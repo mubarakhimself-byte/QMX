@@ -1,4 +1,4 @@
-"""Stories 65.1–65.3 / J-KIT-01, J-KIT-02, and J-KIT-03 — thin kit-journey fixtures.
+"""Stories 65.1–65.4 / J-KIT-01 through J-KIT-05 — thin kit-journey fixtures.
 
 J-KIT-01: a pack that omits ``view:*`` and omits ``copilot_profile`` enables
 after Story 60.1. Main authoring invokes via CLI or wire and receives a
@@ -18,6 +18,12 @@ invoke is legal. Invoke needs exactly one ``selected_refs`` kind
 GrantRecords bind. Zero or two refs are ``INVALID_INPUT``. Nested call
 does not union grants or widen tools. No third profile, silent latest, or
 optional envelope ``instance_id`` (SCN-0023 Branches A–D).
+
+J-KIT-04/05: a widget binds ``start`` of template T with
+``caller_kind=user|agent``; dispose does not cancel. Template A starts B
+as one nested Mission with its own JobHandle; crash of A does not splice
+B. Include-at-author is a new versioned Graph Template. Live merge is
+refused (SCN-0025 Then 1–4; Branches A–D).
 
 Class/test existence is not e2e at inspect SHA ``34c148b`` (DEC-0286;
 DEC-0465). Does not fill GAP-0081 chrome.
@@ -54,6 +60,40 @@ from qma.core.ports.jobs import JobHandle
 from qma.core.refusals import NestedGrantUnionRefused, NoEnvironment
 from qma.core.vocabulary.enums import FailureClass, JobHandleState
 from qma.daemon.diagnosis import DiagnosisQueryService
+from qma.daemon.kit_journey_nested import (
+    FIFTH_COMPOSITION_MODE_MINTED,
+    INCLUDE_AT_AUTHOR_IMPLEMENTED,
+    J_KIT_04,
+    J_KIT_04_05,
+    J_KIT_05,
+    KIT_JOURNEY_04_E2E_AT_INSPECT_SHA,
+    KIT_JOURNEY_04_INSPECT_SHA,
+    KIT_JOURNEY_04_OWNER,
+    KIT_JOURNEY_05_E2E_AT_INSPECT_SHA,
+    KIT_JOURNEY_05_INSPECT_SHA,
+    KIT_JOURNEY_05_OWNER,
+    NESTED_MISSION_OCCUPANCY_EXISTED_AT_INSPECT_SHA,
+    PARENT_AD10_COMPOSITION_MODES,
+    WIDGET_DISPOSE_CANCELS_MISSION,
+    WIDGET_START_CALLER_KINDS,
+    WIDGET_START_IMPLEMENTED,
+    WIDGET_START_VERB,
+    WIDGETS_OWN_INVOKE,
+    IncludeAtAuthorVersionReport,
+    JKit0405Fixture,
+    NestedMissionStartReport,
+    WidgetBoundStartReport,
+    claim_j_kit_04_05_e2e_at_inspect_sha,
+    claim_nested_mission_occupancy_at_inspect_sha,
+    refuse_fifth_composition_mode,
+    refuse_gap_0081_widget_chrome,
+    refuse_live_graph_splice,
+    refuse_live_task_graph_merge,
+    refuse_nested_mission_grant_union,
+    refuse_widget_contribution_without_envelope,
+    refuse_widget_dispose_cancels_mission,
+    refuse_widget_owned_invoke,
+)
 from qma.daemon.plugins.lifecycle import PackLifecycleFixture, PackTransition
 from qma.daemon.repair import STORY_58_4_IS_APPLY_ORACLE
 from qma.daemon.sessions.copilot import CopilotHost
@@ -95,15 +135,20 @@ __all__ = [
     "ENABLE_AFTER_VALIDATE_IS_GRANT",
     "ENVELOPE_INSTANCE_ID_OPTIONAL",
     "ENVELOPE_INSTANCE_ID_REMAINS_REQUIRED",
+    "FIFTH_COMPOSITION_MODE_MINTED",
     "GAP_0081_CHROME_FILLED",
     "HEADLESS_HAS_COPILOT_PANEL",
     "HEADLESS_HAS_NAVIGATION",
     "HOME_IS_AUTHORING_WITHOUT_INSTANCE",
+    "INCLUDE_AT_AUTHOR_IMPLEMENTED",
     "INSTALL_IS_GRANT",
     "INSTANCE_ID_KIND",
     "J_KIT_01",
     "J_KIT_02",
     "J_KIT_03",
+    "J_KIT_04",
+    "J_KIT_04_05",
+    "J_KIT_05",
     "KIT_JOURNEY_01_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_01_INSPECT_SHA",
     "KIT_JOURNEY_01_OWNER",
@@ -113,32 +158,59 @@ __all__ = [
     "KIT_JOURNEY_03_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_03_INSPECT_SHA",
     "KIT_JOURNEY_03_OWNER",
+    "KIT_JOURNEY_04_E2E_AT_INSPECT_SHA",
+    "KIT_JOURNEY_04_INSPECT_SHA",
+    "KIT_JOURNEY_04_OWNER",
+    "KIT_JOURNEY_05_E2E_AT_INSPECT_SHA",
+    "KIT_JOURNEY_05_INSPECT_SHA",
+    "KIT_JOURNEY_05_OWNER",
+    "NESTED_MISSION_OCCUPANCY_EXISTED_AT_INSPECT_SHA",
     "PACK_MAY_OMIT_COPILOT_PROFILE",
     "PACK_SDK_INSPECT_SHA",
     "PANEL_DISPOSE_CANCELS_JOB_HANDLE",
+    "PARENT_AD10_COMPOSITION_MODES",
     "RECONNECT_REPLAYS_UNACKED_INTENT",
     "SESSION_GRANT_RECORD_IS_GRANT",
     "SILENT_LATEST_INSTANCE",
     "STORY_58_4_IS_APPLY_ORACLE",
     "THIRD_PRODUCT_SESSION_PROFILE_MINTED",
+    "WIDGETS_OWN_INVOKE",
+    "WIDGET_DISPOSE_CANCELS_MISSION",
+    "WIDGET_START_CALLER_KINDS",
+    "WIDGET_START_IMPLEMENTED",
+    "WIDGET_START_VERB",
     "HeadlessPackInvokeReport",
     "HomeAuthoringInvokeReport",
+    "IncludeAtAuthorVersionReport",
     "JKit01Fixture",
     "JKit02Fixture",
     "JKit03Fixture",
+    "JKit0405Fixture",
     "NestedHomeCallReport",
+    "NestedMissionStartReport",
     "OptionalPanelDiagnosisReport",
+    "WidgetBoundStartReport",
     "claim_j_kit_01_e2e_at_inspect_sha",
     "claim_j_kit_02_e2e_at_inspect_sha",
     "claim_j_kit_03_e2e_at_inspect_sha",
+    "claim_j_kit_04_05_e2e_at_inspect_sha",
+    "claim_nested_mission_occupancy_at_inspect_sha",
     "refuse_copilot_required_to_ship",
+    "refuse_fifth_composition_mode",
+    "refuse_gap_0081_widget_chrome",
     "refuse_headless_in_app_panel",
+    "refuse_live_graph_splice",
+    "refuse_live_task_graph_merge",
     "refuse_nested_grant_union",
+    "refuse_nested_mission_grant_union",
     "refuse_optional_envelope_instance_id",
     "refuse_panel_applies_change_request",
     "refuse_silent_latest_instance",
     "refuse_tab_close_cancels_job_handle",
     "refuse_third_product_session_profile",
+    "refuse_widget_contribution_without_envelope",
+    "refuse_widget_dispose_cancels_mission",
+    "refuse_widget_owned_invoke",
 ]
 
 
