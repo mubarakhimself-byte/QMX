@@ -48,7 +48,10 @@ from qma.core.ports.copilot import (
 )
 from qma.core.ports.jobs import JobHandle
 from qma.core.vocabulary.enums import HookResultDecision
-from qma.daemon.discovery.listing import ContributionListingService
+from qma.daemon.discovery.listing import (
+    ContributionListingService,
+    query_contribution_listings,
+)
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.repair import (
     HMR_LIVE,
@@ -75,7 +78,7 @@ from qma.daemon.staging.change_request import (
     ChangeRequest,
     ChangeRequestFixture,
 )
-from qma.wire.contribution_listing import refuse_hit_as_grant
+from qma.wire.contribution_listing import ContributionListing, refuse_hit_as_grant
 from qma.wire.copilot_profile import parse_wire_copilot_profile
 from qma.wire.invocation_envelope import (
     BoundInvocation,
@@ -268,7 +271,16 @@ class CopilotHost:
     def note_host_grant(self, qualified_id: str) -> None:
         self._host_grants.add(qualified_id)
         if self.listings is not None:
-            self.listings.note_host_grant(qualified_id)
+            self.listings.note_authorized(qualified_id)
+
+    def list_contributions(self) -> Result[tuple[ContributionListing, ...]]:
+        """Copilot door onto the same headless listing query as CLI."""
+        if self.listings is None:
+            return invalid_input(
+                "listings",
+                "copilot listing consumes ContributionListingService (Story 64.1)",
+            )
+        return query_contribution_listings(self.listings, consumer="copilot")
 
     def note_healthy(self, qualified_id: str) -> None:
         self._healthy.add(qualified_id)
@@ -295,7 +307,7 @@ class CopilotHost:
                 qid = row.hit.qualified_id
                 if row.published:
                     published.add(qid)
-                if row.granted:
+                if row.authorized:
                     host.add(qid)
                 if row.healthy:
                     healthy.add(qid)

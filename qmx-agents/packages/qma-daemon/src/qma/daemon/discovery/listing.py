@@ -1,12 +1,16 @@
-"""ContributionHit listings — published vs healthy; a hit is not a grant (53.4).
+"""ContributionHit listings — published vs healthy; a hit is not a grant (64.1).
 
 COMP-QMA-DAEMON query overlay over live ``published_contributions()``. Five
-status axes stay independent. Publishing or discovering a hit does not
-authorize invoke (SCN-0018 Branch B). ``view:*`` is AD-17 wire DTO only
-(GAP-0081). Stage 0 hypotheses / ``research_ref`` stay off this DTO.
-Occupancy remains none. ``product_session.granted_ops`` stay a separate AD-8
-state — this module does not mint ``product_session`` (Epic 55). Host grants
-are an injected overlay, never pack enablement.
+status axes stay independent. Story 53.4 CONNECT at ``34c148b`` named the
+third axis ``granted``; kit law AMENDs the live name to ``authorized``
+(parent AD-15). Dual-live names are refused. Publishing or discovering a hit
+does not authorize invoke (SCN-0018 Branch B). ``authorized`` is not a
+session GrantRecord and not ``product_session.granted_ops``. ``view:*`` is
+AD-17 wire DTO only (GAP-0081). GAP-0100 dashboard is refused. Copilot and
+CLI consume this same headless query. Stage 0 hypotheses / ``research_ref``
+stay off this DTO. Occupancy remains none. ``product_session.granted_ops``
+stay a separate AD-8 state — this module does not mint ``product_session``
+(Epic 55). Host authorized overlay is injected, never pack enablement.
 """
 
 from __future__ import annotations
@@ -25,15 +29,28 @@ from qma.daemon.discovery.research_surface import (
 )
 from qma.daemon.plugins.loader import PluginLoader
 from qma.wire.contribution_listing import (
+    AUTHORIZED_IS_GRANT_RECORD,
+    AUTHORIZED_IS_GRANTED_OPS,
     CONTRIBUTION_HIT_IS_GRANT,
     CONTRIBUTION_LISTING_OCCUPANCY,
     CONTRIBUTION_LISTING_STATUS_AXES,
     CONTRIBUTION_LISTING_WIRED_AT_INSPECT_SHA,
+    DUAL_LIVE_LISTING_THIRD_AXIS,
     GRANTED_OPS_ARE_PACK_ENABLEMENT,
+    LISTING_AXES_AT_INSPECT_SHA,
+    LISTING_AXES_EXISTED_AT_INSPECT_SHA,
+    LISTING_AXES_INSPECT_SHA,
+    LISTING_QUERY_CONSUMERS,
+    LISTING_QUERY_NAME,
+    LISTING_THIRD_AXIS_AT_INSPECT_SHA,
+    LISTING_THIRD_AXIS_LIVE,
     PRODUCT_SESSION_MINTED,
     ContributionListing,
+    claim_listing_axes_absent_at_inspect_sha,
+    refuse_dual_live_listing_axis,
     refuse_granted_ops_as_pack_enablement,
     refuse_hit_as_grant,
+    refuse_listing_chrome,
     refuse_listing_occupancy,
     refuse_product_session_mint,
 )
@@ -48,20 +65,35 @@ from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
+    "AUTHORIZED_IS_GRANTED_OPS",
+    "AUTHORIZED_IS_GRANT_RECORD",
     "CONTRIBUTION_HIT_IS_GRANT",
     "CONTRIBUTION_LISTING_OCCUPANCY",
     "CONTRIBUTION_LISTING_STATUS_AXES",
     "CONTRIBUTION_LISTING_WIRED_AT_INSPECT_SHA",
+    "DUAL_LIVE_LISTING_THIRD_AXIS",
     "GRANTED_OPS_ARE_PACK_ENABLEMENT",
+    "LISTING_AXES_AT_INSPECT_SHA",
+    "LISTING_AXES_EXISTED_AT_INSPECT_SHA",
+    "LISTING_AXES_INSPECT_SHA",
     "LISTING_IS_DOOR_RUN",
     "LISTING_OPENS_FOURTH_STORE",
     "LISTING_OWNER",
+    "LISTING_QUERY_CONSUMERS",
+    "LISTING_QUERY_NAME",
+    "LISTING_THIRD_AXIS_AT_INSPECT_SHA",
+    "LISTING_THIRD_AXIS_LIVE",
     "PRODUCT_SESSION_MINTED",
     "VIEW_IS_CONTRIBUTION_HIT",
     "VIEW_IS_PLUGIN_CONTRIBUTION_POINT",
     "ContributionListingService",
+    "claim_listing_axes_absent_at_inspect_sha",
+    "cli_list_contributions",
     "contribution_listing_identity",
+    "query_contribution_listings",
+    "refuse_dual_live_listing_axis",
     "refuse_hit_as_grant",
+    "refuse_listing_chrome",
     "refuse_product_session_mint",
 ]
 
@@ -70,35 +102,54 @@ LISTING_OWNER: Final[str] = "COMP-QMA-DAEMON"
 LISTING_IS_DOOR_RUN: Final[bool] = False
 LISTING_OPENS_FOURTH_STORE: Final[bool] = False
 
-_HYPOTHESIS_KWARGS: Final[tuple[str, ...]] = (
-    "hypothesis",
-    "hypotheses",
-    "research_candidate",
-    "research_candidates",
-    "qml_candidate",
-    "stage0_hypothesis",
-    "research_ref",
-)
-
 
 def contribution_listing_identity() -> dict[str, object]:
     """Identity-bearing listing fields. Package SemVer is omitted."""
     return {
+        "authorized_is_grant_record": AUTHORIZED_IS_GRANT_RECORD,
+        "authorized_is_granted_ops": AUTHORIZED_IS_GRANTED_OPS,
         "axes": list(CONTRIBUTION_LISTING_STATUS_AXES),
+        "axes_existed_at_inspect_sha": LISTING_AXES_EXISTED_AT_INSPECT_SHA,
+        "dual_live_third_axis": DUAL_LIVE_LISTING_THIRD_AXIS,
         "hit_is_grant": CONTRIBUTION_HIT_IS_GRANT,
         "hypotheses_are_federated_hits": HYPOTHESES_ARE_FEDERATED_HITS,
         "hypothesis_listing_surface": HYPOTHESIS_LISTING_SURFACE,
+        "inspect_axes": list(LISTING_AXES_AT_INSPECT_SHA),
+        "inspect_sha": LISTING_AXES_INSPECT_SHA,
+        "inspect_third_axis": LISTING_THIRD_AXIS_AT_INSPECT_SHA,
         "is_door_run": LISTING_IS_DOOR_RUN,
+        "live_third_axis": LISTING_THIRD_AXIS_LIVE,
         "occupancy": CONTRIBUTION_LISTING_OCCUPANCY,
         "opens_fourth_store": LISTING_OPENS_FOURTH_STORE,
         "owner": LISTING_OWNER,
         "product_session_minted": PRODUCT_SESSION_MINTED,
         "granted_ops_are_pack_enablement": GRANTED_OPS_ARE_PACK_ENABLEMENT,
         "qmb_opens_daemon_sqlite": QMB_OPENS_DAEMON_SQLITE,
+        "query": LISTING_QUERY_NAME,
+        "query_consumers": list(LISTING_QUERY_CONSUMERS),
         "view_is_contribution_hit": VIEW_IS_CONTRIBUTION_HIT,
         "view_is_plugin_contribution_point": VIEW_IS_PLUGIN_CONTRIBUTION_POINT,
         "wired_at_inspect_sha": CONTRIBUTION_LISTING_WIRED_AT_INSPECT_SHA,
     }
+
+
+def query_contribution_listings(
+    service: ContributionListingService,
+    *,
+    consumer: object,
+) -> Result[tuple[ContributionListing, ...]]:
+    """Headless listing query shared by copilot and CLI (Story 64.1)."""
+    if consumer not in LISTING_QUERY_CONSUMERS:
+        gap = "GAP-0081" if consumer in {"chrome", "ui", "dashboard"} else "GAP-0100"
+        return refuse_listing_chrome(field="consumer", given=repr(consumer), gap=gap)
+    return service.list_contributions()
+
+
+def cli_list_contributions(
+    service: ContributionListingService,
+) -> Result[tuple[ContributionListing, ...]]:
+    """CLI door onto the same headless listing query as copilot."""
+    return query_contribution_listings(service, consumer="cli")
 
 
 def _row_field(row: object, name: str) -> object:
@@ -150,7 +201,7 @@ class ContributionListingService:
     _configured: dict[str, ContributionHit] = field(
         default_factory=dict[str, ContributionHit], init=False
     )
-    _granted: set[str] = field(default_factory=set[str], init=False)
+    _authorized: set[str] = field(default_factory=set[str], init=False)
     _reachable: set[str] = field(default_factory=set[str], init=False)
     _healthy: set[str] = field(default_factory=set[str], init=False)
 
@@ -170,13 +221,17 @@ class ContributionListingService:
     def granted_ops_are_pack_enablement(self) -> bool:
         return GRANTED_OPS_ARE_PACK_ENABLEMENT
 
+    @property
+    def query_name(self) -> str:
+        return LISTING_QUERY_NAME
+
     def note_configured(self, hit: ContributionHit) -> None:
         """Record bytes-present / configured independently of live publication."""
         self._configured[hit.qualified_id] = hit
 
-    def note_host_grant(self, qualified_id: str) -> None:
-        """Host grant overlay — not product_session.granted_ops (Epic 55)."""
-        self._granted.add(qualified_id)
+    def note_authorized(self, qualified_id: str) -> None:
+        """Host authorized overlay — not product_session.granted_ops (Epic 55)."""
+        self._authorized.add(qualified_id)
 
     def note_reachable(self, qualified_id: str) -> None:
         self._reachable.add(qualified_id)
@@ -196,7 +251,7 @@ class ContributionListingService:
                 {
                     "published": listing.published,
                     "configured": listing.configured,
-                    "granted": listing.granted,
+                    "authorized": listing.authorized,
                     "reachable": listing.reachable,
                     "healthy": listing.healthy,
                     "qualified_id": listing.hit.qualified_id,
@@ -234,8 +289,8 @@ class ContributionListingService:
                 {
                     "authorizes_invoke": False,
                     "axes": {
+                        "authorized": listing.authorized,
                         "configured": listing.configured,
-                        "granted": listing.granted,
                         "healthy": listing.healthy,
                         "published": listing.published,
                         "reachable": listing.reachable,
@@ -263,7 +318,12 @@ class ContributionListingService:
         product_session: object = None,
         product_session_id: object = None,
         granted_ops: object = None,
+        granted: object = None,
         status: object = None,
+        dashboard: object = None,
+        readiness_dashboard: object = None,
+        chrome: object = None,
+        ui_chrome: object = None,
     ) -> Result[tuple[ContributionListing, ...]]:
         """Render five-axis listings. Occupancy none. A hit is not a grant."""
         if occupancy != CONTRIBUTION_LISTING_OCCUPANCY:
@@ -286,15 +346,29 @@ class ContributionListingService:
                 field="view_id" if view_id is not None else "ui_view",
                 given=repr(view_id if view_id is not None else ui_view),
             )
+        if chrome is not None or ui_chrome is not None:
+            return refuse_listing_chrome(
+                field="chrome" if chrome is not None else "ui_chrome",
+                given=repr(chrome if chrome is not None else ui_chrome),
+                gap="GAP-0081",
+            )
+        if dashboard is not None or readiness_dashboard is not None:
+            return refuse_listing_chrome(
+                field="dashboard" if dashboard is not None else "readiness_dashboard",
+                given=repr(dashboard if dashboard is not None else readiness_dashboard),
+                gap="GAP-0100",
+            )
         if product_session is not None or product_session_id is not None:
             return refuse_product_session_mint(given=repr(product_session or product_session_id))
         if granted_ops is not None:
             return refuse_granted_ops_as_pack_enablement(given=repr(granted_ops))
+        if granted is not None:
+            return refuse_dual_live_listing_axis(given=repr(granted))
         if status is not None:
             return policy_rejection(
                 "status",
-                "discovery listings distinguish published vs configured vs granted "
-                "vs reachable vs healthy as independent axes (FR-WF-12; AD-15)",
+                "discovery listings distinguish published vs configured vs authorized "
+                "vs reachable vs healthy as independent axes (FR-WF-12; AD-15; Story 64.1)",
                 given=repr(status),
                 axes=list(CONTRIBUTION_LISTING_STATUS_AXES),
             )
@@ -317,7 +391,7 @@ class ContributionListingService:
                 hit=hit,
                 published=hit.availability == "enabled",
                 configured=True,
-                granted=qualified_id in self._granted,
+                authorized=qualified_id in self._authorized,
                 reachable=qualified_id in self._reachable,
                 healthy=qualified_id in self._healthy,
                 authorizes_invoke=False,
@@ -338,7 +412,7 @@ class ContributionListingService:
                 hit=unpublished.value,
                 published=False,
                 configured=True,
-                granted=qualified_id in self._granted,
+                authorized=qualified_id in self._authorized,
                 reachable=qualified_id in self._reachable,
                 healthy=qualified_id in self._healthy,
                 authorizes_invoke=False,

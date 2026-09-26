@@ -1,12 +1,16 @@
-"""ContributionHit listing status — additive CT-40 DTO (Story 53.4; FR-WF-12).
+"""ContributionHit listing status — additive CT-40 DTO (Story 53.4; Story 64.1).
 
-Listings distinguish published vs configured vs granted vs reachable vs
-healthy as five independent booleans. A hit is not a grant: publishing or
-discovering a ContributionHit does not authorize invoke, even when published
-and healthy (SCN-0018 Branch B; DEC-0415; FR-WF-06). ``product_session`` /
-``granted_ops`` stay a separate AD-8 state — this DTO does not mint them
-(Epic 55). Occupancy on this path is none. Stage 0 hypotheses / ``research_ref``
-are not hits here. No new CT number (do not mint CT-52).
+Listings distinguish published vs configured vs authorized vs reachable vs
+healthy as five independent booleans. Story 53.4 CONNECT at inspect SHA
+``34c148b`` named the third axis ``granted``; kit law (parent AD-15) AMENDs
+the live name to ``authorized``. Dual-live ``granted`` and ``authorized`` is
+refused. A hit is not a grant: publishing or discovering a ContributionHit
+does not authorize invoke, even when published and healthy (SCN-0018 Branch B;
+DEC-0415; FR-WF-06). ``authorized`` is not a session GrantRecord and not
+``product_session.granted_ops``. ``product_session`` / ``granted_ops`` stay a
+separate AD-8 state — this DTO does not mint them (Epic 55). Occupancy on this
+path is none. Stage 0 hypotheses / ``research_ref`` are not hits here. No new
+CT number (do not mint CT-52).
 """
 
 from __future__ import annotations
@@ -34,6 +38,8 @@ from qmf.core.refusal import (
 )
 
 __all__ = [
+    "AUTHORIZED_IS_GRANTED_OPS",
+    "AUTHORIZED_IS_GRANT_RECORD",
     "CONTRIBUTION_HIT_IS_GRANT",
     "CONTRIBUTION_LISTING_CONTRACT",
     "CONTRIBUTION_LISTING_DTO_OWNER",
@@ -45,13 +51,24 @@ __all__ = [
     "CONTRIBUTION_LISTING_SCHEMA_NAME",
     "CONTRIBUTION_LISTING_STATUS_AXES",
     "CONTRIBUTION_LISTING_WIRED_AT_INSPECT_SHA",
+    "DUAL_LIVE_LISTING_THIRD_AXIS",
     "GRANTED_OPS_ARE_PACK_ENABLEMENT",
+    "LISTING_AXES_AT_INSPECT_SHA",
+    "LISTING_AXES_EXISTED_AT_INSPECT_SHA",
+    "LISTING_AXES_INSPECT_SHA",
+    "LISTING_QUERY_CONSUMERS",
+    "LISTING_QUERY_NAME",
+    "LISTING_THIRD_AXIS_AT_INSPECT_SHA",
+    "LISTING_THIRD_AXIS_LIVE",
     "PRODUCT_SESSION_MINTED",
     "ContributionListing",
+    "claim_listing_axes_absent_at_inspect_sha",
     "parse_contribution_listing",
     "refuse_collapsed_listing_status",
+    "refuse_dual_live_listing_axis",
     "refuse_granted_ops_as_pack_enablement",
     "refuse_hit_as_grant",
+    "refuse_listing_chrome",
     "refuse_listing_occupancy",
     "refuse_product_session_mint",
     "validate_contribution_listing",
@@ -70,10 +87,27 @@ CONTRIBUTION_LISTING_OCCUPANCY: Final[str] = "none"
 PRODUCT_SESSION_MINTED: Final[bool] = False
 GRANTED_OPS_ARE_PACK_ENABLEMENT: Final[bool] = False
 
-CONTRIBUTION_LISTING_STATUS_AXES: Final[tuple[str, str, str, str, str]] = (
+LISTING_AXES_INSPECT_SHA: Final[str] = "34c148b"
+LISTING_AXES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
+LISTING_AXES_AT_INSPECT_SHA: Final[tuple[str, str, str, str, str]] = (
     "published",
     "configured",
     "granted",
+    "reachable",
+    "healthy",
+)
+LISTING_THIRD_AXIS_AT_INSPECT_SHA: Final[str] = "granted"
+LISTING_THIRD_AXIS_LIVE: Final[str] = "authorized"
+DUAL_LIVE_LISTING_THIRD_AXIS: Final[bool] = False
+AUTHORIZED_IS_GRANT_RECORD: Final[bool] = False
+AUTHORIZED_IS_GRANTED_OPS: Final[bool] = False
+LISTING_QUERY_NAME: Final[str] = "list_contributions"
+LISTING_QUERY_CONSUMERS: Final[tuple[str, str]] = ("cli", "copilot")
+
+CONTRIBUTION_LISTING_STATUS_AXES: Final[tuple[str, str, str, str, str]] = (
+    "published",
+    "configured",
+    "authorized",
     "reachable",
     "healthy",
 )
@@ -86,6 +120,7 @@ _FORBIDDEN_LISTING_KEYS: Final[frozenset[str]] = frozenset(
         "product_session",
         "product_session_id",
         "psess",
+        "granted",
         "granted_ops",
         "grant_id",
         "GrantRecord",
@@ -97,6 +132,10 @@ _FORBIDDEN_LISTING_KEYS: Final[frozenset[str]] = frozenset(
         "ui_view",
         "hypothesis",
         "qml_candidate",
+        "dashboard",
+        "readiness_dashboard",
+        "chrome",
+        "ui_chrome",
     }
 )
 
@@ -113,6 +152,12 @@ _PRODUCT_SESSION_KEYS: Final[frozenset[str]] = frozenset(
 _COLLAPSED_STATUS_KEYS: Final[frozenset[str]] = frozenset(
     {"status", "state", "availability_status"}
 )
+
+_RETIRED_THIRD_AXIS_KEYS: Final[frozenset[str]] = frozenset({"granted"})
+
+_GAP_0100_KEYS: Final[frozenset[str]] = frozenset({"dashboard", "readiness_dashboard"})
+
+_GAP_0081_KEYS: Final[frozenset[str]] = frozenset({"chrome", "ui_chrome"})
 
 
 def _invalid(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -149,6 +194,8 @@ def refuse_hit_as_grant(**extra: object) -> TypedRefusal:
         hit_is_grant=False,
         authorizes_invoke=False,
         product_session_minted=False,
+        authorized_is_grant_record=False,
+        authorized_is_granted_ops=False,
         **extra,
     )
 
@@ -158,11 +205,49 @@ def refuse_collapsed_listing_status(**extra: object) -> TypedRefusal:
     field = str(extra.pop("field", "status"))
     return _policy(
         field,
-        "discovery listings distinguish published vs configured vs granted vs "
+        "discovery listings distinguish published vs configured vs authorized vs "
         "reachable vs healthy as independent axes; a collapsed status enum is "
-        "refused (FR-WF-12; AD-15; DEC-0415)",
+        "refused (FR-WF-12; AD-15; DEC-0415; Story 64.1)",
         decision="DEC-0415",
         axes=CONTRIBUTION_LISTING_STATUS_AXES,
+        **extra,
+    )
+
+
+def refuse_dual_live_listing_axis(**extra: object) -> TypedRefusal:
+    """Story 64.1 — one live third-axis name: authorized, not granted."""
+    field = str(extra.pop("field", "granted"))
+    extra.setdefault("live_axis", LISTING_THIRD_AXIS_LIVE)
+    extra.setdefault("retired_axis", LISTING_THIRD_AXIS_AT_INSPECT_SHA)
+    extra.setdefault("dual_live", DUAL_LIVE_LISTING_THIRD_AXIS)
+    extra.setdefault("existed_at_inspect_sha", LISTING_AXES_EXISTED_AT_INSPECT_SHA)
+    extra.setdefault("inspect_sha", LISTING_AXES_INSPECT_SHA)
+    extra.setdefault("inspect_axes", LISTING_AXES_AT_INSPECT_SHA)
+    extra.setdefault("live_axes", CONTRIBUTION_LISTING_STATUS_AXES)
+    extra.setdefault("authorized_is_grant_record", AUTHORIZED_IS_GRANT_RECORD)
+    extra.setdefault("authorized_is_granted_ops", AUTHORIZED_IS_GRANTED_OPS)
+    return _policy(
+        field,
+        "listing third axis live kit name is authorized (parent AD-15); "
+        "granted is not a live listing axis and is not product_session.granted_ops "
+        "(Story 64.1; DEC-0465; FR-PG-33)",
+        **extra,
+    )
+
+
+def refuse_listing_chrome(**extra: object) -> TypedRefusal:
+    """GAP-0081 chrome and GAP-0100 dashboard are not this listing query."""
+    gap = str(extra.get("gap", "GAP-0100"))
+    field = str(extra.pop("field", "dashboard" if gap == "GAP-0100" else "chrome"))
+    extra.setdefault("gap", gap)
+    extra.setdefault("chrome_filled", False)
+    extra.setdefault("dashboard_filled", False)
+    extra.setdefault("consumers", LISTING_QUERY_CONSUMERS)
+    extra.setdefault("query", LISTING_QUERY_NAME)
+    return _policy(
+        field,
+        "GAP-0081 chrome and GAP-0100 dashboard are refused; copilot and CLI "
+        "consume the same headless listing query (UX-DR-PG-04; DEC-0468; Story 64.1)",
         **extra,
     )
 
@@ -177,6 +262,7 @@ def refuse_product_session_mint(**extra: object) -> TypedRefusal:
         decision="DEC-0421",
         product_session_minted=False,
         granted_ops_are_pack_enablement=False,
+        authorized_is_granted_ops=False,
         epic="55",
         **extra,
     )
@@ -188,10 +274,12 @@ def refuse_granted_ops_as_pack_enablement(**extra: object) -> TypedRefusal:
     return _policy(
         field,
         "installed ≠ enabled ≠ session-granted; granted_ops is AD-8 state, not "
-        "pack enablement (AD-13; FR-WF-38; DEC-0421)",
+        "pack enablement, and not the listing authorized axis "
+        "(AD-13; FR-WF-38; DEC-0421; Story 64.1)",
         decision="DEC-0421",
         granted_ops_are_pack_enablement=False,
         product_session_minted=False,
+        authorized_is_granted_ops=False,
         **extra,
     )
 
@@ -207,6 +295,30 @@ def refuse_listing_occupancy(**extra: object) -> TypedRefusal:
         is_door_run=False,
         **extra,
     )
+
+
+def claim_listing_axes_absent_at_inspect_sha(absent: object) -> Result[bool]:
+    """Claiming Story 53.4 listing axes were absent at 34c148b fails."""
+    if absent is True or absent == "true":
+        return _policy(
+            "listing_axes",
+            "CONTRIBUTION_LISTING_STATUS_AXES existed at inspect SHA 34c148b as "
+            "published, configured, granted, reachable, healthy "
+            "(Story 53.4 CONNECT; DEC-0465; NFR-PG-04)",
+            existed_at_inspect_sha=True,
+            inspect_sha=LISTING_AXES_INSPECT_SHA,
+            inspect_axes=LISTING_AXES_AT_INSPECT_SHA,
+            live_axes=CONTRIBUTION_LISTING_STATUS_AXES,
+            live_third_axis=LISTING_THIRD_AXIS_LIVE,
+            inspect_third_axis=LISTING_THIRD_AXIS_AT_INSPECT_SHA,
+        )
+    if absent is not False:
+        return _invalid(
+            "absent_at_inspect_sha",
+            "inspect-SHA absence claim is a boolean",
+            given=repr(absent),
+        )
+    return Ok(False)
 
 
 def _parse_bool(value: object, field: str) -> Result[bool]:
@@ -253,7 +365,7 @@ class ContributionListing:
     hit: ContributionHit
     published: bool
     configured: bool
-    granted: bool
+    authorized: bool
     reachable: bool
     healthy: bool
     authorizes_invoke: Literal[False] = False
@@ -266,7 +378,7 @@ class ContributionListing:
         hit: object,
         published: object,
         configured: object,
-        granted: object,
+        authorized: object,
         reachable: object,
         healthy: object,
         authorizes_invoke: object = False,
@@ -280,6 +392,16 @@ class ContributionListing:
                 if any(key in {"granted_ops", "GrantRecord"} for key in stolen):
                     return refuse_granted_ops_as_pack_enablement(fields=stolen, given=stolen)
                 return refuse_product_session_mint(fields=stolen, given=stolen)
+            if any(key in _RETIRED_THIRD_AXIS_KEYS for key in stolen):
+                return refuse_dual_live_listing_axis(fields=stolen, given=stolen)
+            if any(key in _GAP_0100_KEYS for key in stolen):
+                return refuse_listing_chrome(
+                    fields=stolen, given=stolen, gap="GAP-0100", field="dashboard"
+                )
+            if any(key in _GAP_0081_KEYS for key in stolen):
+                return refuse_listing_chrome(
+                    fields=stolen, given=stolen, gap="GAP-0081", field="chrome"
+                )
             if any(key in _COLLAPSED_STATUS_KEYS for key in stolen):
                 return refuse_collapsed_listing_status(fields=stolen, given=stolen)
             if any(key in {"research_ref", "hypothesis", "qml_candidate"} for key in stolen):
@@ -302,9 +424,9 @@ class ContributionListing:
         conf = _parse_bool(configured, "configured")
         if is_refusal(conf):
             return conf
-        grant = _parse_bool(granted, "granted")
-        if is_refusal(grant):
-            return grant
+        auth = _parse_bool(authorized, "authorized")
+        if is_refusal(auth):
+            return auth
         reach = _parse_bool(reachable, "reachable")
         if is_refusal(reach):
             return reach
@@ -316,7 +438,7 @@ class ContributionListing:
                 hit=parsed_hit.value,
                 published=pub.value,
                 configured=conf.value,
-                granted=grant.value,
+                authorized=auth.value,
                 reachable=reach.value,
                 healthy=health.value,
                 authorizes_invoke=False,
@@ -332,8 +454,8 @@ class ContributionListing:
         return MappingProxyType(
             {
                 "authorizes_invoke": False,
+                "authorized": self.authorized,
                 "configured": self.configured,
-                "granted": self.granted,
                 "healthy": self.healthy,
                 "hit": dict(self.hit.to_payload()),
                 "occupancy": CONTRIBUTION_LISTING_OCCUPANCY,
@@ -350,7 +472,7 @@ def parse_contribution_listing(value: object) -> Result[ContributionListing]:
             hit=value.hit,
             published=value.published,
             configured=value.configured,
-            granted=value.granted,
+            authorized=value.authorized,
             reachable=value.reachable,
             healthy=value.healthy,
             authorizes_invoke=value.authorizes_invoke,
@@ -370,7 +492,7 @@ def parse_contribution_listing(value: object) -> Result[ContributionListing]:
         hit=body.get("hit"),
         published=body.get("published"),
         configured=body.get("configured"),
-        granted=body.get("granted"),
+        authorized=body.get("authorized"),
         reachable=body.get("reachable"),
         healthy=body.get("healthy"),
         authorizes_invoke=body.get("authorizes_invoke", False),

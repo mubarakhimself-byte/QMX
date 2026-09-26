@@ -34,7 +34,7 @@ def main() -> None:
         hit=hit.value,
         published=True,
         configured=True,
-        granted=False,
+        authorized=False,
         reachable=False,
         healthy=True,
     )
@@ -67,7 +67,7 @@ def main() -> None:
         }
     )
     assert is_refusal(as_hit)
-    print("listing axes distinct; view:* is AD-17 DTO only; hit is not a grant")
+    print("listing axes distinct; authorized is live third axis; hit is not a grant")
 
 
 if __name__ == "__main__":

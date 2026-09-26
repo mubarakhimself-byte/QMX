@@ -1,4 +1,4 @@
-"""Reference usage — listings distinguish published from healthy (Story 53.4)."""
+"""Reference usage — listings distinguish published from healthy (Story 64.1)."""
 
 from __future__ import annotations
 
@@ -46,12 +46,13 @@ def main() -> None:
     row = found.value[0]
     assert row.published is True
     assert row.configured is True
-    assert row.granted is False
+    assert row.authorized is False
     assert row.healthy is False
+    assert row.published is not row.healthy
     assert row.authorizes_invoke is False
     refused = listings.authorize_invoke(row)
     assert is_refusal(refused)
-    print("published ≠ granted ≠ healthy; invoke refused (SCN-0018 Branch B)")
+    print("published ≠ authorized ≠ healthy; invoke refused (SCN-0018 Branch B)")
 
 
 if __name__ == "__main__":
