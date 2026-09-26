@@ -1,4 +1,4 @@
-"""Stories 65.1–65.5 / J-KIT-01 through J-KIT-06 — thin kit-journey fixtures.
+"""Stories 65.1–65.6 / J-KIT-01 through J-KIT-07 — thin kit-journey fixtures.
 
 J-KIT-01: a pack that omits ``view:*`` and omits ``copilot_profile`` enables
 after Story 60.1. Main authoring invokes via CLI or wire and receives a
@@ -29,6 +29,12 @@ J-KIT-06: a ``read`` op flakes with typed retryability that is not ``NO``.
 The host retries and the operator is not paged. An ``external-egress``
 without a receipt becomes ``unknown`` with no second send. Stories invent
 no ceiling number; tests may inject a registry value (SCN-0026; GAP-0108).
+
+J-KIT-07: a weaker model fills descriptor schemas; missing dependency
+validate fails closed; prose cannot add an op. Skills do not grant.
+json-render and MCP Apps stay unpinned. Graduation does not skip
+enable/validate. Loop remains node state. SCN-0027 Then branches hold
+(SCN-0027; DEC-0458). GAP-0081/GAP-0100 refused.
 
 Class/test existence is not e2e at inspect SHA ``34c148b`` (DEC-0286;
 DEC-0465). Does not fill GAP-0081 chrome.
@@ -116,6 +122,34 @@ from qma.daemon.kit_journey_retry import (
     refuse_invented_ceiling_number,
     refuse_operator_paged_for_read_flake,
 )
+from qma.daemon.kit_journey_weak import (
+    GAP_0100_DASHBOARD_FILLED,
+    J_KIT_07,
+    JSON_LINES_EXISTED_AT_INSPECT_SHA,
+    JSON_RENDER_PACKAGE,
+    JSON_RENDER_PINNED,
+    KIT_JOURNEY_07_E2E_AT_INSPECT_SHA,
+    KIT_JOURNEY_07_INSPECT_SHA,
+    KIT_JOURNEY_07_OWNER,
+    LOOP_ENGINE_MINTED,
+    LOOP_IS_NODE_STATE,
+    MCP_APPS_PACKAGE,
+    MCP_APPS_PINNED,
+    PROSE_MAY_ADD_OP,
+    AdapterInterceptReport,
+    GraduationReport,
+    JKit07Fixture,
+    WeakModelFillReport,
+    claim_j_kit_07_e2e_at_inspect_sha,
+    refuse_adapter_adds_ops_or_fields,
+    refuse_gap_0081_chrome,
+    refuse_gap_0100_dashboard,
+    refuse_graduation_skips_enable_validate,
+    refuse_json_render_or_mcp_pin,
+    refuse_loop_engine,
+    refuse_prose_adds_op,
+    refuse_scn_0027_branch,
+)
 from qma.daemon.plugins.lifecycle import PackLifecycleFixture, PackTransition
 from qma.daemon.repair import STORY_58_4_IS_APPLY_ORACLE
 from qma.daemon.sessions.copilot import CopilotHost
@@ -159,6 +193,7 @@ __all__ = [
     "ENVELOPE_INSTANCE_ID_REMAINS_REQUIRED",
     "FIFTH_COMPOSITION_MODE_MINTED",
     "GAP_0081_CHROME_FILLED",
+    "GAP_0100_DASHBOARD_FILLED",
     "HEADLESS_HAS_COPILOT_PANEL",
     "HEADLESS_HAS_NAVIGATION",
     "HOME_IS_AUTHORING_WITHOUT_INSTANCE",
@@ -167,6 +202,9 @@ __all__ = [
     "INSTALL_IS_GRANT",
     "INSTANCE_ID_KIND",
     "INVENTED_CEILING_NUMBER",
+    "JSON_LINES_EXISTED_AT_INSPECT_SHA",
+    "JSON_RENDER_PACKAGE",
+    "JSON_RENDER_PINNED",
     "J_KIT_01",
     "J_KIT_02",
     "J_KIT_03",
@@ -174,6 +212,7 @@ __all__ = [
     "J_KIT_04_05",
     "J_KIT_05",
     "J_KIT_06",
+    "J_KIT_07",
     "KIT_JOURNEY_01_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_01_INSPECT_SHA",
     "KIT_JOURNEY_01_OWNER",
@@ -192,12 +231,20 @@ __all__ = [
     "KIT_JOURNEY_06_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_06_INSPECT_SHA",
     "KIT_JOURNEY_06_OWNER",
+    "KIT_JOURNEY_07_E2E_AT_INSPECT_SHA",
+    "KIT_JOURNEY_07_INSPECT_SHA",
+    "KIT_JOURNEY_07_OWNER",
+    "LOOP_ENGINE_MINTED",
+    "LOOP_IS_NODE_STATE",
+    "MCP_APPS_PACKAGE",
+    "MCP_APPS_PINNED",
     "NESTED_MISSION_OCCUPANCY_EXISTED_AT_INSPECT_SHA",
     "OPERATOR_PAGED_FOR_READ_FLAKE",
     "PACK_MAY_OMIT_COPILOT_PROFILE",
     "PACK_SDK_INSPECT_SHA",
     "PANEL_DISPOSE_CANCELS_JOB_HANDLE",
     "PARENT_AD10_COMPOSITION_MODES",
+    "PROSE_MAY_ADD_OP",
     "RECONNECT_REPLAYS_UNACKED_INTENT",
     "SESSION_GRANT_RECORD_IS_GRANT",
     "SILENT_LATEST_INSTANCE",
@@ -208,6 +255,8 @@ __all__ = [
     "WIDGET_START_CALLER_KINDS",
     "WIDGET_START_IMPLEMENTED",
     "WIDGET_START_VERB",
+    "AdapterInterceptReport",
+    "GraduationReport",
     "HeadlessPackInvokeReport",
     "HomeAuthoringInvokeReport",
     "IncludeAtAuthorVersionReport",
@@ -218,30 +267,41 @@ __all__ = [
     "JKit06EgressReport",
     "JKit06Fixture",
     "JKit06ReadRetryReport",
+    "JKit07Fixture",
     "NestedHomeCallReport",
     "NestedMissionStartReport",
     "OptionalPanelDiagnosisReport",
+    "WeakModelFillReport",
     "WidgetBoundStartReport",
     "claim_j_kit_01_e2e_at_inspect_sha",
     "claim_j_kit_02_e2e_at_inspect_sha",
     "claim_j_kit_03_e2e_at_inspect_sha",
     "claim_j_kit_04_05_e2e_at_inspect_sha",
     "claim_j_kit_06_e2e_at_inspect_sha",
+    "claim_j_kit_07_e2e_at_inspect_sha",
     "claim_nested_mission_occupancy_at_inspect_sha",
+    "refuse_adapter_adds_ops_or_fields",
     "refuse_blind_j_kit_06_second_send",
     "refuse_copilot_required_to_ship",
     "refuse_fifth_composition_mode",
+    "refuse_gap_0081_chrome",
     "refuse_gap_0081_retry_chrome",
     "refuse_gap_0081_widget_chrome",
+    "refuse_gap_0100_dashboard",
+    "refuse_graduation_skips_enable_validate",
     "refuse_headless_in_app_panel",
     "refuse_invented_ceiling_number",
+    "refuse_json_render_or_mcp_pin",
     "refuse_live_graph_splice",
     "refuse_live_task_graph_merge",
+    "refuse_loop_engine",
     "refuse_nested_grant_union",
     "refuse_nested_mission_grant_union",
     "refuse_operator_paged_for_read_flake",
     "refuse_optional_envelope_instance_id",
     "refuse_panel_applies_change_request",
+    "refuse_prose_adds_op",
+    "refuse_scn_0027_branch",
     "refuse_silent_latest_instance",
     "refuse_tab_close_cancels_job_handle",
     "refuse_third_product_session_profile",
