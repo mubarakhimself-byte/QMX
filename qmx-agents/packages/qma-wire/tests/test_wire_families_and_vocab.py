@@ -39,8 +39,8 @@ def test_seed_vocabulary_counts_and_owner() -> None:
     assert WIRE_VOCABULARY_OWNER == "qma-wire"
     assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT == 9
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 5
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 12
+    assert ADDABLE_QUERY_COUNT == 6
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 13
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS
@@ -72,6 +72,9 @@ def test_seed_members_match_ratified_packet() -> None:
     assert WireQuery.FACADE_GET.value == "facade_get"
     assert "get_diagnosis" in WIRE_QUERIES
     assert WireQuery.GET_DIAGNOSIS.value == "get_diagnosis"
+    assert "get_instance_health" in WIRE_QUERIES
+    assert WireQuery.GET_INSTANCE_HEALTH.value == "get_instance_health"
+    assert WireQuery.GET_PROVIDER_HEALTH.value != WireQuery.GET_INSTANCE_HEALTH.value
     assert {
         "agent.started",
         "message.delta",

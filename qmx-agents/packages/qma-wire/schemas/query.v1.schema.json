@@ -22,7 +22,8 @@
         "plugin_install_preflight",
         "facade_search",
         "facade_get",
-        "get_diagnosis"
+        "get_diagnosis",
+        "get_instance_health"
       ]
     },
     "args": { "type": "object" }

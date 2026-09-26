@@ -48,6 +48,13 @@ from qma.core.ports.copilot import (
 )
 from qma.core.ports.jobs import JobHandle
 from qma.core.vocabulary.enums import HookResultDecision
+from qma.daemon.discovery.instance_health import (
+    InstanceHealthReport,
+    InstanceHealthService,
+)
+from qma.daemon.discovery.instance_health import (
+    query_instance_health as headless_instance_health,
+)
 from qma.daemon.discovery.listing import (
     ContributionListingService,
     query_contribution_listings,
@@ -126,6 +133,7 @@ class CopilotHost:
     sessions: ProductSessionService = field(default_factory=ProductSessionService)
     jobs: JobHandleService = field(default_factory=JobHandleService)
     listings: ContributionListingService | None = None
+    instance_health: InstanceHealthService | None = None
     retry_loop: HostRetryLoop = field(default_factory=HostRetryLoop)
     chrome: ProductSessionChrome = field(init=False)
     changes: ChangeRequestFixture = field(init=False)
@@ -281,6 +289,15 @@ class CopilotHost:
                 "copilot listing consumes ContributionListingService (Story 64.1)",
             )
         return query_contribution_listings(self.listings, consumer="copilot")
+
+    def query_instance_health(self, instance_id: object) -> Result[InstanceHealthReport]:
+        """Copilot door onto the same headless instance health() query as CLI."""
+        if self.instance_health is None:
+            return invalid_input(
+                "instance_health",
+                "copilot health() consumes InstanceHealthService (Story 64.2)",
+            )
+        return headless_instance_health(self.instance_health, instance_id, consumer="copilot")
 
     def note_healthy(self, qualified_id: str) -> None:
         self._healthy.add(qualified_id)
