@@ -1,11 +1,19 @@
-"""Story 65.1 / J-KIT-01 — headless pack with no copilot still invokes.
+"""Stories 65.1–65.2 / J-KIT-01 and J-KIT-02 — thin kit-journey fixtures.
 
-Thin fixture: a pack that omits ``view:*`` and omits ``copilot_profile``
-enables after Story 60.1. Main authoring invokes via CLI or wire and
-receives a JobHandle. No in-app panel exists. Requiring a copilot to ship
-fails (SCN-0024 Branch A). Install remains not a grant. Class/test
-existence is not e2e at inspect SHA ``34c148b`` (DEC-0286; DEC-0465).
-Does not fill GAP-0081 chrome.
+J-KIT-01: a pack that omits ``view:*`` and omits ``copilot_profile`` enables
+after Story 60.1. Main authoring invokes via CLI or wire and receives a
+JobHandle. No in-app panel exists. Requiring a copilot to ship fails
+(SCN-0024 Branch A). Install remains not a grant.
+
+J-KIT-02: an app-use session on instance A with an optional panel asks why
+the last run failed (Story 61.2 diagnosis: ``failure_class`` plus JobHandle
+or null). The panel cannot edit the pack. App-use mints ``change_request``
+and must not apply; authoring plus operator applies and v1 stays (Story
+58.4). Closing the panel or a future UI tab does not cancel the JobHandle;
+reconnect does not replay unacked intent (SCN-0024 Branch B/C forbidden).
+
+Class/test existence is not e2e at inspect SHA ``34c148b`` (DEC-0286;
+DEC-0465). Does not fill GAP-0081 chrome.
 """
 
 from __future__ import annotations
@@ -14,7 +22,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Literal
 
 from qma.core.ontology import ActorId, DeskSlug
 from qma.core.operations import public_operation_descriptors
@@ -29,14 +37,27 @@ from qma.core.plugins import (
     SESSION_GRANT_RECORD_IS_GRANT,
 )
 from qma.core.ports.copilot import (
+    APP_USE_MAY_APPLY,
     GAP_0081_CHROME_FILLED,
     PACK_MAY_OMIT_COPILOT_PROFILE,
+    PANEL_DISPOSE_CANCELS_JOB_HANDLE,
+    RECONNECT_REPLAYS_UNACKED_INTENT,
 )
 from qma.core.ports.jobs import JobHandle
-from qma.core.vocabulary.enums import JobHandleState
+from qma.core.refusals import NoEnvironment
+from qma.core.vocabulary.enums import FailureClass, JobHandleState
+from qma.daemon.diagnosis import DiagnosisQueryService
 from qma.daemon.plugins.lifecycle import PackLifecycleFixture, PackTransition
+from qma.daemon.repair import STORY_58_4_IS_APPLY_ORACLE
 from qma.daemon.sessions.copilot import CopilotHost
+from qma.daemon.sessions.product_session import ProductSession, ReconnectSnapshot
+from qma.daemon.staging.change_request import (
+    ChangeApplyRecord,
+    ChangeRequest,
+    InstalledAppSnapshot,
+)
 from qma.wire import compute_input_hash
+from qma.wire.diagnosis import Diagnosis
 from qma.wire.invocation_envelope import (
     ContributionRecord,
     InstanceRecord,
@@ -47,6 +68,7 @@ from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
+    "APP_USE_MAY_APPLY",
     "COPILOT_PROFILE_EXISTED_AT_INSPECT_SHA",
     "COPILOT_REQUIRED_TO_SHIP",
     "ENABLE_AFTER_VALIDATE_IS_GRANT",
@@ -55,17 +77,29 @@ __all__ = [
     "HEADLESS_HAS_NAVIGATION",
     "INSTALL_IS_GRANT",
     "J_KIT_01",
+    "J_KIT_02",
     "KIT_JOURNEY_01_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_01_INSPECT_SHA",
     "KIT_JOURNEY_01_OWNER",
+    "KIT_JOURNEY_02_E2E_AT_INSPECT_SHA",
+    "KIT_JOURNEY_02_INSPECT_SHA",
+    "KIT_JOURNEY_02_OWNER",
     "PACK_MAY_OMIT_COPILOT_PROFILE",
     "PACK_SDK_INSPECT_SHA",
+    "PANEL_DISPOSE_CANCELS_JOB_HANDLE",
+    "RECONNECT_REPLAYS_UNACKED_INTENT",
     "SESSION_GRANT_RECORD_IS_GRANT",
+    "STORY_58_4_IS_APPLY_ORACLE",
     "HeadlessPackInvokeReport",
     "JKit01Fixture",
+    "JKit02Fixture",
+    "OptionalPanelDiagnosisReport",
     "claim_j_kit_01_e2e_at_inspect_sha",
+    "claim_j_kit_02_e2e_at_inspect_sha",
     "refuse_copilot_required_to_ship",
     "refuse_headless_in_app_panel",
+    "refuse_panel_applies_change_request",
+    "refuse_tab_close_cancels_job_handle",
 ]
 
 
@@ -488,3 +522,450 @@ class JKit01Fixture:
                 return granted
             self._granted = True
         return Ok(None)
+
+
+J_KIT_02: Final[str] = "J-KIT-02"
+KIT_JOURNEY_02_OWNER: Final[str] = "COMP-QMA-DAEMON"
+KIT_JOURNEY_02_INSPECT_SHA: Final[str] = "34c148b"
+KIT_JOURNEY_02_E2E_AT_INSPECT_SHA: Final[bool] = False
+_APP_A: Final[str] = "psess:app-a"
+_INSTANCE_A: Final[str] = "inst:A"
+_PANEL_A: Final[str] = "panel:a"
+_FUTURE_TAB: Final[str] = "tab:future"
+_GRANT_A: Final[str] = "grant:j-kit-02"
+_PACKAGE_A: Final[str] = "research-corpus"
+_VERSION_A: Final[str] = "1.0.0"
+_CR_A: Final[str] = "cr:j-kit-02"
+_LAST_CORR: Final[str] = "corr:j-kit-02-last"
+_NULL_CORR: Final[str] = "corr:j-kit-02-null"
+_LAST_TASK: Final[str] = "task:j-kit-02-last"
+_LAST_JOB: Final[str] = "job:j-kit-02-last"
+_RUN_TASK: Final[str] = "task:j-kit-02-running"
+_RUN_JOB: Final[str] = "job:j-kit-02-running"
+_APPLY_AT: Final[str] = "2026-09-20T16:12:00Z"
+_VALIDATE_AT: Final[str] = "2026-09-20T16:10:00Z"
+_SOURCE_A: Final[str] = "fp1:sha256:" + "11" * 32
+_TARGET_A: Final[str] = "fp1:sha256:" + "22" * 32
+_HASH_A: Final[str] = "fp1:sha256:" + "aa" * 32
+_APP_CONTRIBUTION: Final[Mapping[str, str]] = MappingProxyType(
+    {"package_version": "0.1.0", "qualified_id": _QUALIFIED_ID}
+)
+
+
+def refuse_panel_applies_change_request(**extra: object) -> TypedRefusal:
+    """SCN-0024 Branch B — the optional panel must not apply v2."""
+    extra.setdefault("branch", "B")
+    extra.setdefault("applies", APP_USE_MAY_APPLY)
+    extra.setdefault("app_use_may_apply", APP_USE_MAY_APPLY)
+    extra.setdefault("panel_edits_pack", False)
+    extra.setdefault("story_58_4_is_apply_oracle", STORY_58_4_IS_APPLY_ORACLE)
+    extra.setdefault("journey", J_KIT_02)
+    extra.setdefault("profile", "app-use")
+    return policy_rejection(
+        str(extra.pop("field", "apply")),
+        "app-use mints change_request and must not apply; authoring plus "
+        "operator principal applies (SCN-0024 Branch B; FR-PG-14; Story 58.4)",
+        **extra,
+    )
+
+
+def refuse_tab_close_cancels_job_handle(**extra: object) -> TypedRefusal:
+    """SCN-0024 Branch C — chrome dispose must not cancel the JobHandle."""
+    extra.setdefault("branch", "C")
+    extra.setdefault("cancels", PANEL_DISPOSE_CANCELS_JOB_HANDLE)
+    extra.setdefault("panel_dispose_cancels_job_handle", PANEL_DISPOSE_CANCELS_JOB_HANDLE)
+    extra.setdefault("replays_unacked_intent", RECONNECT_REPLAYS_UNACKED_INTENT)
+    extra.setdefault("journey", J_KIT_02)
+    extra.setdefault("gap_0081_chrome_filled", GAP_0081_CHROME_FILLED)
+    return policy_rejection(
+        str(extra.pop("field", "job_handle")),
+        "closing a panel or future UI tab must not cancel a running JobHandle "
+        "(SCN-0024 Branch C; FR-PG-13; DEC-0454)",
+        **extra,
+    )
+
+
+def claim_j_kit_02_e2e_at_inspect_sha(claimed: object) -> Result[bool]:
+    """Class/test existence is not e2e at inspect SHA ``34c148b``."""
+    if claimed is True or claimed == "true":
+        return policy_rejection(
+            "e2e",
+            "J-KIT-02 fixtures are not e2e adoption at inspect SHA 34c148b; "
+            "class/test existence is not e2e (DEC-0286; DEC-0465; FR-PG-42)",
+            claimed=True,
+            e2e_at_inspect_sha=False,
+            inspect_sha=KIT_JOURNEY_02_INSPECT_SHA,
+            class_test_existence_is_e2e=False,
+            gap_0081_chrome_filled=GAP_0081_CHROME_FILLED,
+            journey=J_KIT_02,
+        )
+    if claimed is not False:
+        return invalid_input(
+            "e2e_at_inspect_sha",
+            "inspect-SHA e2e claim is a boolean",
+            given=repr(claimed),
+        )
+    return Ok(False)
+
+
+def _diagnosis_log(correlation_id: str, *, event: str) -> Mapping[str, object]:
+    return MappingProxyType(
+        {
+            "correlation_id": correlation_id,
+            "event": event,
+            "fp1_identity": False,
+            "is_journal": False,
+            "level": "ERROR",
+            "ts": "2026-09-26T12:00:00.000Z",
+        }
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OptionalPanelDiagnosisReport:
+    """Panel ask-why result: closed failure_class plus JobHandle or null."""
+
+    diagnosis: Diagnosis
+    panel_id: str
+    instance_id: str
+    can_edit_pack: Literal[False] = False
+    applies: Literal[False] = False
+
+    def to_payload(self) -> Mapping[str, object]:
+        handle = self.diagnosis.job_handle
+        return MappingProxyType(
+            {
+                "applies": self.applies,
+                "can_edit_pack": self.can_edit_pack,
+                "correlation_id": self.diagnosis.correlation_id,
+                "failure_class": self.diagnosis.failure_class.value,
+                "instance_id": self.instance_id,
+                "job_id": None if handle is None else handle.job_id,
+                "journey": J_KIT_02,
+                "panel_id": self.panel_id,
+            }
+        )
+
+
+@dataclass
+class JKit02Fixture:
+    """App-use on instance A: optional panel cannot apply; dispose does not cancel."""
+
+    host: CopilotHost = field(default_factory=CopilotHost)
+    diagnosis: DiagnosisQueryService = field(init=False)
+    _opened: bool = field(default=False, init=False)
+    _running_job_id: str | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        self.diagnosis = DiagnosisQueryService(jobs=self.host.jobs)
+
+    @property
+    def owner(self) -> str:
+        return KIT_JOURNEY_02_OWNER
+
+    @property
+    def journey(self) -> str:
+        return J_KIT_02
+
+    @property
+    def e2e_at_inspect_sha(self) -> bool:
+        return KIT_JOURNEY_02_E2E_AT_INSPECT_SHA
+
+    @property
+    def app_use_may_apply(self) -> bool:
+        return APP_USE_MAY_APPLY
+
+    @property
+    def panel_dispose_cancels_job_handle(self) -> bool:
+        return PANEL_DISPOSE_CANCELS_JOB_HANDLE
+
+    def in_app_panels(self) -> Result[tuple[str, ...]]:
+        loaded = self.host.sessions.get(_APP_A)
+        if is_refusal(loaded):
+            return Ok(())
+        return self.host.sessions.attached_tabs(_APP_A)
+
+    def open_instance_a_with_panel(self) -> Result[ProductSession]:
+        """App-use seat on instance A with an optional in-app panel (60.4)."""
+        if self._opened:
+            return self.host.sessions.get(_APP_A)
+        opened = self.host.open_app_use(
+            product_session_id=_APP_A,
+            instance_id=_INSTANCE_A,
+            contribution=dict(_APP_CONTRIBUTION),
+            as_of=_AS_OF,
+            granted_ops=(_GRANT_A,),
+            selected_refs=[{"kind": "run", "id": _TARGET_A}],
+            panel_id=_PANEL_A,
+            copilot_profile=None,
+        )
+        if is_refusal(opened):
+            return opened
+        installed = self.host.changes.install_v1(
+            instance_id=_INSTANCE_A,
+            package_id=_PACKAGE_A,
+            version=_VERSION_A,
+            package_source_hash=_SOURCE_A,
+            config_revision=_CONFIG_REVISION,
+            granted_ops=(_GRANT_A,),
+            running_jobs=(),
+            live_hashes=[{"target_ref": _TARGET_A, "base_hash": _HASH_A}],
+        )
+        if is_refusal(installed):
+            return installed
+        self._opened = True
+        return opened
+
+    def fail_last_run(self) -> Result[JobHandle]:
+        """Last public run fails as workflow so the panel can ask why (61.2)."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        actor = self._actor()
+        if is_refusal(actor):
+            return actor
+        submitted = self.host.jobs.submit(
+            owner=actor.value,
+            task_id=_LAST_TASK,
+            job_id=_LAST_JOB,
+            correlation_id=_LAST_CORR,
+            attempt_id=2,
+        )
+        if is_refusal(submitted):
+            return submitted
+        started = self.host.jobs.start(submitted.value.job_id)
+        if is_refusal(started):
+            return started
+        failed = self.host.jobs.complete(started.value.job_id, JobHandleState.FAILED)
+        if is_refusal(failed):
+            return failed
+        observed = self.diagnosis.observe(
+            correlation_id=_LAST_CORR,
+            refusal=NoEnvironment.of(kind="docker"),
+            healthy=False,
+            log_line=dict(_diagnosis_log(_LAST_CORR, event="task_graph.failed")),
+            job_handle=failed.value,
+        )
+        if is_refusal(observed):
+            return observed
+        if observed.value.failure_class is not FailureClass.WORKFLOW:
+            return policy_rejection(
+                "failure_class",
+                "J-KIT-02 last-run diagnosis is failure_class=workflow plus JobHandle",
+                given=observed.value.failure_class.value,
+            )
+        return failed
+
+    def ask_why_last_run_failed(self) -> Result[OptionalPanelDiagnosisReport]:
+        """Panel asks why. Host returns failure_class plus JobHandle (or null)."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        queried = self.diagnosis.query(_LAST_CORR)
+        if is_refusal(queried):
+            return queried
+        return Ok(
+            OptionalPanelDiagnosisReport(
+                diagnosis=queried.value,
+                panel_id=_PANEL_A,
+                instance_id=_INSTANCE_A,
+            )
+        )
+
+    def ask_why_without_job(self) -> Result[OptionalPanelDiagnosisReport]:
+        """Diagnosis may return failure_class with a null JobHandle (FR-PG-20)."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        observed = self.diagnosis.observe(
+            correlation_id=_NULL_CORR,
+            refusal=NoEnvironment.of(kind="docker"),
+            healthy=False,
+            log_line=dict(_diagnosis_log(_NULL_CORR, event="public_operation.failed")),
+            job_handle=None,
+        )
+        if is_refusal(observed):
+            return observed
+        return Ok(
+            OptionalPanelDiagnosisReport(
+                diagnosis=observed.value,
+                panel_id=_PANEL_A,
+                instance_id=_INSTANCE_A,
+            )
+        )
+
+    def edit_pack(self, *, source: object = "package.py") -> Result[None]:
+        """Panel cannot edit the pack (SCN-0024 Then 2)."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        return self.host.changes.write_package_source(from_session=_APP_A, source=source)
+
+    def mint_change_request(self) -> Result[ChangeRequest]:
+        """App-use mints. Does not apply. v1 instance stays."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        before = self.host.changes.v1_snapshot()
+        if is_refusal(before):
+            return before
+        minted = self.host.mint_change_request(
+            from_session=_APP_A,
+            change_request_id=_CR_A,
+            targets=[{"target_ref": _TARGET_A, "base_hash": _HASH_A}],
+            patch={"kind": "filter_add", "path": "industry.known_at"},
+        )
+        if is_refusal(minted):
+            return minted
+        after = self.host.changes.v1_snapshot()
+        if is_refusal(after):
+            return after
+        if dict(after.value.to_payload()) != dict(before.value.to_payload()):
+            return policy_rejection(
+                "v1",
+                "v1 instance stays until authoring plus operator apply (FR-PG-14)",
+                journey=J_KIT_02,
+            )
+        return minted
+
+    def apply_from_panel(self) -> Result[ChangeApplyRecord]:
+        """Branch B — panel/app-use apply is forbidden."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        return refuse_panel_applies_change_request(from_session=_APP_A, change_request_id=_CR_A)
+
+    def apply_authoring_plus_operator(self) -> Result[ChangeApplyRecord]:
+        """Story 58.4 remains the apply oracle. v1 instance stays."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        loaded = self.host.changes.get(_CR_A)
+        if is_refusal(loaded):
+            return loaded
+        before = self.host.changes.v1_snapshot()
+        if is_refusal(before):
+            return before
+        authoring = self.host.changes.open_authoring_handoff(loaded.value)
+        if is_refusal(authoring):
+            return authoring
+        validated = self.host.changes.validate(
+            change_request_id=_CR_A,
+            authoring_session=authoring.value.product_session_id,
+            validated_at=_VALIDATE_AT,
+        )
+        if is_refusal(validated):
+            return validated
+        applied = self.host.apply_change_request(
+            change_request_id=_CR_A,
+            from_session=authoring.value.product_session_id,
+            operator_principal="operator",
+            applied_at=_APPLY_AT,
+        )
+        if is_refusal(applied):
+            return applied
+        after = self.host.changes.v1_snapshot()
+        if is_refusal(after):
+            return after
+        if dict(after.value.to_payload()) != dict(before.value.to_payload()):
+            return policy_rejection(
+                "v1",
+                "apply produces v2 evidence; the v1 instance stays (Story 58.4)",
+                journey=J_KIT_02,
+            )
+        return applied
+
+    def v1_snapshot(self) -> Result[InstalledAppSnapshot]:
+        return self.host.changes.v1_snapshot()
+
+    def start_running_work(self) -> Result[JobHandle]:
+        """Live work the panel must not kill on dispose (SCN-0024 Then 3)."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        actor = self._actor()
+        if is_refusal(actor):
+            return actor
+        handle = self.host.submit_job(
+            owner=actor.value,
+            task_id=_RUN_TASK,
+            job_id=_RUN_JOB,
+        )
+        if is_refusal(handle):
+            return handle
+        if handle.value.state is not JobHandleState.RUNNING:
+            return policy_rejection(
+                "job_handle",
+                "J-KIT-02 running work is a live JobHandle",
+                state=handle.value.state.value,
+            )
+        self._running_job_id = handle.value.job_id
+        return handle
+
+    def dispose_panel(self, *, cancel_job: bool = False) -> Result[ProductSession]:
+        """Dispose the optional panel. Running JobHandle is not cancelled."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        if cancel_job:
+            return refuse_tab_close_cancels_job_handle(given="cancel_job")
+        closed = self.host.dispose_panel(
+            _PANEL_A,
+            product_session_id=_APP_A,
+            job_id=self._running_job_id,
+        )
+        if is_refusal(closed):
+            return closed
+        if self._running_job_id is not None:
+            live = self.host.jobs.handle_for(self._running_job_id)
+            if live is None or live.state is not JobHandleState.RUNNING:
+                state = None if live is None else live.state.value
+                return refuse_tab_close_cancels_job_handle(state=state)
+        return closed
+
+    def close_future_ui_tab(self) -> Result[ProductSession]:
+        """A future UI tab close also does not cancel running work."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        opened = self.host.chrome.open_tab(tab_id=_FUTURE_TAB, product_session_id=_APP_A)
+        if is_refusal(opened):
+            return opened
+        closed = self.host.dispose_panel(
+            _FUTURE_TAB,
+            product_session_id=_APP_A,
+            job_id=self._running_job_id,
+        )
+        if is_refusal(closed):
+            return closed
+        if self._running_job_id is not None:
+            live = self.host.jobs.handle_for(self._running_job_id)
+            if live is None or live.state is not JobHandleState.RUNNING:
+                state = None if live is None else live.state.value
+                return refuse_tab_close_cancels_job_handle(state=state, chrome=_FUTURE_TAB)
+        return closed
+
+    def reconnect(self) -> Result[ReconnectSnapshot]:
+        """Resume queries/events. Never replay unacked intent."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        return self.host.reconnect(_APP_A, resume_cursor=0, cursor_generation=1)
+
+    def reconnect_replaying_unacked(self) -> Result[ReconnectSnapshot]:
+        """Forbidden — reconnect does not replay unacked intent."""
+        seated = self._require_open()
+        if is_refusal(seated):
+            return seated
+        return self.host.reconnect(_APP_A, resume_cursor=0, cursor_generation=1, unacked=True)
+
+    def _require_open(self) -> Result[ProductSession]:
+        if not self._opened:
+            return invalid_input(
+                "panel",
+                "J-KIT-02 requires an app-use session on instance A with an optional panel",
+            )
+        return self.host.sessions.get(_APP_A)
+
+    def _actor(self) -> Result[ActorId]:
+        return ActorId.mint(DeskSlug.RESEARCH, "alpha")
