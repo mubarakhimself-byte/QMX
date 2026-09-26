@@ -1,4 +1,4 @@
-"""Stories 65.1–65.4 / J-KIT-01 through J-KIT-05 — thin kit-journey fixtures.
+"""Stories 65.1–65.5 / J-KIT-01 through J-KIT-06 — thin kit-journey fixtures.
 
 J-KIT-01: a pack that omits ``view:*`` and omits ``copilot_profile`` enables
 after Story 60.1. Main authoring invokes via CLI or wire and receives a
@@ -24,6 +24,11 @@ J-KIT-04/05: a widget binds ``start`` of template T with
 as one nested Mission with its own JobHandle; crash of A does not splice
 B. Include-at-author is a new versioned Graph Template. Live merge is
 refused (SCN-0025 Then 1–4; Branches A–D).
+
+J-KIT-06: a ``read`` op flakes with typed retryability that is not ``NO``.
+The host retries and the operator is not paged. An ``external-egress``
+without a receipt becomes ``unknown`` with no second send. Stories invent
+no ceiling number; tests may inject a registry value (SCN-0026; GAP-0108).
 
 Class/test existence is not e2e at inspect SHA ``34c148b`` (DEC-0286;
 DEC-0465). Does not fill GAP-0081 chrome.
@@ -94,6 +99,23 @@ from qma.daemon.kit_journey_nested import (
     refuse_widget_dispose_cancels_mission,
     refuse_widget_owned_invoke,
 )
+from qma.daemon.kit_journey_retry import (
+    HOST_RETRY_LOOP_EXISTED_AT_INSPECT_SHA,
+    INVENTED_CEILING_NUMBER,
+    J_KIT_06,
+    KIT_JOURNEY_06_E2E_AT_INSPECT_SHA,
+    KIT_JOURNEY_06_INSPECT_SHA,
+    KIT_JOURNEY_06_OWNER,
+    OPERATOR_PAGED_FOR_READ_FLAKE,
+    JKit06EgressReport,
+    JKit06Fixture,
+    JKit06ReadRetryReport,
+    claim_j_kit_06_e2e_at_inspect_sha,
+    refuse_blind_j_kit_06_second_send,
+    refuse_gap_0081_retry_chrome,
+    refuse_invented_ceiling_number,
+    refuse_operator_paged_for_read_flake,
+)
 from qma.daemon.plugins.lifecycle import PackLifecycleFixture, PackTransition
 from qma.daemon.repair import STORY_58_4_IS_APPLY_ORACLE
 from qma.daemon.sessions.copilot import CopilotHost
@@ -140,15 +162,18 @@ __all__ = [
     "HEADLESS_HAS_COPILOT_PANEL",
     "HEADLESS_HAS_NAVIGATION",
     "HOME_IS_AUTHORING_WITHOUT_INSTANCE",
+    "HOST_RETRY_LOOP_EXISTED_AT_INSPECT_SHA",
     "INCLUDE_AT_AUTHOR_IMPLEMENTED",
     "INSTALL_IS_GRANT",
     "INSTANCE_ID_KIND",
+    "INVENTED_CEILING_NUMBER",
     "J_KIT_01",
     "J_KIT_02",
     "J_KIT_03",
     "J_KIT_04",
     "J_KIT_04_05",
     "J_KIT_05",
+    "J_KIT_06",
     "KIT_JOURNEY_01_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_01_INSPECT_SHA",
     "KIT_JOURNEY_01_OWNER",
@@ -164,7 +189,11 @@ __all__ = [
     "KIT_JOURNEY_05_E2E_AT_INSPECT_SHA",
     "KIT_JOURNEY_05_INSPECT_SHA",
     "KIT_JOURNEY_05_OWNER",
+    "KIT_JOURNEY_06_E2E_AT_INSPECT_SHA",
+    "KIT_JOURNEY_06_INSPECT_SHA",
+    "KIT_JOURNEY_06_OWNER",
     "NESTED_MISSION_OCCUPANCY_EXISTED_AT_INSPECT_SHA",
+    "OPERATOR_PAGED_FOR_READ_FLAKE",
     "PACK_MAY_OMIT_COPILOT_PROFILE",
     "PACK_SDK_INSPECT_SHA",
     "PANEL_DISPOSE_CANCELS_JOB_HANDLE",
@@ -186,6 +215,9 @@ __all__ = [
     "JKit02Fixture",
     "JKit03Fixture",
     "JKit0405Fixture",
+    "JKit06EgressReport",
+    "JKit06Fixture",
+    "JKit06ReadRetryReport",
     "NestedHomeCallReport",
     "NestedMissionStartReport",
     "OptionalPanelDiagnosisReport",
@@ -194,15 +226,20 @@ __all__ = [
     "claim_j_kit_02_e2e_at_inspect_sha",
     "claim_j_kit_03_e2e_at_inspect_sha",
     "claim_j_kit_04_05_e2e_at_inspect_sha",
+    "claim_j_kit_06_e2e_at_inspect_sha",
     "claim_nested_mission_occupancy_at_inspect_sha",
+    "refuse_blind_j_kit_06_second_send",
     "refuse_copilot_required_to_ship",
     "refuse_fifth_composition_mode",
+    "refuse_gap_0081_retry_chrome",
     "refuse_gap_0081_widget_chrome",
     "refuse_headless_in_app_panel",
+    "refuse_invented_ceiling_number",
     "refuse_live_graph_splice",
     "refuse_live_task_graph_merge",
     "refuse_nested_grant_union",
     "refuse_nested_mission_grant_union",
+    "refuse_operator_paged_for_read_flake",
     "refuse_optional_envelope_instance_id",
     "refuse_panel_applies_change_request",
     "refuse_silent_latest_instance",
