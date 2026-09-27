@@ -21,7 +21,12 @@ Unit tests: **32 passed, 1 skipped** (Skylos CLI absent on Windows).
 Synthetic lifecycle (local): `ok=true` at
 `C:/Users/Mubarak/Desktop/QMX-worktrees/_ui-factory/lifecycle/lifecycle.json`
 
-Live Grok workflow: `ui-factory-lifecycle` (script `~/.grok/workflows/ui-factory-lifecycle.rhai`).
+Live Grok workflow `ui-factory-lifecycle` (`wf_01a0e25fde9476a2948261c0819cccbd`):
+agent spawn succeeded; quality `--user-facing` without Reticle returned `passed=false` `exit_code=1`.
+`inspect-evidence --user-facing` on that artifact: `ok=false` reason `Reticle evidence missing`.
+Evidence: `C:/Users/Mubarak/Desktop/QMX-worktrees/_ui-factory/lifecycle/evidence-neg/quality-ft-reticle-neg.json`
+(`reticle_verdict=missing`, command `exit_code=0`). That red result is the R2 negative control, not a factory crash.
+
 Live GitHub named-check wait is **not** a promotion success unless `ci-wait` reports `simulated=false` and required names green on the exact SHA.
 
 ## Map
