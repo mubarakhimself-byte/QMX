@@ -2,6 +2,10 @@
 
 ## Current decision
 
+**Latest instruction, 2026-09-27:** ALL new feature coding is paused, including independent backlog work. Sequence is existing backend core assurance, then middleware, then UI. Only CI/factory infrastructure repairs may proceed now. The user does not authorize a large Codex backend audit; external service/model selection comes first. No quality percentage or backend readiness has been established. Planned Epics 66–73 must remain distinct from the implemented baseline through Epic 65.
+
+Dedicated repair chat: **Repair QMX CI and factory enforcement**, thread `01a0e2ad-ed5b-7913-b591-81b4034274f7`, local. [Dispatched scope and acceptance requirements](REPAIR-TASK.md). [Reviewer/skill study and audit staging](../reviewer-study-2026-09-27/START-HERE.md). This new instruction supersedes any earlier recommendation to continue independent feature work during reconciliation.
+
 Pause new UI/product factory execution while establishing trustworthy integration quality. User authorizes Codex to take ownership of the factory fixes, but first requests Skylos documentation review, diagnosis, repository preservation on GitHub, and a concrete way forward. No factory repair, automatic finding cleanup, product coding, third-party reviewer activation or branch-protection change occurred in this diagnosis sitting.
 
 The completed planning split remains Epic 66 → UI factory → ui-integration; Epics 67–73 → backend factory → integration. Backend prerequisites still apply. This document does not certify all story acceptance criteria or code correctness.
@@ -65,7 +69,7 @@ The repository's local CLI gate compares totals with configured ceilings. It doe
 4. **Give Grok bounded batches.** One owned component or rule family per repair batch, explicit evidence and allowed files, no unrelated refactors, no gate weakening, no baseline reset. Require fresh verification at the exact candidate SHA. Escalate ambiguity as a named blocked item rather than spending 19 hours chasing every red report from successive pushes.
 5. **Repair factory enforcement before resuming it.** Local story checks → epic review → immutable candidate push → await all required checks for that exact SHA → verified promotion to the proper lane → cleanup. A red baseline is recorded separately from newly introduced findings; it does not become permission to add regressions or call a candidate green. Add branch-level protection only with a compatible candidate/PR flow, so no permanent deadlock is introduced.
 6. **Add targeted independent review.** Review high-risk areas and bounded diffs with applicable contracts and user journeys. Repository-wide review needs a coverage ledger and several scoped passes; a giant PR is not exhaustive assurance. Keep mechanical checks in CI and semantic/runtime findings in review. Test clean installation, Linux/Windows behavior, failure recovery and realistic end-to-end operation before deployment.
-7. **Resume delivery.** Fix UI factory findings in REVIEW-ROUND2.md, demonstrate its positive and negative lifecycle, then run Epic 66 when prerequisites allow. Run 67–73 through the repaired backend lane. Combine accepted tips later in a deployment candidate and validate them together.
+7. **Reassess delivery after backend assurance.** Repair factory findings and demonstrate its positive and negative lifecycle, but keep ALL feature execution paused. The user now requires existing backend audit and bounded repairs first, middleware next, UI last. A repaired factory alone does not authorize Epic 66 or 67–73. Later combine accepted tips in a deployment candidate and validate them together after a separate readiness decision.
 
 ## Codex Review
 
@@ -85,4 +89,4 @@ Recommended first use: a bounded reconciliation PR with explicit contracts and c
 
 ## Carry forward
 
-User prefers Codex to own the remaining factory fixes instead of another Grok correction cycle. This remains pending behind integration reconciliation. Grok remains the implementation worker for well-scoped repair batches. Grok 4.7 is excluded by user preference; respect 4.6/4.5 intent while honestly reporting any catalog restriction on per-agent model selection.
+User prefers Codex to own the remaining factory fixes instead of another Grok correction cycle. A separate scoped CI/factory repair chat is now started (see the latest decision above); its completion is not yet established. Grok remains the implementation worker for later well-scoped product repair batches. Grok 4.7 is excluded by user preference; respect 4.6/4.5 intent while honestly reporting any catalog restriction on per-agent model selection. The large backend audit must use separately selected external resources, not a broad Codex review in this chat.
