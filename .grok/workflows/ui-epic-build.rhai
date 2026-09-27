@@ -93,6 +93,11 @@ if args.build_model != () {
     }
 }
 
+// This Grok catalog rejects agent(..., #{ model: ... }).
+// "Explicit subagent model selection is unavailable for this catalog."
+// Children inherit the session model (UI factory orchestrator is grok-4.6).
+log("catalog cannot set per-agent model; inheriting session (requested build_model=" + build_model + ")");
+
 phase("Stories");
 let ledger = [];
 let stopped = false;
@@ -148,7 +153,6 @@ for story in stories {
             let build = agent(bp, #{
                 label: "build:" + sid,
                 phase: "Stories",
-                model: build_model,
                 capability_mode: "all",
                 output_schema: build_schema,
             });
@@ -185,7 +189,6 @@ for story in stories {
                 let verify = agent(vp, #{
                     label: "verify:" + sid + "." + round.to_string(),
                     phase: "Stories",
-                    model: "grok-4.5",
                     capability_mode: "execute",
                     output_schema: verify_schema,
                 });
@@ -218,7 +221,6 @@ for story in stories {
                     let fixr = agent(fp, #{
                         label: "fix:" + sid + "." + round.to_string(),
                         phase: "Stories",
-                        model: build_model,
                         capability_mode: "all",
                         output_schema: build_schema,
                     });
@@ -280,7 +282,6 @@ rp += " Return JSON {blocking, advisory, summary}.";
 let review = agent(rp, #{
     label: "review",
     phase: "Review",
-    model: "grok-4.6",
     capability_mode: "execute",
     output_schema: review_schema,
 });

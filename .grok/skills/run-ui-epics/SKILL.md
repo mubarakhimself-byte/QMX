@@ -134,9 +134,10 @@ stories.
 
 At most 2 live UI epics, and only when declared files/components are
 disjoint. Shared tokens, component APIs, and lockfiles are sequential
-unless isolation is proven. Weight H/M → `args.build_model=grok-4.6`;
-L → `grok-4.5`. Quality runners stay grok-4.5. Reviewer is grok-4.6.
-Never spawn a reviewer on grok-4.5.
+unless isolation is proven. Weight H/M → record `args.build_model=grok-4.6`; L → `grok-4.5`.
+This catalog **rejects** `agent(..., #{ model: ... })`. The executable
+script omits `model`; children inherit this grok-4.6 session. Log the
+requested weight. Do not recreate a 30m watchdog (same inherit trap).
 
 Inspect `git worktree list`, `QMX-worktrees/ui-epic-*`, and
 `git branch --list "ui-epic/*"`. Reuse leftovers. Do not recut a live

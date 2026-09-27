@@ -36,6 +36,11 @@ file, pass the text). Optionally replace only `meta.name` with
 `already_commit` skips rebuild and re-runs quality. A story commit means
 built, not verified.
 
+This Grok catalog rejects `agent(..., #{ model: ... })`. The script logs
+the requested `build_model` and omits `model` on every spawn so children
+inherit the orchestrator session (grok-4.6). Do not put `model` back
+until the catalog accepts it.
+
 ## Budget
 
 `stories.len * 10 + 12` (build + up to 4 verifies + up to 3 fixes +

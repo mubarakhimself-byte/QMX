@@ -40,9 +40,9 @@ p += worktree;
 p += "/../_ui-factory/evidence";
 p += "\npassed is true only if that command exits 0. Return JSON {passed, exit_code, evidence_path}.";
 
+// Catalog rejects agent(..., #{ model: ... }). Inherit session model.
 let r = agent(p, #{
     label: "smoke-quality",
-    model: "grok-4.5",
     capability_mode: "execute",
     output_schema: verify_schema,
 });
@@ -54,6 +54,8 @@ if r != () && r.success && r.output != () {
     passed = r.output.passed == true;
     exit_code = r.output.exit_code;
     evidence_path = as_str(r.output.evidence_path);
+} else if r != () && r.output != () {
+    evidence_path = as_str(r.output);
 }
 if exit_code != 0 { passed = false; }
 
