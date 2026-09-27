@@ -1,4 +1,4 @@
-"""Setup/doctor: toolchain, MCP, destination branch, no-story waiting."""
+"""Setup/doctor: observed tools, honest MCP, readiness levels."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from ui_factory.config import FactoryConfig, load_pins
-from ui_factory.paths import SOURCE_SKILL, USER_SKILL, USER_WORKFLOW
+from ui_factory.gitops import observed_toolchain
+from ui_factory.paths import PRODUCT_HOST, SOURCE_SKILL, USER_SKILL, USER_WORKFLOW
 from ui_factory.quality import find_host_root
 from ui_factory.validate_inputs import validate_inputs
 
@@ -21,20 +22,26 @@ class Check:
     name: str
     ok: bool
     detail: str
-    kind: str = "local"  # local | mcp | ci | pin-mismatch
+    kind: str = "local"
 
 
 @dataclass
 class DoctorReport:
     checks: list[Check] = field(default_factory=list)
-    ready: bool = False
+    installed: bool = False
+    setup_ready: bool = False
     waiting_for_input: bool = False
+    runtime_ready: bool = False
+    ready: bool = False
     limitations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "ready": self.ready,
+            "installed": self.installed,
+            "setup_ready": self.setup_ready,
             "waiting_for_input": self.waiting_for_input,
+            "runtime_ready": self.runtime_ready,
+            "ready": self.ready,
             "checks": [asdict(c) for c in self.checks],
             "limitations": self.limitations,
         }
@@ -54,7 +61,6 @@ def _node_version() -> str:
 
 
 def _in_range(version: str, spec: str) -> bool:
-    # spec like ">=22.12.0 <23.0.0"
     if version == "":
         return False
     parts = [int(p) for p in version.split(".")[:3]]
@@ -66,7 +72,11 @@ def _in_range(version: str, spec: str) -> bool:
     return not ("<23.0.0" in spec and major >= 23)
 
 
-def run_doctor(config: FactoryConfig, *, mcp: dict[str, bool] | None) -> DoctorReport:
+def run_doctor(
+    config: FactoryConfig,
+    *,
+    mcp: dict[str, dict[str, object]] | None,
+) -> DoctorReport:
     report = DoctorReport()
     pins = load_pins()
     node_spec = str(pins.get("node_range") or ">=22.12.0 <23.0.0")
@@ -75,7 +85,7 @@ def run_doctor(config: FactoryConfig, *, mcp: dict[str, bool] | None) -> DoctorR
     report.checks.append(
         Check(
             "node",
-            node != "",
+            node_ok,
             f"found {node or 'missing'}; pin {node_spec}",
             "pin-mismatch" if node and not node_ok else "local",
         )
@@ -83,85 +93,74 @@ def run_doctor(config: FactoryConfig, *, mcp: dict[str, bool] | None) -> DoctorR
     if node and not node_ok:
         report.limitations.append(
             f"Workstation Node {node} is outside ADR pin {node_spec}. "
-            "CI uses Node 22.12.0. Vite 8 engines are "
-            "^20.19.0 || >=22.12.0 so Node 24 can run Vite; "
-            "do not label a Node 24 run as ADR Node 22."
+            "runtime_ready is false until Node 22.12.x is used or an operator "
+            "amendment is recorded. Vite 8 engines allow Node 24; that is not "
+            "an ADR amendment."
+        )
+    for name, version in observed_toolchain():
+        report.checks.append(
+            Check(f"observed:{name}", version != "missing", version, "local")
         )
     pnpm = shutil.which("pnpm")
-    report.checks.append(
-        Check("pnpm", pnpm is not None, pnpm or "pnpm missing", "local")
-    )
-    report.checks.append(
-        Check("python", True, sys.version.split()[0], "local")
-    )
+    report.checks.append(Check("pnpm", pnpm is not None, pnpm or "pnpm missing"))
+    report.checks.append(Check("python", True, sys.version.split()[0]))
     uv = shutil.which("uv")
-    report.checks.append(Check("uv", uv is not None, uv or "uv missing", "local"))
+    report.checks.append(Check("uv", uv is not None, uv or "uv missing"))
     gh = shutil.which("gh")
     report.checks.append(
-        Check(
-            "gh",
-            gh is not None,
-            gh or "gh missing; live CI wait unavailable",
-            "ci",
-        )
+        Check("gh", gh is not None, gh or "gh missing; live CI wait unavailable", "ci")
     )
-    if gh is None:
-        report.limitations.append(
-            "Live GitHub CI wait is unproven until gh is used against "
-            "a factory-candidate/ui tag or ui-integration push."
-        )
     dest = config.destination_branch
     report.checks.append(
         Check(
             "destination_branch",
             dest not in {config.backend_branch, "main", "integration"},
             f"UI destination is {dest}; backend remains {config.backend_branch}",
-            "local",
+        )
+    )
+    report.checks.append(Check("source_skill", SOURCE_SKILL.is_dir(), str(SOURCE_SKILL)))
+    report.checks.append(
+        Check("installed_skill", (USER_SKILL / "SKILL.md").is_file(), str(USER_SKILL))
+    )
+    report.checks.append(
+        Check("installed_workflow", USER_WORKFLOW.is_file(), str(USER_WORKFLOW))
+    )
+    product = find_host_root(config.repo_root, config.host_app_roots, factory_mode="product")
+    fixture = find_host_root(config.repo_root, config.host_app_roots, factory_mode="fixture")
+    report.checks.append(
+        Check(
+            "product_host",
+            product is not None,
+            str(product) if product else f"missing {PRODUCT_HOST}",
         )
     )
     report.checks.append(
         Check(
-            "source_skill",
-            SOURCE_SKILL.is_dir(),
-            str(SOURCE_SKILL),
-            "local",
-        )
-    )
-    report.checks.append(
-        Check(
-            "installed_skill",
-            (USER_SKILL / "SKILL.md").is_file(),
-            str(USER_SKILL),
-            "local",
-        )
-    )
-    report.checks.append(
-        Check(
-            "installed_workflow",
-            USER_WORKFLOW.is_file(),
-            str(USER_WORKFLOW),
-            "local",
-        )
-    )
-    host = find_host_root(config.repo_root, config.host_app_roots)
-    report.checks.append(
-        Check(
-            "host_app",
-            host is not None,
-            str(host) if host else "no package.json host yet (product stories will add it)",
-            "local",
+            "fixture_host",
+            fixture is not None,
+            str(fixture) if fixture else "fixture app absent",
         )
     )
     mcp_map = mcp or {}
-    for name, present in mcp_map.items():
+    if not mcp_map:
         report.checks.append(
-            Check(f"mcp:{name}", present, "connected" if present else "absent", "mcp")
+            Check("mcp", False, "MCP not probed this run; status unknown", "mcp")
         )
-        if not present:
-            report.limitations.append(
-                f"MCP {name} is not connected in this session. "
-                "CLI readiness is separate from MCP readiness."
+        report.limitations.append(
+            "MCP readiness is unknown until an orchestrator writes probed evidence."
+        )
+    for name, info in mcp_map.items():
+        probed = bool(info.get("probed")) if isinstance(info, dict) else False
+        ok = bool(info.get("ok")) if isinstance(info, dict) else False
+        detail = ""
+        if isinstance(info, dict):
+            detail = str(info.get("detail") or "")
+        if not probed:
+            report.checks.append(
+                Check(f"mcp:{name}", False, detail or "unknown (not probed)", "mcp")
             )
+        else:
+            report.checks.append(Check(f"mcp:{name}", ok, detail or "probed", "mcp"))
     validation = validate_inputs(config)
     waiting = validation.status == "waiting_for_input"
     report.waiting_for_input = waiting
@@ -169,21 +168,28 @@ def run_doctor(config: FactoryConfig, *, mcp: dict[str, bool] | None) -> DoctorR
         Check(
             "stories",
             validation.stories > 0,
-            validation.status + f" stories={validation.stories}",
-            "local",
+            f"{validation.status} stories={validation.stories}",
         )
     )
     if waiting:
         report.limitations.append(
-            "No UI stories supplied. Setup is complete and waiting for BMAD "
-            "epics/stories. The factory will not generate a backlog."
+            "No UI stories supplied. Setup can complete while waiting for BMAD."
         )
-    blocking = [
-        c
-        for c in report.checks
-        if not c.ok and c.name in {"python", "uv", "destination_branch", "source_skill"}
-    ]
-    report.ready = not blocking
+    report.installed = (USER_SKILL / "SKILL.md").is_file()
+    report.setup_ready = uv is not None and SOURCE_SKILL.is_dir()
+    report.runtime_ready = (
+        report.setup_ready
+        and node_ok
+        and product is not None
+        and bool(mcp_map)
+        and all(
+            isinstance(v, dict) and bool(v.get("probed")) and bool(v.get("ok"))
+            for v in mcp_map.values()
+        )
+        if mcp_map
+        else False
+    )
+    report.ready = report.setup_ready
     return report
 
 

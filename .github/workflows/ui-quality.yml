@@ -31,16 +31,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          roots = [
-              Path("apps/host"),
-              Path("apps/ui"),
-              Path("host"),
-              Path("tools/ui_factory/fixtures/factory-test-app"),
-          ]
-          found = next((p for p in roots if (p / "package.json").is_file()), None)
+          product = Path("apps/qmx-ui")
+          found = product if (product / "package.json").is_file() else None
           print(f"host={found or ''}")
           if found is None:
-              print("::notice::No UI host package.json; UI job skips (not a pass of product chrome)")
+              print("::error::Missing product host apps/qmx-ui; UI quality is not a pass")
           with open(Path.home() / "host.txt" if False else "/dev/null", "w"):
               pass
           Path("host-path.txt").write_text(str(found) if found else "", encoding="utf-8")
@@ -63,6 +58,8 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm run test:e2e
-      - name: Skipped host
+      - name: Missing product host
         if: steps.host.outputs.skip == 'true'
-        run: echo "No host package; job succeeded without claiming product UI."
+        run: |
+          echo "Missing product host apps/qmx-ui; this check is not a pass"
+          exit 1

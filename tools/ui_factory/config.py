@@ -12,6 +12,7 @@ from ui_factory.paths import (
     BACKEND_BRANCH,
     DESTINATION_BRANCH,
     FACTORY_DIR,
+    PRODUCT_HOST,
     REPO_ROOT,
     state_dir,
     worktree_root,
@@ -45,6 +46,9 @@ class FactoryConfig:
     max_parallel_epics: int
     max_repair_rounds: int
     ci_timeout_seconds: int
+    product_host: str
+    fixture_host: str
+    required_ci_checks: tuple[str, ...]
 
     @property
     def merge_tmp_name(self) -> str:
@@ -70,18 +74,14 @@ def load_config(repo_root: Path | None = None) -> FactoryConfig:
         "typecheck": "uv run --project {worktree} poe types",
         "test": "uv run --project {worktree} poe test",
     }
-    host_roots = data.get("host_app_roots") or [
-        "apps/host",
-        "apps/ui",
-        "host",
-        "tools/ui_factory/fixtures/factory-test-app",
-    ]
+    host_roots = data.get("host_app_roots") or [PRODUCT_HOST]
     serial = data.get("shared_serial_paths") or [
         "pnpm-lock.yaml",
         "package.json",
-        "apps/host/src/lib/tokens.css",
-        "apps/host/src/lib/components/ui",
+        f"{PRODUCT_HOST}/src/lib/tokens.css",
+        f"{PRODUCT_HOST}/src/lib/components/ui",
     ]
+    checks = data.get("required_ci_checks") or ["Skylos", "QA Battery", "UI quality"]
     return FactoryConfig(
         destination_branch=dest,
         backend_branch=backend,
@@ -95,6 +95,11 @@ def load_config(repo_root: Path | None = None) -> FactoryConfig:
         max_parallel_epics=int(data.get("max_parallel_epics") or 2),
         max_repair_rounds=int(data.get("max_repair_rounds") or 3),
         ci_timeout_seconds=int(data.get("ci_timeout_seconds") or 1800),
+        product_host=str(data.get("product_host") or PRODUCT_HOST),
+        fixture_host=str(
+            data.get("fixture_host") or "tools/ui_factory/fixtures/factory-test-app"
+        ),
+        required_ci_checks=tuple(str(c) for c in checks),
     )
 
 

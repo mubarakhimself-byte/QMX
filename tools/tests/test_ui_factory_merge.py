@@ -54,11 +54,27 @@ def test_ff_merge_lands_on_ui_integration(tmp_path: Path) -> None:
         dest="ui-integration",
         branch="ui-epic/70-shell",
         tmp=tmp,
+        lease=tmp_path / "merge.lease",
     )
     dest_has = _git(repo, ["log", "ui-integration", "--oneline"])
     backend = _git(repo, ["log", "integration", "--oneline"])
     assert "story 70.1" in dest_has.stdout
     assert "story 70.1" not in backend.stdout
+
+
+def test_occupied_destination_merges_in_place(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    _git(repo, ["checkout", "ui-integration"])
+    ff_merge(
+        repo=repo,
+        dest="ui-integration",
+        branch="ui-epic/70-shell",
+        tmp=tmp_path / "should-not-create",
+        lease=tmp_path / "merge.lease",
+    )
+    assert not (tmp_path / "should-not-create").exists()
+    log = _git(repo, ["log", "--oneline"])
+    assert "story 70.1" in log.stdout
 
 
 def test_rebase_conflict_blocks(tmp_path: Path) -> None:

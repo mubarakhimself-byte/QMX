@@ -7,18 +7,18 @@
     "_bmad-output/planning-artifacts/epics-UI*.md",
     "_bmad-output/planning-artifacts/epics-ui*.md"
   ],
+  "product_host": "apps/qmx-ui",
+  "fixture_host": "tools/ui_factory/fixtures/factory-test-app",
   "host_app_roots": [
-    "apps/host",
-    "apps/ui",
-    "host",
-    "tools/ui_factory/fixtures/factory-test-app"
+    "apps/qmx-ui"
   ],
   "shared_serial_paths": [
     "pnpm-lock.yaml",
     "package.json",
-    "apps/host/src/lib/tokens.css",
-    "apps/host/src/lib/components/ui"
+    "apps/qmx-ui/src/lib/tokens.css",
+    "apps/qmx-ui/src/lib/components/ui"
   ],
+  "required_ci_checks": ["Skylos", "QA Battery", "UI quality"],
   "python_quality": {
     "lint": "uv run --project {worktree} poe lint",
     "typecheck": "uv run --project {worktree} poe types",

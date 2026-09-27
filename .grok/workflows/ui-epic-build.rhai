@@ -174,17 +174,31 @@ for story in stories {
                 let vp = unattended_rules();
                 vp += "In this worktree RUN the factory CLI. Do not judge by reading code. Set cwd to the worktree.\n";
                 vp += factory_cli;
+                vp += " git-changed --worktree ";
+                vp += worktree;
+                vp += "\nThen run quality with those files, the story hash, and metadata:\n";
+                vp += factory_cli;
                 vp += " quality --worktree ";
                 vp += worktree;
                 vp += " --unit-id ";
                 vp += sid;
                 vp += " --sha ";
                 vp += commit;
+                vp += " --story-hash ";
+                vp += sid;
+                vp += " --files <comma-separated git-changed paths>";
+                if user_facing == "true" {
+                    vp += " --user-facing";
+                }
+                vp += "\nThen inspect the evidence_path:\n";
+                vp += factory_cli;
+                vp += " inspect-evidence --path <evidence_path>";
                 if user_facing == "true" {
                     vp += " --user-facing";
                 }
                 vp += "\n";
-                vp += "passed is true only if the CLI exits 0 AND evidence JSON exists AND every command exit_code is 0. ";
+                vp += "passed is true only if quality CLI exits 0 AND inspect-evidence ok=true AND evidence JSON exists. ";
+                vp += "Do not trust an agent opinion. User-facing units without Reticle act_and_wait/assert yes fail. ";
                 vp += "If the CLI is missing, passed=false and missing_tool. Return JSON {passed, failures, evidence_path, exit_code}.";
                 let verify = agent(vp, #{
                     label: "verify:" + sid + "." + round.to_string(),

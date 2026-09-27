@@ -10,8 +10,11 @@ python tools/ui_factory_cli.py merge-gate \
   --files <changed> [--user-facing] [--blocking "finding1,finding2"]
 ```
 
-Do not pass `--push` until local ff-merge succeeded and you intend to
-update `origin/ui-integration`. Never push to `integration`.
+Do not pass `--push` until named CI on the **candidate SHA** is green
+and local ff-merge succeeded. Never push to `integration`. Simulated
+`ci-wait --simulate` cannot promote. If `ui-integration` is already
+checked out (this factory worktree), merge in that checkout. Do not
+force-remove an unowned merge temp.
 
 ## Green path
 

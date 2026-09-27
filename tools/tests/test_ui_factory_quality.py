@@ -23,20 +23,34 @@ def _cfg(root: Path) -> FactoryConfig:
         max_parallel_epics=2,
         max_repair_rounds=3,
         ci_timeout_seconds=30,
+        product_host="apps/qmx-ui",
+        fixture_host="tools/ui_factory/fixtures/factory-test-app",
+        required_ci_checks=("Skylos", "QA Battery", "UI quality"),
     )
 
 
 def test_applicable_profiles_keep_python() -> None:
     names = applicable_profiles(
         Path("."),
-        ["apps/host/src/lib/Rail.svelte"],
+        ["apps/qmx-ui/src/lib/Rail.svelte"],
         user_facing=True,
         needs_backend=True,
     )
-    assert names[0] == "python"
+    assert "python" in names
     assert "ui-reticle" in names
     assert "ui-playwright" in names
     assert "ui-contract" in names
+
+
+def test_user_facing_without_files_still_requires_ui() -> None:
+    names = applicable_profiles(
+        Path("."),
+        [],
+        user_facing=True,
+        needs_backend=False,
+    )
+    assert "ui-reticle" in names
+    assert "ui-build" in names
 
 
 def test_missing_host_is_incomplete(tmp_path: Path) -> None:
@@ -57,10 +71,31 @@ def test_missing_host_is_incomplete(tmp_path: Path) -> None:
             profile_names=["ui-lint"],
             user_facing=False,
             evidence_dir=tmp_path / "ev",
+            factory_mode="product",
         )
     assert ok is False
     assert record.commands[0].missing_tool is True
     assert "missing" in reason
+
+
+def test_user_facing_without_reticle_is_not_ok(tmp_path: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    record, ok, reason = run_profiles(
+        config=_cfg(tmp_path),
+        worktree=tmp_path,
+        unit_id="ft-ret",
+        story_hash="h",
+        candidate_sha="sha",
+        profile_names=["factory-selftest"],
+        user_facing=True,
+        evidence_dir=tmp_path / "ev",
+        factory_mode="fixture",
+    )
+    assert ok is False
+    assert "Reticle" in reason or "reticle" in reason.lower()
+    assert record.reticle_verdict == "missing"
 
 
 def test_factory_selftest_profile_passes(tmp_path: Path) -> None:

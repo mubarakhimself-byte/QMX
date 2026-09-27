@@ -23,6 +23,9 @@ def _cfg(root: Path) -> FactoryConfig:
         max_parallel_epics=2,
         max_repair_rounds=3,
         ci_timeout_seconds=30,
+        product_host="apps/qmx-ui",
+        fixture_host="tools/ui_factory/fixtures/factory-test-app",
+        required_ci_checks=("Skylos", "QA Battery", "UI quality"),
     )
 
 

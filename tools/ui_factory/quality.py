@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -10,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from ui_factory.config import FactoryConfig, load_pins, load_profiles
+from ui_factory.config import FactoryConfig, load_profiles
 from ui_factory.evidence import (
     CommandResult,
     EvidenceRecord,
@@ -23,26 +24,31 @@ from ui_factory.evidence import (
     write_command_log,
     write_evidence,
 )
-
-_COUNT_MARKERS = (
-    ("passed", "passed"),
-    ("failed", "failed"),
-    ("skipped", "skipped"),
-)
+from ui_factory.gitops import observed_toolchain
+from ui_factory.paths import FIXTURE_HOST, PRODUCT_HOST
 
 
 def _parse_test_counts(text: str) -> dict[str, int]:
     counts: dict[str, int] = {}
-    lower = text.lower()
-    for token, key in _COUNT_MARKERS:
-        for part in lower.replace(",", " ").split():
-            if part.endswith(token) and part[: -len(token)].isdigit():
-                counts[key] = counts.get(key, 0) + int(part[: -len(token)])
-    if "ran" not in counts:
-        ran = counts.get("passed", 0) + counts.get("failed", 0)
-        if ran:
-            counts["ran"] = ran
+    for kind in ("passed", "failed", "skipped", "error"):
+        match = re.search(rf"(\d+)\s+{kind}", text, re.IGNORECASE)
+        if match:
+            counts[kind] = int(match.group(1))
+    vitest = re.search(r"Tests\s+(\d+)\s+passed", text)
+    if vitest:
+        counts["passed"] = int(vitest.group(1))
+    ran = counts.get("passed", 0) + counts.get("failed", 0)
+    if ran:
+        counts["ran"] = ran
     return counts
+
+
+def _is_test_command(name: str, argv: Sequence[str]) -> bool:
+    blob = " ".join(argv).lower()
+    return any(
+        token in blob
+        for token in ("pytest", "vitest", "playwright", "poe test", "run test")
+    )
 
 
 def _which(binary: str) -> str | None:
@@ -65,33 +71,20 @@ def applicable_profiles(
 ) -> list[str]:
     names: list[str] = []
     profiles = load_profiles()
-    files = [f.replace("\\", "/") for f in changed_files]
-    ui_touch = any(
-        f.endswith((".ts", ".svelte", ".css", ".js"))
-        or "/apps/" in f
-        or f.startswith("tools/ui_factory/fixtures/")
-        for f in files
-    )
-    py_touch = any(f.endswith(".py") for f in files) or not files
-    if py_touch:
+    files = [f.replace("\\", "/") for f in changed_files if f]
+    ui_ext = any(f.endswith((".ts", ".tsx", ".svelte", ".css", ".js")) for f in files)
+    product_touch = any(f.startswith(PRODUCT_HOST + "/") or f == PRODUCT_HOST for f in files)
+    py_touch = any(f.endswith(".py") for f in files)
+    ui_required = user_facing or ui_ext or product_touch
+    if py_touch or not ui_required:
         names.append("python")
-    if ui_touch:
-        names.extend(
-            [
-                "ui-format",
-                "ui-lint",
-                "ui-types",
-                "ui-build",
-                "ui-unit",
-            ]
-        )
+    if ui_required:
+        names.extend(["ui-format", "ui-lint", "ui-types", "ui-build", "ui-unit"])
+        names.append("ui-playwright")
         if needs_backend:
             names.append("ui-contract")
-        names.append("ui-playwright")
         if user_facing:
             names.append("ui-reticle")
-    # Always include python when the story did not declare files: fail closed
-    # on the existing roster gate rather than skipping it.
     if "python" not in names:
         names.insert(0, "python")
     known = set(profiles.keys())
@@ -157,6 +150,10 @@ def run_command(
     stderr = proc.stderr or ""
     log_path = write_command_log(log_dir, name, stdout, stderr)
     counts = _parse_test_counts(stdout + "\n" + stderr)
+    if _is_test_command(name, argv):
+        counts["required"] = max(counts.get("required", 0), 1)
+        if "ran" not in counts:
+            counts["ran"] = 0
     return CommandResult(
         name=name,
         argv=argv,
@@ -197,10 +194,25 @@ def _profile_commands(
     return rows
 
 
-def find_host_root(worktree: Path, roots: Sequence[str]) -> Path | None:
+def find_host_root(
+    worktree: Path,
+    roots: Sequence[str],
+    *,
+    factory_mode: str = "product",
+) -> Path | None:
+    if factory_mode == "fixture":
+        fixture = worktree / FIXTURE_HOST
+        if (fixture / "package.json").is_file():
+            return fixture
+        return None
+    product = worktree / PRODUCT_HOST
+    if (product / "package.json").is_file():
+        return product
     for rel in roots:
+        if rel == FIXTURE_HOST:
+            continue
         path = worktree / rel
-        if (path / "package.json").is_file():
+        if path.name == "qmx-ui" and (path / "package.json").is_file():
             return path
     return None
 
@@ -215,21 +227,14 @@ def run_profiles(
     profile_names: Sequence[str],
     user_facing: bool,
     evidence_dir: Path,
+    factory_mode: str = "product",
+    reticle: Mapping[str, str] | None = None,
 ) -> tuple[EvidenceRecord, bool, str]:
-    pins = load_pins()
     profiles = load_profiles()
-    host = find_host_root(worktree, config.host_app_roots)
-    frontend = pins.get("frontend")
-    svelte_pin = ""
-    if isinstance(frontend, dict):
-        svelte_pin = str(frontend.get("svelte") or "")
-    toolchain = toolchain_fingerprint(
-        [
-            ("node", str(pins.get("node_ci") or "")),
-            ("pnpm", str(pins.get("pnpm") or "")),
-            ("svelte", svelte_pin),
-        ]
+    host = find_host_root(
+        worktree, config.host_app_roots, factory_mode=factory_mode
     )
+    toolchain = toolchain_fingerprint(observed_toolchain())
     dirty = dirty_fingerprint(worktree)
     existing = evidence_dir / f"quality-{unit_id}.json"
     if existing.is_file():
@@ -240,11 +245,11 @@ def run_profiles(
             story_hash=story_hash,
             toolchain=toolchain,
             dirty=dirty,
+            profiles=list(profile_names),
         )
         if stale == "":
             ok, reason = evidence_ok(previous, require_reticle=user_facing)
             return previous, ok, "reused evidence" if ok else reason
-        # fall through and rerun
     results: list[CommandResult] = []
     log_dir = evidence_dir / "logs" / unit_id
     for name in profile_names:
@@ -298,6 +303,15 @@ def run_profiles(
                     timeout=timeout,
                 )
             )
+    reticle_map = dict(reticle or {})
+    verdict = reticle_map.get("verdict", "")
+    source = reticle_map.get("source", "")
+    if not user_facing:
+        verdict = "not-applicable"
+        source = "not-applicable"
+    elif verdict == "":
+        verdict = "missing"
+        source = source or "missing"
     record = EvidenceRecord(
         kind="quality",
         unit_id=unit_id,
@@ -306,8 +320,12 @@ def run_profiles(
         toolchain=toolchain,
         dirty_fingerprint=dirty,
         commands=results,
-        reticle_verdict="not-applicable" if not user_facing else "",
+        reticle_verdict=verdict,
+        reticle_tool=reticle_map.get("tool", ""),
+        reticle_journey=reticle_map.get("journey", ""),
+        reticle_source=source,
+        profiles=list(profile_names),
     )
     write_evidence(evidence_dir, record)
-    ok, reason = evidence_ok(record, require_reticle=False)
+    ok, reason = evidence_ok(record, require_reticle=user_facing)
     return record, ok, reason

@@ -87,6 +87,7 @@ class FactoryState:
     destination_branch: str
     base_sha: str
     units: dict[str, UnitRecord] = field(default_factory=dict)
+    completed_features: list[str] = field(default_factory=list)
     waiting_for_input: bool = False
     waiting_reason: str = ""
     updated_at: str = ""
@@ -98,6 +99,7 @@ class FactoryState:
             "waiting_for_input": self.waiting_for_input,
             "waiting_reason": self.waiting_reason,
             "updated_at": self.updated_at,
+            "completed_features": list(self.completed_features),
             "units": {k: v.to_dict() for k, v in self.units.items()},
         }
 
@@ -113,6 +115,7 @@ class FactoryState:
             destination_branch=str(data.get("destination_branch") or ""),
             base_sha=str(data.get("base_sha") or ""),
             units=units,
+            completed_features=[str(x) for x in (data.get("completed_features") or [])],
             waiting_for_input=bool(data.get("waiting_for_input")),
             waiting_reason=str(data.get("waiting_reason") or ""),
             updated_at=str(data.get("updated_at") or ""),

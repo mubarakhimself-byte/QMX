@@ -12,6 +12,7 @@ from ui_factory.evidence import (
     EvidenceRecord,
     evidence_ok,
     is_stale,
+    read_evidence,
     sha256_text,
     write_evidence,
 )
@@ -40,6 +41,9 @@ def _cfg(root: Path) -> FactoryConfig:
         max_parallel_epics=2,
         max_repair_rounds=3,
         ci_timeout_seconds=30,
+        product_host="apps/qmx-ui",
+        fixture_host="tools/ui_factory/fixtures/factory-test-app",
+        required_ci_checks=("Skylos", "QA Battery", "UI quality"),
     )
 
 
@@ -69,6 +73,71 @@ def test_passing_command_retains_evidence(tmp_path: Path) -> None:
     ok, reason = evidence_ok(record, require_reticle=False)
     assert ok is True
     assert reason == "ok"
+
+
+def test_exit_zero_survives_round_trip(tmp_path: Path) -> None:
+    passing = CommandResult(
+        name="lint",
+        argv=["true"],
+        cwd=".",
+        exit_code=0,
+        duration_ms=1,
+        stdout_sha256="x",
+        stderr_sha256="y",
+        log_path="lint.log",
+    )
+    record = EvidenceRecord(
+        kind="quality",
+        unit_id="ft-zero",
+        candidate_sha="abc",
+        story_hash="h",
+        toolchain="t",
+        dirty_fingerprint="d",
+        commands=[passing],
+        reticle_verdict="not-applicable",
+    )
+    path = write_evidence(tmp_path / "ev", record)
+    loaded = read_evidence(path)
+    assert loaded.commands[0].exit_code == 0
+    ok, _reason = evidence_ok(loaded, require_reticle=False)
+    assert ok is True
+
+
+def test_pytest_summary_populates_counts() -> None:
+    from ui_factory.quality import _parse_test_counts
+
+    counts = _parse_test_counts("25 passed, 1 skipped in 5.58s")
+    assert counts["passed"] == 25
+    assert counts["skipped"] == 1
+    assert counts["ran"] == 25
+
+
+def test_forced_reticle_cannot_promote() -> None:
+    passing = CommandResult(
+        name="lint",
+        argv=["true"],
+        cwd=".",
+        exit_code=0,
+        duration_ms=1,
+        stdout_sha256="x",
+        stderr_sha256="y",
+        log_path="lint.log",
+    )
+    record = EvidenceRecord(
+        kind="quality",
+        unit_id="ft-forced",
+        candidate_sha="abc",
+        story_hash="h",
+        toolchain="t",
+        dirty_fingerprint="d",
+        commands=[passing],
+        reticle_verdict="yes",
+        reticle_tool="reticle_assert",
+        reticle_source="forced",
+    )
+    ok, reason = evidence_ok(record, require_reticle=True)
+    assert ok is False
+    assert "forced" in reason
 
 
 def test_type_failure_refuses_promotion() -> None:
@@ -255,6 +324,15 @@ def test_good_persist() -> None:
     assert persistence_check(_FakeDriver(True), "http://127.0.0.1/", "save", "k") == "ok"
 
 
+def test_named_ci_ignores_unrelated_success() -> None:
+    from ui_factory.ci_wait import _named_status
+
+    rows = [{"name": "unrelated", "conclusion": "success", "headSha": "abc"}]
+    conclusion, _found, detail = _named_status(rows, ["Skylos", "QA Battery", "UI quality"])
+    assert conclusion == "incomplete"
+    assert "missing" in detail
+
+
 def test_simulated_ci_separated_from_live() -> None:
     sim = watch_sha(
         "abc",
@@ -263,6 +341,7 @@ def test_simulated_ci_separated_from_live() -> None:
         simulate_conclusion="success",
     )
     assert sim.simulated is True
+    assert sim.conclusion == "incomplete"
     live_shape = watch_sha("abc", branch="ui-integration", timeout_seconds=1)
     if live_shape.simulated:
         raise AssertionError("live watch must not set simulated")

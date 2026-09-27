@@ -180,8 +180,10 @@ An agent returning `passed=true` is not evidence. The verify agent must
 run:
 
 ```
+python tools/ui_factory_cli.py git-changed --worktree WT
 python tools/ui_factory_cli.py quality --worktree WT --unit-id ID \
-    --sha HEAD --story-hash HASH --files ...
+    --sha HEAD --story-hash HASH --files <from git-changed> [--user-facing]
+python tools/ui_factory_cli.py inspect-evidence --path EVIDENCE [--user-facing]
 ```
 
 The merge gate re-runs that CLI on the rebased tree. Missing tools,

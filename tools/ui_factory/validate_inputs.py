@@ -92,9 +92,12 @@ def _story_issues(story: StoryRecord) -> list[FieldIssue]:
         hinted = any(
             hint.lower() in story.brief.lower()
             or any(hint.lower() in ac.lower() for ac in story.acceptance_criteria)
+            or any(hint.lower() in src.lower() for src in story.source_documents)
             for hint in UI_DESIGN_HINTS
         )
-        if not hinted:
+        if hinted:
+            story.design_refs.append("inferred-from-traceability")
+        else:
             issues.append(
                 FieldIssue(
                     story.id,
@@ -102,11 +105,45 @@ def _story_issues(story: StoryRecord) -> list[FieldIssue]:
                     "design / UI lens references missing",
                 )
             )
-    if story.depends_on is None:
-        issues.append(
-            FieldIssue(story.id, "depends_on", "dependency edges missing")
-        )
     return issues
+
+
+REQUIRED_FIELDS = {
+    "id",
+    "title",
+    "brief",
+    "acceptance_criteria",
+    "source_documents",
+    "components",
+    "design_refs",
+}
+
+
+def _cycles(stories: list[StoryRecord]) -> list[str]:
+    ids = {s.id for s in stories}
+    graph = {
+        s.id: [d for d in s.depends_on if d in ids]
+        for s in stories
+    }
+    visiting: set[str] = set()
+    seen: set[str] = set()
+    found: list[str] = []
+
+    def walk(node: str, stack: list[str]) -> None:
+        if node in seen:
+            return
+        if node in visiting:
+            found.append(" -> ".join([*stack, node]))
+            return
+        visiting.add(node)
+        for nxt in graph.get(node, []):
+            walk(nxt, [*stack, node])
+        visiting.remove(node)
+        seen.add(node)
+
+    for story_id in ids:
+        walk(story_id, [])
+    return found
 
 
 def _needs_backend(story: StoryRecord) -> bool:
@@ -166,34 +203,45 @@ def validate_inputs(
     issues: list[FieldIssue] = []
     waiting: list[str] = []
     runnable: list[str] = []
-    known = merged_features or set()
+    known = set(merged_features or set())
+    cycles = _cycles(stories)
+    if cycles:
+        for cycle in cycles:
+            waiting.append("dependency cycle: " + cycle)
+    story_ids = {s.id for s in stories}
     for story in stories:
-        issues.extend(_story_issues(story))
-        blocked = [
+        story_issues = _story_issues(story)
+        issues.extend(story_issues)
+        missing_required = any(
+            i.field in REQUIRED_FIELDS for i in story_issues
+        )
+        unfinished = [
             dep
             for dep in story.depends_on
-            if dep.startswith("FEAT-") and dep not in known
+            if dep not in known and dep not in {"", story.id}
         ]
-        backend_wait = _needs_backend(story) and bool(blocked)
-        missing_required = any(
-            i.field in {"acceptance_criteria", "id", "title"} for i in issues
-            if i.story_id == story.id
-        )
+        unknown = [
+            dep
+            for dep in unfinished
+            if dep.startswith("FEAT-") or dep in story_ids or "." in dep
+        ]
         if missing_required:
             waiting.append(f"{story.id} blocked on missing required fields")
-        elif backend_wait:
+        elif unknown:
             waiting.append(
-                f"{story.id} waits on unfinished backend: " + ", ".join(blocked)
+                f"{story.id} waits on unfinished dependencies: " + ", ".join(unknown)
             )
+        elif cycles:
+            waiting.append(f"{story.id} blocked by dependency cycle")
         else:
             runnable.append(story.id)
     status = "ready"
-    if issues and not runnable:
+    if (issues or cycles) and not runnable:
         status = "invalid_input"
     elif waiting and runnable:
         status = "partial"
     elif waiting and not runnable:
-        status = "waiting_for_backend"
+        status = "waiting_for_backend" if any("FEAT-" in w for w in waiting) else "waiting"
     return ValidateReport(
         status=status,
         epic_files=[str(p) for p in files],

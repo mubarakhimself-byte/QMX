@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from ui_factory.gitops import content_fingerprint
 
 
 def sha256_text(text: str) -> str:
@@ -26,15 +27,24 @@ def sha256_file(path: Path) -> str:
 
 
 def dirty_fingerprint(worktree: Path) -> str:
-    """Cheap dirty-tree fingerprint: tracked status bytes, not a git write."""
-    proc = subprocess.run(
-        ["git", "status", "--porcelain=v1"],
-        cwd=worktree,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return sha256_text(proc.stdout or "")
+    """Hash of HEAD diff plus untracked file bytes."""
+    return content_fingerprint(worktree)
+
+
+def safe_filename(name: str) -> str:
+    return name.replace(":", "__").replace("/", "_").replace("\\", "_")
+
+
+def as_int(value: object, default: int) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip() != "":
+        return int(value)
+    return default
 
 
 @dataclass
@@ -66,6 +76,10 @@ class EvidenceRecord:
     dirty_fingerprint: str
     commands: list[CommandResult]
     reticle_verdict: str = ""  # yes | no | unknown | missing | not-applicable
+    reticle_tool: str = ""
+    reticle_journey: str = ""
+    reticle_source: str = ""  # mcp | cli | forced | missing
+    profiles: list[str] = field(default_factory=list)
     review_blocking: list[str] = field(default_factory=list)
     created_at: str = ""
     notes: str = ""
@@ -84,8 +98,8 @@ class EvidenceRecord:
                         name=str(item.get("name") or ""),
                         argv=[str(a) for a in (item.get("argv") or [])],
                         cwd=str(item.get("cwd") or ""),
-                        exit_code=int(item.get("exit_code") or 1),
-                        duration_ms=int(item.get("duration_ms") or 0),
+                        exit_code=as_int(item.get("exit_code"), 1),
+                        duration_ms=as_int(item.get("duration_ms"), 0),
                         stdout_sha256=str(item.get("stdout_sha256") or ""),
                         stderr_sha256=str(item.get("stderr_sha256") or ""),
                         log_path=str(item.get("log_path") or ""),
@@ -106,6 +120,10 @@ class EvidenceRecord:
             dirty_fingerprint=str(data.get("dirty_fingerprint") or ""),
             commands=commands,
             reticle_verdict=str(data.get("reticle_verdict") or ""),
+            reticle_tool=str(data.get("reticle_tool") or ""),
+            reticle_journey=str(data.get("reticle_journey") or ""),
+            reticle_source=str(data.get("reticle_source") or ""),
+            profiles=[str(x) for x in (data.get("profiles") or [])],
             review_blocking=[str(x) for x in (data.get("review_blocking") or [])],
             created_at=str(data.get("created_at") or ""),
             notes=str(data.get("notes") or ""),
@@ -130,12 +148,16 @@ def evidence_ok(record: EvidenceRecord, *, require_reticle: bool) -> tuple[bool,
             if ran == 0:
                 return False, f"{cmd.name} ran zero required tests"
     if require_reticle:
+        if record.reticle_source == "forced":
+            return False, "forced Reticle yes cannot promote"
         if record.reticle_verdict in ("", "missing"):
             return False, "Reticle evidence missing"
         if record.reticle_verdict == "unknown":
             return False, "Reticle verdict unknown is not a pass"
         if record.reticle_verdict != "yes":
             return False, f"Reticle verdict {record.reticle_verdict}"
+        if record.reticle_tool not in {"reticle_act_and_wait", "reticle_assert"}:
+            return False, "Reticle tool must be act_and_wait or assert"
     if record.review_blocking:
         return False, "blocking review findings present"
     return True, "ok"
@@ -148,6 +170,7 @@ def is_stale(
     story_hash: str,
     toolchain: str,
     dirty: str,
+    profiles: Sequence[str] | None = None,
 ) -> str:
     if record.candidate_sha != candidate_sha:
         return "candidate SHA changed"
@@ -157,6 +180,8 @@ def is_stale(
         return "toolchain fingerprint changed"
     if record.dirty_fingerprint != dirty:
         return "worktree dirty fingerprint changed"
+    if profiles is not None and list(record.profiles) != list(profiles):
+        return "requested profiles changed"
     return ""
 
 
@@ -178,7 +203,7 @@ def read_evidence(path: Path) -> EvidenceRecord:
 
 def write_command_log(directory: Path, name: str, stdout: str, stderr: str) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{name}.log"
+    path = directory / f"{safe_filename(name)}.log"
     path.write_text(
         f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}\n",
         encoding="utf-8",
