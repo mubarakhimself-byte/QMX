@@ -19,7 +19,7 @@ name: Skylos
 # exclusions this project's scope ruling needs.
 on:
   push:
-    branches: [integration]
+    branches: [integration, ui-integration]
     tags:
       - 'factory-candidate/**'
   pull_request:

@@ -1,0 +1,41 @@
+{
+  "node_range": ">=22.12.0 <23.0.0",
+  "node_ci": "22.12.0",
+  "vite_node_engines": "^20.19.0 || >=22.12.0",
+  "pnpm": "10.18.3",
+  "packageManager": "pnpm@10.18.3",
+  "frontend": {
+    "svelte": "5.57.1",
+    "sveltekit": "2.70.3",
+    "adapter_static": "3.0.10",
+    "typescript": "5.9.2",
+    "vite": "8.3.0",
+    "vite_plugin_svelte": "7.3.1",
+    "tailwindcss": "4.3.3",
+    "shadcn_svelte": "1.7.0",
+    "bits_ui": "2.19.3",
+    "xyflow_svelte": "1.6.6"
+  },
+  "quality": {
+    "types_node": "22.18.6",
+    "eslint": "9.36.0",
+    "eslint_plugin_svelte": "3.23.0",
+    "vitest": "5.0.2",
+    "playwright": "1.63.0",
+    "prettier": "3.9.9",
+    "svelte_check": "4.7.6"
+  },
+  "catalog": {
+    "storybook": "10.6.0",
+    "storybook_sveltekit": "10.6.0"
+  },
+  "skylos": "4.33.2",
+  "notes": {
+    "pin_policy": "Unattended runs use these exact versions from the lockfile. Do not resolve latest on each story.",
+    "verified_on": "2026-09-27 npm view + vendor docs",
+    "vite8_node": "Vite 8 engines are ^20.19.0 || >=22.12.0 (Node 24 is legal for Vite). QMX CI still uses Node 22.12.0 from ADR-0026.",
+    "vite_plugin_svelte": "6.2.1 peers vite ^6.3 || ^7 only. Vite 8 requires @sveltejs/vite-plugin-svelte 7.x (7.3.1; peers vite ^8 and svelte ^5.46.4). Svelte 5.57.1 satisfies that. Kit 2.70.3 peers already include vite ^8 and plugin ^7.",
+    "vitest": "Vitest 3.x does not support Vite 8 Rolldown. 5.0.2 peers vite ^6.4 || ^7 || ^8.",
+    "storybook": "Do not create storybook@latest. Catalog pin is Storybook 10.6.0 with @storybook/sveltekit 10.6.0 (peers svelte ^5, vite ^5||^6||^7||^8). Storybook 8 is the v8 line (Vite 5 era), not this stack. Install only when a shared-library story asks; local catalog route is enough for factory-test."
+  }
+}

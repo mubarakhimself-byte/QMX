@@ -313,6 +313,10 @@ ignore = [
 # it keeps linting byte-identically to baseline and the root gate stays green with
 # zero adws edits. Only adds the carve-out; nothing here weakens packages/ code.
 "adws/**" = ["E1", "E2", "E3", "E5", "W", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
+# UI factory calls git/uv/pnpm/gh by PATH name; S607 is the same noise as S603.
+"tools/ui_factory/**" = ["S607"]
+"tools/ui_factory_cli.py" = ["S607"]
+"tools/tests/test_ui_factory_*.py" = ["S607"]
 # Tests assert (S101 is the whole point of a test); use fake tokens/secrets as
 # fixtures (S105/S106/S107); and do deliberate local imports to exercise import-time
 # behaviour (PLC0415). Test files may also reach into a package's private benchmark
@@ -347,7 +351,7 @@ include = ["packages", "extensions", "qml", "qmb", "qmn", "tools"]
 pythonPlatform = "Windows"
 # The deliberately-broken money-path fixtures are scanner input data, not code to
 # type-check (Story 1.7); the rest preserves pyright's default exclusions.
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tools/tests/fixtures"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tools/tests/fixtures", "tools/ui_factory", "tools/ui_factory_cli.py"]
 extraPaths = [
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
@@ -415,6 +419,7 @@ exclude = [
     "specs",         # specification prose
     "app_docs",      # transcripts and HTML artifacts
     "qmx-agents",    # nested QMA uv workspace — own lockfile and quality surface (Story 40.1)
+    "ui_factory",    # UI coding-factory machinery — same ruling as adws: agents never "fix" the factory from a scan alert
 ]
 
 # ONE rule is switched off, and only because it cannot read this project's

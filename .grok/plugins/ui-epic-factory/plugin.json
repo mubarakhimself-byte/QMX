@@ -1,0 +1,7 @@
+{
+  "name": "ui-epic-factory",
+  "version": "0.1.0",
+  "description": "Grok UI coding factory: sibling of epic-factory. Worktrees, command evidence, Reticle for user-facing stories, ff-merge to ui-integration. Never touches integration or main.",
+  "author": { "name": "Mubarak" },
+  "keywords": ["ui-epic-factory", "run-ui-epics", "svelte"]
+}

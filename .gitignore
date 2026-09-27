@@ -39,6 +39,17 @@ _bmad/*
 Thumbs.db
 .DS_Store
 
+# UI factory / frontend (product host will reuse these)
+node_modules/
+playwright-report/
+test-results/
+.reticle/
+tools/ui_factory/fixtures/**/dist
+tools/ui_factory/fixtures/**/.svelte-kit
+.vite/
+.grok/plugins/ui-epic-factory/skills/
+
+
 # sssf runtime
 adws/adw_data/sessions/
 adws/adw_data/sssf.db*

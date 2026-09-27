@@ -1,0 +1,30 @@
+{
+  "factory_id": "run-ui-epics",
+  "destination_branch": "ui-integration",
+  "backend_branch": "integration",
+  "base_sha": "7b65732fc03683476c3221889d62d23ae8ccf88e",
+  "epic_globs": [
+    "_bmad-output/planning-artifacts/epics-UI*.md",
+    "_bmad-output/planning-artifacts/epics-ui*.md"
+  ],
+  "host_app_roots": [
+    "apps/host",
+    "apps/ui",
+    "host",
+    "tools/ui_factory/fixtures/factory-test-app"
+  ],
+  "shared_serial_paths": [
+    "pnpm-lock.yaml",
+    "package.json",
+    "apps/host/src/lib/tokens.css",
+    "apps/host/src/lib/components/ui"
+  ],
+  "python_quality": {
+    "lint": "uv run --project {worktree} poe lint",
+    "typecheck": "uv run --project {worktree} poe types",
+    "test": "uv run --project {worktree} poe test"
+  },
+  "max_parallel_epics": 2,
+  "max_repair_rounds": 3,
+  "ci_timeout_seconds": 1800
+}

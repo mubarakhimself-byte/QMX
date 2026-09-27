@@ -1,0 +1,132 @@
+{
+  "python": {
+    "description": "Existing QMF/QMB Python gate. Never replaced by frontend checks.",
+    "cwd": "worktree",
+    "timeout_seconds": 1800,
+    "exit_policy": "any-nonzero-blocks",
+    "commands": [
+      {
+        "name": "poe-lint",
+        "argv": ["uv", "run", "poe", "lint"]
+      },
+      {
+        "name": "poe-types",
+        "argv": ["uv", "run", "poe", "types"]
+      },
+      {
+        "name": "poe-test",
+        "argv": ["uv", "run", "poe", "test"]
+      }
+    ]
+  },
+  "ui-format": {
+    "description": "Prettier + Svelte formatting",
+    "cwd": "host",
+    "timeout_seconds": 300,
+    "commands": [
+      {
+        "name": "prettier-check",
+        "argv": ["pnpm", "exec", "prettier", "--check", "."]
+      }
+    ]
+  },
+  "ui-lint": {
+    "description": "ESLint with eslint-plugin-svelte",
+    "cwd": "host",
+    "timeout_seconds": 300,
+    "commands": [
+      {
+        "name": "eslint",
+        "argv": ["pnpm", "run", "lint"]
+      }
+    ]
+  },
+  "ui-types": {
+    "description": "svelte-check / TypeScript",
+    "cwd": "host",
+    "timeout_seconds": 300,
+    "commands": [
+      {
+        "name": "svelte-check",
+        "argv": ["pnpm", "run", "check"]
+      }
+    ]
+  },
+  "ui-build": {
+    "description": "Production SvelteKit static build",
+    "cwd": "host",
+    "timeout_seconds": 600,
+    "commands": [
+      {
+        "name": "vite-build",
+        "argv": ["pnpm", "run", "build"]
+      }
+    ]
+  },
+  "ui-unit": {
+    "description": "Vitest logic and component tests",
+    "cwd": "host",
+    "timeout_seconds": 300,
+    "commands": [
+      {
+        "name": "vitest",
+        "argv": ["pnpm", "run", "test"]
+      }
+    ]
+  },
+  "ui-contract": {
+    "description": "Frontend/backend contract fixtures. Missing backend is incomplete.",
+    "cwd": "host",
+    "timeout_seconds": 300,
+    "commands": [
+      {
+        "name": "contract",
+        "argv": ["pnpm", "run", "test:contract"]
+      }
+    ]
+  },
+  "ui-playwright": {
+    "description": "Playwright journeys, failure states, accessibility",
+    "cwd": "host",
+    "timeout_seconds": 600,
+    "commands": [
+      {
+        "name": "playwright",
+        "argv": ["pnpm", "run", "test:e2e"]
+      }
+    ]
+  },
+  "ui-reticle": {
+    "description": "Required running-app Reticle evidence. unknown is not a pass.",
+    "cwd": "host",
+    "timeout_seconds": 600,
+    "commands": [
+      {
+        "name": "reticle-cli",
+        "argv": ["pnpm", "run", "test:reticle"]
+      }
+    ]
+  },
+  "ui-integration-perf": {
+    "description": "Broader integration/performance when the story requires it",
+    "cwd": "host",
+    "timeout_seconds": 900,
+    "commands": [
+      {
+        "name": "perf",
+        "argv": ["pnpm", "run", "test:perf"]
+      }
+    ]
+  },
+  "factory-selftest": {
+    "description": "Synthetic factory-test profile. Not a product story gate.",
+    "cwd": "worktree",
+    "timeout_seconds": 60,
+    "commands": [
+      {
+        "name": "true",
+        "argv": ["python", "-c", "print('factory-selftest ok')"]
+      }
+    ]
+  }
+}
