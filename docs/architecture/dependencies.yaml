@@ -350,6 +350,10 @@ components:
       ownership with daemon; no new COMP and no new depends_on edge
       (DEC-0416, DEC-0419, DEC-0446). InvocationEnvelope/GrantRecord specified
       not implemented at 270e992 (DEC-0437, DEC-0450).
+      Pack-and-grant 2026-09-23: pack SDK descriptors, caller_kind named
+      amendment of DEC-0437, host retry none/read; no new COMP and no new
+      depends_on edge (DEC-0452, DEC-0464, DEC-0462). Inspect 34c148b
+      (DEC-0465).
 
   - id: COMP-QMA-WIRE
     name: qma-wire
@@ -361,21 +365,25 @@ components:
     interfaces: [CT-40]
     spec: docs/components/qma-wire.md
     notes: >-
-      The contract-only package both the daemon and the future UI import: the
+      The contract-only package both the daemon and the Svelte host import: the
       wire envelope, the command / query / event families, the initialize
       handshake with semver protocolVersion, attach/detach/replay over the
       durable seq stream, the host_request bridge, dedup and principal classes
       (AD-5, DEC-0304). The seam qma-wire carries is `ui -> backend`, declared
       on CT-40, so the component itself sits where its owner does and no upward
-      edge is drawn; the daemon and future UI meet only at qma-wire, and the two
-      plugin halves meet only here (DEC-0304, DEC-0333, DEC-0336, DEC-0347).
-      Transport posture: loopback default, TLS with recorded config otherwise,
-      remote workers dial out and the daemon never dials in. The
-      qma-ui-contract is a deferred stub (GAP-0081).
-      Workflows 2026-09-19: ContributionHit DTO + pin/tombstone and UI
-      contribution DTOs are additive CT-40 family — no new CT number; chrome
-      stays GAP-0081; no new depends_on edge (DEC-0415, DEC-0430, DEC-0446,
-      DEC-0449). ContributionHit not on wire at 270e992 (DEC-0450).
+      edge is drawn; the daemon and the Svelte host meet only at qma-wire, and
+      the two plugin halves meet only here (DEC-0304, DEC-0333, DEC-0336,
+      DEC-0347, DEC-0505). Transport posture: loopback default, TLS with
+      recorded config otherwise, remote workers dial out and the daemon never
+      dials in. Chrome is the 2026-09-25 Svelte client (DEC-0509); qma-ui-contract
+      types beyond a stub remain GAP-0114. No COMP-UI and no new depends_on
+      edge (DEC-0505). Workflows 2026-09-19: ContributionHit DTO + pin/tombstone
+      and UI contribution DTOs are additive CT-40 family — no new CT number
+      (DEC-0415, DEC-0430, DEC-0446, DEC-0449). ContributionHit not on wire at
+      270e992 (DEC-0450). Pack-and-grant 2026-09-23: caller_kind and diagnosis
+      failure_class are additive CT-40 usage annotations; json-render/MCP Apps
+      stay unpinned; no new CT (DEC-0464, DEC-0456, DEC-0459, DEC-0462).
+      Inspect 34c148be (DEC-0507).
 
   - id: COMP-QMA-DAEMON
     name: qma-daemon
@@ -419,3 +427,8 @@ components:
       place; no new store class and no new depends_on edge (DEC-0421,
       DEC-0420, DEC-0439, DEC-0443, DEC-0446). product_session and durable
       edges absent at 270e992 (DEC-0450).
+      Pack-and-grant 2026-09-23: host SDK, optional copilot, JSON-lines
+      diagnosis, default none/read retry, nested Mission invoke — connect
+      in place; no new store class and no new depends_on edge (DEC-0452,
+      DEC-0454, DEC-0456, DEC-0457, DEC-0455, DEC-0462). Inspect 34c148b
+      (DEC-0465).

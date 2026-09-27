@@ -4,10 +4,10 @@ title: QMF V1 Glossary
 type: glossary
 status: ratified
 depends_on: [COMP-QMF-CORE, COMP-QMF-REGISTRY, COMP-QMF-DATA, COMP-QMF-INDICATORS, COMP-QMF-STRUCTURE, COMP-QMF-VENUE, COMP-QMF-RISK, COMP-QMN, COMP-QMA-CORE, COMP-QMA-WIRE, COMP-QMA-DAEMON]
-decisions: [DEC-0001, DEC-0017, DEC-0019, DEC-0024, DEC-0028, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0048, DEC-0055, DEC-0058, DEC-0059, DEC-0065, DEC-0066, DEC-0074, DEC-0076, DEC-0105, DEC-0106, DEC-0107, DEC-0108, DEC-0109, DEC-0110, DEC-0114, DEC-0115, DEC-0116, DEC-0117, DEC-0118, DEC-0119, DEC-0126, DEC-0128, DEC-0129, DEC-0130, DEC-0131, DEC-0132, DEC-0133, DEC-0134, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0142, DEC-0143, DEC-0144, DEC-0145, DEC-0146, DEC-0147, DEC-0148, DEC-0149, DEC-0150, DEC-0151, DEC-0152, DEC-0153, DEC-0154, DEC-0155, DEC-0157, DEC-0158, DEC-0159, DEC-0160, DEC-0161, DEC-0164, DEC-0165, DEC-0169, DEC-0171, DEC-0172, DEC-0173, DEC-0174, DEC-0175, DEC-0176, DEC-0177, DEC-0178, DEC-0179, DEC-0180, DEC-0181, DEC-0182, DEC-0183, DEC-0184, DEC-0185, DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0215, DEC-0216, DEC-0217, DEC-0218, DEC-0221, DEC-0224, DEC-0227, DEC-0228, DEC-0229, DEC-0230, DEC-0231, DEC-0233, DEC-0234, DEC-0235, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0241, DEC-0249, DEC-0250, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0261, DEC-0262, DEC-0303, DEC-0304, DEC-0305, DEC-0306, DEC-0308, DEC-0309, DEC-0311, DEC-0312, DEC-0313, DEC-0314, DEC-0315, DEC-0316, DEC-0317, DEC-0318, DEC-0319, DEC-0320, DEC-0321, DEC-0322, DEC-0323, DEC-0328, DEC-0330, DEC-0331, DEC-0332, DEC-0337, DEC-0338, DEC-0339, DEC-0340, DEC-0342, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0348, DEC-0349, DEC-0361, DEC-0376, DEC-0378, DEC-0269, DEC-0270, DEC-0273, DEC-0275, DEC-0283, DEC-0284, DEC-0285, DEC-0286, DEC-0380, DEC-0381, DEC-0382, DEC-0383, DEC-0386, DEC-0387, DEC-0395, DEC-0396, DEC-0397, DEC-0398, DEC-0399, DEC-0401, DEC-0403, DEC-0414, DEC-0415, DEC-0417, DEC-0421, DEC-0424, DEC-0435, DEC-0436, DEC-0437, DEC-0444, DEC-0445, DEC-0448, DEC-0449, DEC-0450]
+decisions: [DEC-0001, DEC-0017, DEC-0019, DEC-0024, DEC-0028, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0048, DEC-0055, DEC-0058, DEC-0059, DEC-0065, DEC-0066, DEC-0074, DEC-0076, DEC-0105, DEC-0106, DEC-0107, DEC-0108, DEC-0109, DEC-0110, DEC-0114, DEC-0115, DEC-0116, DEC-0117, DEC-0118, DEC-0119, DEC-0126, DEC-0128, DEC-0129, DEC-0130, DEC-0131, DEC-0132, DEC-0133, DEC-0134, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0142, DEC-0143, DEC-0144, DEC-0145, DEC-0146, DEC-0147, DEC-0148, DEC-0149, DEC-0150, DEC-0151, DEC-0152, DEC-0153, DEC-0154, DEC-0155, DEC-0157, DEC-0158, DEC-0159, DEC-0160, DEC-0161, DEC-0164, DEC-0165, DEC-0169, DEC-0171, DEC-0172, DEC-0173, DEC-0174, DEC-0175, DEC-0176, DEC-0177, DEC-0178, DEC-0179, DEC-0180, DEC-0181, DEC-0182, DEC-0183, DEC-0184, DEC-0185, DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0215, DEC-0216, DEC-0217, DEC-0218, DEC-0221, DEC-0224, DEC-0227, DEC-0228, DEC-0229, DEC-0230, DEC-0231, DEC-0233, DEC-0234, DEC-0235, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0241, DEC-0249, DEC-0250, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0261, DEC-0262, DEC-0303, DEC-0304, DEC-0305, DEC-0306, DEC-0308, DEC-0309, DEC-0311, DEC-0312, DEC-0313, DEC-0314, DEC-0315, DEC-0316, DEC-0317, DEC-0318, DEC-0319, DEC-0320, DEC-0321, DEC-0322, DEC-0323, DEC-0328, DEC-0330, DEC-0331, DEC-0332, DEC-0337, DEC-0338, DEC-0339, DEC-0340, DEC-0342, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0348, DEC-0349, DEC-0361, DEC-0376, DEC-0378, DEC-0269, DEC-0270, DEC-0273, DEC-0275, DEC-0283, DEC-0284, DEC-0285, DEC-0286, DEC-0380, DEC-0381, DEC-0382, DEC-0383, DEC-0386, DEC-0387, DEC-0395, DEC-0396, DEC-0397, DEC-0398, DEC-0399, DEC-0401, DEC-0403, DEC-0414, DEC-0415, DEC-0417, DEC-0421, DEC-0424, DEC-0435, DEC-0436, DEC-0437, DEC-0444, DEC-0445, DEC-0448, DEC-0449, DEC-0450, DEC-0452, DEC-0453, DEC-0454, DEC-0455, DEC-0456, DEC-0463, DEC-0464, DEC-0465]
 sources: [_docwork/ledger.yaml, _docwork/gaps.yaml, docs/registry/variables.yaml, docs/architecture/dependencies.yaml, docs/contracts/, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, docs/decisions/ADR-0019-trading-node.md, docs/decisions/ADR-0022-workbench-expansion.md, docs/decisions/ADR-0023-qml-research-expansion.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-14/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-16/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, _docwork/riders/workflows-construction-kit-2026-09-19.md]
 generated: 2026-08-18
-verified: '2026-09-19'
+verified: '2026-09-25'
 stale_after: 30d
 ---
 
@@ -467,7 +467,7 @@ A qmf-core time type: a half-open interval over Instants, `[start, end)`, suppor
 
 ### InvocationEnvelope / GrantRecord
 
-**Specified, not implemented** at `integration@270e992` (DEC-0437, DEC-0450). Every public operation call carries an **InvocationEnvelope** binding logical invocation/attempt ids, op id/version, contribution tuple, instance_id, config_revision, optional caller/callee `psess:` refs, grant snapshot, effect class, and effect-specific idempotency. Manifests request; the host grants structured immutable **GrantRecord**s (`grant_id`, principal, audience, contribution tuple, instance_id, config_revision, op id/version, effect class, parameter ceiling, account_scope, expires_at). `product_session.granted_ops` stores grant ids, never bare op-id strings as the grant. Upgrade or a new package version cannot widen an existing grant without an explicit re-grant. (DEC-0437, DEC-0416)
+**Specified, not implemented** at `integration@270e992` (DEC-0437, DEC-0450). Every public operation call carries an **InvocationEnvelope** binding logical invocation/attempt ids, op id/version, contribution tuple, instance_id, config_revision, optional caller/callee `psess:` refs, grant snapshot, effect class, and effect-specific idempotency. Manifests request; the host grants structured immutable **GrantRecord**s (`grant_id`, principal, audience, contribution tuple, instance_id, config_revision, op id/version, effect class, parameter ceiling, account_scope, expires_at). `product_session.granted_ops` stores grant ids, never bare op-id strings as the grant. Upgrade or a new package version cannot widen an existing grant without an explicit re-grant. Named amendment 2026-09-23 (DEC-0464): envelope gains closed `caller_kind` `user | agent | workflow`; envelope `instance_id` remains required on invoke. Types/fixtures exist at `integration@34c148b`; `caller_kind` is absent there (DEC-0465, GAP-0101). (DEC-0437, DEC-0416, DEC-0464, DEC-0465)
 
 ### JobHandle
 
@@ -690,7 +690,59 @@ Trading-floor **Role display** label for the PM desk Role (DEC-0435). The durabl
 
 ### product_session / psess:
 
-An authority overlay — a journal-projected record kind, **not** a QMA **Session** and not a QMA Profile (DEC-0421). Ids are `psess:`; QMA Session ids remain `sess:` and remain the execution container. Cardinality is 1 product_session → many QMA Sessions. `ProductSessionProfile` is the closed enum `{authoring, app-use}`, immutable at create. Durable fields include grants (GrantRecord ids), selected_refs, and context_revision under compare-and-set; tab attachment and UI layout are not durable. App-use cannot edit implementation or apply its own changes. Specified under Workflows AD-8; absent at `integration@270e992` (DEC-0450). (DEC-0421, DEC-0442, DEC-0450)
+An authority overlay — a journal-projected record kind, **not** a QMA **Session** and not a QMA Profile (DEC-0421). Ids are `psess:`; QMA Session ids remain `sess:` and remain the execution container. Cardinality is 1 product_session → many QMA Sessions. `ProductSessionProfile` is the closed enum `{authoring, app-use}`, immutable at create. Durable fields include grants (GrantRecord ids), selected_refs, and context_revision under compare-and-set; tab attachment and UI layout are not durable. App-use cannot edit implementation or apply its own changes. Specified under Workflows AD-8; absent at `integration@270e992` (DEC-0450). Named amendment 2026-09-23 (DEC-0463): `app_instance_id` MAY be absent when `profile=authoring`; remains required when `profile=app-use`; closed `selected_refs` kinds gain `instance_id`; no third profile. Types/fixtures exist at `integration@34c148b`; class/test existence is not e2e (DEC-0465, DEC-0286). (DEC-0421, DEC-0442, DEC-0450, DEC-0463, DEC-0465)
+
+### pack (kit)
+
+A versioned plugin bundle that **requests** operations, optional `view:*` wire DTOs, optional `copilot_profile` request blob, and requested capabilities (DEC-0452). The host **grants** GrantRecords into a `psess:`. Installing is not granting. Enabling after validate is not granting. Headless packs (operations, no views, no copilot panel) are first-class. SDK means this pack-and-grant host contract, not a pip extra. (DEC-0452, DEC-0443)
+
+### mini-app
+
+An installed instance of a pack, keyed by `instance_id` ≠ `plugin_id` (DEC-0453) (DEC-0429). Kit noun over the whole platform — not a QMA-only product and not a registry kind. Execution of each `op_id` is owned by the COMP named on the descriptor. (DEC-0453)
+
+### widget (kit)
+
+A view of an operation — display only. Widgets bind or display ops; they do not own invoke and do not add a fifth composition mode (DEC-0453) (DEC-0455). Distinct from Experimentation Board layout widgets (client-only display alias, DEC-0417).
+
+### copilot / QuantMind copilot
+
+One product identity over QMA (DEC-0454) (DEC-0422). Many independently scoped resumable `psess:` sessions. `ProductSessionProfile` remains `{authoring, app-use}` — no third seat (DEC-0463). In-app copilot panel is optional; a pack may omit `copilot_profile` (DEC-0454). Tool availability is parent AD-9 intersection. UI panels are not sessions. Absent as a named field at `integration@34c148b` (DEC-0465, GAP-0103).
+
+### caller_kind
+
+Closed InvocationEnvelope field `user | agent | workflow` (DEC-0464) (DEC-0455). Named amendment of DEC-0437. Envelope `instance_id` remains required on every invoke. Not a grant and not a second invoke API. Absent at `integration@34c148b` (GAP-0101, DEC-0465).
+
+### failure_class (kit)
+
+Closed diagnosis enum `grant | workflow | view | dependency | host` (DEC-0456). `view` means a wire DTO failed to mount, was stale, or was unhealthy — it is not an invoke. Distinct from QMN alert `failure_class` and from CT-04 `RefusalCategory`. Absent at `integration@34c148b` (GAP-0105, DEC-0465). Cheap-veto A7 (DEC-0467).
+
+### pairing_proof
+
+Bearer credential that authorizes a browser-paired CT-40 connection (DEC-0492). HTTP presents `Authorization: Bearer pairing:<proof>`. WebSocket presents subprotocol `qmx.pair.<proof>`. Allowed homes are in-memory plus `sessionStorage`. Cookies, `localStorage`, and IndexedDB are forbidden homes. Journal stores `proof_fp1` only, never the raw proof. A remembered Origin never issues a new proof (DEC-0491). Absent at `integration@34c148be` (DEC-0507).
+
+### pairing_record_id
+
+Nonsecret journal identity of a pairing row (DEC-0492). Logs and `qmb host status` may show this id. Distinct from `pairing_proof`. Distinct from CT-28 `pairing_record` (BMS demo-account link).
+
+### host_control
+
+Daemon-minted owner-only token under `QMA_DAEMON_ROOT` that authorizes local `qmb host` verbs on a running daemon (DEC-0503). Not CT-40. Not a provider `cred://`. Lost-file recovery is `qmb host recover-control` on a stopped daemon by the OS owner without presenting the lost token (DEC-0503). Absent at `integration@34c148be` (DEC-0507).
+
+### product_session_ref
+
+Additive CT-48 mailbox Envelope pointer at a product-session projection (DEC-0495). Excluded from Envelope fp1. ProductSession **own** identity remains `product_session_id`. Machine rows with no product conversation omit the field. Absent at `integration@34c148be` (DEC-0507).
+
+### originating_product_session_ref
+
+Optional immutable JobHandle field stored at UI admit (DEC-0496). Headless/QMB admits omit it. UI `cancel_job` is unavailable when absent. Absent at `integration@34c148be` (DEC-0507).
+
+### Home (platform destination)
+
+Work / attention / resume surface on the platform rail (DEC-0470). Independent of Copilot. May share `SessionList` / `ConversationPane` components. Not a third `ProductSessionProfile`.
+
+### Copilot (platform destination)
+
+Conversation workspace on the platform rail (DEC-0470). Independent of Home. Distinct from the optional in-app copilot **panel** (DEC-0454).
 
 ### Profile
 

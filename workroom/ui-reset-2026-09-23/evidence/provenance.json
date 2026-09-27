@@ -1,0 +1,99 @@
+{
+  "reviewDate": "2026-09-23",
+  "records": [
+    {
+      "role": "storyboard",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Excalidraw/qmx-ui-storyboard.md",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/qmx-ui-storyboard.source.md",
+      "bytes": 99027,
+      "sha256": "2c27d55f4414e2c044bcbc2be36e087503fbe34655a258b1bfefac4d1d89e929"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922150714_899.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922150714_899.png",
+      "fileId": "9519524b10183db42c0fe087cb7e01a37c1d7e43",
+      "bytes": 828323,
+      "sha256": "2b7efd1e78e3c472be603d48dbd0629754b1584f5cc379586862df282867f920"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922151452_954.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922151452_954.png",
+      "fileId": "f5e551b2d517638514042911b94ed38e2383a7df",
+      "bytes": 309589,
+      "sha256": "dcd5c2f1c1c5721e40fa645e09b7ad68fe3fb37a4e29dac7547d6f23d5006a5c"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922153805_586.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922153805_586.png",
+      "fileId": "1efa6f5c3ee34c2384d1aa42a6025278f09da3fa",
+      "bytes": 683560,
+      "sha256": "5c5538c8db8a892f07436e1d7d94bd2fe3b4e9a6d312f7d3043e0f112b3dcc20"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922153840_932.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922153840_932.png",
+      "fileId": "08d58f4f31dee383af1d3dee6e716c7c4f4e8f5a",
+      "bytes": 174440,
+      "sha256": "576956e247a294fed647ac5ba473c910680f7233f9eebec5060d8de22926f3c9"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922153920_566.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922153920_566.png",
+      "fileId": "7ea17c736d35f92c520165c93d27607170bde619",
+      "bytes": 63739,
+      "sha256": "ddb52954b7879d6d47ba2d778411a8a754713a9b810b83d2d0d164b3c7247d5a"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922154128_267.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922154128_267.png",
+      "fileId": "df49334ceff2d5ea4b740f0010d8606553a8ffad",
+      "bytes": 561010,
+      "sha256": "2d3dd47a60bf8f9a0a5e81c7c4f61db249cb5dc1236254626573a52106813058"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922154153_959.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922154153_959.png",
+      "fileId": "f5779af0facb130fbac8fae56c7f32f58333db37",
+      "bytes": 122750,
+      "sha256": "79abaeb83723603f606d6bfcdbc9b1fbd28136fc4683dd0ba8388992e36a3129"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922154354_046.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922154354_046.png",
+      "fileId": "ef4c1922cd5a776627fa329b0a711ff9ac487dc2",
+      "bytes": 65877,
+      "sha256": "6298093de2bf716d32276ca5cd4f1454d0955f26468ef3e9bdf07e5852e5ac22"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922154421_046.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922154421_046.png",
+      "fileId": "22180a4043401316eb5f9194d5d12ffe6647b84e",
+      "bytes": 137378,
+      "sha256": "e3e840a538dea4f2293442db277aad3218e71469970b563b058c9b641101aa80"
+    },
+    {
+      "role": "image",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/Pasted Image 20260922155654_792.png",
+      "snapshot": "workroom/ui-reset-2026-09-23/evidence/source-images/Pasted Image 20260922155654_792.png",
+      "fileId": "242a1cf3bdc536d1342f8e6cb637715d993922b3",
+      "bytes": 44490,
+      "sha256": "956db91dcea7316a543cc4fb409bc439db94f7fc60f472848f2595f04758ef1f"
+    },
+    {
+      "role": "video",
+      "source": "C:/Users/Mubarak/Documents/brain/brain/terminal-preview.mp4",
+      "bytes": 4948211,
+      "sha256": "9de8b26e5ec796e8f800a7a29875080339c84beeb539bcf9d5c9348dfb5d2e44",
+      "snapshot": "See sampled frames; full original video not copied."
+    }
+  ]
+}

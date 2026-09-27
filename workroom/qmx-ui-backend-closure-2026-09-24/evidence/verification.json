@@ -1,0 +1,13 @@
+{
+  "checked_at_utc": "2026-09-24T17:42:55.539142+00:00",
+  "input_file_count": 88,
+  "hash_mismatches": [],
+  "file_set_differences": {
+    "backend": [],
+    "ui": []
+  },
+  "structural_lints": "both pass, zero findings",
+  "independent_reviewers": "all usage-limited, no reports; primary-agent review only",
+  "runtime_verified": false,
+  "input_integrity_ok": true
+}

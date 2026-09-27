@@ -1,0 +1,368 @@
+--- backend/before/ARCHITECTURE-SPINE.md
++++ backend/after/ARCHITECTURE-SPINE.md
+@@ -10,8 +10,8 @@
+ updated: '2026-09-24'
+ binds: [GAP-0081-backend, GAP-0100-backend, UX-01, UX-03, UX-05, UX-06, UX-11, UX-12, J-UI-06, J-UI-08, J-UI-09, J-UI-13, J-UI-14]
+ sources: [architecture-QMX-2026-09-18, architecture-QMX-2026-09-23, architecture-QMX-UI-2026-09-23, architecture-QMA-2026-08-28, workroom/qmx-ui-closure-round2-2026-09-24, workroom/qmx-ui-backend-joint-review-2026-09-24, epics-QMA-2026-08-29, epics-WORKFLOWS-2026-09-19, epics-PACK-AND-GRANT-2026-09-23, integration@34c148be, RFC-6455, RFC-6750, WHATWG-WebSockets, HTML-webstorage-2026-09-22, RFC-9110]
+-companions: [START-HERE.md, PARENT-AMENDMENT-MAP.md, DEPENDENCY-MAP.md, PAIRING-AND-ADMISSION.md, HOST-LIFECYCLE.md, MAILBOX-AND-DELIVERY.md, CANCEL-AND-HANDLES.md, ARTIFACTS-AND-TRANSFER.md, PACK-UI-AND-AUTHORING.md, PROVIDER-AND-COMPAT.md, TRACE-MATRIX.md, CLOSURE-EVIDENCE.md, CLOSURE-J1-J5.md, UI-CANDIDATE-CHANGELOG.md, REVIEW-LAUNCH.txt]
+-review_status: joint-review amendment J1-J5 — candidate defaults, not operator-accepted
++companions: [START-HERE.md, PARENT-AMENDMENT-MAP.md, DEPENDENCY-MAP.md, PAIRING-AND-ADMISSION.md, HOST-LIFECYCLE.md, MAILBOX-AND-DELIVERY.md, CANCEL-AND-HANDLES.md, ARTIFACTS-AND-TRANSFER.md, PACK-UI-AND-AUTHORING.md, PROVIDER-AND-COMPAT.md, TRACE-MATRIX.md, CLOSURE-EVIDENCE.md, CLOSURE-J1-J5.md, CLOSURE-C1-C2.md, UI-CANDIDATE-CHANGELOG.md, REVIEW-LAUNCH.txt]
++review_status: C1/C2 correction after closure review — candidate defaults, not operator-accepted
+ ---
+ 
+ # Architecture Spine — QMX UI backend-delta
+@@ -101,7 +101,7 @@
+ 
+ - **Binds:** COMP-QMA-DAEMON store; COMP-QMB confirm/revoke; logs, traces, diagnostics
+ - **Prevents:** journaling a bearer credential; treating a renamed field as nonsecret; two lifecycle implementations
+-- **Rule:** `pairing_proof` is a **bearer credential** ([RFC 6750 §1.2](https://datatracker.ietf.org/doc/html/rfc6750#section-1.2)): possession authorizes. `pairing_record_id` is the nonsecret row identity. Journal projections `pairing_pending` and `pairing_session` (**AM-03**) store `pairing_record_id`, Origin, operator principal, `proof_fp1` (hash of the proof), issued/expires/revoked, pending lineage — **never** the raw proof. HTTP `Authorization: Bearer pairing:<proof>` and WS `qmx.pair.<proof>` present the proof. Access logs, traces, diagnostics, crash reports, and `qmb host status` redact Authorization and `qmx.pair.*`; they may show `pairing_record_id`. Surface scan refuses raw proof values, not only keys named `token`/`bearer`. Confirm, renew, expiry, revoke, restart: `PAIRING-AND-ADMISSION.md` §lifecycle. TTL is `registry:pairing.session_ttl` (no number minted here). **Only** `qmb host configure pairing-ttl` over host-control may create or change that row; CT-40 `variable.set` naming that key **refuses**. Missing TTL refuses `/pair/start` and `/pair/confirm` issue. Expiry **closes** sockets that presented that proof. Renew **rotates**: new proof, old `proof_fp1` revoked, old sockets closed. One proof **may** be presented on multiple connections for that Origin until expiry/revoke/rotate. Origin revoke (`--origin`) is a journal-ordered cutoff of all `pairing_session` rows **and every** `pairing_pending` for that Origin with `created_at`/`confirmed_at`/`issued_at` ≤ cutoff, including **confirmed-unconsumed** pendings. After cutoff, `/pair/confirm` cannot issue.
++- **Rule:** `pairing_proof` is a **bearer credential** ([RFC 6750 §1.2](https://datatracker.ietf.org/doc/html/rfc6750#section-1.2)): possession authorizes. `pairing_record_id` is the nonsecret row identity. Journal projections `pairing_pending` and `pairing_session` (**AM-03**) store `pairing_record_id`, Origin, operator principal, `proof_fp1` (hash of the proof), issued/expires/revoked, pending lineage — **never** the raw proof. HTTP `Authorization: Bearer pairing:<proof>` and WS `qmx.pair.<proof>` present the proof. Access logs, traces, diagnostics, crash reports, and `qmb host status` redact Authorization and `qmx.pair.*`; they may show `pairing_record_id`. Surface scan refuses raw proof values, not only keys named `token`/`bearer`. Confirm, renew, expiry, revoke, restart: `PAIRING-AND-ADMISSION.md` §lifecycle. TTL is `registry:pairing.session_ttl` (no number minted here). **Only** `qmb host configure pairing-ttl` over host-control may create or change that row; CT-40 `variable.set` naming that key **refuses**. Missing TTL refuses `/pair/start` and `/pair/confirm` issue. Expiry **closes** sockets that presented that proof. Renew **rotates**: new proof, old `proof_fp1` revoked, old sockets closed. One proof **may** be presented on multiple connections for that Origin until expiry/revoke/rotate. **`--session`** revokes that `pairing_record_id` only. **`--origin`** is an administrative barrier: when that event is durable at `journal_seq` R, every `pairing_session` and `pairing_pending` for that Origin with `journal_seq` < R is revoked (including **confirmed-unconsumed** pendings and a **renew that committed earlier**). Origin-revoke is never discarded because a renew appended first. The argv is `qmb host pair revoke --origin <origin>` (the paired static Origin, not every Origin on the daemon). After R: `/pair/renew` of proofs with `journal_seq` < R refuses; `/pair/confirm` of pendings with `journal_seq` < R cannot issue. A **new** `/pair/start` after R (new pending, seq > R) is legal and may be QMB-confirmed (re-pair). Each `--origin` is a new barrier at its own `journal_seq`. Close matching WS. Details: `PAIRING-AND-ADMISSION.md`.
+ 
+ ### AD-5 — Unauthenticated bind is a named carve-out [CANDIDATE]
+ 
+@@ -113,7 +113,7 @@
+ 
+ - **Binds:** UX-01, parent AD-21, local UI AD-19
+ - **Prevents:** browser spawn of Python; a launcher COMP; unnamed start/status/stop
+-- **Rule:** Privileged verbs are `qmb host start|status|stop|pair|configure` (COMP-QMB add). They speak the **local host-control** channel (AD-17). `start` sets `QMA_DAEMON_ROOT`, spawns `python -m qma.daemon` if the lock is free, and on an empty root runs first-operator bootstrap. `status` reports lock, pid, bind, operator-established, pairing TTL set/unset, pending/bound **record ids** (never proofs). `stop` stops the **local** daemon only. `qmb host pair <code>` confirms that pending over host-control. `qmb host pair revoke --session|--origin` revokes. `qmb host configure pairing-ttl` writes `registry:pairing.session_ttl` over host-control (operator supplies the duration; this sitting mints no number). QMB never writes daemon sqlite. Until the group exists, UI Start local is setup copy. Details: `HOST-LIFECYCLE.md`.
++- **Rule:** Privileged verbs are `qmb host start|status|stop|pair|configure|rotate-control|recover-control` (COMP-QMB add). They speak the **local host-control** channel (AD-17). `start` sets `QMA_DAEMON_ROOT`, spawns `python -m qma.daemon` if the lock is free, and on an **empty** root (no `local_operator` row) runs first-operator bootstrap. A root that already has `local_operator` but is missing `host_control` is **not** empty: start may spawn if the lock is free and **does not** remint a principal; host-control verbs then refuse until `recover-control`. `status` reports lock, pid, bind, operator-established, TTL set/unset, pending/bound **record ids** (never proofs). `stop` stops the **local** daemon: current `host_control` **or**, if that file is missing/unreadable, the OS owner of the root (so a lost token can still reach recover). `qmb host pair <code>` confirms that pending over host-control. `qmb host pair revoke --session|--origin <origin>` revokes (AD-4). `qmb host configure pairing-ttl` writes `registry:pairing.session_ttl` over host-control (operator supplies the duration; this sitting mints no number). `rotate-control` and `recover-control` are AD-17. **QMB never writes daemon sqlite.** `recover-control` runs a one-shot daemon recover entry that acquires `.daemon_writer`, appends the journal, releases the lock, and exits; it does not bind port 8765. Until the group exists, UI Start local is setup copy. Details: `HOST-LIFECYCLE.md`.
+ 
+ ### AD-7 — Mailbox delivery stays Epic 46 [CANDIDATE]
+ 
+@@ -179,7 +179,7 @@
+ 
+ - **Binds:** clean install, pairing TTL, `qmb host pair`, recovery of operator identity
+ - **Prevents:** assuming an existing authenticated CT-40 operator; using a provider `cred://` as login; a well-shaped ref as proof
+-- **Rule:** Trust root is the **OS user who owns `QMA_DAEMON_ROOT`** plus a daemon-minted **`host_control` token** stored under that root with owner-only ACL. The channel is loopback-only and is **not** the CT-40 listener (named amendment of QMA AD-5 single inbound port, QMA AD-15/AD-24, Story 41.4: this path is outside port 8765). `qmb host start` on an empty root: acquire lock, mint the first operator principal into journal projection **`local_operator`** (AM-03), mint `host_control`, refuse `/pair/start` and `/pair/confirm` until `qmb host configure pairing-ttl` has written the registry row. Only that host-control verb mutates pairing TTL. Proof verification: QMB must present the current `host_control` token from that root; a forged `credential_ref` / caller-selected `principal_class` is not proof; a remote caller without that token is refused; a different OS user who cannot read the token is refused. Recovery: stop, same OS user, same root, start — `local_operator` remains; lost `host_control` file refuses until `qmb host rotate-control` from a still-valid token (do not remint a second principal). Browser pairing **maps** to that principal (AD-4/AD-5). Broker allowlist is not widened. Details: `HOST-LIFECYCLE.md`.
++- **Rule:** Trust root is the **OS user who owns `QMA_DAEMON_ROOT`** plus a daemon-minted **`host_control` token** stored under that root with owner-only ACL. The channel is loopback-only and is **not** the CT-40 listener (named amendment of QMA AD-5 single inbound port, QMA AD-15/AD-24, Story 41.4: this path is outside port 8765). `qmb host start` on an **empty** root (no `local_operator` row): acquire lock, mint the first operator principal into journal projection **`local_operator`** (AM-03), mint `host_control`, refuse `/pair/start` and `/pair/confirm` until `qmb host configure pairing-ttl` has written the registry row. A root that already has `local_operator` is never empty bootstrap, even if `host_control` is missing. Only that host-control verb mutates pairing TTL. Proof verification for a **running** daemon: QMB must present the current `host_control` token from that root; a forged `credential_ref` / caller-selected `principal_class` is not proof; a remote caller without that token is refused; a different OS user who cannot read the token is refused. **Rotation** (token still held): `qmb host rotate-control` presents the current token; daemon mints a new file, journals the new `host_control_fp1`, invalidates the previous fingerprint; `local_operator` unchanged. **Lost-token recovery** (file missing or unreadable): daemon **must be stopped**; the OS user who owns the root runs `qmb host recover-control`. That verb does not present the lost token. It verifies OS ownership of `QMA_DAEMON_ROOT`, mints a new owner-only `host_control` file, journals the new fingerprint and the invalidation of the previous one, and **preserves** `local_operator` and all journals. It does not remint a second principal. It does not delete the data root. If the daemon is live, recover-control refuses; OS owner may `stop` without the token when the file is missing (AD-6), then recover. If another OS user (not the directory owner that first-start used), refuse. If the token file is still readable, refuse recover-control. Browser pairing **maps** to that principal (AD-4/AD-5). Broker allowlist is not widened. Details: `HOST-LIFECYCLE.md`.
+ 
+ ## Consistency Conventions
+ 
+@@ -219,7 +219,7 @@
+   vocabulary.py       # add list_mailbox, get_pack_ui_request, get_editor_draft_head, cancel_job, transfer_artifact, save_editor_draft, publish_editor_draft, transfer_complete
+   auth.py             # browser: pairing_record_id + operator principal; machine: credential_ref
+ qmb/doors/cli/
+-  host.py             # start|status|stop|pair|configure via host_control
++  host.py             # start|status|stop|pair|configure|rotate-control|recover-control
+ ```
+ 
+ ```mermaid
+--- backend/before/ARTIFACTS-AND-TRANSFER.md
++++ backend/after/ARTIFACTS-AND-TRANSFER.md
+@@ -27,7 +27,7 @@
+ 
+ Never silently expose loopback. Never fall back to local invoke. Same-daemon instance: no transfer.
+ 
+-A different-daemon copy uses the same ticket, audience, and completion ack.
++A different-daemon copy uses the same ticket, audience, and completion ack. That copy still requires a **registered authenticated destination control connection** and a reachable allowed source. This sitting does not define inter-daemon discovery or relay.
+ 
+ ## Ticket
+ 
+--- backend/before/CLOSURE-C1-C2.md
++++ backend/after/CLOSURE-C1-C2.md
+@@ -0,0 +1,75 @@
++---
++name: C1/C2 closure map
++sitting: architecture-QMX-UI-BACKEND-2026-09-24
++date: 2026-09-24
++status: candidate — focused Codex closure
++inspect: 34c148be404a375cbfd79fd4ce6997452e4f1d20
++---
++
++# C1/C2 closure map
++
++From `workroom/qmx-ui-backend-closure-2026-09-24/REVIEW.md`. J3/J4/J5 and the completed small reconciliations stay. Origin-only issuance stays closed.
++
++| ID | Finding | Binding | Status |
++| --- | --- | --- | --- |
++| C1 | Lost `host_control` recovery required the lost token | Stopped daemon; OS owner of `QMA_DAEMON_ROOT` runs `qmb host recover-control` without presenting the lost token; `local_operator` and journals preserved | **closed as candidate** |
++| C2 | Origin-revoke discarded if renew committed first | `--origin` is a barrier at `journal_seq` R; renew-then-revoke kills the new proof; revoke-then-renew refuses. `--session` is that record only | **closed as candidate** |
++
++## C1 — Lost host_control recovery
++
++**Choice.** Owner-verified **offline replacement** while the daemon is stopped. Not a backup-restore path (that remains a later ops story). Not `rotate-control` (that still needs the current token).
++
++| Path | When | Proof | Result |
++| --- | --- | --- | --- |
++| `rotate-control` | Token still held; daemon live | Current `host_control` | New file; old `host_control_fp1` dead; same `local_operator` |
++| `recover-control` | File missing or unreadable; daemon **stopped** | OS user owns `QMA_DAEMON_ROOT`. **No** lost token. One-shot daemon recover entry writes the journal (QMB never writes sqlite; no 8765 bind) | New owner-only file; old fingerprint dead; `local_operator` and journals **preserved** |
++
++Does not remint a second principal. Does not delete the data root. Empty root = no `local_operator` (first-start bootstrap). Missing token + existing `local_operator` is not empty. Live daemon with missing file: OS owner may `stop` without the token, then recover. Other OS user → refuse. Readable token file still present → refuse (use rotate-control).
++
++**Evidence**
++
++| Claim | File / section |
++| --- | --- |
++| AD | backend AD-17, AD-6 |
++| Companion | `HOST-LIFECYCLE.md` Recovery / Rotation rows, T-H-01..04, verbs |
++| Amendment | AM-10 adds `recover-control` |
++| UI | `BOOTSTRAP-AND-AUTH.md` §12 verbs |
++
++**Positive traces.** T-H-01 rotate while held. T-H-02 lost file + stopped daemon + owning user `recover-control` → new file, same principal, journals intact, then start. T-BE-27.
++
++**Negative traces.** T-H-03 start after lost file without recover → host-control verbs refuse; no second principal. T-H-04 / T-BE-28 other OS user. Recover while live. Recover while file still readable.
++
++## C2 — Origin-revoke vs renew
++
++**Choice.** Two revoke scopes.
++
++| Verb | Scope |
++| --- | --- |
++| `pair revoke --session <pairing_record_id>` | That record only. After a renew, the old id is already rotated; `--session` of the old id is a recorded no-op; the **new** proof stays live |
++| `pair revoke --origin <origin>` | Administrative **barrier** for that static Origin. Durable at `journal_seq` R: every `pairing_session` and `pairing_pending` for that Origin with `journal_seq` < R is revoked, including confirmed-unconsumed pendings **and a renew that committed earlier**. Never discarded because a renew appended first. After R: `/pair/renew` / `/pair/confirm` of pre-R rows refuse. **New** `/pair/start` after R is legal (re-pair). Close matching WS |
++
++Serialized outcomes:
++
++1. Renew first, then `--origin` → new proof revoked.
++2. `--origin` first, then `/pair/renew` with the old proof → refuse.
++
++Journal order still serializes appends. Origin-revoke is not a CAS loser.
++
++**Evidence**
++
++| Claim | File / section |
++| --- | --- |
++| AD | backend AD-4 |
++| Companion | `PAIRING-AND-ADMISSION.md` lifecycle rows + T-P-11..13 |
++| UI | `BOOTSTRAP-AND-AUTH.md` §12 revoke verbs |
++| Traces | T-BE-30, T-BE-31 |
++
++## Preserved
++
++J3 daemon draft issuer, J4 `publish_editor_draft`, J5 reachable TLS + dest `transfer_complete`, small reconciliations, Origin-only issuance, layouts, Svelte, Epics 60–65.
++
++J5 stays a registered authenticated destination control connection plus a reachable allowed source. No arbitrary inter-daemon discovery.
++
++## Honesty
++
++No live daemon. Tests unexecuted. Candidate ≠ operator acceptance. Documentation Factory still waits on focused closure.
+--- backend/before/CLOSURE-EVIDENCE.md
++++ backend/after/CLOSURE-EVIDENCE.md
+@@ -13,8 +13,8 @@
+ | --- | --- | --- |
+ | R2 issuance | Origin-only auto-approve of a new pairing proof permitted | **Closed as candidate (preserved).** AD-3: QMB confirm of that pending request **or** authenticated `/pair/renew` with existing valid proof. Origin required, never sufficient. |
+ | Reload vs cold start | T-CH-06 / Home trace said “browser restart” over sessionStorage | **Closed as wording (preserved).** Same-tab reload restores pending state when present. Cold start uses `list_mailbox(product_session_ref)` and never auto-resends. Cloned tab = copied proof + new live `producer_id`. |
+-| J1 first operator | Assumed existing authenticated operator CredentialRef | **Closed as candidate.** AD-17 host-control + empty-root mint. See `CLOSURE-J1-J5.md`. |
+-| J2 pairing custody | Pairing id treated as nonsecret journal key | **Closed as candidate.** `pairing_proof` vs `pairing_record_id`; hash-only; lifecycle table. |
++| J1 first operator | Assumed existing authenticated operator CredentialRef | **Closed as candidate.** AD-17 host-control + empty-root mint. **C1:** lost token = stopped-daemon `recover-control`. See `CLOSURE-C1-C2.md`. |
++| J2 pairing custody | Pairing id treated as nonsecret journal key | **Closed as candidate.** `pairing_proof` vs `pairing_record_id`; hash-only; lifecycle table. **C2:** origin-revoke barrier vs `--session`. |
+ | J3 draft issuer | UI and daemon both minted `editor_draft_id` | **Closed as candidate.** Daemon sole durable issuer. |
+ | J4 publication | Unnamed UI act | **Closed as candidate.** `publish_editor_draft`; AD-30 enable remains compile identity. |
+ | J5 transfer | Loopback pull from a VPS | **Closed as candidate.** Recorded TLS or `source_unreachable`; dest `transfer_complete`. |
+@@ -42,4 +42,4 @@
+ - Inspect SHA still `34c148be`. No live daemon, no tests executed, no installed-product run.
+ - Candidate ≠ operator acceptance.
+ - Documentation Factory, epic rewrite, and factory execution are **out of this sitting**.
+-- Mechanical spine lint and the J1–J5 reviewer gate are recorded under `reviews/` (`gate-j1j5-summary.md`). Historical first-pass reviews remain as prior evidence and were not rewritten.
++- Mechanical spine lint and reviewer gates are recorded under `reviews/` (`gate-j1j5-summary.md`, `gate-c1c2-summary.md`). Historical first-pass reviews remain as prior evidence and were not rewritten.
+--- backend/before/CLOSURE-J1-J5.md
++++ backend/after/CLOSURE-J1-J5.md
+@@ -22,7 +22,7 @@
+ 
+ ## J1 — First operator bootstrap
+ 
+-**Choice.** Trust root is the OS user that owns `QMA_DAEMON_ROOT` plus a daemon-minted `host_control` token (owner-only ACL) on a **loopback host-control channel**. That channel is not CT-40, not `/pair/*`, and not a provider `cred://`. Shape of a ref is not proof.
++**Choice.** Trust root is the OS user that owns `QMA_DAEMON_ROOT` plus a daemon-minted `host_control` token (owner-only ACL) on a **loopback host-control channel**. That channel is not CT-40, not `/pair/*`, and not a provider `cred://`. Shape of a ref is not proof. Lost-token recovery is **C1**: stopped daemon, OS-owner `recover-control`, no lost token presented (`CLOSURE-C1-C2.md`).
+ 
+ **Evidence**
+ 
+@@ -36,7 +36,7 @@
+ 
+ **Positive trace.** Empty per-user root → `qmb host start` (operator principal + `host_control`) → `qmb host configure pairing-ttl` → `/pair/start` → `qmb host pair <code>` → `/pair/confirm` → `pairing_proof` once → `initialize`. T-BE-23.
+ 
+-**Negative traces.** Forged `cred://models/…` as login → refuse. Unauthorized OS user (cannot read `host_control`) → refuse. Remote caller without host-control → refuse. `/pair/confirm` before TTL set → refuse issue.
++**Negative traces.** Forged `cred://models/…` as login → refuse. Unauthorized OS user (cannot read `host_control`) → refuse. Remote caller without host-control → refuse. `/pair/confirm` before TTL set → refuse issue. Other OS user `recover-control` → refuse (T-H-04).
+ 
+ **Deferral.** Exact TTL duration is operator-supplied; this sitting mints no number. Stale-PID lock recovery is an implementation story.
+ 
+@@ -53,9 +53,9 @@
+ | Amendment | AM-01, AM-03, AM-11 |
+ | UI wording | UI `BOOTSTRAP-AND-AUTH.md` locked defaults, §5.3–5.6, failure matrix, tests; UI AD-19 |
+ 
+-**Positive traces.** T-P-02 confirm once; T-P-04 renew rotate; T-BE-02 / T-BE-24.
++**Positive traces.** T-P-02 confirm once; T-P-04 renew rotate; T-BE-02 / T-BE-24. C2: T-P-11 renew then `--origin` kills the new proof.
+ 
+-**Negative traces.** T-P-01 Origin-only; T-P-03 second confirm; T-P-05 TTL; T-P-06 origin revoke; T-P-07 / T-BE-25 journal leak; T-P-10 lost confirm.
++**Negative traces.** T-P-01 Origin-only; T-P-03 second confirm; T-P-05 TTL; T-P-06 origin revoke; T-P-07 / T-BE-25 journal leak; T-P-10 lost confirm. C2: T-P-12 `--origin` then renew refuses.
+ 
+ **Deferral.** Entropy/length of the proof token is an implementation story (must be unguessable and WS-token-safe).
+ 
+@@ -117,7 +117,7 @@
+ | --- | --- | --- |
+ | Provider vs shell | Shell = host start + TTL + pair + initialize. Provider needs an already-stored allowlisted ref | `PROVIDER-AND-COMPAT.md`; UI TRACE first-run row |
+ | PackUiRequest read-back | `get_pack_ui_request` by `instance_id` + `availability_revision` | backend AD-10; AM-16; UI AD-15; `VIEW-AND-PACK-CONTRACT.md` §3 |
+-| Mailbox write authorization | `send_message` and `list_mailbox` require principal == session principal | backend AD-7; `MAILBOX-AND-DELIVERY.md`; UI AD-18; `CHAT-AND-HISTORY.md` §1.1 |
++| Mailbox write authorization | When `product_session_ref` is present, `send_message` and `list_mailbox` require principal == session principal | backend AD-7; `MAILBOX-AND-DELIVERY.md`; UI AD-18; `CHAT-AND-HISTORY.md` §1.1 |
+ | Cancel / headless | `originating_product_session_ref` optional; omitted on headless; exact handle/run/attempt fences | backend AD-8; `CANCEL-AND-HANDLES.md`; UI AD-23 |
+ | Durable-reference naming | Envelope/handle pointers use `_ref`; ProductSession own id stays `product_session_id`; exception list unchanged | AM-14; UI CHAT identities; backend AD-7/AD-8 |
+ 
+--- backend/before/DEPENDENCY-MAP.md
++++ backend/after/DEPENDENCY-MAP.md
+@@ -52,8 +52,8 @@
+ | `python -m qma.daemon` process entry | reuse | COMP-QMA-DAEMON | process | none | n/a | cwd default is **not** product root | n/a | workstation | exists |
+ | `.daemon_writer` lock | reuse | DAEMON | lock file under root | n/a | n/a | n/a | second start reports already-running | `QMA_DAEMON_ROOT` | Story 42.1 |
+ | `qmb host start\|status\|stop` | **proposed amendment** AM-10 | COMP-QMB | none (supervises daemon) | CLI | operator OS user | n/a | stale lock = QMB/daemon recovery, not UI | local only | **new QMB stories** |
+-| First operator + host-control | **proposed amendment** AM-15 | COMP-QMB + DAEMON | operator principal + `host_control` token | local loopback control | OS user + token | n/a | forged ref / remote without token refuse | `QMA_DAEMON_ROOT` | **new**; before pairing issue |
+-| `qmb host pair` / `pair revoke` / `configure pairing-ttl` | **proposed amendment** AM-10 | COMP-QMB host-control | pairing projection / registry | CLI local control | host_control | n/a | unknown code → typed refuse | same host as daemon | pairing stories |
++| First operator + host-control | **proposed amendment** AM-15 | COMP-QMB + DAEMON | `local_operator` + `host_control` token | local loopback control | OS user + token (running); OS owner of stopped root for `recover-control` | n/a | forged ref / remote without token refuse; lost file → `recover-control` (C1) | `QMA_DAEMON_ROOT` | **new**; before pairing issue |
++| `qmb host pair` / `pair revoke` / `configure pairing-ttl` / `rotate-control` / `recover-control` | **proposed amendment** AM-10 | COMP-QMB host-control | pairing projection / registry / `host_control_fp1` | CLI local control | host_control (running); OS-owner stopped root (`recover-control`) | n/a | `--origin` barrier (C2); unknown code → typed refuse | same host as daemon | pairing stories |
+ | Stable per-user root | **proposed amendment** of `__main__.py` cwd default | QMB start sets env | directory | env `QMA_DAEMON_ROOT` | n/a | existing cwd trees stay dev-only | two folders = two trees | Windows `%LOCALAPPDATA%\QMX\qma-daemon` | host stories |
+ 
+ ## 4. Conversation routing, history, recovery
+--- backend/before/HOST-LIFECYCLE.md
++++ backend/after/HOST-LIFECYCLE.md
+@@ -20,7 +20,8 @@
+ | Verification | QMB presents the current token. Shape of a `credential_ref` or a caller-chosen `principal_class` is **not** proof |
+ | First start (empty root) | Spawn daemon, acquire `.daemon_writer`, mint operator principal into journal projection **`local_operator`** (AM-03), mint `host_control`. `/pair/start` and `/pair/confirm` refuse until TTL is configured |
+ | Configure TTL | `qmb host configure pairing-ttl <duration>` over host-control. **Only** this verb may write `registry:pairing.session_ttl`. CT-40 `variable.set` of that key refuses. Operator supplies the duration. No number minted here |
+-| Recovery | Same OS user, same root, start: `local_operator` remains. Lost `host_control` file refuses until `qmb host rotate-control` from a still-valid token (do not remint a second principal) |
++| Rotation | Token still held. `qmb host rotate-control` presents the current token. New file; previous `host_control_fp1` invalidated; `local_operator` unchanged |
++| Lost-token recovery | File missing or unreadable. Daemon **stopped** (no live pid holding `.daemon_writer`). Owning OS user runs `qmb host recover-control` (**no** lost token presented). QMB does not write sqlite: a one-shot daemon recover entry acquires the lock, appends `host_control_fp1`, exits without binding 8765. New owner-only file; previous fingerprint invalidated; `local_operator` and journals **preserved**. Does not remint a principal. Does not delete the data root. Live daemon → OS owner may `stop` without the token (file missing), then recover. Other OS user → refuse. Readable token file still present → refuse (use rotate-control). Missing token + existing `local_operator` is **not** empty-root bootstrap |
+ | Remote host | SSH (or equivalent) to that machine and run `qmb host` **there**. The laptop browser never bootstraps a remote operator |
+ 
+ ### Clean-install trace
+@@ -40,18 +41,33 @@
+ | Unauthorized local user (cannot read `host_control`) | refuse pair/configure |
+ | Remote caller without host_control | refuse |
+ | `/pair/confirm` before TTL set | refuse issue |
++| Lost `host_control` + live daemon + `rotate-control` | refuse (no token to present). OS owner `stop` (file missing), then `recover-control` |
++| Lost `host_control` + `recover-control` while daemon live | refuse. Stop first |
++| Other OS user + `recover-control` on stopped daemon | refuse. `local_operator` and journals unchanged |
++| `recover-control` while token file still readable | refuse. Use `rotate-control` |
++
++### Recovery traces (unexecuted)
++
++| ID | Intent |
++| --- | --- |
++| T-H-01 | Token held, `rotate-control` → new file, old `host_control_fp1` dead, same `local_operator`, journals intact |
++| T-H-02 | File deleted, daemon stopped, owning OS user `recover-control` → new file, old fingerprint dead, same `local_operator`, journals intact; then `start` |
++| T-H-03 | File deleted, daemon restarted (lock free) without recover → host-control verbs refuse until `recover-control`; pairing proofs still valid until TTL; no second principal |
++| T-H-04 | Other OS user `recover-control` → refuse; data root untouched |
+ 
+ ## Verbs
+ 
+ | Verb | Does | Does not |
+ | --- | --- | --- |
+-| `qmb host start` | Set `QMA_DAEMON_ROOT`; spawn if lock free; bootstrap if empty | Orchestrate Missions; grant; start QMN; spawn from the browser |
++| `qmb host start` | Set `QMA_DAEMON_ROOT`; spawn if lock free; bootstrap **only** if no `local_operator` row | Orchestrate Missions; grant; start QMN; spawn from the browser; remint principal when token is missing |
+ | `qmb host status` | Lock, pid, bind, operator-established, TTL set/unset, pending/bound **record ids** | Print proofs, codes, host_control, Credential Manager secrets |
+-| `qmb host stop` | Stop **local** daemon; release lock | Cancel QMN/remote |
++| `qmb host stop` | Stop **local** daemon; release lock. Auth: current token **or** (file missing/unreadable **and** OS owner of the root) | Cancel QMN/remote |
+ | `qmb host configure pairing-ttl` | Write registry row via daemon (sole writer) | Invent a duration |
+ | `qmb host pair <code>` | Confirm that pending over host-control | Issue the browser proof; write sqlite from QMB |
+-| `qmb host pair revoke --session <pairing_record_id>` / `--origin` | `revoke_pair` via host-control; close WS | Delete journal history |
+-| `qmb host rotate-control` | New host_control token | Change operator principal |
++| `qmb host pair revoke --session <pairing_record_id>` | Revoke that record only; close its WS | Origin-wide cutoff; delete journal history |
++| `qmb host pair revoke --origin <origin>` | Origin barrier (AD-4) for that static Origin: revoke every session and pending with `journal_seq` < R, including a renew that committed earlier | Discard the revoke because a renew appended first; revoke every Origin; delete journal history |
++| `qmb host rotate-control` | New `host_control` while token is held | Change `local_operator`; recover a lost file |
++| `qmb host recover-control` | Stopped daemon; OS owner of the root; lost/unreadable file; one-shot daemon journal write; new token without presenting the old one | Run against a live daemon; remint principal; wipe journals; QMB sqlite write; bind 8765 |
+ 
+ Until these exist, UI Start local is the documented recipe (still not a browser spawn). Pairing cannot complete until a product `qmb host` or an equivalent local-control implementation exists — the UI must not fake a paired session.
+ 
+--- backend/before/PAIRING-AND-ADMISSION.md
++++ backend/after/PAIRING-AND-ADMISSION.md
+@@ -57,9 +57,11 @@
+ | POST `/pair/renew` | Valid unexpired unrevoked proof + Origin | **Rotate:** new record+proof; old `proof_fp1` revoked; **close** WS that offered the old subprotocol | Store new proof; drop old |
+ | Lost renew response | New proof issued, old revoked | Unrecoverable for both if client has neither | Re-pair |
+ | TTL elapsed | `now >= expires_at` | Record expired; **close** WS on that proof; HTTP Bearer refuses | Re-pair |
+-| `pair revoke --session` | host_control | That record revoked; close its WS | Drop proof |
+-| `pair revoke --origin` | host_control | Journal-ordered cutoff: all sessions **and every pending** for that Origin (including **confirmed-unconsumed**) with `created_at`/`confirmed_at`/`issued_at` ≤ cutoff | All tabs on that Origin re-pair; `/pair/confirm` cannot issue |
+-| Concurrent renew vs revoke | First durable journal append wins | Loser is no-op or typed refuse against the new head | Query record state |
++| `pair revoke --session <pairing_record_id>` | host_control | **That record only** revoked; close its WS. Does not revoke a later renew’s new `pairing_record_id` | Drop that proof |
++| `pair revoke --origin <origin>` | host_control; `<origin>` is the paired static Origin | **Barrier** at `journal_seq` R for **that** Origin: every `pairing_session` and `pairing_pending` with `journal_seq` < R is revoked, including **confirmed-unconsumed** pendings **and a renew that committed earlier**. Close WS for that Origin. After R: `/pair/renew` of proofs with seq < R refuses; `/pair/confirm` of pendings with seq < R refuses. **New** `/pair/start` after R is legal (re-pair) | Tabs on that Origin run `/pair/start` again |
++| Renew then origin-revoke | Renew durable first (seq < R), then `--origin` | New proof **revoked**. Origin-revoke is never a no-op loser | Drop new proof; re-pair |
++| Origin-revoke then renew | `--origin` durable first, then `/pair/renew` with the old proof | Typed refuse. Old proof already revoked | Re-pair |
++| `--session` after that id already renewed | host_control; new record exists | Old row already rotated; `--session` of the old id is a recorded no-op; **new** proof stays live | Use `--origin` to kill the new proof |
+ | Daemon restart | Same `QMA_DAEMON_ROOT` | Hashes and principals reload; raw proofs not in sqlite; still-valid proofs work until TTL | Reconnect with stored proof |
+ | Renew lifetime | — | New `expires_at` = now + configured TTL (**rolling**). Rolling is bounded by revoke and by the operator’s TTL choice | — |
+ 
+@@ -87,3 +89,7 @@
+ | T-P-08 | Forged `cred://models/…` as login → refuse |
+ | T-P-09 | Remote caller without host_control → refuse pair |
+ | T-P-10 | Lost confirm response → re-pair, no journal retrieval of proof |
++| T-P-11 | Renew commits, then `--origin <origin>` → **new** proof revoked; its WS closed |
++| T-P-12 | `--origin <origin>` commits, then `/pair/renew` with old proof → refuse |
++| T-P-13 | Renew then `--session` of the **old** id → new proof still live |
++| T-P-14 | After `--origin <origin>`, new `/pair/start` + QMB pair + confirm → new proof | `/pair/confirm` of a pre-R pending |
+--- backend/before/PARENT-AMENDMENT-MAP.md
++++ backend/after/PARENT-AMENDMENT-MAP.md
+@@ -17,14 +17,14 @@
+ | --- | --- | --- | --- | --- |
+ | AM-01 | QMA AD-5, AD-15, AD-24 transport custody; Epic 41 Story 41.4 “never offers an unauthenticated bind”; credential_ref authenticates before protocol bytes | Browser cannot present `credential_ref` from JS; CORS OPTIONS on PUT/renew would be illegal if the carve-out is POST-only | Unauthenticated HTTP **only** for `POST /pair/start`, `POST /pair/confirm`, and CORS `OPTIONS` on daemon HTTP routes that declare CORS. OPTIONS never issues a session, never upgrades WS, never returns bytes. `POST /pair/renew` is authenticated. Machine clients still use `credential_ref`. | AD-5 |
+ | AM-02 | QMA AD-20 Envelope field list; Story 46.4 / FR-Q60 required Envelope members | UI chat cannot survive daemon restart by `psess:` if the field is absent | Additive Envelope / journal field **`product_session_ref`** on the **operator product-chat path**. Quant/machine rows with no product conversation omit it. Principal equality applies **when the field is present**. Seed `send_message` stays legal for `machine` when omitted. Replies inherit. Not a new store. Story 46.4 remains the delivery owner. | AD-7 |
+-| AM-03 | QMA AD-6 / AD-8 / FR-Q23 / Story 42.2 declaration validator; parent AD-16 complete v1 sqlite additions | Pairing, draft head, transfer ticket, first operator have no named projection | **Named add** of journal projections `pairing_pending`, `pairing_session`, `editor_draft_head`, `artifact_transfer_ticket`, **`local_operator`** to that closed list. Still not a new sqlite **class**. Each fold: stream `noun.verb`, ordering `journal_seq`, knowledge-time `as_of` over `recorded_at`, equal-instant ascending `journal_seq`. Live shape: unrevoked pairing rows / draft head pointer / open tickets / single local operator principal. Migrations follow QMA AD-27. | AD-4, AD-9, AD-11, AD-17 |
++| AM-03 | QMA AD-6 / AD-8 / FR-Q23 / Story 42.2 declaration validator; parent AD-16 complete v1 sqlite additions | Pairing, draft head, transfer ticket, first operator have no named projection | **Named add** of journal projections `pairing_pending`, `pairing_session`, `editor_draft_head`, `artifact_transfer_ticket`, **`local_operator`** to that closed list. Still not a new sqlite **class**. Each fold: stream `noun.verb`, ordering `journal_seq`, knowledge-time `as_of` over `recorded_at`, equal-instant ascending `journal_seq`. Live shape: unrevoked pairing rows / draft head pointer / open tickets / single local operator principal plus current `host_control_fp1`. Migrations follow QMA AD-27. | AD-4, AD-9, AD-11, AD-17 |
+ | AM-04 | QMA AD-17 JobHandle record; parent AD-26 handle vocab; Story 57.3 “vocabulary exactly” (states stay closed) | UI cancel authority has no durable starter session | Optional immutable **`originating_product_session_ref`** at UI admit; omitted on headless. `handle_id` is `job_id`. States unchanged. | AD-8 |
+ | AM-05 | QMA AD-5 / UI AD-12 three CT-40 families (JSON-RPC WS, HTTP GET, events) | Raw upload bytes cannot travel as a JSON-RPC body; a REST invoke API is forbidden | Authenticated HTTP `PUT /artifacts/stage` is a **byte channel** on the daemon origin, not invoke, not a fourth message family, not a BFF. | AD-9, AD-15 |
+ | AM-06 | Story 41.4 “daemon never dials in”; QMA loopback default | Remote worker cannot pull laptop loopback | Ticket + dest-audience pull from **recorded reachable TLS** source; `source_unreachable` on loopback-only; dest-authored `transfer_complete` closes the ticket. Daemon never dials in. | AD-9 |
+ | AM-07 | QMA AD-22 one RefinementProposal type | A builder might store graph drafts in AD-22 staging | **Non-amendment of AD-22.** Drafts use artifact-store bytes + `editor_draft_head` (AM-03). AD-22 stays one type. | AD-11 |
+ | AM-08 | Epic 41.1 seed query count as closed-and-addable | `list_mailbox` is not in the seed seven | Addable query `list_mailbox` owned by `qma-wire`. Same rule as `facade_search`. | AD-7 |
+ | AM-09 | Epic 41.1 seed command count as closed-and-addable | cancel, transfer, draft save/publish, transfer complete have no names | Addable commands `cancel_job`, `transfer_artifact`, `transfer_complete`, `save_editor_draft`, `publish_editor_draft`. `stop_run` stays distinct. No JSON-RPC `stage_artifact`. Pair/revoke/TTL are **local host-control**, not these CT-40 names. | AD-8, AD-9, AD-11 |
+-| AM-10 | QMB CLI `COMMAND_GROUPS` (parent AD-21); QMA AD-24 human-gate list; QMA AD-26 `variable.set` | No process-lifetime door; pairing TTL would otherwise be a wire variable | Add group `host`: `start`, `status`, `stop`, `configure pairing-ttl`, `pair <code>`, `pair revoke`, `rotate-control`. Human-gate: these host-control verbs are operator-only via `host_control`, not CT-40. **Only** host-control may write `registry:pairing.session_ttl`; CT-40 `variable.set` of that key refuses. | AD-6, AD-17 |
++| AM-10 | QMB CLI `COMMAND_GROUPS` (parent AD-21); QMA AD-24 human-gate list; QMA AD-26 `variable.set` | No process-lifetime door; pairing TTL would otherwise be a wire variable | Add group `host`: `start`, `status`, `stop`, `configure pairing-ttl`, `pair <code>`, `pair revoke --session\|--origin`, `rotate-control`, **`recover-control`**. Human-gate: running-daemon verbs are operator-only via `host_control`. `recover-control` is OS-owner of a **stopped** root and does not present the lost token. **Only** host-control may write `registry:pairing.session_ttl`; CT-40 `variable.set` of that key refuses. | AD-6, AD-17 |
+ | AM-11 | `authenticate_before_protocol` takes `credential_ref`; secret-surface key list | Browser cannot present a broker ref; raw pairing proof must not be journaled | Browser-paired session: `principal_class=operator` + `pairing_record_id`, **no** `credential_ref`. Proof is a bearer; journal stores `proof_fp1` only. Surface scan is by value class (proofs), not only key spelling. | AD-4, AD-5 |
+ | AM-12 | Story 41.3 `registry:wire.dedup_window` | Mailbox lost-ack lookup needs journal-lifetime collision | For `send_message` only, same `(producer_id, id)` + different payload hash refuses for **journal lifetime**, not the wire dedup window. Other commands keep Story 41.3. | AD-7 |
+ | AM-13 | QMA AD-5 three families; AM-05 PUT-only | Machine pull and authenticated renew have no family | Authenticated `POST /pair/renew` is pairing HTTP, not a CT-40 family. Authenticated `GET /artifacts/<fp1>` with transfer ticket is the machine byte pull (AM-06). | AD-5, AD-9, AD-15 |
+--- backend/before/START-HERE.md
++++ backend/after/START-HERE.md
+@@ -1,6 +1,6 @@
+ # QMX UI backend-delta architecture — start here
+ 
+-**Status:** draft candidate after joint-review J1–J5 amendment. Ready for Codex closure review. Not operator-accepted. Not implementation. Not Documentation Factory. Not an epic backlog rewrite.
++**Status:** draft candidate after C1/C2 correction (lost `host_control` recovery; origin-revoke vs renew). Focused Codex closure next. Not operator-accepted. Not implementation. Not Documentation Factory. Not an epic backlog rewrite.
+ 
+ **Workspace:** `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/`
+ 
+@@ -15,10 +15,10 @@
+ ## Read in this order
+ 
+ 1. This file
+-2. `CLOSURE-J1-J5.md` — J1–J5 evidence, traces, deferrals
++2. `CLOSURE-J1-J5.md` — J1–J5 evidence, traces, deferrals; `CLOSURE-C1-C2.md` — this correction
+ 3. `CLOSURE-EVIDENCE.md` — R2 preserved; J1–J5 added
+ 4. `ARCHITECTURE-SPINE.md` — local AD-1..AD-17
+-5. `PARENT-AMENDMENT-MAP.md` — every conflict with inherited law, named (AM-01..AM-16)
++5. `PARENT-AMENDMENT-MAP.md` — every conflict with inherited law, named (AM-01..AM-17)
+ 6. `DEPENDENCY-MAP.md` — supplement inventory vs Epics 41–42, 46.4, 57, 60–65
+ 7. Companions: `PAIRING-AND-ADMISSION.md`, `HOST-LIFECYCLE.md`, `MAILBOX-AND-DELIVERY.md`, `CANCEL-AND-HANDLES.md`, `ARTIFACTS-AND-TRANSFER.md`, `PACK-UI-AND-AUTHORING.md`, `PROVIDER-AND-COMPAT.md`
+ 8. `TRACE-MATRIX.md`, `UI-CANDIDATE-CHANGELOG.md`
+--- backend/before/TRACE-MATRIX.md
++++ backend/after/TRACE-MATRIX.md
+@@ -38,5 +38,10 @@
+ | T-BE-23 | First operator negatives | host pair / configure | forged provider ref refuse; remote without token refuse | dummy `cred://models` login |
+ | T-BE-24 | Confirm retry | second `/pair/confirm` | `already_issued` | second proof |
+ | T-BE-25 | Journal leak | status/trace | no raw proof / Authorization / `qmx.pair.` value | pairing_proof in journal |
++| T-BE-27 | Lost host_control | `qmb host recover-control` (daemon stopped, OS owner) | new token; same `local_operator`; journals intact; old `host_control_fp1` dead | require the lost token; remint principal; wipe root |
++| T-BE-28 | Unauthorized recover | other OS user `recover-control` | refuse; root untouched | steal operator by file create |
++| T-BE-29 | Rotate while held | `qmb host rotate-control` | new token; principal unchanged | recover-control on a live daemon |
++| T-BE-30 | Renew then origin-revoke | `/pair/renew` then `pair revoke --origin` | **new** proof revoked; WS closed | discard the revoke as first-append loser |
++| T-BE-31 | Origin-revoke then renew | `--origin` then `/pair/renew` | typed refuse | new proof after explicit origin revoke |
+ 
+ UI traces J-UI-06, J-UI-08, J-UI-09, J-UI-13, J-UI-14 remain binding on the client once this backend exists.
+--- backend/before/UI-CANDIDATE-CHANGELOG.md
++++ backend/after/UI-CANDIDATE-CHANGELOG.md
+@@ -35,4 +35,10 @@
+ | `CHANGE-IMPACT.md` | Host verbs, transfer complete, draft publish, pack-ui query. |
+ | `START-HERE.md` | J1–J5 status. |
+ 
++## Round 3 (C1/C2)
++
++| File | Change |
++| --- | --- |
++| `BOOTSTRAP-AND-AUTH.md` | §12: `--session` vs `--origin` barrier; `rotate-control` vs `recover-control` (stopped daemon, no lost token). |
++
+ Not edited: `EXPERIENCE-AND-LAYOUT.md`, `DESIGN.md`, `COMPONENT-CONTRACTS.md`, `JOURNEYS.md`, `EXAMPLES.md`, `DELIVERY-AND-QA.md`. Historical `reviews/` left as prior evidence.
+--- ui/before/BOOTSTRAP-AND-AUTH.md
++++ ui/after/BOOTSTRAP-AND-AUTH.md
+@@ -414,7 +414,10 @@
+ | `qmb host stop` | Stop the local daemon; release lock | Cancel QMN/remote; `JobHandle.cancel` for every job (local handles may go `unknown`) |
+ | `qmb host configure pairing-ttl` | Write `registry:pairing.session_ttl` over host-control. Required before first issue | Invent a duration in this sitting |
+ | `qmb host pair <code>` | Confirm pending `/pair/start` for that Origin over host-control. After this, POST `/pair/confirm` returns `{pairing_record_id, pairing_proof, expires_at}` **once**. A second tab on the same Origin still needs its own pending code and this confirm. Authenticated `POST /pair/renew` (existing valid Bearer) is the other issuance path; Origin-only auto-approve is refused. | Accept a provider secret; bind a non-matching origin; set a cookie; open CT-40 for the browser; issue a session because Origin was remembered; return a second proof on retry |
+-| `qmb host pair revoke --session\|--origin` | Revoke that record or that Origin’s earlier sessions and unclaimed pendings; close matching WS | Delete journal history |
++| `qmb host pair revoke --session <pairing_record_id>` | Revoke **that** record only; close its WS | Origin-wide cutoff; delete journal history |
++| `qmb host pair revoke --origin <origin>` | Barrier for **that** static Origin: every session and pending with `journal_seq` before the revoke, including a renew that committed earlier; close matching WS. New `/pair/start` after the barrier is legal | Discard the revoke because a renew appended first; revoke every Origin on the daemon |
++| `qmb host rotate-control` | New `host_control` while the current token is held | Recover a lost file; change `local_operator` |
++| `qmb host recover-control` | Daemon **stopped**; OS owner of `QMA_DAEMON_ROOT`; lost/unreadable token file; mint a new file **without** presenting the lost token; preserve `local_operator` and journals | Live daemon; other OS user; remint principal; wipe the data root |
+ 
+ Until these verbs exist, status is operator-visible via OS process list + the setup screen’s probe, and pair confirm has **no** product door — the UI must not fake a paired session.
+ 

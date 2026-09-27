@@ -1,0 +1,19 @@
+{
+  "checked_at_utc": "2026-09-24T11:40:27.294910+00:00",
+  "input_file_count": 56,
+  "sha256_mismatches": [],
+  "candidate_files_added_since_snapshot": [],
+  "candidate_files_removed_since_snapshot": [],
+  "missing_report_links": [],
+  "independent_reports_present": true,
+  "structural_lint": {
+    "ok": true,
+    "spine": "ARCHITECTURE-SPINE.md",
+    "total_findings": 0,
+    "by_severity": {},
+    "findings": []
+  },
+  "application_runtime_verified": false,
+  "scope": "Document-only closure review; no application or candidate changes",
+  "ok": true
+}

@@ -1,0 +1,187 @@
+[
+  {
+    "path": ".memlog.md",
+    "bytes": 4527,
+    "sha256": "AA8E64E62FA2F9BBB214F78157B1B0E6A19C14C67B5CFD09852CED2F602B6744"
+  },
+  {
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 26325,
+    "sha256": "48150BBB62168F93657C610DC5373B6C48960A4DAFE257CC83CA8C92E1C2B1F8"
+  },
+  {
+    "path": "CHANGE-IMPACT.md",
+    "bytes": 3835,
+    "sha256": "391F7D08FF87579083938F9F9EAD39E393A3C45C9F90942E27A90773D1A374E9"
+  },
+  {
+    "path": "CODEX-REVIEW-LAUNCH.txt",
+    "bytes": 1485,
+    "sha256": "24C44CAA2B3B3F4597C20D4A6703D6576B172C039782DADBB58B211B74267056"
+  },
+  {
+    "path": "COMPONENT-CONTRACTS.md",
+    "bytes": 4221,
+    "sha256": "90C05A8BBB215FFD26C65958B663D73600E15A74D46CF97A70F96AFE55764D7A"
+  },
+  {
+    "path": "DECISIONS-AND-OPEN.md",
+    "bytes": 3413,
+    "sha256": "3104C57DBE735D22EA967DEEABAE9CC59A517E2BB23D537ADAD1A0A727E8FD92"
+  },
+  {
+    "path": "DELIVERY-AND-QA.md",
+    "bytes": 2566,
+    "sha256": "89067789E89F3CD70FEABB581ADE7F7801D5396885ABF85D9257BAA3957DA2BD"
+  },
+  {
+    "path": "DESIGN.md",
+    "bytes": 1741,
+    "sha256": "C060785B430382A15733F239A128F0FDDF0D2BFA647F3DB2DBEA6A2C0A035949"
+  },
+  {
+    "path": "EXPERIENCE-AND-LAYOUT.md",
+    "bytes": 4663,
+    "sha256": "9C1B70A49CB9AA4DB203ED248C5A9315F4BD9307EC6378FC3FC682B1B5D59DF9"
+  },
+  {
+    "path": "JOURNEYS.md",
+    "bytes": 3091,
+    "sha256": "CE0F2149B40D56D8DE715E03296CB03E834F64060291D31D28711BD9E771B318"
+  },
+  {
+    "path": "START-HERE.md",
+    "bytes": 2501,
+    "sha256": "DE219CA8E910D1736FBCFE166142B9D77E4DF5492FFF06B4384BAB5095D5DC18"
+  },
+  {
+    "path": "research\\00-orchestrator-image-notes.md",
+    "bytes": 7504,
+    "sha256": "FF6E5F9FFF2407FD2CE4C714F121A94B4C801EAB6527DF800CA9A18A3ED1B266"
+  },
+  {
+    "path": "research\\01-evidence-ledger.md",
+    "bytes": 39528,
+    "sha256": "738407B11A7EAAD58EA02CEFD8D4B5F879C431EFFA4BAE88A1AF38A8E6FA494C"
+  },
+  {
+    "path": "research\\02-origin-explore-node-editor.md",
+    "bytes": 40031,
+    "sha256": "088058E347F8A5C9D7E23491DBB1A2793081AD2C6D5636684C84559E6DAAEB44"
+  },
+  {
+    "path": "research\\03-origin-mimi0apps.md",
+    "bytes": 22971,
+    "sha256": "9FD8CB663253674C82143515E1358D4C5790350EAEC5D34CA4B4CDDBC41B3868"
+  },
+  {
+    "path": "research\\04-session-visible-steering.md",
+    "bytes": 37391,
+    "sha256": "E589BE3BA1E77EF03A17D5F1FC9C7719EB41A8F50AC788A458F10983AA58FBE6"
+  },
+  {
+    "path": "research\\05-repo-core-baseline.md",
+    "bytes": 22076,
+    "sha256": "E11B86705600C0B9995359793C34453F7C1C7DEE80F362011FDCE90090DDFF1D"
+  },
+  {
+    "path": "research\\06-parent-invariants-for-ui.md",
+    "bytes": 34441,
+    "sha256": "E36CF350E8BC387B082EAB9683932412CC685A13F22CB0F1B9E9C005322ECC3B"
+  },
+  {
+    "path": "research\\07-existing-frontend-scan.md",
+    "bytes": 22823,
+    "sha256": "F019124D385418585E8A758599CD9247B9D3AF80CD859B3D3C071393F9C651E8"
+  },
+  {
+    "path": "research\\08-bdd-reconciliation.md",
+    "bytes": 36350,
+    "sha256": "0C269D98942A1E51A5117A77AD988CE0DF7F6D01D410AA9B3ED93417A2916BEE"
+  },
+  {
+    "path": "research\\09-images-video-codex-refs.md",
+    "bytes": 43492,
+    "sha256": "2F1B95A1A0FC9AA2715D02942D31BBC5531986318FC588923D67BC948A369DD3"
+  },
+  {
+    "path": "research\\10-transport-reconnect-ops.md",
+    "bytes": 35313,
+    "sha256": "108313957738D5DB260D8CD3ABF339D3F53F2B110B5681849445D775E0711EFB"
+  },
+  {
+    "path": "research\\11-pack-view-contribution-ui.md",
+    "bytes": 30262,
+    "sha256": "C32ACF8DB41D4E6E0BF4E24683711EDA74838BF157BAB1D5D7C8D5EFB3DE6AE1"
+  },
+  {
+    "path": "research\\12-rejected-studies-salvage.md",
+    "bytes": 29150,
+    "sha256": "0B57DA52DDD053C9CC4FBB7767DD9D57F1885148BCD0E0D662AD7D60C7E5AF75"
+  },
+  {
+    "path": "research\\13-library-lifecycle.md",
+    "bytes": 29548,
+    "sha256": "8AF785C4FF23A99ADA7975E650E57BF80D9EE590DF8F926D421D10A3ECE0D65E"
+  },
+  {
+    "path": "research\\14-firstrun-packaging-placement.md",
+    "bytes": 39943,
+    "sha256": "CC9D44A39D41B2DBAE24C326C9696EBC3578CA6325E14E94D2A4E52B68B4F516"
+  },
+  {
+    "path": "research\\15-stack-currency-orchestrator.md",
+    "bytes": 4462,
+    "sha256": "A218D24B95D64ADC9D24D1CA00F4A59C350A28A760CEB69384B3C77F336B7BCB"
+  },
+  {
+    "path": "research\\16-workflow-svelte-tauri-spa.md",
+    "bytes": 13764,
+    "sha256": "71D990906F8A3ED5C0714B5231647F8EF5BAEA2A60C97BF38E3DA5C87099FEEA"
+  },
+  {
+    "path": "research\\17-workflow-tauri-python-sidecar.md",
+    "bytes": 19419,
+    "sha256": "04C0E556D33EDD8FF7E8046F0A2BA6C6270BC1576096D184475C03C565CD399E"
+  },
+  {
+    "path": "research\\18-workflow-json-render-mcp-apps.md",
+    "bytes": 18568,
+    "sha256": "BA6117F58E85FEF2D5549560660704D690C679A15D5FE39F6ECE668BEFCB5531"
+  },
+  {
+    "path": "research\\19-workflow-specialized-libraries.md",
+    "bytes": 23286,
+    "sha256": "37E5490AADBAB45023E287D9C79082EFA5093B05F969A518A1276E3DC736A862"
+  },
+  {
+    "path": "reviews\\gate-summary.md",
+    "bytes": 1981,
+    "sha256": "432BB8803F9725097E7E0C3362DADCB8E2CCEC1856F2D275500411F7EFD8A2EF"
+  },
+  {
+    "path": "reviews\\reconcile-inputs.md",
+    "bytes": 25281,
+    "sha256": "8A867AE5F4DDF3871765D4CA200DE4ECBC60ACB7964C0CD957A3074CE92665FA"
+  },
+  {
+    "path": "reviews\\review-adversarial.md",
+    "bytes": 52854,
+    "sha256": "AA02ADABAF13B9B5D022EA555D7641CB4B194E1D3D38F2C0B50E284D0438E0CD"
+  },
+  {
+    "path": "reviews\\review-currency.md",
+    "bytes": 13047,
+    "sha256": "BE483A81EDDA2240B08FCBA98FDA65A91A681B08BE870535A1E03F82538F2058"
+  },
+  {
+    "path": "reviews\\review-parent-consistency.md",
+    "bytes": 36082,
+    "sha256": "696E4B1310A68A7B201FA7709741FE1584684356727048F7C65326A2AF0912CE"
+  },
+  {
+    "path": "reviews\\review-rubric.md",
+    "bytes": 33113,
+    "sha256": "29E9A1C8671388DC2EEE51E54C2D58159485697BB86F8278DB614FFDA1A6AAA6"
+  }
+]

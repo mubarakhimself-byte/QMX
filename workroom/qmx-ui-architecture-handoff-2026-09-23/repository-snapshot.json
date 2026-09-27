@@ -1,0 +1,27 @@
+{
+  "capturedAt": "2026-09-23T13:07:01.947199+00:00",
+  "repository": "C:\\Users\\Mubarak\\Desktop\\QMX",
+  "rootBranch": "main",
+  "rootCommit": "92279dfe43922d60fabe38e29284ca52956ab75c",
+  "rootHasUncommittedChanges": true,
+  "statusEntryCount": 124,
+  "relevantWorktrees": [
+    {
+      "worktree": "C:/Users/Mubarak/Desktop/QMX",
+      "HEAD": "92279dfe43922d60fabe38e29284ca52956ab75c",
+      "branch": "refs/heads/main"
+    },
+    {
+      "worktree": "C:/Users/Mubarak/Desktop/QMX/.worktrees/integration-inspect",
+      "HEAD": "34c148be404a375cbfd79fd4ce6997452e4f1d20",
+      "branch": "refs/heads/integration"
+    },
+    {
+      "worktree": "C:/Users/Mubarak/Desktop/QMX/.worktrees/ui",
+      "HEAD": "af6628888fb8901bf9e877cbd07e438dbb0f39b4",
+      "branch": "refs/heads/ui"
+    }
+  ],
+  "observedLatestArchitectureDirectory": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-23",
+  "observationLimit": "Read-only metadata and a narrow scenario/BDD inventory, not full backend review or fresh runtime verification. Existing ui checkout is not selected as the new UI integration base. Refresh changing documents before using them."
+}

@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-09-23T13:07:01.947199+00:00",
+  "primaryDocuments": 6,
+  "navigationDocumentsChecked": 8,
+  "brokenPrimaryRelativeLinks": [],
+  "originalImages": 10,
+  "savedWebCaptures": 18,
+  "userCodexScreenshots": 5,
+  "visibleSessionUserTurns": 15,
+  "bddScenarioDeclarations": 85,
+  "sourceHashChecks": "Original storyboard, ten original images, original short video and selected BDD sources matched the read snapshots",
+  "scope": "Documentation/package integrity only. No application tests, implementation, installed-product proof or Reticle verdict."
+}

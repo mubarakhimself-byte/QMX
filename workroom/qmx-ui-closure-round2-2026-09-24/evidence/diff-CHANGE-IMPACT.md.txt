@@ -1,0 +1,16 @@
+--- previous/CHANGE-IMPACT.md
++++ current/CHANGE-IMPACT.md
+@@ -24,5 +24,5 @@
+ | QMN secrets / evidence HTTP | COMP-QMN | coded | reuse; UI later fronts refs | No laptop venue-key store |
+ | Listing axes | COMP-QMA-DAEMON | `listing.py` overlay | adapt (in-memory overlay today) | Do not collapse axes |
+-| instance `health()` | kit AD-5 | absent | **add** (backend, FEAT-0059-class) | Ops chrome consumes when present |
++| instance `health()` | kit AD-5 | absent | **already planned** FEAT-0062 / Epic 64 | Ops chrome consumes when present |
+ | Daemon JSON-lines / `failure_class` | specified | absent | **add** (backend) | UX-11 |
+ | Default host retry | specified | absent as loop | **add** (backend) | UI Retry follows matrix |
+@@ -42,5 +42,5 @@
+ | Loopback pairing / origin bind | COMP-QMA-DAEMON | auth.py shape-only | **add** | pre-protocol operator proof |
+ | PackUiRequest DTO | none | view_presentation.py fragment | **add** request schema | not a contribution point |
+-| Node 22 + pnpm lockfile | none | | **add** at scaffold | isolated-scaffold gate |
++| Node.js >=22.12.0 <23.0.0 + pnpm lockfile | none | Vite 8.3 engines | **add** at scaffold | isolated-scaffold gate |
+ | Envelope crypto | GAP-DESK-ENVELOPE-CRYPTO | | unresolved (backend) | UI still sends bound envelope |
+ | Performance budgets | none measured | | unresolved | Need a shell first |

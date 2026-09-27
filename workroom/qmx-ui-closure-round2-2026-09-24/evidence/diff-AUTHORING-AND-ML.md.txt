@@ -1,0 +1,241 @@
+--- previous/AUTHORING-AND-ML.md
++++ current/AUTHORING-AND-ML.md
+@@ -14,10 +14,24 @@
+ **Provenance:** **CANDIDATE** sitting default for Codex R5. Not user-accepted. Not implementation. Not a new COMP, CT, sqlite class, or Library kind.
+ 
++## 0. Locked defaults (Codex R5)
++
++| Lock | Rule |
++| --- | --- |
++| **First runnable path** | empty Authoring → save revision → validate → **publish template into the local authoring pack** → **enable that local pack** (parent AD-30, **compile-at-enable**) → grant into authoring `psess:` → select that `instance_id` → first Run via `dispatchInvoke` |
++| **Local authoring pack** | Unpublished. This machine’s roster. Not a parent AD-18 distributable. |
++| **Distributable export** | Later copy for **other machines** (parent AD-18). First Run does **not** wait on export. |
++| **Compile identity** | Enable of the local pack **is** the compile identity `(qualified_id, version)` (parent AD-4 / AD-30). Do **not** register templates outside enable law. |
++| **Draft save / publish** | CAS `expected_revision` = last known `editor_revision` hash. Stale save → typed conflict. No last-writer-wins. Two restored clients: second save refuses until it reloads head. |
++| **Draft Run** | **Refused.** Preview and validate stay legal. |
++| **V1 while editing V2** | **Allowed.** Running JobHandle stays pinned to enabled V1. |
++
+ ## Honesty at `34c148b`
+ 
+ | Claim | Fact |
+ | --- | --- |
+-| Graph Template register at enable | **Present** as plugin contribution `graph_template`; compile identity `(qualified_id, version)` |
++| Graph Template register at enable | **Present** as plugin contribution `graph_template`; compile identity `(qualified_id, version)` from the plugin manifest **at enable** (parent AD-4) |
+ | Enabled template bytes immutable | **Specified** parent AD-4; rebuild-on-load must not change an enabled `(id, version)` |
++| Local authoring pack vs distributable export | **Specified here.** Local pack = this machine’s unpublished roster. Export = parent AD-18 later copy. First Run does not wait on export |
++| Draft save/publish CAS `expected_revision` | **Specified here** as last known `editor_revision` hash. Not `product_session.context_revision` |
+ | `editor_draft_id` / `editor_revision` product surface | **Absent** |
+ | Draft test-run / temporary runnable version | **Refused** by this companion (must not be invented in UI or daemon) |
+@@ -63,5 +77,5 @@
+ | Unsaved editor buffer | Svelte `GraphCanvas` / `DetailHost` client-local | Daemon, pack, GrantRecord |
+ | Saved `editor_revision` | Daemon staging write on explicit Save | App-use; widget; json-render; MCP frame |
+-| Graph Template bytes | Pack authoring publish → new `version` (or disable) | In-place overwrite of an enabled version |
++| Graph Template bytes | Publish into the **local authoring pack**, then **enable** (parent AD-30). Enable mints `(qualified_id, version)` | In-place overwrite of an enabled version; register outside enable |
+ | `config_revision` | Named CAS on the instance | Tab switch; preview; layout edit |
+ | JobHandle | Owner COMP via envelope `start` / cancel path | UI compile; seed `start_mission`; `stop_run` |
+@@ -73,11 +87,15 @@
+   D["editor_draft_id — mutable, not runnable"]
+   R["editor_revision — saved hash, not runnable"]
+-  T["Graph Template (qualified_id, version) — immutable when enabled"]
++  L["local authoring pack — unpublished, this machine"]
++  T["Graph Template (qualified_id, version) — compile identity at enable"]
+   P["instance_id + package_version + config_revision"]
+   J["JobHandle logical_run_id + attempt_id"]
+-  D -->|"save"| R
+-  R -->|"publish new version"| T
+-  T -->|"pack export → install → enable → grant"| P
++  X["distributable export — later, parent AD-18"]
++  D -->|"save CAS expected_revision"| R
++  R -->|"publish into local pack"| L
++  L -->|"enable = compile-at-enable (parent AD-30)"| T
++  T -->|"grant into authoring psess + select instance_id"| P
+   P -->|"dispatchInvoke start"| J
++  T -->|"later copy for other machines"| X
+ ```
+ 
+@@ -91,19 +109,43 @@
+ | **Edit** | `editor_draft_id` | same id; buffer dirty vs last `editor_revision` | client | Dirty buffer is not a revision. Does not touch running jobs. |
+ | **Validate** | named `editor_revision` **or** explicit “validate unsaved” (must hash the buffer first as a transient revision candidate) | `ChangeValidation`-class verdict against **that hash** | daemon graph/topology/schema checks (parent AD-6 DAG); UI displays | **Invalidates** if bytes change after the named hash. Validate ≠ Run. No JobHandle. |
+-| **Save revision** | dirty `editor_draft_id` | new immutable `editor_revision` (content hash) | COMP-QMA-DAEMON staging | Unsaved client buffer may still exist beside it. Hash is not a template version. |
+-| **Publish new template version** | named `editor_revision` whose last validation is still valid for that hash | new Graph Template `(qualified_id, version)` registered; enabled bytes immutable | pack/plugin enable path (parent AD-4, AD-30) | **This is the first runnable identity.** Prior version stays. |
+-| **Pack export** | validated template + ops it calls | versioned pack (manifest, contributions, compatibility, migrations) | host export (parent AD-18); `ExportScanReport` is the oracle | Packaging a loop exports the operations it calls; it does **not** mint a loop engine. |
+-| **Install** | downloaded pack | `installed` (bytes present) | host AD-30 | Install ≠ enable ≠ grant. |
+-| **Enable** | installed + validated | `enabled`; atomic roster; `availability_revision` | host AD-30 | Failed validation restores last usable roster. Collision of `(point, qualified_id)` refuses. |
+-| **Grant** | enabled contribution + operator | GrantRecord on `psess:` | host AD-24 | Hit ≠ grant. Upgrade cannot widen an existing grant. |
++| **Save revision** | dirty `editor_draft_id` | new immutable `editor_revision` (content hash) | COMP-QMA-DAEMON staging | CAS `expected_revision` = last known `editor_revision` hash (empty on first save). Stale → typed conflict. Hash is not a template version. |
++| **Publish into local authoring pack** | named `editor_revision` whose last validation is still valid for that hash | template contribution bytes in the **local authoring pack** (unpublished, this machine’s roster) | host write into that pack | **Not** a registered Graph Template. **Not** a distributable export. CAS `expected_revision` = last known `editor_revision` hash. |
++| **Enable local authoring pack** | local pack with published contribution + parent AD-30 validate | `enabled`; atomic roster; `availability_revision`; Graph Template `(qualified_id, version)` **registered** | host AD-30 | **Enable is the compile identity** (parent AD-4 / AD-30). Do not register templates outside this law. Failed validation restores last usable roster. Collision of `(point, qualified_id)` refuses. **This is the first runnable identity.** First Run does **not** wait on export. |
++| **Grant** | enabled contribution + operator | GrantRecord on the **authoring** `psess:` | host AD-24 | Hit ≠ grant. Upgrade cannot widen an existing grant. |
++| **Select instance** | enabled pack instance | exactly one `selected_refs` kind `instance_id` | operator via TargetPicker | Envelope `instance_id` copies this (kit AD-3 / DEC-0463). |
+ | **Run** | enabled template `(qualified_id, version)` ∩ GrantRecord ∩ health ∩ envelope `instance_id` | JobHandle (`logical_run_id`, `attempt_id`) | `dispatchInvoke` of the template `start` op; `node_ids` inside `input_schema` when running a subgraph | Not seed `start_mission`. Not in-process MissionCompiler. Not a live Board scribble. |
++| **Pack export** (later) | enabled local pack | versioned distributable pack (manifest, contributions, compatibility, migrations) | host export (parent AD-18); `ExportScanReport` is the oracle | Copy for **other machines**. Packaging a loop exports the operations it calls; it does **not** mint a loop engine. **Not on the first Run path.** |
++| **Install** (downloaded pack) | downloaded pack | `installed` (bytes present) | host AD-30 | Other-machine / imported path. Install ≠ enable ≠ grant. |
++| **Enable** (downloaded pack) | installed + validated | `enabled`; same compile-at-enable law | host AD-30 | Same as local enable. Not the first authored Run. |
+ 
+ Authoring/Home **may not invoke** (including Graph Run) until exactly one `selected_refs` kind `instance_id` is present; envelope `instance_id` remains required (kit AD-3 / DEC-0463). Chat without invoke remains allowed (local AD-18).
+ 
++### 2.0 One complete first-Run path
++
++Architecture sequence. Unexecuted. Empty Authoring is a legal platform destination with zero opened apps.
++
++1. **Create draft.** Empty Authoring canvas → `editor_draft_id`. Not a template. Not an instance. Not runnable.
++2. **Save revision.** Dirty buffer → immutable `editor_revision` hash. CAS `expected_revision` is empty on first save, then the last known hash. Stale head → typed conflict (no last-writer-wins).
++3. **Validate.** Names that `editor_revision` hash. Verdict is for that hash only. Validate ≠ Run.
++4. **Publish into the local authoring pack.** Validated hash is written as a `graph_template` contribution on **this machine’s unpublished authoring pack**. Still not registered. Still not runnable. Still not a parent AD-18 distributable.
++5. **Enable that local pack** (parent AD-30). Compile-at-enable: plugin manifest yields Graph Template `(qualified_id, version)`. Enabled bytes are immutable. This **is** registration. Do not register any other way.
++6. **Grant** the enabled contribution into the **authoring** `psess:`.
++7. **Select** that pack’s `instance_id` (exactly one `selected_refs` kind `instance_id`).
++8. **First Run** via `dispatchInvoke` of the template `start` op → JobHandle.
++
++After first Run:
++
++- **Edit a new version** on a new (or same) `editor_draft_id` aiming at v2. Enabled V1 and its JobHandle stay pinned.
++- **Save / validate / publish / enable** a new `(qualified_id, version)`. Prior version stays. In-place overwrite is refused.
++- **Run V1** while the V2 draft is open is allowed (trace T-R5-02). Graph Run on the V2 draft remains `draft_not_runnable` until v2 is enabled.
++- **Rollback** of enable is parent AD-30 last usable roster, not a rewrite of enabled bytes.
++
++**Local authoring pack** vs **distributable export:** the local pack is this daemon’s unpublished roster item. Enable it here and Run here. Export (parent AD-18) is a later copy so **another** machine can install → enable → grant. First Run does not wait on that copy.
++
+ ### 2.1 Draft test-run — REFUSED
+ 
+-**Run is refused** until a new immutable Graph Template `(qualified_id, version)` is **registered** (publish) and the invoke path above is satisfied.
+-
+-This closes Codex Team-B: a temporary runnable draft, a hidden “dev version” of the same `(qualified_id, version)`, or overwrite-in-place of enabled bytes is **unsupported**. Preview and validate stay legal on draft/revision. Graph Run is `dispatchInvoke` of an **already-registered** template.
++**Run is refused** until a new immutable Graph Template `(qualified_id, version)` is **registered by enabling the local authoring pack** and the invoke path above is satisfied. Publish-into-pack is not registration. Export is not registration.
++
++This closes Codex Team-B: a temporary runnable draft, a hidden “dev version” of the same `(qualified_id, version)`, or overwrite-in-place of enabled bytes is **unsupported**. Preview and validate stay legal on draft/revision. Graph Run is `dispatchInvoke` of an **already-enabled** template.
+ 
+ | Attempt | Result |
+@@ -112,11 +154,27 @@
+ | Run naming only `editor_draft_id` or `editor_revision` | same refusal |
+ | Register a throwaway template version without pack/enable law | forbidden (would be Team-B) |
++| Treat publish-into-pack as compile identity | forbidden — enable is compile identity |
++| Gate first Run on parent AD-18 export | forbidden — export is a later copy |
+ | Preview graph/code/data of a revision | allowed |
+ | Validate DAG/schema of a named revision | allowed; stale if bytes change |
+ | Run V1 template while V2 draft is open | allowed — different identities (trace T-R5-02) |
+ 
++### 2.1a Draft save / publish CAS
++
++Save and publish compare-and-set on **`expected_revision`**: the last known `editor_revision` hash for that `editor_draft_id`. This is the draft head, **not** `product_session.context_revision`.
++
++| Case | Result |
++| --- | --- |
++| First save (no prior hash) | `expected_revision` empty/absent. Daemon mints the first `editor_revision`. |
++| Save / publish naming current head | `ok` + new immutable `editor_revision` (save) or pack contribution write (publish). |
++| Save / publish naming a stale hash | typed **conflict** with current head. No last-writer-wins. Bytes of the refused write are not the new head. |
++| Two restored clients, both at `R1` | First save with `expected_revision=R1` → `R2`. Second save with `expected_revision=R1` **refuses** until that client reloads head `R2` and retries. |
++| Duplicate `command_id` with same payload | prior durable result (parent AD-29). Different payload on the same id refuses. |
++
++Reconnect does not invent a winning write. Reload head is a query.
++
+ ### 2.2 Validation invalidation
+ 
+-Validation records the `editor_revision` hash (or the hash of the buffer if the operator chose validate-unsaved). Any subsequent edit that changes bytes **invalidates** that verdict. Publish requires a **currently valid** validation of the hash being published. Re-validate is explicit. The UI must show the hash it validated, not a draft label.
++Validation records the `editor_revision` hash (or the hash of the buffer if the operator chose validate-unsaved). Any subsequent edit that changes bytes **invalidates** that verdict. Publish into the local authoring pack requires a **currently valid** validation of the hash being published. Re-validate is explicit. The UI must show the hash it validated, not a draft label.
+ 
+ ### 2.3 Crash / reopen
+@@ -124,5 +182,5 @@
+ | What | Restore |
+ | --- | --- |
+-| Last saved `editor_revision` | **Yes** — reopen that hash on `editor_draft_id` |
++| Last saved `editor_revision` | **Yes** — reopen that hash on `editor_draft_id`. That hash is the CAS head (`expected_revision`) |
+ | Unsaved client buffer | **May be lost** (honest). Do not claim localStorage as durable product state |
+ | Board viewport/selection | Client-local; may be lost; must not be written to `psess:` |
+@@ -140,5 +198,5 @@
+ 3. Authoring **plus operator principal** appends `ChangeApplyRecord`.
+ 
+-App-use **must not apply**. `promote` remains L17 and is not this path. Apply publishes a **new** template version and/or new `config_revision` / pack version as the patch requires. **v1 instance bytes, GrantRecords, and running JobHandles stay pinned.** Installation/upgrade must not mutate an existing row’s `granted_ops` or retarget `app_instance_id`. Nested invoke does not union grants. Authoring opens with scoped `selected_refs`, not the app-use private transcript, not layout/widget trees.
++App-use **must not apply**. `promote` remains L17 and is not this path. Apply publishes a **new** template version through the same local-pack enable law (and/or a new `config_revision` / pack version as the patch requires). It does not register outside enable and does not wait on distributable export. **v1 instance bytes, GrantRecords, and running JobHandles stay pinned.** Installation/upgrade must not mutate an existing row’s `granted_ops` or retarget `app_instance_id`. Nested invoke does not union grants. Authoring opens with scoped `selected_refs`, not the app-use private transcript, not layout/widget trees.
+ 
+ Fixture exists at `34c148b` (`staging/change_request.py`). Not e2e.
+@@ -157,5 +215,5 @@
+   Detail --> Diff: compare editor_revision or template versions
+   Diff --> Detail
+-  Detail --> Run: registered template version only
++  Detail --> Run: enabled template version only
+   Run --> Results: JobHandle
+   Results --> Graph: Return
+@@ -180,5 +238,5 @@
+ | **Split** | CT-12 split / partition membership on the **release** | train / validation / test / holdout as declared; sealed holdout denied on default research path | shuffle that leaks future into train |
+ | **Leakage check** | recorded on the recipe/run (retain **P1-DATA-005**) | alignment policy, exclusions, leakage checks on heterogeneous timezone/calendar/sparse data | run that cannot show the record |
+-| **Code / model config** | `editor_revision` until publish; then template version + config_revision | named hash/version; environment/code pins | editing V2 presented as the running V1 config |
++| **Code / model config** | `editor_revision` until enable of the published local-pack version; then template version + config_revision | named hash/version; environment/code pins | editing V2 presented as the running V1 config |
+ | **Execution target** | composer target = one `selected_refs` kind `instance_id` plus optional granted account/placement | placement, GPU/entitlement **preflight** (retain **P1-PLC-001**) | missing local GPU and remote entitlement → refuse **before** schedule/cost |
+ | **Run inspect** | JobHandle `logical_run_id` + `attempt_id` | parent AD-26 states; completeness `complete` \| `partial` \| `missing` \| `expired`; logs as observation not evidence | cancelled **display** as proof of stop; incomplete GPU weights treated as promotable (P1-DATA-007) |
+@@ -194,4 +252,14 @@
+ Do not reuse frozen `P1-*` ids as UI journey numbers. Mapping is retain/map only.
+ 
++### T-R5-00 — Empty Authoring to first Run
++
++1. Empty Authoring. Create draft `D`. No revision. Run refuses (`draft_not_runnable`).
++2. Save → `editor_revision=R1` (`expected_revision` empty). Validate names `R1` → `valid`.
++3. Publish `R1` into the **local authoring pack**. Still not a Graph Template. Run still refuses. No export.
++4. Enable that local pack (parent AD-30). Compile identity `(q, v1)` registers. Enabled bytes immutable.
++5. Grant `(q, v1)` into the authoring `psess:`. Select that `instance_id`.
++6. Graph Run → `dispatchInvoke` of `(q, v1)` `start` → JobHandle `H`.
++7. Later distributable export (parent AD-18) is optional and is **not** on this path.
++
+ ### T-R5-01 — Edit after validate
+ 
+@@ -199,5 +267,5 @@
+ 2. Edit the draft (bytes change). Verdict for `R1` remains historically true for `R1` and is **not** valid for the dirty buffer.
+ 3. Publish of the dirty buffer without a new valid validation **refuses**.
+-4. Save `R2`. Re-validate `R2`. Publish may proceed from `R2`.
++4. Save `R2` with `expected_revision=R1`. Re-validate `R2`. Publish into the local pack may proceed from `R2`. Enable still required before Run.
+ 
+ ### T-R5-02 — Run V1 while editing V2
+@@ -206,5 +274,5 @@
+ 2. Operator opens Authoring on `editor_draft_id` aiming at v2. Viewport/selection/draft refs retained on expand.
+ 3. `H` stays pinned to `(q, v1)` + the `instance_id` / `config_revision` / grant it started with.
+-4. Graph Run control on the v2 draft **refuses** (`draft_not_runnable`) until publish of `(q, v2)`.
++4. Graph Run control on the v2 draft **refuses** (`draft_not_runnable`) until **enable** of `(q, v2)` on the local authoring pack.
+ 5. Switching the visible app does not cancel `H` (J-UI-01).
+ 
+@@ -228,8 +296,15 @@
+ 1. App-use inspects run `H` on instance v1; mints `cr:…` with base hashes.
+ 2. New authoring `psess:` receives typed refs (not transcript, not layout).
+-3. Validation `valid`. Operator principal applies → v2 template/config as specified.
++3. Validation `valid`. Operator principal applies → v2 template/config as specified, through local-pack **enable** (not a side-door register, not gated on export).
+ 4. Instance v1, its GrantRecords, and `H` **unchanged**. No grant union. No account retarget.
+ 5. Stale base hash → `conflict` / `rebase-required`, not apply (SCN-0019 branch C).
+ 
++### T-R5-07 — Two restored clients, stale save
++
++1. Saved head `editor_revision=R1`. Two clients restore `D` at `R1`.
++2. Client A saves with `expected_revision=R1` → head is `R2`.
++3. Client B saves with `expected_revision=R1` → typed **conflict**. Head stays `R2`. No last-writer-wins.
++4. Client B reloads head `R2`, then may save `R3` with `expected_revision=R2`.
++
+ ## 6. Unsupported (explicit)
+ 
+@@ -237,4 +312,7 @@
+ | --- | --- |
+ | Draft test-run / temporary registered version | Team-B hole; local AD-9 |
++| Register a template outside enable of the local (or imported) pack | parent AD-4 / AD-30; enable **is** compile identity |
++| Gate first Run on parent AD-18 distributable export | export is a later copy for other machines |
++| Last-writer-wins on draft save/publish | CAS `expected_revision` = last known `editor_revision` hash |
+ | In-place mutate enabled `(qualified_id, version)` | parent AD-4 |
+ | Lossless code ↔ graph | local AD-9 |
+@@ -257,15 +335,17 @@
+ | --- | --- | --- |
+ | Persist `editor_draft_id` + `editor_revision` bytes (staging, not Library kind) | COMP-QMA-DAEMON | **add** (absent) |
++| CAS save/publish on `expected_revision` (last known `editor_revision` hash) | COMP-QMA-DAEMON | **add** (absent) |
+ | Validate-named-hash; invalidate on byte change | COMP-QMA-DAEMON | **add** chrome+command over existing DAG checks |
+-| Publish revision → new immutable template version | plugin enable / AD-30 | **adapt** existing register; forbid overwrite |
+-| Wire Graph Run = `start` of registered template | COMP-QMA-WIRE + DAEMON | reuse envelope; **add** live JSON-RPC |
++| Publish revision **into the local authoring pack** (not register) | host pack write | **adapt** pack bytes on this machine’s unpublished roster |
++| Enable local authoring pack = compile identity `(qualified_id, version)` | plugin enable / parent AD-30 | **adapt** existing register; forbid overwrite; forbid register outside enable |
++| Wire Graph Run = `start` of **enabled** template | COMP-QMA-WIRE + DAEMON | reuse envelope; **add** live JSON-RPC |
+ | `selected_refs` kind `instance_id` | COMP-QMA-DAEMON + WIRE | **adapt** (DEC-0463; absent in `SELECTED_REF_KINDS`) |
+ 
+-Storage: drafts use existing staging/content-address (same “no new store class” law as `change_request`). They are **not** Workbench AD-3 ArtifactHits and **not** Graph Templates until publish.
++Storage: drafts use existing staging/content-address (same “no new store class” law as `change_request`). They are **not** Workbench AD-3 ArtifactHits and **not** Graph Templates until **enable** of the pack that contains the published contribution.
+ 
+ ## Sources
+ 
+ - `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md` (local AD-9, AD-8, AD-7)
+-- `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md` (parent AD-4, AD-6, AD-8, AD-11, AD-26, AD-29, AD-30, AD-31)
++- `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md` (parent AD-4, AD-6, AD-8, AD-11, AD-18, AD-26, AD-29, AD-30, AD-31)
+ - `C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-review-2026-09-23/REVIEW.md` (R5)
+ - `C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/03-EXPERIENCE-SCOPE.md` (UX-06, UX-07, UX-09)

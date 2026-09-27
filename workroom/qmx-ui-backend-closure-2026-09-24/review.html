@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>QMX closure review</title><style>
+:root{color-scheme:light;--ink:#18212b;--muted:#536171;--line:#d5dce3}
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+main{max-width:1140px;margin:auto;padding:38px 44px 72px;background:white;min-height:100vh}
+nav{display:flex;flex-wrap:wrap;gap:18px;padding-bottom:22px;border-bottom:1px solid var(--line);font-size:14px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.03em;margin:30px 0 20px}
+h2{font-size:23px;margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+h3{font-size:19px;line-height:1.4;margin-top:32px}p,li{max-width:100ch}
+a{color:#125c87;text-underline-offset:3px}code{font: .88em ui-monospace,Consolas,monospace;background:#eef1f4;padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5}
+th,td{border:1px solid var(--line);padding:12px;text-align:left;vertical-align:top}th{background:#eaf0f5}
+li+li{margin-top:9px}.scope{margin-top:56px;border-top:4px solid #4b647c;padding-top:16px}
+.badge{font-weight:650;background:#fff4d9;border:1px solid #d9ba67;padding:12px 16px;margin:22px 0}
+@media(max-width:700px){main{padding:24px 18px}h1{font-size:27px}td,th{min-width:130px}}
+@media print{body,main{background:white}main{max-width:none;padding:0}nav{display:none}a{color:inherit}}
+</style><main><h1>QMX amended backend/UI closure review — 24 September 2026</h1>
+<p><strong>Verdict: ready after two remaining corrections; not yet cleared for Documentation Factory.</strong></p>
+<p>Grok&#x27;s amendments are present. Root reviewed the amended spines, closure map, parent amendments, pairing/host/authoring/transfer companions and corresponding UI contracts. Both structural lints pass. The 88 input files were frozen before review and checked against their live counterparts afterward.</p>
+<p>Three independent reviewers were dispatched, but all hit the account usage limit without producing reports. This verdict is the primary agent&#x27;s direct review, not a completed independent reviewer gate. No implementation, candidate edits, Documentation Factory, epics or factory control occurred.</p>
+<h2>Closure status</h2>
+<div class="table-wrap"><table>
+<tr><th>Finding</th><th>Result</th></tr>
+<tr><td>J1 first operator bootstrap</td><td>Clean-install path is now coherent: owner-only host-control token, daemon-owned operator principal, explicit TTL setup, no dummy provider login. Recovery still needs the correction below.</td></tr>
+<tr><td>J2 proof custody/lifecycle</td><td>Secret proof versus nonsecret record identity, hash-only persistence, redaction, single-use confirmation, rotation and active-socket expiry are corrected. Renew/revoke ordering still has contradictory outcomes below.</td></tr>
+<tr><td>J3 draft identity</td><td>Closed at architecture altitude: daemon is sole durable issuer; first save omits id; correlation/same fp1 supports retry; subsequent saves and reload use durable head/CAS. UI and backend agree.</td></tr>
+<tr><td>J4 validated publication</td><td>Closed: publish_editor_draft checks owner and expected revision, reruns immutable-fp1 validation and writes the local contribution. Enable remains compile identity. UI validation label is not authority.</td></tr>
+<tr><td>J5 transfer</td><td>Prior loopback assumption corrected: recorded reachable TLS source and destination allowlist are prerequisites; otherwise typed refusal. Ticket carries destination identity/revision/audience, with destination-authored completion and retry. This closes the prior architectural direction for a registered destination control connection; it does not prove arbitrary laptop-to-VPS connectivity or implementation.</td></tr>
+</table></div>
+<h2>Remaining corrections</h2>
+<h3>C1 — J1 recovery still requires the credential that has been lost</h3>
+<p>Backend HOST-LIFECYCLE.md line 23 and ARCHITECTURE-SPINE.md AD-17 line 182 say a lost host_control file refuses until rotate-control presents a still-valid token. If the file was the only copy and the daemon restarts, the stated recovery path cannot run. It covers rotation by a current holder, not recovery from lost proof.</p>
+<p>Define recovery under the already-chosen OS-user trust root: for example, an explicit owner-verified offline replacement while the daemon is stopped, preserving local_operator and journals and invalidating the previous token. A documented protected-backup restore path is also viable. Choose one; do not silently remint an operator or require deleting the data root. Include lost-file plus restart, unauthorized local user and normal rotation traces. Exact OS API/signal mechanics may remain implementation detail.</p>
+<h3>C2 — J2 origin revocation must still apply when renewal commits first</h3>
+<p>PAIRING-AND-ADMISSION.md line 61 says origin revoke invalidates all preceding sessions and pending approvals. Line 62 says concurrent renew versus revoke is first-append-wins and the loser may be a no-op or refusal. If renewal commits first and the later operator origin-revoke is discarded, the freshly renewed proof survives an explicit revocation, contradicting the cutoff rule.</p>
+<p>Define serialized outcomes explicitly: renew first then origin revoke must revoke the newly issued proof too; origin revoke first makes renewal with the old proof refuse. Define single-record revocation separately so its scope is not confused with origin-wide revocation. Add both orderings to the traces and reconcile spine/companion/closure wording. Journal ordering alone is not a reason to discard the later valid administrative command.</p>
+<h2>Small reconciliations</h2>
+<p>Provider shell-versus-ready prerequisites, get_pack_ui_request read-back, mailbox write principal checks, optional headless handle origins, cancel run/attempt fences and _ref field naming are now explicitly bound. Historical memlogs/research remain historical; their superseded terminology is not itself a new finding. START-HERE&#x27;s AM-01..16 range should be updated to include AM-17 as routine cleanup.</p>
+<p>Keep a narrow delivery qualification: remote transfer requires a registered authenticated destination control connection and a reachable allowed source. Do not infer arbitrary inter-daemon discovery/relay support from the sentence about different-daemon copies; those setup prerequisites must be carried into downstream stories. No new transport or UI redesign is requested by this review.</p>
+<h2>Next action</h2>
+<p>Return C1/C2 to the same Grok backend-delta architecture session. Preserve J3/J4/J5 and the completed small reconciliations. Update affected UI wording, closure map and positive/negative traces. Run the architecture reviewer gate there; return for focused closure. One integrated Documentation Factory pass remains next after closure. No application runtime or installed-product readiness is certified here.</p></main></html>

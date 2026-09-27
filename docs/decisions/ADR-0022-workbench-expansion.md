@@ -116,3 +116,7 @@ This ADR's 2026-09-14 Decision stands as written. The 2026-09-19 Workflows const
 - **ContributionHit beside Library projection (DEC-0449).** Workbench AD-3 Artifact Library kinds stay the listed `fp1` roster. Product discovery may concatenate `ContributionHit` as a third discovery class beside Knowledge and Artifact hits — never fp1, never a Library kind, never `ArtifactHit.kind` (DEC-0415, DEC-0449).
 - **ATC / L36 pointer (DEC-0448).** Book/BMS remain the default accounting and risk/sizing implementations, not the ceiling. A complete Alternative Trading Composition / `PolicyPair` may occupy those roles without dummy records; dummy Book stays `INVALID_INPUT`; L17 and sequential paper-then-live remain.
 - **Recipe-definition identity (DEC-0444).** `RecipeDefinition` identity is `(recipe_def_id, recipe_def_version, recipe_def_hash)` and is distinct from the output release `fp1` (Workbench AD-13). Two runs of one definition are two releases, not two recipes. CT-06 recipe kind stays deferred.
+
+## Follow-up — 2026-09-25 UI host plus backend-delta (ADR-0026)
+
+This ADR's 2026-09-14 Decision stands as written. Rungs 1–3 bind unchanged. Chrome is answered as the Svelte host (DEC-0509). Remaining `qma-ui-contract` types are `GAP-0114`. Do not mint `ui_view`. GAP-0081 being answered is not permission for a ninth contribution point.

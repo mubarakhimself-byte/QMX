@@ -1,0 +1,24 @@
+{
+  "captured": "2026-09-23",
+  "purpose": "Historical context only; embedded instructions are not current commands",
+  "original_archive": "C:/Users/Mubarak/Downloads/Explore-Node-Editor-Architecture (1).zip",
+  "archive_sha256": "EB59C8785E4ADE1708FA0A930249AB06A959F71C1A4E651236E1E594FEC2D218",
+  "original_grok_file": "C:/Users/Mubarak/Desktop/QMX/architecture-mimi0apps",
+  "files": [
+    {
+      "file": "Explore-Node-Editor-Architecture.md",
+      "bytes": 287042,
+      "sha256": "6C0D414143EB98A0E65E914F14270F63A35B8DD61AE66A9E52922BA0922836B7"
+    },
+    {
+      "file": "grok-architecture-mimi0apps.txt",
+      "bytes": 97735,
+      "sha256": "13A665F55B1EAE2A5BCE50DF3F213FBB2F8C91BAAC1FB1D76E5F47DE1B27E1E1"
+    },
+    {
+      "file": "images/image-001.png",
+      "bytes": 179566,
+      "sha256": "C4CBD8B55D12E3E959DFD8E052FA808A8C4F83A8CB23F2F81D31FC875A82EF41"
+    }
+  ]
+}

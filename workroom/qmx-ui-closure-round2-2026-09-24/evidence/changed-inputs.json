@@ -1,0 +1,92 @@
+[
+  {
+    "path": ".memlog.md",
+    "change": "modified",
+    "bytes": 8486
+  },
+  {
+    "path": "ARCHITECTURE-SPINE.md",
+    "change": "modified",
+    "bytes": 31668
+  },
+  {
+    "path": "AUTHORING-AND-ML.md",
+    "change": "modified",
+    "bytes": 28960
+  },
+  {
+    "path": "BACKEND-DEPENDENCIES.md",
+    "change": "added",
+    "bytes": 2861
+  },
+  {
+    "path": "BOOTSTRAP-AND-AUTH.md",
+    "change": "modified",
+    "bytes": 40876
+  },
+  {
+    "path": "CHANGE-IMPACT.md",
+    "change": "modified",
+    "bytes": 4526
+  },
+  {
+    "path": "CHAT-AND-HISTORY.md",
+    "change": "modified",
+    "bytes": 34357
+  },
+  {
+    "path": "CLOSURE-MAP.md",
+    "change": "modified",
+    "bytes": 3767
+  },
+  {
+    "path": "DECISIONS-AND-OPEN.md",
+    "change": "modified",
+    "bytes": 4165
+  },
+  {
+    "path": "EXAMPLES.md",
+    "change": "modified",
+    "bytes": 15450
+  },
+  {
+    "path": "JOURNEYS.md",
+    "change": "modified",
+    "bytes": 4211
+  },
+  {
+    "path": "LIBRARY-AND-ATTACHMENTS.md",
+    "change": "modified",
+    "bytes": 24272
+  },
+  {
+    "path": "reviews/gate-amendment-summary.md",
+    "change": "modified",
+    "bytes": 926
+  },
+  {
+    "path": "reviews/review-closure-delta-2026-09-24.md",
+    "change": "added",
+    "bytes": 12952
+  },
+  {
+    "path": "reviews/review-epic60-copilot-profile.md",
+    "change": "added",
+    "bytes": 7342
+  },
+  {
+    "path": "START-HERE.md",
+    "change": "modified",
+    "bytes": 2408
+  },
+  {
+    "path": "TRACE-MATRIX.md",
+    "change": "modified",
+    "bytes": 18551
+  },
+  {
+    "path": "VIEW-AND-PACK-CONTRACT.md",
+    "change": "modified",
+    "bytes": 22893
+  }
+]

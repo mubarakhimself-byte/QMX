@@ -1,0 +1,53 @@
+Codex closure review — QMX UI backend-delta J1–J5 amendment + reconciled UI candidate
+=====================================================================================
+
+Paste this block into a fresh review session (Codex). Do not implement. Do not run Documentation Factory. Do not generate or start epics. Do not alter factory inputs.
+
+Workspace (backend-delta, this sitting):
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/
+
+Read in order:
+  START-HERE.md
+  CLOSURE-J1-J5.md
+  CLOSURE-EVIDENCE.md
+  ARCHITECTURE-SPINE.md
+  PARENT-AMENDMENT-MAP.md
+  DEPENDENCY-MAP.md
+  PAIRING-AND-ADMISSION.md
+  HOST-LIFECYCLE.md
+  MAILBOX-AND-DELIVERY.md
+  CANCEL-AND-HANDLES.md
+  ARTIFACTS-AND-TRANSFER.md
+  PACK-UI-AND-AUTHORING.md
+  PROVIDER-AND-COMPAT.md
+  TRACE-MATRIX.md
+  UI-CANDIDATE-CHANGELOG.md
+
+Reconciled UI candidate:
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+
+Joint review this amendment answers (do not overwrite):
+  C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-joint-review-2026-09-24/REVIEW.md
+  C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-joint-review-2026-09-24/GROK-FOLLOWUP.md
+
+Inspect pins (planned ≠ implemented):
+  main    92279dfe43922d60fabe38e29284ca52956ab75c
+  integration  34c148be404a375cbfd79fd4ce6997452e4f1d20
+  worktree  .worktrees/integration-inspect
+
+Must confirm:
+  1. R2 Origin-only issuance remains closed. Remembered Origin never issues pairing_proof.
+  2. J1: clean install establishes/verifies the first operator via local host-control (OS user + QMA_DAEMON_ROOT + host_control). No assumed existing CredentialRef. Allowlist not widened. A well-shaped ref is not proof. Positive and negative traces exist.
+  3. J2: pairing_proof is a bearer; pairing_record_id is the journal identity; raw proof never in journals/traces/status; confirm once; already_issued; lost confirm → re-pair; renew rotates; expiry closes WS; origin revoke is a cutoff. UI wording matches.
+  4. J3: daemon is the sole durable editor_draft_id issuer. First save omits the id. client_draft_correlation recovers lost first-save ack. Subsequent saves are CAS on expected_revision.
+  5. J4: publish_editor_draft authorizes, CAS-checks, revalidates immutable fp1, writes the local authoring pack. AD-30 enable remains compile identity. Unsaved preview/validate stay legal.
+  6. J5: transfer_artifact requires recorded reachable TLS or typed source_unreachable. Ticket bound to dest identity + placement revision + machine credential_ref audience. Dest-authored transfer_complete. Invoke refuses until complete. No silent loopback expose. No local-invoke fallback.
+  7. Small: shell ≠ provider readiness; get_pack_ui_request snapshot; mailbox send principal equality; cancel optional originating_product_session_ref + exact fences; _ref naming (AM-14) without widening the exception list.
+  8. Every inherited conflict is a named amendment in PARENT-AMENDMENT-MAP.md (AM-01..AM-16). No silent override of QMA AD-24, Envelope fields, JobHandle states, Epic 60 copilot_profile, or the credential allowlist.
+  9. Closed UI findings R1, R3–R9 intent, Svelte/storyboard, visual/headless, and Epics 60–65 are preserved.
+  10. No implementation, Documentation Factory, epic rewrite, or factory control in these trees.
+
+After this closure review passes, the operator's batch is:
+  one integrated Documentation Factory pass
+  then coordinated epics/stories amendments and additions
+  then software-factory execution.

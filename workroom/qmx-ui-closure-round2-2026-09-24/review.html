@@ -1,0 +1,86 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>QMX second-amendment closure review</title>
+<style>
+:root{color-scheme:light;--ink:#18212b;--muted:#536171;--line:#d5dce3}
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+main{max-width:1140px;margin:auto;padding:38px 44px 72px;background:white;min-height:100vh}
+nav{display:flex;flex-wrap:wrap;gap:18px;padding-bottom:22px;border-bottom:1px solid var(--line);font-size:14px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.03em;margin:30px 0 20px}
+h2{font-size:23px;margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+h3{font-size:19px;line-height:1.4;margin-top:32px}p,li{max-width:100ch}
+a{color:#125c87;text-underline-offset:3px}code{font: .88em ui-monospace,Consolas,monospace;background:#eef1f4;padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5}
+th,td{border:1px solid var(--line);padding:12px;text-align:left;vertical-align:top}th{background:#eaf0f5}
+li+li{margin-top:9px}.scope{margin-top:56px;border-top:4px solid #4b647c;padding-top:16px}
+.badge{font-weight:650;background:#fff4d9;border:1px solid #d9ba67;padding:12px 16px;margin:22px 0}
+@media(max-width:700px){main{padding:24px 18px}h1{font-size:27px}td,th{min-width:130px}}
+@media print{body,main{background:white}main{max-width:none;padding:0}nav{display:none}a{color:inherit}}
+</style></head><body><main>
+<nav><a href="#review">Closure review</a><a href="#intake">Backend intake</a><a href="REVIEW.md">Markdown</a><a href="FRESH-BACKEND-PROMPT.md">Fresh-session prompt</a></nav>
+<div class="badge">8 findings closed · 1 authentication correction · Next: fresh backend architecture</div>
+<section id="review"><h1>QMX UI architecture — second-amendment closure</h1>
+<p><strong>Verdict: ready after one listed correction. R2 remains partially open; the other eight original findings are closed at the UI architecture gate.</strong></p>
+<p>2026-09-24. Review against the preceding closure report&#x27;s R2–R7/R9, with R1/R8 checked for regression. This is a document review. The required backend changes remain candidate inputs to a fresh architecture sitting, not implemented or ratified parent amendments.</p>
+<p><strong>Next destination: the fresh backend-delta BMAD architecture session.</strong> Carry the explicit R2 correction below into that sitting and resolve it before ratifying the combined architecture. Another broad UI-design revision is unnecessary. Documentation Factory still waits for the joint review, as agreed with the user.</p>
+<h2>Closure matrix</h2>
+<div class="table-wrap"><table>
+<tr><th>Finding</th><th>Verdict</th><th>Verified result</th></tr>
+<tr><td>R1 — navigation</td><td>Closed, preserved</td><td>Independent Home/Copilot/Library/Authoring and original layout families remain</td></tr>
+<tr><td>R2 — bootstrap/authentication</td><td><strong>Partial — one High correction</strong></td><td>Browser-realizable HTTP bearer and WebSocket subprotocol now agree; origin-only issuance of a new session remains permitted</td></tr>
+<tr><td>R3 — chat/history</td><td>Closed as candidate</td><td>Persisted product_session_id and inherited replies; journaled pre-ack wire pair, collision rule, lookup and rebuild; no synthetic chat instance</td></tr>
+<tr><td>R4 — pack/view contracts</td><td>Closed as candidate</td><td>Epic 60 sibling copilot_profile retained; nav.view_ids binding and invalid-ref behavior; multiple matching grants refuse GRANT_AMBIGUOUS</td></tr>
+<tr><td>R5 — authoring/ML</td><td>Closed as candidate</td><td>Local authoring pack publication then enable/registration, grant, instance and first Run; expected_revision CAS; later export distinguished</td></tr>
+<tr><td>R6 — attachments/Library</td><td>Closed as candidate</td><td>Initial daemon possession over authenticated PUT, complete hash/byte-count proof, refusal/cleanup of interrupted v1 upload, explicit verified remote transfer</td></tr>
+<tr><td>R7 — cancellation</td><td>Closed as candidate</td><td>Starter-session operator only; originating_psess stored at admission; queued→running does not invalidate cancel; terminal recorded no-op; replay/nested paths aligned</td></tr>
+<tr><td>R8 — provenance</td><td>Closed, preserved</td><td>Candidate status is not operator acceptance; no new claim of implemented behavior</td></tr>
+<tr><td>R9 — build seed</td><td>Closed as candidate</td><td>Node.js &gt;=22.12.0 &lt;23.0.0 is consistent; bits-ui/pnpm ownership retained; scaffold checks honestly unexecuted</td></tr>
+</table></div>
+<p>The earlier internal candidate review still contains pre-fix findings. This verdict checks the current source files and snapshot, not the summary&#x27;s declaration that everything is closed.</p>
+<h2>One remaining required correction: R2 session issuance</h2>
+<p><strong>High — a remembered website origin must not authorize a new operator session.</strong></p>
+<p><code>BOOTSTRAP-AND-AUTH.md:39</code>, <code>:228</code>, <code>:409</code> and the corresponding examples/tests allow a new tab to use unauthenticated <code>/pair/start</code> and <code>/pair/confirm</code>, then receive a new <code>pairing_session_id</code> automatically because that Origin was previously paired with an operator. No existing valid pairing proof is required on that path.</p>
+<p>This is an issuance bypass even though subsequent HTTP and WebSocket calls validate the newly issued token correctly. A non-browser caller can claim an Origin header; the server cannot infer the requesting client&#x27;s operator identity from it. This is an architectural inference from the candidate&#x27;s optional auto-approval rule and the <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-10.1">RFC 6455 non-browser-client warning</a>, not a claim of an exploited or deployed vulnerability.</p>
+<p><strong>Finite correction:</strong> every new pairing session must require either fresh privileged QMB confirmation of its pending request, or an explicitly authenticated renewal/derivation using an existing valid pairing proof. Matching a remembered Origin alone is insufficient. For v1, removing unauthenticated auto-approval is the smallest correction. Apply the invariant to all repeated second-tab rows, examples and tests, including revocation/expiry behavior. Preserve exact Origin checking as an additional browser boundary, and preserve the newly coherent bearer/subprotocol transport choice.</p>
+<p>Required negative trace: Origin is known but caller has no valid proof and no fresh privileged confirmation → no pairing_session_id issued and no CT-40 access. Required positive trace: newly confirmed request → token; valid authenticated renewal if that feature is retained → token; revoked/expired proof alone → refusal.</p>
+<p>This can be resolved first in the fresh backend sitting, alongside pairing-table ownership and lifecycle. It must not enter Documentation Factory as an accepted origin-only shortcut.</p>
+<h2>Nonblocking precision and handoff notes</h2>
+<ol>
+<li><strong>Session-storage wording.</strong> <code>CHAT-AND-HISTORY.md:357–364</code> and TRACE-MATRIX&#x27;s Home row overstate browser-restart restoration from sessionStorage. The bootstrap companion correctly narrows the guarantee to the same page session/reload; the chat contract already supplies the safe empty-storage fallback (select the product session, fetch the full snapshot, never replay leftover text). Rename the trace to reload/restored page session and state cold-start behavior explicitly. Consider new/cloned-tab identity in implementation checks. This does not reopen the now-correct durable mailbox model. <a href="https://html.spec.whatwg.org/multipage/webstorage.html">HTML Web Storage specification</a>.</li>
+<li><strong>Backend inventory is a starting list.</strong> Include saved-draft/CAS storage and APIs, PackUiRequest ingestion/querying, all QMB host lifecycle verbs, provider setup, and client/core/installed-product compatibility. These are already named across the candidate; they should not disappear because BACKEND-DEPENDENCIES lists only several new API names.</li>
+<li><strong>Mailbox plan anchor.</strong> The candidate labels this “Epic 41 mailbox.” Wire vocabulary belongs there, but durable mailbox delivery is <strong>QMA Epic 46 / Story 46.4</strong>, with journal/fold infrastructure in Epic 42. Verify all dependency anchors against the actual planned backlog before amendment.</li>
+</ol>
+<p>See <a href="BACKEND-INTAKE-SUPPLEMENT.md">BACKEND-INTAKE-SUPPLEMENT.md</a> for the bounded carry-forward inventory. Multi-view navigation composition, transfer data-plane details, registry values, exact storage migrations and packaging implementation belong to their subsequent design/implementation owners. Missing code alone does not reopen these UI findings.</p>
+<h2>Evidence and limits</h2>
+<ul>
+<li>Independent reviews: <a href="reviews/auth-chat.md">auth/chat</a>, <a href="reviews/experience.md">experience</a>, <a href="reviews/cancel-currency.md">cancel/currency</a>. Root checked the source delta, inherited plan anchors and primary browser-security/storage specifications.</li>
+<li>Mechanical lint passes with zero findings. The root&#x27;s issuer finding demonstrates why lint alone does not prove semantic closure.</li>
+<li>56 current candidate files are snapshotted with SHA-256 hashes. Primary diffs against the preceding 53-file snapshot are saved. Final integrity results: <a href="evidence/verification.json">verification.json</a>.</li>
+<li>main/integration refs remain <code>92279dfe43922d60fabe38e29284ca52956ab75c</code> / <code>34c148be404a375cbfd79fd4ce6997452e4f1d20</code>. No assumption that all working-tree activity is represented by those refs or that existing epics have been built.</li>
+<li>No candidate edits, implementation, dependency installation, daemon startup, Reticle/runtime tests, branch changes, Documentation Factory, epic generation or factory control. This report is not build, security-certification or installed-product acceptance.</li>
+</ul>
+<p>The next review should cover the backend-delta architecture and its explicit reconciliation of this single remaining UI closure condition. Keep the closed decisions closed unless new evidence requires changing them.</p></section>
+<section id="intake" class="scope"><h1>Backend architecture intake — second UI closure review</h1>
+<p>2026-09-24. A supplement to the candidate&#x27;s BACKEND-DEPENDENCIES.md, not a new architecture or epic backlog. The user reports existing epics are not built: treat them as planned obligations, checking code/evidence before asserting implementation.</p>
+<h2>Source priority and scope</h2>
+<p>Use the final review in this directory to interpret the second-amendment candidate. Preserve the original storyboard layouts and user constraints from <code>../qmx-ui-architecture-handoff-2026-09-23/</code>. The UI architecture is a candidate contract input; its proposed parent amendments are not already ratified backend law.</p>
+<p>The fresh sitting should reconcile backend work required to deliver these UI experiences with the inherited core architecture and existing planned epics. No aesthetics, frontend implementation, Documentation Factory invocation, epic generation or factory control is authorized by this packet.</p>
+<h2>Dependency inventory to carry forward</h2>
+<div class="table-wrap"><table>
+<tr><th>Contract group</th><th>Candidate sources</th><th>Existing plan / next decision</th></tr>
+<tr><td>Existing pack-and-grant work</td><td>BACKEND-DEPENDENCIES already-planned table</td><td>Epics 60–65 / FEAT-0058–0063: optional sibling copilot_profile, caller_kind, optional authoring instance/selected instance ref, diagnosis, retry, nested Missions, health/listing and adoption proofs. Reuse/amend these plans; no duplicate feature set</td></tr>
+<tr><td>Browser admission and live transport</td><td>AD-19, BOOTSTRAP-AND-AUTH, TRACE-MATRIX</td><td>Epic 41 wire/auth and Epic 42 daemon responsibilities. Resolve the review&#x27;s token-issuance issue before ratifying. Define proof lifecycle, bootstrap versus CT-40, supported origin/topology, CORS/upgrade handling, revocation and credential-safe diagnostics</td></tr>
+<tr><td>QMB host/process lifecycle</td><td>BOOTSTRAP sections 4, 8, 12; CHANGE-IMPACT</td><td>Carry <strong>start/status/stop/pair</strong>, stable daemon root, lock/readiness and failure/cleanup behavior. The candidate backend list names pairing but does not fully inventory the other proposed QMB verbs. Reconcile parent CLI/component dependencies</td></tr>
+<tr><td>Conversation routing, history and recovery</td><td>AD-18, CHAT-AND-HISTORY</td><td>CT-48 mailbox and <strong>QMA Epic 46, Story 46.4</strong> own durable mailbox delivery. Epic 41 owns wire/query vocabulary; Epic 42 owns journal/fold infrastructure. The candidate&#x27;s label “Epic 41 mailbox” is incomplete. Carry product_session_id inheritance, durable admitted wire-pair lookup, history retention/rebuild and pending-client recovery</td></tr>
+<tr><td>Cancel authorization and handle lifecycle</td><td>AD-23, TRACE-MATRIX</td><td>Reconcile Epic 57 handles and Epic 63 nested work with stored originating_psess, authenticated operator binding, terminal/no-op races, immutable attempt fencing, replay and unknown-state handling</td></tr>
+<tr><td>Initial artifact possession and later transfer</td><td>AD-22, LIBRARY-AND-ATTACHMENTS, J-UI-09</td><td>Named authenticated HTTP PUT byte path, registration hooks, transfer_artifact, size limits, no partial v1 reference, interrupted-transfer cleanup and destination verification. Classify explicitly against CT-40 transport law and daemon artifact ownership; do not call a new route implemented because the store exists</td></tr>
+<tr><td>Host ingestion of UI requests</td><td>AD-15/20, VIEW-AND-PACK-CONTRACT, EXAMPLES</td><td>New PackUiRequest schema, host ingestion/query lifecycle, nav-to-view mapping, compatibility and immutable ActionContext bindings. Preserve Epic 60 PluginManifest.copilot_profile. Separate frontend-only adapters from backend roster/DTO responsibilities; ambiguous grants refuse</td></tr>
+<tr><td>Saved drafts and authoring publication</td><td>AD-21, AUTHORING-AND-ML</td><td>Saved draft identity/head, content-addressed revisions, expected_revision CAS, validation binding, publish into local authoring pack, enable, grant, instance and first Run. Determine existing staging/pack machinery to reuse and missing contracts. Later distributable export is distinct; no second enable machine</td></tr>
+<tr><td>First-run provider setup</td><td>BOOTSTRAP, CHANGE-IMPACT, existing credential broker/proxy architecture</td><td>Check proposed host write-to-OS-store/setup capability, allowed credential domains and CLI-proxy integration against already-planned owners. Provider secret values must not become normal wire payloads or UI diagnostic data</td></tr>
+<tr><td>Client/core compatibility and installed-product readiness</td><td>TRACE-MATRIX J-UI-13/14, DELIVERY-AND-QA</td><td>Capability/version negotiation and honest unavailable states, clean-machine launch, local/server placement and update/recovery. Distinguish selected v1 from deferred Tauri packaging; no native-performance or build-success claim without evidence</td></tr>
+</table></div>
+<h2>Required output of the fresh sitting</h2>
+<p>For each item: current planned contract and inspected implementation evidence; reuse / already planned / adoption gap / new amendment; owning COMP and durable source; wire/API/schema effect; compatibility/migration effect; dependency on existing planned stories; acceptance/failure traces; explicit deferral with revisit condition where appropriate.</p>
+<p>Produce a parent-amendment map and a frontend/backend dependency map without rewriting or renumbering the epic backlog. No predicted final epic count. Inspect the then-current baseline; do not assume today&#x27;s inspect SHA describes later work or that planning status proves delivery.</p>
+<p>The UI review&#x27;s remaining conditions must be resolved explicitly in the fresh architecture output and reconciled back into the candidate documents. Returning a bigger backend document without closing those named conditions is insufficient.</p>
+<p>After the joint architecture review passes, the user&#x27;s proposed batching remains: <strong>one integrated Documentation Factory pass → one coordinated epics/stories amendment/addition pass → software-factory execution for this batch</strong>. Preserve valid prior artifacts throughout. This document starts none of those stages.</p></section>
+</main></body></html>

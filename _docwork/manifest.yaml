@@ -184,3 +184,47 @@ sources:
   status: harvested
   no_chunks: "Original Explore-Node-Editor-Architecture transcript harvested for operator words only (OD-01 close ~L1061 Book/BMS replace; Kelly; adopt-the-chain; sequential not tomorrow; sessions not tabs; app-use cannot edit). House treatment: no chunk index; spine/rider remain citation surface for sitting law."
   note: "Operator-words citation surface for OD-01 close and related dictation (EXT-2247). Not a second spine."
+
+- id: SRC-24
+  path: _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-23/
+  kind: rider
+  role: primary
+  status: harvested
+  note: "2026-09-23 QMX pack-and-grant kit architecture sitting (child feature spine; local AD-1..AD-9 inherit parent 09-18 AD-1..AD-31): ARCHITECTURE-SPINE.md, REQUIREMENTS-ADDENDUM.md, CONTRACTS.md, JOURNEYS.md, COPILOT-AND-APPS.md, IMPLEMENTATION-SEQUENCE.md, .memlog.md, reviews/gate-summary.md, research/SDK-HYBRID-AND-CORE.md. Operator accepted the sitting as the plan to fold. Spine YAML leftover status draft / not operator-accepted is stale paperwork. Parents bind read-only. Local AD ids do not renumber parents. Planning on main@92279df; implementation inspected on integration@34c148b. Parent freeze 270e992 still applies for ADR-0024 original Decision (DEC-0450)."
+- id: SRC-25
+  path: _docwork/riders/pack-and-grant-kit-2026-09-23.md
+  kind: rider
+  role: primary
+  status: harvested
+  note: "Operator-direct rider for the 2026-09-23 documentation-factory change-mode session: pack-and-grant SDK; kit nouns over the whole platform; one copilot many sessions in-app panel optional; named parent AD-8 and AD-24 amendments; host observability JSON-lines; default host retry none/read; no sixth COMP; no new CT; no UI chrome; JSON Render/MCP Apps unpinned; wiring honesty @ 34c148b; DEC-0286 fixtures not e2e. Citation surface for DEC-0452..DEC-0467."
+- id: SRC-26
+  path: _docwork/riders/pack-and-grant-gap-correction-2026-09-23.md
+  kind: rider
+  role: primary
+  status: harvested
+  note: "Operator-direct 2026-09-23 correction: GAP-0101..GAP-0108 are sitting-answered law delivered by FEAT-0058..FEAT-0063, not open design holes. GAP-0081 and GAP-0100 are out-of-scope as kit holes (UI is not designed). GAP-0093/0096 left for a later operator look. DEC-0468."
+
+- id: SRC-27
+  path: _bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+  kind: rider
+  role: primary
+  status: harvested
+  note: "2026-09-23/24 QMX UI host architecture sitting (local UI AD-1..AD-24) over parent 09-18 and kit 09-23. Closes GAP-0081 chrome and GAP-0100 observation surfaces as this sitting's job. Codex R1-R9 closed as candidate then reconciled with backend-delta. Operator launched Documentation Factory 2026-09-25 after Codex PASS."
+- id: SRC-28
+  path: _bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/
+  kind: rider
+  role: primary
+  status: harvested
+  note: "2026-09-24 QMX UI backend-delta sitting (local backend AD-1..AD-17). Named AM-01..AM-17. C1/C2 and J1-J5 closed as candidate. Codex 2026-09-25 recheck PASS. Inspect integration@34c148be."
+- id: SRC-29
+  path: _docwork/riders/ui-and-backend-delta-2026-09-25.md
+  kind: rider
+  role: primary
+  status: harvested
+  note: "Operator-direct rider for the 2026-09-25 documentation-factory change-mode session."
+- id: SRC-30
+  path: workroom/qmx-ui-final-closure-2026-09-24/
+  kind: rider
+  role: primary
+  status: harvested
+  note: "Codex focused closure 2026-09-24 REVIEW.md plus 2026-09-25 RECHECK PASS. Non-blocking AM-10 stop-exception wording cleanup."

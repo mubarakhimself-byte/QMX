@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>QMX final architecture closure</title><style>
+:root{color-scheme:light;--ink:#18212b;--muted:#536171;--line:#d5dce3}
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+main{max-width:1140px;margin:auto;padding:38px 44px 72px;background:white;min-height:100vh}
+nav{display:flex;flex-wrap:wrap;gap:18px;padding-bottom:22px;border-bottom:1px solid var(--line);font-size:14px}
+h1{font-size:32px;line-height:1.2;letter-spacing:-.03em;margin:30px 0 20px}
+h2{font-size:23px;margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+h3{font-size:19px;line-height:1.4;margin-top:32px}p,li{max-width:100ch}
+a{color:#125c87;text-underline-offset:3px}code{font: .88em ui-monospace,Consolas,monospace;background:#eef1f4;padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5}
+th,td{border:1px solid var(--line);padding:12px;text-align:left;vertical-align:top}th{background:#eaf0f5}
+li+li{margin-top:9px}.scope{margin-top:56px;border-top:4px solid #4b647c;padding-top:16px}
+.badge{font-weight:650;background:#fff4d9;border:1px solid #d9ba67;padding:12px 16px;margin:22px 0}
+@media(max-width:700px){main{padding:24px 18px}h1{font-size:27px}td,th{min-width:130px}}
+@media print{body,main{background:white}main{max-width:none;padding:0}nav{display:none}a{color:inherit}}
+</style><main><h1>QMX final focused architecture closure — 24 September 2026</h1>
+<p><strong>Verdict: ready for one integrated Documentation Factory pass.</strong></p>
+<p>C1 and C2 are closed at the architecture-document gate. This is a focused direct closure review of the latest Grok amendment, building on earlier joint reviews; no new independent subagent gate or application runtime test is claimed.</p>
+<h2>Closure evidence</h2>
+<div class="table-wrap"><table>
+<tr><th>Finding</th><th>Result</th><th>Evidence</th></tr>
+<tr><td>C1 lost host-control recovery</td><td>Closed. Stopped-daemon recovery uses the owning OS user rather than the lost token. A one-shot daemon recovery entry acquires the writer lock and updates the fingerprint; QMB does not write sqlite. Operator identity and journals survive. Normal token rotation remains separate.</td><td>Backend HOST-LIFECYCLE.md trust-root and recovery sections, T-H-01..04; spine AD-6/AD-17; AM-03/AM-10; UI BOOTSTRAP-AND-AUTH.md section 12; T-BE-27..29.</td></tr>
+<tr><td>C2 renewal versus origin revoke</td><td>Closed. Origin revoke is a journal-sequence barrier. Renew first then revoke invalidates the new proof; revoke first then renew refuses. Single-record revoke has explicitly narrower scope. Fresh pairing after the barrier remains possible.</td><td>Backend PAIRING-AND-ADMISSION.md lifecycle table, T-P-11..14; spine AD-4; UI bootstrap revoke verbs; T-BE-30/31.</td></tr>
+</table></div>
+<p>The previous J3/J4 contracts are unchanged. J5 gains the requested explicit qualification: registered authenticated destination control connection plus a reachable allowed source; no inter-daemon discovery or relay is claimed. The remaining UI edit is confined to BOOTSTRAP-AND-AUTH.md. Storyboard layouts and the frontend stack remain unchanged.</p>
+<h2>Validation and scope</h2>
+<p>Both architecture spine lints pass with zero findings. Preserved 93 candidate files in evidence with SHA-256 manifest and amendment diff. Reviewed the C1/C2 closure map, actual host and pairing rules, affected spine/amendment/dependency/trace references, UI reconciliation and Grok&#x27;s gate summary. Grok&#x27;s internal reports are supporting evidence, not a substitute for these direct checks.</p>
+<p>One non-blocking wording cleanup belongs in Documentation Factory: AM-10&#x27;s generic running-daemon token requirement should explicitly cite AD-17/HOST-LIFECYCLE&#x27;s narrowly defined OS-owner stop exception when the token file is missing or unreadable. The controlling behavior is already specified; do not interpret this as a new broader unauthenticated stop path.</p>
+<p>Readiness here means the reviewed architecture packets can be reconciled into implementation documentation. It does not mean the software exists, security tests have run, or a clean installation works. Existing epics remain planned requirements until implementation evidence establishes otherwise.</p>
+<h2>Handoff</h2>
+<p>Use both candidate packets together with their parent-amendment and dependency maps, original UI evidence and these review closures. Documentation Factory should preserve valid existing documentation and epic IDs, incorporate named amendments explicitly, avoid duplicating Epics 60–65, and carry unexecuted traces into downstream acceptance work. Then proceed to coordinated epic/story amendments and additions, followed by factory execution through the user&#x27;s established workflow.</p>
+<p>No candidate files, parent contracts, backlog, application code, branches or active factory inputs were changed by this review. Documentation Factory has not been started.</p></main></html>

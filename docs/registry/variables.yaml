@@ -2020,3 +2020,27 @@ variables:
     decision: DEC-0316
     configurable: true
     notes: "The consecutive Compute Router `NoEnvironment` refusal count that arms the deferred sandbox/compute-vendor revisit (AD-17, AD-26), default 3. Registry-homed: set by an operator-principal variable.set (AD-24). Scope global (AD-26 pins none explicitly). Sandbox and compute vendors are deferred (GAP-0075) (DEC-0316, DEC-0325)."
+
+  - name: pairing.session_ttl
+    symbol: null
+    value: null
+    gap: GAP-0109
+    formula: null
+    units: duration
+    type: duration
+    component: COMP-QMA-DAEMON
+    decision: DEC-0492
+    configurable: true
+    notes: "Pairing proof lifetime. Only qmb host configure pairing-ttl over host-control may create or change this row; CT-40 variable.set of this key refuses (DEC-0492, DEC-0503, DEC-0510 A10). Missing row refuses /pair/start and /pair/confirm issue. This sitting mints no number."
+
+  - name: artifact.stage_max_bytes
+    symbol: null
+    value: null
+    gap: GAP-0110
+    formula: null
+    units: bytes
+    type: count
+    component: COMP-QMA-DAEMON
+    decision: DEC-0497
+    configurable: true
+    notes: "Maximum Content-Length for authenticated PUT /artifacts/stage (DEC-0497, DEC-0510 A11). Missing row refuses the PUT. This sitting mints no number. Set by operator-principal variable.set (AD-24)."

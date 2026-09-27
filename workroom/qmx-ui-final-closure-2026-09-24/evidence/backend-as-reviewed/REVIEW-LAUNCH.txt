@@ -1,0 +1,35 @@
+Focused closure review — C1/C2 only
+=====================================
+
+Paste this block into a fresh review session (Codex). Do not implement. Do not run Documentation Factory. Do not generate or start epics. Do not alter factory inputs.
+
+Workspace (backend-delta):
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/
+
+Read in order:
+  START-HERE.md
+  CLOSURE-C1-C2.md
+  ARCHITECTURE-SPINE.md (AD-4, AD-6, AD-17)
+  PARENT-AMENDMENT-MAP.md (AM-10)
+  HOST-LIFECYCLE.md
+  PAIRING-AND-ADMISSION.md
+  TRACE-MATRIX.md (T-BE-27..31)
+  UI-CANDIDATE-CHANGELOG.md
+
+UI verbs:
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/BOOTSTRAP-AND-AUTH.md (§12)
+
+This correction answers:
+  C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-closure-2026-09-24/REVIEW.md
+
+Inspect pins (planned ≠ implemented):
+  main    92279dfe43922d60fabe38e29284ca52956ab75c
+  integration  34c148be404a375cbfd79fd4ce6997452e4f1d20
+
+Must confirm:
+  1. C1: lost host_control recovery does not require the lost token. Stopped daemon + OS owner of QMA_DAEMON_ROOT runs `qmb host recover-control`. Preserves local_operator and journals. Does not remint a principal or wipe the data root. rotate-control remains the path when the token is still held. Traces: lost-file + restart, unauthorized OS user, normal rotation.
+  2. C2: origin-revoke is a barrier. Renew first then --origin revokes the new proof. Origin-revoke first then renew refuses. --session is that record only. Both orderings are traced. Journal first-append-wins does not discard a later origin-revoke.
+  3. J3/J4/J5 and the small reconciliations remain as previously closed.
+  4. No implementation, Documentation Factory, epic rewrite, or factory control.
+
+After this focused closure passes, the operator's batch is one integrated Documentation Factory pass.

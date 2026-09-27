@@ -1,0 +1,170 @@
+{
+  "title": "Visual evidence manifest",
+  "created": "2026-09-23",
+  "root": "workroom/ui-reset-2026-09-23/live-research/screenshots",
+  "count": 18,
+  "evidence": [
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/lse-dataset-selected.png",
+      "source_page": "https://www.londonstrategicedge.com/machine-learning-studio/",
+      "evidence_type": "actual public controls",
+      "supports": "Shows Train state after selecting EUR/USD in the dataset picker; supports that selection visibly updates the dataset field.",
+      "limitations": "Preferred for dataset-selection flow. Does not prove model execution or output correctness.",
+      "bytes": 139971,
+      "sha256": "79799bdecc109db7c07d480c19235fc38d240ea263176efe937261a5076278d4"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/lse-ml-studio.png",
+      "source_page": "https://www.londonstrategicedge.com/machine-learning-studio/",
+      "evidence_type": "actual public controls",
+      "supports": "Shows ML Studio Train workspace: model catalogue, training form, Model Guide and empty result area.",
+      "limitations": "Public unauthenticated interface; no training run was launched.",
+      "bytes": 139475,
+      "sha256": "ee84ecf2569582dee9de1ac18c62b6da88d25b48ba6af87a3523c4b91d45d276"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/lse-walk-forward.png",
+      "source_page": "https://www.londonstrategicedge.com/machine-learning-studio/",
+      "evidence_type": "actual public controls",
+      "supports": "Shows Optimise with Walk Forward selected, fold controls and disabled action without a completed model.",
+      "limitations": "Supports prerequisite/empty-state behavior only; no model or optimization was run.",
+      "bytes": 122964,
+      "sha256": "1de438b60860c8a4c5932aa2709e271bff2a100bf2927d45e0d048d8ab510aae"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/minara-asset-copilot-doc.png",
+      "source_page": "https://minara.ai/docs/agent/",
+      "evidence_type": "broken capture",
+      "supports": "Records the agent documentation page where the embedded asset-copilot image failed to load.",
+      "limitations": "Broken/missing image; do not use as evidence of the asset-copilot interface.",
+      "bytes": 65386,
+      "sha256": "3731899acdaace9357726cb75af5b7ad4f7901c342dd0458c4c9c64c975f421a"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/minara-chat-workspace.png",
+      "source_page": "https://minara.ai/app/chat",
+      "evidence_type": "actual public controls",
+      "supports": "Shows public Chat workspace with persistent rail, mode history and composer.",
+      "limitations": "Public app surface; no account-specific content or chat submission.",
+      "bytes": 82101,
+      "sha256": "1a3627ec6cf78b25fe568e33824f71ebcfcd0a585e3ed2abdccf8e14a828fe4f"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/minara-strategy-home.png",
+      "source_page": "https://minara.ai/app/strategy-studio",
+      "evidence_type": "actual public controls",
+      "supports": "Shows Strategy Studio organization, composer, creation entry cards and templates.",
+      "limitations": "Displayed performance/template content was not independently validated; no strategy generated.",
+      "bytes": 93725,
+      "sha256": "f3b51041b9d427c60c59b0cf30a02095014641d22647c216bfc02a0fa70db38b"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/minara-workflow-home.png",
+      "source_page": "https://minara.ai/app/chat",
+      "evidence_type": "actual public controls",
+      "supports": "Shows Workflow mode retaining global rail while changing local history and landing content.",
+      "limitations": "Wallet Monitor led to login; no workflow was created or run.",
+      "bytes": 92036,
+      "sha256": "9f1d9d7d490c70fe8dc7edf40ac1c776d9add115656bbf1c3893325e7755d950"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/openbb-app-gallery.png",
+      "source_page": "https://docs.openbb.co/workspace/analysts/apps (embedded demo: https://www.youtube.com/watch?v=uYyhswnZkSw)",
+      "evidence_type": "recorded demo",
+      "supports": "Shows the Apps gallery tile grid and persistent navigation rail in the public Workspace screencast.",
+      "limitations": "Recorded historical demo, not live authenticated Workspace; sample content and interface may differ from current product.",
+      "bytes": 131335,
+      "sha256": "f3faf5ac163d181b29a367925ae4bc297795e07ddf46de60e3fb6bc0f7bb4014"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/openbb-copilot-panel.png",
+      "source_page": "https://docs.openbb.co/workspace/analysts/ai-features/copilot-basics (embedded demo: https://www.youtube.com/watch?v=uYyhswnZkSw)",
+      "evidence_type": "recorded demo",
+      "supports": "Shows dashboard beside Copilot, context row, composer/agent choice and Copilot settings in the demo.",
+      "limitations": "Recorded demo, not live authenticated behavior; do not infer global settings or current availability.",
+      "bytes": 130625,
+      "sha256": "aad546c29b809f618e47a74a1d62c96b417beddd005b15ee9e400a6d6db97e02"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/openbb-dashboard.png",
+      "source_page": "https://docs.openbb.co/workspace/analysts/dashboards (embedded demo: https://www.youtube.com/watch?v=uYyhswnZkSw)",
+      "evidence_type": "recorded demo",
+      "supports": "Shows editable multi-widget dashboard with top view tabs and two-column layout.",
+      "limitations": "Recorded historical demo using sample data; does not verify current live controls or market data.",
+      "bytes": 126734,
+      "sha256": "f755a8fd4bc96e7af861657a58ec1f81d5a2716f54384a551d458f527cfc7a27"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/prime-bias-expanded.png",
+      "source_page": "https://prime-terminal.com/feature-demos/smart-bias-tracker/index",
+      "evidence_type": "actual public controls",
+      "supports": "Shows selected currency detail with category rail, narrative drivers and outlook replacing the matrix in the viewport.",
+      "limitations": "Public demo fixture; selected-cell mapping uncertain and header period conflicts with detail date (22–28 Jun vs 01–06 Jan 2026).",
+      "bytes": 72040,
+      "sha256": "eecb749a5f453bf1b0499ebf566a1736fb5a751e80a0d2b02856d66969284cc6"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/prime-bias-matrix.png",
+      "source_page": "https://prime-terminal.com/feature-demos/smart-bias-tracker/index",
+      "evidence_type": "actual public controls",
+      "supports": "Shows terminal-like currency-by-indicator matrix, status chips, toolbar and date range.",
+      "limitations": "Public demo fixture rather than authenticated workspace; sample dates/content have consistency caveat.",
+      "bytes": 191727,
+      "sha256": "5ca095448c42701b6dc91502ac1d10f3e3e3a7135186fe87234c534b1a335378"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/quantx-builder-results-comparison.png",
+      "source_page": "https://quantx.es/signup#das (official image sources: https://quantx.es/platform/cmp-builder.webp?v=20260531e and https://quantx.es/platform/backtester-results.webp?v=20260531e)",
+      "evidence_type": "partial capture",
+      "supports": "Partial page capture juxtaposing builder/results imagery; supports only a visual reference to these product areas.",
+      "limitations": "Partial page capture, not a complete builder view or interactive behavior; prefer the individual official-image captures.",
+      "bytes": 93679,
+      "sha256": "630348320024bedcfa26a65bd64950cc2da94b6e6517568ea5ec85414bfd1d46"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/quantx-dashboard.png",
+      "source_page": "https://quantx.es/signup#das",
+      "evidence_type": "vendor image",
+      "supports": "Shows product showcase dashboard image with dense multi-column analytics and global rail.",
+      "limitations": "Official product image loaded on public showcase, not an interactive app capture; controls untested.",
+      "bytes": 118539,
+      "sha256": "ef493e27381997b809043f3d557441d9264f69a714b33dfe5ecf4521454e35b3"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/quantx-filing-assistant.png",
+      "source_page": "https://quantx.es/signup#das (image: https://quantx.es/platform/talk-zoom.webp?v=20260531e)",
+      "evidence_type": "vendor image",
+      "supports": "Shows filing/document beside an “ASK THE FILING” assistant, illustrating intended document-scoped chat.",
+      "limitations": "Official product image, not live interaction; assistant behavior and controls not tested.",
+      "bytes": 104368,
+      "sha256": "ae1999a99b5df8e7d602649a1e9eb3ff3e7f18b1aebeb54dbe0b7f6b2a697d05"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/quantx-results.png",
+      "source_page": "https://quantx.es/signup#das (image: https://quantx.es/platform/backtester-results.webp?v=20260531e)",
+      "evidence_type": "vendor image",
+      "supports": "Shows comparative result curves and visible equity/drawdown and bucket controls.",
+      "limitations": "Official product image; controls and displayed results were not interactive or validated.",
+      "bytes": 86484,
+      "sha256": "01549dd7e0917775fdff955208c6909c05a88854c58d9fc8c8f09c922a31e904"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/quantx-strategy-builder.png",
+      "source_page": "https://quantx.es/signup#das (image: https://quantx.es/platform/cmp-builder.webp?v=20260531e)",
+      "evidence_type": "vendor image",
+      "supports": "Shows component catalogue, node canvas, processing stages and bottom toolbar as a visual reference for node authoring.",
+      "limitations": "Official product image; no proof all pictured features work; app login required authentication.",
+      "bytes": 95526,
+      "sha256": "980c9a1a6106059e1ce0f328fe0b48289b590c4b7c582b3ad1cdeb91cf4d84c0"
+    },
+    {
+      "path": "workroom/ui-reset-2026-09-23/live-research/screenshots/xynth-alert-description.png",
+      "source_page": "https://xynth.com/alerts/alert-316c218a3600",
+      "evidence_type": "blurred gated capture",
+      "supports": "Captures the public alert Description view behind the anonymous sign-up blur.",
+      "limitations": "Blurred and unreadable as visual evidence. Page accessibility tree exposed text, but this image should not be preferred; live/account controls gated.",
+      "bytes": 43702,
+      "sha256": "f672c0794b8c041141d4ba0fb58f95dfad11b1893892b0d50c1c8cb8d45a2843"
+    }
+  ]
+}

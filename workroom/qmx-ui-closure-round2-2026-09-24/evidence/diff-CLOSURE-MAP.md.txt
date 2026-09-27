@@ -1,0 +1,40 @@
+--- previous/CLOSURE-MAP.md
++++ current/CLOSURE-MAP.md
+@@ -8,5 +8,5 @@
+ # Closure map
+ 
+-Amendment in place after `workroom/qmx-ui-review-2026-09-23/REVIEW.md`. AD-1..AD-17 ids kept. AD-18..AD-24 added. Tests unexecuted. Inspect SHA unchanged.
++Second amendment after `workroom/qmx-ui-closure-review-2026-09-24/REVIEW.md`. R1/R8 preserved. AD ids stable. Tests unexecuted. Inspect SHA unchanged.
+ 
+ ## R1–R9
+@@ -14,13 +14,13 @@
+ | ID | Decision | Changed files | Evidence | Remaining risk | Status |
+ | --- | --- | --- | --- | --- | --- |
+-| R1 | Home = work/attention/resume; Copilot = conversation; Authoring restored on the rail | `ARCHITECTURE-SPINE.md` AD-3; `EXPERIENCE-AND-LAYOUT.md` §1 | User dictation Home / main agent / Library / Authoring; `research/04` D-015 | Geometry still unfrozen | **closed** |
+-| R2 | v1 requires running daemon; owner COMP-QMB `qmb host *`; browser does not spawn; pairing before CT-40 bytes | AD-11, AD-12, AD-19; `BOOTSTRAP-AND-AUTH.md` | parent AD-21; `auth.py`; Codex R2 | `qmb host` absent at inspect; live server still required | **closed as candidate** |
+-| R3 | `dispatchChat` / `send_message` vs `dispatchInvoke`; mailbox keyed by `psess:` | AD-4, AD-7, AD-8, AD-18; sequence diagram; `CHAT-AND-HISTORY.md`; `COMPONENT-CONTRACTS.md` | `WireCommand.SEND_MESSAGE`; parent AD-8 fields | `list_mailbox` is a backend add | **closed as candidate** |
+-| R4 | PackUiRequest v1; immutable ActionContext; MCP 2026-01-26 host policy declines extra tools | AD-6, AD-15, AD-20; `VIEW-AND-PACK-CONTRACT.md`; `EXAMPLES.md` | parent AD-17; currency MCP spec | DTO not in code | **closed as candidate** |
+-| R5 | Draft/revision vs template vs instance vs JobHandle; draft Run refused | AD-9, AD-21; `AUTHORING-AND-ML.md` | parent template immutability | Editor persistence implementation later | **closed as candidate** |
+-| R6 | `stage_artifact`; Knowledge cite as artifact fp1; Library verb matrix | AD-7, AD-22; `LIBRARY-AND-ATTACHMENTS.md` | research/13 matrix | fork/hypothesis listing deferred with revisit | **closed as candidate** |
+-| R7 | Trace matrix; `dispatchCancel`; J-UI-13/14; workloads named | AD-13, AD-23, AD-24; `TRACE-MATRIX.md`; `JOURNEYS.md`; `DELIVERY-AND-QA.md` | parent JobHandle; seed `stop_run` forbidden | `cancel_job` absent; tests unexecuted | **closed as candidate** |
+-| R8 | `[USER]` / `[INHERITED]` / `[CANDIDATE]`; decisions ledger no longer stamps P as Adopted | spine frontmatter; every local AD tag; `DECISIONS-AND-OPEN.md` | Codex R8 | Factory must not treat CANDIDATE as user law | **closed** |
+-| R9 | bits-ui 2.19.3 everywhere; Node 22 LTS; pnpm lockfile at scaffold gate | AD-2; stack table; `COMPONENT-CONTRACTS.md` | currency review; Vite 8 floor | lockfile unexecuted | **closed as candidate** |
++| R1 | Home / Copilot / Library / Authoring independent | AD-3; EXPERIENCE-AND-LAYOUT | session dictation | Geometry unfrozen | **closed** (preserved) |
++| R2 | One proof `pairing_session_id`. HTTP Bearer. WS subprotocol `qmx.pair.<id>`. Unauthenticated `/pair/*` only. Cookies refused | AD-19; BOOTSTRAP-AND-AUTH | WHATWG WebSocket; CT-40 auth | pairing HTTP not in code | **closed as candidate** |
++| R3 | Mailbox Envelope persists `product_session_id`. Pre-ack identity `(producer_id, id)`. `list_mailbox` looks up that pair | AD-18; CHAT-AND-HISTORY; TRACE-MATRIX | CT-48; lost-ack restart trace | additive mailbox field is a QMA amend | **closed as candidate** |
++| R4 | Keep Epic 60 `PluginManifest.copilot_profile`. Nav `view_ids`. `GRANT_AMBIGUOUS` if ≥2 grants | AD-15, AD-20; VIEW-AND-PACK-CONTRACT; EXAMPLES | kit CONTRACTS §1; epics 60.1 | PackUiRequest still unspecified in code | **closed as candidate** — **no parent amendment** |
++| R5 | First Run = publish into **local authoring pack** then AD-30 enable. Export later. CAS `expected_revision` | AD-21; AUTHORING-AND-ML | parent compile-at-enable | local pack roster implementation | **closed as candidate** |
++| R6 | Local daemon possession first; HTTP PUT `/artifacts/stage`; v1 refuse partial; explicit `transfer_artifact` for remote | AD-22; LIBRARY-AND-ATTACHMENTS | J-UI-09 | byte channel not in code | **closed as candidate** |
++| R7 | Starter `originating_psess` only. `queued`→`running` does not kill cancel. Terminal = no-op | AD-23; TRACE-MATRIX | parent JobHandle | `originating_psess` is a proposed JobHandle amend | **closed as candidate** |
++| R8 | USER / INHERITED / CANDIDATE tags | DECISIONS-AND-OPEN | Codex R8 | CANDIDATE ≠ operator accept | **closed** (preserved) |
++| R9 | Node.js **>=22.12.0 <23.0.0**; bits-ui 2.19.3; pnpm | AD-2; stack; DECISIONS | Vite 8.3 engines | lockfile unexecuted | **closed as candidate** |
+ 
+ ## Whole-session rubric
+@@ -47,5 +47,5 @@
+ ## Backend adds (not this sitting)
+ 
+-`DaemonProcess` CT-40 server; `caller_kind`; `list_mailbox`; `cancel_job`; `stage_artifact`; `qmb host start|status|stop`; loopback pairing; optional authoring `app_instance_id`.
++See `BACKEND-DEPENDENCIES.md`. Already planned: Epic 60–65 fields. Proposed amendments: pairing HTTP + WS subprotocol; mailbox `product_session_id`; `list_mailbox`; `cancel_job` + `originating_psess`; artifact HTTP PUT + transfer. **Not** amending Epic 60 `copilot_profile`.
+ 
+-Post-amendment independent review applied. Remaining risk is implementation of those backend adds, not a second unnamed owner.
++Post-amendment independent review follows this delta. Remaining risk is implementation of named backend adds, not a second unnamed owner.

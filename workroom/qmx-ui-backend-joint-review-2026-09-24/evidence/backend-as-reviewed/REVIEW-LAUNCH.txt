@@ -1,0 +1,48 @@
+Joint review — QMX UI backend-delta + reconciled UI candidate
+==============================================================
+
+Paste this block into a fresh review session (Codex or Grok 4.6 reviewer). Do not implement. Do not run Documentation Factory. Do not generate or start epics.
+
+Workspace (backend-delta, this sitting):
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/
+
+Read in order:
+  START-HERE.md
+  CLOSURE-EVIDENCE.md
+  ARCHITECTURE-SPINE.md
+  PARENT-AMENDMENT-MAP.md
+  DEPENDENCY-MAP.md
+  PAIRING-AND-ADMISSION.md
+  HOST-LIFECYCLE.md
+  MAILBOX-AND-DELIVERY.md
+  CANCEL-AND-HANDLES.md
+  ARTIFACTS-AND-TRANSFER.md
+  PACK-UI-AND-AUTHORING.md
+  PROVIDER-AND-COMPAT.md
+  TRACE-MATRIX.md
+  UI-CANDIDATE-CHANGELOG.md
+
+Reconciled UI candidate:
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+
+Prior UI closure (do not overwrite):
+  C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-closure-round2-2026-09-24/REVIEW.md
+
+Inspect pins (planned ≠ implemented):
+  main    92279dfe43922d60fabe38e29284ca52956ab75c
+  integration  34c148be404a375cbfd79fd4ce6997452e4f1d20
+  worktree  .worktrees/integration-inspect
+
+Must confirm:
+  1. R2: remembered Origin never issues pairing_session_id. Fresh QMB confirm or authenticated renew only. Negative and positive traces exist. Auto-approve rows are gone from the UI candidate.
+  2. Reload vs cold-start wording: sessionStorage is page-session; cold start never auto-resends; cloned tab is existing proof + new producer_id.
+  3. Mailbox delivery owner is Epic 46 / Story 46.4; Epic 41 is wire/query vocabulary; Epic 42 is journal/fold.
+  4. Every inherited conflict is a named amendment in PARENT-AMENDMENT-MAP.md (no silent override of QMA AD-24 unauthenticated-bind, AD-20 Envelope fields, AD-22 staging singleton, JobHandle states, Epic 60 copilot_profile).
+  5. DEPENDENCY-MAP covers the full BACKEND-INTAKE-SUPPLEMENT inventory with reuse / already planned / adoption gap / proposed amendment.
+  6. Closed UI findings R1, R3–R9 and Svelte/storyboard intent are preserved.
+  7. No implementation, Documentation Factory, epic rewrite, or factory control in these trees.
+
+After this joint review passes, the operator's batch is:
+  one integrated Documentation Factory pass
+  then coordinated epics/stories amendments and additions
+  then software-factory execution.

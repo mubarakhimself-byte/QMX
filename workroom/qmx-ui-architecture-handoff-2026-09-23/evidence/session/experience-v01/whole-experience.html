@@ -1,0 +1,142 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QMX · Whole experience study 01</title><style>:root{color-scheme:dark;--background:#111416;--foreground:#ebefed;--muted-foreground:#a5b0b5;font:14px/1.5 system-ui,sans-serif}*{box-sizing:border-box}body{background:var(--background);color:var(--foreground);margin:0;padding:24px}button{font:inherit;color:inherit;background:#22282c;border:1px solid #384147;border-radius:6px;padding:8px 12px;cursor:pointer}button[aria-pressed=true]{background:#233e34;border-color:#abe6ce;color:#abe6ce}button:focus-visible{outline:2px solid #c3dbff;outline-offset:3px}.viz-row,.viz-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.viz-row{justify-content:space-between}.viz-badge{font-size:11px;border:1px solid #384147;padding:4px 8px;border-radius:4px}.text-small{font-size:12px;color:#a5b0b5}.card{padding:18px;border:1px solid #384147;border-radius:8px}.table-responsive{overflow:auto}.table{width:100%;border-collapse:collapse;text-align:left}.table th,.table td{padding:10px;border-bottom:1px solid #384147}hr{border:0;border-top:1px solid #384147}a{color:#abe6ce}h3{font-size:18px}p{margin:12px 0}.export-note{color:#a5b0b5;font-size:12px;margin-bottom:18px}</style></head><body><p class="export-note">Portable export of the earlier experience model · fixture data · no QMX connection. Main workspace is expanded in <a href="../experience-v02/main-workspace.html">study 02</a>. App copilots here are illustrative and optional in the proposed product.</p><div id="qmx-experience-v01">
+  <div class="viz-row"><strong>QMX · Experience draft 0.1</strong><span class="viz-badge">Illustrative state</span></div>
+  <hr>
+  <div class="qmx-shell">
+    <nav aria-label="QMX destinations" class="qmx-rail">
+      <button class="btn btn-ghost" type="button" data-dest="home">Home</button>
+      <button class="btn btn-ghost" type="button" data-dest="agent">Main agent</button>
+      <button class="btn btn-ghost" type="button" data-dest="library">Library</button>
+      <button class="btn btn-ghost" type="button" data-dest="author">Authoring</button>
+      <hr>
+      <span class="text-small">Opened apps</span>
+      <button class="btn btn-ghost" type="button" data-dest="research">Research</button>
+      <button class="btn btn-ghost" type="button" data-dest="ml">ML workspace</button>
+    </nav>
+    <main class="qmx-main" aria-label="Selected workspace">
+      <div class="viz-row"><h3 id="qmx-title">Home</h3><span id="qmx-scene" class="text-small">S-01</span></div>
+      <nav id="qmx-pages" class="viz-controls" aria-label="App pages"></nav>
+      <div id="qmx-detail-tabs" class="viz-controls" aria-label="Open detail views"></div>
+      <div id="qmx-canvas"></div>
+    </main>
+    <aside class="qmx-assistant" aria-label="Conversation context">
+      <h3 id="qmx-agent-title">Workspace context</h3>
+      <div id="qmx-context"></div>
+    </aside>
+  </div>
+  <hr>
+  <div id="qmx-feedback" role="status" aria-live="polite">Home · Research opened; ML example run continuing.</div>
+</div>
+<style>
+#qmx-experience-v01 { color:var(--foreground); background:var(--background); }
+#qmx-experience-v01 .qmx-shell { display:grid; grid-template-columns:135px minmax(0,1fr) 205px; gap:20px; padding-block:12px; }
+#qmx-experience-v01 .qmx-rail { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+#qmx-experience-v01 .qmx-rail hr { width:100%; }
+#qmx-experience-v01 .qmx-main,#qmx-experience-v01 .qmx-assistant { min-width:0; overflow-wrap:anywhere; }
+#qmx-experience-v01 h3 { margin-block:0 12px; }
+#qmx-experience-v01 .qmx-item { margin-block:16px; }
+#qmx-experience-v01 .qmx-flow { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-block:20px; }
+#qmx-experience-v01 .qmx-kv { display:grid; grid-template-columns:auto 1fr; gap:8px 16px; margin-block:16px; }
+#qmx-experience-v01 .qmx-kv dt { color:var(--muted-foreground); }
+#qmx-experience-v01 .qmx-kv dd { margin:0; }
+#qmx-experience-v01 #qmx-pages,#qmx-experience-v01 #qmx-detail-tabs { margin-bottom:12px; }
+#qmx-experience-v01 pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+@media(max-width:760px) { #qmx-experience-v01 .qmx-shell { grid-template-columns:115px minmax(0,1fr); } #qmx-experience-v01 .qmx-assistant { grid-column:2; } }
+@media(max-width:480px) { #qmx-experience-v01 .qmx-shell { grid-template-columns:minmax(0,1fr); } #qmx-experience-v01 .qmx-rail { flex-direction:row; flex-wrap:wrap; align-items:center; } #qmx-experience-v01 .qmx-assistant { grid-column:1; } }
+</style>
+<script>
+(() => {
+  const root=document.getElementById('qmx-experience-v01');
+  const $=id=>root.querySelector('#'+id);
+  const modes=['home','agent','library','author','research','ml'];
+  const fresh=()=>({mode:'home',apps:{research:{page:'Overview',detail:false,focus:false,attached:false},ml:{page:'Data',detail:false,focus:false,attached:false}},returnTo:null,libraryItem:null,authorView:'Composition',authorPreview:false});
+  let state=fresh();
+  const names={home:'Home',agent:'Main agent',library:'Global library',author:'Authoring draft',research:'Research',ml:'ML workspace'};
+  const objectNames={research:'Evidence summary',ml:'Experiment workflow'};
+  function restore(saved) {
+    const p=saved && saved.privateContent;
+    if(!p || p.version!==1 || !modes.includes(p.mode))return;
+    const n=fresh(); n.mode=p.mode;
+    for(const key of ['research','ml']) {
+      const a=p.apps && p.apps[key];
+      if(!a)continue;
+      const allowed=key==='research'?['Overview','Evidence']:['Data','Experiments'];
+      n.apps[key]={page:allowed.includes(a.page)?a.page:allowed[0],detail:a.detail===true,focus:a.detail===true&&a.focus===true,attached:a.attached===true};
+    }
+    n.returnTo=['research','ml'].includes(p.returnTo)?p.returnTo:null;
+    n.libraryItem=['research','ml'].includes(p.libraryItem)?p.libraryItem:null;
+    n.authorView=['Composition','Workflow','Code boundary'].includes(p.authorView)?p.authorView:'Composition';
+    n.authorPreview=p.authorPreview===true;state=n;
+  }
+  function persist(){ if(window.openai && window.openai.setWidgetState)window.openai.setWidgetState({modelContent:{draft:'QMX experience v0.1',view:state.mode,research:state.apps.research,ml:state.apps.ml,authorView:state.authorView},privateContent:{version:1,...state}}).catch(()=>{}); }
+  const button=(label,action,selected)=>`<button class="btn btn-ghost" type="button" data-action="${action}"${selected===undefined?'':` aria-pressed="${selected}"`}>${label}</button>`;
+  const chip=label=>`<span class="viz-badge">${label}</span>`;
+  function render(message) {
+    const mode=state.mode;
+    $('qmx-title').textContent=names[mode];
+    root.querySelectorAll('[data-dest]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.dest===mode)));
+    $('qmx-pages').innerHTML='';$('qmx-detail-tabs').innerHTML='';
+    const app=state.apps[mode];
+    if(app) {
+      const pages=mode==='research'?['Overview','Evidence']:['Data','Experiments'];
+      $('qmx-pages').innerHTML='<span class="text-small">App pages</span>'+pages.map(p=>button(p,'page:'+p,!app.focus&&app.page===p)).join('');
+      if(app.detail)$('qmx-detail-tabs').innerHTML='<span class="text-small">Open detail</span>'+button(objectNames[mode],'focus',app.focus)+button('Close detail','close');
+      $('qmx-scene').textContent=app.focus?'S-04 · Detail':'S-03 · App use';
+      if(app.focus && mode==='research') {
+        $('qmx-canvas').innerHTML=`<h3>Evidence summary</h3>${chip('Saved result · example revision 1')}<dl class="qmx-kv"><dt>Origin</dt><dd>Research / Overview</dd><dt>View</dt><dd>Detailed evidence</dd><dt>Data</dt><dd>Illustrative snapshot; no live feed</dd></dl><div class="viz-controls">${button('Discuss this result','attach')}${button('Locate in library','locate')}</div>`;
+      } else if(app.focus) {
+        $('qmx-canvas').innerHTML=`<h3>Experiment workflow</h3>${chip('Illustrative run · running')}<div class="qmx-flow"><span>Dataset</span><span aria-hidden="true">→</span><span>Validate inputs</span><span aria-hidden="true">→</span><span>Train</span><span aria-hidden="true">→</span><span>Evaluate</span></div><dl class="qmx-kv"><dt>View</dt><dd>Run inspection</dd><dt>Definition</dt><dd>Saved workflow · example revision 1</dd></dl><div class="viz-controls">${button('Discuss workflow','attach')}${button('Locate in library','locate')}${button('Inspect authoring draft','author')}</div>`;
+      } else if(mode==='research') {
+        $('qmx-canvas').innerHTML=`<h3>${app.page}</h3><div class="card"><div class="viz-row"><strong>Evidence summary</strong>${chip('Saved result')}</div><dl class="qmx-kv"><dt>State</dt><dd>Available to inspect</dd><dt>Source</dt><dd>Illustrative research artifact</dd></dl><div class="viz-controls">${button('Expand','expand')}${button('Discuss','attach')}</div></div>`;
+      } else {
+        $('qmx-canvas').innerHTML=`<h3>${app.page}</h3><div class="card"><div class="viz-row"><strong>Experiment workflow</strong>${chip('Example run continuing')}</div><dl class="qmx-kv"><dt>Input</dt><dd>Example dataset</dd><dt>State</dt><dd>Training · illustrative</dd></dl><div class="viz-controls">${button('Inspect workflow','expand')}${button('Discuss','attach')}</div></div>`;
+      }
+      $('qmx-agent-title').textContent=names[mode]+' copilot';
+      $('qmx-context').innerHTML=`${chip('Scope: this app')}<div class="qmx-item"><strong>Attached context</strong><p>${app.attached?objectNames[mode]+' · example revision 1':'No explicit object attached'}</p>${app.attached?button('Remove attachment','detach'):''}</div><div class="qmx-item">Tools remain limited to the app’s granted capabilities.</div>`;
+    } else {
+      $('qmx-agent-title').textContent=mode==='agent'?'Main agent scope':mode==='author'?'Authoring copilot':'Workspace context';
+      $('qmx-context').innerHTML=mode==='agent'?`${chip('Workspace context')}<p>Cross-app work within actual permissions.</p><p>Explicit object references stay visible alongside the conversation.</p>`:mode==='author'?`${chip('Draft only')}<p>Suggest composition, explain changes, validate and preview.</p><p>Active app remains unchanged.</p>`:`<p>${mode==='library'?'Library selection does not grant execution access.':'Opened apps and executing work have separate lifetimes.'}</p>${chip('ML example run continuing')}`;
+      if(mode==='home') {
+        $('qmx-scene').textContent='S-01 · Resume work';
+        $('qmx-canvas').innerHTML=`<div class="table-responsive"><table class="table"><thead><tr><th>Work</th><th>State</th><th>Open</th></tr></thead><tbody><tr><td>Research</td><td>Opened · no active job</td><td>${button('Open Research','research')}</td></tr><tr><td>ML experiment</td><td>Example run continuing</td><td>${button('Open ML','ml')}</td></tr></tbody></table></div>`;
+      } else if(mode==='agent') {
+        $('qmx-scene').textContent='S-02 · Conversation and previews';
+        $('qmx-canvas').innerHTML=`<div class="viz-row">${chip('Session: workspace exploration')}${chip('Preview: evidence summary')}</div><div class="qmx-item"><strong>Conversation</strong><p>Inspect this research result and explain its sources.</p></div><div class="card"><strong>Evidence summary preview</strong><p>Same saved result; opened from the main agent.</p><div class="viz-controls">${button('Open in Research','agent-open')}${button('Inspect authoring draft','author')}</div></div>`;
+      } else if(mode==='library') {
+        $('qmx-scene').textContent='S-06 · Locate and return';
+        const k=state.libraryItem;
+        $('qmx-canvas').innerHTML=`<div class="viz-row">${chip(k?'Located existing object':'Library examples')}${state.returnTo?button('Return to '+names[state.returnTo],'return'):''}</div><div class="table-responsive"><table class="table"><thead><tr><th>Item</th><th>Kind</th><th>Open</th></tr></thead><tbody><tr><td>Evidence summary ${k==='research'?'· selected':''}</td><td>Saved result</td><td>${button('Open result','library-research')}</td></tr><tr><td>Experiment workflow ${k==='ml'?'· selected':''}</td><td>Workflow definition</td><td>${button('Open workflow','library-ml')}</td></tr></tbody></table></div>`;
+      } else {
+        $('qmx-scene').textContent='S-07 · Build and preview';
+        $('qmx-pages').innerHTML=['Composition','Workflow','Code boundary'].map(v=>button(v,'author-view:'+v,state.authorView===v)).join('');
+        let content=state.authorView==='Composition'?'<div class="qmx-flow"><span>App: Research</span><span aria-hidden="true">→</span><span>Page: Overview</span><span aria-hidden="true">→</span><span>Widget: Evidence summary</span></div>':state.authorView==='Workflow'?'<div class="qmx-flow"><span>Data input</span><span aria-hidden="true">→</span><span>Supported procedure</span><span aria-hidden="true">→</span><span>Result</span></div><p>Graph view for supported workflow structure.</p>':'<p>Custom code requires an explicit interface and validation. Arbitrary code is not assumed to convert into nodes.</p>';
+        if(state.authorPreview)content='<div class="card"><strong>Preview · Research / Overview</strong><p>Evidence summary · draft widget</p><span class="viz-badge">Fixture data · active app unchanged</span></div>';
+        $('qmx-canvas').innerHTML=`${chip('Proposed draft')}<div class="qmx-item">${content}</div><div class="viz-controls">${button(state.authorPreview?'Return to draft':'Preview draft','preview')}</div><p class="text-small">Validation and activation belong to the later implementation contract.</p>`;
+      }
+    }
+    if(message)$('qmx-feedback').textContent=message;
+  }
+  root.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b || !root.contains(b))return;
+    if(b.dataset.dest) {state.mode=b.dataset.dest;render(names[state.mode]+' selected · other app state retained.');persist();return;}
+    const a=b.dataset.action;if(!a)return;
+    const app=state.apps[state.mode];let msg='';
+    if(a.startsWith('page:')&&app){app.page=a.slice(5);app.focus=false;msg=app.page+' selected · detail remains available.';}
+    else if(a==='expand'&&app){app.detail=true;app.focus=true;msg='Detail opened inside '+names[state.mode]+'.';}
+    else if(a==='focus'&&app){app.focus=true;msg='Returned to the open detail.';}
+    else if(a==='close'&&app){app.detail=false;app.focus=false;msg='Detail closed · returned to '+app.page+' · runs unchanged.';}
+    else if(a==='attach'&&app){app.attached=true;msg=objectNames[state.mode]+' attached to this app’s copilot · permissions unchanged.';}
+    else if(a==='detach'&&app){app.attached=false;msg='Explicit object attachment removed.';}
+    else if(a==='locate'&&app){state.returnTo=state.mode;state.libraryItem=state.mode;state.mode='library';msg='Existing object located · nothing duplicated or saved.';}
+    else if(a==='return'&&state.returnTo){state.mode=state.returnTo;msg='Returned to '+names[state.mode]+' with its prior view.';}
+    else if(a==='agent-open'||a==='library-research'){state.mode='research';state.apps.research.detail=true;state.apps.research.focus=true;msg='Saved research result opened in its app.';}
+    else if(a==='library-ml'){state.mode='ml';state.apps.ml.detail=true;state.apps.ml.focus=true;msg='Workflow inspection opened in ML workspace.';}
+    else if(a.startsWith('author-view:')){state.authorView=a.slice(12);state.authorPreview=false;msg=state.authorView+' authoring view · draft only.';}
+    else if(a==='preview'){state.authorPreview=!state.authorPreview;msg=state.authorPreview?'Fixture preview opened · active app unchanged.':'Returned to the draft.';}
+    else if(['research','ml','author'].includes(a)){state.mode=a;msg=names[a]+' opened.';}
+    render(msg);persist();
+  });
+  restore(window.openai && window.openai.widgetState);render(names[state.mode]+' selected · illustrative state; no QMX connection.');
+  window.addEventListener('openai:set_globals',e=>{const g=e.detail&&e.detail.globals;if(g&&g.widgetState){restore(g.widgetState);render();}});
+})();
+</script>
+</body></html>

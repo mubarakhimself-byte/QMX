@@ -1,0 +1,77 @@
+--- previous/VIEW-AND-PACK-CONTRACT.md
++++ current/VIEW-AND-PACK-CONTRACT.md
+@@ -20,7 +20,7 @@
+ | --- | --- | --- | --- |
+ | `contributes`: `{point, local_id}` | operation request | yes — closed eight: `tool`, `tool_adapter`, `hook`, `skill`, `graph_template`, `model_deployment`, `toolset`, `worker_template` | no. Hit ≠ grant (parent AD-2) |
+-| `PackUiRequest` v1 (`nav`, `views`, optional `copilot_profile`) | versioned request DTO | **no** | **no** |
++| `PackUiRequest` v1 (`nav`, `views`) | versioned request DTO | **no** | **no** |
+ | `view:*` / `ViewPresentation` | COMP-QMA-WIRE DTO, CT-40 additive | **no**. `view_id` must start with `view:`. Token `ui_view` is refused | no. `VIEW_OWNS_GRANTS = False`. `authorizes_invoke: true` refuses |
+-| `copilot_profile` | request blob inside `PackUiRequest` | **no** | **no**. Absence is valid |
++| `PluginManifest.copilot_profile` | **Epic 60 / kit sibling field** | **no** | **no**. Absence is valid. PackUiRequest **references** this field; it does not replace it |
+ | `requested_capabilities` | kit AMEND/alias of inspect `PluginManifest.permissions` | no | no. Do not add a second live request field |
+ | `GrantRecord` into `psess:` | host-minted, immutable | n/a | **yes — the only grant** |
+@@ -34,5 +34,5 @@
+ Schema name: `qmx.ui.pack_ui_request.v1`. Not a new CT. Not identity. Not a json-render runtime id.
+ 
+-The pack manifest carries **at most one** live UI-request document under key `pack_ui_request`. Omit the key, or send an empty object, for a headless pack. Do not also ship a sibling manifest `copilot_profile` or a sibling `views` array — that would be two live request fields.
++The pack manifest keeps Epic 60 fields: `contributes`, optional `view:*`, optional **`copilot_profile`**, `requested_capabilities` (alias of inspect `permissions`). **At most one** `pack_ui_request` document may be added for chrome. Omit it for a headless pack. Do **not** nest `copilot_profile` inside `pack_ui_request` as a replacement for the manifest field. No parent amendment. Epic 60 stories 60.1+ stay the owner of that blob.
+ 
+ ```json
+@@ -42,5 +42,5 @@
+   "pack_version": "0.1.0",
+   "nav": [
+-    { "id": "coverage", "title": "Coverage", "slot": "app-nav" }
++    { "id": "coverage", "title": "Coverage", "slot": "app-nav", "view_ids": ["view:coverage"] }
+   ],
+   "views": [
+@@ -53,12 +53,9 @@
+       "parameter_binding": { "schema": "research.coverage.snapshot.v1" }
+     }
+-  ],
+-  "copilot_profile": {
+-    "profile_version": 1,
+-    "seat": "app-use",
+-    "panel": "optional"
+-  }
++  ]
+ }
+ ```
++
++Host reads optional `PluginManifest.copilot_profile` beside this document.
+ 
+ | Field | Rule |
+@@ -67,5 +64,5 @@
+ | `pack_id` | Non-empty string. Must equal the manifest package id. |
+ | `pack_version` | Non-empty string. Must equal the manifest version being enabled. |
+-| `nav` | Optional. Omit or `[]` to omit app-owned top navigation (valid; OpenBB-class packs may still ship canvas views). Each item is `{id, title, slot}`. `id` and `title` are non-empty strings. `slot` is a slot token (§4). |
++| `nav` | Optional. Omit or `[]` to omit app-owned top navigation. Each item is `{id, title, slot, view_ids}`. `id` and `title` are non-empty strings. `slot` is a slot token (§4). `view_ids` is a non-empty array of `view_id`s declared in `views`. Unknown view_id → ignore that nav item (do not fail enable). Empty `view_ids` is invalid for that item (ignore item). |
+ | `views` | Optional. Omit or `[]` for no chrome. Each item: `view_id`, `view_version` (positive int), `op_id`, `renderer`, `slot`, `parameter_binding.schema` (non-empty name of an existing parent-AD-3 `input_schema`). |
+ | `view_id` | Must start with `view:`. `ui_view` / `ui-view` refused as a contribution-point attempt. |
+@@ -73,5 +70,5 @@
+ | `slot` | Closed set in §4. |
+ | `parameter_binding` | Request-time object `{ "schema": "<input_schema name>" }` only. Values are not authority; they are filled later on the live `ViewPresentation`. Schema must not add or drop fields versus the descriptor `input_schema`. |
+-| `copilot_profile` | Optional request blob. Not a contribution point and not a grant. Closed candidate keys: `profile_version` (positive int), `seat` (`app-use` only — packs do not request the main authoring seat), `panel` (`optional` \| `omit`). Must not list `grant_id`, tools-to-grant, or `requested_capabilities`. |
++| `copilot_profile` | **Not a PackUiRequest field.** Lives on `PluginManifest` (Epic 60). Host copies it at enable if present. |
+ 
+ Renderer-specific **non-authority** extras (ignored if unknown; never grants):
+@@ -92,5 +89,5 @@
+ | Condition | Enable ops roster? | UI outcome |
+ | --- | --- | --- |
+-| Key omitted or `{}` / `{schema, pack_id, pack_version}` with empty `nav`+`views` and no `copilot_profile` | yes | Headless. Valid. |
++| Key omitted or `{}` / `{schema, pack_id, pack_version}` with empty `nav`+`views` | yes | Headless chrome. Valid. Manifest may still omit `copilot_profile` (Epic 60). |
+ | `schema` missing or not `qmx.ui.pack_ui_request.v1` | yes | Treat UI as empty; record `failure_class=view` diagnostic `unknown_pack_ui_schema`. |
+ | `pack_id` / `pack_version` mismatch with the enabling manifest | yes | Ignore the UI request (empty chrome); diagnostic `pack_ui_identity_mismatch`. Do not silently bind another pack's views. |
+@@ -152,5 +149,5 @@
+ | `instance_id` | Opened-app instance, or the single selected `instance_id` ref | no |
+ | `config_revision` | Instance config revision from authoritative stores | no |
+-| `grant_id` | The GrantRecord that matches this contribution + instance + config + `op_id` / `op_version` + audience `psess`. Null if none — mount may still paint; press will refuse | no |
++| `grant_id` | Matching GrantRecords for this contribution + instance + config + `op_id`/`op_version` + audience `psess`: **0** → null (paint allowed, invoke refuses); **1** → that `grant_id`; **≥2** → do not mint context; typed `GRANT_AMBIGUOUS` (no first-wins, no merge, no order pick). Operator must grant uniquely or the host must name one grant in a later explicit bind — v1 refuses ambiguity | no |
+ | `allowed_op_ids` | Intersection of this view's declared `op_id` (v1: one op per view) with currently matching, unrevoked, unexpired GrantRecords for **this** instance. Empty if ungranted | no |
+ | `account_scope` | From that GrantRecord (`null` unless granted) | no |
+@@ -291,5 +288,5 @@
+ ```
+ 
+-Equivalent: omit `pack_ui_request` from the manifest. Omit `nav`, omit `views`, omit `copilot_profile`. Enable still does not grant. The pack appears as ContributionHits + JobHandles (Home attention, Library, qmb CLI / wire). No `MiniAppNavHost`. No in-app copilot. A future tab close still does not cancel work (SCN-0024 / J-UI-02 / J-KIT-01).
++Equivalent: omit `pack_ui_request` from the manifest. Omit `nav` and `views`. Omit manifest `copilot_profile` (Epic 60 absence is valid). Enable still does not grant. The pack appears as ContributionHits + JobHandles (Home attention, Library, qmb CLI / wire). No `MiniAppNavHost`. No in-app copilot. A future tab close still does not cancel work (SCN-0024 / J-UI-02 / J-KIT-01).
+ 
+ A headless pack cannot fail `failure_class=view` by missing chrome.

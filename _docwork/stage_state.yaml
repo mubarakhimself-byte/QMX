@@ -342,3 +342,54 @@ change_mode:
     lint_docs_strict: "expected-blocked (ADR-0023 and SCN-0017 status: provisional per mill stamp)"
   review: "Independent consistency FAIL-with-amendments (_docwork/review-consistency-workflows.md): 0 critical, 3 major, 7 minor. Desk fixes applied (ADR-0023 Consequences vs DEC-0449; unqualified AD-n collisions; SCN-0022 DEC-0431 vs DEC-0423; JobHandle cite; index counts; L36 QMN-only venue; CT-40 schema-honesty). Adversarial (_docwork/review-redteam-workflows.md) schema-hole blockers recorded as GAP-0094 notes — do not invent CT-52 or pin-store sqlite."
   remaining: "Operator cheap-veto A1-A6; GAP-0092 Codex skip; first epic FEAT-0051 after the operator starts bmad-create-epics-and-stories in a later session — not this one. Implementation factory-pipeline-only."
+
+- date: '2026-09-23'
+  change: "Absorb the 2026-09-23 pack-and-grant kit spine (local AD-1..AD-9) into docs/ — reuse existing applications; no sixth COMP; no new CT; named parent AD-8/AD-24 amendments; do not rewrite 2026-09-16 QML or 2026-09-19 Workflows folds"
+  sources: [SRC-24, SRC-25]
+  provenance: "SRC-24 = architecture-QMX-2026-09-23/ (spine AD-1..AD-9 + companions + memlog + gate-summary + SDK-HYBRID-AND-CORE). SRC-25 = rider pack-and-grant-kit-2026-09-23.md. Inspect integration@34c148b. Parent freeze 270e992 for ADR-0024 original Decision. Route e change-mode Stage 9. Operator accepted sitting as plan to fold. Do not start epics this session."
+  ledger: "DEC-0452..DEC-0460 = kit AD-1..AD-9 ratified; DEC-0461 umbrella; DEC-0462 preflight reuse; DEC-0463 parent AD-8 amendment (DEC-0421 not superseded); DEC-0464 parent AD-24 amendment (DEC-0437 not superseded); DEC-0465 wiring @34c148b; DEC-0466 dead-list honors; DEC-0467 cheap-veto A7-A9. EXT-2286..EXT-2299 plus EXT-2460..EXT-2462. No live DEC superseded."
+  gaps: "GAP-0101..GAP-0108 minted deferred non-blocking. GAP-0081/0100/0093/0096 notes patched in place. Do not fill 0085/0063/0061/0062/0058/0081 chrome/0100 dashboard."
+  adr: "ADR-0025 written (new, status ratified, docs authority only); preflight verdict reuse — no new COMP, no new CT, no new depends_on edge; dated follow-ups on ADR-0024/ADR-0020 (mill stays provisional)"
+  contracts: "CT-40 usage annotations only; no new contract id; caller_kind and failure_class specified in prose until FEAT-0058 format mint"
+  features: "FEAT-0058..FEAT-0063 minted (multi-pass, planned). First epic FEAT-0058 (host SDK pack-and-grant)."
+  docs: "ADR-0025; SCN-0023..0027; qma-core/daemon/wire, qmb; constitution L7; AGENTS; glossary; gap-report GAP-0101..0108; traceability; index; changelog 2026-09-23; overview/stack/dependencies notes; ADR-0020/0024 follow-ups; logging-spec QMA row; every edited doc verified: 2026-09-23"
+  status: complete
+  gates:
+    validate_ledger: pass
+    validate_registry: pass
+    validate_inventory: "pass (pre-existing house-accepted warnings only)"
+    check_citations: "pass (house-accepted dead-DEC class only)"
+    lint_docs: clean
+    lint_docs_strict: "expected-blocked (ADR-0023 and SCN-0017 status: provisional per mill stamp; plus pre-existing stale 30d docs)"
+  review: "Independent consistency FAIL-with-amendments (_docwork/review-consistency-pack-and-grant.md): 0 critical, 4 major, several minor. Desk fixes applied same session (CT-40 named-amendment invariant; qma-wire FM-12 duplicate -> FM-14; gap-report pack-and-grant heading split; wire/daemon Related SHA-qualified; GAP-0081/0093/0096 public cells; SCN-0024 chrome wording; index 141/93; frontmatter DECs). lint_docs re-clean."
+  remaining: "Operator cheap-veto A7-A9; first epic FEAT-0058 after the operator starts bmad-create-epics-and-stories in a later session — not this one. Implementation factory-pipeline-only."
+- date: '2026-09-23'
+  change: "Operator gap-catalog correction (DEC-0468): GAP-0101..GAP-0108 are answered sitting law delivered by FEAT-0058..FEAT-0063; GAP-0081 and GAP-0100 out-of-scope as kit holes"
+  sources: [SRC-26]
+  provenance: "SRC-26 = rider pack-and-grant-gap-correction-2026-09-23.md. Operator: a gap is an unanswered design question. Sitting already decided kit AD-1..AD-9. Do not re-run architecture. Do not start epics this session."
+  ledger: "DEC-0468 ratified (authority rider). EXT-2463."
+  gaps: "GAP-0101..GAP-0108 status answered. GAP-0081 and GAP-0100 status out-of-scope. GAP-0093/0096 left for a later operator look."
+  adr: "ADR-0025 Consequences updated; ADR-0024 follow-up chrome line updated"
+  status: complete
+  remaining: "First epic FEAT-0058 after the operator starts bmad-create-epics-and-stories in a later session. Implementation factory-pipeline-only."
+
+- date: '2026-09-25'
+  change: "Absorb the 2026-09-23/24 UI host spine plus 2026-09-24 backend-delta spine into docs/ — reuse existing applications; no COMP-UI; no new CT; named AM-01..AM-17; do not rewrite 2026-09-16 QML, 2026-09-19 Workflows, or 2026-09-23 pack-and-grant folds"
+  sources: [SRC-27, SRC-28, SRC-29, SRC-30]
+  provenance: "SRC-27 = architecture-QMX-UI-2026-09-23/. SRC-28 = architecture-QMX-UI-BACKEND-2026-09-24/. SRC-29 = rider ui-and-backend-delta-2026-09-25.md. SRC-30 = Codex REVIEW.md + RECHECK-2026-09-25.md PASS. Inspect integration@34c148be. Parent freeze 270e992 for ADR-0024 original Decision. Route e change-mode Stage 9. Operator launch after Codex PASS is the fold stamp. Do not start epics this session."
+  ledger: "DEC-0469..DEC-0503 = UI AD-2..AD-24 plus backend AD-3..AD-17 ratified; DEC-0504 umbrella; DEC-0505 preflight reuse; DEC-0506 AM-01..AM-17; DEC-0507 wiring @34c148be; DEC-0508 dead-list honors; DEC-0509 catalog restamp; DEC-0510 cheap-veto A10-A14. EXT-2464..EXT-2479. SRC-27..SRC-30. No live DEC superseded."
+  gaps: "GAP-0081 and GAP-0100 answered as UI sitting law (still out-of-scope as kit holes). GAP-0109..GAP-0114 minted deferred non-blocking."
+  adr: "ADR-0026 written (new, status ratified, docs authority only); preflight verdict reuse — no new COMP, no COMP-UI, no new CT, no new depends_on edge; dated follow-ups on ADR-0024/ADR-0025 (Decision text unchanged)"
+  contracts: "CT-40 AM-01 pairing carve-out plus addable names; CT-42 copilot_profile sibling note; CT-46 originating_product_session_ref; CT-48 product_session_ref excluded from fp1; no new contract id"
+  features: "FEAT-0064..FEAT-0071 minted (multi-pass, planned). FEAT-0071 blocked_by FEAT-0055+FEAT-0066+FEAT-0041 (prefold desk-fix). Do not duplicate FEAT-0058..FEAT-0063."
+  docs: "ADR-0026; SCN-0028..0035; UI lens design-system plus six screens; qma-core/daemon/wire, qmb; constitution L7/L31; AGENTS; glossary; gap-report; traceability; index 157/109; changelog 2026-09-25; overview mermaid; stack Svelte pins; security-model pairing/host-control; logging-spec redaction; test-strategy J-UI unexecuted; ADR-0024/0025 follow-ups; registry pairing.session_ttl and artifact.stage_max_bytes; every edited doc verified: 2026-09-25"
+  status: complete
+  gates:
+    validate_ledger: pass
+    validate_registry: pass
+    validate_inventory: "pass (pre-existing house-accepted warnings only; 71 features, next FEAT-0001)"
+    check_citations: "pass (house-accepted dead-DEC / refused-COMP-UI class only)"
+    lint_docs: clean
+    lint_docs_strict: "expected-blocked (ADR-0023 and SCN-0017 status: provisional per mill stamp; plus eight pre-existing 30d-stale files this fold did not reopen)"
+  review: "Prefold 12-lens workflow GO (_docwork/review-prefold-ui-backend.md). Independent consistency 8-lens FAIL-with-amendments (_docwork/review-consistency-ui-backend.md): 6 critical, 18 major, 12 minor. Desk-fixes applied same session (CT-40 Rust-UI leftover, AM-03 sqlite named add, GAP-0081 catalog restamp, AM-01/AM-11 broker-ref, CT-46/48 inspect honesty, overview DEC-0507, ADR-0020/0022 follow-ups, pairing nouns, recover-control writer, origin-revoke argv, COMMAND_GROUPS, pairing.session_ttl write-path, initialize/AM-12/AM-04, FEAT holds, locator waves, rail/library/screens, SCN banners)."
+  remaining: "Do not start epics or the software factory from this sitting. Independent planned epics 60-65 continue. FEAT-0064..0071 wait for a later coordinated epics-and-stories pass, then one coding session as the operator directed."

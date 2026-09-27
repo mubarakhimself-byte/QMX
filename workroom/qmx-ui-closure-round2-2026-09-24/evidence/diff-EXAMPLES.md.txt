@@ -1,0 +1,70 @@
+--- previous/EXAMPLES.md
++++ current/EXAMPLES.md
+@@ -22,4 +22,5 @@
+ | I4 Adapter mount failure | Svelte `ViewMountHost` (`failure_class=view`, native empty+reason) | Disable the pack. Cancel JobHandles. |
+ | I5 Iframe declares a different `instance_id` | Host MCP Apps `tools/call` **intercept** (ignore foreign authority fields; refuse if `action` ∉ this mount’s `allowed_op_ids`) | Forward iframe `instance_id` on the envelope. Let HTML grant tools. |
++| I6 Two GrantRecords match one mount | Host `bindActionContext` typed `GRANT_AMBIGUOUS` | First-wins. Merge grants. |
+ 
+ ---
+@@ -42,4 +43,9 @@
+   ],
+   "permissions": [],
++  "copilot_profile": {
++    "profile_version": 1,
++    "seat": "app-use",
++    "panel": "optional"
++  },
+   "pack_ui_request": {
+     "schema": "qmx.ui.pack_ui_request.v1",
+@@ -47,6 +53,6 @@
+     "pack_version": "0.1.0",
+     "nav": [
+-      { "id": "coverage", "title": "Coverage", "slot": "app-nav" },
+-      { "id": "session", "title": "Session", "slot": "app-nav" }
++      { "id": "coverage", "title": "Coverage", "slot": "app-nav", "view_ids": ["view:coverage"] },
++      { "id": "session", "title": "Session", "slot": "app-nav", "view_ids": ["view:session-table"] }
+     ],
+     "views": [
+@@ -76,10 +82,5 @@
+         "ui_resource": "ui://sector-desk/heatmap/mcp-app.html"
+       }
+-    ],
+-    "copilot_profile": {
+-      "profile_version": 1,
+-      "seat": "app-use",
+-      "panel": "optional"
+-    }
++    ]
+   }
+ }
+@@ -157,4 +158,9 @@
+   ],
+   "permissions": [],
++  "copilot_profile": {
++    "profile_version": 1,
++    "seat": "app-use",
++    "panel": "optional"
++  },
+   "pack_ui_request": {
+     "schema": "qmx.ui.pack_ui_request.v1",
+@@ -162,6 +168,6 @@
+     "pack_version": "0.1.0",
+     "nav": [
+-      { "id": "graph", "title": "Graph", "slot": "app-nav" },
+-      { "id": "data", "title": "Data", "slot": "app-nav" }
++      { "id": "graph", "title": "Graph", "slot": "app-nav", "view_ids": ["view:train-graph"] },
++      { "id": "data", "title": "Data", "slot": "app-nav", "view_ids": ["view:split-check"] }
+     ],
+     "views": [
+@@ -198,10 +204,5 @@
+         "parameter_binding": { "schema": "ml.train_eval.query-state.v1" }
+       }
+-    ],
+-    "copilot_profile": {
+-      "profile_version": 1,
+-      "seat": "app-use",
+-      "panel": "optional"
+-    }
++    ]
+   }
+ }

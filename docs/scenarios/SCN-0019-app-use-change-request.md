@@ -5,10 +5,10 @@ type: scenario
 status: ratified
 component: COMP-QMA-DAEMON
 depends_on: [COMP-QMA-DAEMON, COMP-QMA-WIRE, COMP-QMA-CORE]
-decisions: [DEC-0421, DEC-0422, DEC-0442, DEC-0450]
+decisions: [DEC-0421, DEC-0422, DEC-0442, DEC-0450, DEC-0463, DEC-0465]
 sources: [_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/JOURNEYS.md, _docwork/workflows-increment-brief.md, _docwork/riders/workflows-construction-kit-2026-09-19.md, docs/decisions/ADR-0024-workflows-construction-kit.md]
 generated: 2026-09-19
-verified: 2026-09-19
+verified: 2026-09-23
 stale_after: 90d
 ---
 
@@ -16,7 +16,7 @@ stale_after: 90d
 
 This scenario pins J01: an installed app-use product session may mint a `change_request` staging artifact (with base hashes) after inspecting a run, but must not apply implementation edits. Only an authoring product session under an operator principal applies; the v1 instance, grants, and running jobs stay unchanged. [DEC-0421] [DEC-0422] [DEC-0442]
 
-This document is a **specification of intended behavior**, not evidence that the code does this today. At `integration@270e992` `product_session` is absent; Operation descriptor / InvocationEnvelope / GrantRecord are absent. [DEC-0450]
+This document is a **specification of intended behavior**, not evidence that the code does this today. At `integration@270e992` `product_session` is absent; Operation descriptor / InvocationEnvelope / GrantRecord are absent. [DEC-0450] Pack-and-grant 2026-09-23: authoring may omit `app_instance_id` (DEC-0463); this scenario's app-use path still requires an instance. Types/fixtures exist at `integration@34c148b`; class/test existence is not e2e (DEC-0465, DEC-0286).
 
 ## Given
 

@@ -7,7 +7,7 @@ depends_on: [COMP-QMF-CORE, COMP-QMF-REGISTRY, COMP-QMF-DATA, COMP-QMF-INDICATOR
 decisions: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0118, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0189, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, DEC-0259, DEC-0268, DEC-0285, DEC-0287, DEC-0334, DEC-0335, DEC-0336, DEC-0337, DEC-0342, DEC-0344, DEC-0347, DEC-0392, DEC-0401, DEC-0432, DEC-0445, DEC-0451]
 sources: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-14/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ctrader-venue-facts.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/spotware-org-inventory.md, docs/decisions/ADR-0019-trading-node.md, docs/decisions/ADR-0022-workbench-expansion.md, docs/decisions/ADR-0023-qml-research-expansion.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, docs/architecture/dependencies.yaml, docs/registry/variables.yaml, docs/contracts/]
 generated: 2026-08-18
-verified: 2026-09-19
+verified: 2026-09-25
 stale_after: 90d
 ---
 
@@ -220,6 +220,27 @@ The JSON-Schema validator is deliberately `[UNPINNED]` — the implementation ch
 ## Workflows construction kit — no new runtime pins
 
 The 2026-09-19 Workflows fold adds **no new runtime pins** and no new product dependency (DEC-0445, DEC-0451). n8n, OpenBB, json-render / `@json-render/*`, MCP Apps, Hermes, LEAN, and QuantConnect are **mental models only** — not product dependencies and not imported runtimes (DEC-0432, DEC-0451). mutmut remains optional test-strength only (WSL/POSIX on Windows, disposable copy, never `mutmut apply` on the shared worktree); it is not a product pin (DEC-0432). Inherited QMF/QMB/QML/QMN/QMA pins stand unchanged.
+
+## Pack-and-grant kit — no new runtime pins
+
+The 2026-09-23 pack-and-grant fold adds **no required runtime** (DEC-0461, DEC-0459). json-render remains unpinned (upstream v0.21.0 cited as a presentation candidate, not a pin). MCP Apps remain a SEP-1865-class presentation candidate, not storage. OpenTelemetry remains export-port adapter only (DEC-0322, DEC-0456). Inherited pins stand unchanged.
+
+## QMX UI host stack (client of COMP-QMA-WIRE)
+
+QMF V1 still has no UI layer (DEC-0009). The 2026-09-25 fold adds a **QMX product UI** seed as a Svelte client of `COMP-QMA-WIRE`, not a COMP and not a QMF runtime (DEC-0469, DEC-0505). Optional frontend adapter pins stay optional (DEC-0459). This sitting mints no QMA Python runtime change. The first-party Svelte host is absent at `integration@34c148be` (DEC-0507).
+
+| Name | Version / status | Role | Cites |
+|---|---|---|---|
+| Svelte | 5.57.1 | Host framework | DEC-0469 |
+| SvelteKit | 2.70.3 `adapter-static`, `ssr=false` | Static SPA; origin is never daemon port 8765 | DEC-0469 |
+| TypeScript | 5.9 | Kit 2 peer | DEC-0469 |
+| Vite | 8.3.0 | Bundler | DEC-0469 |
+| Tailwind CSS | 4.3.3 | Utility CSS | DEC-0469 |
+| shadcn-svelte | 1.7.0 Rhea compact | Working visual seed, not a brand freeze | DEC-0469, DEC-0510 A12 |
+| bits-ui | 2.19.3 | Primitive kit | DEC-0469 |
+| `@xyflow/svelte` | 1.6.6 | Graph canvas | DEC-0469 |
+| Node.js | `>=22.12.0 <23.0.0` | Toolchain; pnpm lockfile at an unexecuted scaffold gate | DEC-0469, DEC-0510 A13 |
+| Tauri 2 | optional later shell | Not required for v1 protocol (`GAP-0112`) | DEC-0478 |
 
 ## Related
 

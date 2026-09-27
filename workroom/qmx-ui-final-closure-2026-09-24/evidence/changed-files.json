@@ -1,0 +1,25 @@
+{
+  "backend": [
+    ".memlog.md",
+    "ARCHITECTURE-SPINE.md",
+    "ARTIFACTS-AND-TRANSFER.md",
+    "CLOSURE-C1-C2.md",
+    "CLOSURE-EVIDENCE.md",
+    "CLOSURE-J1-J5.md",
+    "DEPENDENCY-MAP.md",
+    "HOST-LIFECYCLE.md",
+    "PAIRING-AND-ADMISSION.md",
+    "PARENT-AMENDMENT-MAP.md",
+    "REVIEW-LAUNCH.txt",
+    "reviews/gate-c1c2-summary.md",
+    "reviews/review-c1c2-adversarial.md",
+    "reviews/review-c1c2-closure.md",
+    "reviews/review-c1c2-parent.md",
+    "START-HERE.md",
+    "TRACE-MATRIX.md",
+    "UI-CANDIDATE-CHANGELOG.md"
+  ],
+  "ui": [
+    "BOOTSTRAP-AND-AUTH.md"
+  ]
+}

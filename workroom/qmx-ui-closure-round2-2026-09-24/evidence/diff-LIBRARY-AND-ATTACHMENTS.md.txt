@@ -1,0 +1,144 @@
+--- previous/LIBRARY-AND-ATTACHMENTS.md
++++ current/LIBRARY-AND-ATTACHMENTS.md
+@@ -16,4 +16,16 @@
+ **Forbidden:** a generic Library database, `COMP-LIB`, a copied-row sqlite, a sixth store class, a new `selected_refs` kind other than kit `instance_id`, collapsing Artifact / Knowledge / Contribution / Hypothesis identities.
+ 
++## 0. Locked defaults (Codex R6)
++
++| Lock | Rule |
++| --- | --- |
++| **Possession first** | Initial possession is on the **authenticated local daemon**. Home may stage **before** an instance exists. That yields a **local-complete fp1**. It is **not** a remote placement. |
++| **Then transfer** | When instance / execution placement is known and is not this daemon: explicit host command `transfer_artifact` (or refuse). Destination **verifies hash**. Never silent local fallback. |
++| **Byte transport** | Authenticated **HTTP PUT** `/artifacts/stage` with **Content-Length**. Same pairing auth as queries (`Authorization: Bearer pairing:<id>`). **Not** a JSON-RPC body. **Not** REST `/invoke`. **Not** a UI BFF. |
++| **Max size** | Registry row `registry:artifact.stage_max_bytes`. Oversize PUT refuses; no object. |
++| **Interrupted v1 PUT** | **Refuse.** No resume. No partial fp1. Daemon **deletes** the incomplete object. Retry is a **new PUT of full bytes** (new staging attempt). Same content hash **may reuse** an already-complete object. |
++| **Completeness proof** | Daemon-recomputed hash **plus** byte count after it holds complete bytes. Browser hash is not possession. |
++| **Knowledge cite** | After CT-44 `cite`: composer kind remains **`artifact`**. No kind `knowledge`. Library verb matrix unchanged. |
++
+ ## Honesty at `34c148b`
+ 
+@@ -23,5 +35,7 @@
+ | kit `instance_id` kind | Specified DEC-0463; **absent** in code |
+ | CT-44 `cite` | **Present.** Copies bytes, returns `Citation` + `artifact_ref` / `content_fp1`. Cite-copy is **not** an ArtifactHit |
+-| `stage_artifact` daemon command | **Absent.** Backend add (local AD-22) |
++| `stage_artifact` / HTTP PUT `/artifacts/stage` | **Absent.** Backend add (local AD-22). Byte channel is PUT, not JSON-RPC |
++| `transfer_artifact` host command | **Absent.** Backend add. Explicit remote placement after local possession |
++| `registry:artifact.stage_max_bytes` | **Specified here.** Absent at inspect |
+ | `facade_search` concatenate | Types + in-process tests; **not** live HTTP; `E2E_ADOPTION_CLOSED = False` |
+ | QMB `library.search` | **Present** (fp1 + kind). Occupancy `query` |
+@@ -37,5 +51,5 @@
+ | Kind | Id | Notes |
+ | --- | --- | --- |
+-| `artifact` | content fp1 | Durable bytes the host **possesses**. Provenance metadata may ride **on** the chip; it is not a second kind |
++| `artifact` | content fp1 | Durable bytes the host **possesses**. A local-complete fp1 is local possession, not remote placement. Provenance metadata may ride **on** the chip; it is not a second kind |
+ | `research_ref` | fp1-shaped class `qml-research-hypothesis` | Hypothesis; off Library facade |
+ | `contribution` | `(qualified_id, package_version)` | Live tuple; never fp1 |
+@@ -57,5 +71,5 @@
+ | Source | Durable representation | Notes |
+ | --- | --- | --- |
+-| file / image upload | `selected_refs` kind **`artifact`** fp1 **after** daemon `stage_artifact` | Browser-computed hash is **not** possession. Do not mint `upload_bytes` / `local_path` |
++| file / image upload | `selected_refs` kind **`artifact`** fp1 **after** a **complete** PUT `/artifacts/stage` on the local daemon | Browser-computed hash is **not** possession. Home may attach with **no** instance. Result is **local-complete** fp1, not remote placement. Do not mint `upload_bytes` / `local_path` |
+ | existing stored file | kind **`artifact`** / **`dataset`** / **`run`** as the stored object already is | Pointer to an already-stored identity. Machine path is not a portable id |
+ | Knowledge citation | CT-44 `cite` returns copied bytes + `artifact_ref` / `content_fp1`; composer kind remains **`artifact`** | Chip **shows Knowledge provenance** (`source_ref`, `snapshot_ref`, `locator`, evidence label). **Do not mint** kind `knowledge`. Cite-copy is not an Artifact-rail Library hit |
+@@ -68,23 +82,43 @@
+ Cross-app: composer on `psess:` A may cite B’s artifact/instance. Authority stays A’s GrantRecords. Unavailable B is labelled; the draft remains.
+ 
+-## 3. Ingest owner — `stage_artifact` (local AD-22)
++## 3. Ingest owner — local possession, then transfer (local AD-22)
++
++Chosen design: **initial possession on the authenticated local daemon**, then **explicit transfer** to execution placement when instance/placement is known. Not target-bound staging before the first upload. Home may attach first.
++
++### 3.1 Local possession — HTTP PUT `/artifacts/stage`
+ 
+ | Field | Contract |
+ | --- | --- |
+ | Owner | **COMP-QMA-DAEMON** |
+-| Command | `stage_artifact` (CT-40 host command, **not** a pack op, **not** `dispatchInvoke`) |
++| Transport | Authenticated **HTTP PUT** `/artifacts/stage` with **Content-Length**. Body = raw bytes. **Not** a JSON-RPC body. **Not** REST `/invoke`. **Not** a UI BFF (local AD-12). Same daemon HTTP origin as snapshot queries |
++| Auth | Same pairing proof as queries: `Authorization: Bearer pairing:<id>`. Paired Origin. MCP/json-render/native frames **must not** PUT; host chrome does. Not a GrantRecord pack-op |
++| Max size | `registry:artifact.stage_max_bytes`. Missing Content-Length, oversize, or unpaired Origin → refuse; no object |
+ | Store | Existing artifact registration path (`before_artifact_register` / content fp1). **No new sqlite class.** Not a Workbench AD-3 kind unless a later register on that rail says so |
+-| At `34c148b` | **Absent** as a product command. Knowledge `cite` already copies through `before_artifact_register` into an in-memory `_artifacts` map — that is the pattern to reuse, not a Library database |
+-| Auth | Authenticated principal **before** protocol bytes (parent CT-40). MCP/json-render/native frames **must not** call this; host chrome does. Not a GrantRecord pack-op |
+-| Instance | Staging **does not** require `selected_refs` kind `instance_id`. **Run** of those bytes later does |
+-| Input | Streamed bytes + declared media/schema. Optional client hash is advisory progress only |
+-| Host proof | Daemon **recomputes** fp1 after it holds complete bytes. Client hash ≠ possession |
+-| Completeness | `complete` \| `partial` \| `missing` \| `expired` (parent AD-26 inventory vocab). Partial is not a runnable ref |
+-| Interrupt / retry | P1-PLC-003: interrupted staging or path-escape → no partial/unauthorized read; clean **resumable or refused** state. Resume uses the same staging identity; it does not mint a second fp1 for the same complete bytes |
+-| Return | durable fp1 + completeness. Composer then CAS-inserts `selected_refs` kind `artifact` |
+-| Remote placement | Stage **onto the placement that will run**, or **refuse**. Never silent local retarget (J-UI-09, P1-PLC-002). Remote failure does not rewrite the ref into a laptop path |
+-| Forbidden | Inlining bytes on InvocationEnvelope; treating a local path as global id; hashing in the browser and skipping the daemon write |
+-
+-`stage_artifact` is a backend **add**. UI depends on it; the UI must not invent an upload BFF or a REST invoke API (local AD-12).
++| At `34c148b` | **Absent.** Knowledge `cite` already copies through `before_artifact_register` into an in-memory `_artifacts` map — that is the pattern to reuse, not a Library database |
++| Instance | Staging **does not** require `selected_refs` kind `instance_id`. Home may stage first. Result is a **local-complete fp1**. It is **not** a remote placement. **Run** of those bytes later still needs exactly one `instance_id` |
++| Client hash | Advisory progress only. Browser hash ≠ possession |
++| Completeness proof | After the daemon holds **complete** bytes: daemon-recomputed hash **plus** byte count. That pair is possession. Inventory of a possessed object is `complete` (later `missing` / `expired` per parent AD-26). v1 does **not** emit a composer-visible `partial` fp1 |
++| Interrupted v1 PUT | **Refuse.** No resume. No partial fp1. Daemon **deletes** the incomplete object. Retry = a **new PUT of the full bytes** (new staging attempt). If a **complete** object with the same content hash already exists, reuse that object — do not mint a second fp1 for the same complete bytes |
++| Return | durable fp1 + byte count + completeness `complete`. Composer then CAS-inserts `selected_refs` kind `artifact` |
++| Forbidden | JSON-RPC body bytes; inlining bytes on InvocationEnvelope; treating a local path as global id; hashing in the browser and skipping the daemon write; resume of a partial; treating local-complete fp1 as remote possession |
++
++PUT is the named **byte channel**. Pack invoke stays `dispatchInvoke` / InvocationEnvelope. Queries stay HTTP GET. Commands stay JSON-RPC WebSocket. Pairing HTTP stays `/pair/*`. This PUT does not mint a fourth protocol family and does not grant tools.
++
++### 3.2 Explicit transfer — `transfer_artifact`
++
++When the operator later selects an instance whose execution placement is **not** this local daemon:
++
++| Field | Contract |
++| --- | --- |
++| Command | Host command `transfer_artifact` (CT-40, **not** a pack op, **not** `dispatchInvoke`) |
++| Input | Local-complete fp1 + destination placement / instance |
++| Destination | Verifies **hash** (and byte count) on arrival. Incomplete destination object is deleted; no runnable remote ref |
++| Success | Placement possesses the same fp1. Invoke may cite it **on that placement** |
++| Failure / refuse | Typed refusal. Local fp1 remains local-complete. **Never** silent local fallback (J-UI-09, P1-PLC-002). Remote failure does not rewrite the ref into a laptop path |
++| Interrupted transfer | Destination has no complete object. Do not invoke remotely against local-only possession. Do not finish the run on local disk |
++
++If the selected instance runs **on this daemon**, no transfer is required; the local-complete fp1 is already on the execution placement.
++
++`stage_artifact` (PUT) and `transfer_artifact` are backend **adds**. UI depends on them. The UI must not invent an upload BFF or a REST invoke API.
+ 
+ ## 4. Knowledge cite — provenance without a new kind
+@@ -218,11 +252,16 @@
+ ## 7. Closure traces (architecture, unexecuted)
+ 
+-### T-R6-01 — File / image upload
+-
+-Operator attaches a local image on Home (no instance). Host calls `stage_artifact`. Daemon possesses complete bytes, returns fp1. Composer chip kind `artifact`. Client hash alone never enables Run. Later invoke still needs exactly one `instance_id` ref.
++### T-R6-01 — Home attach, later remote instance
++
++1. Operator attaches a local image on Home. **No** `instance_id`.
++2. Host issues authenticated **HTTP PUT** `/artifacts/stage` with Content-Length and `Authorization: Bearer pairing:<id>`. Not JSON-RPC.
++3. Daemon holds complete bytes, recomputes hash + byte count, returns **local-complete** fp1. Composer chip kind `artifact`. Client hash alone never enables Run.
++4. Operator later selects a **remote** instance. Local fp1 is still not remote possession.
++5. Host command `transfer_artifact` (or typed refuse). Destination verifies hash. Invoke may then cite the fp1 **on that placement**.
++6. Remote failure does **not** silently run locally. Later invoke still needs exactly one `instance_id` ref.
+ 
+ ### T-R6-02 — Dataset / version
+ 
+-Pointer to an already-stored dataset uses kind `dataset` (or artifact/run if that is the stored identity). Not a path. Stale/unavailable badge from listing/as-of. Remote job: stage or refuse (J-UI-09).
++Pointer to an already-stored dataset uses kind `dataset` (or artifact/run if that is the stored identity). Not a path. Stale/unavailable badge from listing/as-of. Remote job: `transfer_artifact` or refuse (J-UI-09). Local-complete is not remote placement.
+ 
+ ### T-R6-03 — App instance
+@@ -242,7 +281,10 @@
+ Library and composer show `unavailable` or `tombstone`. Invoke refuses that identity. No silent other version (J-UI-05, parent AD-30). Surrounding draft remains.
+ 
+-### T-R6-07 — Partial remote transfer
+-
+-Staging to a remote placement is interrupted. Completeness `partial`. No unauthorized leftover. Resume or refuse (P1-PLC-003). Do not invoke against partial. Do not silently finish on local disk.
++### T-R6-07 — Interrupted PUT leaves no runnable ref
++
++1. Home attach starts PUT `/artifacts/stage`. Connection drops before Content-Length bytes arrive.
++2. Daemon **deletes** the incomplete object. **No** fp1. **No** partial runnable ref. Completeness is not `partial` on the composer.
++3. Retry is a **new PUT of the full bytes**. If a complete object with that content hash already exists, reuse it.
++4. A later interrupted `transfer_artifact` likewise leaves **no** complete object on the destination. Local-complete fp1 (if any) stays local. Do not invoke remotely. Do not silently finish on local disk (P1-PLC-003, J-UI-09).
+ 
+ ### T-R6-08 — Locate in Library / return
+@@ -254,5 +296,7 @@
+ | Item | Owner | Class vs `34c148b` |
+ | --- | --- | --- |
+-| `stage_artifact` | COMP-QMA-DAEMON | **add** (absent); reuse artifact register / `before_artifact_register` |
++| HTTP PUT `/artifacts/stage` (local possession) | COMP-QMA-DAEMON | **add** (absent); reuse artifact register / `before_artifact_register`. Not JSON-RPC body |
++| `registry:artifact.stage_max_bytes` | COMP-QMA-DAEMON registry | **add** (absent) |
++| `transfer_artifact` (explicit remote placement) | COMP-QMA-DAEMON | **add** (absent); destination hash verify; or refuse |
+ | CT-44 cite | COMP-QMA-DAEMON | **reuse** |
+ | `facade_search` / `facade_get` | COMP-QMA-DAEMON + WIRE | reuse in-process; **add** HTTP query door |

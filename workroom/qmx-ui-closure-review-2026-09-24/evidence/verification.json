@@ -1,0 +1,12 @@
+{
+  "checked_at_utc": "2026-09-24T10:57:30.770783+00:00",
+  "input_file_count": 53,
+  "sha256_mismatches": [],
+  "candidate_files_added_since_snapshot": [],
+  "candidate_files_removed_since_snapshot": [],
+  "missing_report_links": [],
+  "independent_reports_present": true,
+  "structural_lint": "pass; zero findings; see spine-lint.json",
+  "app_runtime_verification": "not performed; documents only",
+  "ok": true
+}

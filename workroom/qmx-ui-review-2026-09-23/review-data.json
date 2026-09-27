@@ -1,0 +1,476 @@
+{
+  "title": "QMX UI architecture — independent return review",
+  "date": "2026-09-23",
+  "verdict": "Ready after listed corrections; not ready for Documentation Factory as written.",
+  "summary": "Keep Grok’s research and core boundaries. Amend the candidate in place before the next pipeline stage. The problem is incomplete or conflicting contracts between the UI and the core, not a need to restart research, replace Svelte, or redesign every screen.",
+  "scope": "Architecture and experience-contract readiness against the full current session. This is not a whole-backend audit, runtime acceptance, implementation approval, or a BMAD UX run.",
+  "strengths": [
+    "Original OpenBB mini-app and VS Code graph/editor families are recovered. Main copilot is distinct; app navigation sits above meaningful working space; the LSE form layout and rejected study 03 are not revived.",
+    "Visual, headless and mixed capabilities remain valid. Views, product sessions and durable jobs have different lifetimes. Paper evaluation is limited to relevant trading/risk behavior.",
+    "Parent authority and ownership largely survive: no sixth COMP, duplicated scheduler or grant store; native, json-render and MCP Apps remain presentation paths.",
+    "The repository baseline is candid: existing types and fixtures are distinguished from a working daemon transport. Missing caller_kind, optional authoring instance and other amendments are named.",
+    "The requested Svelte/TypeScript, shadcn-svelte and Svelte Flow direction remains viable. Neutral dark is a provisional baseline; a new visual-design exercise is not required to correct these findings."
+  ],
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "High",
+      "title": "Restore platform Authoring and Home’s purpose",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 111,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/EXPERIENCE-AND-LAYOUT.md",
+          "line": 16,
+          "label": "EXPERIENCE-AND-LAYOUT.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/evidence/session/session-visible-messages.md",
+          "line": 324,
+          "label": "evidence/session/session-visible-messages.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/04-session-visible-steering.md",
+          "line": 269,
+          "label": "research/04-session-visible-steering.md"
+        }
+      ],
+      "finding": "Authoring has disappeared from the platform rail, and Home is forced into the main-copilot interior. The session places Home, main agent, Library and Authoring above the opened-app divider. Home’s authoring permission profile does not require a conversation-first Home layout.",
+      "consequence": "A builder can ship a shell with no independent route to create work when no app is open, and a second copilot destination in place of the requested work overview.",
+      "correction": "Restore Authoring as an independently accessible platform destination. Give Home running/attention/resume behavior and keep Copilot as the conversation workspace. Reuse components freely; distinguish product purpose from permission profile. Keep exact geometry and detail-container choices provisional where the source left them open.",
+      "closure": "From zero opened apps, reach Home, Copilot, Library and Authoring. Home can resume an existing job/session without creating an instance or merging histories. Source-link the revised navigation diagram.",
+      "disposition": "Correct from existing session evidence; no new user questionnaire needed."
+    },
+    {
+      "id": "R2",
+      "severity": "High",
+      "title": "Name the browser-first bootstrap and authentication owner",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 105,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 159,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 165,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/CHANGE-IMPACT.md",
+          "line": 23,
+          "label": "CHANGE-IMPACT.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/14-firstrun-packaging-placement.md",
+          "line": 95,
+          "label": "research/14-firstrun-packaging-placement.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/17-workflow-tauri-python-sidecar.md",
+          "line": 71,
+          "label": "research/17-workflow-tauri-python-sidecar.md"
+        }
+      ],
+      "finding": "The candidate promises Start local runtime, supervision and OS credential writes while choosing a browser-client v1 and deferring Tauri. It never selects the privileged process that performs those actions or the browser authentication bridge. The inspected auth helper validates reference/principal shape; that is not proof of a live authenticated connection.",
+      "consequence": "A launcher, a per-user service and a manually started daemon all fit the prose but disagree on lifetime, installation, port/root ownership, credential custody and Stop local runtime.",
+      "correction": "Choose and describe one v1 bootstrap owner. Specify local/static origins, daemon discovery, stable state directory, duplicate-instance prevention, start/readiness/stop, browser credential establishment and validation, HTTP-query and WebSocket authorization, allowed origins, and reconnect. Credential references identify stored material; possession of a ref alone must not become proof of the operator. If browser v1 requires an externally running daemon, say so and make Start local an honest setup path until a native owner exists. Preserve the separate live CT-40 server prerequisite.",
+      "closure": "Provide an end-to-end sequence from a machine with no running daemon to authenticated initialize/query/invoke, plus failure, second-launch, window-close, daemon-stop and remote-disconnect cases. Name owners and required backend changes. An architecture sequence is required now; executed install proof belongs to implementation.",
+      "disposition": "Architectural choice for Grok to resolve with a justified default; do not silently force Tauri or invent a second orchestrator."
+    },
+    {
+      "id": "R3",
+      "severity": "High",
+      "title": "Separate chat from operation invocation and bind conversation persistence",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 117,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 141,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 251,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 33,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/10-transport-reconnect-ops.md",
+          "line": 296,
+          "label": "research/10-transport-reconnect-ops.md"
+        }
+      ],
+      "finding": "AD-4 permits Home chat without an instance. AD-8 and the sequence diagram route composer submissions/send-message through dispatchInvoke, which constructs an InvocationEnvelope requiring an instance. A product-session context row also does not by itself define the authoritative conversation history, pending questions or stream routing.",
+      "consequence": "Two implementations can disagree on the Send method, instance requirement, history query and storage owner. Reconnect might restore grants and references while losing messages or routing a question to the wrong visible app.",
+      "correction": "Define chat-send and granted tool-invoke as separate host contracts, reusing existing mailbox/session facilities where suitable. Name the durable history owner/query and binding among psess, engine runs, messages, questions and jobs. Specify send acknowledgement/deduplication, drafts, concurrent streams, stale/revised answers and reference lifetime. Do not manufacture a synthetic app instance just to send Home chat.",
+      "closure": "Trace Home send with no selected instance, a later authorized tool call, two concurrent conversations, app switching, stale question answer, crash/reconnect and history restoration. Remove the contradictory invoke-only send path.",
+      "disposition": "Resolve the contradiction and durable mapping before downstream documentation."
+    },
+    {
+      "id": "R4",
+      "severity": "High",
+      "title": "Make the app/view contribution contract usable by independent builders",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 129,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 183,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 61,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/11-pack-view-contribution-ui.md",
+          "line": 31,
+          "label": "research/11-pack-view-contribution-ui.md"
+        }
+      ],
+      "finding": "Optional navigation, views and copilot settings remain request blobs. The candidate does not bind how a pack supplies them, how the host discovers a renderer and compatible schema, or how lifecycle/failure isolation works. Checking an embedded action against any grant in a session also leaves its intended contribution/instance context ambiguous.",
+      "consequence": "A pack author and shell author can both comply yet disagree on the same app descriptor. A generated view can accidentally select authority from a broader session instead of acting through its host-bound context.",
+      "correction": "Define a versioned request-DTO schema and host ingestion/loading path without making view:* a grant or minting a new contribution point. Bind each mounted native/generated/iframe view to host-owned instance, contribution, session and action context. Reuse parent GrantRecord matching on contribution, instance/config, op/version, effect, parameter ceiling and account scope; do not create view-specific grants or another registry. Untrusted specs/frames supply declared actions and schema-valid inputs; host-derived grant, target and caller fields must not be renderer-selected. Specify supported slots, compatibility, mount/dispose, unsupported-renderer fallback and error isolation. Pin the MCP Apps protocol profile and explicitly decline unsupported app-provided-tool negotiation.",
+      "closure": "Provide one widget-heavy app, one graph/code app and one headless pack example against the same contract. Include two instances with overlapping op names/grants, malformed metadata, disabled contribution, adapter mount failure and a frame attempting a different target. Show who refuses each case.",
+      "disposition": "Complete the host/pack contract; retain existing authorization rather than adding a parallel permission system."
+    },
+    {
+      "id": "R5",
+      "severity": "High",
+      "title": "Close authoring and ML lifecycle contracts",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 147,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 39,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/EXPERIENCE-AND-LAYOUT.md",
+          "line": 72,
+          "label": "EXPERIENCE-AND-LAYOUT.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/03-EXPERIENCE-SCOPE.md",
+          "line": 27,
+          "label": "03-EXPERIENCE-SCOPE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/03-EXPERIENCE-SCOPE.md",
+          "line": 30,
+          "label": "03-EXPERIENCE-SCOPE.md"
+        }
+      ],
+      "finding": "The binding graph contract largely covers selection, expansion and running an already registered template. It does not close create/edit/save/validate/diff/package/enable/grant behavior. An identified draft/version is insufficient to bind a test run to immutable bytes. ML evaluation is named but not specified beyond generic Run/Results.",
+      "consequence": "Builders may keep drafts only in a browser, register temporary runnable versions, or overwrite a draft label with incompatible consequences. The result could be a graph viewer rather than the capability-building platform discussed throughout the session.",
+      "correction": "Distinguish editor draft/revision, immutable template version, installed pack/instance and run/JobHandle. Define transitions, mutation owner, validation invalidation, conflicts, preview, test-run eligibility, publication and change-request application. Choose whether draft runs are supported and how their exact bytes are pinned; otherwise refuse them explicitly until the required lifecycle completes. Add one non-trading ML journey through dataset/features/split, leakage checks, code/model configuration, execution target, run inspection, comparison and artifact lineage within the accepted graph/code layout.",
+      "closure": "Trace edit after validation, Run V1 while editing V2, reopen after a crash, incompatible comparison inputs and unavailable GPU/target. Show an app-use change request moving to authorized authoring without mutating the running instance or unioning grants.",
+      "disposition": "Complete the behavioral contract, not every editor implementation or every future ML algorithm."
+    },
+    {
+      "id": "R6",
+      "severity": "High",
+      "title": "Resolve resource attachment and Library lifecycle gaps",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 135,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/EXPERIENCE-AND-LAYOUT.md",
+          "line": 64,
+          "label": "EXPERIENCE-AND-LAYOUT.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 41,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/13-library-lifecycle.md",
+          "line": 146,
+          "label": "research/13-library-lifecycle.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/research/13-library-lifecycle.md",
+          "line": 175,
+          "label": "research/13-library-lifecycle.md"
+        }
+      ],
+      "finding": "Uploads are promised as artifact fp1 references without an identified ingest/resolution contract. Knowledge citations and widget/filter context do not automatically fit the closed selected_refs set. The detailed Library research still marks several lifecycle actions unresolved, while the binding companion mostly says open/reference/cite.",
+      "consequence": "A UI could hash a file without ensuring the selected runtime possesses its bytes, lose widget provenance, disguise a Knowledge citation as a different identity, or invent generic Library CRUD against incompatible stores.",
+      "correction": "Map every promised attachment source to its valid existing representation or a deliberate named amendment. Identify upload/staging owner, verification, completeness, interruption/retry, authorization and returned durable reference; a browser-computed hash alone is not host possession. Define message-only versus retained references, inspect/remove and unavailable recovery. Promote a compact per-resource Library action matrix from the research: supported, refused or deferred preview/open/use/reference/save/fork/import/export/upgrade actions, with owners and return navigation.",
+      "closure": "Cover file/image upload, dataset/version, app instance, widget result, Knowledge citation, missing/deleted item, partial remote transfer and locate-in-Library/return. Preserve the draft and source identity; do not silently widen enums or create a universal resource store.",
+      "disposition": "Make support explicit; unsupported verbs may be deferred with an honest UI and revisit condition."
+    },
+    {
+      "id": "R7",
+      "severity": "High",
+      "title": "Join run-control, compatibility and delivery journeys to concrete contracts",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 171,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 40,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/JOURNEYS.md",
+          "line": 54,
+          "label": "JOURNEYS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/JOURNEYS.md",
+          "line": 62,
+          "label": "JOURNEYS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/DELIVERY-AND-QA.md",
+          "line": 18,
+          "label": "DELIVERY-AND-QA.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/05-RETURN-FOR-REVIEW.md",
+          "line": 19,
+          "label": "05-RETURN-FOR-REVIEW.md"
+        }
+      ],
+      "finding": "Journey outcomes, component events and backend owners are separate lists. Cancel has no unique frontend-host/wire route despite JobHandle authority being named. Producer, product-session command and invocation identities are not bound across tabs. J-UI-10 tests pack/host enable compatibility, and J-UI-12 tests pack activation; neither covers its similarly named UI/core handshake or installed-product requirement.",
+      "consequence": "UI and daemon stories can implement different cancel/envelope paths or command identities. Delivery can report the expected journey titles while never checking the actual client/core boundary or launch outside the checkout.",
+      "correction": "Add concise intent→component state→identity→command/query→owner→ack/result→recovery→test-class traces. Specify the UI adapter/wire mapping to inherited JobHandle.cancel coordinated authority, existing principal/grant checks, stable command identity and lost-ack reconciliation; preserve first-terminal-wins and do not invent a second cancel dialect. Define producer cardinality, per-producer wire-id uniqueness and product-session command_id uniqueness across tabs; keep these distinct from invocation idempotency. Add client/core protocol/capability mismatch and deployed-product launch/update/recovery journeys separately from pack lifecycle. Cover the remaining trading/risk, operations and specialized-surface obligations with supported behavior or explicit owner/defer/revisit entries. Define representative graph/chart/table/conversation workloads and where acceptance budgets are set before performance-sensitive choices are frozen.",
+      "closure": "Trace lost ack, cancel racing completion, two tabs editing one session, protocol incompatibility, first-run provider failure and deployed-client recovery. Pick a first vertical slice with real authenticated transport, durable result/history restoration and one meaningful widget/headless or graph operation. Label all proposed tests unexecuted until actually run.",
+      "disposition": "Complete the acceptance and integration contract. This does not require starting the full backend audit or executing the future test suite now."
+    },
+    {
+      "id": "R8",
+      "severity": "Medium",
+      "title": "Separate accepted constraints from unaccepted proposals",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 14,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 101,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/DECISIONS-AND-OPEN.md",
+          "line": 19,
+          "label": "DECISIONS-AND-OPEN.md"
+        }
+      ],
+      "finding": "The candidate says not operator-accepted while every local AD is marked ADOPTED. Its decision ledger simultaneously calls process, attachment, style and other choices proposals. Independent-dimension terminology and exact expansion containers also include assistant framing rather than verbatim user decisions.",
+      "consequence": "Documentation Factory may turn a recommendation into a settled user requirement and stop questioning it.",
+      "correction": "Label user-directed/inherited constraints, observed implementation, candidate decisions and deferred choices consistently. Grok can recommend and converge on defaults without falsely attributing approval. Reconcile the memlog, spine and companion open issues after the amendment.",
+      "closure": "Each new consequential choice has provenance, status and rationale; unresolved research items have an explicit disposition. No proposal is stamped user-accepted merely because a reviewer suggested it.",
+      "disposition": "Editorial/status correction before ingest; no extra approval ceremony is implied."
+    },
+    {
+      "id": "R9",
+      "severity": "Medium",
+      "title": "Close the scaffold runtime floor and conflicting component major",
+      "evidence": [
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/ARCHITECTURE-SPINE.md",
+          "line": 105,
+          "label": "ARCHITECTURE-SPINE.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/COMPONENT-CONTRACTS.md",
+          "line": 20,
+          "label": "COMPONENT-CONTRACTS.md"
+        },
+        {
+          "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/DELIVERY-AND-QA.md",
+          "line": 48,
+          "label": "DELIVERY-AND-QA.md"
+        }
+      ],
+      "finding": "The spine pins bits-ui 2.19.3 but the component contract says 1.x. The build seed omits Node/package-manager constraints, while the verified Vite/plugin combination has a higher Node floor than SvelteKit alone. Exact lockfile work is legitimately deferred.",
+      "consequence": "Two scaffolds can both follow the documents yet install incompatible major APIs or fail before application work starts.",
+      "correction": "Reconcile bits-ui and choose a supported Node/build-tool policy for the selected Vite/Kit lines. Record package manager and lockfile ownership; verify the precise resolved adapters/plugins at the isolated scaffold gate. Do not chase new majors just to be current.",
+      "closure": "One consistent seed; later clean dependency install, svelte-check and production build recorded against the actual lockfile and runtime. No successful scaffold is claimed by this review.",
+      "disposition": "Correct now; exact transitive pins remain a scaffold task."
+    }
+  ],
+  "rubric": [
+    [
+      "UX-01 Startup / reconnect",
+      "Partial — R2, R7",
+      "Partial readiness is sound; native bootstrap/auth ownership and deployed launch remain unresolved."
+    ],
+    [
+      "UX-02 Home / platform",
+      "Needs correction — R1",
+      "Preserve independent Authoring access and Home work/attention purpose."
+    ],
+    [
+      "UX-03 Copilot / composer",
+      "Partial — R3, R6",
+      "Scoped sessions are sound; send/history/question and reference contracts need closure."
+    ],
+    [
+      "UX-04 App / widgets",
+      "Partial — R4",
+      "Spatial family and expand/return invariant hold; registration, instance binding and fallback need definition."
+    ],
+    [
+      "UX-05 Library",
+      "Partial — R6",
+      "Typed identities hold; action/lifecycle gaps remain outside the binding companion."
+    ],
+    [
+      "UX-06 App building",
+      "Incomplete — R4, R5",
+      "The draft-to-package-to-running-instance path is not an implementable contract."
+    ],
+    [
+      "UX-07 Graph / code",
+      "Partial — R5",
+      "Accepted layout retained; editable draft and runnable pin transitions need closure."
+    ],
+    [
+      "UX-08 Charts / data",
+      "Partial — R7",
+      "Financial versus analytics distinction and provenance are sound; data/lifecycle acceptance needs traces."
+    ],
+    [
+      "UX-09 ML evaluation",
+      "Incomplete — R5",
+      "Needs a concrete reproducible data/config/target/run/compare journey in the accepted layout."
+    ],
+    [
+      "UX-10 Trading / risk",
+      "Partial — R7",
+      "Book/BMS and capability-specific paper policy retained; operational behavior or explicit deferrals needed."
+    ],
+    [
+      "UX-11 Operations",
+      "Partial — R7",
+      "Uses existing health/diagnosis correctly; cancel, target and correlated run/log experience needs wiring."
+    ],
+    [
+      "UX-12 Settings / previews",
+      "Partial — R2, R7",
+      "Scope and authority fences retained; file/native/terminal ownership and recovery need closure."
+    ],
+    [
+      "Headless / visual / mixed",
+      "Pass at architecture-policy level",
+      "No required pane/copilot or universal paper gate. Runtime execution is not proved."
+    ],
+    [
+      "Original evidence / layout separation",
+      "Pass with R1 correction",
+      "Original images/dictation remain controlling; no demand to replicate branding or freeze coordinates."
+    ],
+    [
+      "Parent authority / ownership",
+      "Largely preserved",
+      "No need to redesign core taxonomy; remaining renderer and command mappings must preserve these boundaries."
+    ],
+    [
+      "Evidence honesty / process",
+      "Pass with R8/R9 corrections",
+      "Grok identifies missing implementation and stops before coding; candidate status and build seed still conflict."
+    ]
+  ],
+  "deferred": [
+    "Tauri can remain optional. Before its milestone, specify the Rust crate/CLI/JS API/plugin version tuple and window-independent daemon lifetime. A single Tauri version is not every package’s version.",
+    "Browser and Tauri share UI source; byte-identical production output is not established. Browser fallback/rewrite and Tauri index.html need target-specific configuration and direct-load/deep-link acceptance.",
+    "Exact brand colors, exhaustive component catalog, every future mini-app and arbitrary code-to-graph round-tripping are not required for this gate.",
+    "Full backend code review remains a separate stream. Envelope crypto and other backend gaps must have dependency/gate ownership; this review neither resolves nor validates them."
+  ],
+  "adjudication": [
+    "Independent reviewers agreed on amendment before the next stage. Consolidation groups overlapping findings rather than counting every reviewer bullet as another defect.",
+    "The seams reviewer rated bootstrap and chat Critical. This report rates them High architecture blockers: no deployed vulnerability or production incident was demonstrated.",
+    "The initial currency concern about MCP tool support was refined. AD-6 can correctly be read as QMX policy; the required change is an explicit supported protocol/capability profile and enforcement, not a claim that the protocol inherently forbids all app-provided tools.",
+    "Exact Node/adapter/transitive pins, Tauri version tuples and final packaging execution need not be completed by an architecture-only review. The current contract must identify the floor, owner and stage that closes them.",
+    "Home/Copilot may share UI components and even a shell family. The defect is losing Home’s work overview and independent Authoring entry, not a prohibition on component reuse."
+  ],
+  "method": [
+    "Read the complete 451-line supplied Grok return transcript. Snapshot and SHA-256 are preserved under evidence.",
+    "Independent full-session reviewer read the complete captured 15-turn visible-message export, including user corrections, plus the current handoff, board text and source imagery. The latest review request supplements that export. Historical origin transcripts remain in the earlier packet; this turn does not claim a fresh line-by-line reread of both origin exports.",
+    "Parent read all primary candidate companions and relevant research/parent contracts; reopened the original OpenBB and VS Code images. Reviewers checked narrow code seams at integration@34c148b and current primary technical sources.",
+    "Three background gpt-5.6-sol reviewers: full-session rubric (high), adversarial architecture seams (high), technical currency/evidence (medium). BMAD architecture Validate was used; BMAD UX was not.",
+    "Mechanical spine lint passed with zero findings. That checks structure, not completeness, semantics or runtime behavior.",
+    "No application code, branch operation, install, daemon launch, broad test suite, Reticle verdict, Documentation Factory or epics run. Existing candidate files are checked against the start manifest; new review files are additive."
+  ],
+  "next": "Send GROK-CORRECTION-PROMPT.md to the architecture session. It should amend the candidate, supply a finding-by-finding closure map, re-run the focused gate and return here. Do not restart discovery or proceed automatically to Documentation Factory.",
+  "reviews": [
+    {
+      "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/reviews/review-codex-session-rubric.md",
+      "line": 1,
+      "label": "Independent full-session rubric"
+    },
+    {
+      "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/reviews/review-codex-adversarial-seams.md",
+      "line": 1,
+      "label": "Independent architecture seams"
+    },
+    {
+      "path": "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/reviews/review-codex-currency-evidence.md",
+      "line": 1,
+      "label": "Independent technical currency and evidence"
+    }
+  ],
+  "primarySources": [
+    [
+      "SvelteKit SPA deployment",
+      "https://svelte.dev/docs/kit/single-page-apps"
+    ],
+    [
+      "Tauri SvelteKit configuration",
+      "https://v2.tauri.app/start/frontend/sveltekit/"
+    ],
+    [
+      "Tauri sidecar process capabilities",
+      "https://v2.tauri.app/develop/sidecar/"
+    ],
+    [
+      "Vite package metadata",
+      "https://registry.npmjs.org/vite/latest"
+    ],
+    [
+      "MCP Apps stable specification",
+      "https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx"
+    ],
+    [
+      "MCP Apps development specification",
+      "https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/draft/apps.mdx"
+    ]
+  ]
+}

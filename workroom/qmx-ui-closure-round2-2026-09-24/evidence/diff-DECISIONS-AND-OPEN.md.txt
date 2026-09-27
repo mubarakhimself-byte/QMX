@@ -1,0 +1,9 @@
+--- previous/DECISIONS-AND-OPEN.md
++++ current/DECISIONS-AND-OPEN.md
+@@ -23,5 +23,5 @@
+ | ID | Default | Local AD | Status |
+ | --- | --- | --- | --- |
+-| C-SPA | SvelteKit 2.70.3 + adapter-static + `ssr=false`; Node 22; pnpm | AD-2 | C |
++| C-SPA | SvelteKit 2.70.3 + adapter-static + `ssr=false`; Node.js >=22.12.0 <23.0.0; pnpm | AD-2 | C |
+ | C-BOOTSTRAP | Externally running daemon; QMB `qmb host *` owner; browser does not spawn | AD-19 | C |
+ | C-CHAT | `send_message` mailbox; no envelope; `list_mailbox` add | AD-18 | C |

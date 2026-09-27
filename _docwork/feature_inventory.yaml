@@ -536,8 +536,13 @@ features:
       with recorded config otherwise, remote workers dial out and the daemon
       never dials in, outbox depth and spool bytes); and the correlation_missing
       carve-out. Out: any daemon-side state, store or execution (qma-daemon); the
-      qma-ui-contract beyond a deferred stub (GAP-0081, DEC-0333); the UI
-      extension SDK, contribution points and packaging (Deferred, DEC-0333).
+      leftover qma-ui-contract types beyond a stub (GAP-0114); a ui_view
+      contribution point; COMP-UI. Hold Story 41.4 unauthenticated-bind: machine
+      clients stay credential_ref; AM-01 is the /pair/start|/pair/confirm|OPTIONS
+      carve-out. initialize addable names include pairing, list_mailbox,
+      cancel_job, stage_artifact (PUT exists, never a WireCommand), transfer_artifact,
+      transfer_complete, pack_ui_request, get_pack_ui_request, save_editor_draft,
+      get_editor_draft_head, publish_editor_draft (DEC-0500).
       Done: the envelope, families and schemas validate; the initialize
       handshake negotiates protocolVersion additively within a major; attach /
       detach / replay reproduce the durable stream from a since_seq cursor with
@@ -550,7 +555,7 @@ features:
         reason: "qma-wire depends on qma-core (AD-5): the envelope and every command/query/event family carry qma-core-typed payloads and reuse core's typed-refusal shape (DEC-0304), so the definitions package must land first"
     size: multi-pass
     status: planned
-    notes: "The wire contract binds now while the UI is later (DEC-0333); it is the first milestone's reachability surface — a Quant is reached through models over the wire (SRC-15 build order). Ratified by the FINAL spine adopted 2026-08-29 (DEC-0329); implementation authorization arrives only through the factory pipeline."
+    notes: "The wire contract binds now (DEC-0333). Chrome is answered Svelte (DEC-0509); leftover qma-ui-contract types are GAP-0114. Hold Story 41.4 unauthenticated-bind (AM-01). First milestone remains a Quant over the wire. Implementation authorization factory-pipeline-only."
 
   - id: FEAT-0042
     name: "qma-daemon substrate — journal, stores, hooks registry, Task Graph, store lifecycle"
@@ -707,7 +712,7 @@ features:
         reason: "the three ledgers, Agent Bus, scheduler/Routines, memory and knowledge ports, admission gate and telemetry export are daemon subsystems on the journal, stores, leases and hooks registry the substrate lands (DEC-0305, DEC-0334, DEC-0342, DEC-0343); the sole-writer daemon persists every one"
     size: multi-pass
     status: planned
-    notes: "admit / apply / promote are three distinct acts: memory candidates are admitted, RefinementProposals are applied, and only a registered artifact is promoted into the live zone by a human OUTSIDE QMA (L17, DEC-0345). Ledgers are task-level: no global ledger and no per-desk/per-profile ledger store (DEC-0338). Ratified by the FINAL spine adopted 2026-08-29 (DEC-0329); implementation authorization arrives only through the factory pipeline."
+    notes: "admit / apply / promote are three distinct acts: memory candidates are admitted, RefinementProposals are applied, and only a registered artifact is promoted into the live zone by a human OUTSIDE QMA (L17, DEC-0345). Ledgers are task-level: no global ledger and no per-desk/per-profile ledger store (DEC-0338). Hold Story 46.4 Envelope field list for additive product_session_ref excluded from fp1 (DEC-0495). Implementation authorization factory-pipeline-only."
 
   - id: FEAT-0046
     name: "plugin loader + the five desk plugin packs"
@@ -919,7 +924,7 @@ features:
         reason: "qma-daemon's qmf-risk edge is read-and-calculate only over the default-deny surface FEAT-0027 lands; continuation config does not mint risk rules (DEC-0347, DEC-0278)"
     size: multi-pass
     status: planned
-    notes: "Connect-wave cluster. GAP-0062 (host machine) and GAP-0081 (rung 4) stay deferred. Implementation authorization factory-pipeline-only."
+    notes: "Connect-wave cluster. GAP-0062 (host machine) stays deferred. GAP-0081 chrome is answered by FEAT-0064 (DEC-0509); leftover types are GAP-0114. Implementation authorization factory-pipeline-only."
   - id: FEAT-0039
     name: "QML structure-generation authoring of new CT-33/CT-34 candidates"
     scope: >-
@@ -1190,7 +1195,7 @@ features:
         reason: "coordinated QMB door occupancy and ExperimentSpec lineage FEAT-0033 lands remain distinct from Task Graph control-flow edges (DEC-0420)"
     size: multi-pass
     status: planned
-    notes: "Feeds from GAP-0095. Implementation authorization factory-pipeline-only."
+    notes: "Feeds from GAP-0095. Hold Epic 57 handle record for optional originating_product_session_ref (CT-46, states unchanged, DEC-0496). Implementation authorization factory-pipeline-only."
 
   - id: FEAT-0056
     name: "Four proofs as thin fixtures (Book regression; ATC simulate; recipe-def; app-use change-request; pack export)"
@@ -1247,3 +1252,258 @@ features:
     size: multi-pass
     status: planned
     notes: "Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0058
+    name: "Host SDK pack-and-grant (optional copilot_profile; authoring instance optional; caller_kind)"
+    scope: >-
+      In: pack manifest requests operations, optional view:* wire DTOs, optional
+      copilot_profile request blob, requested_capabilities; host grants
+      GrantRecords (DEC-0452, DEC-0453); ProductSessionProfile authoring may omit
+      app_instance_id and selected_refs gains kind instance_id with exactly-one
+      rule on invoke (DEC-0454, DEC-0463); InvocationEnvelope gains caller_kind
+      user|agent|workflow (DEC-0455, DEC-0464); envelope instance_id remains
+      required on invoke; no new COMP or CT (DEC-0462). Out: third profile;
+      view:* as contribution point; installing as granting; chrome (GAP-0081).
+      Done means the host SDK field changes are specified; implementation
+      authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0452, DEC-0453, DEC-0454, DEC-0463, DEC-0464, DEC-0462]
+    components: [COMP-QMA-CORE, COMP-QMA-WIRE, COMP-QMA-DAEMON]
+    blocked_by:
+      - id: FEAT-0052
+        reason: "caller_kind and pack descriptors extend InvocationEnvelope / GrantRecord / operation descriptor FEAT-0052 lands (DEC-0416, DEC-0437, DEC-0464)"
+      - id: FEAT-0053
+        reason: "authoring app_instance_id optionality amends product_session CAS FEAT-0053 lands (DEC-0421, DEC-0463)"
+    size: multi-pass
+    status: planned
+    notes: "First epic after this documentation-factory pass. Feeds GAP-0101, GAP-0102, GAP-0103. Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0059
+    name: "Daemon JSON-lines operator logs plus diagnosis query"
+    scope: >-
+      In: qma-daemon stdlib JSON-lines with required ts, level, event,
+      correlation_id and optional instance_id, op_id, logical_invocation_id,
+      graph_run_id when present (DEC-0456); headless diagnosis query returns
+      failure_class grant|workflow|view|dependency|host plus JobHandle plus
+      healthy (DEC-0456); QMA telemetry store remains the trace/metric plane;
+      logs are not evidence. Out: fourth observability product; extending
+      qmn/FAILURES.md; agents authoring telemetry. Done means diagnosis and
+      daemon logs are specified; implementation authorization still arrives
+      only through the factory pipeline.
+    decisions: [DEC-0456, DEC-0465, DEC-0467]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: "diagnosis fields join instance_id / op_id / logical_invocation_id from the host SDK envelope FEAT-0058 lands (DEC-0455, DEC-0456)"
+      - id: FEAT-0042
+        reason: "daemon JSON-lines and health queries extend existing daemon sqlite / journal projections FEAT-0042 lands, not a new store class (DEC-0429, DEC-0456)"
+    size: multi-pass
+    status: planned
+    notes: "Feeds GAP-0104, GAP-0105. Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0060
+    name: "Default host retry for effect none/read"
+    scope: >-
+      In: host/SDK retries effect none and read until success, typed
+      retryability=NO, or host-registered attempt ceiling (DEC-0457); parent
+      AD-24 matrix unchanged — no blind external-egress retry; CAS conflict is
+      not a retry; unknown-blocked never auto-retried; pack may set attempts
+      to zero and must not exceed host ceiling. Out: per-pack retry dialect;
+      retry of every effect; minting the ceiling number (GAP-0108). Done means
+      default retry is specified; implementation authorization still arrives
+      only through the factory pipeline.
+    decisions: [DEC-0457, DEC-0464, DEC-0467]
+    components: [COMP-QMA-CORE, COMP-QMA-DAEMON]
+    blocked_by:
+      - id: FEAT-0058
+        reason: "retry is host behaviour on the pack-and-grant envelope and effect_class FEAT-0058 lands (DEC-0452, DEC-0457)"
+      - id: FEAT-0052
+        reason: "effect-class idempotency matrix and reconcile_policy FEAT-0052 lands remain the retry law (DEC-0437, DEC-0457)"
+    size: multi-pass
+    status: planned
+    notes: "Feeds GAP-0106. Ceiling number is GAP-0108. Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0061
+    name: "Nested Mission invoke (workflow-to-workflow)"
+    scope: >-
+      In: workflow-to-workflow at runtime is parent-AD-3 invoke of the callee
+      template start/query-state/cancel/await creating one nested Mission /
+      one Task Graph / one JobHandle (DEC-0455); include-at-author is a new
+      versioned Graph Template; merging two live Task Graphs is refused;
+      nested invoke does not union grants. Out: live-graph splice; a fifth
+      composition mode; widget-owned invoke. Done means nested Mission invoke
+      is specified; implementation authorization still arrives only through
+      the factory pipeline.
+    decisions: [DEC-0455, DEC-0462]
+    components: [COMP-QMA-DAEMON, COMP-QMA-CORE]
+    blocked_by:
+      - id: FEAT-0055
+        reason: "nested Mission JobHandle occupancy assumes durable Task Graph edges and outbox FEAT-0055 lands (DEC-0439, DEC-0455)"
+      - id: FEAT-0058
+        reason: "callee invoke rides caller_kind=workflow and envelope instance_id from the host SDK FEAT-0058 lands (DEC-0455, DEC-0464)"
+    size: multi-pass
+    status: planned
+    notes: "Feeds GAP-0107. Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0062
+    name: "Listing axes plus instance health() for copilot/CLI"
+    scope: >-
+      In: host exposes parent AD-15 listing axes including healthy, and
+      instance health() as the existing component typed-report distinct from
+      pack published (DEC-0456, DEC-0428); copilot and CLI consume the same
+      headless queries. Out: chrome dashboard (GAP-0081 / GAP-0100); treating
+      published as healthy. Done means listing and health queries are
+      specified; implementation authorization still arrives only through the
+      factory pipeline.
+    decisions: [DEC-0456, DEC-0428, DEC-0462]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: "health and listing join pack instance rows and GrantRecords the host SDK FEAT-0058 lands (DEC-0452, DEC-0456)"
+      - id: FEAT-0051
+        reason: "published vs authorized listing axes reuse ContributionHit concatenate FEAT-0051 lands (DEC-0415, DEC-0428)"
+    size: multi-pass
+    status: planned
+    notes: "Feeds GAP-0105. Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0063
+    name: "Thin fixtures for pack-and-grant journeys (headless, optional panel, home pick, nested Mission, retry, diagnosis)"
+    scope: >-
+      In: thin fixtures proving J-KIT-01 headless pack with no copilot
+      (DEC-0452, DEC-0454); J-KIT-02 optional in-app panel cannot apply
+      (DEC-0454, DEC-0442); J-KIT-03 home authoring exactly-one instance_id
+      (DEC-0463); J-KIT-05 nested Mission not live merge (DEC-0455);
+      J-KIT-06 host retry none/read and no blind external-egress
+      (DEC-0457); J-KIT-07 weak model fills schemas (DEC-0458). Out:
+      inventing chrome; claiming e2e adoption at 34c148b (DEC-0465).
+      Done means the fixtures are specified for factory stories;
+      implementation authorization still arrives only through the factory
+      pipeline.
+    decisions: [DEC-0452, DEC-0454, DEC-0455, DEC-0456, DEC-0457, DEC-0458, DEC-0463, DEC-0465]
+    components: [COMP-QMA-CORE, COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: "kit journeys invoke the host SDK field changes FEAT-0058 lands (DEC-0452, DEC-0463, DEC-0464)"
+      - id: FEAT-0059
+        reason: "diagnosis journey reads failure_class and JSON-lines FEAT-0059 lands (DEC-0456)"
+      - id: FEAT-0060
+        reason: "retry journey requires default host retry FEAT-0060 lands (DEC-0457)"
+      - id: FEAT-0061
+        reason: "nested-workflow journey requires nested Mission invoke FEAT-0061 lands (DEC-0455)"
+      - id: FEAT-0062
+        reason: "headless listing/health journey requires listing axes FEAT-0062 lands (DEC-0456)"
+      - id: FEAT-0056
+        reason: "kit fixtures trail Workflows thin proof fixtures FEAT-0056 lands so change-request and pack export stay the same envelopes (DEC-0442, DEC-0443)"
+    size: multi-pass
+    status: planned
+    notes: "Implementation authorization factory-pipeline-only."
+
+  - id: FEAT-0064
+    name: 'Differentiated-shell Svelte host (rail, stack seed, unique issuers, UI lens)'
+    scope: >-
+      In: SvelteKit static SPA host with platform rail Home / Copilot / Library / Authoring (DEC-0469, DEC-0470); unique issuers dispatchInvoke / dispatchChat / dispatchCancel (DEC-0474, DEC-0484, DEC-0489); native-first presentation lanes (DEC-0472); UI lens design-system plus screen specs; charts provenance (DEC-0483); sibling integration stream (DEC-0482). Out: COMP-UI; sixth COMP; Tauri as v1-required (GAP-0112); trading ticket chrome (GAP-0113); claiming a frontend exists at 34c148be (DEC-0507). Done means chrome contracts are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0469, DEC-0470, DEC-0471, DEC-0472, DEC-0473, DEC-0474, DEC-0475, DEC-0476, DEC-0477, DEC-0478, DEC-0479, DEC-0480, DEC-0482, DEC-0483, DEC-0504, DEC-0505]
+    components: [COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: 'shell consumes pack-and-grant host SDK fields FEAT-0058 lands (DEC-0452, DEC-0463, DEC-0464)'
+    size: multi-pass
+    status: planned
+    notes: 'Feeds GAP-0081 / GAP-0100 answered delivery. Chrome consumes planned FEAT-0059/0060/0062 when those slices land; they stay out of blocked_by. Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0065
+    name: 'QMB host lifecycle plus first operator plus recover-control'
+    scope: >-
+      In: qmb host start|status|stop|configure|rotate-control|recover-control (DEC-0494, DEC-0503); local_operator journal projection; host_control token; product QMA_DAEMON_ROOT (DEC-0510 A14); C1 lost-token recovery without presenting the lost token; narrow OS-owner stop-when-file-missing exception. Out: browser spawn of Python; QMB writing daemon sqlite; reminting principal on recover; wiping journals. Done means host verbs are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0494, DEC-0503, DEC-0506, DEC-0507]
+    components: [COMP-QMB, COMP-QMA-DAEMON]
+    blocked_by:
+      - id: FEAT-0042
+        reason: 'host-control and local_operator are journal projections on the daemon substrate FEAT-0042 lands (DEC-0334)'
+    size: multi-pass
+    status: planned
+    notes: 'Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0066
+    name: 'Pairing admission (proof versus record, Origin-never-sufficient, CORS, renew, origin-revoke)'
+    scope: >-
+      In: pairing_proof bearer plus pairing_record_id journal identity (DEC-0492); issuance Origin-never-sufficient (DEC-0491, DEC-0485); unauthenticated carve-out AM-01 (DEC-0493); authenticated /pair/renew; qmb host pair plus pair revoke --origin <origin> (creating-event journal_seq < R for that Origin) and --session <pairing_record_id> only (DEC-0492); origin-revoke barrier C2; memory plus sessionStorage client home (DEC-0501); CORS exact origin. Out: cookies; localStorage proof; Origin-only auto-approve; minting TTL number (GAP-0109). Done means pairing contracts are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0485, DEC-0491, DEC-0492, DEC-0493, DEC-0501, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE, COMP-QMB]
+    blocked_by:
+      - id: FEAT-0065
+        reason: 'pairing issue requires first-operator host-control and TTL configure FEAT-0065 lands (DEC-0503)'
+      - id: FEAT-0041
+        reason: 'pairing HTTP and WS subprotocol sit on the CT-40 listener FEAT-0041 lands (DEC-0304, DEC-0493)'
+    size: multi-pass
+    status: planned
+    notes: 'Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0067
+    name: 'Mailbox product_session_ref plus list_mailbox plus dispatchChat'
+    scope: >-
+      In: additive Envelope product_session_ref excluded from fp1 (DEC-0495, DEC-0484); list_mailbox addable query; dispatchChat unique issuer; principal equality when the field is present; journal-lifetime pair+hash collision (AM-12); lost-ack lookup by (producer_id, id). Out: routing Send through InvocationEnvelope; replacing Story 46.4; a parallel conversation store. Done means mailbox session binding is specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0484, DEC-0495, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0045
+        reason: 'durable mailbox Envelope and journal message.* delivery FEAT-0045 lands remain the owner (DEC-0319, Story 46.4)'
+      - id: FEAT-0041
+        reason: 'list_mailbox is an addable CT-40 query on the wire vocabulary FEAT-0041 lands (DEC-0304)'
+      - id: FEAT-0066
+        reason: 'send_message and list_mailbox require a paired operator principal FEAT-0066 lands (DEC-0493)'
+    size: multi-pass
+    status: planned
+    notes: 'Amends Story 46.4 field list; does not replace it. Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0068
+    name: 'Artifact PUT plus reachable transfer plus transfer_complete'
+    scope: >-
+      In: authenticated HTTP PUT /artifacts/stage (DEC-0488, DEC-0497, DEC-0502); refuse interrupted v1; transfer_artifact ticket on recorded reachable TLS; dest-authored transfer_complete; machine GET /artifacts/<fp1> with ticket header. Out: JSON-RPC byte bodies; silent local fallback; minting stage_max_bytes (GAP-0110); daemon dial-in. Done means ingest and transfer are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0488, DEC-0497, DEC-0502, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0042
+        reason: 'artifact store and before_artifact_register live on the daemon substrate FEAT-0042 lands'
+      - id: FEAT-0066
+        reason: 'PUT and transfer require authenticated pairing or machine credential FEAT-0066 lands (DEC-0493)'
+    size: multi-pass
+    status: planned
+    notes: 'Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0069
+    name: 'Editor drafts plus publish_editor_draft plus local authoring-pack first Run'
+    scope: >-
+      In: daemon-issued editor_draft_id; editor_draft_head CAS expected_revision; get_editor_draft_head; publish_editor_draft into local authoring pack then parent AD-30 enable (DEC-0487, DEC-0499). Out: using AD-22 RefinementProposal as the graph editor store; draft Run; distributable export as first enable. Done means draft/publish/first-Run are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0487, DEC-0499, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: 'first Run enable rides pack-and-grant host SDK and parent AD-30 FEAT-0058 lands (DEC-0452)'
+      - id: FEAT-0068
+        reason: 'draft bytes use the AD-9 PUT channel FEAT-0068 lands (DEC-0497)'
+    size: multi-pass
+    status: planned
+    notes: 'Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0070
+    name: 'PackUiRequest ingest plus ActionContext plus get_pack_ui_request'
+    scope: >-
+      In: ingest qmx.ui.pack_ui_request.v1 at enable; get_pack_ui_request; host-minted ActionContext; GRANT_AMBIGUOUS; nav view_ids (DEC-0481, DEC-0486, DEC-0498). Out: nesting copilot_profile inside PackUiRequest; ui_view contribution point; duplicating Epic 60.1. Done means pack UI request contracts are specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0481, DEC-0486, DEC-0498, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0058
+        reason: 'PackUiRequest is additional beside optional copilot_profile FEAT-0058 / Epic 60.1 lands (DEC-0452, DEC-0454)'
+    size: multi-pass
+    status: planned
+    notes: 'Do not hold Epic 60.1. Implementation authorization factory-pipeline-only.'
+  - id: FEAT-0071
+    name: 'cancel_job plus originating_product_session_ref plus dispatchCancel'
+    scope: >-
+      In: addable cancel_job; optional originating_product_session_ref at UI admit; dispatchCancel unique issuer; queued-to-running same command_id; terminal recorded no-op (DEC-0489, DEC-0490, DEC-0496). Out: mapping cancel to stop_run; observer cancel; changing JobHandle states. Done means cancel authority is specified; implementation authorization still arrives only through the factory pipeline.
+    decisions: [DEC-0489, DEC-0490, DEC-0496, DEC-0506]
+    components: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocked_by:
+      - id: FEAT-0055
+        reason: 'cancel rides durable JobHandle parent vocabulary FEAT-0055 lands (DEC-0439)'
+      - id: FEAT-0066
+        reason: 'UI cancel_job requires authenticated pairing FEAT-0066 lands (DEC-0493, DEC-0496)'
+      - id: FEAT-0041
+        reason: 'addable cancel_job name rides live CT-40 initialize FEAT-0041 lands (DEC-0500)'
+    size: multi-pass
+    status: planned
+    notes: 'Amends Epic 57 handle record additively; states unchanged. Implementation authorization factory-pipeline-only.'

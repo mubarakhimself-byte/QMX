@@ -5,10 +5,10 @@ type: adr
 status: ratified
 component: COMP-QMA-CORE
 depends_on: [COMP-QMA-CORE, COMP-QMA-WIRE, COMP-QMA-DAEMON, COMP-QMB, COMP-QML, COMP-QMN, COMP-QMF-RISK, COMP-QMF-REGISTRY, COMP-QMF-DATA]
-decisions: [DEC-0414, DEC-0415, DEC-0416, DEC-0417, DEC-0418, DEC-0419, DEC-0420, DEC-0421, DEC-0422, DEC-0423, DEC-0424, DEC-0425, DEC-0426, DEC-0427, DEC-0428, DEC-0429, DEC-0430, DEC-0431, DEC-0432, DEC-0433, DEC-0434, DEC-0435, DEC-0436, DEC-0437, DEC-0438, DEC-0439, DEC-0440, DEC-0441, DEC-0442, DEC-0443, DEC-0444, DEC-0445, DEC-0446, DEC-0447, DEC-0448, DEC-0449, DEC-0450, DEC-0451]
+decisions: [DEC-0414, DEC-0415, DEC-0416, DEC-0417, DEC-0418, DEC-0419, DEC-0420, DEC-0421, DEC-0422, DEC-0423, DEC-0424, DEC-0425, DEC-0426, DEC-0427, DEC-0428, DEC-0429, DEC-0430, DEC-0431, DEC-0432, DEC-0433, DEC-0434, DEC-0435, DEC-0436, DEC-0437, DEC-0438, DEC-0439, DEC-0440, DEC-0441, DEC-0442, DEC-0443, DEC-0444, DEC-0445, DEC-0446, DEC-0447, DEC-0448, DEC-0449, DEC-0450, DEC-0451, DEC-0461, DEC-0462, DEC-0463, DEC-0464, DEC-0465]
 sources: [_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/CHALLENGE-RECONCILIATION.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/OPERATOR-QUESTIONS.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/CONTRACTS.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/JOURNEYS.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/REQUIREMENTS-ADDENDUM.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/CONFLICT-REGISTER.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/SCENARIO-CATALOG.jsonl, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/transcript-refresh-20260919/Explore-Node-Editor-Architecture.md, _docwork/workflows-increment-brief.md, _docwork/riders/workflows-construction-kit-2026-09-19.md, _docwork/ledger.yaml, docs/decisions/ADR-0020-qma-agentic-system.md, docs/decisions/ADR-0022-workbench-expansion.md, docs/decisions/ADR-0023-qml-research-expansion.md]
 generated: 2026-09-19
-verified: 2026-09-19
+verified: 2026-09-23
 stale_after: 1y
 ---
 
@@ -133,3 +133,20 @@ Not vetoable here: no sixth COMP; dummy Book `INVALID_INPUT`; sessions ≠ tabs;
 ## Codex catalog pointer
 
 Eighty-five Codex scenario IDs live at `_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/SCENARIO-CATALOG.jsonl` as specification oracles. Do not mint 85 `SCN-*.md` files for them (DEC-0445). Golden documentation scenarios for this fold are SCN-0018 (ContributionHit honesty), SCN-0019 (app-use change-request), SCN-0020 (two trading compositions), SCN-0021 (outbox / JobHandle), and SCN-0022 (pack lifecycle headless). BDD/Gherkin is specification, not proof that feature files execute (DEC-0447).
+
+## Follow-up — 2026-09-23 pack-and-grant kit (ADR-0025)
+
+This ADR's 2026-09-19 Decision stands as written. The 2026-09-23 pack-and-grant spine ([ADR-0025](ADR-0025-pack-and-grant-kit.md), DEC-0461) composes over the same applications and does not mint a sixth COMP, a new CT, or a new `depends_on` edge (DEC-0462).
+
+- **Named parent AD-8 amendment (DEC-0463).** `app_instance_id` MAY be absent when `profile=authoring`; remains required for `app-use`. Closed `selected_refs` kinds gain `instance_id`. Home invoke requires exactly one such ref; envelope `instance_id` remains required on every invoke. No third profile. Do not set DEC-0421 `superseded_by`.
+- **Named parent AD-24 amendment (DEC-0464).** InvocationEnvelope gains closed `caller_kind`: `user | agent | workflow`. Envelope `instance_id` remains required on every invoke. Do not set DEC-0437 `superseded_by`.
+- **QMA is host, not owner of every op (DEC-0453).** Execution of each `op_id` is the COMP named on the descriptor.
+- **Copilot is one identity; panel optional (DEC-0454).** Packs may omit `copilot_profile`. Install/enable is not grant.
+- **`failure_class` (DEC-0456).** Closed `grant | workflow | view | dependency | host`. Daemon JSON-lines; logs ≠ journals. Do not extend `qmn/FAILURES.md`.
+- **Retry default (DEC-0457).** Host `none`/`read` only; parent effect-class matrix is not loosened.
+- **json-render / MCP Apps (DEC-0459).** Remain unpinned presentation adapters. GAP-0081 / GAP-0100 are out-of-scope as kit holes (DEC-0468): the user interface is not designed.
+- **Wiring honesty (DEC-0465).** Inspect `integration@34c148b` for connect/amend vs absent. Parent freeze `270e992` still applies for this ADR's original Decision (DEC-0450). Fixtures are not e2e (DEC-0286).
+
+## Follow-up — 2026-09-25 UI host plus backend-delta (ADR-0026)
+
+This ADR's 2026-09-19 Decision stands as written. The 2026-09-25 UI fold ([ADR-0026](ADR-0026-ui-host-and-backend-delta.md), DEC-0509) answers GAP-0081 chrome and GAP-0100 observation surfaces as **UI sitting law**. They remain out-of-scope as kit holes (DEC-0468). The Svelte host is a client of `qma-wire`, not a COMP (DEC-0505). Named pairing / host-control / mailbox-field amendments are AM-01..AM-17 (DEC-0506) and do not rewrite this ADR's Decision. AM-03 adds named projections `pairing_pending`, `pairing_session`, `editor_draft_head`, `artifact_transfer_ticket`, `local_operator` to the DEC-0429 sqlite class. AM-04 adds optional `originating_product_session_ref` at UI admit (CT-46). GAP-0081 answered is not permission for `ui_view`.

@@ -1,0 +1,530 @@
+[
+  {
+    "source": "backend",
+    "path": ".memlog.md",
+    "bytes": 7879,
+    "sha256": "a193b24c5b552a35e36c6890600c596163986249c18a33828bc8306c83d45e44"
+  },
+  {
+    "source": "backend",
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 30059,
+    "sha256": "b59ffd3182199553eae76745a9b931c92bdb36615f198c824f75e881a37c274d"
+  },
+  {
+    "source": "backend",
+    "path": "ARTIFACTS-AND-TRANSFER.md",
+    "bytes": 3466,
+    "sha256": "ebb3d26d9184340e4fb8d68ba3653eea2ac495ff5501ec85703d9f32cd98034a"
+  },
+  {
+    "source": "backend",
+    "path": "CANCEL-AND-HANDLES.md",
+    "bytes": 1756,
+    "sha256": "cd02253d14394783b61ed492cc3cac1bcdb3959a3eb525584eeaeb4154a7f8c5"
+  },
+  {
+    "source": "backend",
+    "path": "CLOSURE-EVIDENCE.md",
+    "bytes": 3190,
+    "sha256": "8ee5c3dbf0b4700646535325f881128f205141841b2eb7f92fd79301daff6dde"
+  },
+  {
+    "source": "backend",
+    "path": "CLOSURE-J1-J5.md",
+    "bytes": 8965,
+    "sha256": "b54760183584ac390e87ee167f5aa447481892aa4c79faaf1c4f4b3fb4172f69"
+  },
+  {
+    "source": "backend",
+    "path": "DEPENDENCY-MAP.md",
+    "bytes": 15582,
+    "sha256": "41fea5d1998ed009c1562d8e155bb19a1ef546098e734d7537526c6e056e271d"
+  },
+  {
+    "source": "backend",
+    "path": "HOST-LIFECYCLE.md",
+    "bytes": 4077,
+    "sha256": "cc56f1b612d761db1855d77e4f550456051ff1cbcdc011b2fd7b8a4733bdd2af"
+  },
+  {
+    "source": "backend",
+    "path": "MAILBOX-AND-DELIVERY.md",
+    "bytes": 2333,
+    "sha256": "796d3b9819cbc7dd54b661d653c73e6e27f2ea985b6177fcc5689c657d91b72b"
+  },
+  {
+    "source": "backend",
+    "path": "PACK-UI-AND-AUTHORING.md",
+    "bytes": 2944,
+    "sha256": "31bbfae69a2e26d82969aee08940a7a5b7907f74eb08d9269df3ebd04b147804"
+  },
+  {
+    "source": "backend",
+    "path": "PAIRING-AND-ADMISSION.md",
+    "bytes": 5991,
+    "sha256": "d8935990044ceaa2f8a6043fdeff6848c04cd9eeacfa894cca30f45de4755c6a"
+  },
+  {
+    "source": "backend",
+    "path": "PARENT-AMENDMENT-MAP.md",
+    "bytes": 8852,
+    "sha256": "5013bf8eb782a052a0a31ad8bd6b2b67b55740eabedf7b4864fc827d0c7636e1"
+  },
+  {
+    "source": "backend",
+    "path": "PROVIDER-AND-COMPAT.md",
+    "bytes": 2186,
+    "sha256": "ad9ae2d99318de186e9be7bd1501cf036e2a34ff6a2c65477ae958bceb0b6a12"
+  },
+  {
+    "source": "backend",
+    "path": "research/00-inspect-and-sources.md",
+    "bytes": 4449,
+    "sha256": "5feed27b7a95b08807ce33589e1872c78a6fad520d5a7e5554f335f95f1ac176"
+  },
+  {
+    "source": "backend",
+    "path": "REVIEW-LAUNCH.txt",
+    "bytes": 3572,
+    "sha256": "46051a8a3195226abd5e4b94a05ddc0a35e709a33c7615daceab17629672768e"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/gate-j1j5-summary.md",
+    "bytes": 1474,
+    "sha256": "bf3899bc4456c26409630a0e5d01cf115cb42901a2e118332ed0da2a63adc72b"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/gate-summary.md",
+    "bytes": 1344,
+    "sha256": "54521c38625b414ffd026c0d8bd3a5ae77d1596d1f35a52ad37cadee0006e8ac"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/reconcile-inputs.md",
+    "bytes": 17790,
+    "sha256": "3c8837b3655c404d40364fa0294d4a750cdb0c8c98649b068c0b7ecb7b214347"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/reconcile-j1j5-inputs.md",
+    "bytes": 20049,
+    "sha256": "299423e344ceda61e03fcc2364a58e85cd0def3b2df3d1bba857455c07aa7055"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-adversarial.md",
+    "bytes": 36798,
+    "sha256": "4201108325149f74cc26ac0eff879d6f6d7d1ff4542f2de63dbc31709a3ddba1"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-currency.md",
+    "bytes": 15281,
+    "sha256": "9dbdd366686c9415f27bf6e45ce5e0d0a38fd1e1fd632af96df4518bf7fa3215"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-j1j5-adversarial.md",
+    "bytes": 55561,
+    "sha256": "6b626b656b207a4aa41e997076d30330e18655b843466e9ca7e4822ae4141ec1"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-j1j5-closure.md",
+    "bytes": 35575,
+    "sha256": "76bcafc915bbbde26c6f5efdd08d3f5113f358fbcf6b77071254ff101acccccb"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-j1j5-currency.md",
+    "bytes": 23372,
+    "sha256": "c6ce141b1e422e2cad2c40d17327e14cca4c6ddbb719b813a9b81cdb79ad27a6"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-j1j5-parent.md",
+    "bytes": 28620,
+    "sha256": "583b31888c887f55d6006def8d8d1dbddc01bd6be11654129bef3ad62ee984d3"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-j1j5-rubric.md",
+    "bytes": 33066,
+    "sha256": "86f5f304f89173c42cd2a6f35cae2dc6fa9fcf875dfda50ba07265bf63a97a47"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-parent-consistency.md",
+    "bytes": 30156,
+    "sha256": "4d545271fdd2ddc71d807ce761d127320e6ac19ee819b3e6ac859f9b74988784"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-r2-closure.md",
+    "bytes": 20243,
+    "sha256": "845154c5454028283968f69384ee32bd18b8921a8640119d08aadd23bd7b08a1"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-rubric.md",
+    "bytes": 31845,
+    "sha256": "a4a2876fe7e00d5d1f7bead2b5c5be7eb808ac24f29eda72364f2e9d746204e7"
+  },
+  {
+    "source": "backend",
+    "path": "START-HERE.md",
+    "bytes": 2912,
+    "sha256": "6e223a5cfd4a3cc4537d5a153dd8dd7ec9b3aa0a50e092aa79f709e6dcead8cc"
+  },
+  {
+    "source": "backend",
+    "path": "TRACE-MATRIX.md",
+    "bytes": 3853,
+    "sha256": "119b2bac2dea74e54899a024f2d87a01d48607a3768b268e8e1e08d497aa6d25"
+  },
+  {
+    "source": "backend",
+    "path": "UI-CANDIDATE-CHANGELOG.md",
+    "bytes": 2646,
+    "sha256": "9015eb29e904c95f5f6cb625b7ac8f1ffa4d8c991472d9ef157fe2363c8b3405"
+  },
+  {
+    "source": "ui",
+    "path": ".memlog.md",
+    "bytes": 8817,
+    "sha256": "57c14b53ac36bce4481b4e0967b347a32e6b6e95ad5eb57c0ed94e4f829b031b"
+  },
+  {
+    "source": "ui",
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 33259,
+    "sha256": "22098919cea535766408cbf7c42c3280f560831ebedccac7a0b43f02f288bf9a"
+  },
+  {
+    "source": "ui",
+    "path": "AUTHORING-AND-ML.md",
+    "bytes": 30041,
+    "sha256": "9cc8590f19b3565f7909a95c187b9334ea382b34fae109293fe4cbbf524cfc1e"
+  },
+  {
+    "source": "ui",
+    "path": "BACKEND-DEPENDENCIES.md",
+    "bytes": 3752,
+    "sha256": "324f5ed5aa284eb7bbf1cf079fbc3fb33c124e07c52c7830e2fd5df8a344b0b4"
+  },
+  {
+    "source": "ui",
+    "path": "BOOTSTRAP-AND-AUTH.md",
+    "bytes": 44176,
+    "sha256": "9255ca8b8a73d1bf771fbb11814ddfa23b540c1796745d1bc8905c56416dd8a5"
+  },
+  {
+    "source": "ui",
+    "path": "CHANGE-IMPACT.md",
+    "bytes": 5075,
+    "sha256": "0e52c5cf3fdfdee7dd7e03b5cf44ce99f9dbd13bebd8acebe8476333a437c85f"
+  },
+  {
+    "source": "ui",
+    "path": "CHAT-AND-HISTORY.md",
+    "bytes": 35460,
+    "sha256": "c122220ce757a06521bc724d70fc5ce737340ac9cb1751a93470f9f3b1d46076"
+  },
+  {
+    "source": "ui",
+    "path": "CLOSURE-MAP.md",
+    "bytes": 4602,
+    "sha256": "304f3c9aa62f4f9a799acf5d7d53f6e319f81e5d176842e17e8548c42e47d171"
+  },
+  {
+    "source": "ui",
+    "path": "CODEX-REVIEW-LAUNCH.txt",
+    "bytes": 1485,
+    "sha256": "24c44caa2b3b3f4597c20d4a6703d6576b172c039782dadbb58b211b74267056"
+  },
+  {
+    "source": "ui",
+    "path": "COMPONENT-CONTRACTS.md",
+    "bytes": 4355,
+    "sha256": "8ed3582c1d08250dd32d5085de413c032460791d5793ee5e0de3923d8a1ef2c2"
+  },
+  {
+    "source": "ui",
+    "path": "DECISIONS-AND-OPEN.md",
+    "bytes": 4204,
+    "sha256": "9c35231c07876ae9c9719e77b52323b6c01d6ed762e5547d1045a9fa5efacd11"
+  },
+  {
+    "source": "ui",
+    "path": "DELIVERY-AND-QA.md",
+    "bytes": 2585,
+    "sha256": "df9a53abd97996a3703ad2de0808c7316c27d7948b252e90ceb78124d1beb2f8"
+  },
+  {
+    "source": "ui",
+    "path": "DESIGN.md",
+    "bytes": 1741,
+    "sha256": "c060785b430382a15733f239a128f0fddf0d2bfa647f3db2dbea6a2c0a035949"
+  },
+  {
+    "source": "ui",
+    "path": "EXAMPLES.md",
+    "bytes": 15450,
+    "sha256": "92943ee2ea133cae16dee1e4612bf20a3262acec64434b154051476a89223bd2"
+  },
+  {
+    "source": "ui",
+    "path": "EXPERIENCE-AND-LAYOUT.md",
+    "bytes": 5024,
+    "sha256": "8b36450eeda97bd46a1e3d609b72a0d6048222b09e3138c3c16045b5cc2332f8"
+  },
+  {
+    "source": "ui",
+    "path": "JOURNEYS.md",
+    "bytes": 4211,
+    "sha256": "67b45aab009bccb19d4ddfc4b55e51f5568debd9748f2cf8c3a07ac674f6eb2f"
+  },
+  {
+    "source": "ui",
+    "path": "LIBRARY-AND-ATTACHMENTS.md",
+    "bytes": 25212,
+    "sha256": "5177dc41ce548b332130d967792fa9435e640d63eb67187d54af15a0ae3dc6f5"
+  },
+  {
+    "source": "ui",
+    "path": "research/00-orchestrator-image-notes.md",
+    "bytes": 7504,
+    "sha256": "ff6e5f9fff2407fd2ce4c714f121a94b4c801eab6527df800ca9a18a3ed1b266"
+  },
+  {
+    "source": "ui",
+    "path": "research/01-evidence-ledger.md",
+    "bytes": 39528,
+    "sha256": "738407b11a7eaad58ea02cefd8d4b5f879c431effa4bae88a1af38a8e6fa494c"
+  },
+  {
+    "source": "ui",
+    "path": "research/02-origin-explore-node-editor.md",
+    "bytes": 40031,
+    "sha256": "088058e347f8a5c9d7e23491dbb1a2793081ad2c6d5636684c84559e6daaeb44"
+  },
+  {
+    "source": "ui",
+    "path": "research/03-origin-mimi0apps.md",
+    "bytes": 22971,
+    "sha256": "9fd8cb663253674c82143515e1358d4c5790350eaec5d34ca4b4cddbc41b3868"
+  },
+  {
+    "source": "ui",
+    "path": "research/04-session-visible-steering.md",
+    "bytes": 37391,
+    "sha256": "e589be3ba1e77ef03a17d5f1fc9c7719eb41a8f50ac788a458f10983aa58fbe6"
+  },
+  {
+    "source": "ui",
+    "path": "research/05-repo-core-baseline.md",
+    "bytes": 22076,
+    "sha256": "e11b86705600c0b9995359793c34453f7c1c7dee80f362011fdce90090ddff1d"
+  },
+  {
+    "source": "ui",
+    "path": "research/06-parent-invariants-for-ui.md",
+    "bytes": 34441,
+    "sha256": "e36cf350e8bc387b082eab9683932412cc685a13f22cb0f1b9e9c005322ecc3b"
+  },
+  {
+    "source": "ui",
+    "path": "research/07-existing-frontend-scan.md",
+    "bytes": 22823,
+    "sha256": "f019124d385418585e8a758599cd9247b9d3af80cd859b3d3c071393f9c651e8"
+  },
+  {
+    "source": "ui",
+    "path": "research/08-bdd-reconciliation.md",
+    "bytes": 36350,
+    "sha256": "0c269d98942a1e51a5117a77ad988ce0df7f6d01d410aa9b3ed93417a2916bee"
+  },
+  {
+    "source": "ui",
+    "path": "research/09-images-video-codex-refs.md",
+    "bytes": 43492,
+    "sha256": "2f1b95a1a0fc9aa2715d02942d31bbc5531986318fc588923d67bc948a369dd3"
+  },
+  {
+    "source": "ui",
+    "path": "research/10-transport-reconnect-ops.md",
+    "bytes": 35313,
+    "sha256": "108313957738d5db260d8cd3abf339d3f53f2b110b5681849445d775e0711efb"
+  },
+  {
+    "source": "ui",
+    "path": "research/11-pack-view-contribution-ui.md",
+    "bytes": 30262,
+    "sha256": "c32acf8db41d4e6e0bf4e24683711eda74838bf157bab1d5d7c8d5efb3de6ae1"
+  },
+  {
+    "source": "ui",
+    "path": "research/12-rejected-studies-salvage.md",
+    "bytes": 29150,
+    "sha256": "0b57da52ddd053c9cc4fbb7767dd9d57f1885148bcd0e0d662ad7d60c7e5af75"
+  },
+  {
+    "source": "ui",
+    "path": "research/13-library-lifecycle.md",
+    "bytes": 29548,
+    "sha256": "8af785c4ff23a99ada7975e650e57bf80d9ee590df8f926d421d10a3ece0d65e"
+  },
+  {
+    "source": "ui",
+    "path": "research/14-firstrun-packaging-placement.md",
+    "bytes": 39943,
+    "sha256": "cc9d44a39d41b2dbae24c326c9696ebc3578ca6325e14e94d2a4e52b68b4f516"
+  },
+  {
+    "source": "ui",
+    "path": "research/15-stack-currency-orchestrator.md",
+    "bytes": 4462,
+    "sha256": "a218d24b95d64adc9d24d1ca00f4a59c350a28a760ceb69384b3c77f336b7bcb"
+  },
+  {
+    "source": "ui",
+    "path": "research/16-workflow-svelte-tauri-spa.md",
+    "bytes": 13764,
+    "sha256": "71d990906f8a3ed5c0714b5231647f8ef5baea2a60c97bf38e3da5c87099feea"
+  },
+  {
+    "source": "ui",
+    "path": "research/17-workflow-tauri-python-sidecar.md",
+    "bytes": 19419,
+    "sha256": "04c0e556d33edd8ff7e8046f0a2ba6c6270bc1576096d184475c03c565cd399e"
+  },
+  {
+    "source": "ui",
+    "path": "research/18-workflow-json-render-mcp-apps.md",
+    "bytes": 18568,
+    "sha256": "ba6117f58e85fef2d5549560660704d690c679a15d5fe39f6ece668befcb5531"
+  },
+  {
+    "source": "ui",
+    "path": "research/19-workflow-specialized-libraries.md",
+    "bytes": 23286,
+    "sha256": "37e5490aadbab45023e287d9c79082efa5093b05f969a518a1276e3dc736a862"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/gate-amendment-summary.md",
+    "bytes": 926,
+    "sha256": "c6dcf1c682e6b1422c900c055f67848d9cdde73f3d02208d8d8d343ffa02685c"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/gate-summary.md",
+    "bytes": 1981,
+    "sha256": "432bb8803f9725097e7e0c3362dadcb8e2ccec1856f2d275500411f7efd8a2ef"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/reconcile-inputs.md",
+    "bytes": 25281,
+    "sha256": "8a867ae5f4ddf3871765d4ca200de4ecbc60acb7964c0cd957a3074ce92665fa"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-adversarial.md",
+    "bytes": 52854,
+    "sha256": "aa02adabaf13b9b5d022ea555d7641cb4b194e1d3d38f2c0b50e284d0438e0cd"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-adversarial.md",
+    "bytes": 21971,
+    "sha256": "d4afa7b943fa3f34537f17bef60dbf153ef43b47008c106e4148eaf7a3a9637b"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-parent.md",
+    "bytes": 28183,
+    "sha256": "c428d7f0a83582317f26c2af6b9708bb4dc2af7759d0f5da7b1abd69010ed607"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-rubric.md",
+    "bytes": 13252,
+    "sha256": "151b58a47acc046be51d821f1c5f0ffbc0dee88067fd2d2003e0d7686b55a42b"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-closure-delta-2026-09-24.md",
+    "bytes": 12952,
+    "sha256": "9ba6d74ac64a48a2ae0a8781526128018e20a6abb20e45bd4863d75838551933"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-adversarial-seams.md",
+    "bytes": 21675,
+    "sha256": "43bb9169544d82a11f2b7aaec0eebf1d61ee63fbe64d61e474fa8f596853ab8d"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-consolidated.md",
+    "bytes": 779,
+    "sha256": "60ebfd8773fa3d4744d39d45fc53a9b26eb0d0590423609531a932d285405467"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-currency-evidence.md",
+    "bytes": 12259,
+    "sha256": "0f4ea06d9ae8cef62f6801323b227c36330fa6c88dcefc9e21302e0f73548be8"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-session-rubric.md",
+    "bytes": 29284,
+    "sha256": "1bd54b7d8e6d256258ed38e87687ca939b278a6cd02b5e1fc40c76dcc9722f70"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-currency.md",
+    "bytes": 13047,
+    "sha256": "be483a81edda2240b08fcba98fda65a91a681b08be870535a1e03f82538f2058"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-epic60-copilot-profile.md",
+    "bytes": 7342,
+    "sha256": "48ce5ec94167535fc6d49f5bb67d7492734edff20707a0e4fe849df1169327c8"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-parent-consistency.md",
+    "bytes": 36082,
+    "sha256": "696e4b1310a68a7b201fa7709741fe1584684356727048f7c65326a2af0912ce"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-rubric.md",
+    "bytes": 33113,
+    "sha256": "29e9a1c8671388dc2eee51e54c2d58159485697bb86f8278db614ffda1a6aaa6"
+  },
+  {
+    "source": "ui",
+    "path": "START-HERE.md",
+    "bytes": 2720,
+    "sha256": "8d29b2a8300d858db5d359bb54b460de2df8045506169ac1c630624b5bf45ae3"
+  },
+  {
+    "source": "ui",
+    "path": "TRACE-MATRIX.md",
+    "bytes": 19319,
+    "sha256": "58fd6189fc9877f17b6b9859cdb408fbdaef70792fa305e1d4cdeee1ff268773"
+  },
+  {
+    "source": "ui",
+    "path": "VIEW-AND-PACK-CONTRACT.md",
+    "bytes": 23062,
+    "sha256": "7d2a28231a02b556348ef4d150b180819d2c1c580c899a66f66fd62489603069"
+  }
+]

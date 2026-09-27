@@ -1,0 +1,482 @@
+[
+  {
+    "source": "backend",
+    "path": ".memlog.md",
+    "bytes": 4519,
+    "sha256": "CD81A97B88D588818A52B93E453975BB0A674B089597FD242ADC6C1A5977F712"
+  },
+  {
+    "source": "backend",
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 24536,
+    "sha256": "8E41BD926F3BF29218D00188A398B4DE1D728E4DD1FD5B5107A839C94C4ECDBA"
+  },
+  {
+    "source": "backend",
+    "path": "ARTIFACTS-AND-TRANSFER.md",
+    "bytes": 2344,
+    "sha256": "07DB5228E412D00C445764488FCE9E59C8EEBB644B2D038B81E7C039569DDCE2"
+  },
+  {
+    "source": "backend",
+    "path": "CANCEL-AND-HANDLES.md",
+    "bytes": 2295,
+    "sha256": "D48FFBD990F79D1EE51C9B44C0739C838E22794E021181DFE2B10F2F3AF7C6AA"
+  },
+  {
+    "source": "backend",
+    "path": "CLOSURE-EVIDENCE.md",
+    "bytes": 2380,
+    "sha256": "C25DB4E892E36A3DF1AE6DAF3C80B89B6293076EDB9A7707F3510EAEE26CF154"
+  },
+  {
+    "source": "backend",
+    "path": "DEPENDENCY-MAP.md",
+    "bytes": 14263,
+    "sha256": "D5D8A0A74F62F5475D8046004475870BE53E630B3DF7F62B89C1CAE51688E0B6"
+  },
+  {
+    "source": "backend",
+    "path": "HOST-LIFECYCLE.md",
+    "bytes": 2619,
+    "sha256": "AA6E0D1404EA7BA9DA92FC277CC91D2C08188BBF86ACFEBCF3B77B278CBC733B"
+  },
+  {
+    "source": "backend",
+    "path": "MAILBOX-AND-DELIVERY.md",
+    "bytes": 3055,
+    "sha256": "FA4FDC4D3FFB327D3D9EBF3D2F70C3547B2E15C1F434BE0AF0B336ED35EB1E3B"
+  },
+  {
+    "source": "backend",
+    "path": "PACK-UI-AND-AUTHORING.md",
+    "bytes": 2364,
+    "sha256": "13B6272C078C2F799252964E31AF9B2E27A1301D4194D9BD32B7E930472E4D1E"
+  },
+  {
+    "source": "backend",
+    "path": "PAIRING-AND-ADMISSION.md",
+    "bytes": 8460,
+    "sha256": "051E041A8FCF225ECB4CC8E5AD2EB8A2826BB8FB452CDEB94C6B2D5BDDBC70A5"
+  },
+  {
+    "source": "backend",
+    "path": "PARENT-AMENDMENT-MAP.md",
+    "bytes": 6988,
+    "sha256": "EDC64EA29A9CE1A24144110155605E6EC13D7AB946B7D4970D437D8402F99277"
+  },
+  {
+    "source": "backend",
+    "path": "PROVIDER-AND-COMPAT.md",
+    "bytes": 2612,
+    "sha256": "C9143B3FDD68C94E8C64D3D7742AE919AD724C49FCF30A7F492CEE8FD82BB1E8"
+  },
+  {
+    "source": "backend",
+    "path": "research/00-inspect-and-sources.md",
+    "bytes": 4449,
+    "sha256": "5FEED27B7A95B08807CE33589E1872C78A6FAD520D5A7E5554F335F95F1AC176"
+  },
+  {
+    "source": "backend",
+    "path": "REVIEW-LAUNCH.txt",
+    "bytes": 2438,
+    "sha256": "38085B7B00E929A35D0F9C7E485E587543EFC5BBE77DED1DCE8BFA89DE76E379"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/gate-summary.md",
+    "bytes": 1344,
+    "sha256": "54521C38625B414FFD026C0D8BD3A5AE77D1596D1F35A52AD37CADEE0006E8AC"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/reconcile-inputs.md",
+    "bytes": 17790,
+    "sha256": "3C8837B3655C404D40364FA0294D4A750CDB0C8C98649B068C0B7ECB7B214347"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-adversarial.md",
+    "bytes": 36798,
+    "sha256": "4201108325149F74CC26AC0EFF879D6F6D7D1FF4542F2DE63DBC31709A3DDBA1"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-currency.md",
+    "bytes": 15281,
+    "sha256": "9DBDD366686C9415F27BF6E45CE5E0D0A38FD1E1FD632AF96DF4518BF7FA3215"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-parent-consistency.md",
+    "bytes": 30156,
+    "sha256": "4D545271FDD2DDC71D807CE761D127320E6AC19EE819B3E6AC859F9B74988784"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-r2-closure.md",
+    "bytes": 20243,
+    "sha256": "845154C5454028283968F69384EE32BD18B8921A8640119D08AADD23BD7B08A1"
+  },
+  {
+    "source": "backend",
+    "path": "reviews/review-rubric.md",
+    "bytes": 31845,
+    "sha256": "A4A2876FE7E00D5D1F7BEAD2B5C5BE7EB808AC24F29EDA72364F2E9D746204E7"
+  },
+  {
+    "source": "backend",
+    "path": "START-HERE.md",
+    "bytes": 2703,
+    "sha256": "ED67A40FC1BB548684DE12878B5BF705E35507443D8B6015924561F00D2CDE14"
+  },
+  {
+    "source": "backend",
+    "path": "TRACE-MATRIX.md",
+    "bytes": 2930,
+    "sha256": "6C11C096BBE28AF05565A599D01C0439FF3BA6D5312CEF7B4A084F7ED1DF86A6"
+  },
+  {
+    "source": "backend",
+    "path": "UI-CANDIDATE-CHANGELOG.md",
+    "bytes": 1801,
+    "sha256": "2D659BA3235D3F4B31C48B360778C2BC6A8D2F3E0D38673879A8674628576FB4"
+  },
+  {
+    "source": "ui",
+    "path": ".memlog.md",
+    "bytes": 8486,
+    "sha256": "2A06867B6F8298F3D63441FA2684A2CBB25863B2FDA3E9CDDD5A07E1BE9ED86E"
+  },
+  {
+    "source": "ui",
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 31879,
+    "sha256": "44151D881907CD5AA50437F8304E781ECDA4D7524EFE2CC9CF4D766B85597B96"
+  },
+  {
+    "source": "ui",
+    "path": "AUTHORING-AND-ML.md",
+    "bytes": 28960,
+    "sha256": "FDB07EF23E8C05A5FFFDB5864C62BBF0F4AD50DCEBF3103C5E81E423FAEEC1CB"
+  },
+  {
+    "source": "ui",
+    "path": "BACKEND-DEPENDENCIES.md",
+    "bytes": 3151,
+    "sha256": "72F3DAFECB368CEAC6D2F4B38C28E733E40A24D730B0F408B609FA1D12241100"
+  },
+  {
+    "source": "ui",
+    "path": "BOOTSTRAP-AND-AUTH.md",
+    "bytes": 41610,
+    "sha256": "6BD511BD53934B73106EAC78FC56BE1064848EF887137B21168644C4F95C7B1D"
+  },
+  {
+    "source": "ui",
+    "path": "CHANGE-IMPACT.md",
+    "bytes": 4675,
+    "sha256": "F1F952D5FC09B547A65D5FA54BB80E7C1C6A7B5081FF98A21F63B1D9E698BE4A"
+  },
+  {
+    "source": "ui",
+    "path": "CHAT-AND-HISTORY.md",
+    "bytes": 34715,
+    "sha256": "E8D432A2A28B250DF2738F04566F0BF468ACDC283748A7BE285BD4B6DE5CBA93"
+  },
+  {
+    "source": "ui",
+    "path": "CLOSURE-MAP.md",
+    "bytes": 4051,
+    "sha256": "B96927E8FDDF17D15E298928AC2AC94DCE4FC5D743A265B8855EBE685F210263"
+  },
+  {
+    "source": "ui",
+    "path": "CODEX-REVIEW-LAUNCH.txt",
+    "bytes": 1485,
+    "sha256": "24C44CAA2B3B3F4597C20D4A6703D6576B172C039782DADBB58B211B74267056"
+  },
+  {
+    "source": "ui",
+    "path": "COMPONENT-CONTRACTS.md",
+    "bytes": 4355,
+    "sha256": "8ED3582C1D08250DD32D5085DE413C032460791D5793EE5E0DE3923D8A1EF2C2"
+  },
+  {
+    "source": "ui",
+    "path": "DECISIONS-AND-OPEN.md",
+    "bytes": 4204,
+    "sha256": "9C35231C07876AE9C9719E77B52323B6C01D6ED762E5547D1045A9FA5EFACD11"
+  },
+  {
+    "source": "ui",
+    "path": "DELIVERY-AND-QA.md",
+    "bytes": 2585,
+    "sha256": "DF9A53ABD97996A3703AD2DE0808C7316C27D7948B252E90CEB78124D1BEB2F8"
+  },
+  {
+    "source": "ui",
+    "path": "DESIGN.md",
+    "bytes": 1741,
+    "sha256": "C060785B430382A15733F239A128F0FDDF0D2BFA647F3DB2DBEA6A2C0A035949"
+  },
+  {
+    "source": "ui",
+    "path": "EXAMPLES.md",
+    "bytes": 15450,
+    "sha256": "92943EE2EA133CAE16DEE1E4612BF20A3262ACEC64434B154051476A89223BD2"
+  },
+  {
+    "source": "ui",
+    "path": "EXPERIENCE-AND-LAYOUT.md",
+    "bytes": 5024,
+    "sha256": "8B36450EEDA97BD46A1E3D609B72A0D6048222B09E3138C3C16045B5CC2332F8"
+  },
+  {
+    "source": "ui",
+    "path": "JOURNEYS.md",
+    "bytes": 4211,
+    "sha256": "67B45AAB009BCCB19D4DDFC4B55E51F5568DEBD9748F2CF8C3A07AC674F6EB2F"
+  },
+  {
+    "source": "ui",
+    "path": "LIBRARY-AND-ATTACHMENTS.md",
+    "bytes": 24272,
+    "sha256": "4EF1B391FE0D2C4485A54DC01A927703BAB7661BDD8F84555DF1A76B039F4AC0"
+  },
+  {
+    "source": "ui",
+    "path": "research/00-orchestrator-image-notes.md",
+    "bytes": 7504,
+    "sha256": "FF6E5F9FFF2407FD2CE4C714F121A94B4C801EAB6527DF800CA9A18A3ED1B266"
+  },
+  {
+    "source": "ui",
+    "path": "research/01-evidence-ledger.md",
+    "bytes": 39528,
+    "sha256": "738407B11A7EAAD58EA02CEFD8D4B5F879C431EFFA4BAE88A1AF38A8E6FA494C"
+  },
+  {
+    "source": "ui",
+    "path": "research/02-origin-explore-node-editor.md",
+    "bytes": 40031,
+    "sha256": "088058E347F8A5C9D7E23491DBB1A2793081AD2C6D5636684C84559E6DAAEB44"
+  },
+  {
+    "source": "ui",
+    "path": "research/03-origin-mimi0apps.md",
+    "bytes": 22971,
+    "sha256": "9FD8CB663253674C82143515E1358D4C5790350EAEC5D34CA4B4CDDBC41B3868"
+  },
+  {
+    "source": "ui",
+    "path": "research/04-session-visible-steering.md",
+    "bytes": 37391,
+    "sha256": "E589BE3BA1E77EF03A17D5F1FC9C7719EB41A8F50AC788A458F10983AA58FBE6"
+  },
+  {
+    "source": "ui",
+    "path": "research/05-repo-core-baseline.md",
+    "bytes": 22076,
+    "sha256": "E11B86705600C0B9995359793C34453F7C1C7DEE80F362011FDCE90090DDFF1D"
+  },
+  {
+    "source": "ui",
+    "path": "research/06-parent-invariants-for-ui.md",
+    "bytes": 34441,
+    "sha256": "E36CF350E8BC387B082EAB9683932412CC685A13F22CB0F1B9E9C005322ECC3B"
+  },
+  {
+    "source": "ui",
+    "path": "research/07-existing-frontend-scan.md",
+    "bytes": 22823,
+    "sha256": "F019124D385418585E8A758599CD9247B9D3AF80CD859B3D3C071393F9C651E8"
+  },
+  {
+    "source": "ui",
+    "path": "research/08-bdd-reconciliation.md",
+    "bytes": 36350,
+    "sha256": "0C269D98942A1E51A5117A77AD988CE0DF7F6D01D410AA9B3ED93417A2916BEE"
+  },
+  {
+    "source": "ui",
+    "path": "research/09-images-video-codex-refs.md",
+    "bytes": 43492,
+    "sha256": "2F1B95A1A0FC9AA2715D02942D31BBC5531986318FC588923D67BC948A369DD3"
+  },
+  {
+    "source": "ui",
+    "path": "research/10-transport-reconnect-ops.md",
+    "bytes": 35313,
+    "sha256": "108313957738D5DB260D8CD3ABF339D3F53F2B110B5681849445D775E0711EFB"
+  },
+  {
+    "source": "ui",
+    "path": "research/11-pack-view-contribution-ui.md",
+    "bytes": 30262,
+    "sha256": "C32ACF8DB41D4E6E0BF4E24683711EDA74838BF157BAB1D5D7C8D5EFB3DE6AE1"
+  },
+  {
+    "source": "ui",
+    "path": "research/12-rejected-studies-salvage.md",
+    "bytes": 29150,
+    "sha256": "0B57DA52DDD053C9CC4FBB7767DD9D57F1885148BCD0E0D662AD7D60C7E5AF75"
+  },
+  {
+    "source": "ui",
+    "path": "research/13-library-lifecycle.md",
+    "bytes": 29548,
+    "sha256": "8AF785C4FF23A99ADA7975E650E57BF80D9EE590DF8F926D421D10A3ECE0D65E"
+  },
+  {
+    "source": "ui",
+    "path": "research/14-firstrun-packaging-placement.md",
+    "bytes": 39943,
+    "sha256": "CC9D44A39D41B2DBAE24C326C9696EBC3578CA6325E14E94D2A4E52B68B4F516"
+  },
+  {
+    "source": "ui",
+    "path": "research/15-stack-currency-orchestrator.md",
+    "bytes": 4462,
+    "sha256": "A218D24B95D64ADC9D24D1CA00F4A59C350A28A760CEB69384B3C77F336B7BCB"
+  },
+  {
+    "source": "ui",
+    "path": "research/16-workflow-svelte-tauri-spa.md",
+    "bytes": 13764,
+    "sha256": "71D990906F8A3ED5C0714B5231647F8EF5BAEA2A60C97BF38E3DA5C87099FEEA"
+  },
+  {
+    "source": "ui",
+    "path": "research/17-workflow-tauri-python-sidecar.md",
+    "bytes": 19419,
+    "sha256": "04C0E556D33EDD8FF7E8046F0A2BA6C6270BC1576096D184475C03C565CD399E"
+  },
+  {
+    "source": "ui",
+    "path": "research/18-workflow-json-render-mcp-apps.md",
+    "bytes": 18568,
+    "sha256": "BA6117F58E85FEF2D5549560660704D690C679A15D5FE39F6ECE668BEFCB5531"
+  },
+  {
+    "source": "ui",
+    "path": "research/19-workflow-specialized-libraries.md",
+    "bytes": 23286,
+    "sha256": "37E5490AADBAB45023E287D9C79082EFA5093B05F969A518A1276E3DC736A862"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/gate-amendment-summary.md",
+    "bytes": 926,
+    "sha256": "C6DCF1C682E6B1422C900C055F67848D9CDDE73F3D02208D8D8D343FFA02685C"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/gate-summary.md",
+    "bytes": 1981,
+    "sha256": "432BB8803F9725097E7E0C3362DADCB8E2CCEC1856F2D275500411F7EFD8A2EF"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/reconcile-inputs.md",
+    "bytes": 25281,
+    "sha256": "8A867AE5F4DDF3871765D4CA200DE4ECBC60ACB7964C0CD957A3074CE92665FA"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-adversarial.md",
+    "bytes": 52854,
+    "sha256": "AA02ADABAF13B9B5D022EA555D7641CB4B194E1D3D38F2C0B50E284D0438E0CD"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-adversarial.md",
+    "bytes": 21971,
+    "sha256": "D4AFA7B943FA3F34537F17BEF60DBF153EF43B47008C106E4148EAF7A3A9637B"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-parent.md",
+    "bytes": 28183,
+    "sha256": "C428D7F0A83582317F26C2AF6B9708BB4DC2AF7759D0F5DA7B1ABD69010ED607"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-amendment-rubric.md",
+    "bytes": 13252,
+    "sha256": "151B58A47ACC046BE51D821F1C5F0FFBC0DEE88067FD2D2003E0D7686B55A42B"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-closure-delta-2026-09-24.md",
+    "bytes": 12952,
+    "sha256": "9BA6D74AC64A48A2AE0A8781526128018E20A6ABB20E45BD4863D75838551933"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-adversarial-seams.md",
+    "bytes": 21675,
+    "sha256": "43BB9169544D82A11F2B7AAEC0EEBF1D61EE63FBE64D61E474FA8F596853AB8D"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-consolidated.md",
+    "bytes": 779,
+    "sha256": "60EBFD8773FA3D4744D39D45FC53A9B26EB0D0590423609531A932D285405467"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-currency-evidence.md",
+    "bytes": 12259,
+    "sha256": "0F4EA06D9AE8CEF62F6801323B227C36330FA6C88DCEFC9E21302E0F73548BE8"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-codex-session-rubric.md",
+    "bytes": 29284,
+    "sha256": "1BD54B7D8E6D256258ED38E87687CA939B278A6CD02B5E1FC40C76DCC9722F70"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-currency.md",
+    "bytes": 13047,
+    "sha256": "BE483A81EDDA2240B08FCBA98FDA65A91A681B08BE870535A1E03F82538F2058"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-epic60-copilot-profile.md",
+    "bytes": 7342,
+    "sha256": "48CE5EC94167535FC6D49F5BB67D7492734EDFF20707A0E4FE849DF1169327C8"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-parent-consistency.md",
+    "bytes": 36082,
+    "sha256": "696E4B1310A68A7B201FA7709741FE1584684356727048F7C65326A2AF0912CE"
+  },
+  {
+    "source": "ui",
+    "path": "reviews/review-rubric.md",
+    "bytes": 33113,
+    "sha256": "29E9A1C8671388DC2EEE51E54C2D58159485697BB86F8278DB614FFDA1A6AAA6"
+  },
+  {
+    "source": "ui",
+    "path": "START-HERE.md",
+    "bytes": 2509,
+    "sha256": "42F2595C4BCBD78B8FF4114B7B79D54CA3E6564BD6BE433ACA4D4D525CB7F28D"
+  },
+  {
+    "source": "ui",
+    "path": "TRACE-MATRIX.md",
+    "bytes": 18696,
+    "sha256": "2F500A245F59D754D21E74A32BAD120509310D3F9211AF430D257BFEA989668F"
+  },
+  {
+    "source": "ui",
+    "path": "VIEW-AND-PACK-CONTRACT.md",
+    "bytes": 22893,
+    "sha256": "0C24AEB40438E0053FB7C6EF48074725A817E84B731DD95C8175D7F246954115"
+  }
+]

@@ -1,0 +1,12 @@
+const fs = require('fs');
+const lz = require('../../../.scratch/qmx-storyboard-tools/node_modules/lz-string');
+const source='C:/Users/Mubarak/Documents/brain/brain/Excalidraw/qmx-ui-storyboard.md';
+const md=fs.readFileSync(source,'utf8');
+const block=md.match(/```compressed-json\s+([\s\S]*?)```/);
+if(!block) throw Error('Compressed drawing missing');
+const scene=JSON.parse(lz.decompressFromBase64(block[1].replace(/\s+/g,'')));
+fs.writeFileSync(__dirname+'/scene.json',JSON.stringify(scene,null,2));
+fs.writeFileSync(__dirname+'/storyboard-text.md',md.split('%%')[0]);
+const links=[...md.matchAll(/([a-f0-9]{40}): \[\[([^\]]+)\]\]/g)].map(m=>({fileId:m[1],name:m[2],path:'C:/Users/Mubarak/Documents/brain/brain/'+m[2]}));
+fs.writeFileSync(__dirname+'/assets.json',JSON.stringify(links,null,2));
+console.log(JSON.stringify({elements:scene.elements.length,types:scene.elements.reduce((a,e)=>(a[e.type]=(a[e.type]||0)+1,a),{}),assets:links,images:scene.elements.filter(e=>e.type==='image').map(e=>({id:e.id,fileId:e.fileId,x:e.x,y:e.y,width:e.width,height:e.height})),texts:scene.elements.filter(e=>e.type==='text').map(e=>({id:e.id,x:e.x,y:e.y,text:e.text.slice(0,100)}))},null,2));

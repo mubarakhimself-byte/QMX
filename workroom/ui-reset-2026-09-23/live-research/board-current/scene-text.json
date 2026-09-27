@@ -1,0 +1,223 @@
+[
+  {
+    "id": "rbuAuIXL",
+    "x": 3676.627890490672,
+    "y": -4181.402833840681,
+    "text": "or",
+    "groupIds": [
+      "EWgyhr4XBq2FOzt9BNnHG"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "lDsh2tno",
+    "x": 3931.762173371786,
+    "y": -4820.618711043594,
+    "text": "Alright, so the reason I actually shifted over to Visual Studio Code is the layout is kind of\nsimilar, if not very, very the same. Okay, I feel like OpenBB developers took the exact same\nthing, okay? So the layout is what I'm picking. qoute me right, please. The layout",
+    "groupIds": [
+      "EWgyhr4XBq2FOzt9BNnHG"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "UEafaJLm",
+    "x": 1973.8924446164092,
+    "y": -4895.542225336348,
+    "text": "this open bb",
+    "groupIds": [
+      "EWgyhr4XBq2FOzt9BNnHG"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "viURg15y",
+    "x": -1854.0486526907362,
+    "y": -5004.1189690583915,
+    "text": "Okay, so this ideal wireframe, I don't even know what to call it, is more like the first layout, or I think it could serve more of an up layout.\nOkay, we shall see how to go about it",
+    "groupIds": [
+      "EWgyhr4XBq2FOzt9BNnHG"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "YJYDP26I",
+    "x": -3391.86635353697,
+    "y": -5276.910945262934,
+    "text": "Okay, now this top bar is ideal and I love it. However, the problem is going to come in that some apps might not need it and some might. Okay, so it's a reusable component, in my opinion. \nOkay, we are going to see where to replace it. We shall discuss that in detail",
+    "groupIds": [
+      "EWgyhr4XBq2FOzt9BNnHG"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "qhuD191N",
+    "x": 15461.756663971732,
+    "y": 1741.3800481022759,
+    "text": "Okay, this one proposes a very\ndifferent approach. This is an idea\nsetting or settings page. Looks cool.\nI liked it, but notice the layout.\nOkay, this is one idea where we can\nlook at so many ways we can\nrepresent the settings page because\nthis one is global, and I believe each\napp needs its own. We shall see\nanyway. Not each app, I think we are\nreally talked about the UI at all,\nbecause there are lots of things\nthat have come into play ever since\nwe last talked about it",
+    "groupIds": [
+      "Fs06Cdeht8F4k_-itNjU3"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "EIWGwk1g",
+    "x": -727.314050630057,
+    "y": 8471.808565044706,
+    "text": "Or we can try these ones",
+    "groupIds": [
+      "8deutGIVcWyUeDW210tbp"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "tD33M0Ny",
+    "x": -777.089581459837,
+    "y": 1101.573783213379,
+    "text": "or/and",
+    "groupIds": [
+      "Uxd5W2WO_kbnYcWxjf66n",
+      "jviA8oKKkH8bWxU3GaVlg"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "rrUMAlEq",
+    "x": 918.3903285904926,
+    "y": 827.315481310872,
+    "text": "This can be a browser, an agentic browser in other words, so it's like a\npreview panel or a preview pane. I'll show you an example,Oh yeah, no, I\nbelieve there is an interesting concept coming in here. I think we can also\nmake this a preview for mini apps to see what's going on or widgets or\neven workflows. However, this is not where we design or make workflows\nfrom. I believe where you make workflows from will be very similar to what\nwe had above. I'll show you how later. Or we shall explore how this is very\nmuch open for discussion, like I said earlier. Okay, but this is open for\nsub-agents, preview pens, or preview panels, okay. CLIs, so in other words,\nlet's say I'm testing a strategy. I'm also, let's say this can be very, very\nmuch more of a preview for a strategy, a model, or anything in that\nmanner. So, in other words, mostly this is for preview. This entire thing,\nokay? These boxes are just showing multiple variants, but I think this\nexplanation has sorted you out.....Okay, so okay, so I was saying this is\nmostly for preview, so strategy cards or a lot of things for preview, live\nbrowsing, video watching. Yeah, so that's why it's so important. Even diff\nview, if I want it, we shall see how to explore this. But there are so many\napps that look like this, it's just that I've expanded it a bit more, okay?\nSo many. We can also add a terminal here at the bottom. I'll show you\nwhere to put it. Let me first continue editing. And by the way, this is a\nsimple note. I'm dictating all this while I'm editing\nOkay, you know what? Maybe the terminal can also be in here. I see no\npoint in leaving it out",
+    "groupIds": [
+      "Uxd5W2WO_kbnYcWxjf66n",
+      "jviA8oKKkH8bWxU3GaVlg"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "C39LFtm1",
+    "x": 57.96224057618883,
+    "y": 1846.3790831015012,
+    "text": "This is more for open sessions, history\nsettings for the agents, and so on and so\nforth. I'm going to show you examples. Okay,\nthere are so many things we can put in there",
+    "groupIds": [
+      "Uxd5W2WO_kbnYcWxjf66n",
+      "jviA8oKKkH8bWxU3GaVlg"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "nLB3FO70",
+    "x": 11370.133231601963,
+    "y": 16367.305240549616,
+    "text": "message icon",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "Y3XcLbSh",
+    "x": 9164.853475910968,
+    "y": 15808.60625846729,
+    "text": "this thing (editing the set up of\nwidgests)",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "wLhO8DpA",
+    "x": 9180.79481947689,
+    "y": 18596.830423764943,
+    "text": "thing at the bottom i mentioned",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": "GqD8KmCk"
+  },
+  {
+    "id": "C2K3xORn",
+    "x": 7901.982946600349,
+    "y": 18646.375427836392,
+    "text": "this s the thing i mentioned for risk mgt and bms stuff ",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "Ibr804Se",
+    "x": 7950.473801649003,
+    "y": 15930.887545111727,
+    "text": "history thing i mentioned",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "NJidF6Tg",
+    "x": 10811.258558015837,
+    "y": 17445.69969087079,
+    "text": "this can help s go from preview mode to library ",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "w6Wra1LH",
+    "x": 6671.088270981236,
+    "y": 15798.591842750724,
+    "text": "this is the exapansion tool",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "JHZj5SdT",
+    "x": -6184.68095266745,
+    "y": 17701.226434211683,
+    "text": "Okay, now, this is the part where things are get I think will start getting a little bit out of hand because we need to figure out a few things, but I believe most of them look or assume they are dashboards. Now I'm\ngoing to attach a lot more reference images or put them in here. Here's the thing: okay, most of the mini apps or dashboards we are most likely going to have, right? Let me echo that. Most of the mini apps that we are\ngoing to have will most likely just have dashboards. But the problem, or the thing is, those dashboards, if you consider how we are going to be having the layout, for example, OpenBloomberg, I think, gives us the best\noption. If you look at the OpenBloomberg thing image, okay. What you realize is that it has widgets, okay? And if it has widgets, what I'm saying is each widget could expand. That is making things interesting. So, in\nother words, for example, if let's say we have market sentient, market sentient can expand to become bigger, and we can see this when we zoom in on the image. For example, right here I'm seeing ticker information and\nit's showing a very summarized preview. But I can zoom in, which means all that data needs to be filled in. As you are seeing, this is an insane amount of information you are going to be having. You're also seeing at the\ntop, okay? So, in other words, this is mostly a dashboard, and you are seeing most of them are editable. And I'm also seeing something interesting. There is also some sort of message icon. I don't know if I could edit\nit, but the message icon, okay, it's like a message icon with a plus in between. Okay, let me see if I can screenshot specific parts of this. Okay, this ticker information can expand. Let me first copy everything. so the\nmessage icon, the one I'm talking about, I'll circle it, don't worry. And it's global, okay? It's global, so it's almost on every widget. Let me see. Okay, so I've taken out the message icon, not taken it out, but I've\nhighlighted it. I think this is the way we can connect multiple apps to the copilot. I think this is how Bloomberg Terminal does it. So it seems like we have that sorted. But there are so many things we need to figure\nout: like the preview, how do we preview data? How do we preview code? How do we preview different things? Because, as you're seeing, the widgets expand. There is also a chatting thing. Of course, it doesn't do much,\nbut it's just a chatting platform. Okay, not platform, but you get what I'm getting at. I'm not so much of a trider and either my technique. I'm just trying to put stuff in here. There is also something interesting I'm\nnoting. I'm going to try and circle as much as possible or highlight. Okay, there is this other thing. I've highlighted it. This shows that we can edit. Okay, so it seems like Open Bloomberg is giving us more and more, but\nwe can build from here, I do believe. I seriously believe I've given you way, way more information today. Okay, moving on. what else anything I'm noting? Scroll bars. There is also this thing. I don't know how much I'm\ngoing to circle, but there is this other thing. I don't know what it does. Are you seeing how much I'm noticing all these images? Yeah, I want you to note the assembly thing, please. But just now that I've been dictating\nwhile editing, yeah, so there is this thing at the bottom. I think this can help us add new panels or add new stuff. But there are lots of things that are interesting, really. There are so many things we can borrow. For\nexample, it's revenue per business baseline. This is a very interesting thing. I think for risk management and question sizing, this can help the BIMS, the book, such things can help. Even to show what is on a server,\nwhat is local, for example, the trading node, you see that blue icon in this thing I've highlighted. Yeah, I think it can help a lot. All right, moving on. Let me see what else. I'm trying to notice as much as possible. Also,\nthe history thing, we shall see how to do this. But I think the first thing, this is mostly for layouts, but we have a lot to think through here because I mean, so many things to consider from now. This is most this is\nan example of a mini app. You see how intentional it is? Okay, it is very intentional. There are small, small details like copy, paste. Aha, now this is something very interesting I actually hadn't noticed. There's this other\nthing. I'm going to highlight it, I think, with the color green. Actually, blue, let me do Navy blue. Let me even try to feel it very different things. Let me give it a darker slopiness and a darker stroke. Okay, I mean, for\ninstance, it's in blue. I think this is this will be, or this will prove to be a very important thing. Why am I saying this? Reason is actually simple. This can help us go from preview mode to library. Now, the library is more\nlike a database for the application. Now, QMX Global and I think a mini app library, but I think QMX Global Library is the best. Okay, so QMX Global Library, I think, can open up as a tab here on top anywhere in any mini\napp. Or actually, no, no, no, I think it when I use that, for example, if I am to click on top of this, what will happen on this blue thing I've highlighted? What will happen is that we go back to the sidebar and we just\nhave okay, we are transferred to the sidebar. I don't know how that is explained in visual aesthetics. Okay, there is also, but there are so many things here seriously to notice. for example, I was still saying, for\nexample, now this expansion tool, this right here gives us a better view. There is a lot to design. I don't know how you're going to help me figure this out because it seems like, but I think this guy is first met a design\nsystem. But I think this is going to be the hardest part designing the mini apps, and we have to give them, I think, an SDK or a design system. I don't know how to explain it because we don't have defaults yet, and\nwidgets, workflows, mini-apps, some are okay, we have some default workflows, some default mini apps, and so on and so forth. Yeah, actually, we haven't done the node editor yet, but this is just a dashboard of a mini\napp, an example. Okay, let me now get to how we are okay, they're not best editor because trust me, that's going to be a more complex thing, okay? Not complex, but it's what really gives us this. We have two ways to\ndo it, yeah, and we shall see. This is all up for discussion. I will re-echo this. We can design it in terms of code or a note-based editor, but most likely, since we don't intend to have since we don't intend to have so\nmuch code, so the mini app is more like universal view. Okay, let me first stop here and catch my breath a bit\n\nNow, the other thing I wanted to note specifically, please, is that you see in the agent or in the co-pilot setup, we have two different things to consider. Okay, the first one is the version that is made. So it's the one\nabove, the one with multiple black screens. However, this one, which has access to a mini app, this is a different version, it has different permissions, permission, rather, it has different permissions and tools, as well as\ndifferent access. This is where MCP apps configuration comes into play a lot. I want you to note that, please. Okay, now for the widgets, I was proposing JSON render. I think it can help us here so much. Database, I\ndon't know. Then the other parts, I think, dashboards. I think for those ones, we can easily, easily figure them out. Okay, yeah. I think this is mostly what I have in mind because when I consider the other things, I\nfeel like you can really figure them out from here. Okay, most things I think we can build as we go and we can discuss as we go. Let me see. What am I missing? Yeah, no, the left-hand sidebar in the main co-pilot view,\nthe one above. Now, that one is a bit more specific. Okay, that one has more tools, more access, almost everything, and it has it can have the ability to actually access singular apps. Okay? So, singular mini apps, singular\nwidgets, singular workflows. We haven't designed the node-based editor yet. We shall see how to figure it out. But that one, I think you can easily sort it because I feel like visually you can understand what that is.\nOkay, the layout, but I think it can fit into that preview panel. Then, also preview of a mini app. Now, this is where things can become funny. Since I'm considering, since the since, okay, here's the thing. Yeah, there are\ntwo things I think we need to figure out, and I think here is my proposal. Number one, multi-apps running at a go. How does Bloomberg do it? Or how does a Bloomberg terminal do it? That's the first thing I really\nquestion. Because my idea was: we open multiple mini apps. okay, we can have them on the sidebar, the left-hand sidebar, yeah, to show which is active. However, for example, how can I explain this? Now, this is way, way,\nway. I'm long at drawing anyway. Okay, I wanted to clarify that. So, I'm longer drawing, this is just a part of a dictation I want to put across. Okay, so this can be, for example, we can have visually on the left-hand\nside, but the main one. This one is always there. We can have things that are defaults, okay? So, that main home dashboard, which shows all everything running, this is where things are going to get complex. there is\nactually a correction I will make about, let me first finish this. Then we can draw like some sort of a line, a thick one, yeah, to show that, okay, this is where most of the menu ends. I think it's a menu, if I'm not\nmistaken. Okay, then the remaining new icons below that line represent active applications or applications that have opened. In other words, many applications that have opened. Okay, remember that rendering is kind of\nstill the same, in my opinion. Now, what I forgot above, let me first stop here. So, okay, what I had forgotten is explaining how multiple apps are going to be rendering. Now, you see on top here of the image, I hope you\nare seeing you will see this. You see this top bar where you see overview financials. Let me highlight it. This one is going to be in, I think, let me put it in yellow or whatever on no, my bad. Let me put it in the outline,\nit's going to be in orange, whatever color that is. Okay, now are you seeing this? This, in my opinion, represents a singular mini. Okay, actually, a mini app is a composition of widgets and workflows. Unless I forgot, but\nthis could represent a view, an expanded view, yeah, of a widget or a workflow. I think this is far better to use like this. Okay, so I think this is exactly how it is. So, I think I don't know how we can do this. Because\nme, I'm seeing two things: we are seeing overview, then we are seeing financials, we are seeing technical analysis. Now, there are so many things, there are so many ideas, not things rather, that can come in here. Okay,\nbecause this alone is interesting. Because what I'm saying is, yeah, we could do it the way Open Bloomberg did it, in that we just have these other things because this screen is showing us an overview. However, we\ncould also propose instead of an overview, we can propose that it is multiple widgets. Okay, so in other words, whereby financials is a widget, technical analysis is a widget, however, that won't make sense. Now, I'm\nseeing why it won't. The reason I'm saying why it won't is that overview, I think, is meant to show a summarized version of everything, which means a mini app should also have menus. Now I'm seeing it come into play\nproperly, which means financials is representing the visuals or rather the widgets in the mini app. So now, the mini app, perhaps in our platform, could maybe be proposing or could be under maybe hypothesis and research.\nAnother one could be under ML and coding. So, which means these menus on top change, they're dynamic. Okay, this is why I think we have an editable thing. Now, why are things becoming interesting is when you click\nthat expansion icon. This is where things become interesting. How are we going to be expanding? Because me, I thought all I was proposing when we expand, yeah, for example, right here I'm seeing ticker information,\nthen there is that expanded circle, sorry, expanded icon. I circled properly. What could happen is that it could open a new tab on top or a new menu on top. I don't know how to say it. I'm looking at it like a browser,\nokay? Okay, so it opens a new tab, so it's like opening a new tab thing or something, then it shows a detailed view. But then now this is more work, okay? Because it means we have to design everything or we have to\nspecify everything. This is very, very difficult, in my opinion. Actually, yeah, man, there are lots of things I'm going to need you to pull for me, okay? Not pull for me, but really think through this for me with me, okay?\nOkay, then embedding a chatting platform. Now, this is where things also are interesting. Now, when you look at QMX, a mini app could be in okay, a mini app, a workflow, or a widget because what I had in mind, we\nactually haven't looked at a widget representation, a mini-app representation we have. And then the other one we haven't looked at, I believe, is the workflow representation. We haven't looked at any of those. Okay, so\nwe have looked at only one, and I think for the others, you can help me, okay? Because our widget is very different now. Placement is also the next thing in line. How are we going to place them? How do you know that\nthis is okay? Like the examples I gave: ML, maybe one is in research and hypothesis. You get that stuff, okay? That specification. Remember, it is like it is meant to be specified during the building. This is getting\nbroader and broader and more complex. It is already complex, so yeah. Anyway, that's that. So, I think we are okay to begin. There are so many questions here. Seriously, so, so many. It's not even funny. Well, I think we\ncan figure it out, okay? Because I feel like the first thing wouldn't be more of a design system, it would be figuring the design, okay, design system first. Let me attach the links for the JSON render and MCP apps, and\nthen we start\n\nlimks ;\nhttps://json-render.dev/\nhttps://modelcontextprotocol.io/extensions/apps/overview\nhttps://xynth.com/\nhttps://primemarket-terminal.com/\n\nOkay, so for more inspiration, we are going to look at these websites and look at how they try to present their work.......Actually, it's not just their work, even how they present their dashboards and apps. I don't know.\nWe shall figure it out in the session\nhttps://quantx.es/\nhttps://minara.ai/docs/agent\nhttps://www.londonstrategicedge.com/terminal\n\nOkay, now something I'm noticing is that these applications can actually give us way more ideas, okay, and by the way, I do believe in the latest commits, especially when we were rebuilding the mini apps, the workflows\nstuff recently, I think it was last week. Not rebuilding, but when we were implementing it, there are some documentation that might be very helpful, so you might need to find it or have a sub-agent find it. Yeah, so these\napplications might give us way more ideas, better representation, because we have a lot to think through from crypto dashboards to Forex dashboards. Yeah, and LSE, I believe, is I think the best option. Not option,\nbut it is what we are using in terms of data for machine learning, ideas, even the video they have, I think might be, if not the best thing we can use, it might be the best representation. Just let's we shall add our own\ntweets to it. I'm not going to lie to you. I'll add the video. Don't worry. Then what else? Like, there's a lot. Okay, I think let me just give you the LSE Terminal web link. Okay, so yeah, I begin. Rather, I believe. Let's\nbegin\nOh yeah, I do presume by the time we we start this session, I want to make some things clear. for the sub-agents, you are going to use lower-end models, obviously for the navigation of these apps to pick ideas. We\nmight need browser use, so you might need to use an actual browser this time, okay, or computer use, depending. I'm still going to add more links than I talk about, so this is a long, long task. But I think for navigation,\nwe might need a different agent. Okay, I might prefer, not prefer, but I might prefer to use Grokbot okay, because it has a browser and so on and so forth. So it'll give me a prompt so that it does it, so that we don't\nwaste tokens on just navigation, yeah. And you direct it, please. Give it very clear instructions, very depth, and very in-depth. So, in other words, the same way you would do it. So, what you know what? Let me just\nstop here. We shall figure this out when the session begins for now. Well, actually, your session has begun. If you receive this message, the session has begun\n\n\n\n\n",
+    "groupIds": [
+      "EgXLF6bkT_kJu_EzejnIu"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "hoGJ6iaL",
+    "x": 4833.5252620819465,
+    "y": 14192.172347388409,
+    "text": "this is for the expanded view of a widget or workflow ",
+    "groupIds": [
+      "4AaMrriVEU1CBbzD3I7Xm"
+    ],
+    "boundElements": [],
+    "containerId": null
+  },
+  {
+    "id": "4AhOiPPo",
+    "x": -11560.635301069098,
+    "y": 29868.17278480702,
+    "text": "lse vide",
+    "groupIds": [],
+    "boundElements": [],
+    "containerId": "i51GbhaS"
+  }
+]

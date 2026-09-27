@@ -1,0 +1,267 @@
+[
+  {
+    "path": ".memlog.md",
+    "bytes": 6767,
+    "sha256": "42027F6FCEA0F62EDB4E843E0BAD22AE92FA0E25B9B948F18FEE823A843C696E"
+  },
+  {
+    "path": "ARCHITECTURE-SPINE.md",
+    "bytes": 30907,
+    "sha256": "4B380D1A570135156F3A860E0218C9E9F065A974C84910C14EEB8FFAFA388BA2"
+  },
+  {
+    "path": "AUTHORING-AND-ML.md",
+    "bytes": 20676,
+    "sha256": "2169BA654400F9E2F36FAF421E98E4D88E80F4692A34C88B6F018AE8CB870F73"
+  },
+  {
+    "path": "BOOTSTRAP-AND-AUTH.md",
+    "bytes": 28186,
+    "sha256": "D58BA9F536CAFE7B3DDDE90C1879BC2FBE69D86FA5608410979834154D2E5347"
+  },
+  {
+    "path": "CHANGE-IMPACT.md",
+    "bytes": 4486,
+    "sha256": "EE0E17F71C1D5546B9DFB2D1F78DF69D7C8A01C2B747E1E90989403F557E0A20"
+  },
+  {
+    "path": "CHAT-AND-HISTORY.md",
+    "bytes": 24521,
+    "sha256": "5D7BD6252882010A8EB704AA307369775DA1735835C194E5C0BED84F769E8FB2"
+  },
+  {
+    "path": "CLOSURE-MAP.md",
+    "bytes": 3978,
+    "sha256": "B18AB529B47A7EE5B154F06B37CD1F8BBC90C1B9F60945E686760C78E56F3592"
+  },
+  {
+    "path": "CODEX-REVIEW-LAUNCH.txt",
+    "bytes": 1485,
+    "sha256": "24C44CAA2B3B3F4597C20D4A6703D6576B172C039782DADBB58B211B74267056"
+  },
+  {
+    "path": "COMPONENT-CONTRACTS.md",
+    "bytes": 4355,
+    "sha256": "8ED3582C1D08250DD32D5085DE413C032460791D5793EE5E0DE3923D8A1EF2C2"
+  },
+  {
+    "path": "DECISIONS-AND-OPEN.md",
+    "bytes": 4147,
+    "sha256": "2E5D18211E509E3F0C3EE80059B3864A5258AA70B3651BD45BA3D66A0BDEF92F"
+  },
+  {
+    "path": "DELIVERY-AND-QA.md",
+    "bytes": 2585,
+    "sha256": "DF9A53ABD97996A3703AD2DE0808C7316C27D7948B252E90CEB78124D1BEB2F8"
+  },
+  {
+    "path": "DESIGN.md",
+    "bytes": 1741,
+    "sha256": "C060785B430382A15733F239A128F0FDDF0D2BFA647F3DB2DBEA6A2C0A035949"
+  },
+  {
+    "path": "EXAMPLES.md",
+    "bytes": 15216,
+    "sha256": "7268B03C4D96E828EF8C2C84E810647B0949263A948AF2CFD2C2698C193E5259"
+  },
+  {
+    "path": "EXPERIENCE-AND-LAYOUT.md",
+    "bytes": 5024,
+    "sha256": "8B36450EEDA97BD46A1E3D609B72A0D6048222B09E3138C3C16045B5CC2332F8"
+  },
+  {
+    "path": "JOURNEYS.md",
+    "bytes": 4099,
+    "sha256": "85CFFF9AD62E8689C768ADC65ACD8322D872B15BFBF57051350CF25A35A00E6D"
+  },
+  {
+    "path": "LIBRARY-AND-ATTACHMENTS.md",
+    "bytes": 19335,
+    "sha256": "C2DD552ED187FB26E7572F220CB9E242A22F8BD345D4FC00178D766A37DD9A81"
+  },
+  {
+    "path": "START-HERE.md",
+    "bytes": 2293,
+    "sha256": "8F735D79D52235A1D0668CE3E1C530D7AC8E0DB329FEF6C89A92E09DEE83C3DF"
+  },
+  {
+    "path": "TRACE-MATRIX.md",
+    "bytes": 17992,
+    "sha256": "FE3A51DA5D9D8F1BAE5B395342D7F02E1EF36BDA8AFBD766A45393415F369C51"
+  },
+  {
+    "path": "VIEW-AND-PACK-CONTRACT.md",
+    "bytes": 22446,
+    "sha256": "4D902D300A271052F25CC206D0F0290DE31E458615200F22FC94DE1F480EFA39"
+  },
+  {
+    "path": "research/00-orchestrator-image-notes.md",
+    "bytes": 7504,
+    "sha256": "FF6E5F9FFF2407FD2CE4C714F121A94B4C801EAB6527DF800CA9A18A3ED1B266"
+  },
+  {
+    "path": "research/01-evidence-ledger.md",
+    "bytes": 39528,
+    "sha256": "738407B11A7EAAD58EA02CEFD8D4B5F879C431EFFA4BAE88A1AF38A8E6FA494C"
+  },
+  {
+    "path": "research/02-origin-explore-node-editor.md",
+    "bytes": 40031,
+    "sha256": "088058E347F8A5C9D7E23491DBB1A2793081AD2C6D5636684C84559E6DAAEB44"
+  },
+  {
+    "path": "research/03-origin-mimi0apps.md",
+    "bytes": 22971,
+    "sha256": "9FD8CB663253674C82143515E1358D4C5790350EAEC5D34CA4B4CDDBC41B3868"
+  },
+  {
+    "path": "research/04-session-visible-steering.md",
+    "bytes": 37391,
+    "sha256": "E589BE3BA1E77EF03A17D5F1FC9C7719EB41A8F50AC788A458F10983AA58FBE6"
+  },
+  {
+    "path": "research/05-repo-core-baseline.md",
+    "bytes": 22076,
+    "sha256": "E11B86705600C0B9995359793C34453F7C1C7DEE80F362011FDCE90090DDFF1D"
+  },
+  {
+    "path": "research/06-parent-invariants-for-ui.md",
+    "bytes": 34441,
+    "sha256": "E36CF350E8BC387B082EAB9683932412CC685A13F22CB0F1B9E9C005322ECC3B"
+  },
+  {
+    "path": "research/07-existing-frontend-scan.md",
+    "bytes": 22823,
+    "sha256": "F019124D385418585E8A758599CD9247B9D3AF80CD859B3D3C071393F9C651E8"
+  },
+  {
+    "path": "research/08-bdd-reconciliation.md",
+    "bytes": 36350,
+    "sha256": "0C269D98942A1E51A5117A77AD988CE0DF7F6D01D410AA9B3ED93417A2916BEE"
+  },
+  {
+    "path": "research/09-images-video-codex-refs.md",
+    "bytes": 43492,
+    "sha256": "2F1B95A1A0FC9AA2715D02942D31BBC5531986318FC588923D67BC948A369DD3"
+  },
+  {
+    "path": "research/10-transport-reconnect-ops.md",
+    "bytes": 35313,
+    "sha256": "108313957738D5DB260D8CD3ABF339D3F53F2B110B5681849445D775E0711EFB"
+  },
+  {
+    "path": "research/11-pack-view-contribution-ui.md",
+    "bytes": 30262,
+    "sha256": "C32ACF8DB41D4E6E0BF4E24683711EDA74838BF157BAB1D5D7C8D5EFB3DE6AE1"
+  },
+  {
+    "path": "research/12-rejected-studies-salvage.md",
+    "bytes": 29150,
+    "sha256": "0B57DA52DDD053C9CC4FBB7767DD9D57F1885148BCD0E0D662AD7D60C7E5AF75"
+  },
+  {
+    "path": "research/13-library-lifecycle.md",
+    "bytes": 29548,
+    "sha256": "8AF785C4FF23A99ADA7975E650E57BF80D9EE590DF8F926D421D10A3ECE0D65E"
+  },
+  {
+    "path": "research/14-firstrun-packaging-placement.md",
+    "bytes": 39943,
+    "sha256": "CC9D44A39D41B2DBAE24C326C9696EBC3578CA6325E14E94D2A4E52B68B4F516"
+  },
+  {
+    "path": "research/15-stack-currency-orchestrator.md",
+    "bytes": 4462,
+    "sha256": "A218D24B95D64ADC9D24D1CA00F4A59C350A28A760CEB69384B3C77F336B7BCB"
+  },
+  {
+    "path": "research/16-workflow-svelte-tauri-spa.md",
+    "bytes": 13764,
+    "sha256": "71D990906F8A3ED5C0714B5231647F8EF5BAEA2A60C97BF38E3DA5C87099FEEA"
+  },
+  {
+    "path": "research/17-workflow-tauri-python-sidecar.md",
+    "bytes": 19419,
+    "sha256": "04C0E556D33EDD8FF7E8046F0A2BA6C6270BC1576096D184475C03C565CD399E"
+  },
+  {
+    "path": "research/18-workflow-json-render-mcp-apps.md",
+    "bytes": 18568,
+    "sha256": "BA6117F58E85FEF2D5549560660704D690C679A15D5FE39F6ECE668BEFCB5531"
+  },
+  {
+    "path": "research/19-workflow-specialized-libraries.md",
+    "bytes": 23286,
+    "sha256": "37E5490AADBAB45023E287D9C79082EFA5093B05F969A518A1276E3DC736A862"
+  },
+  {
+    "path": "reviews/gate-amendment-summary.md",
+    "bytes": 689,
+    "sha256": "687A96B89C204538AB4E5EFDAB8E9DA44B538F138825B2F9F877D269C5788739"
+  },
+  {
+    "path": "reviews/gate-summary.md",
+    "bytes": 1981,
+    "sha256": "432BB8803F9725097E7E0C3362DADCB8E2CCEC1856F2D275500411F7EFD8A2EF"
+  },
+  {
+    "path": "reviews/reconcile-inputs.md",
+    "bytes": 25281,
+    "sha256": "8A867AE5F4DDF3871765D4CA200DE4ECBC60ACB7964C0CD957A3074CE92665FA"
+  },
+  {
+    "path": "reviews/review-adversarial.md",
+    "bytes": 52854,
+    "sha256": "AA02ADABAF13B9B5D022EA555D7641CB4B194E1D3D38F2C0B50E284D0438E0CD"
+  },
+  {
+    "path": "reviews/review-amendment-adversarial.md",
+    "bytes": 21971,
+    "sha256": "D4AFA7B943FA3F34537F17BEF60DBF153EF43B47008C106E4148EAF7A3A9637B"
+  },
+  {
+    "path": "reviews/review-amendment-parent.md",
+    "bytes": 28183,
+    "sha256": "C428D7F0A83582317F26C2AF6B9708BB4DC2AF7759D0F5DA7B1ABD69010ED607"
+  },
+  {
+    "path": "reviews/review-amendment-rubric.md",
+    "bytes": 13252,
+    "sha256": "151B58A47ACC046BE51D821F1C5F0FFBC0DEE88067FD2D2003E0D7686B55A42B"
+  },
+  {
+    "path": "reviews/review-codex-adversarial-seams.md",
+    "bytes": 21675,
+    "sha256": "43BB9169544D82A11F2B7AAEC0EEBF1D61EE63FBE64D61E474FA8F596853AB8D"
+  },
+  {
+    "path": "reviews/review-codex-consolidated.md",
+    "bytes": 779,
+    "sha256": "60EBFD8773FA3D4744D39D45FC53A9B26EB0D0590423609531A932D285405467"
+  },
+  {
+    "path": "reviews/review-codex-currency-evidence.md",
+    "bytes": 12259,
+    "sha256": "0F4EA06D9AE8CEF62F6801323B227C36330FA6C88DCEFC9E21302E0F73548BE8"
+  },
+  {
+    "path": "reviews/review-codex-session-rubric.md",
+    "bytes": 29284,
+    "sha256": "1BD54B7D8E6D256258ED38E87687CA939B278A6CD02B5E1FC40C76DCC9722F70"
+  },
+  {
+    "path": "reviews/review-currency.md",
+    "bytes": 13047,
+    "sha256": "BE483A81EDDA2240B08FCBA98FDA65A91A681B08BE870535A1E03F82538F2058"
+  },
+  {
+    "path": "reviews/review-parent-consistency.md",
+    "bytes": 36082,
+    "sha256": "696E4B1310A68A7B201FA7709741FE1584684356727048F7C65326A2AF0912CE"
+  },
+  {
+    "path": "reviews/review-rubric.md",
+    "bytes": 33113,
+    "sha256": "29E9A1C8671388DC2EEE51E54C2D58159485697BB86F8278DB614FFDA1A6AAA6"
+  }
+]

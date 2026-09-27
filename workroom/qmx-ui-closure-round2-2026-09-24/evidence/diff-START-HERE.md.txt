@@ -1,0 +1,13 @@
+--- previous/START-HERE.md
++++ current/START-HERE.md
+@@ -1,7 +1,8 @@
+ # QMX UI architecture candidate — start here
+ 
+-**Status:** amended after Codex R1–R9. Candidate defaults, not operator-accepted. Not implementation. Not Documentation Factory.
++**Status:** second amendment after Codex 2026-09-24 closure review (R2–R7, R9). R1/R8 preserved. Candidate defaults, not operator-accepted. Not implementation. Not Documentation Factory.
+ 
+-**Closure map:** `CLOSURE-MAP.md`
++**Closure map:** `CLOSURE-MAP.md`  
++**Backend dependency list:** `BACKEND-DEPENDENCIES.md`
+ 
+ **Workspace:** `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/`

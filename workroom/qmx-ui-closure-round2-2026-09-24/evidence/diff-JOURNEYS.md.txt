@@ -1,0 +1,9 @@
+--- previous/JOURNEYS.md
++++ current/JOURNEYS.md
+@@ -50,5 +50,5 @@
+ ## J-UI-09 — Local file used remotely
+ 
+-Attach local path to a remote job: stage a content-identified artifact or refuse. Remote failure does not silently retarget locally.
++Attach local bytes via HTTP PUT to the authenticated local daemon (complete fp1). Remote run requires explicit `transfer_artifact` plus hash verify. Interrupted PUT is refused (no partial fp1). Remote failure does not silently retarget locally.
+ 
+ ## J-UI-10 — Pack/host enable incompatibility

@@ -1,0 +1,969 @@
+## User
+
+Use BMAD architecture to scope QMX's backend changes required by the reviewed UI architecture. This is a fresh backend-delta sitting, not another UI-design session.
+
+Start here:
+C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-closure-round2-2026-09-24/START-HERE.md
+
+Read REVIEW.md and BACKEND-INTAKE-SUPPLEMENT.md there, then the candidate's START-HERE.md, spine, companions, CLOSURE-MAP.md and BACKEND-DEPENDENCIES.md at:
+C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+
+Eight UI findings are closed. Resolve the remaining R2 condition first: a remembered Origin alone must never authorize issuance of a new pairing_session_id. Require fresh privileged confirmation or an explicitly authenticated renewal using existing valid proof. Reconcile the repeated UI contract/examples and clarify reload versus cold-start recovery. Preserve the other closed UI decisions.
+
+Inspect the current repository and inherited QMA/QMX architectures. Treat existing epics as planned requirements, not implementation evidence. Reconcile Pack-and-Grant Epics 60–65 and relevant earlier QMA work before adding scope; durable mailbox delivery includes Epic 46 / Story 46.4, not only Epic 41's wire layer.
+
+For every dependency classify reuse, already planned, implementation/adoption gap, or proposed amendment. Cover owners, durable records, API/wire/schema changes, authentication and authorization, compatibility/migrations, failure/recovery, local/server placement, installed-product implications and acceptance traces. Include the full supplement, not only the short candidate backend list. Surface conflicts with inherited contracts as explicit amendments, never silent overrides.
+
+Use as many independent agents, applicable workflows and primary-source research passes as useful. Investigate additional consequences where evidence warrants them. Preserve original storyboard intent, visual/headless/mixed capabilities and the chosen Svelte direction; no BMAD UX or aesthetics redesign.
+
+Return a separate backend-delta architecture workspace, parent-amendment map, dependency map against existing planned stories, updated closure evidence and review launch instructions. Make only the specifically required reconciliations to the UI candidate, with a change log.
+
+Do not implement, run Documentation Factory, generate/start or rewrite epics, alter the factory, or modify application code/branches. Return for joint review here. After that review, the intended batch is one integrated Documentation Factory pass, then coordinated epics/stories amendments and additions, then software-factory execution.   Feel free to use as many sub-agents and dynamic workflows as you wantUse only Grok 4.6, Grok 4.5, leave Grok 4.7 out of the picture
+
+## Assistant
+
+I'll start by reading the BMAD architecture skill, the workroom intake, and the UI candidate so this sitting stays a backend-delta, not another UI redesign.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\SKILL.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-bmad-pipeline.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-ui-architecture-2026-09-23.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\operator-communication.md
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\START-HERE.md
+- Read: C:\Users\Mubarak\.grok\bundled\skills\create-workflow\SKILL.md
+
+## Assistant
+
+The intake already names the R2 pairing rule and the backend-delta deliverables. Next I’ll load the architecture skill, review packet, and candidate so the workspace can be opened correctly.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\customize.toml
+- ListDir: \.agents\skills\bmad-architecture
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\REVIEW.md
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\BACKEND-INTAKE-SUPPLEMENT.md
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\FRESH-BACKEND-PROMPT.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-architecture-2026-09-23.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\observations\_inbox\01a0ce63-8f04-7511-927c-2205a27fb95a__t000003-000003__n000.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\observations\_inbox\01a0ce63-8f04-7511-927c-2205a27fb95a__t000003-000003__n001.md
+
+## Assistant
+
+Activation is next: resolve BMAD config, check for an existing backend-delta workspace, and load the UI candidate plus inherited spines.
+
+## Tools
+
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/resolve_customization.py --skill C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture --key workflow (Resolve bmad-architecture workflow customization)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/resolve_config.py --project-root C:/Users/Mubarak/Desktop/QMX (Resolve BMad project config)
+- ListDir: \_bmad-output\planning-artifacts\architecture
+- ListDir: \_bmad\custom
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\references\headless.md
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\references\reviewer-gate.md
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\assets\spine-template.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad\custom\bmad-architecture.toml
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\START-HERE.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- ListDir: \_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23
+- Read: C:\Users\Mubarak\Desktop\QMX\.grok\workflows\qmx-exp-investigate.rhai (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad\scripts\memlog.py (1-80)
+
+## Assistant
+
+This is a backend-delta sitting, Fast path: I’ll open a separate workspace, inspect the inherited contracts and current repo, then resolve R2 first.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad\custom\config.toml
+- Search: project-context
+- ListDir: \_bmad-output\planning-artifacts
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (1-150)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHANGE-IMPACT.md (1-51)
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\reviews\auth-chat.md (1-80)
+- ListDir: \workroom\qmx-ui-closure-round2-2026-09-24
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\.memlog.md (1-40)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-2026-09-23\START-HERE.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-2026-09-18\ARCHITECTURE-SPINE.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-2026-09-23\ARCHITECTURE-SPINE.md (1-80)
+- Search: ^## Epic (41|42|46|57|60|61|62|63|64|65)|FEAT-0058|FEAT-0059|FEAT-0060|FEAT-0061|FEAT-0062|FEAT-0063|Story 46\.4
+- Execute: git -C "C:/Users/Mubarak/Desktop/QMX" rev-parse HEAD; git -C "C:/Users/Mubarak/Desktop/QMX" branch --show-current; git -C "C:/Users/Mubarak/Desktop/QMX" log -1 --oneline; git -C "C:/Users/Mubarak/Desktop/QMX" rev-parse main integration 2>$null; if (Test-Path "C:/Users/Mubarak/Desktop/QMX/.worktrees/integration-inspect") { git -C "C:/Users/Mubarak/Desktop/QMX/.worktrees/integration-inspect" rev-parse HEAD } else { Write-Output "no integration-inspect worktree" } (Inspect current git SHAs and inspect worktree)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (161-460)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (341-380)
+
+## Assistant
+
+Inspect SHAs are unchanged. I’ll open the backend-delta workspace and fan out parallel inspectors on code, planned epics, and primary sources.
+
+## Tools
+
+- Execute: New-Item -ItemType Directory -Force -Path "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" | Out-Null; New-Item -ItemType Directory -Force -Path "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/research" | Out-Null; New-Item -ItemType Directory -Force -Path "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/reviews" | Out-Null; New-Item -ItemType Directory -Force -Path "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/inputs" | Out-Null; uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py init --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" --field scope="QMX backend-delta required by the reviewed UI architecture. Child of architecture-QMX-UI-2026-09-23 over parent architecture-QMX-2026-09-18 AD-1..AD-31 and kit architecture-QMX-2026-09-23. Resolves remaining R2 pairing issuance." --field purpose="build-substrate plus parent-amendment map, planned-story dependency map, and UI-candidate reconciliations for joint review before Documentation Factory" --field altitude="feature" --field paradigm="Host-supervised daemon with privileged QMB door and browser pairing proof" --field parent="architecture-QMX-2026-09-18, architecture-QMX-2026-09-23, architecture-QMX-UI-2026-09-23" (Create backend-delta workspace and init memlog)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-QMA-2026-08-29.md (615-694)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-QMA-2026-08-29.md (1710-1859)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-WORKFLOWS-2026-09-19.md (939-1018)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md (1-120)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md (1-100)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\.grok\workflows\qmx-workflows-stage-a-donors.rhai (1-60)
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\assets\spine-template.md
+- Search: list_mailbox|send_message|cancel_job|stage_artifact|transfer_artifact|/pair/|pairing_session|originating_psess|copilot_profile|caller_kind
+- Search: COMMAND_GROUPS|host
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md (1-90)
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\reviews\cancel-currency.md (1-34)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMA-2026-08-28\ARCHITECTURE-SPINE.md (1-100)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" --type event --text "Sitting opened 2026-09-24. Fast path. Intent=create. Backend-delta only. Stop before Documentation Factory, epic rewrite, implementation, factory control. Inspect pins: main=92279dfe43922d60fabe38e29284ca52956ab75c; integration=34c148be404a375cbfd79fd4ce6997452e4f1d20 via .worktrees/integration-inspect. Intake: workroom/qmx-ui-closure-round2-2026-09-24 plus UI candidate architecture-QMX-UI-2026-09-23." (Append sitting-open memlog event)
+- Search: list_mailbox|cancel_job|stage_artifact|pairing_session|originating_psess|copilot_profile|caller_kind|qmb host
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmb\src\qmb\doors\cli\tree.py (184-203)
+- Search: Mailbox|mailbox
+- Search: before_artifact_register|_artifacts|stage
+- Search: JobHandle|originating
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\DELIVERY-AND-QA.md (1-53)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-core\src\qma\core\ports\mailbox.py (261-380)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-core\src\qma\core\ports\jobs.py (241-360)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-wire\src\qma\wire\auth.py (1-80)
+- Search: discards|_handle_client|DEFAULT_BIND_PORT
+- Search: ^### AD-(17|20|21|22|24|26|27)
+- Search: ^### AD-(8|9|17|18|21|24|26|29|30)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\COMPONENT-CONTRACTS.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-closure-round2-2026-09-24\reviews\experience.md (1-19)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMA-2026-08-28\ARCHITECTURE-SPINE.md (243-312)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-2026-09-18\ARCHITECTURE-SPINE.md (187-276)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-QMA-2026-08-29.md (691-820)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-PACK-AND-GRANT-2026-09-23.md (301-380)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-daemon\src\qma\daemon\process.py (401-440)
+- Search: class PluginManifest|copilot_profile|permissions
+- Search: editor_draft|expected_revision|staging
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-wire\src\qma\wire\vocabulary.py (1-120)
+- Search: before_artifact_register|class Artifact
+- Search: class ProductSession
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\DECISIONS-AND-OPEN.md (1-60)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\epics-PACK-AND-GRANT-2026-09-23.md (648-727)
+- WebSearch: RFC 6455 section 10.1 Origin header non-browser WebSocket clients
+- WebSearch: WHATWG HTML sessionStorage page session vs new tab clone site:html.spec.whatwg.org
+- WebSearch: Fetch CORS Access-Control-Allow-Origin exact origin credentials omit Authorization Bearer
+- WebSearch: WHATWG WebSocket constructor subprotocols Sec-WebSocket-Protocol server select one
+- WebSearch: RFC 9110 HTTP PUT Content-Length incomplete request body abort
+- Search: auto-approve|auto-approval|already-paired|browser restart
+- WebSearch: open https://html.spec.whatwg.org/multipage/webstorage.html
+- WebSearch: open https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.4
+- Search: auto-approve|Auto-approve|browser restart|sessionStorage
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-daemon\src\qma\daemon\sessions\product_session.py (735-814)
+- Search: WinCred|_reader|compose
+
+## Assistant
+
+Issuance, mailbox ownership, and the clone-tab sessionStorage copy are locked. Next I’ll record those decisions and write the backend-delta workspace.
+
+## Tools
+
+- Execute: $ws = "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24"
+$ml = "C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py"
+uv run $ml append --workspace $ws --type constraint --text "Inherit parent architecture-QMX-2026-09-18 AD-1..AD-31, kit architecture-QMX-2026-09-23 AD-1..AD-9, QMA architecture-QMA-2026-08-28, and UI candidate architecture-QMX-UI-2026-09-23 local AD-1..AD-24 as read-only inputs. Local ADs that contradict a parent are named amendments, never silent overrides. No sixth COMP. No new CT. No UI BFF. No BMAD UX. No Documentation Factory. No epic rewrite. No application/branch/factory change."
+uv run $ml append --workspace $ws --type decision --text "R2 issuance USER: a remembered Origin alone never authorizes a new pairing_session_id. Issuance requires fresh QMB confirmation of that pending request, or authenticated renewal presenting an existing unexpired unrevoked pairing_session_id that matches Origin. Preserve Bearer + WS subprotocol transport. Cookies refused."
+uv run $ml append --workspace $ws --type decision --text "Reload vs cold-start: same-tab reload may restore pairing_session_id from sessionStorage and reconnect. Closed-tab/cold-start has empty sessionStorage; restore mailbox by list_mailbox(product_session_id) if a session is selected; never auto-resend. Auxiliary/cloned browsing context copies sessionStorage (WHATWG); that is existing proof plus a new producer_id, not Origin-only issuance."
+uv run $ml append --workspace $ws --type constraint --text "Durable mailbox delivery is QMA Epic 46 / Story 46.4 (CT-48 Envelope). Epic 41 owns wire/query vocabulary including addable list_mailbox. Epic 42 owns journal/fold. Do not label this Epic 41 mailbox only."
+uv run $ml append --workspace $ws --type assumption --text "Inspect pins remain main@92279dfe and integration@34c148be. Working-tree activity outside those refs is not assumed delivered. Existing epics are planned requirements." (Append core memlog constraints and R2 decision)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\research\00-inspect-and-sources.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\MAILBOX-AND-DELIVERY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CANCEL-AND-HANDLES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PROVIDER-AND-COMPAT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md
+
+## Assistant
+
+R2 and recovery wording go into the UI candidate next, then I’ll write closure evidence and the review launch.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md (41-45)
+- Search: auto-approve|may auto
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\DECISIONS-AND-OPEN.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHANGE-IMPACT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHANGE-IMPACT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\UI-CANDIDATE-CHANGELOG.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Search: browser restart|may auto-approve
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" (Lint backend-delta architecture spine)
+- Execute: $ws = "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24"
+$ml = "C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py"
+uv run $ml append --workspace $ws --type decision --text "AD-4 pairing table is journal-projected pairing_pending and pairing_session. TTL is registry:pairing.session_ttl with no number minted. Revoke is qmb host pair revoke."
+uv run $ml append --workspace $ws --type decision --text "AM-01 named carve-out: unauthenticated HTTP only POST /pair/start, POST /pair/confirm, OPTIONS. Machine clients keep credential_ref. Browser maps pairing_session_id internally to AuthenticatedWireSession."
+uv run $ml append --workspace $ws --type decision --text "Mailbox: Story 46.4 owns durable delivery. Additive product_session_id. list_mailbox is addable Epic 41 query. Journal holds originating wire pair and payload hash."
+uv run $ml append --workspace $ws --type decision --text "Cancel: additive originating_psess at admit. Nested Epic 63 children store their own. cancel_job addable. Reuse later_commands for terminal no-op."
+uv run $ml append --workspace $ws --type decision --text "Artifacts: authenticated PUT /artifacts/stage; interrupted v1 deletes incomplete; transfer_artifact destination pulls as machine principal."
+uv run $ml append --workspace $ws --type decision --text "Drafts are artifact bytes plus editor_draft_head projection. Not AD-22 RefinementProposal. PackUiRequest ingested at enable; copilot_profile stays Epic 60."
+uv run $ml append --workspace $ws --type version --text "Primary sources 2026-09-24: RFC 6455 10.1 Origin spoofing; WHATWG WebSockets one echoed subprotocol; HTML webstorage sessionStorage per window and auxiliary copy; Fetch CORS exact origin omit credentials; RFC 9110 PUT idempotent, partial PUT unused in v1." (Append remaining architecture decisions to memlog)
+
+## Assistant
+
+Spine lint is clean. Independent reviewers are next: rubric, adversarial, parent consistency, and R2 closure.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-wire\src\qma\wire\auth.py (81-160)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (2-21)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CANCEL-AND-HANDLES.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md (116-129)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md (86-125)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\MAILBOX-AND-DELIVERY.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-adversarial.md (1-120)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-parent-consistency.md (1-120)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\reconcile-inputs.md (1-100)
+
+## Assistant
+
+Reviewers found real join-key holes. I’m closing those in the spine and amendment map now.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md (2-51)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (89-128)
+- Search: pair revoke|pair-revoke
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PROVIDER-AND-COMPAT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md (29-48)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" (Re-lint spine after gate fixes)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" (Confirm spine lint is clean)
+- Search: \{[a-zA-Z_]
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24" (Confirm lint clean after placeholder fix)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\gate-summary.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Execute: $ws = "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24"
+$ml = "C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py"
+uv run $ml append --workspace $ws --type event --text "Reviewer gate 2026-09-24: lint clean. R2 closed as candidate. Applied gate fixes AM-01 OPTIONS, AM-03 parent AD-16/Story 42.2, AM-12 mailbox journal lifetime, AM-13 renew/pull families, confirm_pair/revoke_pair human-gate, handle_id=job_id, copied operator CredentialRef, TTL holding rule, qmb host pair revoke argv, GET /artifacts/<fp1> ticket header, save_editor_draft."
+uv run $ml append --workspace $ws --type event --text "Spine distilled and companions written. Status remains draft pending joint review. No Documentation Factory. No epic rewrite. No implementation." (Append gate and distill events to memlog)
+- Edit: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-ui-backend-delta-2026-09-24.md
+
+## Assistant
+
+The backend-delta candidate is ready for joint review. R2 is closed as a candidate: a remembered website origin never issues a new operator session.
+
+Workspace: `_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/`  
+Start at `START-HERE.md`. Inspect pins are still `main@92279dfe` and `integration@34c148be`. Existing epics stay planned work. Nothing was implemented.
+
+**R2.** A new `pairing_session_id` needs either QMB confirmation of that pending pair (`qmb host pair <code>` then `/pair/confirm`) or authenticated `POST /pair/renew` with a still-valid proof. Origin is checked and is never enough. Same-tab reload reconnects from `sessionStorage`. A closed tab is a cold start: empty storage, no auto-resend, history comes from `list_mailbox`. A cloned tab copies storage, so it already has proof and takes a new `producer_id` if the old one is live.
+
+**Mailbox.** Durable delivery is Epic 46 / Story 46.4. Epic 41 owns the `list_mailbox` name. Epic 42 owns the journal.
+
+**Maps.** `PARENT-AMENDMENT-MAP.md` names AM-01..AM-13 (unauthenticated CORS OPTIONS carve-out, mailbox field, pairing/draft/ticket projections, cancel field, PUT + pull, QMB host, human-gate pair commands). `DEPENDENCY-MAP.md` covers the full supplement against Epics 41–42, 46.4, 57, and 60–65.
+
+**UI candidate.** Only the required reconciliations landed. Change log: `UI-CANDIDATE-CHANGELOG.md`. Home / Copilot / Library / Authoring, Svelte, and the other eight closed UI findings stay as they were.
+
+**Review.** Paste `REVIEW-LAUNCH.txt` into the joint review session. After that review passes, the batch is one Documentation Factory pass, then coordinated epics/stories, then the software factory. This sitting starts none of those.
+
+## User
+
+Continue this architecture session with a bounded amendment.
+
+Read:
+C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-joint-review-2026-09-24/REVIEW.md
+
+Follow the complete correction brief:
+C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-joint-review-2026-09-24/GROK-FOLLOWUP.md
+
+Amend:
+C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/
+
+Reconcile affected contracts in:
+C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+
+Resolve J1–J5:
+- Establish and verify the first operator on a clean installation without assuming an existing authenticated session.
+- Protect the pairing bearer credential and define confirmation, renewal, expiry, revocation and recovery consistently.
+- Choose one durable draft-ID issuer and bind first-save, retry/recovery and subsequent CAS saves.
+- Bind authorized, exact-revision validation and CAS publication into the local authoring pack; preserve AD-30 enable as compile identity.
+- Define a reachable, destination-authorized artifact-transfer route with durable verified completion and lost-ack recovery.
+
+Address the report’s smaller reconciliations in the same pass:
+provider provisioning prerequisites, PackUiRequest snapshot read-back,
+mailbox write authorization, cancel/headless identity, and inherited
+durable-reference naming.
+
+Preserve the corrected Origin-only issuance rule, original storyboard
+layouts, Svelte/TypeScript direction, visual/headless capabilities and
+existing Epics 60–65. Do not reopen aesthetics or duplicate planned work.
+
+Use independent agents and research as useful. Update the spine,
+companions, amendment/dependency maps, traces, memlog and UI changelog
+consistently. Return a J1–J5 closure map with exact evidence and run the
+architecture reviewer gate.
+
+Do not implement, run Documentation Factory, start epics, rewrite the
+backlog or alter active factory inputs. Return both reconciled packets
+for Codex closure review.
+
+## Assistant
+
+I’ll read the joint-review brief and the current backend-delta packet, then apply a bounded J1–J5 amendment without touching factory or epics.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\GROK-FOLLOWUP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\REVIEW.md
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\SKILL.md
+- ListDir: \workroom\qmx-ui-backend-joint-review-2026-09-24
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\operator-communication.md
+
+## Assistant
+
+This is an update of the existing backend-delta spine. I’ll load the memlog, inherited naming/allowlist law, and the five joint-review findings, then amend in place.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\.memlog.md
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\reviews\admission.md (1-46)
+- Search: allowlist|cred://
+- Search: naming.exception|whitelist exception|closed exception|fp1-excluded|ENVELOPE_FP1
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (1-50)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-core\src\qma\core\barriers\credential_allowlist.py
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\reviews\state-data.md (1-48)
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\reviews\authoring-currency.md (1-63)
+- Search: exception list|whitelist exception|from_actor|bare `from`|naming
+- Search: REFERENCE|ref_field|cross-store|_id exception|closed-and-addable
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMA-2026-08-28\ARCHITECTURE-SPINE.md (331-370)
+- Read: C:\Users\Mubarak\Desktop\QMX\.worktrees\integration-inspect\qmx-agents\packages\qma-core\src\qma\core\ports\mailbox.py (91-120)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md (101-180)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (91-180)
+
+## Assistant
+
+Joint review J1–J5 are the amendment scope. I’ll bind a local OS-user trust root, treat pairing as a bearer credential, and keep Origin-only issuance closed.
+
+## Tools
+
+- WebSearch: RFC 6750 section 1.2 bearer token possession logging
+- Execute: $ws = "C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24"
+$ml = "C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py"
+uv run $ml append --workspace $ws --type event --text "Update 2026-09-24 joint-review amendment. Intake workroom/qmx-ui-backend-joint-review-2026-09-24/REVIEW.md J1-J5. Keep AD IDs stable. Origin-only issuance remains closed. No Documentation Factory, epics, implementation."
+uv run $ml append --workspace $ws --type decision --text "J1: First operator trust root is the OS user who owns QMA_DAEMON_ROOT plus a daemon-minted host_control token under that root (ACL owner-only, loopback). qmb host start on empty root mints the operator principal and may set pairing TTL via that local control. Browser pairing maps to that principal. No provider cred:// as login. Named amendment: local control is not CT-40; confirm_pair/revoke_pair/variable pairing-ttl are local-control verbs. Story 41.4 wire still authenticates before protocol."
+uv run $ml append --workspace $ws --type decision --text "J2: pairing_proof is a bearer credential (RFC 6750). pairing_record_id is the nonsecret journal identity. Journal stores record id + proof hash + lifecycle, never the raw proof. Logs redact Authorization and qmx.pair.*. Confirm consumes once; lost confirm response requires re-pair. Renew rotates: new proof, old proof revoked, sockets on old proof closed. Expiry closes active WS. Origin revoke cuts all earlier sessions and unclaimed pendings for that Origin."
+uv run $ml append --workspace $ws --type decision --text "J3: Daemon is the sole durable editor_draft_id issuer. First save omits editor_draft_id; optional client_draft_correlation for retry. Result returns editor_draft_id plus editor_revision=fp1. Subsequent saves require both plus expected_revision."
+uv run $ml append --workspace $ws --type decision --text "J4: Addable publish_editor_draft checks ownership, expected_revision, reruns validation on immutable fp1, writes local authoring-pack contribution. Enable remains parent AD-30 compile identity. Unsaved preview/validate stay legal."
+uv run $ml append --workspace $ws --type decision --text "J5: transfer_artifact requires a recorded reachable TLS source origin the destination can dial. Loopback-only source refuses source_unreachable. Ticket binds dest machine credential, placement revision, fp1, byte count, operator command_id. Destination-authored verify ack closes the ticket. Invoke refuses until dest complete."
+uv run $ml append --workspace $ws --type decision --text "Small: send_message admits only when connection principal equals product_session principal. Cross-store pointers product_session_ref and originating_product_session_ref (rename from product_session_id-on-envelope and originating_psess). PackUiRequest read is addable get_pack_ui_request keyed by instance_id plus availability_revision. originating_product_session_ref optional on headless admits. Clean-machine shell is not provider-ready."
+uv run $ml append --workspace $ws --type version --text "J2 sources 2026-09-24: RFC 6750 section 1.2 bearer possession; OWASP Logging Cheat Sheet data-to-exclude session tokens." (Append J1-J5 amendment decisions to memlog)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (179-268)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md (76-95)
+
+## Assistant
+
+I'll amend the spine in place (stable AD ids), add AD-17 for first-operator bootstrap, then update companions and the UI packet.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\MAILBOX-AND-DELIVERY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CANCEL-AND-HANDLES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PROVIDER-AND-COMPAT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Search: pairing_session_id|originating_psess|product_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md (21-110)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md (1-39)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md
+- Search: pairing_session_id
+- Search: product_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (31-50)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (176-195)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+
+## Assistant
+
+I'll pick up the bounded amendment from the leftover UI wording and finish the remaining contracts, maps, and reviewer gate.
+
+## Tools
+
+- ListDir: \_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23
+- ListDir: \_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24
+- Search: pairing_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\workroom\qmx-ui-backend-joint-review-2026-09-24\GROK-FOLLOWUP.md (1-27)
+
+## Assistant
+
+UI still names `pairing_session_id` in several contracts. I'll read those files and the already-amended backend bindings so the remaining edits stay consistent.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (2-181)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md (1-89)
+- Search: pairing_proof|pairing_record_id|editor_draft_id|publish_editor_draft|product_session_ref|get_pack_ui_request|originating_product_session_ref
+- Search: editor_draft_id|product_session_id|originating_psess|get_pack_ui_request|publish_editor
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (1-80)
+
+## Assistant
+
+I have the remaining UI contract list. Next I’ll read those sections and apply the J1–J5 wording in one pass.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (181-460)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md (91-180)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md (181-260)
+- Search: originating_psess|pairing_session_id|pack_ui_request|transfer_artifact|editor_draft
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md (1-45)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md (1-59)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md (1-120)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md (1-71)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\UI-CANDIDATE-CHANGELOG.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md (1-41)
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\SKILL.md
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\references\reviewer-gate.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\START-HERE.md (1-46)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHANGE-IMPACT.md (1-51)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (281-330)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PROVIDER-AND-COMPAT.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Search: get_pack_ui_request|ingest
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md (81-130)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md (2-71)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md (2-91)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (2-81)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (81-120)
+- Search: finalize_reviewers
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md (108-157)
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\customize.toml (91-103)
+- Search: pairing_session_id|originating_psess|product_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\MAILBOX-AND-DELIVERY.md (1-50)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md (2-21)
+
+## Assistant
+
+Applying remaining UI contract edits in parallel, starting with bootstrap, spine, chat, authoring, library, and view.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Search: pairing_session_id|pairing:<id>|qmx.pair\.<id>|CredentialRef
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (309-338)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (401-430)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (431-460)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\LIBRARY-AND-ATTACHMENTS.md
+- Search: product_session_id|pairing_session_id
+- Search: Persist `editor_draft_id`|UI mints
+- Search: pairing_session_id
+
+## Assistant
+
+I'll finish the remaining CHAT field names with a targeted replace, then update the maps.
+
+## Tools
+
+- Execute: python -c "
+from pathlib import Path
+p = Path(r'C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/CHAT-AND-HISTORY.md')
+t = p.read_text(encoding='utf-8')
+repls = [
+    ('Envelope.product_session_id', 'Envelope.product_session_ref'),
+    ('pending \`{producer_id, id, product_session_id}\`', 'pending `{producer_id, id, product_session_ref}`'),
+    ('pending \`{producer_id:P, id:C1, product_session_id:psess:H}\`', 'pending `{producer_id:P, id:C1, product_session_ref:psess:H}`'),
+    ('persist \`product_session_id\` **on the mailbox Envelope', 'persist \`product_session_ref\` **on the mailbox Envelope'),
+    ('**Key for product chat:** \`Envelope.product_session_ref\`. Rebuild of \`list_mailbox\` is: fold journal \`message.*\` rows whose \`product_session_id\` equals',
+     '**Key for product chat:** \`Envelope.product_session_ref\`. Rebuild of \`list_mailbox\` is: fold journal \`message.*\` rows whose \`product_session_ref\` equals'),
+    ('**plus additive** \`product_session_id\`.', '**plus additive** \`product_session_ref\`.'),
+    ('**inherit** \`product_session_id\` from the parent', '**inherit** \`product_session_ref\` from the parent'),
+    ('also names \`product_session_id\`', 'also names \`product_session_ref\`'),
+    ('list_mailbox({ \"product_session_id\": \"psess:H\" })', 'list_mailbox({ \"product_session_ref\": \"psess:H\" })'),
+    ('| \`msg_id\` (server) | \`producer_id\` | \`wire_id\` | \`product_session_id\` |', '| \`msg_id\` (server) | \`producer_id\` | \`wire_id\` | \`product_session_ref\` |'),
+    ('payload \`product_session_id=psess:H\`', 'payload \`product_session_ref=psess:H\`'),
+    ('omitted \`product_session_id\`', 'omitted \`product_session_ref\`'),
+    ('{ \"product_session_id\": \"psess:…\" }', '{ \"product_session_ref\": \"psess:…\" }'),
+    ('{ \"product_session_id\": \"psess:…\", \"producer_id\": \"…\", \"wire_id\": \"…\" }', '{ \"product_session_ref\": \"psess:…\", \"producer_id\": \"…\", \"wire_id\": \"…\" }'),
+    ('Pending \`{producer_id, id, product_session_id}\`', 'Pending `{producer_id, id, product_session_ref}`'),
+    ('\`list_mailbox\` \`{product_session_id, producer_id, wire_id}\`', '\`list_mailbox\` \`{product_session_ref, producer_id, wire_id}\`'),
+    ('same \`pairing_session_id\` (HTTP Bearer + WS \`qmx.pair.<id>\`). Daemon maps it internally to \`credential_ref\`',
+     'same \`pairing_proof\` (HTTP Bearer + WS \`qmx.pair.<proof>\`). Daemon maps Origin + proof_fp1 to operator principal + \`pairing_record_id\`'),
+    ('(\`{product_session_id}\` snapshot)', '(\`{product_session_ref}\` snapshot)'),
+    ('list_mailbox {product_session_id, producer_id, wire_id}', 'list_mailbox {product_session_ref, producer_id, wire_id}'),
+    ('command \`send_message\` with \`product_session_id=psess:H\`', 'command \`send_message\` with \`product_session_ref=psess:H\`'),
+    ('list_mailbox({product_session_id:B})', 'list_mailbox({product_session_ref:B})'),
+    ('Envelope \`product_session_id=psess:H\` inherited', 'Envelope \`product_session_ref=psess:H\` inherited'),
+    ('Envelope \`product_session_id=psess:H\` and journal', 'Envelope \`product_session_ref=psess:H\` and journal'),
+    ('list_mailbox {product_session_id:psess:H, producer_id:P, wire_id:C1}', 'list_mailbox {product_session_ref:psess:H, producer_id:P, wire_id:C1}'),
+    ('list_mailbox {product_session_id:psess:H}', 'list_mailbox {product_session_ref:psess:H}'),
+    ('list_mailbox(product_session_id)', 'list_mailbox(product_session_ref)'),
+    ('list_mailbox({product_session_id:psess:H})', 'list_mailbox({product_session_ref:psess:H})'),
+    ('additive \`product_session_id\` (proposed QMA amend', 'additive \`product_session_ref\` (proposed QMA amend'),
+    ('No \`product_session_id\` today', 'No \`product_session_ref\` today'),
+    ('persist \`product_session_id\` at write', 'persist \`product_session_ref\` at write'),
+    ('canonical product_session_id', 'canonical product_session_ref'),
+    ('D->>M: append message.* with Envelope.product_session_ref', 'D->>M: append message.* with Envelope.product_session_ref'),
+]
+# first pass already renamed Envelope.product_session_id in the first pair
+for a,b in repls:
+    t = t.replace(a,b)
+p.write_text(t, encoding='utf-8')
+print('done', t.count('product_session_id'), 'product_session_id remaining')
+"
+ (Bulk-replace mailbox field names in CHAT companion)
+- Edit: C:\Users\Mubarak\AppData\Local\Temp\qmx-chat-rename.py
+- Execute: python C:\Users\Mubarak\AppData\Local\Temp\qmx-chat-rename.py (Run CHAT companion field-rename script)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\TRACE-MATRIX.md
+- Search: product_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (161-180)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHAT-AND-HISTORY.md (131-150)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CHANGE-IMPACT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\VIEW-AND-PACK-CONTRACT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\UI-CANDIDATE-CHANGELOG.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\CLOSURE-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\START-HERE.md
+- Search: pairing_session_id|originating_psess
+- Search: pairing_session_id|originating_psess
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md (2-51)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md (1-42)
+- Search: ^### AD-
+- Search: pairing:<id>|pairing_session_id
+- Read: C:\Users\Mubarak\Desktop\QMX\.agents\skills\bmad-architecture\scripts\lint_spine.py (1-40)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 --type event --text "J1-J5 amendment distilled: AD-1..AD-17 in place; companions, AM-14..AM-16, TRACE T-BE-23..25, CLOSURE-J1-J5.md, UI candidate reconciled. Origin-only issuance preserved. Ready for Codex closure review. No Documentation Factory, no epics, no implementation." (Append J1-J5 distill event to backend memlog)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23 --type event --text "Backend-delta J1-J5 reconcile: pairing_proof vs pairing_record_id; first operator host-control; Envelope product_session_ref; daemon-issued editor_draft_id; publish_editor_draft; get_pack_ui_request; reachable transfer plus transfer_complete; optional originating_product_session_ref. Layouts and Epics 60-65 untouched." (Append J1-J5 reconcile event to UI memlog)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 (Lint backend-delta architecture spine)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23 (Lint UI architecture spine)
+
+## Assistant
+
+Both spines lint clean. Independent reviewers are next: rubric, currency, adversarial, parent-consistency, J1–J5 closure, and input reconcile.
+
+Reviewers are running. I’ll clear leftover stale wording and keep the packets consistent while they finish.
+
+## Tools
+
+- Search: pairing_session_id|originating_psess|Does not edit
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (456-468)
+- Read: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-ui-backend-delta-2026-09-24.md (1-18)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\.grok\memory-v2\workspaces\qmx-7a9e422e\topics\qmx-ui-backend-delta-2026-09-24.md
+- Execute: Remove-Item -Force "C:\Users\Mubarak\AppData\Local\Temp\qmx-chat-rename.py" (Delete temporary CHAT rename script)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-j1j5-closure.md (1-120)
+- ListDir: \_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews
+
+## Assistant
+
+Closure is clean. I’ll add the missing TTL-configure step to the bootstrap sequence, then wait on the other reviewers.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-j1j5-currency.md (1-80)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (251-305)
+
+## Assistant
+
+Gate findings need live-law fixes. I’ll read the High items and apply the clear ones.
+
+## Tools
+
+- Search: ^## |^### |H-1|H-2|F-1|F-2|High|autofix
+- Search: ^## |^### |F-1|F-2|F-3|F-4|High
+- Search: ^## |^### |landed|partial|missed|quiet
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md (274-281)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-j1j5-rubric.md (73-162)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-j1j5-parent.md (206-275)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (101-190)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md (17-36)
+
+## Assistant
+
+Applying the High and Medium gate fixes: origin-revoke, exclusive TTL writer, mailbox admit, operator-principal fold, and the remaining unique bindings.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\MAILBOX-AND-DELIVERY.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PROVIDER-AND-COMPAT.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md (177-184)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md (15-30)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md (2-51)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\AUTHORING-AND-ML.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md (86-126)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BACKEND-DEPENDENCIES.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Search: ## Deferred
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (263-278)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md (49-54)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PACK-UI-AND-AUTHORING.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24; uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23 (Re-lint both architecture spines after gate fixes)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\gate-j1j5-summary.md
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 (Confirm backend spine lint is clean)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 --type event --text "Reviewer gate applied: origin-revoke includes confirmed-unconsumed; clone reconnects (renew not clone path); pairing TTL host-control exclusive; local_operator on AM-03; mailbox principal check only when product_session_ref present; IndexedDB forbidden; first-save supplied id refuses; get_editor_draft_head AM-17; initialize caps include save_editor_draft and transfer_complete; OPTIONS catalogue named. lint_spine 0 findings." (Append gate-fix event to backend memlog)
+- Search: or `/pair/renew`|or `/pair/renew
+
+## Assistant
+
+J1–J5 are closed as candidate in both packets. Origin-only issuance stays closed. Layouts, Svelte/TypeScript, visual/headless, and Epics 60–65 were not reopened.
+
+**Packets**
+
+- Backend-delta: `_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/` — start at `START-HERE.md`
+- UI candidate: `_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/`
+- Closure map: `architecture-QMX-UI-BACKEND-2026-09-24/CLOSURE-J1-J5.md`
+- Codex paste: `architecture-QMX-UI-BACKEND-2026-09-24/REVIEW-LAUNCH.txt`
+
+**J1–J5**
+
+| ID | Binding | Evidence |
+| --- | --- | --- |
+| J1 | Clean install: OS user + `QMA_DAEMON_ROOT` + `host_control`. Daemon mints `local_operator`. TTL required before pair. | AD-17, `HOST-LIFECYCLE.md`, AM-15 |
+| J2 | `pairing_proof` is the bearer; `pairing_record_id` is the journal id; hash-only; confirm once; renew rotates; expiry/revoke close WS; origin-revoke includes confirmed-unconsumed pendings | AD-4, `PAIRING-AND-ADMISSION.md` |
+| J3 | Daemon issues `editor_draft_id` on first save (omit id; supplied id refuses). Lost-ack uses `client_draft_correlation`. Reload is `get_editor_draft_head` | AD-11, AM-17 |
+| J4 | `publish_editor_draft` revalidates immutable fp1 then writes the local authoring pack. AD-30 enable remains compile identity | AD-11, `PACK-UI-AND-AUTHORING.md` |
+| J5 | Recorded reachable TLS or `source_unreachable`. Dest-authored `transfer_complete`. Invoke waits until complete | AD-9, `ARTIFACTS-AND-TRANSFER.md` |
+
+Small items landed: shell ≠ provider; `get_pack_ui_request`; mailbox principal check only when `product_session_ref` is present; cancel field optional on headless; `_ref` names (AM-14).
+
+**Gate.** `lint_spine.py` is clean on both spines. Independent reviews are under `reviews/review-j1j5-*.md` and `gate-j1j5-summary.md` (historical first-pass reviews left in place). Clear High/Medium forks from that gate were applied in live law (TTL writer, clone vs renew, operator fold, mailbox admit).
+
+This sitting did not implement, run Documentation Factory, start epics, rewrite the backlog, or touch factory inputs. After Codex closure passes, the next stage is one integrated Documentation Factory pass.
+
+## User
+
+Read:
+
+## User
+
+C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-closure-2026-09-24/REVIEW.md
+
+Resolve C1 and C2:
+1. Define recovery from a lost host_control token without requiring
+   that lost token, preserving the operator identity and journals.
+2. Ensure origin-wide revocation still revokes a newly renewed proof
+   when renewal commits first. If revocation commits first, renewal
+   must refuse.
+
+Reconcile affected documents and add both failure/race traces.
+Preserve the other corrections. Run the reviewer gate and return
+for focused closure. Do not implement, start epics, or run
+Documentation Factory yet.
+
+## Assistant
+
+I'll read the closure review and the current host-control and pairing contracts, then bind C1 and C2 with traces and a reviewer gate.
+
+## Tools
+
+- Read: C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-backend-closure-2026-09-24/REVIEW.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (99-188)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md
+- Search: rotate-control|host_control|pair revoke|--origin|Concurrent renew
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md (1-46)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md (51-130)
+
+## Assistant
+
+C1 is a stopped-daemon OS-owner replacement of the token. C2 is origin-revoke as a barrier that still kills a renew that committed first. Binding those next.
+
+## Tools
+
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\TRACE-MATRIX.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\START-HERE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-C1-C2.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-J1-J5.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (2-17)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (209-238)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PARENT-AMENDMENT-MAP.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\UI-CANDIDATE-CHANGELOG.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md (2-46)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md (28-35)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARTIFACTS-AND-TRANSFER.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-EVIDENCE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\REVIEW-LAUNCH.txt
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 (Lint backend spine after C1/C2 edits)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 --type decision --text "C1: lost host_control recovery is qmb host recover-control while daemon is stopped; OS owner of QMA_DAEMON_ROOT; does not present the lost token; preserves local_operator and journals; does not remint principal or wipe root. rotate-control remains the live-token path." (Memlog C1 recovery decision)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 --type decision --text "C2: pair revoke --origin is an administrative barrier at journal_seq R; every pairing_session and pairing_pending for that Origin with journal_seq less than R is revoked, including a renew that committed earlier. Origin-revoke is never discarded because a renew appended first. Revoke first then renew with the old proof refuses. --session revokes that pairing_record_id only." (Memlog C2 origin-revoke barrier decision)
+- Search: still-valid token|first durable journal append wins|Loser is no-op
+- Search: rotate-control|recover-control
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md (49-73)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\DEPENDENCY-MAP.md
+
+## Assistant
+
+Adversarial Highs are real. I’ll bind stop-without-token, recover as a daemon-only journal write, post-revoke re-pair, and `--origin` with an explicit Origin.
+
+## Tools
+
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\review-c1c2-adversarial.md (2-81)
+- Search: issued_at|after R|/pair/confirm cannot
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md (177-186)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\ARCHITECTURE-SPINE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\PAIRING-AND-ADMISSION.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-2026-09-23\BOOTSTRAP-AND-AUTH.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-C1-C2.md
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-C1-C2.md (19-73)
+- Read: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md (69-87)
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-C1-C2.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\CLOSURE-C1-C2.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\HOST-LIFECYCLE.md
+- Edit: C:\Users\Mubarak\Desktop\QMX\_bmad-output\planning-artifacts\architecture\architecture-QMX-UI-BACKEND-2026-09-24\reviews\gate-c1c2-summary.md
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 (Lint backend spine after C1/C2 gate autofix)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/_bmad/scripts/memlog.py append --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24 --type event --text "C1/C2 gate autofix: stop without token when host_control missing (OS owner); empty root means no local_operator; recover-control is one-shot daemon journal writer; --origin takes the static Origin; after barrier new pair/start is legal. lint_spine 0 findings." (Memlog C1/C2 gate autofix event)
+- Execute: uv run C:/Users/Mubarak/Desktop/QMX/.agents/skills/bmad-architecture/scripts/lint_spine.py --workspace C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23 (Lint UI spine after C1/C2 UI verb edits)
+
+## Assistant
+
+C1 and C2 are closed as candidate. J3, J4, J5, and the earlier small reconciliations stay as they were.
+
+**C1 — lost `host_control`.** Recovery does not need the lost token. The OS user who owns `QMA_DAEMON_ROOT` stops the daemon (stop is allowed without the token when the file is missing) and runs `qmb host recover-control`. A one-shot daemon recover entry writes the journal. `local_operator` and journals stay. No second principal. No data-root wipe. `rotate-control` remains the path when the token is still held. Empty root means no `local_operator` row; a missing token on an existing principal is not first-start bootstrap.
+
+**C2 — origin-revoke vs renew.** `qmb host pair revoke --origin <origin>` is a barrier at `journal_seq` R. Renew first, then origin-revoke: the new proof is revoked. Origin-revoke first, then renew: refuse. `--session` touches that record only. After R, a **new** `/pair/start` is legal (re-pair). Origin-revoke is never dropped because a renew appended first.
+
+Traces: T-H-01..04, T-P-11..14, T-BE-27..31.
+
+**Packets**
+
+- Backend: `_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-BACKEND-2026-09-24/` — `CLOSURE-C1-C2.md`, AD-4 / AD-6 / AD-17, `HOST-LIFECYCLE.md`, `PAIRING-AND-ADMISSION.md`
+- UI verbs: `architecture-QMX-UI-2026-09-23/BOOTSTRAP-AND-AUTH.md` §12
+- Codex paste: `REVIEW-LAUNCH.txt`
+
+`lint_spine.py` is clean on both spines. Independent reviews are under `reviews/review-c1c2-*.md` and `gate-c1c2-summary.md`. Clear Highs from that gate (stop-without-token, empty vs missing token, `--origin` argv, post-barrier re-pair) were applied in live law.
+
+No implementation, Documentation Factory, or epics from this sitting. After focused Codex closure, the next stage is one integrated Documentation Factory pass.

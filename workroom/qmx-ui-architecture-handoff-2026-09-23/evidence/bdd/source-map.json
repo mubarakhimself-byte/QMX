@@ -1,0 +1,104 @@
+{
+  "capturedAt": "2026-09-23T13:07:01.947199+00:00",
+  "sources": [
+    {
+      "name": "workflows-and-sessions.feature",
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/behavior/workflows-and-sessions.feature",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\behavior\\workflows-and-sessions.feature",
+      "sha256": "685b24f3049c356c0bb44bc2d986157b46992d5cda0365b6ad23d5b95e5b0a0b",
+      "scenarioDeclarations": 10,
+      "scenarioOutlines": 0,
+      "packetPath": "evidence/bdd/behavior/workflows-and-sessions.feature"
+    },
+    {
+      "name": "placement-and-recovery.feature",
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/behavior/placement-and-recovery.feature",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\behavior\\placement-and-recovery.feature",
+      "sha256": "cd60e0032fb478ce7b4e5c306ee3ba238dd894524bcf144f8e2f20cad0e163f4",
+      "scenarioDeclarations": 6,
+      "scenarioOutlines": 0,
+      "packetPath": "evidence/bdd/behavior/placement-and-recovery.feature"
+    },
+    {
+      "name": "data-streams-and-market.feature",
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/behavior/data-streams-and-market.feature",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\behavior\\data-streams-and-market.feature",
+      "sha256": "b1287615254e8df067af634f1fa0eba20a82ae54a537e433c3e26f24189c11ac",
+      "scenarioDeclarations": 11,
+      "scenarioOutlines": 0,
+      "packetPath": "evidence/bdd/behavior/data-streams-and-market.feature"
+    },
+    {
+      "name": "catalog-completion.feature",
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/behavior/catalog-completion.feature",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\behavior\\catalog-completion.feature",
+      "sha256": "bd6bff4bbcf7e183e93c0e0310c55d56425485d39b24d2621ba2daef6a310271",
+      "scenarioDeclarations": 49,
+      "scenarioOutlines": 0,
+      "packetPath": "evidence/bdd/behavior/catalog-completion.feature"
+    },
+    {
+      "name": "capabilities-and-operations.feature",
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/behavior/capabilities-and-operations.feature",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\behavior\\capabilities-and-operations.feature",
+      "sha256": "d77d46ac237b03a81e1c18cb412636e606810ec304f7fb020dfb3c88fc6a9c50",
+      "scenarioDeclarations": 9,
+      "scenarioOutlines": 1,
+      "packetPath": "evidence/bdd/behavior/capabilities-and-operations.feature"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/SCENARIO-CATALOG.jsonl",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\SCENARIO-CATALOG.jsonl",
+      "sha256": "8a8e709c2a0788b25943ef86bddf6ab92e8015b317af2fe049ca5297d34ccbe9",
+      "packetPath": "evidence/bdd/context/SCENARIO-CATALOG.jsonl"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/INDEPENDENT-SCENARIO-BASELINE.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\INDEPENDENT-SCENARIO-BASELINE.md",
+      "sha256": "1c2c865d1cef50076682a737472174fa307cf1fc8eb3663b122ed04ab6f39fd8",
+      "packetPath": "evidence/bdd/context/INDEPENDENT-SCENARIO-BASELINE.md"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/GROK-RECONCILIATION-HANDOFF.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\GROK-RECONCILIATION-HANDOFF.md",
+      "sha256": "08d20ccee2fb21d1ecf22fb2a3e08c1a81d50104c3444aa4f9cf903eb7f9be62",
+      "packetPath": "evidence/bdd/context/GROK-RECONCILIATION-HANDOFF.md"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/TEST-AND-MUTATION-PLAN.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\TEST-AND-MUTATION-PLAN.md",
+      "sha256": "67863e74414fec9567cfe36be7193c1c2848a7e45a27555a09e131b922519c3e",
+      "packetPath": "evidence/bdd/context/TEST-AND-MUTATION-PLAN.md"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/CODEX-RECHECK-HANDOFF.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\CODEX-RECHECK-HANDOFF.md",
+      "sha256": "8bdac4545e2620d53a72c0d5675e068d14c06c8668fca5f26a2bb4bdb8ecf505",
+      "packetPath": "evidence/bdd/context/CODEX-RECHECK-HANDOFF.md"
+    },
+    {
+      "repositoryRelativePath": "docs/lenses/testing/fixtures-and-scenarios.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\docs\\lenses\\testing\\fixtures-and-scenarios.md",
+      "sha256": "a8deb6371f3e88ef3a9b4d0db906dbf3dc7a9ba2869944d5c49b1551dedf4d98",
+      "packetPath": "evidence/bdd/context/fixtures-and-scenarios.md"
+    },
+    {
+      "repositoryRelativePath": "pyproject.toml",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\pyproject.toml",
+      "sha256": "ad0b0bb30232fcc6344ce213c06dca39ab86cec8da5a2f0bfca6d82dd8a17ee0",
+      "packetPath": "evidence/bdd/context/pyproject.toml"
+    },
+    {
+      "repositoryRelativePath": "uv.lock",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\uv.lock",
+      "sha256": "c81c503276b0b36763024f75639cbae1ce6231c3fd64195b9fba910164b8bdfd",
+      "packetPath": "evidence/bdd/context/uv.lock"
+    },
+    {
+      "repositoryRelativePath": "_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/codex-challenge-20260919/COVERAGE-AND-GAPS.md",
+      "absolutePath": "C:\\Users\\Mubarak\\Desktop\\QMX\\_bmad-output\\planning-artifacts\\architecture\\architecture-QMX-2026-09-18\\codex-challenge-20260919\\COVERAGE-AND-GAPS.md",
+      "sha256": "1cccfacd7cdd0eb3f5541201cbe844c8d38bb5b0011675c8b0bbe5f693bb4d5e",
+      "packetPath": "evidence/bdd/context/COVERAGE-AND-GAPS.md"
+    }
+  ]
+}

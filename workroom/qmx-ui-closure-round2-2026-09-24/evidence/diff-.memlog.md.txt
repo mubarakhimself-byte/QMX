@@ -1,0 +1,21 @@
+--- previous/.memlog.md
++++ current/.memlog.md
+@@ -5,5 +5,5 @@
+ paradigm: Differentiated-shell client over pack-and-grant host
+ parent: architecture-QMX-2026-09-23 inherits architecture-QMX-2026-09-18
+-updated: 2026-09-24T13:46
++updated: 2026-09-24T14:31
+ ---
+ 
+@@ -34,2 +34,11 @@
+ - (decision) R9 CANDIDATE: bits-ui 2.19.3; Node 22 LTS; pnpm; lockfile at isolated scaffold gate.
+ - (event) Post-amendment gate: lint clean. Closed producer_id=per tab, dispatchChat issuer, pairing bearer header, bindActionContext, register+enable before Run, starter-only cancel. Stop for Codex closure review. No Documentation Factory.
++- (event) Codex closure 2026-09-24: correct R2-R7 and R9. Preserve R1/R8. No Documentation Factory. No epic rewrite. Inspect still 34c148be.
++- (decision) R2 CANDIDATE: pairing_session_id. Unauthenticated HTTP /pair only. Authenticated HTTP Authorization Bearer pairing:id. WebSocket Sec-WebSocket-Protocol qmx.ct40.v1 plus qmx.pair.<id>. Cookies refused. credential_ref is daemon-internal bind, not the browser login token.
++- (decision) R3 CANDIDATE: mailbox Envelope persists product_session_id at write; replies inherit. Pre-ack identity is wire (producer_id, id). list_mailbox lookup by that pair. Lost ack does not wait for msg_id.
++- (decision) R4 CANDIDATE: PluginManifest.copilot_profile remains Epic 60 sibling field. PackUiRequest references it; does not nest as exclusive replacement. No parent amendment. Nav items bind view_ids. Multiple GrantRecords matching ActionContext refuse GRANT_AMBIGUOUS.
++- (decision) R5 CANDIDATE: first Run uses local authoring pack enable (parent AD-30) after publish into that pack. Distributable export is later. Draft save CAS expected_revision.
++- (decision) R6 CANDIDATE: local daemon possession first; explicit transfer before remote placement. v1 interrupted upload refused; no partial fp1. HTTP PUT byte channel not JSON-RPC body.
++- (decision) R7 CANDIDATE: cancel starter psess operator only. JobHandle stores originating_psess at admit (proposed QMA amend). expected_state does not fail cancel on queued-to-running. Terminal is recorded no-op.
++- (version) R9 CANDIDATE: Node.js >=22.12.0 <23.0.0 (Vite 8.3.0 engines).
++- (event) 2026-09-24 R2-R7 R9 locked and traces aligned. Epic 60 copilot_profile preserved. Backend-delta sitting not started. Stop for Codex.

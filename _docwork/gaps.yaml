@@ -683,10 +683,11 @@ gaps:
     needed_by: [COMP-QMA-WIRE]
     blocking: false
     recommendation: "its own session - the operator has not started the UI and does not plan to soon; the wire contract (AD-5) and the variables registry (AD-26) are not deferred and bind now. Revisit once the daemon API is live and stable. Profile records are client state and are specified in that session; nothing in the daemon reads or stores one (AD-7). Carried forward for that session: the UI reads as a trading/research terminal, not a generic agent dashboard, and surfaces live remote-agent activity - status, current task, tool calls, outputs, progress, failures, attach and observe (operator, T-5071, T-5082-5084)"
-    status: deferred
-    answer: null
-    note: "AD-5 wire. The qma-ui-contract package ships as a stub only in v1. The wire contract (AD-5) and the variables registry (AD-26) are NOT deferred and bind now. Carried forward: the UI reads as a trading/research terminal, not a generic agent dashboard (operator, T-5071, T-5082-5084). 2026-09-19 Workflows: UI-host contracts (AD-17 / DEC-0430 DTOs) fold now; chrome stays deferred on this row (DEC-0446)."
-    date: 2026-09-19
+    status: answered
+    answer: "Chrome is the 2026-09-23/24 UI sitting: differentiated-shell Svelte client over pack-and-grant host (DEC-0469..DEC-0504). Destinations Home / Copilot / Library / Authoring. No COMP-UI. qma-ui-contract types beyond a stub remain GAP-0114. Remains out-of-scope as a pack-and-grant kit hole (DEC-0468). Delivery FEAT-0064..FEAT-0071 (DEC-0509)."
+    answered_by: operator (2026-09-25 Documentation Factory after Codex PASS)
+    note: "AD-5 wire. The qma-ui-contract package ships as a stub only in v1. 2026-09-19 Workflows: UI-host contracts (AD-17 / DEC-0430 DTOs) fold now. 2026-09-23 pack-and-grant: out-of-scope as a kit hole (DEC-0468). 2026-09-25 UI sitting: chrome designed (DEC-0509). Status answered, not deferred."
+    date: 2026-09-25
   - id: GAP-0082
     question: "Are Mission reports (an agent-derived synthesis over a mission's task ledgers) wanted, and in what shape?"
     needed_by: [COMP-QMA-DAEMON]
@@ -861,8 +862,8 @@ gaps:
     recommendation: "Feeds FEAT-0053. Absent at 270e992 (DEC-0450). Implement after Operation/GrantRecord surface (FEAT-0052)."
     status: deferred
     answer: null
-    note: "Workflows AD-8/AD-29. product_session is a journal-projected record kind, not a new store class."
-    date: 2026-09-19
+    note: "Workflows AD-8/AD-29. product_session is a journal-projected record kind, not a new store class. 2026-09-23 inspect 34c148b: product_session types/fixtures exist (Workflows 53-59); class/test existence is not e2e (DEC-0286, DEC-0465). Authoring app_instance_id optionality is the named parent AD-8 amendment (DEC-0463, GAP-0102)."
+    date: 2026-09-23
   - id: GAP-0094
     question: "When do ContributionHit and pin/tombstone land on the federated discovery wire (still KnowledgeHit|ArtifactHit at 270e992)?"
     needed_by: [COMP-QMA-WIRE, COMP-QMA-DAEMON]
@@ -888,8 +889,8 @@ gaps:
     recommendation: "Feeds FEAT-0052. Absent at 270e992 (DEC-0450). Field catalogue is cheap-veto A3."
     status: deferred
     answer: null
-    note: "Workflows AD-3/AD-24. Manifests request; host grants structured GrantRecords."
-    date: 2026-09-19
+    note: "Workflows AD-3/AD-24. Manifests request; host grants structured GrantRecords. 2026-09-23 inspect 34c148b: InvocationEnvelope and GrantRecord types exist as fixtures; caller_kind is absent (DEC-0464, DEC-0465, GAP-0101). Class/test existence is not e2e (DEC-0286)."
+    date: 2026-09-23
   - id: GAP-0097
     question: "When do AlternativeRunConfig and PolicyPair appear in code (ATC path)?"
     needed_by: [COMP-QMF-RISK, COMP-QMB, COMP-QML, COMP-QMN]
@@ -921,8 +922,145 @@ gaps:
     question: "Is a cutover readiness dashboard (latency/deployed) required beside the AD-25 fencing machine?"
     needed_by: [COMP-QMN, COMP-QMA-WIRE]
     blocking: false
-    recommendation: "UI chrome, not this epic set. AD-25 fencing remains the transition machine. GAP-0081 chrome stays deferred."
+    recommendation: "Historical 2026-09-19: UI chrome, not that epic set. Current law: Home attention plus kit listing/health/diagnosis queries (DEC-0480, DEC-0509). AD-25 fencing remains the transition machine."
+    status: answered
+    answer: "Observation surfaces are Home attention plus kit listing/health/diagnosis queries consumed as chrome (UI AD-14 / DEC-0480). Not a fourth observability product. AD-25 fencing remains the transition machine. Trading ticket chrome is GAP-0113. Remains out-of-scope as a kit hole (DEC-0468). Delivery FEAT-0064 (DEC-0509)."
+    answered_by: operator (2026-09-25 Documentation Factory after Codex PASS)
+    note: "Operator 2026-09-19: UI, later. Operator 2026-09-23: no longer a catalog hole hanging over the kit (DEC-0468). 2026-09-25 UI sitting: observation surfaces designed (DEC-0509). Status answered."
+    date: 2026-09-25
+
+  - id: GAP-0101
+    question: "When does InvocationEnvelope gain closed caller_kind user|agent|workflow on COMP-QMA-CORE / COMP-QMA-WIRE?"
+    needed_by: [COMP-QMA-CORE, COMP-QMA-WIRE]
+    blocking: false
+    recommendation: "Feeds FEAT-0058. Absent at 34c148b (DEC-0465). Additive named amendment of DEC-0437 (DEC-0464). No new CT number."
+    status: answered
+    answer: "Closed caller_kind user | agent | workflow on every public InvocationEnvelope (kit AD-4, DEC-0464). Envelope instance_id remains required on invoke. Delivery is FEAT-0058. Inspect 34c148b still lacks the field as product surface (DEC-0465, DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Not an open design question."
+    date: 2026-09-23
+  - id: GAP-0102
+    question: "When may authoring omit app_instance_id, and when does selected_refs accept kind instance_id?"
+    needed_by: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocking: false
+    recommendation: "Feeds FEAT-0058. At 34c148b ProductSession.app_instance_id is required str and SELECTED_REF_KINDS lacks instance_id (DEC-0465). Named amendment of DEC-0421 (DEC-0463)."
+    status: answered
+    answer: "Authoring may omit app_instance_id; app-use still requires it. selected_refs gains kind instance_id; home invoke needs exactly one such ref (DEC-0463). Envelope instance_id remains required on invoke. No third profile. Delivery is FEAT-0058 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Not an open design question."
+    date: 2026-09-23
+  - id: GAP-0103
+    question: "When may a pack omit copilot_profile as a request blob (not a contribution point and not a grant)?"
+    needed_by: [COMP-QMA-CORE, COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: "Feeds FEAT-0058. Absent at 34c148b (DEC-0465). Headless packs remain valid (DEC-0452, DEC-0454)."
+    status: answered
+    answer: "A pack may omit copilot_profile. It is a request blob, not a contribution point and not a grant. Headless packs remain valid (DEC-0452, DEC-0454). Delivery is FEAT-0058 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Optional in-app panel is a contract, not GAP-0081 chrome."
+    date: 2026-09-23
+  - id: GAP-0104
+    question: "When does qma-daemon emit stdlib JSON-lines operator logs (ts, level, event, correlation_id)?"
+    needed_by: [COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: "Feeds FEAT-0059. Absent at 34c148b (DEC-0465). Do not extend qmn/FAILURES.md. Do not mint a fourth observability product."
+    status: answered
+    answer: "qma-daemon emits stdlib JSON-lines with required ts, level, event, correlation_id; extra fields instance_id, op_id, logical_invocation_id, graph_run_id when present (kit AD-5, DEC-0456). Logs are not evidence. Do not extend qmn/FAILURES.md. Delivery is FEAT-0059 / IMPLEMENTATION-SEQUENCE step 2 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "This is the work to build. Not an open design question."
+    date: 2026-09-23
+  - id: GAP-0105
+    question: "When does the host expose diagnosis failure_class grant|workflow|view|dependency|host plus instance health()?"
+    needed_by: [COMP-QMA-DAEMON, COMP-QMA-WIRE]
+    blocking: false
+    recommendation: "Feeds FEAT-0059 and FEAT-0062. Absent at 34c148b (DEC-0465). Cheap-veto A7 covers spellings (DEC-0467)."
+    status: answered
+    answer: "Closed failure_class grant | workflow | view | dependency | host plus instance health() (DEC-0456). view means a wire DTO failed to mount, was stale, or was unhealthy. Delivery is FEAT-0059 and FEAT-0062 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Cheap-veto A7 covers spellings."
+    date: 2026-09-23
+  - id: GAP-0106
+    question: "When is default host retry of effect none/read wired to the parent AD-24 effect-class matrix?"
+    needed_by: [COMP-QMA-CORE, COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: "Feeds FEAT-0060. Effect types and reconcile_policy exist at 34c148b as fixtures; the host retry loop is absent (DEC-0465). No blind external-egress retry."
+    status: answered
+    answer: "Default host retry is on for effect none and read only, until success, typed retryability=NO, or the host-registered ceiling (DEC-0457). No blind external-egress retry. Delivery is FEAT-0060 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Ceiling number is a registry fill under FEAT-0060 (GAP-0108 answered as design)."
+    date: 2026-09-23
+  - id: GAP-0107
+    question: "When is workflow-to-workflow a nested Mission invoke (one nested JobHandle) rather than a live Task Graph merge?"
+    needed_by: [COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: "Feeds FEAT-0061 after durable Task Graph edges FEAT-0055. Include-at-author remains a new versioned Graph Template."
+    status: answered
+    answer: "Workflow-to-workflow at runtime is one nested Mission / one Task Graph / one JobHandle (DEC-0455). Include-at-author is a new versioned Graph Template. Merging two live Task Graphs is refused. Delivery is FEAT-0061 after FEAT-0055 (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Sitting law. Not an open design question."
+    date: 2026-09-23
+  - id: GAP-0108
+    question: "What numeric host retry attempt ceiling is registered (registry row)?"
+    needed_by: [COMP-QMA-CORE, COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: "Out of this sitting. Spine minted no number (DEC-0457, DEC-0467 A9). Do not invent 3 or any other cap in stories until a registry row is ratified."
+    status: answered
+    answer: "Design is closed: the ceiling is a host-registered registry row; this sitting mints no number (DEC-0457, DEC-0467 A9). FEAT-0060 must not invent a cap. The numeric fill is a later registry value under that feature, not a new architecture sitting (DEC-0468)."
+    answered_by: operator (architecture sitting 2026-09-23; catalog correction DEC-0468)
+    note: "Design answered. Number is not architecture."
+    date: 2026-09-23
+
+  - id: GAP-0109
+    question: 'What duration is registry:pairing.session_ttl?'
+    needed_by: [COMP-QMA-DAEMON, COMP-QMB]
+    blocking: false
+    recommendation: 'Leave as a host-registered registry row. This sitting mints no number (DEC-0492, DEC-0510 A10).'
     status: deferred
-    answer: "Operator 2026-09-19: readiness dashboard is user-interface work, later."
-    note: "Workflows deferred. Operator confirmed this is UI, not backend contracts. Do not invent chrome in FEAT-0051..0057."
-    date: 2026-09-19
+    answer: null
+    note: 'Sitting law: the row exists and missing TTL refuses /pair/start and /pair/confirm issue. The number is operator-supplied later. Non-blocking.'
+    date: 2026-09-25
+  - id: GAP-0110
+    question: 'What is registry:artifact.stage_max_bytes?'
+    needed_by: [COMP-QMA-DAEMON]
+    blocking: false
+    recommendation: 'Leave as a host-registered registry row. Missing row refuses PUT. This sitting mints no number (DEC-0497, DEC-0510 A11).'
+    status: deferred
+    answer: null
+    note: 'Non-blocking. FEAT-0068 must not invent a cap.'
+    date: 2026-09-25
+  - id: GAP-0111
+    question: 'Does authoring code use CodeMirror 6 or Monaco?'
+    needed_by: [COMP-QMA-WIRE]
+    blocking: false
+    recommendation: 'Decide after an isolated fidelity spike. Do not pin in this fold.'
+    status: deferred
+    answer: null
+    note: 'UI AD-9 family is graph/code/detail. Editor engine unpinned. Non-blocking.'
+    date: 2026-09-25
+  - id: GAP-0112
+    question: 'When does the optional Tauri 2 desktop shell ship, and who supervises the Python sidecar?'
+    needed_by: [COMP-QMB]
+    blocking: false
+    recommendation: 'v1 is browser plus host-supervised daemon (DEC-0478). Tauri later. Official Tauri 2 has no sidecar health/restart supervisor.'
+    status: deferred
+    answer: null
+    note: 'Non-blocking. Do not make Tauri v1-required.'
+    date: 2026-09-25
+  - id: GAP-0113
+    question: 'What is the UX-10 trading/risk ticket chrome?'
+    needed_by: [COMP-QMN, COMP-QMA-WIRE]
+    blocking: false
+    recommendation: 'Defer to a trading-app sitting. Book/BMS observation may appear on Home attention. Paper-then-live plus L17 remain for trading seats only.'
+    status: deferred
+    answer: null
+    note: 'Constraint-law only in this sitting. Non-blocking.'
+    date: 2026-09-25
+  - id: GAP-0114
+    question: 'When does qma-ui-contract ship types beyond STUB.md?'
+    needed_by: [COMP-QMA-WIRE]
+    blocking: false
+    recommendation: 'Keep the stub until a later types increment. This sitting does not mint COMP-UI or a second contract package.'
+    status: deferred
+    answer: null
+    note: 'Wire contract CT-40 binds now. Stub remains honest at 34c148be. Non-blocking.'
+    date: 2026-09-25

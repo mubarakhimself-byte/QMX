@@ -1,0 +1,933 @@
+--- before/.memlog.md
++++ after/.memlog.md
+@@ -4,7 +4,7 @@
+ altitude: feature
+ paradigm: Differentiated-shell client over pack-and-grant host
+ parent: architecture-QMX-2026-09-23 inherits architecture-QMX-2026-09-18
+-updated: 2026-09-24T14:31
++updated: 2026-09-24T16:05
+ ---
+ 
+ - (event) Sitting opened 2026-09-23. Fast path. Intent=create. Stop before Documentation Factory. Inspect pins: main=92279dfe43922d60fabe38e29284ca52956ab75c dirty; integration=34c148be404a375cbfd79fd4ce6997452e4f1d20; ui branch=af6628888fb8901bf9e877cbd07e438dbb0f39b4 (not the new UI integration base).
+@@ -42,3 +42,4 @@
+ - (decision) R7 CANDIDATE: cancel starter psess operator only. JobHandle stores originating_psess at admit (proposed QMA amend). expected_state does not fail cancel on queued-to-running. Terminal is recorded no-op.
+ - (version) R9 CANDIDATE: Node.js >=22.12.0 <23.0.0 (Vite 8.3.0 engines).
+ - (event) 2026-09-24 R2-R7 R9 locked and traces aligned. Epic 60 copilot_profile preserved. Backend-delta sitting not started. Stop for Codex.
++- (event) Backend-delta J1-J5 reconcile: pairing_proof vs pairing_record_id; first operator host-control; Envelope product_session_ref; daemon-issued editor_draft_id; publish_editor_draft; get_pack_ui_request; reachable transfer plus transfer_complete; optional originating_product_session_ref. Layouts and Epics 60-65 untouched.
+--- before/ARCHITECTURE-SPINE.md
++++ after/ARCHITECTURE-SPINE.md
+@@ -11,7 +11,7 @@
+ binds: [GAP-0081, GAP-0100, UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12]
+ sources: [architecture-QMX-2026-09-18, architecture-QMX-2026-09-23, workroom/qmx-ui-architecture-handoff-2026-09-23, workroom/qmx-ui-review-2026-09-23/REVIEW.md, Explore-Node-Editor-Architecture.md, grok-architecture-mimi0apps.txt, integration@34c148b, svelte.dev 2026-09, shadcn-svelte.com, svelteflow.dev, v2.tauri.app, json-render.dev 0.21.0]
+ companions: [START-HERE.md, EXPERIENCE-AND-LAYOUT.md, COMPONENT-CONTRACTS.md, DESIGN.md, CHANGE-IMPACT.md, JOURNEYS.md, DELIVERY-AND-QA.md, DECISIONS-AND-OPEN.md, BOOTSTRAP-AND-AUTH.md, CHAT-AND-HISTORY.md, VIEW-AND-PACK-CONTRACT.md, AUTHORING-AND-ML.md, LIBRARY-AND-ATTACHMENTS.md, TRACE-MATRIX.md, EXAMPLES.md, CLOSURE-MAP.md, BACKEND-DEPENDENCIES.md]
+-review_status: amendment-after-codex-R1-R9 — candidate defaults, not operator-accepted
++review_status: amendment-after-codex-R1-R9 plus 2026-09-24 J1–J5 backend-delta reconcile — candidate defaults, not operator-accepted
+ ---
+ 
+ # Architecture Spine — QMX UI host
+@@ -184,7 +184,7 @@
+ 
+ - **Binds:** pack contributions, coding-agent contracts
+ - **Prevents:** `ui_view` as a grant or invoke authority
+-- **Rule:** This sitting does **not** mint a `ui_view` contribution point. Packs still contribute **operations only**. Navigation and views are versioned **request DTOs** ingested at enable (`VIEW-AND-PACK-CONTRACT.md`). Optional **`PluginManifest.copilot_profile`** stays the Epic 60 / kit sibling field; the UI request **references** it and must not replace or forbid it. Published still does not grant. Coding agents author reviewable pack patches; generated output is not an untracked execution path.
++- **Rule:** This sitting does **not** mint a `ui_view` contribution point. Packs still contribute **operations only**. Navigation and views are versioned **request DTOs** ingested at enable (`VIEW-AND-PACK-CONTRACT.md`). Read-back is addable query **`get_pack_ui_request`** keyed by enabled `instance_id` + `availability_revision`. Optional **`PluginManifest.copilot_profile`** stays the Epic 60 / kit sibling field; the UI request **references** it and must not replace or forbid it. Published still does not grant. Coding agents author reviewable pack patches; generated output is not an untracked execution path.
+ 
+ ### AD-16 — UI integration is a sibling of backend integration [CANDIDATE]
+ 
+@@ -202,13 +202,13 @@
+ 
+ - **Binds:** UX-03, Home, Copilot
+ - **Prevents:** routing Send through InvocationEnvelope; inventing a synthetic instance for Home chat
+-- **Rule:** Unique chat issuer is **`apps/qmx-ui/src/lib/host/dispatchChat`**. `ConversationPane.send` calls that function only. It issues CT-40 `send_message`. It does not call `dispatchInvoke`. No `instance_id` is required. A mailbox send does not grant tools and does not authorize the next agent turn. Durable history is the QMA mailbox. Each stored message persists `product_session_id` at write; replies inherit it. Pre-ack identity is the wire pair `(producer_id, id)`. `list_mailbox` looks up that pair (and `msg_id` after commit). Details: `CHAT-AND-HISTORY.md`.
++- **Rule:** Unique chat issuer is **`apps/qmx-ui/src/lib/host/dispatchChat`**. `ConversationPane.send` calls that function only. It issues CT-40 `send_message`. It does not call `dispatchInvoke`. No `instance_id` is required. A mailbox send does not grant tools and does not authorize the next agent turn. Durable history is the QMA mailbox. Each stored message persists **`product_session_ref`** at write (QMA `_ref` law; ProductSession own identity remains `product_session_id`). Replies inherit that field. `send_message` and `list_mailbox` admit only when the connection’s operator principal **equals** that session’s durable principal. Pre-ack identity is the wire pair `(producer_id, id)`. `list_mailbox` looks up that pair (and `msg_id` after commit). Details: `CHAT-AND-HISTORY.md`.
+ 
+ ### AD-19 — v1 bootstrap owner is QMB CLI, not the browser [CANDIDATE]
+ 
+ - **Binds:** UX-01, packaging
+ - **Prevents:** browser spawn of Python; unnamed launcher vs service fork; treating a cred:// ref as operator proof
+-- **Rule:** v1 requires an **externally running** `qma-daemon`. Privileged owner is COMP-QMB (`qmb host start|status|stop` — backend add). Until that command exists, UI Start local is a **setup instruction**, not a spawn. `QMA_DAEMON_ROOT` plus a lock file is the single-instance rule. **Unauthenticated bootstrap** is HTTP `/pair/start` and `/pair/confirm` only (loopback or the recorded HTTPS origin). **Issuance:** a remembered Origin never authorizes a new `pairing_session_id`; require fresh QMB confirm of that pending request or authenticated `/pair/renew` with an existing valid proof (backend-delta AD-3). **Authenticated CT-40** uses one proof: `pairing_session_id`. HTTP sends `Authorization: Bearer pairing:<id>`. WebSocket sends WHATWG subprotocols `qmx.ct40.v1` and `qmx.pair.<id>` (browsers cannot set an Authorization header on `WebSocket`). Cookies are not the v1 proof. The daemon maps that session to an operator `credential_ref` internally; the browser does not present an arbitrary `cred://` as login. Details: `BOOTSTRAP-AND-AUTH.md`.
++- **Rule:** v1 requires an **externally running** `qma-daemon`. Privileged owner is COMP-QMB (`qmb host start|status|stop|pair|configure` — backend add, **local host-control**). Until that command exists, UI Start local is a **setup instruction**, not a spawn. `QMA_DAEMON_ROOT` plus a lock file is the single-instance rule. First operator is that local control path (backend-delta AD-17), not a provider `cred://`. **Unauthenticated bootstrap** is HTTP `/pair/start` and `/pair/confirm` plus CORS `OPTIONS` on the named daemon HTTP routes (OPTIONS never issues a proof). **Issuance:** a remembered Origin never authorizes a new `pairing_proof`; require fresh QMB confirm of that pending request or authenticated `/pair/renew` (backend-delta AD-3). `/pair/renew` is an explicit rotate, not the cloned-tab path. **Authenticated CT-40** uses bearer `pairing_proof`. HTTP sends `Authorization: Bearer pairing:<proof>`. WebSocket sends WHATWG subprotocols `qmx.ct40.v1` and `qmx.pair.<proof>`. Cookies are not the v1 proof. The daemon maps Origin + proof hash to the bootstrapped operator principal; the browser does not present an arbitrary `cred://` as login. Details: `BOOTSTRAP-AND-AUTH.md`.
+ 
+ ### AD-20 — Mounted views carry host-minted ActionContext [CANDIDATE]
+ 
+@@ -220,19 +220,19 @@
+ 
+ - **Binds:** UX-06, UX-07, UX-09
+ - **Prevents:** collapsing draft, template version, pack instance, and JobHandle
+-- **Rule:** Distinct ids: editor draft/revision, immutable Graph Template `(qualified_id, version)`, pack instance, JobHandle. Validate and preview may use a saved revision. First Run: publish the template **into the local authoring pack**, **enable that pack** (parent AD-30 compile-at-enable), grant, select that instance, then `dispatchInvoke`. Distributable export is a later copy, not the first enable. Save/publish use CAS `expected_revision`. **Run refuses** a mutable draft. Details: `AUTHORING-AND-ML.md`.
++- **Rule:** Distinct ids: editor draft/revision, immutable Graph Template `(qualified_id, version)`, pack instance, JobHandle. The **daemon** is the sole durable `editor_draft_id` issuer. First save omits that id (optional `client_draft_correlation`); subsequent saves require durable id + `expected_revision`. Addable `publish_editor_draft` authorizes the draft, checks `expected_revision`, revalidates the immutable fp1, and writes the local authoring-pack contribution. Validate and preview may use a saved revision or unsaved buffer. First Run: `publish_editor_draft` **into the local authoring pack**, **enable that pack** (parent AD-30 compile-at-enable), grant, select that instance, then `dispatchInvoke`. Distributable export is a later copy, not the first enable. **Run refuses** a mutable draft. Details: `AUTHORING-AND-ML.md`.
+ 
+ ### AD-22 — Artifact ingest is daemon-owned [CANDIDATE]
+ 
+ - **Binds:** UX-03, UX-05, UX-12
+ - **Prevents:** hash-as-possession; a generic Library store; minting extra selected_ref kinds
+-- **Rule:** Uploads first possess bytes on the **authenticated local daemon** (HTTP PUT `/artifacts/stage`, not a JSON-RPC body). Completeness proof is daemon-recomputed fp1 plus byte count. Interrupted v1 uploads are **refused**; no resumable partial; no runnable incomplete ref. Remote execution requires an **explicit transfer** to that placement and a hash check. Home may attach before an instance exists. Silent local fallback is refused. Details: `LIBRARY-AND-ATTACHMENTS.md`.
++- **Rule:** Uploads first possess bytes on the **authenticated local daemon** (HTTP PUT `/artifacts/stage`, not a JSON-RPC body). Completeness proof is daemon-recomputed fp1 plus byte count. Interrupted v1 uploads are **refused**; no resumable partial; no runnable incomplete ref. Remote execution requires an **explicit transfer** to that placement: `transfer_artifact` issues a ticket only when the source daemon origin is **recorded reachable TLS** the destination can dial; default loopback is typed `source_unreachable`. Destination-authored `transfer_complete` is the verified completion ack. Invoke on that placement refuses until the ticket is `complete`. Home may attach before an instance exists. Silent local fallback is refused. Details: `LIBRARY-AND-ATTACHMENTS.md`.
+ 
+ ### AD-23 — Cancel has one host function [CANDIDATE]
+ 
+ - **Binds:** UX-11, J-UI-08
+ - **Prevents:** mapping cancel to `stop_run`; a second invoke; adapter-owned cancel clients
+-- **Rule:** Unique issuer `apps/qmx-ui/src/lib/host/dispatchCancel`. CT-40 addable command `cancel_job` (absent at `34c148b`, COMP-QMA-WIRE). Fields: `handle_id`, `logical_run_id`, `attempt_id`, `command_id`, `expected_state` (JobHandle state plus attempt_id). **Authority:** operator of the JobHandle’s immutable `originating_psess` (admitted at start). Observation is not cancel authority. `expected_state`: a non-terminal advance `queued`→`running` does **not** invalidate the same `command_id`; an already-terminal handle records a no-op. Nested child handles cancel through this same function. Repeat uses the same `command_id`. First durable terminal wins. Not an InvocationEnvelope invoke. Not seed `stop_run`.
++- **Rule:** Unique issuer `apps/qmx-ui/src/lib/host/dispatchCancel`. CT-40 addable command `cancel_job` (absent at `34c148b`, COMP-QMA-WIRE). Fields: `handle_id`, `logical_run_id`, `attempt_id`, `command_id`, `expected_state` (JobHandle state plus attempt_id). **Authority:** operator of the JobHandle’s immutable **`originating_product_session_ref`** when that field is present (UI admit). Headless/QMB admits **omit** the field; UI `cancel_job` is then unavailable and Story 36.5 remains the abort door. Observation is not cancel authority. Cancel requires exact equality of `handle_id`/`job_id`, `logical_run_id`, and `attempt_id`. `expected_state`: a non-terminal advance `queued`→`running` does **not** invalidate the same `command_id`; an already-terminal handle records a no-op. Nested child handles cancel through this same function. Repeat uses the same `command_id`. First durable terminal wins. Not an InvocationEnvelope invoke. Not seed `stop_run`.
+ 
+ ### AD-24 — Command identity is per producer and per session [CANDIDATE]
+ 
+--- before/AUTHORING-AND-ML.md
++++ after/AUTHORING-AND-ML.md
+@@ -21,7 +21,7 @@
+ | **Local authoring pack** | Unpublished. This machine’s roster. Not a parent AD-18 distributable. |
+ | **Distributable export** | Later copy for **other machines** (parent AD-18). First Run does **not** wait on export. |
+ | **Compile identity** | Enable of the local pack **is** the compile identity `(qualified_id, version)` (parent AD-4 / AD-30). Do **not** register templates outside enable law. |
+-| **Draft save / publish** | CAS `expected_revision` = last known `editor_revision` hash. Stale save → typed conflict. No last-writer-wins. Two restored clients: second save refuses until it reloads head. |
++| **Draft save / publish** | **Daemon** issues durable `editor_draft_id`. First save omits that id (optional `client_draft_correlation`). Subsequent saves + `publish_editor_draft` use CAS `expected_revision` = last known `editor_revision` hash (content fp1). Stale save → typed conflict. No last-writer-wins. Two restored clients: second save refuses until it reloads head. |
+ | **Draft Run** | **Refused.** Preview and validate stay legal. |
+ | **V1 while editing V2** | **Allowed.** Running JobHandle stays pinned to enabled V1. |
+ 
+@@ -33,7 +33,7 @@
+ | Enabled template bytes immutable | **Specified** parent AD-4; rebuild-on-load must not change an enabled `(id, version)` |
+ | Local authoring pack vs distributable export | **Specified here.** Local pack = this machine’s unpublished roster. Export = parent AD-18 later copy. First Run does not wait on export |
+ | Draft save/publish CAS `expected_revision` | **Specified here** as last known `editor_revision` hash. Not `product_session.context_revision` |
+-| `editor_draft_id` / `editor_revision` product surface | **Absent** |
++| `editor_draft_id` / `editor_revision` / `publish_editor_draft` product surface | **Absent** |
+ | Draft test-run / temporary runnable version | **Refused** by this companion (must not be invented in UI or daemon) |
+ | MissionCompiler in Svelte | **Forbidden** (local AD-1 / parent AD-4) |
+ | `change_request` three records | **Types/fixture** (Story 58.4 / SCN-0019); not e2e (DEC-0286) |
+@@ -50,7 +50,7 @@
+ 
+ | Identity | Shape | Mutability | Runnable? | Owner |
+ | --- | --- | --- | --- | --- |
+-| **`editor_draft_id`** | durable id of a working copy | **Mutable** working copy. Unsaved client buffer and daemon- or client-staged bytes | **No** | COMP-QMA-DAEMON once saved; client-local until first save |
++| **`editor_draft_id`** | durable id of a working copy | **Mutable** working copy. Unsaved client buffer until first save | **No** | **COMP-QMA-DAEMON** is the sole durable issuer (first `save_editor_draft`). UI may keep `client_draft_correlation` until then |
+ | **`editor_revision`** | content hash of a **saved** draft snapshot | **Immutable** snapshot. New edits mint a new hash on next save | **No** | COMP-QMA-DAEMON content-addressed staging (not a Workbench AD-3 kind) |
+ | **Graph Template** | `(qualified_id, version)` | Enabled version **immutable**. Byte change → new version or disable (parent AD-4) | **Yes**, after enable ∩ grant ∩ health | Plugin contribution at enable; COMP-QMA-DAEMON roster |
+ | **Pack instance** | `instance_id` + `package_version` + `config_revision` | Instance row mutable only via named pack/config CAS. Running work stays pinned to the instance/bytes it started | Invoke **target**, not the graph definition | Plugin-install projection (parent AD-16). `instance_id` ≠ `plugin_id` |
+@@ -105,11 +105,11 @@
+ 
+ | Act | From | To | Owner | Notes |
+ | --- | --- | --- | --- | --- |
+-| **Create draft** | empty Authoring canvas (platform destination; zero apps legal) | new `editor_draft_id`; no revision yet | UI mints local id; daemon persists id on first save | Not a template. Not an instance. Profile `authoring`. |
++| **Create draft** | empty Authoring canvas (platform destination; zero apps legal) | unsaved buffer; optional `client_draft_correlation`; **no** durable `editor_draft_id` yet | UI correlation only | Not a template. Not an instance. Profile `authoring`. |
+ | **Edit** | `editor_draft_id` | same id; buffer dirty vs last `editor_revision` | client | Dirty buffer is not a revision. Does not touch running jobs. |
+ | **Validate** | named `editor_revision` **or** explicit “validate unsaved” (must hash the buffer first as a transient revision candidate) | `ChangeValidation`-class verdict against **that hash** | daemon graph/topology/schema checks (parent AD-6 DAG); UI displays | **Invalidates** if bytes change after the named hash. Validate ≠ Run. No JobHandle. |
+-| **Save revision** | dirty `editor_draft_id` | new immutable `editor_revision` (content hash) | COMP-QMA-DAEMON staging | CAS `expected_revision` = last known `editor_revision` hash (empty on first save). Stale → typed conflict. Hash is not a template version. |
+-| **Publish into local authoring pack** | named `editor_revision` whose last validation is still valid for that hash | template contribution bytes in the **local authoring pack** (unpublished, this machine’s roster) | host write into that pack | **Not** a registered Graph Template. **Not** a distributable export. CAS `expected_revision` = last known `editor_revision` hash. |
++| **Save revision** | dirty buffer (first) or dirty `editor_draft_id` | durable `editor_draft_id` (first save) + new immutable `editor_revision` (content fp1) | COMP-QMA-DAEMON `save_editor_draft` | First save **omits** `editor_draft_id`; `expected_revision` empty; optional `client_draft_correlation` recovers lost ack. Subsequent saves require durable id + `expected_revision` = current head fp1. Stale → typed conflict. Hash is not a template version. |
++| **Publish into local authoring pack** | named `editor_revision` (fp1) of an owned draft | template contribution bytes in the **local authoring pack** (unpublished, this machine’s roster) | addable `publish_editor_draft` | Checks ownership, `expected_revision`, revalidates **that immutable fp1**, then writes. **Not** a registered Graph Template. **Not** a distributable export. Unsaved preview/validate stay legal. |
+ | **Enable local authoring pack** | local pack with published contribution + parent AD-30 validate | `enabled`; atomic roster; `availability_revision`; Graph Template `(qualified_id, version)` **registered** | host AD-30 | **Enable is the compile identity** (parent AD-4 / AD-30). Do not register templates outside this law. Failed validation restores last usable roster. Collision of `(point, qualified_id)` refuses. **This is the first runnable identity.** First Run does **not** wait on export. |
+ | **Grant** | enabled contribution + operator | GrantRecord on the **authoring** `psess:` | host AD-24 | Hit ≠ grant. Upgrade cannot widen an existing grant. |
+ | **Select instance** | enabled pack instance | exactly one `selected_refs` kind `instance_id` | operator via TargetPicker | Envelope `instance_id` copies this (kit AD-3 / DEC-0463). |
+@@ -124,10 +124,10 @@
+ 
+ Architecture sequence. Unexecuted. Empty Authoring is a legal platform destination with zero opened apps.
+ 
+-1. **Create draft.** Empty Authoring canvas → `editor_draft_id`. Not a template. Not an instance. Not runnable.
+-2. **Save revision.** Dirty buffer → immutable `editor_revision` hash. CAS `expected_revision` is empty on first save, then the last known hash. Stale head → typed conflict (no last-writer-wins).
+-3. **Validate.** Names that `editor_revision` hash. Verdict is for that hash only. Validate ≠ Run.
+-4. **Publish into the local authoring pack.** Validated hash is written as a `graph_template` contribution on **this machine’s unpublished authoring pack**. Still not registered. Still not runnable. Still not a parent AD-18 distributable.
++1. **Create draft.** Empty Authoring canvas. Optional `client_draft_correlation`. Not a template. Not an instance. Not runnable. No durable id yet.
++2. **Save revision.** PUT bytes then `save_editor_draft` **without** `editor_draft_id` on first save. Daemon returns `{editor_draft_id, editor_revision=fp1}`. Lost first-save ack: retry with the same `client_draft_correlation` and same bytes. Subsequent saves require durable id + `expected_revision` = current head. Stale head → typed conflict (no last-writer-wins).
++3. **Validate.** Names that `editor_revision` hash. Verdict is for that hash only. Validate ≠ Run. Unsaved preview/validate remain legal.
++4. **Publish into the local authoring pack.** `publish_editor_draft` checks ownership, `expected_revision`, revalidates that immutable fp1, and writes a `graph_template` contribution on **this machine’s unpublished authoring pack**. Still not registered. Still not runnable. Still not a parent AD-18 distributable.
+ 5. **Enable that local pack** (parent AD-30). Compile-at-enable: plugin manifest yields Graph Template `(qualified_id, version)`. Enabled bytes are immutable. This **is** registration. Do not register any other way.
+ 6. **Grant** the enabled contribution into the **authoring** `psess:`.
+ 7. **Select** that pack’s `instance_id` (exactly one `selected_refs` kind `instance_id`).
+@@ -165,7 +165,7 @@
+ 
+ | Case | Result |
+ | --- | --- |
+-| First save (no prior hash) | `expected_revision` empty/absent. Daemon mints the first `editor_revision`. |
++| First save (no durable id) | Omit `editor_draft_id`. `expected_revision` empty/absent. Optional `client_draft_correlation`. Daemon issues `{editor_draft_id, editor_revision=fp1}`. |
+ | Save / publish naming current head | `ok` + new immutable `editor_revision` (save) or pack contribution write (publish). |
+ | Save / publish naming a stale hash | typed **conflict** with current head. No last-writer-wins. Bytes of the refused write are not the new head. |
+ | Two restored clients, both at `R1` | First save with `expected_revision=R1` → `R2`. Second save with `expected_revision=R1` **refuses** until that client reloads head `R2` and retries. |
+@@ -175,7 +175,7 @@
+ 
+ ### 2.2 Validation invalidation
+ 
+-Validation records the `editor_revision` hash (or the hash of the buffer if the operator chose validate-unsaved). Any subsequent edit that changes bytes **invalidates** that verdict. Publish into the local authoring pack requires a **currently valid** validation of the hash being published. Re-validate is explicit. The UI must show the hash it validated, not a draft label.
++Validation records the `editor_revision` hash (or the hash of the buffer if the operator chose validate-unsaved) as a **chrome label**. Any subsequent edit that changes bytes **invalidates** that label. The durable publication gate is `publish_editor_draft`: the command **reruns** validation against that immutable fp1. A stored verdict is not required and is not a second record. The UI must show the hash it last validated, not a draft label. Reload of the CAS head is addable query `get_editor_draft_head`.
+ 
+ ### 2.3 Crash / reopen
+ 
+@@ -333,7 +333,7 @@
+ 
+ | Add | Owner | Class vs `34c148b` |
+ | --- | --- | --- |
+-| Persist `editor_draft_id` + `editor_revision` bytes (staging, not Library kind) | COMP-QMA-DAEMON | **add** (absent) |
++| Persist `editor_draft_id` + `editor_revision` bytes (daemon-issued id; not Library kind) | COMP-QMA-DAEMON `save_editor_draft` / `publish_editor_draft` | **add** (absent) |
+ | CAS save/publish on `expected_revision` (last known `editor_revision` hash) | COMP-QMA-DAEMON | **add** (absent) |
+ | Validate-named-hash; invalidate on byte change | COMP-QMA-DAEMON | **add** chrome+command over existing DAG checks |
+ | Publish revision **into the local authoring pack** (not register) | host pack write | **adapt** pack bytes on this machine’s unpublished roster |
+--- before/BACKEND-DEPENDENCIES.md
++++ after/BACKEND-DEPENDENCIES.md
+@@ -27,10 +27,12 @@
+ 
+ | Contract | Owner direction | Affected planned work if accepted |
+ | --- | --- | --- |
+-| Pairing HTTP `/pair/*` + `pairing_session_id` + WS subprotocol `qmx.pair.<id>` | COMP-QMA-DAEMON + COMP-QMB `qmb host pair` | New vs Epic 41 auth adoption. **Issuance:** Origin never sufficient; QMB confirm or authenticated `/pair/renew`. Named carve-out to unauthenticated bind (backend-delta AM-01). Do not weaken CT-40 pre-protocol law outside `/pair/start|confirm` |
+-| Mailbox Envelope persists `product_session_id`; `list_mailbox` lookup by `(producer_id, wire id)` | COMP-QMA-WIRE vocab + COMP-QMA-DAEMON delivery | Additive on CT-48. **Delivery owner is Epic 46 / Story 46.4.** Epic 41 owns the addable query name. Epic 42 owns journal/fold. Not a new store |
+-| `cancel_job` + JobHandle `originating_psess` at admit | COMP-QMA-WIRE + DAEMON JobHandle | Touches Epic 57 handle identity; Epic 63 nested child handles |
+-| HTTP PUT `/artifacts/stage` + `transfer_artifact`; v1 refuse partial | COMP-QMA-DAEMON | New byte channel; reuse artifact register |
++| Pairing HTTP `/pair/*` + `pairing_proof` / `pairing_record_id` + WS `qmx.pair.<proof>` | COMP-QMA-DAEMON + COMP-QMB host-control `qmb host pair` | New vs Epic 41 auth adoption. **Issuance:** Origin never sufficient; QMB confirm or authenticated `/pair/renew`. First operator is local host-control (AM-15). Named carve-out to unauthenticated bind (backend-delta AM-01). Do not weaken CT-40 pre-protocol law outside `/pair/start|confirm` |
++| Mailbox Envelope persists `product_session_ref`; `list_mailbox` lookup by `(producer_id, wire id)` | COMP-QMA-WIRE vocab + COMP-QMA-DAEMON delivery | Additive `_ref` on CT-48 (AM-14). **Delivery owner is Epic 46 / Story 46.4.** Epic 41 owns the addable query name. Epic 42 owns journal/fold. Send and list require principal equality |
++| `cancel_job` + optional JobHandle `originating_product_session_ref` at UI admit | COMP-QMA-WIRE + DAEMON JobHandle | Touches Epic 57 handle identity; Epic 63 nested child handles. Headless omits the field |
++| HTTP PUT `/artifacts/stage` + `transfer_artifact` + dest `transfer_complete`; v1 refuse partial; loopback `source_unreachable` | COMP-QMA-DAEMON | New byte channel; reuse artifact register; reachable TLS prerequisite |
++| `save_editor_draft` / `get_editor_draft_head` / `publish_editor_draft`; daemon-issued `editor_draft_id` | COMP-QMA-DAEMON | First save omits id; reload-head query; publish then AD-30 enable |
++| `get_pack_ui_request` keyed by `instance_id` + `availability_revision` | COMP-QMA-WIRE query + DAEMON ingest | Beside Epic 60; do not nest `copilot_profile` |
+ | Local authoring pack enable as first Run bridge | existing AD-30 enable | No new enable machine; export remains later AD-18 |
+ 
+ ## Explicit non-amendments
+--- before/BOOTSTRAP-AND-AUTH.md
++++ after/BOOTSTRAP-AND-AUTH.md
+@@ -15,7 +15,7 @@
+ 
+ **Codex R2 answer — one v1 bootstrap owner:** **COMP-QMB**, via the existing QMB operator CLI (parent AD-21). Named backend add: `qmb host start|status|stop`. That group **does not exist** at `integration@34c148b`. Until it ships, the UI “Start local” control is a **setup screen** with the documented `python -m qma.daemon` recipe. It is **not** a spawn.
+ 
+-**Codex R2 answer — one v1 proof (browser-realizable):** **`pairing_session_id`**. Unauthenticated bootstrap is HTTP POST `/pair/start` and `/pair/confirm` only. Authenticated HTTP GET sends `Authorization: Bearer pairing:<id>`. Authenticated WebSocket offers WHATWG subprotocols `qmx.ct40.v1` and `qmx.pair.<id>` (browsers cannot set `Authorization` on `WebSocket`). Cookies are refused. The browser does not present an arbitrary `cred://` as login. Matches local AD-19.
++**Codex R2 answer — one v1 proof (browser-realizable):** **`pairing_proof`** (bearer credential). Nonsecret row identity is **`pairing_record_id`**. Unauthenticated bootstrap is HTTP POST `/pair/start` and `/pair/confirm` only. Authenticated HTTP GET sends `Authorization: Bearer pairing:<proof>`. Authenticated WebSocket offers WHATWG subprotocols `qmx.ct40.v1` and `qmx.pair.<proof>`. Cookies are refused. The browser does not present an arbitrary `cred://` as login. Matches local AD-19 and backend-delta AD-3/AD-4.
+ 
+ ## 1. Locked defaults (candidate)
+ 
+@@ -24,20 +24,20 @@
+ | Delivery | v1 is a **browser SPA** on a **static origin** (SvelteKit dev server or static file server). Never served from daemon port **8765**. SPA origin ≠ daemon origin. |
+ | Runtime | `qma-daemon` must **already be running** or be started by the **QMB CLI**. Browser JavaScript **must not** spawn Python. |
+ | Privileged owner | COMP-QMB / `qmb` (parent AD-21). No `qma-cli`. No tray/service COMP. |
+-| Named add | `qmb host start\|status\|stop` (absent at inspect). Pair confirm: `qmb host pair` (same group; also absent). |
++| Named add | `qmb host start\|status\|stop\|pair\|configure` via **local host-control** (absent at inspect). First operator is that path (backend-delta AD-17). |
+ | Until that add | UI “Start local” = setup copy + recipe. Not `child_process`, not Tauri `plugin-shell`, not a hidden helper. Pair confirm = QMB-visible pending-pair until the verb exists. |
+ | Data root | Env `QMA_DAEMON_ROOT` = **stable per-user directory**. Not launch cwd. |
+ | Single instance | Lock file under that root refuses a second daemon. |
+ | Discover | Default **`127.0.0.1:8765`**. A recorded remote is operator-entered. Remote failure **never** retargets to local. |
+-| Unauthenticated bootstrap | HTTP POST **`/pair/start`** and **`/pair/confirm`** on the daemon origin only (loopback `http://127.0.0.1:8765` or the recorded HTTPS origin). No CT-40 `initialize`, commands, or queries until pairing succeeds. Pairing HTTP **must not** open the authenticated wire. |
+-| One proof | **`pairing_session_id`**, issued after the operator confirms the code via `qmb host pair` (or QMB-visible pending-pair until that verb exists). Browser then collects it with POST `/pair/confirm`. |
+-| Browser storage | **Memory + `sessionStorage` for that tab.** Not `localStorage`. Not a cookie. Not a provider `cred://`. |
+-| Authenticated HTTP GET | Header `Authorization: Bearer pairing:<id>` **plus** `Origin`. CORS **exact** paired static origin. |
+-| Authenticated WebSocket | WHATWG `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<id>"])`. Browsers **cannot** set `Authorization` on `WebSocket`. Documented below; not a second proof. |
++| Unauthenticated bootstrap | HTTP POST **`/pair/start`** and **`/pair/confirm`** on the daemon origin only, plus CORS **`OPTIONS`** on named daemon HTTP routes (OPTIONS never issues a proof, never upgrades WS, never returns bytes). No CT-40 `initialize`, commands, or queries until pairing succeeds. Pairing HTTP **must not** open the authenticated wire. |
++| One proof | **`pairing_proof`** (bearer). Issued **once** after `qmb host pair <code>` (local host-control) then POST `/pair/confirm`. Journal stores `pairing_record_id` + `proof_fp1`, never the raw proof. |
++| Browser storage | **Memory + `sessionStorage` for that tab.** Not `localStorage`. Not IndexedDB. Not a cookie. Not a provider `cred://`. |
++| Authenticated HTTP GET | Header `Authorization: Bearer pairing:<proof>` **plus** `Origin`. CORS **exact** paired static origin. |
++| Authenticated WebSocket | WHATWG `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<proof>"])`. Browsers **cannot** set `Authorization` on `WebSocket`. Documented below; not a second proof. |
+ | Cookies | **Refused** as the v1 proof. No `Set-Cookie` on `/pair/*`. No header-or-cookie fork. |
+-| Daemon mapping | Daemon maps `pairing_session_id` → operator principal + `CredentialRef` **internally**. Browser never sends an arbitrary `cred://` as login. Accept iff **Origin + pairing_session** match the pairing table. |
+-| Second tab | New `producer_id`. `sessionStorage` is **per-tab**, so a typed-URL second tab does **not** inherit the id. It POSTs `/pair/start` again and needs **fresh QMB confirm** of that pending request. A remembered Origin **never** issues a `pairing_session_id`. A cloned/auxiliary tab that **copied** `sessionStorage` already holds proof and reconnects (or `/pair/renew`); it still takes a new `producer_id` if the old one is live. Same `psess:` only if the operator selects it. |
+-| Same-tab restart | `sessionStorage` restores `pairing_session_id`; reconnect uses it until expiry. |
++| Daemon mapping | Daemon matches Origin + `proof_fp1` to `pairing_record_id` and the **operator principal** minted at host-control bootstrap. Browser-paired sessions do **not** carry a broker `credential_ref`. Browser never sends an arbitrary `cred://` as login. |
++| Second tab | New `producer_id`. Typed-URL tab POSTs `/pair/start` and needs **fresh QMB confirm**. A remembered Origin **never** issues a proof. Cloned tab that copied `sessionStorage` already holds `pairing_proof` and **reconnects**. `/pair/renew` is an explicit rotate, not the clone path. New `producer_id` if the old is live. |
++| Same-tab restart | `sessionStorage` restores `pairing_proof`; reconnect until expiry. Expiry **closes** the WS. |
+ | Remote | HTTPS + `wss://`; pairing recorded on **that** host; disconnect does **not** become local. |
+ | Close browser | `wire.detach` only. Never cancel `JobHandle`s. Never stop the daemon. |
+ | Stop local runtime | `qmb host stop` only. Does not cancel QMN or other remote work. |
+@@ -65,7 +65,7 @@
+ | Cookie (`SameSite=Strict` or otherwise) as the session | **Refused.** No header-or-cookie fork. Cookies are not the v1 proof. |
+ | `localStorage` of a `cred://` or session id | **Refused.** Not tab-scoped; not operator proof. |
+ | Browser sends an arbitrary `cred://` / `credential_ref` as login | **Refused.** Possession of a ref is not the operator. |
+-| HTTP `Authorization: Bearer pairing:<id>` + WS subprotocol `qmx.pair.<id>` | **Chosen.** One proof, two transports, both browser-realizable. |
++| HTTP `Authorization: Bearer pairing:<proof>` + WS subprotocol `qmx.pair.<proof>` | **Chosen.** One proof, two transports, both browser-realizable. `pairing_record_id` is the nonsecret journal identity. |
+ 
+ ## 3. Process topology (v1)
+ 
+@@ -77,17 +77,18 @@
+            |  Origin: e.g. http://127.0.0.1:5173
+            |
+            |  (1) unauth HTTP POST /pair/start and /pair/confirm
+-           |  (2) auth HTTP GET  Authorization: Bearer pairing:<id>
+-           |  (3) auth WS        subprotocols qmx.ct40.v1 + qmx.pair.<id>
++           |  (2) auth HTTP GET  Authorization: Bearer pairing:<proof>
++           |  (3) auth WS        subprotocols qmx.ct40.v1 + qmx.pair.<proof>
+            v
+   qma-daemon  127.0.0.1:8765     QMA_DAEMON_ROOT + .daemon_writer
+            ^
+-           |  start | status | stop | pair
++           |  start | status | stop | pair | configure  (host-control, not CT-40)
+   qmb host (COMP-QMB CLI)   ← only privileged door
+            |
+            +-- does not import into the UI process
+            +-- does not become a second Mission orchestrator
+-           +-- maps pairing_session_id → operator + CredentialRef (internal)
++           +-- maps Origin + proof_fp1 → operator principal + pairing_record_id
++           +-- browser session has no credential_ref
+ ```
+ 
+ No UI-owned scheduler, grant store, or wire bus. Packs, grants, envelopes, and JobHandles stay in existing COMPs.
+@@ -149,16 +150,16 @@
+ 
+ `WireConnection.authenticate` stores the ref + principal, immutable for the connection life. Family messages before authenticate+initialize are policy refusals. Listener posture: unauthenticated bind and plaintext non-loopback are **hard startup refusals** (`listener.py`).
+ 
+-**Honesty:** those modules are types + tests. `DaemonProcess._handle_client` reads TCP chunks and discards them. No live pairing table, CORS, HTTP `/pair/*`, `pairing_session_id`, or CT-40 server exists at `34c148b`. Cookies are **not** planned and **must not** be added as a second proof.
+-
+-**Sitting adapter (candidate):** the **browser** proof is `pairing_session_id`, not a client-sent `credential_ref`. The daemon looks up Origin + pairing session in the pairing table, then **internally** builds `AuthenticatedWireSession` with the mapped operator `credential_ref` + `principal_class=operator` (reuse of the existing shape). The browser never calls `authenticate_before_protocol` with a pasted ref.
++**Honesty:** those modules are types + tests. `DaemonProcess._handle_client` reads TCP chunks and discards them. No live pairing table, CORS, HTTP `/pair/*`, `pairing_proof`, or CT-40 server exists at `34c148b`. Cookies are **not** planned and **must not** be added as a second proof.
++
++**Sitting adapter (candidate):** the **browser** proof is `pairing_proof`, not a client-sent `credential_ref`. After Origin + `proof_fp1` match, the daemon builds `AuthenticatedWireSession` with `principal_class=operator` and `pairing_record_id`. Browser-paired sessions **do not** populate `credential_ref` and do not pass the proof to `parse_credential_ref`. Machine clients still present `credential_ref` (Story 41.4). The browser never calls `authenticate_before_protocol` with a pasted ref.
+ 
+ ### 5.2 Two credential planes (do not mix)
+ 
+ | Plane | What | Who proves it | Browser |
+ | --- | --- | --- | --- |
+-| **Connection (v1 proof)** | `pairing_session_id` bound to Origin + operator | Pairing table after QMB confirm | HTTP `Authorization: Bearer pairing:<id>`; WS subprotocol `qmx.pair.<id>`; stored in memory + `sessionStorage` |
+-| **Daemon-internal bind** | Mapped `credential_ref` + `principal_class=operator` | Daemon only, after table match | **Never sent** as login. Not stored in the page. |
++| **Connection (v1 proof)** | `pairing_proof` bound to Origin + operator principal | Pairing table after local-control confirm (`proof_fp1`) | HTTP `Authorization: Bearer pairing:<proof>`; WS subprotocol `qmx.pair.<proof>`; stored in memory + `sessionStorage` |
++| **Daemon-internal bind** | `principal_class=operator` + `pairing_record_id` (no `credential_ref` on browser sessions) | Daemon only, after table match | **Never sent** as login. Not stored in the page. Journal identity is `pairing_record_id`. |
+ | **Provider / adapter** | Allowlisted `cred://models\|inference\|compute\|sandbox\|corpus\|knowledge\|telemetry/` | Credential Broker exact-ref resolve (adapter layer only) | Never a login. UI may later collect a value into OS store as a **ref**; daemon never sees the secret |
+ 
+ Allowlist is code in `qma-core` (L34 / DEC-0323). UI must not offer `cred://venue|broker|exchange|trading-node|platform-registry/`. Pasting a provider ref into the wire as if it were operator proof is refused.
+@@ -171,18 +172,18 @@
+ 
+ 1. Operator opens the SPA on its **static origin** (dev or file server), not on `:8765`.
+ 2. SPA probes daemon-origin reachability (`127.0.0.1:8765` or the recorded HTTPS remote). If the daemon is down → disconnected setup (section 8). Probe does not open CT-40.
+-3. If this tab has no unexpired `pairing_session_id` in memory/`sessionStorage`, SPA `fetch` **POST `/pair/start`** with `credentials: 'omit'`. The browser sends `Origin` (the static origin). Daemon records a pending pair (short code + expiry) for that Origin. Response is JSON `{code, expires_at, pending_id}` — not a session, not a `Set-Cookie`, not a `credential_ref`.
++3. If this tab has no unexpired `pairing_proof` in memory/`sessionStorage`, SPA `fetch` **POST `/pair/start`** with `credentials: 'omit'`. The browser sends `Origin` (the static origin). Daemon records a pending pair (short code + expiry) for that Origin. Response is JSON `{code, expires_at, pending_id}` — not a session, not a `Set-Cookie`, not a `credential_ref`. Pairing HTTP refuses issue until first operator exists and pairing TTL is set (backend-delta AD-17).
+ 4. UI shows the code (setup chrome, not a secret form).
+-5. Operator confirms the code on the privileged door: **`qmb host pair <code>`** (same host group as start/status/stop; also **absent** at inspect). Interim until that verb exists: confirm in the daemon’s operator-visible pending-pair record **through QMB**, never by typing a secret into the browser. QMB confirm **stores** the bind (Origin → operator principal + internal `CredentialRef`); QMB does not become a second grant store. Confirm does **not** open the authenticated wire.
+-6. SPA **POST `/pair/confirm`** (`credentials: 'omit'`, same Origin, `pending_id`). Before QMB confirm: pending, no `pairing_session_id`, no CT-40. After confirm: JSON `{pairing_session_id}`. **Issuance rule (backend-delta AD-3):** a remembered Origin never issues a session. New ids require this QMB-confirmed pending path **or** authenticated `POST /pair/renew` presenting an existing unexpired unrevoked `pairing_session_id`. That confirmed (or renewed) id is the only issuance of the proof to the page.
+-7. Browser stores `pairing_session_id` in **memory and `sessionStorage` for that tab** (section 5.5). It does not store a `credential_ref`. It does not write `localStorage`. It does not accept a cookie.
++5. Operator confirms the code on the privileged door: **`qmb host pair <code>`** (same host group as start/status/stop; also **absent** at inspect). Interim until that verb exists: confirm in the daemon’s operator-visible pending-pair record **through QMB host-control**, never by typing a secret into the browser. QMB confirm **stores** the bind (Origin → operator principal); QMB does not become a second grant store. Confirm does **not** open the authenticated wire and does **not** issue the browser proof.
++6. SPA **POST `/pair/confirm`** (`credentials: 'omit'`, same Origin, `pending_id`). Before QMB confirm: pending, no proof, no CT-40. After confirm: JSON `{pairing_record_id, pairing_proof, expires_at}` **once**. Retry of the same pending is `already_issued`. **Issuance rule (backend-delta AD-3):** a remembered Origin never issues a session. New proofs require this QMB-confirmed pending path **or** authenticated `POST /pair/renew`. Renew **rotates**: new proof, old proof revoked, old WS closed.
++7. Browser stores `pairing_proof` (and may store `pairing_record_id`) in **memory and `sessionStorage` for that tab**. It does not store a `credential_ref`. It does not write `localStorage`. It does not accept a cookie.
+ 8. Then authenticated CT-40 (section 5.4): HTTP GET with Bearer, WebSocket with subprotocols, then `initialize` (section 6).
+ 
+ **CORS on `/pair/start` and `/pair/confirm`:** reflect the requesting `Origin` so the SPA can POST (cross-origin; static origin ≠ daemon origin). Methods POST (+ OPTIONS preflight). `Access-Control-Allow-Credentials` is **false**. `Authorization` is not required on these two paths. Authenticated routes (section 5.4) do **not** use this open reflect: they allow **only** the paired origin.
+ 
+-**Possession of an arbitrary `cred://…` ref is not operator proof.** A stolen or guessed provider ref, or a ref copied from docs, does not bind an origin and is not a `pairing_session_id`. Confirmation is a human act on the QMB door.
+-
+-**Secrets never on the wire.** Pairing code is a challenge identifier, not a password. `pairing_session_id` is an opaque session id, not a provider secret. Provider values never appear in envelopes, query strings, traces, or diagnostics (`FORBIDDEN_SECRET_SURFACE_KEYS`).
++**Possession of an arbitrary `cred://…` ref is not operator proof.** A stolen or guessed provider ref, or a ref copied from docs, does not bind an origin and is not a `pairing_proof`. Confirmation is a human act on the QMB host-control door. First operator is minted on `qmb host start` of an empty `QMA_DAEMON_ROOT` (backend-delta AD-17), before any pairing HTTP.
++
++**`pairing_proof` is a bearer credential** ([RFC 6750 §1.2](https://datatracker.ietf.org/doc/html/rfc6750#section-1.2)): possession authorizes. It is **not** a nonsecret label. Do not put it in journals, traces, diagnostics, or query strings. Pairing code is a challenge identifier. Provider values never appear on those surfaces. Confirm returns the proof **once**; a lost response requires re-pair.
+ 
+ **Must not:** open a WebSocket to deliver the pairing code; send family messages (`initialize`, commands, queries, `wire.attach`) on an unpaired connection; treat `/pair/*` success as `initialize`; `Set-Cookie`.
+ 
+@@ -190,26 +191,26 @@
+ 
+ ### 5.4 One proof, two transports (cookies refused)
+ 
+-After `/pair/confirm` returns `pairing_session_id`, every authenticated call presents **that same id**. HTTP and WebSocket are different TCP connections. There is **no** shared cookie jar and **no** requirement that they share one in-memory `AuthenticatedWireSession` object across transports. Each request/connection proves the id; the daemon maps Origin + id to operator + `CredentialRef` per the pairing table.
++After `/pair/confirm` returns `{pairing_record_id, pairing_proof, expires_at}` once, every authenticated call presents **that same `pairing_proof`**. HTTP and WebSocket are different TCP connections. There is **no** shared cookie jar and **no** requirement that they share one in-memory `AuthenticatedWireSession` object across transports. Each request/connection proves the proof; the daemon maps Origin + `proof_fp1` to the operator principal + `pairing_record_id`.
+ 
+ | Family | Transport | Proof (v1) |
+ | --- | --- | --- |
+-| Queries | HTTP GET snapshots (authoritative) | Request header `Authorization: Bearer pairing:<id>` **and** `Origin` equal to the paired static origin |
+-| Commands / events | JSON-RPC 2.0 WebSocket (`ws://` loopback, `wss://` otherwise) | WHATWG `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<id>"])` |
+-
+-**HTTP GET.** CORS: `Access-Control-Allow-Origin` is the **exact** paired static origin (not `*`, not a reflect-any after pair). `Access-Control-Allow-Headers` includes `Authorization`. `Access-Control-Allow-Credentials` is false. Fetch uses `credentials: 'omit'`. Other origins: refuse. Preflight failure is not a retarget. Loopback may use `http://` (local AD-12). Non-loopback requires HTTPS. Do not put `pairing_session_id` in the query string.
++| Queries | HTTP GET snapshots (authoritative) | Request header `Authorization: Bearer pairing:<proof>` **and** `Origin` equal to the paired static origin |
++| Commands / events | JSON-RPC 2.0 WebSocket (`ws://` loopback, `wss://` otherwise) | WHATWG `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<proof>"])` |
++
++**HTTP GET.** CORS: `Access-Control-Allow-Origin` is the **exact** paired static origin (not `*`, not a reflect-any after pair). `Access-Control-Allow-Headers` includes `Authorization`. `Access-Control-Allow-Credentials` is false. Fetch uses `credentials: 'omit'`. Other origins: refuse. Preflight failure is not a retarget. Loopback may use `http://` (local AD-12). Non-loopback requires HTTPS. Do not put `pairing_proof` in the query string.
+ 
+ **WebSocket.** Browsers **cannot** set an `Authorization` header on `WebSocket`. That is why the proof is a subprotocol, not a header-or-cookie fork.
+ 
+ ```js
+-const ws = new WebSocket(url, ["qmx.ct40.v1", "qmx.pair." + pairingSessionId]);
++const ws = new WebSocket(url, ["qmx.ct40.v1", "qmx.pair." + pairingProof]);
+ ```
+ 
+-Client offers **both** tokens. WHATWG lets the server echo **one** selected protocol. The daemon **inspects the offered list**, requires `qmx.ct40.v1` and a `qmx.pair.<id>` whose `<id>` matches the pairing table **together with the `Origin`**, then echoes `qmx.ct40.v1`. Missing, malformed, expired, or origin-mismatched `qmx.pair.<id>` → **refuse the upgrade**. No CT-40 bytes, no `initialize`.
++Client offers **both** tokens. WHATWG lets the server echo **one** selected protocol. The daemon **inspects the offered list**, requires `qmx.ct40.v1` and a `qmx.pair.<proof>` whose proof matches the pairing table **together with the `Origin`**, then echoes `qmx.ct40.v1`. Missing, malformed, expired, or origin-mismatched `qmx.pair.<proof>` → **refuse the upgrade**. No CT-40 bytes, no `initialize`. Access logs and traces redact `qmx.pair.*` values.
+ 
+ **Cookies are refused.** Daemon must not `Set-Cookie` on `/pair/start`, `/pair/confirm`, queries, or the WebSocket handshake. A `Cookie` header is **not** operator proof. Implementations must not accept “header or cookie.”
+ 
+-**Origin + pairing_session must match the pairing table.** A valid id presented from a different Origin is refused. A guessed Bearer without a table row is refused. A provider `cred://` in `Authorization` is refused.
++**Origin + `proof_fp1` must match the pairing table.** A valid proof presented from a different Origin is refused. A guessed Bearer without a table row is refused. A provider `cred://` in `Authorization` is refused.
+ 
+ No REST `/invoke`. No UI BFF.
+ 
+@@ -217,23 +218,24 @@
+ 
+ | Store | v1 |
+ | --- | --- |
+-| Memory | Live tab holds `pairing_session_id` (and that tab’s `producer_id` after `initialize`). |
+-| `sessionStorage` | Same tab: survives reload of **that** tab. Restores `pairing_session_id` (and `producer_id` if already assigned). |
++| Memory | Live tab holds `pairing_proof` (and may hold `pairing_record_id`; plus that tab’s `producer_id` after `initialize`). |
++| `sessionStorage` | Same tab: survives reload of **that** tab. Restores `pairing_proof` (and `producer_id` if already assigned). |
+ | `localStorage` | **Forbidden** for this proof. |
++| IndexedDB / other durable web stores | **Forbidden** for this proof. |
+ | Cookie | **Forbidden** for this proof. |
+ | Provider `cred://` | **Forbidden** as login. |
+ 
+ `sessionStorage` is **per-tab**. A second tab on the same static origin does **not** see the first tab’s id. The operator does not paste the id.
+ 
+-**Second tab (typed URL / empty `sessionStorage`):** POST `/pair/start` again (new `producer_id` always). Show a code and require `qmb host pair` as in 5.3. A remembered Origin **does not** auto-approve and **does not** issue a `pairing_session_id`. Backend-delta AD-3: issuance is fresh QMB confirm of **that** pending request, or `POST /pair/renew` presenting an existing unexpired unrevoked proof. Cloned/auxiliary tabs that copied `sessionStorage` already have proof; they reconnect or renew; they do not use the Origin-only path.
+-
+-**Same-tab restart (reload):** `sessionStorage` restores `pairing_session_id`. Skip `/pair/start`. Reconnect with Bearer + WS subprotocols until expiry. Reuse that tab’s `producer_id` from `sessionStorage` (local AD-11 / AD-24). New tab ⇒ empty `sessionStorage` ⇒ new `producer_id` at `initialize`.
++**Second tab (typed URL / empty `sessionStorage`):** POST `/pair/start` again (new `producer_id` always). Show a code and require `qmb host pair` as in 5.3. A remembered Origin **does not** auto-approve and **does not** issue a `pairing_proof`. Backend-delta AD-3: issuance is fresh QMB confirm of **that** pending request, or `POST /pair/renew` presenting an existing unexpired unrevoked proof. Cloned/auxiliary tabs that copied `sessionStorage` already have proof; they reconnect or renew; they do not use the Origin-only path.
++
++**Same-tab restart (reload):** `sessionStorage` restores `pairing_proof`. Skip `/pair/start`. Reconnect with Bearer + WS subprotocols until expiry. Expiry **closes** the WS. Reuse that tab’s `producer_id` from `sessionStorage` (local AD-11 / AD-24). New tab ⇒ empty `sessionStorage` ⇒ new `producer_id` at `initialize`.
+ 
+ Expired / revoked id in `sessionStorage`: drop it, then `/pair/start` again. Do not reuse a dead id. Do not fall back to unauthenticated loopback (`registry:proxy.allow_unauthenticated_loopback` is the **model proxy**, not the UI wire).
+ 
+ ### 5.6 Reconnect vs re-pair
+ 
+-Reconnect (local AD-11 / parent AD-29) is a **query path**: same unexpired `pairing_session_id` for that tab, daemon re-maps to operator + `CredentialRef`, `initialize` with the **same** `producer_id` for that tab, snapshot queries (Bearer), `product_session.reconnect(resume_cursor, cursor_generation)`, `wire.attach(scope, since_seq)`, `JobHandle.reattach`. It does **not** replay intent, resubmit unacked commands, or imply approval.
++Reconnect (local AD-11 / parent AD-29) is a **query path**: same unexpired `pairing_proof` for that tab, daemon re-maps Origin + `proof_fp1` to operator principal + `pairing_record_id`, `initialize` with the **same** `producer_id` for that tab, snapshot queries (Bearer), `product_session.reconnect(resume_cursor, cursor_generation)`, `wire.attach(scope, since_seq)`, `JobHandle.reattach`. It does **not** replay intent, resubmit unacked commands, or imply approval.
+ 
+ Expired / revoked pairing → POST `/pair/start` again. Do not reopen an unauthenticated family wire.
+ 
+@@ -255,23 +257,25 @@
+   B-->>U: disconnected + Start local (setup)
+   U->>Q: qmb host start<br/>(or interim python -m qma.daemon)
+   Q->>D: set QMA_DAEMON_ROOT, spawn process entry
+-  D->>D: acquire .daemon_writer, bind 8765
++  D->>D: acquire .daemon_writer, bind 8765; empty root mints operator + host_control
+   Q-->>U: status running
++  U->>Q: qmb host configure pairing-ttl
++  Q->>D: host-control writes registry:pairing.session_ttl
+   B->>D: POST /pair/start (Origin, credentials omit)
+   D-->>B: code + pending_id (no session, no cookie)
+   B-->>U: show code
+   U->>Q: qmb host pair CODE
+-  Q->>D: confirm pending (Origin → operator + internal CredentialRef)
++  Q->>D: confirm pending over host-control (Origin → operator principal)
+   B->>D: POST /pair/confirm
+-  D-->>B: pairing_session_id
+-  B->>B: memory + sessionStorage (not localStorage, not cookie)
+-  Note over D: map pairing_session_id → operator + CredentialRef
++  D-->>B: pairing_record_id + pairing_proof once
++  B->>B: memory + sessionStorage of proof (not localStorage, not cookie)
++  Note over D: map Origin + proof_fp1 → operator principal + pairing_record_id
+   Note over C: broker is not the login; pairing table is
+-  B->>D: WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<id>"])
++  B->>D: WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<proof>"])
+   D-->>B: upgrade (echo qmx.ct40.v1) or refuse
+   B->>D: initialize {protocolVersion, capabilities, producer_id?}
+   D-->>B: protocolVersion, capabilities, producer_id
+-  B->>D: HTTP GET Authorization Bearer pairing:id + Origin
++  B->>D: HTTP GET Authorization Bearer pairing:<proof> + Origin
+   D-->>B: snapshot
+   B->>D: JSON-RPC command + InvocationEnvelope
+   D->>D: GrantRecord compare
+@@ -286,12 +290,13 @@
+ ### Step list
+ 
+ 0. **No daemon.** Splash/status, then usable disconnected shell (J-UI-11). “Start local” is setup, not a spawn.
+-1. **Start.** Operator runs `qmb host start` (when it exists) **or** the interim recipe. QMB/recipe sets `QMA_DAEMON_ROOT`, starts `python -m qma.daemon`. Lock + bind succeed or typed refusal.
+-2. **Connect.** SPA discovers `127.0.0.1:8765` (or recorded remote) by HTTP reachability. Does not retarget. Does not open CT-40 yet.
+-3. **Pair.** POST `/pair/start` → operator confirms in QMB (`qmb host pair`) → POST `/pair/confirm` → `pairing_session_id` in memory + `sessionStorage`. No family-wire challenge. No cookie. No `cred://` login.
+-4. **Authenticate.** Each HTTP GET and each WebSocket presents that id. Daemon maps Origin + id to operator + `CredentialRef` internally **before** protocol bytes. Secrets absent. Arbitrary `cred://` refused.
++1. **Start.** Operator runs `qmb host start` (when it exists) **or** the interim recipe. QMB/recipe sets `QMA_DAEMON_ROOT`, starts `python -m qma.daemon`. Empty root mints first operator principal + `host_control`. Lock + bind succeed or typed refusal.
++2. **Connect.** SPA discovers `127.0.0.1:8765` (or recorded remote) by HTTP reachability. Does not retarget. Does not open CT-40 yet. Pairing HTTP still refuses issue until TTL is set.
++2a. **Configure TTL.** Operator runs `qmb host configure pairing-ttl` over host-control. Missing TTL refuses `/pair/confirm` issue.
++3. **Pair.** POST `/pair/start` → operator confirms in QMB (`qmb host pair`) → POST `/pair/confirm` → `pairing_proof` in memory + `sessionStorage` (once). No family-wire challenge. No cookie. No `cred://` login.
++4. **Authenticate.** Each HTTP GET and each WebSocket presents that proof. Daemon maps Origin + `proof_fp1` to operator principal + `pairing_record_id` **before** protocol bytes. Secrets absent. Arbitrary `cred://` refused.
+ 5. **Initialize.** JSON-RPC `initialize` (`WIRE_PROTOCOL_VERSION = "1.0.0"`) on the authenticated WebSocket. Server assigns or echoes a stable per-tab `producer_id`. Store it in that tab’s `sessionStorage`.
+-6. **Query.** HTTP GET snapshots (listing, `product_session`, health cards) with `Authorization: Bearer pairing:<id>` and paired `Origin`. CORS = that exact origin.
++6. **Query.** HTTP GET snapshots (listing, `product_session`, health cards) with `Authorization: Bearer pairing:<proof>` and paired `Origin`. CORS = that exact origin.
+ 7. **Attach (optional).** `wire.attach(scope, since_seq)` for events on the authenticated WS. Events are not authoritative.
+ 8. **Invoke.** Unique host issuer `dispatchInvoke` builds parent-AD-24 `InvocationEnvelope`. Until `caller_kind` exists on the daemon, pack invoke refuses `caller_kind_unsupported`; headless `qmb` remains the operator door (local AD-8). This companion does not change that refuse.
+ 
+@@ -311,10 +316,11 @@
+ | **Daemon down** | Probe `none`. Shell disconnected. Start local = setup / `qmb host start`. Headless `qmb` still works. | Spawn from JS. Block all chrome behind a modal forever. Paint `starting`. |
+ | **Second instance** | New process fails `.daemon_writer` (and/or port 8765). `qmb host start` reports already-running or typed lock refusal. UI stays on the live daemon if it can pair. | Two sqlite writers. UI “force start”. Delete the lock from the browser. |
+ | **Bad origin** | Origin not the paired static origin → CORS refuse and/or pairing-table mismatch. No initialize. | `Access-Control-Allow-Origin: *` on authenticated routes. Serving the SPA from 8765 to “fix” CORS. |
+-| **Pairing before confirm** | POST `/pair/confirm` stays pending. No `pairing_session_id`. WS upgrade without `qmx.pair.<id>` refused. | Pairing challenge on a WebSocket. Unauthenticated `initialize`. |
+-| **Expired / revoked pairing** | Drop `sessionStorage` id. POST `/pair/start` again. Queries and WS drop. | Treat leftover id as operator. Cookie fallback. Unauthenticated loopback fallback. |
+-| **Second tab** | Empty `sessionStorage`. POST `/pair/start`. Fresh QMB confirm of that pending request before any `pairing_session_id`. New `producer_id`. | Origin-only auto-approve. Inherit first tab’s id via `localStorage` or cookie. Paste the id. Share a **live** `producer_id`. |
+-| **Same-tab reload** | `sessionStorage` restores `pairing_session_id` (and `producer_id`). Reconnect until expiry. | Force a new pair on every reload while unexpired. Persist the id in `localStorage`. |
++| **Pairing before confirm** | POST `/pair/confirm` stays pending. No `pairing_proof`. WS upgrade without `qmx.pair.<proof>` refused. | Pairing challenge on a WebSocket. Unauthenticated `initialize`. |
++| **Expired / revoked pairing** | Drop `sessionStorage` proof. POST `/pair/start` again. Queries and WS drop. Expiry **closes** the WS. | Treat leftover proof as operator. Cookie fallback. Unauthenticated loopback fallback. |
++| **Second tab** | Empty `sessionStorage`. POST `/pair/start`. Fresh QMB confirm of that pending request before any `pairing_proof`. New `producer_id`. | Origin-only auto-approve. Inherit first tab’s proof via `localStorage` or cookie. Paste the proof. Share a **live** `producer_id`. |
++| **Same-tab reload** | `sessionStorage` restores `pairing_proof` (and `producer_id`). Reconnect until expiry. | Force a new pair on every reload while unexpired. Persist the proof in `localStorage`. |
++| **Lost confirm response** | Proof already minted and hashed; retry is `already_issued`. Client re-pairs (`/pair/start`). | Retrieve raw proof from journal or status. |
+ | **Cookie presented** | Ignore as proof. If daemon ever `Set-Cookie` on `/pair/*`, that is a spec miss — refuse to treat it as login. | Header-or-cookie fork. `SameSite` session cookie. |
+ | **Arbitrary `cred://` pasted** | Not a pairing table row → refuse. | Broker-resolve as login. `Authorization: Bearer cred://…`. |
+ | **Remote disconnect** | Target stays the recorded remote. Chrome: reconnecting → unavailable. Jobs on that host unchanged by tab state. | Silently switch to `127.0.0.1:8765`. Invent local success. |
+@@ -356,10 +362,10 @@
+ | Start / status / stop local daemon | Setup screen only; never spawn | **`qmb host *` (add)** | Process entry `python -m qma.daemon` | No |
+ | `QMA_DAEMON_ROOT` | Must not pick a cwd root | Sets on start | Reads env; opens substrate | No |
+ | Sole-writer lock | No | Surface refusal on start | **`.daemon_writer`** | No |
+-| Pairing bootstrap | POST `/pair/start` + `/pair/confirm`; shows code; stores `pairing_session_id` in memory + `sessionStorage` | **`qmb host pair` (add)** | Stores Origin↔operator bind + issues `pairing_session_id`; **no cookie** | No |
+-| Authenticated HTTP GET | `Authorization: Bearer pairing:<id>` + Origin; `credentials: 'omit'` | No | Pairing-table check; CORS exact paired origin (**add**) | No |
+-| Authenticated WebSocket | `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<id>"])` | No | Inspect offered subprotocols; echo `qmx.ct40.v1`; refuse bad pair | No |
+-| `credential_ref` / `authenticate_before_protocol` | **Does not send** a ref as login | No | Internal map from pairing table; enforces before protocol bytes | Shape is CredentialRef; **not** login |
++| Pairing bootstrap | POST `/pair/start` + `/pair/confirm`; shows code; stores `pairing_proof` in memory + `sessionStorage` | **`qmb host pair` (add, host-control)** | Stores Origin↔operator bind + issues `pairing_proof` **once**; journals `pairing_record_id` + `proof_fp1`; **no cookie** | No |
++| Authenticated HTTP GET | `Authorization: Bearer pairing:<proof>` + Origin; `credentials: 'omit'` | No | Pairing-table check; CORS exact paired origin (**add**); redact Authorization in logs | No |
++| Authenticated WebSocket | `new WebSocket(url, ["qmx.ct40.v1", "qmx.pair.<proof>"])` | No | Inspect offered subprotocols; echo `qmx.ct40.v1`; refuse bad pair; redact `qmx.pair.*` | No |
++| `credential_ref` / `authenticate_before_protocol` | **Does not send** a ref as login | No | Browser session: operator + `pairing_record_id`, **no** `credential_ref`. Machine clients still present a ref. | Shape is CredentialRef for machines; **not** browser login |
+ | Provider secrets | Write-once OS helper is a later native/QMB path; v1 browser does not hold values | Operator CLI for host, not a secret form | Never receives values | Exact-ref resolve, adapter layer only |
+ | `initialize` / `producer_id` | One producer per tab; persist in `sessionStorage` | No | Assigns / echoes | No |
+ | Invoke / grants / JobHandles | `dispatchInvoke` client | Headless door (parent AD-21) | Host compare + dispatch | No |
+@@ -379,14 +385,14 @@
+ | `python -m qma.daemon` | Exists. Not an operator CLI. Default root cwd-relative `"qma-daemon-data"`. | reuse process entry; **adapt** root via env | COMP-QMA-DAEMON |
+ | Bind `127.0.0.1:8765` | `DEFAULT_BIND_PORT = 8765`. `_handle_client` **discards bytes**. | reuse bind; **add** live protocol | COMP-QMA-DAEMON |
+ | `.daemon_writer` | `DaemonWriterLock` coded + tested | reuse | COMP-QMA-DAEMON |
+-| `authenticate_before_protocol` | Shape gate; does **not** call broker; not on the listener | reuse types; **add** wire-up that maps `pairing_session_id` then fills the session internally | COMP-QMA-WIRE + DAEMON |
++| `authenticate_before_protocol` | Shape gate; does **not** call broker; not on the listener | reuse types; **add** wire-up that maps Origin + `proof_fp1` then fills operator + `pairing_record_id` | COMP-QMA-WIRE + DAEMON |
+ | Credential Broker | Exact-ref; WinCred `_reader` **uninjected** in `DaemonProcess.compose` | reuse types; **hole** OS read | COMP-QMA-DAEMON |
+ | `initialize` / families | Types + schemas; `websockets` **zero imports** | reuse contract; **add** JSON-RPC WS + HTTP GET server | COMP-QMA-WIRE + DAEMON |
+ | HTTP POST `/pair/start`, `/pair/confirm` | **Absent** | **add** (unauthenticated bootstrap only) | COMP-QMA-DAEMON |
+ | CORS / origin allowlist | **Absent** | **add** | COMP-QMA-DAEMON |
+-| Pairing table (`pairing_session_id` → Origin + operator + internal `CredentialRef`) | **Absent** | **add** | COMP-QMA-DAEMON (store) + COMP-QMB (confirm) |
+-| `Authorization: Bearer pairing:<id>` | **Absent** | **add** | COMP-QMA-DAEMON |
+-| WS subprotocols `qmx.ct40.v1` + `qmx.pair.<id>` | **Absent** | **add** | COMP-QMA-WIRE + DAEMON |
++| Pairing table (`proof_fp1` → Origin + operator principal + `pairing_record_id`) | **Absent** | **add** | COMP-QMA-DAEMON (store) + COMP-QMB (host-control confirm) |
++| `Authorization: Bearer pairing:<proof>` | **Absent** | **add** | COMP-QMA-DAEMON |
++| WS subprotocols `qmx.ct40.v1` + `qmx.pair.<proof>` | **Absent** | **add** | COMP-QMA-WIRE + DAEMON |
+ | Cookie session | **Must not ship** | forbidden | — |
+ | `qmb host start\|status\|stop\|pair` | CLI groups: `backtest`, `data`, `optimize`, `sweep`, `robustness`, `ledger`, `library`, `analysis`, `config`. **No `host`.** | **add** | COMP-QMB |
+ | SPA / `apps/qmx-ui` | **Absent** | **add** (UI stream) | this sitting’s host, later |
+@@ -403,10 +409,12 @@
+ 
+ | Verb | Does | Does not |
+ | --- | --- | --- |
+-| `qmb host start` | Set `QMA_DAEMON_ROOT` to the per-user path; spawn `python -m qma.daemon` if lock free; wait until bind or already-running | Orchestrate Missions; grant ops; start QMN |
+-| `qmb host status` | Lock, pid, bind, pairing pending/bound origins (`pairing_session_id` presence only, not secrets) | Enumerate Credential Manager; paint SPA `starting` |
++| `qmb host start` | Set `QMA_DAEMON_ROOT` to the per-user path; spawn `python -m qma.daemon` if lock free; wait until bind or already-running; on empty root mint first operator principal + `host_control` | Orchestrate Missions; grant ops; start QMN; issue a pairing proof |
++| `qmb host status` | Lock, pid, bind, operator-established, TTL set/unset, pairing pending/bound **record ids** (never proofs) | Enumerate Credential Manager; paint SPA `starting`; print `pairing_proof` |
+ | `qmb host stop` | Stop the local daemon; release lock | Cancel QMN/remote; `JobHandle.cancel` for every job (local handles may go `unknown`) |
+-| `qmb host pair <code>` | Confirm pending `/pair/start` for that Origin (operator principal + internal `CredentialRef`). After this, POST `/pair/confirm` returns `pairing_session_id`. A second tab on the same Origin still needs its own pending code and this confirm. Authenticated `POST /pair/renew` (existing valid Bearer) is the other issuance path; Origin-only auto-approve is refused. | Accept a provider secret; bind a non-matching origin; set a cookie; open CT-40 for the browser; issue a session because Origin was remembered |
++| `qmb host configure pairing-ttl` | Write `registry:pairing.session_ttl` over host-control. Required before first issue | Invent a duration in this sitting |
++| `qmb host pair <code>` | Confirm pending `/pair/start` for that Origin over host-control. After this, POST `/pair/confirm` returns `{pairing_record_id, pairing_proof, expires_at}` **once**. A second tab on the same Origin still needs its own pending code and this confirm. Authenticated `POST /pair/renew` (existing valid Bearer) is the other issuance path; Origin-only auto-approve is refused. | Accept a provider secret; bind a non-matching origin; set a cookie; open CT-40 for the browser; issue a session because Origin was remembered; return a second proof on retry |
++| `qmb host pair revoke --session\|--origin` | Revoke that record or that Origin’s earlier sessions and unclaimed pendings; close matching WS | Delete journal history |
+ 
+ Until these verbs exist, status is operator-visible via OS process list + the setup screen’s probe, and pair confirm has **no** product door — the UI must not fake a paired session.
+ 
+@@ -418,7 +426,7 @@
+ 
+ - Same SPA origin rules inside the webview (or the webview origin is the paired origin).
+ - Privileged start/stop **calls `qmb host start|status|stop`** (or equivalent QMB library door). Sidecar spawn is a **caller** of that door, not a second owner.
+-- Pairing proof stays `pairing_session_id` (Bearer + WS subprotocols). Not a cookie. Not a Tauri-injected `cred://`.
++- Pairing proof stays `pairing_proof` (Bearer + WS subprotocols). Not a cookie. Not a Tauri-injected `cred://`. Journal identity is `pairing_record_id`.
+ - Close window = detach, same as the browser, unless the operator chose Stop local runtime.
+ - Do not make the daemon a child of the window job object such that close kills workstation work by default.
+ 
+@@ -428,20 +436,20 @@
+ 
+ | Class | Intent |
+ | --- | --- |
+-| Contract | Pairing table matches Origin + `pairing_session_id` → operator + internal `CredentialRef`; arbitrary `cred://` refused; cookies ignored; secrets on surfaces refused (`auth.py` already unit-tests shape). |
+-| Bootstrap HTTP | Unpaired POST `/pair/start` does not authenticate CT-40; `/pair/confirm` before QMB confirm returns pending; after confirm returns `pairing_session_id` and no `Set-Cookie`. |
+-| Transports | HTTP GET without `Authorization: Bearer pairing:<id>` refused; WS without `qmx.pair.<id>` in the offered list refused; WS constructor is subprotocols, not an Authorization header. |
++| Contract | Pairing table matches Origin + `proof_fp1` → operator principal + `pairing_record_id`; arbitrary `cred://` refused; cookies ignored; secrets and raw proofs on surfaces refused (`auth.py` already unit-tests shape). |
++| Bootstrap HTTP | Unpaired POST `/pair/start` does not authenticate CT-40; `/pair/confirm` before QMB confirm returns pending; after confirm returns `pairing_proof` once and no `Set-Cookie`; retry is `already_issued`. |
++| Transports | HTTP GET without `Authorization: Bearer pairing:<proof>` refused; WS without `qmx.pair.<proof>` in the offered list refused; WS constructor is subprotocols, not an Authorization header. |
+ | Process | Second `python -m qma.daemon` on the same `QMA_DAEMON_ROOT` hits `.daemon_writer`; `qmb host start` is idempotent when live. |
+ | Browser | SPA origin ≠ 8765; CORS denies a second origin on authenticated GET; storage is `sessionStorage` not `localStorage`; close tab does not emit cancel. |
+-| Second tab | Empty `sessionStorage` → `/pair/start` → QMB confirm → `/pair/confirm` yields a `pairing_session_id`; Origin-only auto-approve refused; new `producer_id`. Cloned tab with copied id reconnects; new `producer_id` if the old is live. |
+-| Same-tab reload | Restored `pairing_session_id` reconnects until expiry; `producer_id` reused. |
++| Second tab | Empty `sessionStorage` → `/pair/start` → QMB confirm → `/pair/confirm` yields a `pairing_proof`; Origin-only auto-approve refused; new `producer_id`. Cloned tab with copied proof reconnects; new `producer_id` if the old is live. |
++| Same-tab reload | Restored `pairing_proof` reconnects until expiry; `producer_id` reused. |
+ | Failure | Daemon down → disconnected; remote drop does not probe loopback as success; expired pairing re-starts `/pair/start`. |
+ | Installed product | Launch outside checkout with `QMA_DAEMON_ROOT` set; recipe/QMB start; pairing; initialize. **Unexecuted.** |
+ 
+ ## 15. Citations
+ 
+ - Parent AD-21 — headless door parity; QMB is the only operator CLI; a log/progress panel is not a general shell. `_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md`
+-- Local AD-19 — QMB host owner; unauthenticated `/pair/start` + `/pair/confirm`; one proof `pairing_session_id`; HTTP Bearer; WS subprotocols; cookies not the proof; daemon-internal `credential_ref`. `ARCHITECTURE-SPINE.md` in this sitting
++- Local AD-19 — QMB host owner; unauthenticated `/pair/start` + `/pair/confirm`; one proof `pairing_proof`; HTTP Bearer; WS subprotocols; cookies not the proof; daemon maps to operator principal + `pairing_record_id`. `ARCHITECTURE-SPINE.md` in this sitting
+ - CT-40 `auth.py` — `authenticate_before_protocol`, `AuthenticatedWireSession`, `FORBIDDEN_SECRET_SURFACE_KEYS`. `.worktrees/integration-inspect/qmx-agents/packages/qma-wire/src/qma/wire/auth.py`
+ - `listener.py` — loopback default; unauthenticated / plaintext non-loopback hard refusal. Same inspect tree.
+ - `initialize.py` — JSON-RPC `initialize`, `WIRE_PROTOCOL_VERSION = "1.0.0"`, `producer_id`. Same inspect tree.
+@@ -455,7 +463,7 @@
+ 
+ ## 16. What this file does not do
+ 
+-- Does not edit `ARCHITECTURE-SPINE.md`.
++- Spine AD-19 is the matching law; this companion details it. It does not re-open layouts or mint a sixth COMP.
+ - Does not implement pairing, `qmb host`, or a live wire server.
+ - Does not choose OpenCodex as a vendor login.
+ - Does not promise GAP-0062 always-on, GAP-0058 single-machine node, or GAP-0070 computer-use.
+--- before/CHANGE-IMPACT.md
++++ after/CHANGE-IMPACT.md
+@@ -35,10 +35,12 @@
+ | Financial chart lib | none | workflow 19: lightweight-charts 5.2.1 Apache-2.0 | **add** | LayerChart 2.5.0 is analytics only |
+ | MCP Apps host | adapter law | workflow 18: `@modelcontextprotocol/ext-apps` 2.0.0 | **add** optional frontend | Host intercepts `tools/call`; no catalog grant |
+ | Tauri sidecar supervisor | none | workflow 17: no official health/restart | deferred installer | v1 uses external daemon |
+-| `send_message` mailbox | COMP-QMA-WIRE + DAEMON | vocabulary.py seed; CT-48 Envelope | reuse command; **add** live dispatch + `list_mailbox`; persist `product_session_id` (Epic 46.4 delivery, Epic 41 query name) | Home chat |
+-| `cancel_job` | COMP-QMA-WIRE | absent | **add** | dispatchCancel |
+-| `stage_artifact` | COMP-QMA-DAEMON | absent | **add** | upload possession |
+-| `qmb host start\|status\|stop` | COMP-QMB | absent | **add** | v1 bootstrap owner |
++| `send_message` mailbox | COMP-QMA-WIRE + DAEMON | vocabulary.py seed; CT-48 Envelope | reuse command; **add** live dispatch + `list_mailbox`; persist `product_session_ref` (Epic 46.4 delivery, Epic 41 query name) | Home chat |
++| `cancel_job` | COMP-QMA-WIRE | absent | **add** | dispatchCancel; optional `originating_product_session_ref` |
++| `stage_artifact` / `transfer_artifact` / `transfer_complete` | COMP-QMA-DAEMON | absent | **add** | upload possession; reachable TLS; dest ack |
++| `save_editor_draft` / `publish_editor_draft` | COMP-QMA-DAEMON | absent | **add** | daemon-issued draft id; validated publication |
++| `get_pack_ui_request` | COMP-QMA-WIRE + DAEMON | absent | **add** | PackUiRequest snapshot read-back |
++| `qmb host start\|status\|stop\|pair\|configure` | COMP-QMB | absent | **add** | v1 bootstrap owner; first operator; host-control |
+ | Loopback pairing / origin bind | COMP-QMA-DAEMON | auth.py shape-only | **add** | pre-protocol operator proof; Origin-only auto-approve **refused** (backend-delta AD-3) |
+ | PackUiRequest DTO | none | view_presentation.py fragment | **add** request schema | not a contribution point |
+ | Node.js >=22.12.0 <23.0.0 + pnpm lockfile | none | Vite 8.3 engines | **add** at scaffold | isolated-scaffold gate |
+--- before/CHAT-AND-HISTORY.md
++++ after/CHAT-AND-HISTORY.md
+@@ -36,8 +36,8 @@
+ 
+ 1. Operator (or in-app panel) commits composer **text**, not a pack `op_id`.
+ 2. Host calls **`apps/qmx-ui/src/lib/host/dispatchChat` only**. That function issues CT-40 **command** `send_message` over JSON-RPC 2.0 WebSocket. Components never import the wire client.
+-3. **Before send**, `dispatchChat` mints the wire pair `(producer_id, id)` (`id` is the WireEnvelope command id; snapshot/query name it `wire_id`). It stores pending `{producer_id, id, product_session_id}` in **`sessionStorage`** until a `list_mailbox` snapshot shows that row.
+-4. Wire frame is the ordinary `WireEnvelope` (`v`, `type=send_message`, `id`, `producer_id`, `correlation_id`, `scope_path`, payload). Payload names `product_session_id`. It does **not** carry `InvocationEnvelope`. It does **not** carry a client-minted `msg_id`. It does **not** use product-session `command_id` (that namespace is parent AD-29 mutate / cancel / invoke — not mailbox append).
++3. **Before send**, `dispatchChat` mints the wire pair `(producer_id, id)` (`id` is the WireEnvelope command id; snapshot/query name it `wire_id`). It stores pending `{producer_id, id, product_session_ref}` in **`sessionStorage`** until a `list_mailbox` snapshot shows that row.
++4. Wire frame is the ordinary `WireEnvelope` (`v`, `type=send_message`, `id`, `producer_id`, `correlation_id`, `scope_path`, payload). Payload names `product_session_ref`. It does **not** carry `InvocationEnvelope`. It does **not** carry a client-minted `msg_id`. It does **not** use product-session `command_id` (that namespace is parent AD-29 mutate / cancel / invoke — not mailbox append).
+ 5. Ack is transport. Durable membership is the mailbox snapshot (query), not the ack and not `message.delta`.
+ 6. No GrantRecord, no `grant_id`, no `caller_kind`, no `idempotency_key` of the invoke family, no envelope `instance_id`.
+ 7. `app_instance_id` may be absent on the authoring Home/`psess:`. Do not mint a dummy instance to make Send work.
+@@ -54,7 +54,7 @@
+ 
+ ```json
+ {
+-  "product_session_id": "psess:…",
++  "product_session_ref": "psess:…",
+   "body": { "text": "…" },
+   "kind": "handoff"
+ }
+@@ -64,7 +64,7 @@
+ 
+ Forbidden on this command: `InvocationEnvelope` keys (`logical_invocation_id`, `grant_id`, `op_id`, `instance_id` as envelope field, `idempotency_key`, `caller_kind`, `input_hash`). A client that sends those has left the chat contract.
+ 
+-At **write time** the daemon copies `product_session_id` from this payload onto the CT-48 mailbox `Envelope` / journal `message.*` row (section 3). Originating `(producer_id, wire_id)` and payload hash are recorded on that same journal row so recovery can look the row up **without** `msg_id`.
++At **write time** the daemon copies `product_session_ref` from this payload onto the CT-48 mailbox `Envelope` / journal `message.*` row (section 3). Originating `(producer_id, wire_id)` and payload hash are recorded on that same journal row so recovery can look the row up **without** `msg_id`. Admission: resolve that product session; the connection’s operator principal **must equal** the session’s durable principal **before** append. The same principal check applies to `list_mailbox`.
+ 
+ ### 1.2 `dispatchInvoke` — granted operation
+ 
+@@ -104,7 +104,7 @@
+   C->>W: command send_message (producer_id, id, psess)
+   Note over P,I: dispatchInvoke is not on this path
+   W->>D: JSON-RPC
+-  D->>M: append message.* with Envelope.product_session_id
++  D->>M: append message.* with Envelope.product_session_ref
+   D-->>C: command ack
+   C->>W: query list_mailbox
+   W-->>C: snapshot (wire pair + msg_id)
+@@ -135,10 +135,10 @@
+ 
+ | Id | What it is | What it is not |
+ | --- | --- | --- |
+-| `product_session_id` (`psess:`) | Authority overlay. Key for grants, `selected_refs`, and **mailbox history**. Cardinality **1 `psess:` → many** QMA `sess:`. **Persisted on the mailbox Envelope at write.** | Not the engine Session. Not a tab. Not a thread string stored on the session row |
++| `product_session_id` (`psess:`) | Authority overlay. Key for grants, `selected_refs`, and **mailbox history**. Cardinality **1 `psess:` → many** QMA `sess:`. **Mailbox Envelope field is `product_session_ref` (AM-14).** Own identity of this row stays `product_session_id`. | Not the engine Session. Not a tab. Not a thread string stored on the session row |
+ | QMA `Session` (`sess:`) | Execution container (execution_model + autonomy) | Not a third chat. Not the transcript |
+ | `conversation_thread_id` | **Hash-stable** id **derived from** `psess:` at query time | Not a durable Envelope field. Not a `product_session` column. Not `private_notes` |
+-| Wire pair `(producer_id, wire_id)` | **Pre-ack identity.** `wire_id` is WireEnvelope `id`, minted **before** send. Client stores pending `{producer_id, id, product_session_id}` until snapshot shows the row. Persisted on journal `message.*` at admit. | Not `msg_id`. Not invoke `idempotency_key`. Not product-session `command_id` |
++| Wire pair `(producer_id, wire_id)` | **Pre-ack identity.** `wire_id` is WireEnvelope `id`, minted **before** send. Client stores pending `{producer_id, id, product_session_ref}` until snapshot shows the row. Persisted on journal `message.*` at admit. | Not `msg_id`. Not invoke `idempotency_key`. Not product-session `command_id` |
+ | `message_id` / `msg_id` | Server-assigned CT-48 `Envelope.msg_id` at write. Snapshot includes it **after** commit. Display may use it. | Not available to the client before snapshot. Lost-ack recovery **must not** require it |
+ | `job_handle` / `job_id` | Durable work | Not a chat row. May be **linked** from a message |
+ | Tab / pane / window | Chrome | Writes nothing on close |
+@@ -146,7 +146,7 @@
+ **Thread derivation (v1, one primary thread per `psess:`):**
+ 
+ ```
+-conversation_thread_id = "thread:" + hex(sha256(utf8(canonical product_session_id)))
++conversation_thread_id = "thread:" + hex(sha256(utf8(canonical product_session_ref)))
+ ```
+ 
+ Canonical form is the `psess:` string already stored on the row (no salt, no `producer_id`, no tab id). Every client of the same session derives the same thread. Home/Copilot of that session share that one primary thread. An **app-use** optional panel has its **own** app-use `psess:` (instance-bound) and therefore its **own** mailbox and `conversation_thread_id`. Switching apps does not merge threads (local AD-4; J-UI-01; J-UI-04).
+@@ -161,9 +161,9 @@
+ 
+ **Owner:** existing QMA mailbox. Store `mailboxes_and_delivery_state`, fold `mailbox_delivery_state`, bounded stream **`mailbox.delivery`**, sourced from journal `message.*` (CT-48 / DEC-0319). COMP-QMA-DAEMON is the sole writer.
+ 
+-**Proposed QMA amendment (not a new CT, not a sixth store, not `private_notes`):** persist `product_session_id` **on the mailbox Envelope at write time**. Copy it from the admitted `send_message` payload onto the existing CT-48 `Envelope` / journal `message.*` row. Also record the admitting wire pair `(producer_id, wire_id)` and payload hash on that journal row. Quant `from` / `to` ActorIds stay the bus addressing. Product-session history **reuses that stream**, filtered by the persisted field.
+-
+-**Key for product chat:** `Envelope.product_session_id`. Rebuild of `list_mailbox` is: fold journal `message.*` rows whose `product_session_id` equals the requested `psess:`. Do not parse body text. Do not derive the index from `private_notes`.
++**Proposed QMA amendment (not a new CT, not a sixth store, not `private_notes`):** persist `product_session_ref` **on the mailbox Envelope at write time**. Copy it from the admitted `send_message` payload onto the existing CT-48 `Envelope` / journal `message.*` row. Also record the admitting wire pair `(producer_id, wire_id)` and payload hash on that journal row. Quant `from` / `to` ActorIds stay the bus addressing. Product-session history **reuses that stream**, filtered by the persisted field.
++
++**Key for product chat:** `Envelope.product_session_ref`. Rebuild of `list_mailbox` is: fold journal `message.*` rows whose `product_session_ref` equals the requested `psess:`. Do not parse body text. Do not derive the index from `private_notes`.
+ 
+ Parent AD-8 durable fields on `product_session` remain:
+ 
+@@ -177,9 +177,9 @@
+ - Transcript **is not** `private_notes` JSON used as a message store. `private_notes` stay session notes (retention/export/deletion with the row), not MemoryProvider, not Knowledge, not chat.
+ - Grants restore from the **product_session query**. Messages restore from **mailbox snapshot**. Mixing those snapshots is a bug.
+ 
+-CT-48 `Envelope` remains the message record (`msg_id`, `from`, `to`, `kind`, `correlation_id`, `body`, `artifact_refs`, optional mission/task/`reply_to_ref`/`causation_id`) **plus additive** `product_session_id`. Delivery states stay `delivered | queued | woke | deferred | dead_letter`. A message may request work; it is never the work.
+-
+-**Inheritance.** Replies and questions **inherit** `product_session_id` from the parent message named by `reply_to_ref` / `causation_id`. They do not invent a session. If a `send_message` reply payload also names `product_session_id`, it must equal the parent’s field or the write is refused (no retarget onto another `psess:`). Daemon-originated mailbox rows that are not in a product conversation omit the field; Quant delivery is unchanged.
++CT-48 `Envelope` remains the message record (`msg_id`, `from`, `to`, `kind`, `correlation_id`, `body`, `artifact_refs`, optional mission/task/`reply_to_ref`/`causation_id`) **plus additive** `product_session_ref`. Delivery states stay `delivered | queued | woke | deferred | dead_letter`. A message may request work; it is never the work.
++
++**Inheritance.** Replies and questions **inherit** `product_session_ref` from the parent message named by `reply_to_ref` / `causation_id`. They do not invent a session. If a `send_message` reply payload also names `product_session_ref`, it must equal the parent’s field or the write is refused (no retarget onto another `psess:`). Daemon-originated mailbox rows that are not in a product conversation omit the field; Quant delivery is unchanged.
+ 
+ **Retention.** Journal `message.*` is **not** trimmed (parent AD-8 / AD-23). `mailbox.delivery` is a **bounded non-evidence** stream (GAP-0089). UI history is the **snapshot**. If the delivery projection compacted past the client cursor, the query returns snapshot/resync with a bumped generation — **never** a silent empty success. Pair lookup reads the journal/snapshot, not the bounded delivery tape.
+ 
+@@ -187,9 +187,9 @@
+ 
+ ### 3.1 Rebuild example (four journal rows)
+ 
+-Fold `list_mailbox({ "product_session_id": "psess:H" })` keeps every `message.*` row whose Envelope field equals `psess:H`. Example after one operator send, one copilot reply, one copilot question, and a later operator answer:
+-
+-| journal seq | kind | `msg_id` (server) | `producer_id` | `wire_id` | `product_session_id` | `reply_to_ref` | `causation_id` |
++Fold `list_mailbox({ "product_session_ref": "psess:H" })` keeps every `message.*` row whose Envelope field equals `psess:H`. Example after one operator send, one copilot reply, one copilot question, and a later operator answer:
++
++| journal seq | kind | `msg_id` (server) | `producer_id` | `wire_id` | `product_session_ref` | `reply_to_ref` | `causation_id` |
+ | --- | --- | --- | --- | --- | --- | --- | --- |
+ | 101 | `handoff` | `msg:s1` | `prod:tabA` | `C1` | `psess:H` | — | — |
+ | 102 | `reply` | `msg:r1` | `prod:daemon` | `D1` | `psess:H` | `msg:s1` | `msg:s1` |
+@@ -198,12 +198,12 @@
+ 
+ How the field got there:
+ 
+-1. **Send.** `dispatchChat` `send_message` payload `product_session_id=psess:H`. Daemon copies that value onto Envelope at write. Wire pair `(prod:tabA, C1)` recorded on the journal row. Server assigns `msg:s1`.
++1. **Send.** `dispatchChat` `send_message` payload `product_session_ref=psess:H`. Daemon copies that value onto Envelope at write. Wire pair `(prod:tabA, C1)` recorded on the journal row. Server assigns `msg:s1`.
+ 2. **Reply.** Copilot answer is a mailbox `reply` with `reply_to_ref=msg:s1`. Daemon **inherits** `psess:H` from parent `msg:s1`. No UI `send_message` for this row.
+ 3. **Question.** Copilot `question` caused by `msg:r1`. Inherits `psess:H` from that parent (same field as the thread root).
+ 4. **Later answer.** Operator `answer_question` → `dispatchChat` `send_message` kind `reply`, `reply_to_ref=msg:q1`. Inherits `psess:H` from the question (payload, if present, must match).
+ 
+-Rebuild after daemon restart: scan journal `message.*`; keep rows 101–104; drop any row with a different or omitted `product_session_id`. `conversation_thread_id` is derived from `psess:H` at query time. Body text is not consulted.
++Rebuild after daemon restart: scan journal `message.*`; keep rows 101–104; drop any row with a different or omitted `product_session_ref`. `conversation_thread_id` is derived from `psess:H` at query time. Body text is not consulted.
+ 
+ ---
+ 
+@@ -223,8 +223,8 @@
+ 
+ | Args | Returns |
+ | --- | --- |
+-| `{ "product_session_id": "psess:…" }` plus the usual snapshot cursor/generation | Conversation snapshot for that `psess:` (envelopes, delivery state, question bindings, artifact/job refs). Each committed row includes **both** the wire pair `(producer_id, wire_id)` **and** server `msg_id`. |
+-| `{ "product_session_id": "psess:…", "producer_id": "…", "wire_id": "…" }` | Zero or one row: the admitted message with that pair under that `psess:`. Used for lost-ack / restart recovery **before** the client has `msg_id`. |
++| `{ "product_session_ref": "psess:…" }` plus the usual snapshot cursor/generation | Conversation snapshot for that `psess:` (envelopes, delivery state, question bindings, artifact/job refs). Each committed row includes **both** the wire pair `(producer_id, wire_id)` **and** server `msg_id`. |
++| `{ "product_session_ref": "psess:…", "producer_id": "…", "wire_id": "…" }` | Zero or one row: the admitted message with that pair under that `psess:`. Used for lost-ack / restart recovery **before** the client has `msg_id`. |
+ 
+ Display may use `msg_id` once the snapshot has it. Recovery uses the wire pair until then.
+ 
+@@ -240,7 +240,7 @@
+ 
+ | Layer | Identity | Lost ack | Forbidden |
+ | --- | --- | --- | --- |
+-| Chat send | Wire pair **`(producer_id, wire_id)`** minted **before** send. Pending `{producer_id, id, product_session_id}` in `sessionStorage` until snapshot shows the row | **Query `list_mailbox` `{product_session_id, producer_id, wire_id}`**. If the row is present, the send landed; paint it (snapshot now has `msg_id` too) and drop pending. If absent, stay `unknown`. **Do not wait for `msg_id` the client does not have.** | **Do not resend with a new `id`**. Do not look up by `msg_id`. Do not invent invoke `idempotency_key` or product-session `command_id` for chat |
++| Chat send | Wire pair **`(producer_id, wire_id)`** minted **before** send. Pending `{producer_id, id, product_session_ref}` in `sessionStorage` until snapshot shows the row | **Query `list_mailbox` `{product_session_ref, producer_id, wire_id}`**. If the row is present, the send landed; paint it (snapshot now has `msg_id` too) and drop pending. If absent, stay `unknown`. **Do not wait for `msg_id` the client does not have.** | **Do not resend with a new `id`**. Do not look up by `msg_id`. Do not invent invoke `idempotency_key` or product-session `command_id` for chat |
+ | Invoke | Caller `idempotency_key` + envelope uniqueness (parent AD-24) | Query JobHandle / `query-state` **before** any resubmit | Blind retry of `external-egress`; second `dispatchInvoke` for the same submit |
+ 
+ `producer_id` is assigned at `initialize` and **stable across reconnects** of that tab. Wire `id` / `wire_id` is minted by the producer per command **before** the bytes leave. Duplicate `(producer_id, id)` with the **same** payload hash returns the prior ack. Same pair with a **different** payload hash **refuses** (typed collision). Changing either member is a different command — that is why a lost-ack path must reuse the **same** pair or only query.
+@@ -297,10 +297,10 @@
+ 
+ Order after transport loss (research/10 §9–10; parent AD-29):
+ 
+-1. Re-auth with the same `pairing_session_id` (HTTP Bearer + WS `qmx.pair.<id>`). Daemon maps it internally to `credential_ref`. `initialize` with the **same** `producer_id` (re-hint from the pending triple when `sessionStorage` still holds it).
++1. Re-auth with the same `pairing_proof` (HTTP Bearer + WS `qmx.pair.<proof>`). Daemon maps Origin + proof_fp1 to operator principal + `pairing_record_id`. `initialize` with the **same** `producer_id` (re-hint from the pending triple when `sessionStorage` still holds it).
+ 2. **Product-session query** restores durable AD-8 fields (`granted_ops`, `selected_refs`, `profile`, `app_instance_id` absent-or-present, cursors). Does **not** replay unacked intent. Does **not** imply approval.
+-3. **`list_mailbox`** restores transcript for that `psess:` (`{product_session_id}` snapshot). Missing query → typed unavailable (section 4). Compacted delivery → snapshot/resync, not empty-success.
+-4. If a pending triple exists, **also** `list_mailbox {product_session_id, producer_id, wire_id}`. Landed → paint, drop pending. Absent → `unknown`. **Do not resend.** Lookup by stored pair still works if `initialize` assigned a different live `producer_id`; do not substitute the new id into the query.
++3. **`list_mailbox`** restores transcript for that `psess:` (`{product_session_ref}` snapshot). Missing query → typed unavailable (section 4). Compacted delivery → snapshot/resync, not empty-success.
++4. If a pending triple exists, **also** `list_mailbox {product_session_ref, producer_id, wire_id}`. Landed → paint, drop pending. Absent → `unknown`. **Do not resend.** Lookup by stored pair still works if `initialize` assigned a different live `producer_id`; do not substitute the new id into the query.
+ 5. `wire.attach(scope, since_seq)` for **progress** (`message.delta` and others). Events must not overwrite a snapshot terminal.
+ 6. `JobHandle.reattach` for in-flight **jobs** (separate from chat).
+ 7. Unsent drafts remain local. In-flight deltas of `psess:A` are not attached to newly visible `psess:B`. Empty `sessionStorage` (no pending triple) → snapshot the selected `psess:` only; do not mint a send for leftover composer text.
+@@ -316,7 +316,7 @@
+ | `send_message` name | **Present** — `WireCommand.SEND_MESSAGE` in `vocabulary.py`; schema enum |
+ | Live dispatch of `send_message` | **Absent** — `DaemonProcess._handle_client` drains TCP bytes |
+ | `list_mailbox` | **ABSENT** — backend add, COMP-QMA-WIRE vocabulary + daemon handler (both lookup forms) |
+-| `Envelope.product_session_id` | **ABSENT** at inspect (`ENVELOPE_REQUIRED_FIELDS` / optional refs have no `psess:`). **Proposed QMA amendment:** additive field on existing CT-48 Envelope / journal `message.*` |
++| `Envelope.product_session_ref` | **ABSENT** at inspect (`ENVELOPE_REQUIRED_FIELDS` / optional refs have no `psess:`). **Proposed QMA amendment:** additive field on existing CT-48 Envelope / journal `message.*` |
+ | Admitting `(producer_id, wire_id)` on `message.*` | **ABSENT** — same proposed amendment, so pair lookup survives rebuild |
+ | `product_session` messages | **Absent** — durable fields are context/grants/refs, not transcript (`product_session.py` `DURABLE_FIELDS`) |
+ | `private_notes` as chat | **Forbidden** even if the optional JSON column is later wired |
+@@ -326,7 +326,7 @@
+ | `message.delta` | Seed event; **not** truth |
+ | This file | Architecture candidate. Unexecuted |
+ 
+-CHANGE-IMPACT class: **reuse** `send_message` + mailbox store; **add** `list_mailbox` (wire vocabulary + query door + both lookup forms); **adapt** CT-48 Envelope with additive `product_session_id` (proposed QMA amend, not a new sqlite class); **adapt** UI host to two functions (`dispatchChat` vs `dispatchInvoke`).
++CHANGE-IMPACT class: **reuse** `send_message` + mailbox store; **add** `list_mailbox` (wire vocabulary + query door + both lookup forms); **adapt** CT-48 Envelope with additive `product_session_ref` (proposed QMA amend, not a new sqlite class); **adapt** UI host to two functions (`dispatchChat` vs `dispatchInvoke`).
+ 
+ ---
+ 
+@@ -336,7 +336,7 @@
+ 
+ ### T-CH-01 — Home send, no instance
+ 
+-Operator on Home, authoring `psess:H`, `app_instance_id` absent, `selected_refs` has **no** `instance_id`. Types a message. `ConversationPane.send` → **`dispatchChat`** → command `send_message` with `product_session_id=psess:H`. Wire pair minted **before** send; pending triple stored. No `InvocationEnvelope`. No client `msg_id`. Daemon copies `psess:H` onto Envelope at write. Ack then `list_mailbox`. Snapshot contains the wire pair **and** `msg_id`. Display may use `msg_id`. `conversation_thread_id` derived from `psess:H`. **Forbidden:** `dispatchInvoke`; synthetic `inst:`; GrantRecord compare; `INVALID_INPUT` for missing instance **on this path**.
++Operator on Home, authoring `psess:H`, `app_instance_id` absent, `selected_refs` has **no** `instance_id`. Types a message. `ConversationPane.send` → **`dispatchChat`** → command `send_message` with `product_session_ref=psess:H`. Wire pair minted **before** send; pending triple stored. No `InvocationEnvelope`. No client `msg_id`. Daemon copies `psess:H` onto Envelope at write. Ack then `list_mailbox`. Snapshot contains the wire pair **and** `msg_id`. Display may use `msg_id`. `conversation_thread_id` derived from `psess:H`. **Forbidden:** `dispatchInvoke`; synthetic `inst:`; GrantRecord compare; `INVALID_INPUT` for missing instance **on this path**.
+ 
+ ### T-CH-02 — Later authorized tool call (invoke)
+ 
+@@ -344,24 +344,24 @@
+ 
+ ### T-CH-03 — Two concurrent conversations
+ 
+-`psess:H` (authoring/Home) streaming answer A. `psess:B` (app-use panel for instance B) streaming answer B. Thread ids `thread:sha256(H)` and `thread:sha256(B)`. Deltas carry their `thread_id`. Pane H must not paint B’s tokens. Mailboxes are distinct (`Envelope.product_session_id` differs). **Forbidden:** one merged transcript; one mailbox key.
++`psess:H` (authoring/Home) streaming answer A. `psess:B` (app-use panel for instance B) streaming answer B. Thread ids `thread:sha256(H)` and `thread:sha256(B)`. Deltas carry their `thread_id`. Pane H must not paint B’s tokens. Mailboxes are distinct (`Envelope.product_session_ref` differs). **Forbidden:** one merged transcript; one mailbox key.
+ 
+ ### T-CH-04 — App switch
+ 
+-While A is in-flight on `psess:H`, operator selects opened app B. Chrome restores `psess:B` + `list_mailbox({product_session_id:B})`. In-flight deltas of `psess:H` continue bound to H (J-UI-01). Closing B unmounts chrome, does not cancel H’s mailbox work or B’s JobHandles. **Forbidden:** redirecting H’s answer into B; unioning `granted_ops`; writing B’s id onto H’s in-flight reply.
++While A is in-flight on `psess:H`, operator selects opened app B. Chrome restores `psess:B` + `list_mailbox({product_session_ref:B})`. In-flight deltas of `psess:H` continue bound to H (J-UI-01). Closing B unmounts chrome, does not cancel H’s mailbox work or B’s JobHandles. **Forbidden:** redirecting H’s answer into B; unioning `granted_ops`; writing B’s id onto H’s in-flight reply.
+ 
+ ### T-CH-05 — Stale question, revised answer
+ 
+-Question `message_id=M1` on thread H, optional `job_handle=J`, Envelope `product_session_id=psess:H` inherited from the parent send. Operator switches away and back. Question still bound `(thread_H, M1, J)`. Copilot (or operator reply) writes `message_id=M2` superseding M1 for display; M2 inherits `psess:H` from M1. UI shows **revised** and keeps M1 in the snapshot. **Forbidden:** deleting M1; answering onto the currently visible app’s thread if that thread is not H.
++Question `message_id=M1` on thread H, optional `job_handle=J`, Envelope `product_session_ref=psess:H` inherited from the parent send. Operator switches away and back. Question still bound `(thread_H, M1, J)`. Copilot (or operator reply) writes `message_id=M2` superseding M1 for display; M2 inherits `psess:H` from M1. UI shows **revised** and keeps M1 in the snapshot. **Forbidden:** deleting M1; answering onto the currently visible app’s thread if that thread is not H.
+ 
+ ### T-CH-06 — Lost ack, then same-tab reload / restored page session (no resend)
+ 
+-1. `dispatchChat` mints `(producer_id=P, id=C1)` **before** send for `psess:H`. Stores pending `{producer_id:P, id:C1, product_session_id:psess:H}` in `sessionStorage`. Issues `send_message`. Daemon writes Envelope `product_session_id=psess:H` and journal pair `(P, C1)`, assigns `msg:s1`. Transport ack is **lost**. Client never received `msg_id`.
++1. `dispatchChat` mints `(producer_id=P, id=C1)` **before** send for `psess:H`. Stores pending `{producer_id:P, id:C1, product_session_ref:psess:H}` in `sessionStorage`. Issues `send_message`. Daemon writes Envelope `product_session_ref=psess:H` and journal pair `(P, C1)`, assigns `msg:s1`. Transport ack is **lost**. Client never received `msg_id`.
+ 2. **Same-tab reload** (or a restored page session that still has this `sessionStorage`). The pending triple is still present. Re-auth; `initialize` re-hints `P` from that triple when present. **Cold start / closed tab:** `sessionStorage` is empty — skip to step 6 empty-storage branch; do not claim the pending triple survived.
+ 3. Product-session query restores grants/refs. **Do not** look for `msg_id` (the client still does not have it).
+-4. `list_mailbox {product_session_id:psess:H, producer_id:P, wire_id:C1}` returns the landed row, now including `msg:s1`. Paint that conversation (`psess:H`, not some other session). Drop pending. **Do not resend.** Do not mint `id=C2`.
+-5. Then `list_mailbox {product_session_id:psess:H}` for the full snapshot (section 3.1 four-row shape if replies already exist). Then `wire.attach(..., since_seq)`.
+-6. If the pair lookup returns **absent**: chrome `unknown`; keep the pending triple; **still do not resend**. Query again later. If `sessionStorage` is empty (cold start / closed tab), snapshot the selected `psess:` via `list_mailbox(product_session_id)` only; leftover composer text stays a local draft; deterministic pre-ack correlation is unavailable on that client.
++4. `list_mailbox {product_session_ref:psess:H, producer_id:P, wire_id:C1}` returns the landed row, now including `msg:s1`. Paint that conversation (`psess:H`, not some other session). Drop pending. **Do not resend.** Do not mint `id=C2`.
++5. Then `list_mailbox {product_session_ref:psess:H}` for the full snapshot (section 3.1 four-row shape if replies already exist). Then `wire.attach(..., since_seq)`.
++6. If the pair lookup returns **absent**: chrome `unknown`; keep the pending triple; **still do not resend**. Query again later. If `sessionStorage` is empty (cold start / closed tab), snapshot the selected `psess:` via `list_mailbox(product_session_ref)` only; leftover composer text stays a local draft; deterministic pre-ack correlation is unavailable on that client.
+ 
+ **Forbidden:** recovery that waits for `msg_id` before the client has `msg_id`; guessing content; replay unacked intent as a new command; empty history because events were not replayed; attaching the restored send to a different `psess:`.
+ 
+@@ -371,7 +371,7 @@
+ 
+ ### T-CH-08 — Projection rebuild from journal
+ 
+-Daemon restart with empty delivery fold. Fold reads journal `message.*` and keeps rows whose `Envelope.product_session_id == psess:H` — the four rows in section 3.1 (`handoff` send, inherited `reply`, inherited `question`, later inherited answer). `list_mailbox({product_session_id:psess:H})` returns those four. Pair lookup `(prod:tabA, C1)` still finds `msg:s1`. **Forbidden:** rebuilding by parsing bodies; a parallel conversation table; dropping inherited replies because they did not repeat the payload field.
++Daemon restart with empty delivery fold. Fold reads journal `message.*` and keeps rows whose `Envelope.product_session_ref == psess:H` — the four rows in section 3.1 (`handoff` send, inherited `reply`, inherited `question`, later inherited answer). `list_mailbox({product_session_ref:psess:H})` returns those four. Pair lookup `(prod:tabA, C1)` still finds `msg:s1`. **Forbidden:** rebuilding by parsing bodies; a parallel conversation table; dropping inherited replies because they did not repeat the payload field.
+ 
+ ---
+ 
+@@ -403,13 +403,13 @@
+ | --- | --- |
+ | `vocabulary.py` `WireCommand.SEND_MESSAGE` | Seed CT-40 command exists; chat reuses it |
+ | Parent AD-8 durable fields (`architecture-QMX-2026-09-18` spine AD-8; CONTRACTS §3; `product_session.py` `DURABLE_FIELDS`) | Session row is grants/refs/profile — **not** messages |
+-| CT-48 Envelope at inspect (`ports/mailbox.py` `ENVELOPE_REQUIRED_FIELDS`) | No `product_session_id` today; additive field is the named QMA amend |
++| CT-48 Envelope at inspect (`ports/mailbox.py` `ENVELOPE_REQUIRED_FIELDS`) | No `product_session_ref` today; additive field is the named QMA amend |
+ | `research/10-transport-reconnect-ops.md` §3.3, §9 send-copilot row | Families; snapshot vs events; reconnect; **fork closed** in favor of mailbox send |
+ | `workroom/qmx-ui-review-2026-09-23/REVIEW.md` **R3** | Required split, traces, no synthetic instance |
+ | `workroom/qmx-ui-closure-review-2026-09-24/REVIEW.md` **R3 remaining** | Persist session routing on the mailbox record; identity known before ack |
+ | CT-48 / `mailbox.py` `mailbox.delivery` | Durable owner; bounded delivery projection; journal `message.*` not trimmed |
+ | Local AD-4 | Chat without invoke legal; invoke needs one `instance_id` |
+ | Local AD-8 unique issuer | **Invoke** only — not Send |
+-| Local AD-18 | Unique chat issuer `dispatchChat`; persist `product_session_id` at write; pre-ack wire pair |
++| Local AD-18 | Unique chat issuer `dispatchChat`; persist `product_session_ref` at write; pre-ack wire pair |
+ | `LIBRARY-AND-ATTACHMENTS.md` | Message-only widget context until staged |
+ | J-UI-01, J-UI-04, J-UI-06, J-UI-07 | Switch, separate histories, reconnect, duplicate submit |
+--- before/CLOSURE-MAP.md
++++ after/CLOSURE-MAP.md
+@@ -14,12 +14,12 @@
+ | ID | Decision | Changed files | Evidence | Remaining risk | Status |
+ | --- | --- | --- | --- | --- | --- |
+ | R1 | Home / Copilot / Library / Authoring independent | AD-3; EXPERIENCE-AND-LAYOUT | session dictation | Geometry unfrozen | **closed** (preserved) |
+-| R2 | One proof `pairing_session_id`. HTTP Bearer. WS subprotocol `qmx.pair.<id>`. Unauthenticated `/pair/*` only. Cookies refused. **Issuance:** Origin never sufficient; QMB confirm or authenticated renew | AD-19; BOOTSTRAP-AND-AUTH; backend-delta AD-3 | RFC 6455 §10.1; WHATWG WebSocket; CT-40 auth | pairing HTTP not in code | **closed as candidate** (issuance reconciled 2026-09-24 backend-delta) |
+-| R3 | Mailbox Envelope persists `product_session_id`. Pre-ack identity `(producer_id, id)`. `list_mailbox` looks up that pair | AD-18; CHAT-AND-HISTORY; TRACE-MATRIX | CT-48; lost-ack restart trace | additive mailbox field is a QMA amend | **closed as candidate** |
++| R2 | One proof `pairing_proof`. HTTP Bearer. WS subprotocol `qmx.pair.<proof>`. Unauthenticated `/pair/*` only. Cookies refused. **Issuance:** Origin never sufficient; QMB confirm or authenticated renew. Journal identity `pairing_record_id` | AD-19; BOOTSTRAP-AND-AUTH; backend-delta AD-3/AD-4/AD-17 | RFC 6455 §10.1; RFC 6750; WHATWG WebSocket; CT-40 auth | pairing HTTP not in code | **closed as candidate** (issuance + J1/J2 custody reconciled 2026-09-24) |
++| R3 | Mailbox Envelope persists `product_session_ref`. Pre-ack identity `(producer_id, id)`. `list_mailbox` looks up that pair. Principal equality on send and list | AD-18; CHAT-AND-HISTORY; TRACE-MATRIX | CT-48; lost-ack restart trace; QMA `_ref` law | additive mailbox field is a QMA amend | **closed as candidate** |
+ | R4 | Keep Epic 60 `PluginManifest.copilot_profile`. Nav `view_ids`. `GRANT_AMBIGUOUS` if ≥2 grants | AD-15, AD-20; VIEW-AND-PACK-CONTRACT; EXAMPLES | kit CONTRACTS §1; epics 60.1 | PackUiRequest still unspecified in code | **closed as candidate** — **no parent amendment** |
+-| R5 | First Run = publish into **local authoring pack** then AD-30 enable. Export later. CAS `expected_revision` | AD-21; AUTHORING-AND-ML | parent compile-at-enable | local pack roster implementation | **closed as candidate** |
+-| R6 | Local daemon possession first; HTTP PUT `/artifacts/stage`; v1 refuse partial; explicit `transfer_artifact` for remote | AD-22; LIBRARY-AND-ATTACHMENTS | J-UI-09 | byte channel not in code | **closed as candidate** |
+-| R7 | Starter `originating_psess` only. `queued`→`running` does not kill cancel. Terminal = no-op | AD-23; TRACE-MATRIX | parent JobHandle | `originating_psess` is a proposed JobHandle amend | **closed as candidate** |
++| R5 | First Run = `publish_editor_draft` into **local authoring pack** then AD-30 enable. Daemon issues `editor_draft_id`. Export later. CAS `expected_revision` | AD-21; AUTHORING-AND-ML | parent compile-at-enable | local pack roster implementation | **closed as candidate** (J3/J4 bound) |
++| R6 | Local daemon possession first; HTTP PUT `/artifacts/stage`; v1 refuse partial; explicit `transfer_artifact` only on recorded reachable TLS; dest `transfer_complete` | AD-22; LIBRARY-AND-ATTACHMENTS | J-UI-09; J5 | byte channel not in code | **closed as candidate** |
++| R7 | Starter `originating_product_session_ref` on UI admits; omitted on headless. `queued`→`running` does not kill cancel. Terminal = no-op | AD-23; TRACE-MATRIX | parent JobHandle | field is a proposed JobHandle amend | **closed as candidate** |
+ | R8 | USER / INHERITED / CANDIDATE tags | DECISIONS-AND-OPEN | Codex R8 | CANDIDATE ≠ operator accept | **closed** (preserved) |
+ | R9 | Node.js **>=22.12.0 <23.0.0**; bits-ui 2.19.3; pnpm | AD-2; stack; DECISIONS | Vite 8.3 engines | lockfile unexecuted | **closed as candidate** |
+ 
+@@ -46,6 +46,8 @@
+ 
+ ## Backend adds (not this sitting)
+ 
+-See `BACKEND-DEPENDENCIES.md` and backend-delta `DEPENDENCY-MAP.md`. Already planned: Epic 60–65 fields. Proposed amendments: pairing HTTP + WS subprotocol **with Origin-never-sufficient issuance**; mailbox `product_session_id` (**Epic 46.4 delivery**, Epic 41 query name); `list_mailbox`; `cancel_job` + `originating_psess`; artifact HTTP PUT + transfer. **Not** amending Epic 60 `copilot_profile`.
++See `BACKEND-DEPENDENCIES.md` and backend-delta `DEPENDENCY-MAP.md` plus `CLOSURE-J1-J5.md`. Already planned: Epic 60–65 fields. Proposed amendments: pairing HTTP + WS subprotocol **with Origin-never-sufficient issuance**; first-operator host-control; mailbox `product_session_ref` (**Epic 46.4 delivery**, Epic 41 query name); `list_mailbox`; `cancel_job` + optional `originating_product_session_ref`; artifact HTTP PUT + reachable transfer + `transfer_complete`; daemon-issued drafts + `publish_editor_draft`; `get_pack_ui_request`. **Not** amending Epic 60 `copilot_profile`.
++
++J1–J5 evidence, traces, and deferrals: backend-delta `../architecture-QMX-UI-BACKEND-2026-09-24/CLOSURE-J1-J5.md`.
+ 
+ Post-amendment independent review follows this delta. Remaining risk is implementation of named backend adds, not a second unnamed owner.
+--- before/LIBRARY-AND-ATTACHMENTS.md
++++ after/LIBRARY-AND-ATTACHMENTS.md
+@@ -21,7 +21,7 @@
+ | --- | --- |
+ | **Possession first** | Initial possession is on the **authenticated local daemon**. Home may stage **before** an instance exists. That yields a **local-complete fp1**. It is **not** a remote placement. |
+ | **Then transfer** | When instance / execution placement is known and is not this daemon: explicit host command `transfer_artifact` (or refuse). Destination **verifies hash**. Never silent local fallback. |
+-| **Byte transport** | Authenticated **HTTP PUT** `/artifacts/stage` with **Content-Length**. Same pairing auth as queries (`Authorization: Bearer pairing:<id>`). **Not** a JSON-RPC body. **Not** REST `/invoke`. **Not** a UI BFF. |
++| **Byte transport** | Authenticated **HTTP PUT** `/artifacts/stage` with **Content-Length**. Same pairing auth as queries (`Authorization: Bearer pairing:<proof>`). **Not** a JSON-RPC body. **Not** REST `/invoke`. **Not** a UI BFF. |
+ | **Max size** | Registry row `registry:artifact.stage_max_bytes`. Oversize PUT refuses; no object. |
+ | **Interrupted v1 PUT** | **Refuse.** No resume. No partial fp1. Daemon **deletes** the incomplete object. Retry is a **new PUT of full bytes** (new staging attempt). Same content hash **may reuse** an already-complete object. |
+ | **Completeness proof** | Daemon-recomputed hash **plus** byte count after it holds complete bytes. Browser hash is not possession. |
+@@ -91,7 +91,7 @@
+ | --- | --- |
+ | Owner | **COMP-QMA-DAEMON** |
+ | Transport | Authenticated **HTTP PUT** `/artifacts/stage` with **Content-Length**. Body = raw bytes. **Not** a JSON-RPC body. **Not** REST `/invoke`. **Not** a UI BFF (local AD-12). Same daemon HTTP origin as snapshot queries |
+-| Auth | Same pairing proof as queries: `Authorization: Bearer pairing:<id>`. Paired Origin. MCP/json-render/native frames **must not** PUT; host chrome does. Not a GrantRecord pack-op |
++| Auth | Same pairing proof as queries: `Authorization: Bearer pairing:<proof>`. Paired Origin. MCP/json-render/native frames **must not** PUT; host chrome does. Not a GrantRecord pack-op |
+ | Max size | `registry:artifact.stage_max_bytes`. Missing Content-Length, oversize, or unpaired Origin → refuse; no object |
+ | Store | Existing artifact registration path (`before_artifact_register` / content fp1). **No new sqlite class.** Not a Workbench AD-3 kind unless a later register on that rail says so |
+ | At `34c148b` | **Absent.** Knowledge `cite` already copies through `before_artifact_register` into an in-memory `_artifacts` map — that is the pattern to reuse, not a Library database |
+@@ -108,14 +108,17 @@
+ 
+ When the operator later selects an instance whose execution placement is **not** this local daemon:
+ 
++Default source bind is loopback. A remote environment **cannot** dial `127.0.0.1` on the laptop. `transfer_artifact` therefore **refuses** typed `source_unreachable` unless the source daemon origin is **recorded reachable TLS** on the destination environment’s network allowlist. Never silently expose loopback. Never fall back to local invoke.
++
+ | Field | Contract |
+ | --- | --- |
+-| Command | Host command `transfer_artifact` (CT-40, **not** a pack op, **not** `dispatchInvoke`) |
++| Command | Host command `transfer_artifact` (CT-40, **not** a pack op, **not** `dispatchInvoke`) with durable `command_id` |
+ | Input | Local-complete fp1 + destination placement / instance |
+-| Destination | Verifies **hash** (and byte count) on arrival. Incomplete destination object is deleted; no runnable remote ref |
+-| Success | Placement possesses the same fp1. Invoke may cite it **on that placement** |
+-| Failure / refuse | Typed refusal. Local fp1 remains local-complete. **Never** silent local fallback (J-UI-09, P1-PLC-002). Remote failure does not rewrite the ref into a laptop path |
+-| Interrupted transfer | Destination has no complete object. Do not invoke remotely against local-only possession. Do not finish the run on local disk |
++| Ticket | Binds `ticket_id`, source origin, fp1, byte count, operator/`product_session_ref`, destination environment identity + placement revision, exact machine `credential_ref` audience |
++| Destination | Already-authenticated dest control connection is notified. Only that audience may `GET /artifacts/<fp1>` with `X-QMX-Transfer-Ticket`. Verifies **hash** (and byte count) on arrival. Incomplete destination object is deleted; no runnable remote ref |
++| Completion | Dest authors `transfer_complete` `{ticket_id, fp1, byte_count}`. Idempotent. Lost ack: dest retries; source returns prior complete. Invoke on that placement **refuses until ticket `complete`** |
++| Failure / refuse | Typed refusal (`source_unreachable`, wrong audience, hash mismatch). Local fp1 remains local-complete. **Never** silent local fallback (J-UI-09, P1-PLC-002). Remote failure does not rewrite the ref into a laptop path |
++| Interrupted transfer | Destination has no complete object. Ticket stays `claimed` until complete, failed, or expired. Do not invoke remotely against local-only possession. Do not finish the run on local disk |
+ 
+ If the selected instance runs **on this daemon**, no transfer is required; the local-complete fp1 is already on the execution placement.
+ 
+--- before/START-HERE.md
++++ after/START-HERE.md
+@@ -1,8 +1,9 @@
+ # QMX UI architecture candidate — start here
+ 
+-**Status:** second amendment after Codex 2026-09-24 closure review (R2–R7, R9), plus 2026-09-24 backend-delta reconciliation of remaining R2 issuance and reload/cold-start wording. R1/R8 preserved. Candidate defaults, not operator-accepted. Not implementation. Not Documentation Factory.
++**Status:** second amendment after Codex 2026-09-24 closure review (R2–R7, R9), plus 2026-09-24 backend-delta reconciliation of remaining R2 issuance, reload/cold-start wording, and joint-review J1–J5 (first operator, pairing custody, draft issuer, publication, reachable transfer) plus small reconciliations. R1/R8 preserved. Candidate defaults, not operator-accepted. Not implementation. Not Documentation Factory.
+ 
+ **Closure map:** `CLOSURE-MAP.md`  
++**J1–J5 map:** `../architecture-QMX-UI-BACKEND-2026-09-24/CLOSURE-J1-J5.md`  
+ **Backend dependency list:** `BACKEND-DEPENDENCIES.md`
+ 
+ **Workspace:** `C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/`
+--- before/TRACE-MATRIX.md
++++ after/TRACE-MATRIX.md
+@@ -30,7 +30,7 @@
+ - Unique host function: `apps/qmx-ui/src/lib/host/dispatchCancel`.
+ - CT-40 addable command `cancel_job` (absent at `34c148b`, COMP-QMA-WIRE). **Not** seed `stop_run` (agent/mission stop / `agent_stop` hook).
+ - Fields: `handle_id`, `logical_run_id`, `attempt_id`, `command_id`, `expected_state`.
+-- Principal/grant: **operator** of the JobHandle’s immutable **`originating_psess`** (written at admit). Observation is **not** cancel authority. Coordinated authority remains `JobHandle.cancel` (parent AD-26). **Not** a new `InvocationEnvelope` invoke. `machine` cannot take this path. `unknown` is not cancellable (`unknown.resolve` only).
++- Principal/grant: **operator** of the JobHandle’s immutable **`originating_product_session_ref`** when present (written at UI admit). Headless/QMB admits omit the field; UI `cancel_job` is then unavailable. Observation is **not** cancel authority. Coordinated authority remains `JobHandle.cancel` (parent AD-26). Exact equality of `handle_id`/`job_id`, `logical_run_id`, `attempt_id`. **Not** a new `InvocationEnvelope` invoke. `machine` cannot take this path. `unknown` is not cancellable (`unknown.resolve` only).
+ - `expected_state`: JobHandle state plus `attempt_id`. A non-terminal advance `queued`→`running` does **not** invalidate the same `command_id`. Already-terminal → recorded no-op. Same-command replay is idempotent.
+ - Repeat delivery uses the **same** `command_id` (and the same wire `(producer_id, id)` on retry). First durable terminal wins. Cancelled **display** is not proof the worker stopped.
+ - Callers: `RunInspector.cancel` only through this function. Adapters never import the wire client.
+@@ -39,19 +39,19 @@
+ 
+ | Intent | Component | Identity | Command / query | Owner | Ack / result | Recovery | Test class |
+ | --- | --- | --- | --- | --- | --- | --- | --- |
+-| **Home send, no instance** (J-UI chat; local AD-18) | `ConversationPane.send` → `dispatchChat`. Composer Send without an op. Home `authoring`, `app_instance_id` absent. | `psess:` on the mailbox row; **pre-ack identity is wire `(producer_id, id)` only**. **No** product-session `command_id`. **No** `instance_id`. **No** InvocationEnvelope. **No** `idempotency_key`. | **Cmd** `send_message`. **Query** `list_mailbox` by `{product_session_id, producer_id, wire_id}`. **Events** `message.delta` (not authoritative). | COMP-QMA-WIRE vocab; COMP-QMA-DAEMON mailbox. | Immediate command ack. History is mailbox snapshot. | Lost ack → chrome `unknown`; query by the **same wire pair**; do not mint a new `id`. **Same-tab reload / restored page session** restores pending triple from sessionStorage when present. **Cold start / closed tab:** empty storage; `list_mailbox(product_session_id)` only; never auto-resend. | Contract + browser. **Unexecuted.** |
++| **Home send, no instance** (J-UI chat; local AD-18) | `ConversationPane.send` → `dispatchChat`. Composer Send without an op. Home `authoring`, `app_instance_id` absent. | `psess:` on the mailbox row; **pre-ack identity is wire `(producer_id, id)` only**. **No** product-session `command_id`. **No** `instance_id`. **No** InvocationEnvelope. **No** `idempotency_key`. | **Cmd** `send_message`. **Query** `list_mailbox` by `{product_session_ref, producer_id, wire_id}`. **Events** `message.delta` (not authoritative). | COMP-QMA-WIRE vocab; COMP-QMA-DAEMON mailbox. | Immediate command ack. History is mailbox snapshot. Principal of the connection must equal the session principal. | Lost ack → chrome `unknown`; query by the **same wire pair**; do not mint a new `id`. **Same-tab reload / restored page session** restores pending triple from sessionStorage when present. **Cold start / closed tab:** empty storage; `list_mailbox(product_session_ref)` only; never auto-resend. | Contract + browser. **Unexecuted.** |
+ | **Granted invoke** | `WidgetFrame` / json-render / MCP intercept / graph Run / composer Run / palette → **`dispatchInvoke` only**. Host `ActionContext` (local AD-20). | Envelope: `logical_invocation_id`, `attempt_id`, `grant_id`, `instance_id` (required), `idempotency_key`. Distinct `command_id` per `psess:`. `caller_kind` `user`\|`agent`\|`workflow` — no `widget`. | **Cmd** JSON-RPC public-call: payload `invocation_envelope` + `input` (`public_call_from_wire`). **Not** seed `start_mission`. **Query** JobHandle / listing / `query-state`. **Events** `tool.started`, `task.completed` (progress). | COMP-QMA-WIRE + DAEMON hop-compare GrantRecord; then owner COMP. Live JSON-RPC is a **backend add**. | Ack ≠ completion. Output `value` \| `artifact_ref` \| `job_handle` \| `event` \| `stream`. Until daemon accepts `caller_kind`: typed `caller_kind_unsupported`; qmb CLI remains the door. Stale snapshot refuses. | Query handle **before** any resubmit. Same `idempotency_key` coalesces. `none`/`read` may host-retry; `external-egress` must not. Reconnect does **not** replay. | Contract + browser. **Unexecuted.** |
+ | **Cancel racing complete** (J-UI-08) | `RunInspector.cancel` → **`dispatchCancel`**. Chrome: cancellation **requested** until handle terminal. | `handle_id`, `logical_run_id`, `attempt_id`, `command_id` (psess-unique), `expected_state` (last queried JobHandle state). Not invoke `idempotency_key`. | **Cmd** addable `cancel_job`. **Forbidden:** `stop_run`, second `dispatchInvoke`, adapter wire client. **Query** JobHandle snapshot. | COMP-QMA-WIRE (`cancel_job` add); COMP-QMA-DAEMON `JobHandle.cancel`. QMB abort only via production door (Story 36.5). | First durable terminal wins (`done`/`failed`/`cancelled`/`aborted`). Race with complete paints the terminal, not a cancelled lie. Interrupt ≠ cancelled. | Lost cancel ack: keep requested + query; **repeat same** `command_id`. Do not claim cancelled until snapshot says so. Terminal handle: later cancels are recorded no-ops. | Failure injection + contract. **Unexecuted.** |
+ | **Lost ack** (J-UI-07) | Same issuer as the original send/invoke/cancel. Chrome `unknown` (non-terminal). | Chat: preserve `(producer_id, id)` only. Invoke: also `idempotency_key`. Cancel: also product-session `command_id`. Never mint replacements. | **Query** authoritative snapshot: `list_mailbox` and/or JobHandle / listing. No new command. | COMP-QMA-DAEMON snapshots. Wire dedup may hide a duplicate inside the window — that is not permission to send a **new** `id`. | `unknown` until reconcile. Duplicate of the **same** pair returns prior ack. Collision with a different hash refuses. | Reconnect = query (below). Do not treat missing ack as non-execution (parent AD-27). `read` may host-retry; side-effecting ops must not. | Failure injection. **Unexecuted.** |
+ | **Two tabs, one `psess:`** (local AD-4 / AD-24) | Two chrome surfaces share one server row. Each tab: own `ConversationPane` / `RunInspector` chrome. | **`producer_id` per tab/process.** Wire `id` unique per producer. **`command_id` unique per `psess:` across tabs** (UUIDv7, not a per-tab counter). Invocation `idempotency_key` is a **third** identity. | Same commands as send/invoke/cancel; CAS mutate (when present) uses `command_id` + `expected_revision`. | COMP-QMA-DAEMON `product_session` (one row); COMP-QMA-WIRE per-connection `producer_id`. | Shared grants/`selected_refs`. Histories do not merge. Closing a tab writes nothing and does not cancel jobs. | Reconnect per tab: same `producer_id` for **that** tab; `command_id`s never regenerated. | Contract + browser (two contexts). **Unexecuted.** |
+ | **Protocol mismatch UI vs core** (J-UI-13) **NEW** | Splash / `ReadinessCard` / shell disconnected-compatible chrome. | Client pin `expected_qma_api` + `initialize.protocolVersion` / capabilities. Distinct from pack `expected_qma_api` enable (J-UI-10). | **Handshake** `authenticate` then `initialize`. No family commands until negotiated. Missing `cancel_job` / `list_mailbox` / `caller_kind` = capability mismatch. | COMP-QMA-WIRE compatibility (`qma-wire` sole authority; additive-only within a major). | Typed refusal (`unsupported protocolVersion` or missing capability). Shell stays usable for surfaces that still work. Needed chat/invoke/cancel **refuse**, do not hang. | Do not silent-downgrade and lie. Do not run J-UI-10 pack enable as a substitute. Operator upgrades client **or** daemon. | Contract + installed-product (also J-UI-14). **Unexecuted.** |
+-| **First-run provider failure** (J-UI-11) | Splash then usable shell. `ReadinessCard` per listing-axis bundle. Home attention independent of the failed provider. | Credential **refs** only (`cred://models\|inference\|compute\|sandbox\|corpus\|knowledge\|telemetry/`). Venue/broker keys stay QMN. | **Cmd** `update_configuration` (operator, CAS) when saving a ref. **Query** `get_provider_health` + listing axes. Probe is not a mutate. | COMP-QMA-DAEMON Credential Broker + listing; COMP-QMN `/health` for node. Secrets never on the wire. | Partial readiness. One provider `healthy=false` does not block Library/Home/other work. Retry is per-card `retry_probe`. | Reconnect does **not** resubmit the secret. Query health. Do not replay unacked `update_configuration`. | Browser + failure injection. **Unexecuted.** |
++| **First-run provider failure** (J-UI-11) | Splash then usable shell. `ReadinessCard` per listing-axis bundle. Home attention independent of the failed provider. | Credential **refs** only (`cred://models\|inference\|compute\|sandbox\|corpus\|knowledge\|telemetry/`). Venue/broker keys stay QMN. Shell launch (`qmb host start` + pair) is **not** provider readiness. | **Cmd** `update_configuration` (operator, CAS) when saving a ref already in the OS store. **Query** `get_provider_health` + listing axes. Probe is not a mutate. | COMP-QMA-DAEMON Credential Broker + listing; COMP-QMN `/health` for node. Secrets never on the wire. External provision is a **prerequisite**. | Partial readiness. One provider `healthy=false` does not block Library/Home/other work. Retry is per-card `retry_probe`. | Reconnect does **not** resubmit the secret. Query health. Do not replay unacked `update_configuration`. | Browser + failure injection. **Unexecuted.** |
+ | **Deployed client update/recovery** (J-UI-14) **NEW** | Static SPA origin (or later Tauri webview) pairing to an **already-running** daemon. Not pack chrome. | Client build/bytes ≠ pack `(qualified_id, version)` ≠ GrantRecord. `producer_id` persists across client restart of the same surface if stored; otherwise re-hint at `initialize`. | Pairing + `initialize` + snapshot queries. **Not** `install_enable_plugin`. **Not** pack enable/validate (J-UI-10 / J-UI-12). | Host static origin + COMP-QMB `qmb host` (when it exists) + COMP-QMA-DAEMON. Client files are not daemon sqlite. | Installed vs running client bits. Update of SPA/static files must not rewrite journals or widen grants. Failed client drop rolls back **client** bits. | Restore via reconnect query. In-flight JobHandles unchanged. Distinct from pack rollback. Clean-machine start is this class. | **Installed product** (Reticle cannot supply this alone). **Unexecuted.** |
+ | **Widget expand/return** (J-UI-03; local AD-8) | `WidgetFrame.expand` → `DetailHost` / `WorkAreaTabs`. Graph keeps viewport, selection, typed draft/revision/template/run refs (local AD-21). | View DTO `view_id` + `snapshot_cursor`. Expand is **chrome**. JobHandle (if any) unchanged. | **No command.** `ViewPresentation` mount. Dispose must not start/kill work (`refuse_view_durable_work`). | COMP-QMA-WIRE DTO; GAP-0081 chrome in `apps/qmx-ui`. | Detail shows last snapshot. Stale → refuse invoke from that view. Return restores canvas context. Editing V2 is not running V1. | Close detail = local unmount. Re-expand focuses existing detail; not a side effect. | Browser. **Unexecuted.** |
+ | **Headless CLI invoke** (J-UI-02 / J-KIT-01) | No pane, no `view:*`, no `copilot_profile`. Home may show JobHandle attention only. | Same InvocationEnvelope. Transport `cli`. Door parity (parent AD-21). | `public_call_from_cli` / `qmb` CLI. Equivalent must not require simulated clicks. | COMP-QMB CLI; COMP-QMA-WIRE envelope; owner COMP. | JobHandle exists without navigation. Enable is not grant. Closing a future UI tab does not cancel. | Same JobHandle query / `reattach`. UI is optional observation. | Contract + CLI (not Reticle). **Unexecuted.** |
+-| **Reconnect** (J-UI-06; local AD-11) | Connection: connected → reconnecting → unavailable. Job state **unchanged** by transport. | Same `producer_id`. `since_seq` = last **acked** event seq (not `0` unless explicit history replay). `psess:` `(resume_cursor, cursor_generation)`. | (1) re-auth with same `pairing_session_id` (HTTP Bearer + WS `qmx.pair.<id>`; daemon maps internally to `credential_ref`) (2) `initialize` same `producer_id` (3) HTTP snapshots (4) `product_session.reconnect` — extra keys `command_id`/`payload`/`unacked`/`intent` **refuse** (5) `wire.attach(scope, since_seq)` (6) `JobHandle.reattach` (7) `list_mailbox`. | COMP-QMA-WIRE + DAEMON. Laptop-off work only if remote env + daemon not on the sleeping laptop. | Restores durable `psess:` + mailbox + in-flight handles. Client-local tabs/drafts are gone. Compacted cursor → snapshot/resync, new `cursor_generation`. Unreachable → handle `unknown`, not `failed`. | **Never** replay intent. Reconcile snapshots **before** offering retry. Events must not overwrite a terminal. | Failure injection + browser. **Unexecuted.** |
++| **Reconnect** (J-UI-06; local AD-11) | Connection: connected → reconnecting → unavailable. Job state **unchanged** by transport. | Same `producer_id`. `since_seq` = last **acked** event seq (not `0` unless explicit history replay). `psess:` `(resume_cursor, cursor_generation)`. | (1) re-auth with same `pairing_proof` (HTTP Bearer + WS `qmx.pair.<proof>`; daemon maps Origin + proof_fp1 to operator principal + `pairing_record_id`) (2) `initialize` same `producer_id` (3) HTTP snapshots (4) `product_session.reconnect` — extra keys `command_id`/`payload`/`unacked`/`intent` **refuse** (5) `wire.attach(scope, since_seq)` (6) `JobHandle.reattach` (7) `list_mailbox`. | COMP-QMA-WIRE + DAEMON. Laptop-off work only if remote env + daemon not on the sleeping laptop. | Restores durable `psess:` + mailbox + in-flight handles. Client-local tabs/drafts are gone. Compacted cursor → snapshot/resync, new `cursor_generation`. Unreachable → handle `unknown`, not `failed`. | **Never** replay intent. Reconcile snapshots **before** offering retry. Events must not overwrite a terminal. | Failure injection + browser. **Unexecuted.** |
+ | **Duplicate submit** (J-UI-07) | Double-activate of Run / Send / Cancel. Host coalesces **before** a second issuer call. | Send: same wire `(producer_id, id)`. Cancel: same product-session `command_id`. Invoke: same `idempotency_key` + `input_hash`. | Same command as the first press. Second press must not mint a new issuer call. | Daemon dedup (wire pair and/or envelope key). | `duplicate(prior_result)` / prior ack. Different hash → typed collision. | Lost-ack path above. UI Retry is **not** a second invoke (kit AD-6). | Browser + contract. **Unexecuted.** |
+-| **Local file, remote job** (J-UI-09; local AD-22) | Composer / Library attach. No `local_path` / `upload_bytes` selected-ref. | Local-complete fp1 after HTTP PUT `/artifacts/stage`. Browser hash is **not** possession. | **HTTP PUT** `/artifacts/stage` (pairing Bearer). Later **`transfer_artifact`** to remote placement + hash verify. Interrupted PUT is **refused** (delete incomplete; no partial fp1; retry = new full PUT). | COMP-QMA-DAEMON ingest; owner COMP on the remote env. | Complete local fp1; remote copy only after transfer proof. | Remote failure does **not** silently retarget local. Reconnect does not re-upload a completed fp1. | Contract + failure injection. **Unexecuted.** |
++| **Local file, remote job** (J-UI-09; local AD-22) | Composer / Library attach. No `local_path` / `upload_bytes` selected-ref. | Local-complete fp1 after HTTP PUT `/artifacts/stage`. Browser hash is **not** possession. | **HTTP PUT** `/artifacts/stage` (pairing Bearer). Later **`transfer_artifact`** only if source origin is recorded reachable TLS; dest `transfer_complete` after hash verify. Interrupted PUT is **refused** (delete incomplete; no partial fp1; retry = new full PUT). Loopback-only source → `source_unreachable`. | COMP-QMA-DAEMON ingest; owner COMP on the remote env. | Complete local fp1; remote copy only after dest-authored complete ack. Invoke refuses until ticket `complete`. | Remote failure does **not** silently retarget local. Reconnect does not re-upload a completed fp1. Lost complete ack: dest retries same ids. | Contract + failure injection. **Unexecuted.** |
+ | **ML compare** (UX-09; local AD-21) | `GraphCanvas` + `DetailHost` + diff. Authoring destination; no LSE Train/Optimise form. | Draft/revision ≠ immutable template `(qualified_id, version)` ≠ pack instance ≠ JobHandle/run/release fp1. Compare names **immutable** runs. | Run = `dispatchInvoke` of template `start` **after local pack enable** (parent AD-30). Publish-into-pack is not enough. Compare = queries over two run/release identities (lineage CT-07). **Not** `start_mission`. | COMP-QMA-DAEMON / QML as owner of the op; chrome only paints. | Run refused on a mutable draft. V1 JobHandle stays pinned while editing V2. Split/leakage/target are definition fields, not chrome JSON. | Reconnect restores pinned run ids from snapshots, not the draft buffer. | Browser + contract. **Unexecuted.** |
+ | **Trading / risk, paper-only** (UX-10) | Home **attention** may observe Book/BMS JobHandles (local AD-14). **No** ticket/order chrome in this sitting. | Book/BMS default composition; dummy Book is `INVALID_INPUT` (parent AD-11). Paper-then-live + L17 for **trading seats only**. | Observation: listing axes, JobHandle, `correlation_id`, instance `health()` when present. Commands that place/risk stay QMN/Book doors — **deferred to a trading-app sitting**. | COMP-QMN / Book+BMS for execution; UI is observation. Stream subscribe is not a trading grant (parent AD-28). | Paper gate is **not universal**. Data tools, headless utilities, non-trading ML: functional/operational eval, no fake Book chrome. | Dashboard filter is not a command target. Failed observation does not authorize live or hot-swap. | Contract (observation now). Ticket path **deferred**. **Unexecuted.** |
+ | **Terminal / preview** (UX-12) | `WorkAreaTabs` xterm.js preview. | Preview tab is chrome, not a `psess:`, not a privileged shell (parent AD-21). | No QMA command. Must not spawn `qmb` or a host shell as invoke. Unsupported preview = labelled state. | `apps/qmx-ui` adapter only. | Preview ≠ export ≠ grant. Unmount does not cancel JobHandles. | Close tab = dispose. Remote vs local workspace is a reference, not a retarget. | Browser. **Unexecuted.** |
+@@ -75,7 +75,7 @@
+ 
+ After a live CT-40 server exists on `DaemonProcess`:
+ 
+-1. Authenticated CT-40 (`pairing_session_id` on HTTP Bearer and WS subprotocol; daemon maps to `credential_ref`) to a **live** daemon.
++1. Authenticated CT-40 (`pairing_proof` on HTTP Bearer and WS subprotocol; daemon maps to operator principal + `pairing_record_id`) to a **live** daemon.
+ 2. Home mailbox **send** (`dispatchChat` / `send_message`, no instance).
+ 3. One **widget** invoke **or** headless CLI `JobHandle` (not both required in v1 slice).
+ 4. Transport drop then **reconnect restore** (mailbox + handle; no intent replay).
+--- before/VIEW-AND-PACK-CONTRACT.md
++++ after/VIEW-AND-PACK-CONTRACT.md
+@@ -12,7 +12,7 @@
+ 
+ This sitting does **not** mint a `ui_view` contribution point, a UI permission bit, a view-specific GrantRecord, or a second grant store. `view:*` remains a wire DTO (parent AD-17, local AD-15, kit AD-1). Host grants stay parent GrantRecords. Widgets bind and display; the unique invoke issuer remains `apps/qmx-ui/src/lib/host/dispatchInvoke`.
+ 
+-**Honesty.** `ViewPresentation`, `GrantRecord`, and `compare_envelope_to_grant` exist as types/fixtures at `34c148b`. `PackUiRequest`, host-minted `ActionContext`, json-render catalog enforcement, and MCP Apps intercept are **specified here and absent in code**. Until the daemon accepts envelope `caller_kind`, the host refuses pack invoke with typed `caller_kind_unsupported`; qmb CLI remains the operator door (local AD-8). Static JSON in this file is an architecture artifact, not running software.
++**Honesty.** `ViewPresentation`, `GrantRecord`, and `compare_envelope_to_grant` exist as types/fixtures at `34c148b`. `PackUiRequest`, `get_pack_ui_request`, host-minted `ActionContext`, json-render catalog enforcement, and MCP Apps intercept are **specified here and absent in code**. Until the daemon accepts envelope `caller_kind`, the host refuses pack invoke with typed `caller_kind_unsupported`; qmb CLI remains the operator door (local AD-8). Static JSON in this file is an architecture artifact, not running software.
+ 
+ ## 1. What a pack may request vs what the host grants
+ 
+@@ -82,7 +82,7 @@
+ 
+ **When.** After parent AD-30 validate, as part of enable, the host reads `pack_ui_request` from the pack bytes being enabled. Ingestion is **not** granting and **not** mounting. ContributionHits still publish only from `contributes`.
+ 
+-**Who.** COMP-QMA-DAEMON enable path parses and records the request (or records that it was empty). The Svelte host later **loads** that recorded request when an instance is opened. Neither step mints `ui_view` hits.
++**Who.** COMP-QMA-DAEMON enable path parses and records the request (or records that it was empty). The Svelte host later **loads** that recorded request when an instance is opened via addable query **`get_pack_ui_request`** keyed by enabled **`instance_id` + `availability_revision`** (authenticated HTTP GET snapshot family). Neither step mints `ui_view` hits.
+ 
+ **Pack enable vs UI request.** A bad or empty UI request must not roll back the operations roster. Views are not contribution points; they are not enable-critical the way missing operation deps are (parent AD-30 hard-error). Ops can enable headless even when chrome cannot mount.
+ 

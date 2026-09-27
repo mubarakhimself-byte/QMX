@@ -1,0 +1,36 @@
+{
+  "checked_at_utc": "2026-09-24T12:38:20.063585+00:00",
+  "input_file_count": 80,
+  "sha256_mismatches": [],
+  "candidate_file_changes_since_snapshot": {
+    "backend": {
+      "added": [],
+      "removed": []
+    },
+    "ui": {
+      "added": [],
+      "removed": []
+    }
+  },
+  "missing_report_links": [],
+  "independent_reports_present": true,
+  "structural_lints": {
+    "backend": {
+      "ok": true,
+      "spine": "ARCHITECTURE-SPINE.md",
+      "total_findings": 0,
+      "by_severity": {},
+      "findings": []
+    },
+    "ui": {
+      "ok": true,
+      "spine": "ARCHITECTURE-SPINE.md",
+      "total_findings": 0,
+      "by_severity": {},
+      "findings": []
+    }
+  },
+  "application_runtime_verified": false,
+  "scope": "Architecture document review only; candidate inputs not edited by Codex",
+  "ok": true
+}

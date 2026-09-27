@@ -5,14 +5,56 @@ type: changelog
 status: ratified
 sources: [_docwork/ledger.yaml, _docwork/gaps.yaml, _docwork/feature_inventory.yaml, _docwork/review-consistency.md, _docwork/review-redteam.md, docs/index.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md]
 generated: 2026-08-18
-verified: '2026-09-19'
+verified: '2026-09-25'
 stale_after: 90d
-decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0207, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0214, DEC-0215, DEC-0216, DEC-0231, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0240, DEC-0241, DEC-0242, DEC-0243, DEC-0244, DEC-0245, DEC-0246, DEC-0247, DEC-0248, DEC-0249, DEC-0250, DEC-0251, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0260, DEC-0261, DEC-0262, DEC-0263, DEC-0264, DEC-0265, DEC-0266, DEC-0267, DEC-0268, DEC-0269, DEC-0270, DEC-0271, DEC-0272, DEC-0273, DEC-0274, DEC-0275, DEC-0276, DEC-0277, DEC-0278, DEC-0279, DEC-0280, DEC-0281, DEC-0282, DEC-0283, DEC-0284, DEC-0285, DEC-0286, DEC-0287, DEC-0114, DEC-0121, DEC-0142, DEC-0300, DEC-0304, DEC-0315, DEC-0316, DEC-0324, DEC-0327, DEC-0328, DEC-0329, DEC-0330, DEC-0331, DEC-0334, DEC-0335, DEC-0337, DEC-0338, DEC-0340, DEC-0341, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0347, DEC-0349, DEC-0350, DEC-0360, DEC-0379, DEC-0380, DEC-0381, DEC-0382, DEC-0383, DEC-0384, DEC-0385, DEC-0386, DEC-0387, DEC-0388, DEC-0389, DEC-0390, DEC-0391, DEC-0392, DEC-0393, DEC-0394, DEC-0395, DEC-0396, DEC-0397, DEC-0398, DEC-0399, DEC-0400, DEC-0401, DEC-0402, DEC-0403, DEC-0404, DEC-0405, DEC-0406, DEC-0407, DEC-0408, DEC-0409, DEC-0410, DEC-0411, DEC-0412, DEC-0413, DEC-0414, DEC-0415, DEC-0416, DEC-0417, DEC-0418, DEC-0419, DEC-0420, DEC-0421, DEC-0422, DEC-0423, DEC-0424, DEC-0425, DEC-0426, DEC-0427, DEC-0428, DEC-0429, DEC-0430, DEC-0431, DEC-0432, DEC-0433, DEC-0434, DEC-0435, DEC-0436, DEC-0437, DEC-0438, DEC-0439, DEC-0440, DEC-0441, DEC-0442, DEC-0443, DEC-0444, DEC-0445, DEC-0446, DEC-0447, DEC-0448, DEC-0449, DEC-0450, DEC-0451]
+decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0207, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0214, DEC-0215, DEC-0216, DEC-0231, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0240, DEC-0241, DEC-0242, DEC-0243, DEC-0244, DEC-0245, DEC-0246, DEC-0247, DEC-0248, DEC-0249, DEC-0250, DEC-0251, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0260, DEC-0261, DEC-0262, DEC-0263, DEC-0264, DEC-0265, DEC-0266, DEC-0267, DEC-0268, DEC-0269, DEC-0270, DEC-0271, DEC-0272, DEC-0273, DEC-0274, DEC-0275, DEC-0276, DEC-0277, DEC-0278, DEC-0279, DEC-0280, DEC-0281, DEC-0282, DEC-0283, DEC-0284, DEC-0285, DEC-0286, DEC-0287, DEC-0114, DEC-0121, DEC-0142, DEC-0300, DEC-0304, DEC-0315, DEC-0316, DEC-0324, DEC-0327, DEC-0328, DEC-0329, DEC-0330, DEC-0331, DEC-0334, DEC-0335, DEC-0337, DEC-0338, DEC-0340, DEC-0341, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0347, DEC-0349, DEC-0350, DEC-0360, DEC-0379, DEC-0380, DEC-0381, DEC-0382, DEC-0383, DEC-0384, DEC-0385, DEC-0386, DEC-0387, DEC-0388, DEC-0389, DEC-0390, DEC-0391, DEC-0392, DEC-0393, DEC-0394, DEC-0395, DEC-0396, DEC-0397, DEC-0398, DEC-0399, DEC-0400, DEC-0401, DEC-0402, DEC-0403, DEC-0404, DEC-0405, DEC-0406, DEC-0407, DEC-0408, DEC-0409, DEC-0410, DEC-0411, DEC-0412, DEC-0413, DEC-0414, DEC-0415, DEC-0416, DEC-0417, DEC-0418, DEC-0419, DEC-0420, DEC-0421, DEC-0422, DEC-0423, DEC-0424, DEC-0425, DEC-0426, DEC-0427, DEC-0428, DEC-0429, DEC-0430, DEC-0431, DEC-0432, DEC-0433, DEC-0434, DEC-0435, DEC-0436, DEC-0437, DEC-0438, DEC-0439, DEC-0440, DEC-0441, DEC-0442, DEC-0443, DEC-0444, DEC-0445, DEC-0446, DEC-0447, DEC-0448, DEC-0449, DEC-0450, DEC-0451, DEC-0452, DEC-0453, DEC-0454, DEC-0455, DEC-0456, DEC-0457, DEC-0458, DEC-0459, DEC-0460, DEC-0461, DEC-0462, DEC-0463, DEC-0464, DEC-0465, DEC-0466, DEC-0467, DEC-0468, DEC-0469, DEC-0470, DEC-0471, DEC-0472, DEC-0473, DEC-0474, DEC-0475, DEC-0476, DEC-0477, DEC-0478, DEC-0479, DEC-0480, DEC-0481, DEC-0482, DEC-0483, DEC-0484, DEC-0485, DEC-0486, DEC-0487, DEC-0488, DEC-0489, DEC-0490, DEC-0491, DEC-0492, DEC-0493, DEC-0494, DEC-0495, DEC-0496, DEC-0497, DEC-0498, DEC-0499, DEC-0500, DEC-0501, DEC-0502, DEC-0503, DEC-0504, DEC-0505, DEC-0506, DEC-0507, DEC-0508, DEC-0509, DEC-0510]
 ---
 
 # QMF Documentation Changelog
 
 This records changes to the QMF knowledge base. It is not a software release log and does not convert provisional decisions into implementation authority.
+
+## 2026-09-25 — UI host plus backend-delta absorption (change mode)
+
+The 2026-09-23/24 UI host spine (`architecture-QMX-UI-2026-09-23`, local UI AD-1..AD-24) and the 2026-09-24 backend-delta spine (`architecture-QMX-UI-BACKEND-2026-09-24`, local backend AD-1..AD-17) are absorbed into `docs/` after Codex 2026-09-24 focused closure plus 2026-09-25 recheck **PASS**. Preflight verdict: reuse — no new COMP, no COMP-UI, no new contract id, no new dependency edge (DEC-0505, [ADR-0026](decisions/ADR-0026-ui-host-and-backend-delta.md)). ADR-0024 and ADR-0025 Decision sections stand as written. GAP-0081 and GAP-0100 are **answered** as this sitting's chrome law and remain out-of-scope as pack-and-grant kit holes (DEC-0509, DEC-0468). Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold, the 2026-09-19 Workflows fold, or the 2026-09-23 pack-and-grant fold.
+
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb UI AD-2..AD-24 and backend AD-3..AD-17; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0469..DEC-0510 ratified (authority rider SRC-29). Umbrella DEC-0504; preflight DEC-0505; AM-01..AM-17 DEC-0506; wiring honesty DEC-0507; dead-list DEC-0508; catalog restamp DEC-0509; cheap-veto A10–A14 DEC-0510. Codex C1/C2 and J1–J5 closed. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no COMP-UI**; **no new CT** |
+| Gaps | GAP-0081 and GAP-0100 answered; GAP-0109..GAP-0114 deferred non-blocking |
+| Features | FEAT-0064..FEAT-0071 planned; do not duplicate FEAT-0058..FEAT-0063 |
+| Cheap-veto A10–A14 | pairing TTL number; stage_max_bytes number; Rhea seed; Node pin; product data root |
+| Touched docs | [ADR-0026](decisions/ADR-0026-ui-host-and-backend-delta.md) (new); [SCN-0028](scenarios/SCN-0028-first-operator-pair.md)..[SCN-0035](scenarios/SCN-0035-cancel-queued-to-running.md); UI lens `docs/lenses/ui/`; qma-daemon/qma-wire/qmb; CT-40/CT-42/CT-48 annotations; constitution L7/L31; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; security-model; logging-spec; test-strategy; registry `pairing.session_ttl` / `artifact.stage_max_bytes`; ADR-0024/0025 dated follow-ups; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only). check_citations PASS. lint_docs clean. lint_docs --strict expected-blocked by ADR-0023/SCN-0017 provisional plus eight pre-existing 30d-stale files. Prefold 12-lens GO. Consistency 8-lens FAIL-with-amendments; criticals and majors desk-fixed same session. |
+
+## 2026-09-23 — Pack-and-grant gap catalog correction (DEC-0468)
+
+Operator-direct: a catalog gap is an unanswered design question. The pack-and-grant sitting already decided kit AD-1..AD-9. GAP-0101..GAP-0108 are **answered** sitting law delivered by FEAT-0058..FEAT-0063, including GAP-0104 daemon JSON-lines (kit AD-5 / sequence step 2). GAP-0081 and GAP-0100 are **out-of-scope as kit holes** (UI is not designed). Catalog IDs stay for history. GAP-0093/GAP-0096 stay for a later operator look. Wiring honesty at `34c148b` (DEC-0465) still records connect versus absent as product surface.
+
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 correction — ledger + gap catalog only |
+| Authority | DEC-0468 ratified (authority rider SRC-26) |
+| Gaps | GAP-0101..GAP-0108 answered; GAP-0081 and GAP-0100 out-of-scope |
+| Touched | gap-report; ADR-0025; ADR-0024 follow-up; AGENTS.md; increment brief; epics handoff; this changelog |
+| Gates | re-run after this correction |
+
+## 2026-09-23 — Pack-and-grant kit absorption (change mode)
+
+The 2026-09-23 pack-and-grant child spine (`architecture-QMX-2026-09-23/ARCHITECTURE-SPINE.md`, local AD-1..AD-9) is absorbed into `docs/` as an SDK relationship on top of ADR-0024. Preflight verdict: reuse — no new COMP, no sixth application, no new contract id, no new dependency edge (DEC-0462, [ADR-0025](decisions/ADR-0025-pack-and-grant-kit.md)). ADR-0024 Decision stands as written (named amendments DEC-0463/DEC-0464). ADR-0023 mill package stays **provisional**. Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold or the 2026-09-19 Workflows fold.
+
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb kit AD-1..AD-9; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0452..DEC-0467 ratified (authority rider). DEC-0452..DEC-0460 = kit AD-1..AD-9; DEC-0461 umbrella; DEC-0462 preflight; DEC-0463 parent AD-8 amendment; DEC-0464 parent AD-24 amendment; DEC-0465 wiring honesty @ `34c148b`; DEC-0466 dead-list; DEC-0467 cheap-veto A7–A9. Local AD ids do not renumber parents. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no new CT** |
+| Gaps | GAP-0101..GAP-0108 new deferred non-blocking; notes on GAP-0081/0100/0093/0096 in place |
+| Features | FEAT-0058..FEAT-0063 planned; first epic FEAT-0058 (host SDK pack-and-grant) |
+| Cheap-veto A7–A9 | A7 `failure_class` spellings; A8 JSON-lines extra fields; A9 retry ceiling is a registry row, no number minted (DEC-0467) |
+| Touched docs | [ADR-0025](decisions/ADR-0025-pack-and-grant-kit.md) (new); [SCN-0023](scenarios/SCN-0023-home-instance-pick.md)..[SCN-0027](scenarios/SCN-0027-diagnosis-json-lines.md); qma-core/qma-daemon/qma-wire; CT-40 annotation; constitution L7; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; dependencies notes; ADR-0020/0024 dated follow-ups; observability logging-spec QMA row; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict expected-blocked** (ADR-0023 and SCN-0017 `status: provisional` per mill stamp; plus pre-existing stale 30d docs). Review: consistency mini-review `_docwork/review-consistency-pack-and-grant.md`. |
 
 ## 2026-09-19 — Workflows construction-kit absorption (change mode)
 

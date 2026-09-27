@@ -7,7 +7,7 @@ depends_on: [COMP-QMA-CORE, COMP-QMA-WIRE, COMP-QMA-DAEMON, COMP-QMF-CORE, COMP-
 decisions: [DEC-0300, DEC-0301, DEC-0302, DEC-0304, DEC-0305, DEC-0306, DEC-0313, DEC-0316, DEC-0319, DEC-0321, DEC-0322, DEC-0324, DEC-0327, DEC-0328, DEC-0329, DEC-0330, DEC-0331, DEC-0332, DEC-0333, DEC-0334, DEC-0335, DEC-0336, DEC-0337, DEC-0338, DEC-0339, DEC-0340, DEC-0341, DEC-0342, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0347, DEC-0348, DEC-0349, DEC-0350, DEC-0360, DEC-0361, DEC-0362, DEC-0363, DEC-0364, DEC-0365, DEC-0366, DEC-0367, DEC-0368, DEC-0369, DEC-0370, DEC-0371, DEC-0372, DEC-0373, DEC-0374, DEC-0375, DEC-0376, DEC-0377, DEC-0378, DEC-0379, DEC-0285, DEC-0388, DEC-0399, DEC-0403, DEC-0415, DEC-0421, DEC-0429, DEC-0435, DEC-0439, DEC-0440, DEC-0445, DEC-0446, DEC-0449, DEC-0450]
 sources: [DEC-0329, DEC-0335, DEC-0341, DEC-0347, DEC-0350, _bmad-output/planning-artifacts/architecture/architecture-QMA-2026-08-28/ARCHITECTURE-SPINE.md, _docwork/qma/riders/job-spec-2026-08-29.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-16/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, docs/decisions/ADR-0024-workflows-construction-kit.md]
 generated: '2026-08-29'
-verified: '2026-09-19'
+verified: '2026-09-23'
 stale_after: 1y
 ---
 
@@ -108,3 +108,11 @@ This ADR's 2026-08-29 Decision stands as written. The 2026-09-19 Workflows const
 - **ContributionHit wire DTO (DEC-0415, DEC-0449).** Product discovery concatenates `KnowledgeHit`, `ArtifactHit`, and `ContributionHit` on the additive CT-40 family owned by `COMP-QMA-WIRE`. `ContributionHit` identity is the live `published_contributions()` tuple — never fp1, never a registry kind. At `integration@270e992` the wire is still two-class only (DEC-0450).
 - **`ProductSessionProfile` ≠ `Profile` (DEC-0421).** `product_session` ids are `psess:`; QMA `Session` ids remain `sess:`. `ProductSessionProfile` is the closed enum `{authoring, app-use}`, immutable at create, and is not `qma.core.ontology.Profile`.
 - **Portfolio Manager label (DEC-0435).** Trading-floor Role display becomes **Portfolio Manager**. Keep `desk_slug=pm` and `pm-coordination` until a GAP-0083 migration sitting. Preserve BMAD Product Manager.
+
+## Follow-up — 2026-09-23 pack-and-grant kit (ADR-0025)
+
+This ADR's 2026-08-29 Decision stands as written. The 2026-09-23 pack-and-grant spine ([ADR-0025](ADR-0025-pack-and-grant-kit.md), DEC-0461) reuses the three QMA packages in place — no sixth COMP, no new CT (DEC-0462). QMA is host/runtime, not owner of every `op_id` (DEC-0453). Daemon JSON-lines are operator logs, not a fourth telemetry product and not journals (DEC-0456) (DEC-0322). Copilot remains one product identity over QMA; in-app panel is optional (DEC-0454).
+
+## Follow-up — 2026-09-25 UI host plus backend-delta (ADR-0026)
+
+This ADR's 2026-08-29 Decision stands as written. A Quant reachable through models over the wire remains the first milestone. Chrome is the 2026-09-25 Svelte host (DEC-0509); leftover `qma-ui-contract` types remain `GAP-0114`. Named AM-01 / AM-11 / AM-15 amend DEC-0304 / DEC-0323 (pairing Bearer, browser session carries `pairing_record_id` and does not populate `credential_ref`, host-control outside 8765). Named AM-03 adds journal projections `pairing_pending`, `pairing_session`, `editor_draft_head`, `artifact_transfer_ticket`, `local_operator` on the existing DEC-0429 sqlite class. Do not set those DECs `superseded_by`. Inspect `integration@34c148be` (DEC-0507).

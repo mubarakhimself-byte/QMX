@@ -1,0 +1,18 @@
+# Experience closure review — round 2 (R4 / R5 / R6)
+
+**Verdict: pass at UI-architecture altitude. R4, R5, and R6 are closed as candidate contracts.** I found no remaining conflict or missing invariant that should block the fresh backend-delta architecture sitting. R1 and R8 remain closed and were preserved. Candidate status is not operator acceptance, and the named backend additions remain unimplemented.
+
+The reviewed working files are byte-identical to `workroom/qmx-ui-closure-round2-2026-09-24/evidence/candidate-as-reviewed/` for the spine, the three companions, examples, trace matrix, journeys, backend dependencies, and closure map.
+
+| Item | Disposition | Closure evidence |
+| --- | --- | --- |
+| **R4 — view / pack contracts** | **Closed as candidate** | `PluginManifest.copilot_profile` remains the optional Epic 60 sibling field; `PackUiRequest` contains `nav` and `views` and explicitly must not replace that field. Examples A/B use sibling fields. `nav[].view_ids` is non-empty and must reference declared views; an empty or unknown target drops the nav item without failing the operations roster. Grant matching is closed: zero paints but cannot invoke, one mints the context, and two or more refuse with typed `GRANT_AMBIGUOUS` before `ActionContext` exists. No first-wins, merge, or ordering choice remains. |
+| **R5 — authoring / ML lifecycle** | **Closed as candidate** | The first runnable sequence is now complete and consistent: empty Authoring → save revision → validate → publish into the local authoring pack → enable that pack under parent AD-30 (the registration/compile identity) → grant → select exactly one `instance_id` → `dispatchInvoke`. Distributable export is later. Save and publish use draft-head `expected_revision`; stale concurrent save refuses, and T-R5-07 traces two restored clients. The ML trace now says Run occurs only after local pack enable. |
+| **R6 — attachment possession / placement** | **Closed as candidate** | Initial possession is the authenticated local daemon through raw-byte HTTP PUT `/artifacts/stage`, with Content-Length, a registry size ceiling, daemon-recomputed hash plus byte count, and no browser-hash shortcut. Interrupted v1 PUT deletes the incomplete object, emits no runnable fp1, and retries as a new full PUT. A later remote instance requires explicit `transfer_artifact`, destination hash/byte-count verification, and no silent local fallback. AD-22, the companion, J-UI-09, T-R6-01/T-R6-07, and the trace-matrix remote-job row now describe the same machine. |
+
+No closure finding remains from the previous R4–R6 review. Two details are intentionally left below this gate:
+
+- A nav item can list more than one `view_id`, while the exact click/composition presentation is not frozen. The request now deterministically names its view set and rejects bad references; the remaining arrangement is frontend behavior, not a second manifest schema or authority path.
+- `transfer_artifact` names the backend command, possession precondition, destination verification, interrupted-transfer outcome, and refusal behavior. The daemon-to-placement byte data plane can be selected in the fresh backend architecture sitting; its absence from this UI packet does not reopen possession-versus-placement or upload resume semantics.
+
+Scope checked narrowly against the prior R4/R5/R6 findings, the current `ARCHITECTURE-SPINE.md`, `VIEW-AND-PACK-CONTRACT.md`, `AUTHORING-AND-ML.md`, `LIBRARY-AND-ATTACHMENTS.md`, `EXAMPLES.md`, `TRACE-MATRIX.md`, `JOURNEYS.md`, `BACKEND-DEPENDENCIES.md`, Epic 60, and the inherited pack contract. No implementation, Documentation Factory, epic generation, or runtime verification was performed.

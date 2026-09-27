@@ -6276,3 +6276,243 @@ extractions:
     cite: SRC-22
     topics: [workflows, dead-list]
     authority: rider
+
+  - id: EXT-2286
+    type: decision
+    summary: "Operator-direct standing corrections for pack-and-grant fold: pack-and-grant is the SDK; screen-kit and automation-kit rejected as the center; mini-app/widget/workflow are kit nouns over the whole platform and QMA is host not owner of every op; one copilot identity, many independently scoped psess: sessions, in-app panel optional; home is authoring with app_instance_id absent; nested workflow is one nested Mission not merged live graphs; host observability is inherited JSON-lines plus JobHandle plus failure_class; default host retry none/read only; JSON Render and MCP Apps stay unpinned presentation adapters; no sixth COMP, no new CT, no UI chrome, no QMB/QML core fork."
+    quote: "Pack-and-grant is the SDK. Mini-app, widget, and workflow are kit nouns over the whole platform. QMA is host/runtime, not owner of every op. One copilot product identity. In-app copilot panel is optional."
+    cite: SRC-25
+    topics: [pack-and-grant, rider, standing-corrections, no-sixth-comp]
+    authority: rider
+  - id: EXT-2287
+    type: decision
+    summary: "kit AD-1 Pack-and-grant is the SDK: a pack declares operations, optional views, requested access, optional copilot_profile request blob. Host grants GrantRecords. Installing/enabling is not granting. Headless packs are first-class. view:* is a wire DTO not a contribution point."
+    quote: "The SDK is the host contract a pack author gets: versioned operation descriptors, GrantRecords as the only grant, InvocationEnvelope as the only invoke."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-1, sdk]
+    authority: rider
+  - id: EXT-2288
+    type: decision
+    summary: "kit AD-2 Kit nouns span the platform; QMA is host not owner of every op. Bytes of a pack live in plugin tree plus daemon install/instance rows. Execution of each op_id is owned by the COMP named on the descriptor. Widgets never own invoke. Broker/venue stays QMN."
+    quote: "Mini-app / widget / workflow are kit nouns over the whole platform, not a QMA-only product. QMA is host/runtime."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-2, placement]
+    authority: rider
+  - id: EXT-2289
+    type: decision
+    summary: "kit AD-3 One copilot capability; many independently scoped resumable sessions; in-app panel optional. ProductSessionProfile remains authoring or app-use. Authoring with absent app_instance_id may not invoke until exactly one selected_refs kind instance_id. Nested invoke does not union grants. Running work is not cancelled by panel dispose."
+    quote: "Copilot is one shared platform capability, not bundled into every app. Multiple independently scoped sessions. In-app copilot panel is optional."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-3, copilot]
+    authority: rider
+  - id: EXT-2290
+    type: decision
+    summary: "kit AD-4 Caller is user, agent, or workflow on one InvocationEnvelope (named parent AD-24 amendment). Widgets bind or display ops; they do not add a fifth composition mode. Workflow-to-workflow at runtime is one nested Mission / one Task Graph / one JobHandle. Include-at-author is a new versioned Graph Template. Merging two live Task Graphs is refused."
+    quote: "Every public call carries parent AD-24 InvocationEnvelope including named-amendment caller_kind user | agent | workflow."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-4, caller-kind, nested-mission]
+    authority: rider
+  - id: EXT-2291
+    type: decision
+    summary: "kit AD-5 Host observability is a relationship every pack inherits: listing axes including healthy; instance health(); JobHandle; typed refusal; correlation_id; harness-authored QMA telemetry. Failure class closed grant|workflow|view|dependency|host. qma-daemon emits stdlib JSON-lines. Logs are not evidence. Do not extend qmn/FAILURES.md."
+    quote: "qma-daemon emits stdlib JSON-lines operator logs. QMA telemetry store remains the trace/metric plane. Do not extend qmn/FAILURES.md allow-list."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-5, observability]
+    authority: rider
+  - id: EXT-2292
+    type: decision
+    summary: "kit AD-6 Default host retry for effect none and read. Does not retry every effect. Parent AD-24 / SCN-0021 matrix remains: no blind external-egress retry; CAS conflict is not a retry; unknown-blocked never auto-retried. Implementation edits are change_request; app-use may mint and must not apply."
+    quote: "Default retry is host/SDK behaviour for every mini-app/workflow. Retry lives in QMA host/SDK, not reinvented per app."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-6, retry]
+    authority: rider
+  - id: EXT-2293
+    type: decision
+    summary: "kit AD-7 Weak/older models operate through descriptors, GrantRecords, input_schema, typed refusals, and host-intercepted tool calls. Skills describe; they do not grant. MCP App HTML and json-render catalog entries cannot add ops or fields."
+    quote: "Build and operate must work for a weaker/older model. Load-bearing surfaces are descriptors, GrantRecords, input_schema, typed refusals."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-7, weak-models]
+    authority: rider
+  - id: EXT-2294
+    type: decision
+    summary: "kit AD-8 Presentation adapters stay unpinned. JSON Render is a catalog-constrained generative view. MCP Apps are an optional sandboxed view. Native QMX panes remain first. Do not pin @json-render/* or @modelcontextprotocol/ext-apps. Chrome remains GAP-0081 / GAP-0100."
+    quote: "JSON Render and MCP Apps stay presentation adapters. Do not pin @json-render/* or @modelcontextprotocol/ext-apps."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-8, adapters]
+    authority: rider
+  - id: EXT-2295
+    type: decision
+    summary: "kit AD-9 Tested work graduates to a pack: yap at authoring, Graph Template, runs with JobHandles, pack export of those operations after validate. A Loop remains node state. Graduation does not skip parent AD-18/AD-30 enable/validate."
+    quote: "Daily idea path is: yap at authoring then Graph Template then runs with JobHandles then pack export of those operations after validate."
+    cite: SRC-24
+    topics: [pack-and-grant, ad-9, graduation]
+    authority: rider
+  - id: EXT-2296
+    type: decision
+    summary: "Umbrella: 2026-09-23 pack-and-grant child spine adopted in full as DEC-0452 through DEC-0460. Inherit parent 09-18 AD-1..AD-31. Named parent amendments DEC-0463/DEC-0464. ADR-0025 and SCN-0023..0027 are docs authority only. Implementation authorization remains factory-pipeline-only."
+    quote: "Operator accepted the sitting as the plan to fold. Fold this increment into existing docs/. Do not rewrite the 2026-09-16 QML fold or the 2026-09-19 Workflows fold."
+    cite: SRC-25
+    topics: [pack-and-grant, umbrella]
+    authority: rider
+  - id: EXT-2297
+    type: decision
+    summary: "Preflight: reuse existing applications. new COMP none. new CT none. No new depends_on edge. No existing component authority shrinks. Work owners are QMA-CORE/DAEMON/WIRE extends; QMB/QML/QMN remain execution owners of their ops."
+    quote: "No sixth COMP. No new CT. No QMB/QML core fork."
+    cite: SRC-25
+    topics: [pack-and-grant, preflight, reuse]
+    authority: rider
+  - id: EXT-2298
+    type: decision
+    summary: "Named amendment of parent AD-8 / DEC-0421: app_instance_id MAY be absent when ProductSessionProfile=authoring; remains required when profile=app-use. Closed selected_refs kinds gain instance_id. Authoring with absent session instance may not invoke until exactly one selected_refs kind instance_id is present; envelope instance_id remains required on invoke. No third profile. Do not set DEC-0421 superseded_by."
+    quote: "Home/main with no app open is ProductSessionProfile=authoring with app_instance_id absent. Named parent amendment of Workflows AD-8. App-use still requires instance. No third seat."
+    cite: SRC-24
+    topics: [pack-and-grant, parent-ad-8, amendment]
+    authority: rider
+  - id: EXT-2299
+    type: decision
+    summary: "Named amendment of parent AD-24 / DEC-0437: InvocationEnvelope gains closed caller_kind user | agent | workflow. Envelope instance_id remains required on every invoke. Do not set DEC-0437 superseded_by. No new CT number."
+    quote: "InvocationEnvelope gains closed caller_kind: user | agent | workflow. Envelope instance_id remains required on every invoke."
+    cite: SRC-24
+    topics: [pack-and-grant, parent-ad-24, amendment]
+    authority: rider
+  - id: EXT-2460
+    type: context
+    summary: "Wiring honesty at integration@34c148b: InvocationEnvelope, GrantRecord, and product_session types/fixtures exist (Workflows 53-59). Class/test existence is not e2e (DEC-0286). Absent as product surface: caller_kind; optional authoring app_instance_id; selected_refs kind instance_id; pack copilot_profile; daemon JSON-lines operator logger; diagnosis failure_class; default host retry loop; nested Mission invoke as first-class. Parent freeze 270e992 still applies for ADR-0024 original Decision (DEC-0450)."
+    quote: "Inspect implementation at origin/integration (currently 34c148b) for connect/amend vs existing. Parent freeze honesty at 270e992 still applies for ADR-0024. Fixtures are not e2e (DEC-0286)."
+    cite: SRC-25
+    topics: [pack-and-grant, wiring, source-inspected, 34c148b]
+    authority: rider
+  - id: EXT-2461
+    type: death
+    summary: "Dead list honored: DEC-0084/0085/0086; DEC-0361 marketplace; DEC-0362 solver; DEC-0366 HMR; DEC-0408..0413 mill deaths. Screen-kit and automation-kit as the center stay dead. Third ProductSessionProfile un-minted. Merged live Task Graphs refused. JSON Render / MCP Apps as identity/persistence/runtime/authority stay dead. No sixth COMP. No new CT."
+    quote: "Screen kit and Automation kit rejected as the center. No sixth COMP. No new CT. Merging two live Task Graphs is refused."
+    cite: SRC-25
+    topics: [pack-and-grant, dead-list]
+    authority: rider
+  - id: EXT-2462
+    type: decision
+    summary: "Cheap-veto A7-A9: A7 failure_class closed set grant|workflow|view|dependency|host; A8 daemon JSON-lines extra fields when present; A9 host retry attempt ceiling is a registry row and this sitting mints no number. Not vetoable: no sixth COMP; no new CT; no third profile; envelope instance_id required on invoke; no live-graph merge; app-use cannot apply; no blind external-egress retry."
+    quote: "This spine does not mint a number for the host-registered attempt ceiling. Failure class is closed: grant | workflow | view | dependency | host."
+    cite: SRC-24
+    topics: [pack-and-grant, cheap-veto]
+    authority: rider
+  - id: EXT-2463
+    type: correction
+    summary: "Operator 2026-09-23: a catalog gap is an unanswered design question. Pack-and-grant sitting already decided GAP-0101..GAP-0108; they are FEAT-0058..FEAT-0063. GAP-0104 daemon JSON-lines is kit AD-5 / sequence step 2. GAP-0081 and GAP-0100 are UI, out-of-scope as kit holes. GAP-0093/0096 left for a later look. Do not re-run architecture for sitting-answered rows."
+    quote: "Everything you are saying is a gap, is literally what the session was about. This is what you are meant to be building. The only thing you can claim is refusing is because it's part of the UI. If it's part of the UI, then you state it's part of the UI. Gap 81... remove it, it's no longer gap. We are no longer needing it even gap 100, remove it now."
+    cite: SRC-26
+    topics: [pack-and-grant, gaps, operator-correction]
+    authority: rider
+
+  - id: EXT-2464
+    type: decision
+    summary: 'Operator launched Documentation Factory 2026-09-25 after Codex PASS. Fold UI host plus backend-delta into existing docs/. No sixth COMP. No new CT. No COMP-UI. No epic rewrite this session. No application code.'
+    quote: 'Ready for one integrated Documentation Factory pass.'
+    cite: SRC-29
+    topics: [ui-host, backend-delta, rider]
+    authority: rider
+  - id: EXT-2465
+    type: decision
+    summary: 'UI AD-2 Host stack seed: Svelte 5.57.1, SvelteKit 2.70.3 adapter-static ssr=false, TypeScript 5.9, Vite 8.3.0, Tailwind 4.3.3, shadcn-svelte 1.7.0 Rhea, bits-ui 2.19.3, @xyflow/svelte 1.6.6. Node.js >=22.12.0 <23.0.0 and pnpm. SPA static origin never daemon port 8765. Refuse React/Next, Qt, Kit 3 RC, Tauri 3 alpha.'
+    quote: 'Seed is Svelte 5.57.1 + SvelteKit 2.70.3 + TypeScript 5.9 + Vite 8.3.0.'
+    cite: SRC-27
+    topics: [ui-host, ad-2, stack]
+    authority: rider
+  - id: EXT-2466
+    type: decision
+    summary: 'UI AD-3 Platform destinations: Home (work/attention/resume), Copilot (conversation), Library, Authoring independent above the divider. Shared components allowed. Not the same destination. Study-03 one-shell and LSE ML Studio layout refused.'
+    quote: 'Home is work/attention/resume. Copilot is conversation. Authoring is back on the rail with Library.'
+    cite: SRC-27
+    topics: [ui-host, ad-3, rail]
+    authority: rider
+  - id: EXT-2467
+    type: decision
+    summary: 'UI AD-18 Chat send is mailbox not invoke. Unique issuer dispatchChat -> send_message. No instance required. Durable history is QMA mailbox with product_session_ref at write. Principal equality when that field is present.'
+    quote: 'ConversationPane.send = CT-40 send_message mailbox, no InvocationEnvelope.'
+    cite: SRC-27
+    topics: [ui-host, ad-18, mailbox]
+    authority: rider
+  - id: EXT-2468
+    type: decision
+    summary: 'UI AD-19 v1 bootstrap owner is QMB CLI. Externally running daemon. Pairing proof is pairing_proof. HTTP Bearer pairing:<proof>. WS subprotocols qmx.ct40.v1 and qmx.pair.<proof>. Unauthenticated HTTP only /pair/start, /pair/confirm, CORS OPTIONS. Origin never sufficient for issuance.'
+    quote: 'A remembered Origin never authorizes issuance of a new pairing_proof.'
+    cite: SRC-27
+    topics: [ui-host, ad-19, pairing]
+    authority: rider
+  - id: EXT-2469
+    type: decision
+    summary: 'Backend AD-4 pairing_proof is bearer; pairing_record_id is journal identity; hash-only in journal. Origin-revoke is journal_seq barrier (C2). --session is that record only. After barrier new /pair/start is legal.'
+    quote: 'Origin-revoke is a barrier at journal_seq R; renew-then-revoke kills the new proof.'
+    cite: SRC-28
+    topics: [backend-delta, ad-4, c2]
+    authority: rider
+  - id: EXT-2470
+    type: decision
+    summary: 'Backend AD-6/AD-17 first operator is OS owner of QMA_DAEMON_ROOT plus host_control. recover-control on stopped daemon does not present the lost token (C1). QMB never writes sqlite. Stop without token only when file missing/unreadable and caller is OS owner.'
+    quote: 'Lost host_control recovery does not require the lost token.'
+    cite: SRC-28
+    topics: [backend-delta, ad-17, c1]
+    authority: rider
+  - id: EXT-2471
+    type: decision
+    summary: 'Backend AD-7 mailbox delivery stays Epic 46 / Story 46.4. Additive product_session_ref excluded from Envelope fp1. list_mailbox addable Epic 41 query. AM-12 journal-lifetime collision for send_message pair+hash.'
+    quote: 'Durable mailbox delivery is Epic 46 / Story 46.4.'
+    cite: SRC-28
+    topics: [backend-delta, ad-7, mailbox]
+    authority: rider
+  - id: EXT-2472
+    type: decision
+    summary: 'Named AM-01..AM-17: unauthenticated pairing carve-out; mailbox product_session_ref; journal projections pairing/draft/ticket/local_operator; originating_product_session_ref; PUT byte channel; reachable transfer; drafts not AD-22; addable list_mailbox/cancel_job/transfer_*/save_editor_draft/publish_editor_draft/get_pack_ui_request/get_editor_draft_head; qmb host group including recover-control; host-control outside 8765; _ref names.'
+    quote: 'Every conflict with inherited contracts is named. Nothing silently overrides a parent.'
+    cite: SRC-28
+    topics: [backend-delta, amendments]
+    authority: rider
+  - id: EXT-2473
+    type: decision
+    summary: 'Preflight reuse existing applications. new COMP none. new CT none. UI is a client of qma-wire. No COMP-UI. No new depends_on edge.'
+    quote: 'The UI host is a client, not a COMP. No sixth COMP. No new CT.'
+    cite: SRC-29
+    topics: [ui-host, preflight, reuse]
+    authority: rider
+  - id: EXT-2474
+    type: context
+    summary: 'Wiring honesty at integration@34c148be: DaemonProcess discards TCP bytes. Pairing, qmb host, list_mailbox, cancel_job, stage_artifact, editor drafts, PackUiRequest read-back absent. Envelope/GrantRecord/product_session types exist as fixtures not e2e. Envelope has no product_session_ref. JobHandle has no originating_product_session_ref.'
+    quote: 'Live CT-40 server: No. DaemonProcess._handle_client discards TCP bytes.'
+    cite: SRC-28
+    topics: [honesty, 34c148be]
+    authority: rider
+  - id: EXT-2475
+    type: death
+    summary: 'Dead list honored: no COMP-UI; no cookie login; no localStorage pairing; no ui_view contribution point; no AD-22 draft store; study 01/02/03 baseline rejected; LSE ML Studio layout refused; Qt refused; sixth COMP refused; json-render/MCP as identity refused.'
+    quote: 'Chrome never becomes a sixth COMP, a second scheduler, or a second grant store.'
+    cite: SRC-29
+    topics: [dead-list]
+    authority: rider
+  - id: EXT-2476
+    type: decision
+    summary: 'GAP-0081 chrome and GAP-0100 observation surfaces are answered sitting law of the UI sitting, delivered by FEAT-0064..FEAT-0071. They remain out-of-scope as pack-and-grant kit holes. Inspect absence is wiring honesty not a gap.'
+    quote: 'GAP-0081 chrome and GAP-0100 observation surfaces are answered sitting law of this UI sitting.'
+    cite: SRC-29
+    topics: [gaps, catalog]
+    authority: rider
+  - id: EXT-2477
+    type: decision
+    summary: 'Cheap-veto A10-A14: pairing TTL registry row no number; artifact.stage_max_bytes registry row no number; Rhea compact visual seed; Node >=22.12 <23; Windows %LOCALAPPDATA%\\QMX\\qma-daemon product root. Not vetoable: no sixth COMP; Origin-never-sufficient; no cookies; no COMP-UI; Epic 60 copilot_profile sibling; recover-control preserves principal.'
+    quote: 'TTL is registry:pairing.session_ttl with no number minted.'
+    cite: SRC-29
+    topics: [cheap-veto]
+    authority: rider
+  - id: EXT-2478
+    type: decision
+    summary: 'Unique invoke issuer dispatchInvoke. Unique cancel issuer dispatchCancel. Widgets never own invoke. Tab close does not cancel JobHandle.'
+    quote: 'Widgets paint. One function, dispatchInvoke, is the only invoke issuer. Closing a tab does not stop work.'
+    cite: SRC-27
+    topics: [ui-host, issuers]
+    authority: rider
+  - id: EXT-2479
+    type: decision
+    summary: 'Do not duplicate Epics 60-65 / FEAT-0058..FEAT-0063. copilot_profile stays Epic 60 sibling. caller_kind and optional authoring instance stay FEAT-0058.'
+    quote: 'Avoid duplicating Epics 60-65.'
+    cite: SRC-30
+    topics: [reuse, epics-60-65]
+    authority: rider

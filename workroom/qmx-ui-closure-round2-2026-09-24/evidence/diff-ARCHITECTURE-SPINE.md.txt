@@ -1,0 +1,72 @@
+--- previous/ARCHITECTURE-SPINE.md
++++ current/ARCHITECTURE-SPINE.md
+@@ -11,5 +11,5 @@
+ binds: [GAP-0081, GAP-0100, UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12]
+ sources: [architecture-QMX-2026-09-18, architecture-QMX-2026-09-23, workroom/qmx-ui-architecture-handoff-2026-09-23, workroom/qmx-ui-review-2026-09-23/REVIEW.md, Explore-Node-Editor-Architecture.md, grok-architecture-mimi0apps.txt, integration@34c148b, svelte.dev 2026-09, shadcn-svelte.com, svelteflow.dev, v2.tauri.app, json-render.dev 0.21.0]
+-companions: [START-HERE.md, EXPERIENCE-AND-LAYOUT.md, COMPONENT-CONTRACTS.md, DESIGN.md, CHANGE-IMPACT.md, JOURNEYS.md, DELIVERY-AND-QA.md, DECISIONS-AND-OPEN.md, BOOTSTRAP-AND-AUTH.md, CHAT-AND-HISTORY.md, VIEW-AND-PACK-CONTRACT.md, AUTHORING-AND-ML.md, LIBRARY-AND-ATTACHMENTS.md, TRACE-MATRIX.md, EXAMPLES.md, CLOSURE-MAP.md]
++companions: [START-HERE.md, EXPERIENCE-AND-LAYOUT.md, COMPONENT-CONTRACTS.md, DESIGN.md, CHANGE-IMPACT.md, JOURNEYS.md, DELIVERY-AND-QA.md, DECISIONS-AND-OPEN.md, BOOTSTRAP-AND-AUTH.md, CHAT-AND-HISTORY.md, VIEW-AND-PACK-CONTRACT.md, AUTHORING-AND-ML.md, LIBRARY-AND-ATTACHMENTS.md, TRACE-MATRIX.md, EXAMPLES.md, CLOSURE-MAP.md, BACKEND-DEPENDENCIES.md]
+ review_status: amendment-after-codex-R1-R9 — candidate defaults, not operator-accepted
+ ---
+@@ -107,5 +107,5 @@
+ - **Binds:** frontend workspace, coding agents
+ - **Prevents:** React/Next dashboard kits; Qt; SvelteKit 3 RC as a required pin; Tauri 3 alpha; wrapping every primitive
+-- **Rule:** Seed is **Svelte 5.57.1 + SvelteKit 2.70.3 + TypeScript 5.9 (Kit 2 peer; do not take npm TypeScript 7) + Vite 8.3.0 + Tailwind CSS 4.3.3 + shadcn-svelte 1.7.0 (Rhea, MIT, open code) + bits-ui 2.19.3 + `@xyflow/svelte` 1.6.6**. Toolchain: **Node.js 22 LTS** and **pnpm** with `apps/qmx-ui/pnpm-lock.yaml`. Isolated-scaffold gate records the resolved lockfile, `svelte-check`, and production build; that gate is unexecuted. Root layout sets `ssr = false`; `@sveltejs/adapter-static`. SPA fallback is `200.html` on a static host; a later Tauri template may use `index.html` (Deferred, target-specific). The SPA is served from a **static origin**, never from daemon port 8765. Tauri 2 does not host SvelteKit SSR. Graph canvases in any prerender path must set explicit node/handle sizes. Paid kits refused. Do not silently upgrade majors.
++- **Rule:** Seed is **Svelte 5.57.1 + SvelteKit 2.70.3 + TypeScript 5.9 (Kit 2 peer; do not take npm TypeScript 7) + Vite 8.3.0 + Tailwind CSS 4.3.3 + shadcn-svelte 1.7.0 (Rhea, MIT, open code) + bits-ui 2.19.3 + `@xyflow/svelte` 1.6.6**. Toolchain: **Node.js >=22.12.0 <23.0.0** and **pnpm** with `apps/qmx-ui/pnpm-lock.yaml`. Isolated-scaffold gate records the resolved lockfile, `svelte-check`, and production build; that gate is unexecuted. Root layout sets `ssr = false`; `@sveltejs/adapter-static`. SPA fallback is `200.html` on a static host; a later Tauri template may use `index.html` (Deferred, target-specific). The SPA is served from a **static origin**, never from daemon port 8765. Tauri 2 does not host SvelteKit SSR. Graph canvases in any prerender path must set explicit node/handle sizes. Paid kits refused. Do not silently upgrade majors.
+ 
+ ### AD-3 — Platform destinations stay independent of opened apps [USER]
+@@ -185,5 +185,5 @@
+ - **Binds:** pack contributions, coding-agent contracts
+ - **Prevents:** `ui_view` as a grant or invoke authority
+-- **Rule:** This sitting does **not** mint a `ui_view` contribution point. Packs still contribute **operations only**. Navigation, widgets, and copilot profile are versioned **request DTOs** ingested at enable (`VIEW-AND-PACK-CONTRACT.md`). Published still does not grant. Coding agents author reviewable pack patches; generated output is not an untracked execution path.
++- **Rule:** This sitting does **not** mint a `ui_view` contribution point. Packs still contribute **operations only**. Navigation and views are versioned **request DTOs** ingested at enable (`VIEW-AND-PACK-CONTRACT.md`). Optional **`PluginManifest.copilot_profile`** stays the Epic 60 / kit sibling field; the UI request **references** it and must not replace or forbid it. Published still does not grant. Coding agents author reviewable pack patches; generated output is not an untracked execution path.
+ 
+ ### AD-16 — UI integration is a sibling of backend integration [CANDIDATE]
+@@ -203,5 +203,5 @@
+ - **Binds:** UX-03, Home, Copilot
+ - **Prevents:** routing Send through InvocationEnvelope; inventing a synthetic instance for Home chat
+-- **Rule:** Unique chat issuer is **`apps/qmx-ui/src/lib/host/dispatchChat`**. `ConversationPane.send` calls that function only. It issues CT-40 `send_message`. It does not call `dispatchInvoke`. No `instance_id` is required. A mailbox send does not grant tools and does not authorize the next agent turn. Durable history is the QMA mailbox keyed by `psess:` (`CHAT-AND-HISTORY.md`). Authoritative query is addable `list_mailbox` (absent at `34c148b`, COMP-QMA-WIRE). Granted tool calls remain `dispatchInvoke`.
++- **Rule:** Unique chat issuer is **`apps/qmx-ui/src/lib/host/dispatchChat`**. `ConversationPane.send` calls that function only. It issues CT-40 `send_message`. It does not call `dispatchInvoke`. No `instance_id` is required. A mailbox send does not grant tools and does not authorize the next agent turn. Durable history is the QMA mailbox. Each stored message persists `product_session_id` at write; replies inherit it. Pre-ack identity is the wire pair `(producer_id, id)`. `list_mailbox` looks up that pair (and `msg_id` after commit). Details: `CHAT-AND-HISTORY.md`.
+ 
+ ### AD-19 — v1 bootstrap owner is QMB CLI, not the browser [CANDIDATE]
+@@ -209,5 +209,5 @@
+ - **Binds:** UX-01, packaging
+ - **Prevents:** browser spawn of Python; unnamed launcher vs service fork; treating a cred:// ref as operator proof
+-- **Rule:** v1 requires an **externally running** `qma-daemon`. Privileged owner is COMP-QMB (`qmb host start|status|stop` — backend add). Until that command exists, UI Start local is a **setup instruction**, not a spawn. `QMA_DAEMON_ROOT` plus a lock file is the single-instance rule. Pairing binds the static origin to an operator principal using a Credential-Broker **credential_ref** before protocol bytes (CT-40 `auth.py`). The browser holds a `pairing_session_id` in memory and sends `Authorization: Bearer pairing:<id>` on every HTTP query and WebSocket. Cookie-only auth is refused. That bearer is not a provider secret. Details: `BOOTSTRAP-AND-AUTH.md`.
++- **Rule:** v1 requires an **externally running** `qma-daemon`. Privileged owner is COMP-QMB (`qmb host start|status|stop` — backend add). Until that command exists, UI Start local is a **setup instruction**, not a spawn. `QMA_DAEMON_ROOT` plus a lock file is the single-instance rule. **Unauthenticated bootstrap** is HTTP `/pair/start` and `/pair/confirm` only (loopback or the recorded HTTPS origin). **Authenticated CT-40** uses one proof: `pairing_session_id`. HTTP sends `Authorization: Bearer pairing:<id>`. WebSocket sends WHATWG subprotocols `qmx.ct40.v1` and `qmx.pair.<id>` (browsers cannot set an Authorization header on `WebSocket`). Cookies are not the v1 proof. The daemon maps that session to an operator `credential_ref` internally; the browser does not present an arbitrary `cred://` as login. Details: `BOOTSTRAP-AND-AUTH.md`.
+ 
+ ### AD-20 — Mounted views carry host-minted ActionContext [CANDIDATE]
+@@ -215,5 +215,5 @@
+ - **Binds:** UX-04, adapters
+ - **Prevents:** renderer-selected grant, instance, or caller; session-wide grant bag as widget authority
+-- **Rule:** Each mount receives an immutable host `ActionContext`: `psess`, `view_id`, contribution tuple, `instance_id`, `config_revision`, `grant_id`, `allowed_op_ids`, account scope, snapshot cursor. Untrusted specs/frames supply only action name and schema-valid input. Non-mount callers (composer, command palette) call host `bindActionContext` from the current TargetPicker; they do not mint grants. `dispatchInvoke` **intersects** that context with parent AD-9 (hits ∩ host grants ∩ session GrantRecords ∩ health). It does not replace parent AD-9. Schema: `VIEW-AND-PACK-CONTRACT.md`.
++- **Rule:** Each mount receives an immutable host `ActionContext`: `psess`, `view_id`, contribution tuple, `instance_id`, `config_revision`, `grant_id`, `allowed_op_ids`, account scope, snapshot cursor. Untrusted specs/frames supply only action name and schema-valid input. Non-mount callers (composer, command palette) call host `bindActionContext` from the current TargetPicker; they do not mint grants. Matching GrantRecords: **zero** → `grant_id` null (paint allowed, invoke refuses); **one** → that record; **two or more** → typed `GRANT_AMBIGUOUS` (no first-wins, no merge). `dispatchInvoke` **intersects** that context with parent AD-9. Schema: `VIEW-AND-PACK-CONTRACT.md`.
+ 
+ ### AD-21 — Draft is not a runnable template [CANDIDATE]
+@@ -221,5 +221,5 @@
+ - **Binds:** UX-06, UX-07, UX-09
+ - **Prevents:** collapsing draft, template version, pack instance, and JobHandle
+-- **Rule:** Distinct ids: editor draft/revision, immutable Graph Template `(qualified_id, version)`, pack instance, JobHandle. Validate and preview may use a saved revision. **Run refuses** until that template version is **registered and enabled** and exactly one `instance_id` is selected. Pack export/install is a later lifecycle step; it is not a substitute for register+enable. App-use mints `change_request`; authoring plus operator applies; running instance bytes stay pinned. ML data/features/split/leakage/target/run/compare live in this family (`AUTHORING-AND-ML.md`). Editor drafts are not a new sqlite class (parent AD-16).
++- **Rule:** Distinct ids: editor draft/revision, immutable Graph Template `(qualified_id, version)`, pack instance, JobHandle. Validate and preview may use a saved revision. First Run: publish the template **into the local authoring pack**, **enable that pack** (parent AD-30 compile-at-enable), grant, select that instance, then `dispatchInvoke`. Distributable export is a later copy, not the first enable. Save/publish use CAS `expected_revision`. **Run refuses** a mutable draft. Details: `AUTHORING-AND-ML.md`.
+ 
+ ### AD-22 — Artifact ingest is daemon-owned [CANDIDATE]
+@@ -227,5 +227,5 @@
+ - **Binds:** UX-03, UX-05, UX-12
+ - **Prevents:** hash-as-possession; a generic Library store; minting extra selected_ref kinds
+-- **Rule:** Uploads call daemon `stage_artifact` (backend add, COMP-QMA-DAEMON) and return an artifact fp1. A browser hash is not stored-byte availability. Knowledge cite uses the CT-44 artifact copy. Library verbs: `LIBRARY-AND-ATTACHMENTS.md`.
++- **Rule:** Uploads first possess bytes on the **authenticated local daemon** (HTTP PUT `/artifacts/stage`, not a JSON-RPC body). Completeness proof is daemon-recomputed fp1 plus byte count. Interrupted v1 uploads are **refused**; no resumable partial; no runnable incomplete ref. Remote execution requires an **explicit transfer** to that placement and a hash check. Home may attach before an instance exists. Silent local fallback is refused. Details: `LIBRARY-AND-ATTACHMENTS.md`.
+ 
+ ### AD-23 — Cancel has one host function [CANDIDATE]
+@@ -233,5 +233,5 @@
+ - **Binds:** UX-11, J-UI-08
+ - **Prevents:** mapping cancel to `stop_run`; a second invoke; adapter-owned cancel clients
+-- **Rule:** Unique issuer `apps/qmx-ui/src/lib/host/dispatchCancel`. CT-40 addable command `cancel_job` (absent at `34c148b`, COMP-QMA-WIRE). Fields: `handle_id`, `logical_run_id`, `attempt_id`, `command_id`, `expected_state` (JobHandle state plus attempt_id, not a content hash). Principal: the operator of the `psess:` that **started** the job (observers do not cancel). Nested Mission cancel is the **child** JobHandle through this same function, not a second dialect. Repeat uses the same `command_id`. First durable terminal wins. Not an InvocationEnvelope invoke. Not seed `stop_run`.
++- **Rule:** Unique issuer `apps/qmx-ui/src/lib/host/dispatchCancel`. CT-40 addable command `cancel_job` (absent at `34c148b`, COMP-QMA-WIRE). Fields: `handle_id`, `logical_run_id`, `attempt_id`, `command_id`, `expected_state` (JobHandle state plus attempt_id). **Authority:** operator of the JobHandle’s immutable `originating_psess` (admitted at start). Observation is not cancel authority. `expected_state`: a non-terminal advance `queued`→`running` does **not** invalidate the same `command_id`; an already-terminal handle records a no-op. Nested child handles cancel through this same function. Repeat uses the same `command_id`. First durable terminal wins. Not an InvocationEnvelope invoke. Not seed `stop_run`.
+ 
+ ### AD-24 — Command identity is per producer and per session [CANDIDATE]
+@@ -271,5 +271,5 @@
+ | Tauri | 2.11.6 later desktop shell |
+ | @tauri-apps/plugin-shell | 2.3.6 |
+-| Node.js | 22 LTS |
++| Node.js | >=22.12.0 <23.0.0 |
+ | pnpm | 10.x; lockfile `apps/qmx-ui/pnpm-lock.yaml` |
+ 
