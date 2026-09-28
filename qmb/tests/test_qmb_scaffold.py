@@ -97,6 +97,7 @@ def test_source_never_imports_banned_modules() -> None:
         relative = path.relative_to(_SRC)
         in_orchestrator = relative.parts[:1] == ("orchestrator",)
         is_host_runner = relative.parts == ("host", "runner.py")
+        is_cli_host = relative.parts == ("doors", "cli", "host.py")
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             names: list[str] = []
@@ -109,7 +110,7 @@ def test_source_never_imports_banned_modules() -> None:
                 and isinstance(node.func, ast.Name)
                 and node.func.id == "open"
             ):
-                if not (in_orchestrator or is_host_runner):
+                if not (in_orchestrator or is_host_runner or is_cli_host):
                     violations.append(f"{path}: open()")
                 continue
             for name in names:
@@ -119,6 +120,13 @@ def test_source_never_imports_banned_modules() -> None:
                 if banned:
                     if (in_orchestrator or is_host_runner) and (
                         name == "subprocess" or name.startswith("subprocess.")
+                    ):
+                        continue
+                    if is_cli_host and (
+                        name == "subprocess"
+                        or name.startswith("subprocess.")
+                        or name == "socket"
+                        or name.startswith("socket.")
                     ):
                         continue
                     # optuna is the TPE-class sampler adapter's dependency and lives

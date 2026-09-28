@@ -206,6 +206,16 @@ class PersistenceSubstrate:
         """The one writable SQLite connection (checkpoints only through here)."""
         return self._sqlite
 
+    @property
+    def lock_held(self) -> bool:
+        """True while this substrate holds ``.daemon_writer``."""
+        return self._lock.held
+
+    @property
+    def lock_pid(self) -> int:
+        """Pid stamped into the sole-writer lock token."""
+        return self._lock.token.pid
+
     def open_fold_reader(self) -> Result[FoldSqliteReader]:
         """Open the daemon SQLite file read-only for a fold rebuild (never checkpoints)."""
         reader = FoldSqliteReader(self._sqlite.db_path)

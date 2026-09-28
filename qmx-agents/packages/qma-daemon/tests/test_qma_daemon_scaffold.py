@@ -14,6 +14,7 @@ import qma.daemon.envs
 import qma.daemon.experiments
 import qma.daemon.handles
 import qma.daemon.hooks
+import qma.daemon.host_control
 import qma.daemon.journal
 import qma.daemon.knowledge
 import qma.daemon.ledgers
@@ -44,6 +45,7 @@ def test_structural_modules_importable() -> None:
         qma.daemon.taskgraph,
         qma.daemon.ledgers,
         qma.daemon.hooks,
+        qma.daemon.host_control,
         qma.daemon.capabilities,
         qma.daemon.bus,
         qma.daemon.scheduler,

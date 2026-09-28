@@ -113,6 +113,13 @@ from qmb.sweep import (
 )
 from qmb.workbench import refuse_caller_declared_lane_fields
 
+from .host import (
+    HOST_COMMANDS,
+    invoke_host_start,
+    invoke_host_status,
+    invoke_host_stop,
+)
+
 __all__ = [
     "ANALYSIS_COMMANDS",
     "ANALYSIS_NAMED_METHODS",
@@ -140,6 +147,7 @@ __all__ = [
     "DATA_QUERY_OCCUPANCY",
     "DATA_RUN_COMMANDS",
     "HOLDS_CACHE",
+    "HOST_COMMANDS",
     "LIBRARY_COMMANDS",
     "LIBRARY_KINDS_OCCUPANCY",
     "LIBRARY_MINTS_CT32",
@@ -162,6 +170,9 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_start",
+    "invoke_host_status",
+    "invoke_host_stop",
     "invoke_ledger_bar",
     "invoke_ledger_merge",
     "invoke_library_candidates",
@@ -190,6 +201,7 @@ COMMAND_GROUPS: Final[tuple[str, ...]] = (
     "library",
     "analysis",
     "config",
+    "host",
 )
 LIBRARY_COMMANDS: Final[tuple[str, ...]] = ("kinds", "search", "candidates")
 # Story 35.1 occupancy: analysis.project is a query. Story 35.3: rerun is a run.
@@ -237,6 +249,7 @@ _COMMAND_TREE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "library": LIBRARY_COMMANDS,
         "analysis": ANALYSIS_COMMANDS,
         "config": ("compile", "show"),
+        "host": HOST_COMMANDS,
     }
 )
 
@@ -290,6 +303,9 @@ _COMMAND_PREREQS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "analysis.compare": ("left", "right"),
         "config.compile": ("port", "book_fragment", "bms_fragment", "run_spec"),
         "config.show": (),
+        "host.start": (),
+        "host.status": (),
+        "host.stop": (),
     }
 )
 

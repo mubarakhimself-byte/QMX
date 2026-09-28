@@ -9,14 +9,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from pathlib import Path
 
+from qma.daemon.host_control import resolve_daemon_root
 from qma.daemon.process import DEFAULT_BIND_PORT, DaemonProcess
 from qmf.core import is_refusal
 
 
 def main() -> int:
-    root = Path(os.environ.get("QMA_DAEMON_ROOT", "qma-daemon-data"))
+    root = resolve_daemon_root(os.environ)
     machine = os.environ.get("QMA_DAEMON_MACHINE", "workstation")
     boot = os.environ.get("QMA_DAEMON_BOOT_EPOCH", "boot")
     port_raw = os.environ.get("QMA_DAEMON_BIND_PORT", str(DEFAULT_BIND_PORT))

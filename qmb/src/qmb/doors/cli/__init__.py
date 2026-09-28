@@ -50,6 +50,7 @@ from qmb.doors.cli.tree import (
     DATA_QUERY_OCCUPANCY,
     DATA_RUN_COMMANDS,
     HOLDS_CACHE,
+    HOST_COMMANDS,
     LIBRARY_COMMANDS,
     LIBRARY_KINDS_OCCUPANCY,
     LIBRARY_MINTS_CT32,
@@ -72,6 +73,9 @@ from qmb.doors.cli.tree import (
     invoke_config_compile,
     invoke_config_show,
     invoke_data,
+    invoke_host_start,
+    invoke_host_status,
+    invoke_host_stop,
     invoke_ledger_bar,
     invoke_ledger_merge,
     invoke_library_candidates,
@@ -134,6 +138,7 @@ __all__ = [
     "DATA_QUERY_OCCUPANCY",
     "DATA_RUN_COMMANDS",
     "HOLDS_CACHE",
+    "HOST_COMMANDS",
     "LIBRARY_COMMANDS",
     "LIBRARY_KINDS_OCCUPANCY",
     "LIBRARY_MINTS_CT32",
@@ -156,6 +161,9 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_start",
+    "invoke_host_status",
+    "invoke_host_stop",
     "invoke_ledger_bar",
     "invoke_ledger_merge",
     "invoke_library_candidates",
@@ -1621,6 +1629,61 @@ def config_show(ctx: click.Context) -> None:
     _transport(ctx, invoke_config_show())
 
 
+@main.group("host")
+def host_group() -> None:
+    """Local daemon lifecycle over host-control (not CT-33 HostedBot)."""
+
+
+@host_group.command("start")
+@click.pass_context
+def host_start(ctx: click.Context) -> None:
+    """Set product QMA_DAEMON_ROOT and spawn python -m qma.daemon if the lock is free."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_start(
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            spawn=payload.get("spawn"),
+            python=payload.get("python"),
+            wait_attempts=payload.get("wait_attempts"),
+            sleeper=payload.get("sleeper"),
+        ),
+    )
+
+
+@host_group.command("status")
+@click.pass_context
+def host_status(ctx: click.Context) -> None:
+    """Report lock, pid, bind, operator-established, TTL, and record ids."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_status(
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
+@host_group.command("stop")
+@click.pass_context
+def host_stop(ctx: click.Context) -> None:
+    """Stop the local daemon and release .daemon_writer. Does not cancel QMN."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_stop(
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+            wait_attempts=payload.get("wait_attempts"),
+            sleeper=payload.get("sleeper"),
+        ),
+    )
+
+
 def _payload(ctx: click.Context, **parsed: object) -> dict[str, object]:
     raw = ctx.obj
     payload: dict[str, object] = {}
@@ -1693,6 +1756,9 @@ def _format_ok(value: object) -> str:
         return json.dumps(_jsonable_payload(value.fp1_identity()), ensure_ascii=False)
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
+        verb = mapping.get("verb")
+        if verb in {"host.start", "host.status", "host.stop"}:
+            return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.
         if "entries" in mapping and mapping.get("command") in {"list", "catalog"}:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)

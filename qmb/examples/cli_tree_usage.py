@@ -59,6 +59,7 @@ def tree_is_the_platform_surface() -> None:
         "library",
         "analysis",
         "config",
+        "host",
     )
     runner = CliRunner()
     helped = runner.invoke(cli_main, ["--help"])

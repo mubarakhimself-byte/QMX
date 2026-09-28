@@ -128,6 +128,7 @@ def test_command_tree_exposes_platform_groups() -> None:
         "library",
         "analysis",
         "config",
+        "host",
     )
     assert tree["backtest"] == ("run",)
     assert tree["data"] == qmb.DATA_COMMANDS
@@ -138,6 +139,7 @@ def test_command_tree_exposes_platform_groups() -> None:
     assert tree["library"] == ("kinds", "search", "candidates")
     assert tree["analysis"] == ("project", "rerun", "compare")
     assert tree["config"] == ("compile", "show")
+    assert tree["host"] == ("start", "status", "stop")
     identity = cli_tree_identity()
     assert identity["computes_run_id"] is COMPUTES_RUN_ID is False
     assert identity["holds_cache"] is HOLDS_CACHE is False

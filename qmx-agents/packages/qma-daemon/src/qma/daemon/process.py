@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import subprocess
+import sys
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -54,6 +57,15 @@ from qma.daemon.diagnosis import (
     refuse_qmn_alert_failure_class,
 )
 from qma.daemon.experiments import EXPERIMENT_SQLITE_TABLES, ExperimentSpecService
+from qma.daemon.host_control import (
+    CT40_BIND_PORT,
+    HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
+    HOST_CONTROL_IS_CT40,
+    HostControlChannel,
+    claim_host_control_existed_at_inspect_sha,
+    claim_types_absent_at_inspect_sha,
+    ensure_host_control_token,
+)
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
@@ -101,13 +113,23 @@ from qmf.core import Ok, Result, World, WriterId, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
+    "BROWSER_SPAWNS_PYTHON",
     "COMP_EXP_MINTED",
+    "DAEMON_SPAWN_MODULE",
     "DEFAULT_BIND_PORT",
+    "HOST_CONTROL_ON_CT40_PORT",
     "HTTP_EXPERIMENT_SERVICE_MINTED",
     "QMB_JSONL_MERGED_INTO_SQLITE",
     "SIXTH_APPLICATION_MINTED",
+    "START_GRANTS",
+    "START_ORCHESTRATES_MISSIONS",
+    "START_STARTS_QMN",
+    "STOP_CANCELS_QMN",
+    "STOP_STOPS_REMOTE",
     "BoundListener",
     "DaemonProcess",
+    "spawn_supervised_daemon",
+    "supervised_spawn_argv",
 ]
 
 
@@ -116,6 +138,56 @@ HTTP_EXPERIMENT_SERVICE_MINTED: Final[bool] = False
 SIXTH_APPLICATION_MINTED: Final[bool] = False
 QMB_JSONL_MERGED_INTO_SQLITE: Final[bool] = False
 DEFAULT_BIND_PORT: Final[int] = 8765
+DAEMON_SPAWN_MODULE: Final[str] = "qma.daemon"
+START_ORCHESTRATES_MISSIONS: Final[bool] = False
+START_GRANTS: Final[bool] = False
+START_STARTS_QMN: Final[bool] = False
+BROWSER_SPAWNS_PYTHON: Final[bool] = False
+STOP_CANCELS_QMN: Final[bool] = False
+STOP_STOPS_REMOTE: Final[bool] = False
+HOST_CONTROL_ON_CT40_PORT: Final[bool] = HOST_CONTROL_IS_CT40
+
+
+def supervised_spawn_argv(python: str | None = None) -> tuple[str, ...]:
+    """Canonical ``python -m qma.daemon`` argv (Story 67.1)."""
+    exe = sys.executable if python is None else python
+    return (exe, "-m", DAEMON_SPAWN_MODULE)
+
+
+def spawn_supervised_daemon(
+    *,
+    root: Path,
+    python: str | None = None,
+    extra_env: Mapping[str, str] | None = None,
+) -> subprocess.Popen[bytes]:
+    """Spawn ``python -m qma.daemon`` with ``QMA_DAEMON_ROOT`` set.
+
+    The child acquires ``.daemon_writer``. This does not orchestrate Missions,
+    grant, or start QMN.
+    """
+    env = os.environ.copy()
+    env["QMA_DAEMON_ROOT"] = str(root)
+    if extra_env is not None:
+        env.update(dict(extra_env))
+    argv = supervised_spawn_argv(python)
+    if os.name == "nt":
+        return subprocess.Popen(
+            argv,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    return subprocess.Popen(
+        argv,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
 
 _QMB_SQLITE_TABLE_DENY: Final[frozenset[str]] = frozenset(
     {"qmb_jsonl", "qmb_ledger", "qmb_run_ledger", "ct32"}
@@ -174,6 +246,7 @@ class DaemonProcess:
         self._closed = False
         self._operator_logger = configure_daemon_logging()
         self._diagnosis = DiagnosisQueryService()
+        self._host_control: HostControlChannel | None = None
 
     @classmethod
     def compose(
@@ -304,6 +377,12 @@ class DaemonProcess:
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,
             )
+            minted = ensure_host_control_token(process.root)
+            if is_refusal(minted):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return minted
             _process_gate.holder = process
             return Ok(process)
 
@@ -536,6 +615,39 @@ class DaemonProcess:
         """Refused — QMN alert failure_class is a different noun."""
         return refuse_qmn_alert_failure_class(given=repr(value))
 
+    def request_stop(self) -> None:
+        """Stop after the current host-control handler finishes."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.close()
+            return
+        loop.call_soon(self.close)
+
+    def host_status_snapshot(self) -> Mapping[str, object]:
+        """Lock, pid, CT-40 bind, operator/TTL/record-id presence. Never secrets."""
+        bound = self._bound
+        bind = None if bound is None else f"{bound.host}:{bound.port}"
+        return MappingProxyType(
+            {
+                "lock": "held" if self._substrate.lock_held else "free",
+                "pid": os.getpid(),
+                "bind": bind,
+                "operator_established": False,
+                "ttl": "unset",
+                "pending_record_ids": (),
+                "bound_record_ids": (),
+            }
+        )
+
+    def claim_host_control_at_inspect_sha(self, existed: object) -> Result[bool]:
+        """Claiming ``qmb host`` / host-control existed at 34c148be fails."""
+        return claim_host_control_existed_at_inspect_sha(existed)
+
+    def claim_envelope_types_absent_at_inspect_sha(self, absent: object) -> Result[bool]:
+        """Claiming Envelope / GrantRecord / product_session types were absent fails."""
+        return claim_types_absent_at_inspect_sha(absent)
+
     async def bind(self) -> Result[BoundListener]:
         """Bind the loopback listener. Does not start an HTTP experiment service."""
         if self._closed:
@@ -544,6 +656,9 @@ class DaemonProcess:
                 "composed daemon process is closed",
             )
         if self._bound is not None and self._server is not None:
+            attached = await self._bind_host_control()
+            if is_refusal(attached):
+                return attached
             return Ok(self._bound)
         try:
             server = await asyncio.start_server(
@@ -579,11 +694,42 @@ class DaemonProcess:
         )
         self._server = server
         self._bound = bound
+        attached = await self._bind_host_control()
+        if is_refusal(attached):
+            server.close()
+            await server.wait_closed()
+            self._server = None
+            self._bound = None
+            return attached
         self.emit_operator_event(
             "daemon.listener_bound",
             correlation_id=f"daemon-listener:{bound.host}:{bound.port}",
         )
         return Ok(bound)
+
+    async def _bind_host_control(self) -> Result[None]:
+        """Bind the token-gated host-control channel outside port 8765."""
+        existing = self._host_control
+        if existing is not None and existing.bound is not None:
+            return Ok(None)
+        channel = HostControlChannel(
+            self.root,
+            status=self.host_status_snapshot,
+            on_stop=self.request_stop,
+        )
+        bound = await channel.bind()
+        if is_refusal(bound):
+            return bound
+        if bound.value.port == CT40_BIND_PORT:
+            await channel.aclose()
+            return policy_rejection(
+                "host_control",
+                "host-control must bind outside port 8765 (AM-15)",
+                port=bound.value.port,
+                ct40_port=CT40_BIND_PORT,
+            )
+        self._host_control = channel
+        return Ok(None)
 
     async def serve(self) -> Result[None]:
         """Bind if needed and serve until cancelled. One inbound listener."""
@@ -681,11 +827,27 @@ class DaemonProcess:
                 "logs_remain_logs": LOGS_REMAIN_LOGS,
                 "qmb_logsink_may_remain": QMB_LOGSINK_MAY_REMAIN,
                 "third_logger_minted": THIRD_LOGGER_MINTED,
+                "host_control_is_ct40": HOST_CONTROL_IS_CT40,
+                "host_control_on_ct40_port": HOST_CONTROL_ON_CT40_PORT,
+                "host_control_existed_at_inspect_sha": HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
+                "host_control_port": None
+                if self._host_control is None or self._host_control.bound is None
+                else self._host_control.bound.port,
+                "start_orchestrates_missions": START_ORCHESTRATES_MISSIONS,
+                "start_grants": START_GRANTS,
+                "start_starts_qmn": START_STARTS_QMN,
+                "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
+                "stop_cancels_qmn": STOP_CANCELS_QMN,
+                "stop_stops_remote": STOP_STOPS_REMOTE,
             }
         )
 
     def close(self) -> None:
         """Release the listener sockets and the sole-writer substrate."""
+        channel = self._host_control
+        self._host_control = None
+        if channel is not None:
+            channel.close()
         server = self._server
         self._server = None
         if server is not None:
@@ -693,6 +855,10 @@ class DaemonProcess:
         self._release()
 
     async def aclose(self) -> None:
+        channel = self._host_control
+        self._host_control = None
+        if channel is not None:
+            await channel.aclose()
         server = self._server
         self._server = None
         if server is not None:
