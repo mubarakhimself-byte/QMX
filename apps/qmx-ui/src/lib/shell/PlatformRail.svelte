@@ -17,6 +17,7 @@
     FACTORY_TEST_VISUAL_APP,
     showsOpenedAppIcon,
   } from "./openedApps";
+  import FactoryTestIssuers from "$lib/host/FactoryTestIssuers.svelte";
   import {
     addOpenedApp,
     applyOpenedAppFixture,
@@ -328,6 +329,7 @@
         {/if}
       </p>
     {/if}
+    <FactoryTestIssuers />
     <p class="sr-only" data-testid="shell-snapshot">
       products={snapshot.productDestinationCount} settingsIsProduct={String(
         snapshot.settingsIsProduct,

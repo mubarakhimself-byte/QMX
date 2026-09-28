@@ -149,7 +149,8 @@
         {:else}
           <p>
             Board widget with meaningful content. Graph viewport restores on
-            return.
+            return. Widgets emit request_invoke; they never import the wire
+            client.
           </p>
         {/if}
       </div>

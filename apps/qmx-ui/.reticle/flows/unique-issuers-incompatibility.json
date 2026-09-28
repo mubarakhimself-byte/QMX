@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "name": "unique-issuers-incompatibility",
+  "projectId": "qmx-ui",
+  "precondition": {
+    "kind": "element",
+    "query": { "testid": "factory-test-issuers" },
+    "state": "visible"
+  },
+  "createdAt": 1790800000000,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "widget-request-invoke" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "host-last-caller" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "lastCallerEvent",
+            "equals": "request_invoke"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "widgetImportedWire",
+            "equals": false
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "fixture-missing-capability" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "typed-incompatibility" },
+            "state": "visible"
+          },
+          {
+            "kind": "element",
+            "query": { "testid": "chat-still-proceeds" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "lastCallerEvent",
+            "equals": "submit_invoke"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "chatProceeded",
+            "equals": true
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "lastIncompatibilityCode",
+            "equals": "caller_kind_unsupported"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-host",
+            "path": "shellUsable",
+            "equals": true
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-home" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-home" },
+            "state": "visible"
+          },
+          {
+            "kind": "element",
+            "query": { "testid": "typed-incompatibility" },
+            "state": "visible"
+          },
+          {
+            "kind": "element",
+            "query": { "testid": "platform-rail" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "home"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "productDestinationCount",
+            "equals": 4
+          }
+        ]
+      }
+    }
+  ],
+  "startPath": "/",
+  "intent": "A widget control cannot call the wire client; a missing-capability fixture paints typed incompatibility while the platform rail stays usable.",
+  "intentId": "flow:unique-issuers-incompatibility"
+}
