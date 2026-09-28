@@ -45,7 +45,9 @@ if (!existsSync(flowsDir)) {
 }
 const flows = readdirSync(flowsDir).filter((name) => name.endsWith(".json"));
 if (flows.length === 0) {
-  console.error("reticle: .reticle/flows is empty — verifying nothing is never a pass");
+  console.error(
+    "reticle: .reticle/flows is empty — verifying nothing is never a pass",
+  );
   process.exit(1);
 }
 
@@ -88,7 +90,7 @@ if (combined.includes("a Reticle daemon is already listening")) {
     "reticle: official `verify` cannot bind while the agent MCP daemon owns port 4400.",
   );
   console.error(
-    "reticle: replay saved flows via MCP reticle_verify { action: \"flows\" } or pass RETICLE_EVIDENCE_FILE with act_and_wait/assert verified=yes.",
+    'reticle: replay saved flows via MCP reticle_verify { action: "flows" } or pass RETICLE_EVIDENCE_FILE with act_and_wait/assert verified=yes.',
   );
   console.error(
     "reticle: CI (no MCP daemon) runs `npx @reticlehq/server verify <url>` unchanged. Reticle is not skipped.",
