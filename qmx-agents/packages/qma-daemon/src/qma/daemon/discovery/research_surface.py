@@ -202,8 +202,7 @@ def optional_librarian_skill(
     *,
     version: str = "1",
     summary: str = (
-        "Optional contextual librarian over search/retrieve/cite plus "
-        "qml.research Stage 0 helpers"
+        "Optional contextual librarian over search/retrieve/cite plus qml.research Stage 0 helpers"
     ),
 ) -> Skill:
     """Build the optional librarian Skill (FR-RES-16; UX-DR7; DEC-0390)."""

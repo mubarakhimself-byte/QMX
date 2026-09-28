@@ -98,11 +98,14 @@ class RetentionJob:
             )
 
         for stream in requested:
-            if not is_daemon_job_trim(
-                "retention.trim",
-                stream=stream,
-                inside_retention_window=inside_retention_window,
-            ) and not operator_principal:
+            if (
+                not is_daemon_job_trim(
+                    "retention.trim",
+                    stream=stream,
+                    inside_retention_window=inside_retention_window,
+                )
+                and not operator_principal
+            ):
                 return policy_rejection(
                     "retention.trim",
                     "daemon-job trims run only inside registered retention "

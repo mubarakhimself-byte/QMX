@@ -154,16 +154,11 @@ def test_durable_edges_survive_daemon_restart(tmp_path: Path) -> None:
         persisted = process.task_graphs.persist(graph)
         assert is_ok(persisted)
         rows = process.sqlite.execute(
-            "SELECT from_node, to_node, mapping FROM task_graph_state_edge "
-            "WHERE graph_id = ?",
+            "SELECT from_node, to_node, mapping FROM task_graph_state_edge WHERE graph_id = ?",
             (graph.id,),
         )
         assert rows == [("prepare", "survey", "one")]
-        occupancy_tables = {
-            name
-            for name in process.sqlite_table_names()
-            if "occupancy" in name
-        }
+        occupancy_tables = {name for name in process.sqlite_table_names() if "occupancy" in name}
         assert occupancy_tables == set()
         assert process.task_graphs.occupancy_table_present() is False
         snap = process.snapshot()
@@ -188,8 +183,7 @@ def test_durable_edges_survive_daemon_restart(tmp_path: Path) -> None:
         for node in walked.nodes:
             assert "successors" not in node.to_payload()
         edge_rows = restarted.sqlite.execute(
-            "SELECT from_node, to_node, mapping FROM task_graph_state_edge "
-            "WHERE graph_id = ?",
+            "SELECT from_node, to_node, mapping FROM task_graph_state_edge WHERE graph_id = ?",
             (graph.id,),
         )
         assert edge_rows == [("prepare", "survey", "one")]

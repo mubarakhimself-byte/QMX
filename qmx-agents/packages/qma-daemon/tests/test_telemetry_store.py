@@ -26,9 +26,7 @@ from qma.daemon.telemetry import (
 from qma.wire.outbox import OutboxBounds, RemoteOutbox
 from qmf.core import Ok, is_ok, is_refusal
 
-TELEMETRY_SRC = (
-    Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon" / "telemetry"
-)
+TELEMETRY_SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon" / "telemetry"
 
 
 def _actor(slug: str) -> ActorId:

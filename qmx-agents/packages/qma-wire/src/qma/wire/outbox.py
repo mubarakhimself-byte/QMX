@@ -393,9 +393,9 @@ class RemoteOutbox:
             ordinal=self._next_ordinal,
             byte_size=byte_size,
         )
-        line = (
-            json.dumps(entry.to_dict(), separators=(",", ":"), sort_keys=True) + "\n"
-        ).encode("utf-8")
+        line = (json.dumps(entry.to_dict(), separators=(",", ":"), sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
         try:
             self._fsync_write(self._spool_path(), line, append=True)
         except OSError as exc:

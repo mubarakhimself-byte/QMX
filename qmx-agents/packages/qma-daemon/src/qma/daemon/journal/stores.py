@@ -75,10 +75,7 @@ class FoldMetadata:
             )
             raise ValueError(msg)
         if self.knowledge_time_bound != KNOWLEDGE_TIME_BOUND_AS_OF_RECORDED_AT:
-            msg = (
-                "fold knowledge-time bound must be as_of over recorded_at "
-                "(FR-Q25; AD-6)"
-            )
+            msg = "fold knowledge-time bound must be as_of over recorded_at (FR-Q25; AD-6)"
             raise ValueError(msg)
 
 
@@ -162,9 +159,7 @@ ANNOUNCEMENT_EVENT_BY_STORE: Final[Mapping[str, str]] = MappingProxyType(
 _STORE_CLASS: Final[Mapping[str, StoreClass]] = MappingProxyType(
     {
         **dict.fromkeys(CLOSED_PROJECTIONS, StoreClass.JOURNAL_DERIVED_PROJECTION),
-        **dict.fromkeys(
-            DEFINITION_STORE_MEMBERS, StoreClass.JOURNAL_DERIVED_PROJECTION
-        ),
+        **dict.fromkeys(DEFINITION_STORE_MEMBERS, StoreClass.JOURNAL_DERIVED_PROJECTION),
         **dict.fromkeys(CLOSED_INDEPENDENT_STORES, StoreClass.INDEPENDENT_STORE),
     }
 )
@@ -228,9 +223,7 @@ class StoreDeclaration:
 class StoreRegistry:
     """In-memory registry of declared closed stores; schemas materialize later."""
 
-    _declarations: dict[str, StoreDeclaration] = field(
-        default_factory=dict[str, StoreDeclaration]
-    )
+    _declarations: dict[str, StoreDeclaration] = field(default_factory=dict[str, StoreDeclaration])
 
     @property
     def closed_list(self) -> frozenset[str]:
@@ -262,17 +255,14 @@ class StoreRegistry:
         if name not in CLOSED_STORE_NAMES:
             return policy_rejection(
                 "store_declaration",
-                "a store not on the closed AD-6 list may not be created (FR-Q23; AD-6, "
-                "AD-8)",
+                "a store not on the closed AD-6 list may not be created (FR-Q23; AD-6, AD-8)",
                 store=name,
                 closed_list=sorted(CLOSED_STORE_NAMES),
             )
         existing = self._declarations.get(name)
         if existing is not None:
             return Ok(existing)
-        meta = (
-            fold_metadata if fold_metadata is not None else _default_fold_metadata(name)
-        )
+        meta = fold_metadata if fold_metadata is not None else _default_fold_metadata(name)
         declaration = StoreDeclaration(
             name=name,
             store_class=_STORE_CLASS[name],

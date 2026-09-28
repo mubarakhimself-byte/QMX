@@ -46,24 +46,18 @@ class FoldContract:
     source_stream: str
     ordering_key: str = ORDERING_KEY_JOURNAL_SEQ
     knowledge_time_bound: KnowledgeTimeBound = KNOWLEDGE_TIME_BOUND_AS_OF_RECORDED_AT
-    equal_instant_disposition: EqualInstantDisposition = (
-        EQUAL_INSTANT_ASCENDING_JOURNAL_SEQ
-    )
+    equal_instant_disposition: EqualInstantDisposition = EQUAL_INSTANT_ASCENDING_JOURNAL_SEQ
 
     def __post_init__(self) -> None:
         if self.ordering_key != ORDERING_KEY_JOURNAL_SEQ:
             msg = "fold ordering_key must be journal_seq (FR-Q25; AD-6)"
             raise ValueError(msg)
         if self.knowledge_time_bound != KNOWLEDGE_TIME_BOUND_AS_OF_RECORDED_AT:
-            msg = (
-                "fold knowledge-time bound must be as_of over recorded_at "
-                "(FR-Q25; AD-6)"
-            )
+            msg = "fold knowledge-time bound must be as_of over recorded_at (FR-Q25; AD-6)"
             raise ValueError(msg)
         if self.equal_instant_disposition != EQUAL_INSTANT_ASCENDING_JOURNAL_SEQ:
             msg = (
-                "equal instants dispose by ascending journal_seq, never by "
-                "timestamp (FR-Q25; AD-6)"
+                "equal instants dispose by ascending journal_seq, never by timestamp (FR-Q25; AD-6)"
             )
             raise ValueError(msg)
         if not self.fold_id or not self.source_stream:
@@ -189,8 +183,7 @@ class FoldContractRegistry:
         if not isinstance(fold_id, str) or fold_id.strip() == "":
             return policy_rejection(
                 "fold_contract",
-                "a fold contract registration names a non-empty v1 fold id "
-                "(FR-Q25; AD-6)",
+                "a fold contract registration names a non-empty v1 fold id (FR-Q25; AD-6)",
                 given=repr(fold_id),
             )
         if fold_id in FILTERED_PROJECTIONS_NOT_FOLDS:

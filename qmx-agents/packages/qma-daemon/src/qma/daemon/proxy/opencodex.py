@@ -115,9 +115,7 @@ class OpenCodexDeployment:
         if self.record.auth_mode != AUTH_MODE_NONE:
             raise ValueError("OpenCodexDeployment requires auth_mode: none (FR-Q40)")
         if self.record.credential_ref is not None:
-            raise ValueError(
-                "OpenCodexDeployment must not carry a QMA credential_ref (FR-Q40)"
-            )
+            raise ValueError("OpenCodexDeployment must not carry a QMA credential_ref (FR-Q40)")
 
     @property
     def deployment_id(self) -> str:

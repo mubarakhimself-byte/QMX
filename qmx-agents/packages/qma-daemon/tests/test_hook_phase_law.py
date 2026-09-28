@@ -41,9 +41,7 @@ def test_legal_decision_sets_per_phase() -> None:
     assert HookResultDecision.BLOCK_STOP not in before
 
     agent_stop = legal_decisions_for_event("agent_stop")
-    assert agent_stop == frozenset(
-        {HookResultDecision.BLOCK_STOP, HookResultDecision.OBSERVE}
-    )
+    assert agent_stop == frozenset({HookResultDecision.BLOCK_STOP, HookResultDecision.OBSERVE})
     assert HookResultDecision.DENY not in agent_stop
     assert HookResultDecision.ALLOW not in agent_stop
 
@@ -59,9 +57,7 @@ def test_legal_decision_sets_per_phase() -> None:
     assert HookResultDecision.DEFER not in review
 
     after_tool = legal_decisions_for_event("after_tool")
-    assert after_tool == frozenset(
-        {HookResultDecision.ALLOW, HookResultDecision.OBSERVE}
-    )
+    assert after_tool == frozenset({HookResultDecision.ALLOW, HookResultDecision.OBSERVE})
     after_other = legal_decisions_for_event("after_memory_write")
     assert after_other == frozenset({HookResultDecision.OBSERVE})
     assert HookResultDecision.ALLOW not in after_other
@@ -192,9 +188,7 @@ def test_phase_gated_fields_refused_at_registration() -> None:
             fields=("ledger_entry", "verifier_ref"),
         )
     )
-    assert legal_fields_for_event("before_tool") == frozenset(
-        {"updated_input", "injected_context"}
-    )
+    assert legal_fields_for_event("before_tool") == frozenset({"updated_input", "injected_context"})
     assert legal_fields_for_event("after_session_end") == frozenset()
 
 
@@ -214,30 +208,38 @@ def test_injected_context_is_before_only_and_not_ledger() -> None:
 
 
 def test_total_precedence_and_observe_nonparticipation() -> None:
-    assert most_restrictive_hook_result(
-        (
-            HookResultDecision.OBSERVE,
-            HookResultDecision.ALLOW,
-            HookResultDecision.DENY,
-            HookResultDecision.ASK,
+    assert (
+        most_restrictive_hook_result(
+            (
+                HookResultDecision.OBSERVE,
+                HookResultDecision.ALLOW,
+                HookResultDecision.DENY,
+                HookResultDecision.ASK,
+            )
         )
-    ) is HookResultDecision.DENY
-    assert most_restrictive_hook_result(
-        (HookResultDecision.OBSERVE, HookResultDecision.ALLOW)
-    ) is HookResultDecision.ALLOW
-    assert most_restrictive_hook_result(
-        (HookResultDecision.OBSERVE, HookResultDecision.OBSERVE)
-    ) is HookResultDecision.OBSERVE
-    assert most_restrictive_hook_result(
-        (
-            HookResultDecision.BLOCK_STOP,
-            HookResultDecision.DENY,
-            HookResultDecision.DEFER,
-            HookResultDecision.ASK,
-            HookResultDecision.ALLOW,
-            HookResultDecision.OBSERVE,
+        is HookResultDecision.DENY
+    )
+    assert (
+        most_restrictive_hook_result((HookResultDecision.OBSERVE, HookResultDecision.ALLOW))
+        is HookResultDecision.ALLOW
+    )
+    assert (
+        most_restrictive_hook_result((HookResultDecision.OBSERVE, HookResultDecision.OBSERVE))
+        is HookResultDecision.OBSERVE
+    )
+    assert (
+        most_restrictive_hook_result(
+            (
+                HookResultDecision.BLOCK_STOP,
+                HookResultDecision.DENY,
+                HookResultDecision.DEFER,
+                HookResultDecision.ASK,
+                HookResultDecision.ALLOW,
+                HookResultDecision.OBSERVE,
+            )
         )
-    ) is HookResultDecision.BLOCK_STOP
+        is HookResultDecision.BLOCK_STOP
+    )
 
     observe = build_hook_result(HookResultDecision.OBSERVE, reason="seen")
     deny = build_hook_result(HookResultDecision.DENY, reason="blocked")

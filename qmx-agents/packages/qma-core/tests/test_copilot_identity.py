@@ -41,13 +41,16 @@ from qmf.core import is_ok, is_refusal
 
 def test_one_copilot_product_identity_and_optional_panel_contract() -> None:
     assert COPILOT_PRODUCT_IDENTITY == "QuantMind/QMX Copilot"
-    assert frozenset(
-        {
-            "QuantMind/QMX Copilot",
-            "QuantMind Copilot",
-            "QMX Copilot",
-        }
-    ) == COPILOT_PRODUCT_ALIASES
+    assert (
+        frozenset(
+            {
+                "QuantMind/QMX Copilot",
+                "QuantMind Copilot",
+                "QMX Copilot",
+            }
+        )
+        == COPILOT_PRODUCT_ALIASES
+    )
     assert frozenset({"authoring", "app-use"}) == COPILOT_SEAT_PROFILES
     assert PRODUCT_SESSION_ID_PREFIX == "psess:"
     assert ENGINE_RUN_ID_PREFIX == "sess:"

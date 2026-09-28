@@ -405,4 +405,3 @@ def test_unresolved_controls_never_hold_environment_lease() -> None:
         assert suspension.environment_lease_held is False
     for parking in controller.parked_defers:
         assert parking.environment_lease_held is False
-

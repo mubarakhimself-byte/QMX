@@ -36,9 +36,7 @@ def _test_clock(*, boot: str = "boot-clock", n: int = 128) -> DataDrivenClock:
 def _open_journal(
     tmp_path: Path, *, boot: str = "boot-clock", clock: DataDrivenClock | None = None
 ) -> tuple[PersistenceSubstrate, AuthoritativeJournal, DaemonClock]:
-    substrate_result = PersistenceSubstrate.open(
-        tmp_path, machine="test-host", boot_epoch_id=boot
-    )
+    substrate_result = PersistenceSubstrate.open(tmp_path, machine="test-host", boot_epoch_id=boot)
     assert is_ok(substrate_result), substrate_result
     substrate = substrate_result.value
     injected = clock if clock is not None else _test_clock(boot=boot)

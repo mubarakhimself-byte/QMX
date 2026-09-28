@@ -233,21 +233,13 @@ def enforce_spawn_depth(
     depth_cap: object = RLM_DEPTH_CAP_DEFAULT,
 ) -> Result[int]:
     """Enforce ``registry:rlm.depth_cap`` on async RLM spawn (default 2)."""
-    if (
-        not isinstance(depth_cap, int)
-        or isinstance(depth_cap, bool)
-        or depth_cap < 0
-    ):
+    if not isinstance(depth_cap, int) or isinstance(depth_cap, bool) or depth_cap < 0:
         return _invalid(
             "depth_cap",
             "depth_cap is a non-negative int from registry:rlm.depth_cap",
             registry_key=RLM_DEPTH_CAP_REGISTRY_KEY,
         )
-    if (
-        not isinstance(current_depth, int)
-        or isinstance(current_depth, bool)
-        or current_depth < 0
-    ):
+    if not isinstance(current_depth, int) or isinstance(current_depth, bool) or current_depth < 0:
         return _invalid(
             "current_depth",
             "current_depth is a non-negative int spawn depth",

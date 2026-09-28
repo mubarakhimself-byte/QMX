@@ -543,11 +543,7 @@ class PluginMigrationRunner:
                 "daemon-core migration requires a non-empty migration set",
                 target=declaration.target,
             )
-        mode = (
-            "forward_only"
-            if declaration.rollback == "forward_only"
-            else REVERSIBLE_BY_DOWN
-        )
+        mode = "forward_only" if declaration.rollback == "forward_only" else REVERSIBLE_BY_DOWN
         confirmation: ForwardOnlyConfirmation | None = None
         confirm_key = plugin_id_alias or f"daemon-core:{declaration.target}"
         if mode == "forward_only":
@@ -801,4 +797,3 @@ class PluginMigrationRunner:
     def data_intact(self, plugin_id: str) -> bool:
         """Whether disabled forward-only plugin data remains intact."""
         return plugin_id in self._disabled_intact or plugin_id in self._data_roots
-

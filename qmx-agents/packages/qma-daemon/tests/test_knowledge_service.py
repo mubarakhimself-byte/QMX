@@ -54,8 +54,7 @@ def test_exactly_one_adapter_per_source_id(tmp_path: Path) -> None:
     assert first.value.to_payload()["impose_schema"] is False
     assert first.value.to_payload()["hybrid_indexing"] is False
     assert (
-        first.value.to_payload()["evidence_confidence_distinct_from_admission_confidence"]
-        is True
+        first.value.to_payload()["evidence_confidence_distinct_from_admission_confidence"] is True
     )
 
     duplicate = registry.bind(

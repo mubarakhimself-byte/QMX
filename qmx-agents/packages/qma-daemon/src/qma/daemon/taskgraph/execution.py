@@ -145,9 +145,7 @@ def _topology_refusal(
 
 
 def _index_descriptors(
-    descriptors: Mapping[str, OperationDescriptor]
-    | Sequence[OperationDescriptor]
-    | None,
+    descriptors: Mapping[str, OperationDescriptor] | Sequence[OperationDescriptor] | None,
     *,
     default_public: bool,
 ) -> dict[str, OperationDescriptor]:
@@ -271,9 +269,7 @@ def validate_no_daemon_graph_template(qualified_id: str) -> Result[str]:
 def validate_graph_template_topology(
     template: GraphTemplate,
     *,
-    descriptors: Mapping[str, OperationDescriptor]
-    | Sequence[OperationDescriptor]
-    | None = None,
+    descriptors: Mapping[str, OperationDescriptor] | Sequence[OperationDescriptor] | None = None,
 ) -> Result[GraphTemplate]:
     """Refuse illegal topology shapes as typed CT-04 refusals (AD-5/AD-6).
 
@@ -434,17 +430,14 @@ def validate_graph_template_topology(
         if src == dst:
             return _topology_refusal(
                 "graph_template",
-                "self-loops are refused at Graph Template registration "
-                "(AD-6; FR-WF-40)",
+                "self-loops are refused at Graph Template registration (AD-6; FR-WF-40)",
                 code="INVALID_INPUT",
                 illegal_shape="cycle",
                 from_node=src,
                 to_node=dst,
             )
 
-        mapping_or_refusal = _require_explicit_edge_mapping(
-            edge, from_node=src, to_node=dst
-        )
+        mapping_or_refusal = _require_explicit_edge_mapping(edge, from_node=src, to_node=dst)
         if not isinstance(mapping_or_refusal, str):
             return mapping_or_refusal
         mapping = mapping_or_refusal

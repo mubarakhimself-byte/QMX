@@ -173,8 +173,7 @@ def refuse_context_transfer(kind: object, **extra: object) -> TypedRefusal:
     extra.setdefault("given", kind)
     return _policy(
         str(extra.pop("field", "context_transfer")),
-        "context transfer is explicit selected_refs or change_request only "
-        "(DEC-0454; FR-PG-13)",
+        "context transfer is explicit selected_refs or change_request only (DEC-0454; FR-PG-13)",
         **extra,
     )
 

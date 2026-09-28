@@ -146,14 +146,10 @@ def test_concatenates_knowledge_locators_and_artifact_fp1(tmp_path: Path) -> Non
     assert library_kind_to_artifact_hit_kind("analysis-publication") == "analysis.published"
 
     # Knowledge first, then artifact — concatenate, not rank.
-    first_artifact_idx = next(
-        i for i, hit in enumerate(body.hits) if isinstance(hit, ArtifactHit)
-    )
+    first_artifact_idx = next(i for i, hit in enumerate(body.hits) if isinstance(hit, ArtifactHit))
     assert all(isinstance(hit, KnowledgeHit) for hit in body.hits[:first_artifact_idx])
 
-    assert artifacts.calls == [
-        {"kind": "bot-definition", "fp1": None, "query": "swing-high"}
-    ]
+    assert artifacts.calls == [{"kind": "bot-definition", "fp1": None, "query": "swing-high"}]
     payload = body.to_payload()
     assert payload["occupancy"] == "none"
     assert payload["is_door_run"] is False

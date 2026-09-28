@@ -504,9 +504,7 @@ def test_cycle_is_typed_invalid_input_refusal_not_crash() -> None:
     )
     refused = validate_graph_template_topology(template)
     assert is_refusal(refused)
-    typed = _assert_topology_typed_refusal(
-        refused, illegal_shape="cycle", code="INVALID_INPUT"
-    )
+    typed = _assert_topology_typed_refusal(refused, illegal_shape="cycle", code="INVALID_INPUT")
     assert typed.category is RefusalCategory.INVALID_INPUT
     catalog = GraphTemplateCatalog()
     assert is_refusal(catalog.register(template))
@@ -740,9 +738,7 @@ def test_edge_ports_declare_closed_kinds() -> None:
     )
     refused = validate_graph_template_topology(missing_ports)
     assert is_refusal(refused)
-    _assert_topology_typed_refusal(
-        refused, illegal_shape="missing_port_kind", code="INVALID_INPUT"
-    )
+    _assert_topology_typed_refusal(refused, illegal_shape="missing_port_kind", code="INVALID_INPUT")
 
     bad_kind = GraphTemplate(
         qualified_id="dev-factory:bad-port-kind",
