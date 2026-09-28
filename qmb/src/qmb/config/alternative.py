@@ -829,7 +829,7 @@ def _parse_policy_pair(body: Mapping[str, object]) -> Result[PolicyPair]:
     if dummy_id:
         return invalid(
             "policy_pair_id",
-            "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+            "dummy PolicyPair is invalid input",  # mock-data-scan: allow
             sentinel=pair_id,
         )
     version = _positive_int(body.get("policy_pair_version"), "policy_pair_version")

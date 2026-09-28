@@ -150,7 +150,7 @@ def author_policy_pair(
     if pair_id in _DUMMY_SENTINEL or pair_id.casefold() in folded_sentinels:
         return invalid(
             "policy_pair_id",
-            "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+            "dummy PolicyPair is invalid input",  # mock-data-scan: allow
             sentinel=pair_id,
         )
     if isinstance(policy_pair_version, bool) or not isinstance(policy_pair_version, int):
@@ -214,7 +214,7 @@ def _section(
         if token in _DUMMY_SENTINEL or folded in _DUMMY_POLICY or token.casefold() in _DUMMY_POLICY:
             return invalid(
                 raw_key,
-                "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+                "dummy PolicyPair is invalid input",  # mock-data-scan: allow
                 policy=token,
             )
         out[raw_key] = token
