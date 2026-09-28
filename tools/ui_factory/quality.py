@@ -115,10 +115,11 @@ def run_command(
             skipped=True,
         )
     binary = argv[0]
+    resolved = _which(binary) or shutil.which(binary)
+    if resolved:
+        argv = [resolved, *list(argv[1:])]
     missing_named = (
-        binary not in {"python", "uv", "pnpm", "cmd", "git"}
-        and _which(binary) is None
-        and shutil.which(binary) is None
+        resolved is None
         and not Path(binary).exists()
     )
     if missing_named:
