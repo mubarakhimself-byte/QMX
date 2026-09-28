@@ -2,6 +2,12 @@
   "version": 1,
   "name": "bootstrap-loading-skeleton",
   "projectId": "qmx-ui",
+  "precondition": {
+    "kind": "state",
+    "store": "qmx-bootstrap",
+    "path": "chromeState",
+    "equals": "empty"
+  },
   "createdAt": 1790606424855,
   "steps": [
     {

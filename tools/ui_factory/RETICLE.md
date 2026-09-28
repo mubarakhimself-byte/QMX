@@ -49,7 +49,9 @@ recorded forms or missing consequence predicates fail explicitly. It verifies
 the loading skeleton and the app's `qmx-bootstrap.chromeState`, then asserts
 the candidate SHA from the app and a clean console. Only real
 `reticle_act_and_wait` / `reticle_assert` results of `verified: yes` pass.
-The getter provides current state; it does not claim store subscription coverage.
+The dev-only store receives the component's actual state transitions and is
+registered with a subscription, so Reticle can observe state changes as well
+as read the current value. Production excludes the instrumentation.
 
 Exit 0 means the live check passed and lease release was confirmed. Exit 1 is
 a Reticle `no`; exit 2 is incomplete/unknown/infrastructure failure. A previous

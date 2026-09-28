@@ -65,9 +65,8 @@ async function get(url) {
 }
 async function tool(name, args) {
   const result = await client.call("tools/call", { name, arguments: args });
-  const value = payload(result);
   receipt.checks.push({ tool: name, arguments: args, result });
-  return value;
+  return payload(result);
 }
 function consequence(expect) {
   if (expect?.kind) return expect;
@@ -162,6 +161,38 @@ try {
     new URL(connected.url).origin !== app.origin
   ) {
     throw new Error("Reticle session is not the candidate app");
+  }
+  stage = "app readiness";
+  const ready = await tool("reticle_assert", {
+    sessionId,
+    intent:
+      "The candidate app has rendered its first flow control and exposes runtime identity",
+    timeout_ms: assertMs,
+    predicate: {
+      kind: "allOf",
+      predicates: [
+        {
+          kind: "element",
+          query: { testid: flows[0].steps[0].anchor.value },
+          state: "visible",
+        },
+        {
+          kind: "state",
+          store: "qmx-bootstrap",
+          path: "candidateSha",
+          equals: sha,
+        },
+        flows[0].precondition || {
+          kind: "element",
+          query: { testid: flows[0].steps[0].anchor.value },
+          state: "visible",
+        },
+      ],
+    },
+  });
+  if (ready.verified !== "yes") {
+    receipt.verified = ready.verified === "no" ? "no" : "unknown";
+    throw new Error(`App readiness verified=${ready.verified || "unknown"}`);
   }
   for (const flow of flows) {
     if (flow.startPath && flow.startPath !== "/")

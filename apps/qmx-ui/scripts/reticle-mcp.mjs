@@ -121,7 +121,13 @@ export class ReticleMcp {
 }
 
 export function payload(result) {
-  if (result?.isError) throw new Error("Reticle returned a tool error");
+  if (result?.isError) {
+    const detail = (result.content || [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join(" ");
+    throw new Error(`Reticle tool error: ${detail.slice(0, 1200)}`);
+  }
   if (result?.structuredContent) return result.structuredContent;
   for (const item of result?.content || []) {
     if (item.type === "text") {

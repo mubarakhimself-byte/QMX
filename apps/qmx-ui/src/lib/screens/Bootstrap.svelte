@@ -21,11 +21,18 @@
   let origin = $state(SAMPLE_ORIGIN);
   let chromeState = $state<ChromeState>("empty");
   let startLocalResult = $state("");
+  let reportRuntimeState: ((state: ChromeState) => void) | undefined;
 
   onMount(() => {
     origin = assertSpaOrigin(window.location.origin);
     const params = new URLSearchParams(window.location.search);
     chromeState = parseFixtureState(params.get("fixture"));
+    if (import.meta.env.DEV) {
+      void import("../../reticle-dev").then(({ setBootstrapState }) => {
+        reportRuntimeState = setBootstrapState;
+        reportRuntimeState(chromeState);
+      });
+    }
   });
 
   function onStartLocal() {
@@ -35,6 +42,7 @@
 
   function setChromeState(next: ChromeState) {
     chromeState = next;
+    if (import.meta.env.DEV) reportRuntimeState?.(next);
   }
 </script>
 
