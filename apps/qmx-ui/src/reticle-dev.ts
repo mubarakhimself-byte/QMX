@@ -3,6 +3,7 @@ import { registerCapabilities, registerStore } from "@reticlehq/browser";
 import { get, writable } from "svelte/store";
 import type { ChromeState } from "$lib/bootstrap";
 import { hostState } from "$lib/host/runtime";
+import { homeState } from "$lib/screens/homeState";
 import { shellState } from "$lib/shell/shellState";
 
 const runtime = writable({
@@ -23,11 +24,15 @@ registerStore("qmx-host", {
   getState: () => get(hostState),
   subscribe: (listener) => hostState.subscribe(() => listener()),
 });
+registerStore("qmx-home", {
+  getState: () => get(homeState),
+  subscribe: (listener) => homeState.subscribe(() => listener()),
+});
 export function setBootstrapState(chromeState: ChromeState): void {
   runtime.update((value) => ({ ...value, chromeState }));
 }
 registerCapabilities({
-  stores: ["qmx-bootstrap", "qmx-shell", "qmx-host"],
+  stores: ["qmx-bootstrap", "qmx-shell", "qmx-host", "qmx-home"],
   testids: [
     "fixture-loading",
     "bootstrap-state",
@@ -47,6 +52,13 @@ registerCapabilities({
     "typed-incompatibility",
     "host-last-caller",
     "platform-rail",
+    "home-empty",
+    "home-empty-action",
+    "home-submit-chat",
+    "home-submit-invoke",
+    "home-chat-no-instance",
+    "home-invoke-refusal",
+    "home-attention-list",
   ],
   signals: [],
 });

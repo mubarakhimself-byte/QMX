@@ -17,6 +17,8 @@ import {
   INSPECT_SHA,
   QMA_UI_CONTRACT_AT_INSPECT,
   UNIQUE_ISSUERS_AT_INSPECT,
+  HOME_CHROME_AT_INSPECT,
+  ATTENTION_LIST_AT_INSPECT,
 } from "./inspect";
 import { START_LOCAL_MODE, startLocalAction } from "./spawn";
 import { parseFixtureState, stateCopy } from "./bootstrap";
@@ -75,6 +77,9 @@ describe("isolated SPA scaffold", () => {
       read("src/lib/shell/openedApps.ts"),
       read("src/lib/host/wireClient.ts"),
       read("src/lib/host/dispatchInvoke.ts"),
+      read("src/lib/screens/Home.svelte"),
+      read("src/lib/screens/homeState.ts"),
+      read("src/lib/shell/AttentionList.svelte"),
       read("src/routes/+page.svelte"),
       read("src/routes/+layout.svelte"),
     ].join("\n");
@@ -89,6 +94,8 @@ describe("isolated SPA scaffold", () => {
     expect(FIRST_PARTY_SVELTE_HOST_AT_INSPECT).toBe(false);
     expect(PLATFORM_RAIL_AT_INSPECT).toBe(false);
     expect(UNIQUE_ISSUERS_AT_INSPECT).toBe(false);
+    expect(HOME_CHROME_AT_INSPECT).toBe(false);
+    expect(ATTENTION_LIST_AT_INSPECT).toBe(false);
     expect(QMA_UI_CONTRACT_AT_INSPECT).toBe("stub");
     expect(ENVELOPE_TYPES_AT_INSPECT).toBe("fixtures-not-e2e");
     expect(HOST_IDENTITY.compUi).toBe(false);

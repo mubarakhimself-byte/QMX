@@ -9,6 +9,7 @@ import {
   DISPATCH_INVOKE_AT_INSPECT,
   INSPECT_SHA,
   UNIQUE_ISSUERS_AT_INSPECT,
+  HOME_CHROME_AT_INSPECT,
 } from "../inspect";
 import { listMailbox } from "./listMailbox";
 import { createHostRuntime } from "./runtime";
@@ -35,6 +36,7 @@ describe("unique issuer isolation", () => {
     expect(DISPATCH_CHAT_AT_INSPECT).toBe(false);
     expect(DISPATCH_CANCEL_AT_INSPECT).toBe(false);
     expect(CALLER_KIND_CAPABILITY_AT_INSPECT).toBe(false);
+    expect(HOME_CHROME_AT_INSPECT).toBe(false);
     for (const name of [
       "dispatchInvoke.ts",
       "dispatchChat.ts",

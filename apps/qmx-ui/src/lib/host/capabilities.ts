@@ -37,7 +37,8 @@ export type IncompatibilityCode =
   | "family_mismatch"
   | "instance_id_required"
   | "originating_session_required"
-  | "caller_kind_forbidden";
+  | "caller_kind_forbidden"
+  | "INVALID_INPUT";
 
 export type TypedIncompatibility = {
   kind: "incompatibility";

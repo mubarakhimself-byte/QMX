@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "name": "home-attention-resume",
+  "projectId": "qmx-ui",
+  "precondition": {
+    "kind": "element",
+    "query": { "testid": "rail-home" },
+    "state": "visible"
+  },
+  "createdAt": 1790900000000,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-home" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-home" },
+            "state": "visible"
+          },
+          {
+            "kind": "element",
+            "query": { "testid": "home-empty" },
+            "state": "visible"
+          },
+          {
+            "kind": "element",
+            "query": { "testid": "home-empty-action" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "chromeState",
+            "equals": "empty"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "isCopilot",
+            "equals": false
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "home"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "home-submit-chat" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "home-chat-no-instance" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "lastIssuer",
+            "equals": "dispatchChat"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "chatProceeded",
+            "equals": true
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "mintedSyntheticInstance",
+            "equals": false
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "appInstanceId",
+            "equals": null
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "home-submit-invoke" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "home-invoke-refusal" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "lastIncompatibilityCode",
+            "equals": "INVALID_INPUT"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "selectedInstanceRefCount",
+            "equals": 0
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "guessedInstance",
+            "equals": false
+          },
+          {
+            "kind": "state",
+            "store": "qmx-home",
+            "path": "isCopilot",
+            "equals": false
+          }
+        ]
+      }
+    }
+  ],
+  "startPath": "/",
+  "intent": "Home is attention and resume: empty is one action, optional chat sends with no instance, and invoke is refused without exactly one selected_refs kind instance_id.",
+  "intentId": "flow:home-attention-resume"
+}
