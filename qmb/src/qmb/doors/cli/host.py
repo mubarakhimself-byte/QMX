@@ -1,7 +1,8 @@
-"""``qmb host start|status|stop|configure|rotate-control`` (Stories 67.1–67.3).
+"""``qmb host start|status|stop|configure|rotate-control|recover-control``.
 
-Do not reuse package ``qmb.host`` (CT-33 HostedBot). QMB never writes daemon
-sqlite. The browser does not spawn Python. Pair is not this story.
+Stories 67.1–67.4. Do not reuse package ``qmb.host`` (CT-33 HostedBot). QMB
+never writes daemon sqlite. The browser does not spawn Python. Pair is not
+this story. recover-control is a QMB door to a one-shot daemon writer.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -17,7 +19,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Final, cast
 
-from qmf.core.refusal import Ok, RefusalCategory, Result, Retryability, TypedRefusal
+from qmf.core.refusal import (
+    Ok,
+    RefusalCategory,
+    Result,
+    Retryability,
+    TypedRefusal,
+    is_refusal,
+)
 
 from qmb._refuse import invalid, policy, storage, unavailable
 
@@ -25,6 +34,8 @@ __all__ = [
     "BROWSER_SPAWNS_PYTHON",
     "CT40_BIND_PORT",
     "DAEMON_LOCK_NAME",
+    "DAEMON_RECOVER_ENV",
+    "DAEMON_RECOVER_FLAG",
     "DAEMON_SPAWN_MODULE",
     "HOST_COMMANDS",
     "HOST_CONFIGURE_COMMANDS",
@@ -35,17 +46,21 @@ __all__ = [
     "PAIRING_SESSION_TTL_REGISTRY_KEY",
     "QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "START_GRANTS",
     "START_ORCHESTRATES_MISSIONS",
     "START_STARTS_QMN",
     "STOP_CANCELS_QMN",
     "STOP_STOPS_REMOTE",
+    "caller_owns_daemon_root",
     "claim_host_configure_existed_at_inspect_sha",
     "claim_qmb_host_existed_at_inspect_sha",
+    "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
     "invoke_host_status",
@@ -61,13 +76,17 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
     "stop",
     "configure",
     "rotate-control",
+    "recover-control",
 )
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
 QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 DAEMON_LOCK_NAME: Final[str] = ".daemon_writer"
 DAEMON_SPAWN_MODULE: Final[str] = "qma.daemon"
+DAEMON_RECOVER_FLAG: Final[str] = "--recover-control"
+DAEMON_RECOVER_ENV: Final[str] = "QMA_DAEMON_RECOVER_CONTROL"
 HOST_CONTROL_FILE: Final[str] = "host_control"
 HOST_CONTROL_BIND_NAME: Final[str] = "host_control.bind"
 CT40_BIND_PORT: Final[int] = 8765
@@ -192,6 +211,142 @@ def claim_rotate_control_existed_at_inspect_sha(existed: object) -> Result[bool]
             given=repr(existed),
         )
     return Ok(False)
+
+
+def claim_recover_control_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host recover-control`` existed at inspect SHA ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return policy(
+            "host.recover-control",
+            "qmb host recover-control was absent at inspect SHA 34c148be",
+            existed_at_inspect_sha=False,
+            inspect_sha=INSPECT_SHA,
+        )
+    if existed is not False:
+        return invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def caller_owns_daemon_root(root: Path) -> bool:
+    """True when the calling OS user owns ``QMA_DAEMON_ROOT`` (C1 / T-H-04)."""
+    try:
+        if not root.exists():
+            return False
+        if os.name != "nt":
+            return int(root.stat().st_uid) == int(os.getuid())
+        return _windows_caller_owns(root)
+    except OSError:
+        return False
+
+
+def _windows_caller_owns(root: Path) -> bool:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    owner_info = 0x00000001
+    token_query = 0x0008
+    token_user = 1
+
+    class _SidAndAttributes(ctypes.Structure):
+        _fields_ = (("Sid", ctypes.c_void_p), ("Attributes", ctypes.c_uint32))
+
+    class _TokenUser(ctypes.Structure):
+        _fields_ = (("User", _SidAndAttributes),)
+
+    needed = ctypes.c_uint32(0)
+    get_sd = advapi32.GetFileSecurityW
+    get_sd.restype = ctypes.c_int
+    get_sd.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    get_sd(str(root), owner_info, None, 0, ctypes.byref(needed))
+    if needed.value == 0:
+        return False
+    sd = ctypes.create_string_buffer(needed.value)
+    if not get_sd(str(root), owner_info, sd, needed, ctypes.byref(needed)):
+        return False
+    owner = ctypes.c_void_p()
+    defaulted = ctypes.c_int(0)
+    get_owner = advapi32.GetSecurityDescriptorOwner
+    get_owner.restype = ctypes.c_int
+    get_owner.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    if not get_owner(sd, ctypes.byref(owner), ctypes.byref(defaulted)):
+        return False
+    if not owner.value:
+        return False
+    token = ctypes.c_void_p()
+    open_token = advapi32.OpenProcessToken
+    open_token.restype = ctypes.c_int
+    open_token.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)]
+    if not open_token(kernel32.GetCurrentProcess(), token_query, ctypes.byref(token)):
+        return False
+    try:
+        size = ctypes.c_uint32(0)
+        get_info = advapi32.GetTokenInformation
+        get_info.restype = ctypes.c_int
+        get_info.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+        ]
+        get_info(token, token_user, None, 0, ctypes.byref(size))
+        if size.value == 0:
+            return False
+        buf = ctypes.create_string_buffer(size.value)
+        if not get_info(token, token_user, buf, size, ctypes.byref(size)):
+            return False
+        user = _TokenUser.from_buffer(buf)
+        equal = advapi32.EqualSid
+        equal.restype = ctypes.c_int
+        equal.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        return bool(equal(owner, user.User.Sid))
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def _owns_root_gate(root: Path, owns_root: object) -> Result[None]:
+    if owns_root is None:
+        if caller_owns_daemon_root(root):
+            return Ok(None)
+        return policy(
+            "QMA_DAEMON_ROOT",
+            "caller is not the OS owner of the daemon root",
+            root=str(root),
+        )
+    if owns_root is True:
+        return Ok(None)
+    if owns_root is False:
+        return policy(
+            "QMA_DAEMON_ROOT",
+            "caller is not the OS owner of the daemon root",
+            root=str(root),
+        )
+    if callable(owns_root):
+        try:
+            owned = owns_root(root)
+        except (OSError, TypeError, ValueError):
+            owned = False
+        if owned is True:
+            return Ok(None)
+        return policy(
+            "QMA_DAEMON_ROOT",
+            "caller is not the OS owner of the daemon root",
+            root=str(root),
+        )
+    return invalid("owns_root", "owns_root is a bool or callable", given=repr(owns_root))
 
 
 def claim_types_absent_at_inspect_sha(absent: object) -> Result[bool]:
@@ -418,8 +573,10 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
     return bytes(chunks)
 
 
-def _spawn_argv(python: str | None) -> tuple[str, ...]:
+def _spawn_argv(python: str | None, *, recover: bool = False) -> tuple[str, ...]:
     exe = sys.executable if python is None else python
+    if recover:
+        return (exe, "-m", DAEMON_SPAWN_MODULE, DAEMON_RECOVER_FLAG)
     return (exe, "-m", DAEMON_SPAWN_MODULE)
 
 
@@ -450,6 +607,60 @@ def _default_spawn(
             start_new_session=True,
         )
     return int(proc.pid)
+
+
+def _default_recover_spawn(
+    argv: tuple[str, ...],
+    *,
+    env: Mapping[str, str],
+    root: Path | None = None,
+) -> int:
+    _ = root
+    copied = dict(env)
+    if os.name == "nt":
+        proc = subprocess.Popen(
+            argv,
+            env=copied,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        proc = subprocess.Popen(
+            argv,
+            env=copied,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    returncode = proc.wait(timeout=60)
+    if returncode != 0:
+        raise OSError(f"recover-control daemon exited {returncode}")
+    return int(proc.pid)
+
+
+def _signal_local_pid(pid: int) -> Result[None]:
+    if pid <= 0:
+        return invalid("pid", "stop pid must be a positive int", given=repr(pid))
+    if pid == os.getpid():
+        return policy("daemon", "refusing to signal the calling process", pid=pid)
+    if os.name == "nt":
+        handle = ctypes.windll.kernel32.OpenProcess(0x0001, False, pid)
+        if not handle:
+            return storage("daemon", "could not open live daemon pid for owner stop", pid=pid)
+        try:
+            if not ctypes.windll.kernel32.TerminateProcess(handle, 1):
+                return storage("daemon", "could not signal live daemon pid for owner stop", pid=pid)
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+        return Ok(None)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except (OSError, ProcessLookupError) as exc:
+        return storage("daemon", f"could not signal live daemon pid for owner stop: {exc}", pid=pid)
+    return Ok(None)
 
 
 def _wait_attempts(value: object) -> Result[int]:
@@ -667,6 +878,56 @@ def invoke_host_status(
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 
 
+def _owner_stop_when_file_missing(
+    target: Path,
+    *,
+    token_refusal: Result[Mapping[str, object]],
+    owns_root: object,
+    signal_stop: object,
+    wait_attempts: object,
+    sleeper: object,
+) -> Result[Mapping[str, object]]:
+    """Narrow exception: OS owner may stop a live daemon when the token file is lost."""
+    owned = _owns_root_gate(target, owns_root)
+    if is_refusal(owned):
+        return token_refusal
+    live = _live_lock_pid(target)
+    if live is None:
+        return token_refusal
+    if callable(signal_stop):
+        signaled = signal_stop(live)
+        if isinstance(signaled, TypedRefusal):
+            return signaled
+    else:
+        signaled_pid = _signal_local_pid(live)
+        if not isinstance(signaled_pid, Ok):
+            return signaled_pid
+    parsed_attempts = _wait_attempts(wait_attempts)
+    if not isinstance(parsed_attempts, Ok):
+        return parsed_attempts
+    attempts = parsed_attempts.value
+    for _ in range(max(1, attempts)):
+        if _live_lock_pid(target) is None:
+            stopped: dict[str, object] = {
+                "verb": "host.stop",
+                "state": "stopped",
+                "pid": live,
+                "lock": "free",
+                "root": str(target),
+                "cancels_qmn": STOP_CANCELS_QMN,
+                "stops_remote": STOP_STOPS_REMOTE,
+                "owner_stop_file_missing": True,
+            }
+            return Ok(cast("Mapping[str, object]", redact_host_surface(stopped)))
+        if attempts > 1:
+            _pause(sleeper)
+    return unavailable(
+        "daemon_writer",
+        "owner stop did not release .daemon_writer",
+        root=str(target),
+    )
+
+
 def invoke_host_stop(
     *,
     root: object = None,
@@ -674,8 +935,16 @@ def invoke_host_stop(
     transport: object = None,
     wait_attempts: object = None,
     sleeper: object = None,
+    owns_root: object = None,
+    signal_stop: object = None,
 ) -> Result[Mapping[str, object]]:
-    """Stop the local daemon and release ``.daemon_writer``. Does not cancel QMN."""
+    """Stop the local daemon and release ``.daemon_writer``. Does not cancel QMN.
+
+    Running-daemon stop presents the current token. Narrow exception: the OS
+    owner may stop a live daemon when ``host_control`` is missing or unreadable
+    so recover-control can run. Status, configure, and rotate-control stay
+    token-gated.
+    """
     env_map: Mapping[str, str] | None
     if environ is None:
         env_map = None
@@ -686,7 +955,14 @@ def invoke_host_stop(
     target = _as_root(root, env_map)
     token = _read_token(target)
     if not isinstance(token, Ok):
-        return token
+        return _owner_stop_when_file_missing(
+            target,
+            token_refusal=token,
+            owns_root=owns_root,
+            signal_stop=signal_stop,
+            wait_attempts=wait_attempts,
+            sleeper=sleeper,
+        )
     live = _live_lock_pid(target)
     if callable(transport):
         called = transport("stop", token.value, root=target)
@@ -828,3 +1104,94 @@ def invoke_host_rotate_control(
     if "previous_host_control_fp1" in fields_out:
         report["previous_host_control_fp1"] = fields_out.get("previous_host_control_fp1")
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def _recover_complete(root: Path) -> bool:
+    token = _read_token(root)
+    if not isinstance(token, Ok):
+        return False
+    return _live_lock_pid(root) is None
+
+
+def invoke_host_recover_control(
+    *,
+    root: object = None,
+    environ: object = None,
+    spawn: object = None,
+    python: object = None,
+    wait_attempts: object = None,
+    sleeper: object = None,
+    owns_root: object = None,
+) -> Result[Mapping[str, object]]:
+    """QMB door: spawn a one-shot daemon recover writer. Does not write sqlite."""
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    if target.name == INSPECT_CWD_RELATIVE_ROOT and not target.is_absolute():
+        return policy(
+            "QMA_DAEMON_ROOT",
+            "cwd-relative qma-daemon-data is not the product root",
+            given=str(target),
+            product=str(product_daemon_root(environ=env_map.value)),
+        )
+    owned = _owns_root_gate(target, owns_root)
+    if is_refusal(owned):
+        return owned
+    held = _read_token(target)
+    if isinstance(held, Ok):
+        return policy(
+            "recover-control",
+            "host_control is still readable; use rotate-control",
+            root=str(target),
+        )
+    live = _live_lock_pid(target)
+    if live is not None:
+        return policy(
+            "recover-control",
+            "daemon is live; stop first then recover-control",
+            pid=live,
+            root=str(target),
+        )
+    _drop_stale_lock(target)
+    child_env = dict(os.environ if env_map.value is None else env_map.value)
+    child_env["QMA_DAEMON_ROOT"] = str(target)
+    child_env[DAEMON_RECOVER_ENV] = "1"
+    argv = _spawn_argv(python if isinstance(python, str) else None, recover=True)
+    try:
+        if spawn is None:
+            spawned: object = _default_recover_spawn(argv, env=child_env, root=target)
+        elif callable(spawn):
+            spawned = spawn(argv, env=child_env, root=target)
+        else:
+            return invalid("spawn", "spawn must be callable")
+    except OSError as exc:
+        return storage("spawn", f"could not spawn recover-control daemon: {exc}")
+    _ = spawned
+    parsed_attempts = _wait_attempts(wait_attempts)
+    if not isinstance(parsed_attempts, Ok):
+        return parsed_attempts
+    attempts = parsed_attempts.value
+    for _ in range(max(1, attempts)):
+        if _recover_complete(target):
+            token = _read_token(target)
+            report: dict[str, object] = {
+                "verb": "host.recover-control",
+                "recovered": True,
+                "local_operator": "unchanged",
+                "writer": "host.recover-control",
+                "bound_8765": False,
+                "lock": "free",
+                "root": str(target),
+                "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
+            }
+            if isinstance(token, Ok):
+                report["host_control"] = token.value
+            return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+        if attempts > 1:
+            _pause(sleeper)
+    return unavailable(
+        "recover-control",
+        "one-shot recover-control daemon did not mint host_control and release .daemon_writer",
+        root=str(target),
+    )

@@ -1,4 +1,4 @@
-"""L27 reference usage: product QMA_DAEMON_ROOT and host-control (Stories 67.1–67.3)."""
+"""L27 reference usage: product QMA_DAEMON_ROOT and host-control (Stories 67.1–67.4)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 
 from qma.daemon.host_control import (
     HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
+    HOST_CONTROL_FILE,
     HOST_CONTROL_IS_CT40,
     INSPECT_CWD_RELATIVE_ROOT,
     LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA,
@@ -15,6 +16,7 @@ from qma.daemon.host_control import (
     claim_host_configure_existed_at_inspect_sha,
     claim_host_control_existed_at_inspect_sha,
     claim_local_operator_existed_at_inspect_sha,
+    claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     host_control_call,
@@ -30,6 +32,7 @@ from qma.daemon.process import (
     HOST_CONTROL_ON_CT40_PORT,
     START_ORCHESTRATES_MISSIONS,
     DaemonProcess,
+    run_recover_entry,
     supervised_spawn_argv,
 )
 from qma.wire import GrantRecord, WireEnvelope
@@ -50,6 +53,7 @@ def main() -> None:
     assert is_refusal(claim_local_operator_existed_at_inspect_sha(True))
     assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
     assert is_refusal(claim_rotate_control_existed_at_inspect_sha(True))
+    assert is_refusal(claim_recover_control_existed_at_inspect_sha(True))
     assert is_refusal(claim_types_absent_at_inspect_sha(True))
     assert WireEnvelope.__name__ == "WireEnvelope"
     assert GrantRecord.__name__ == "GrantRecord"
@@ -104,6 +108,17 @@ def main() -> None:
         finally:
             if not process.is_closed:
                 await process.aclose()
+        (root / HOST_CONTROL_FILE).unlink()
+        recovered = run_recover_entry(
+            root,
+            machine="example-host",
+            boot_epoch_id="boot-example-67-4",
+            plugin_load_configs=research_corpus_plugin_load_config(seed),
+        )
+        assert is_ok(recovered), recovered
+        assert recovered.value["recovered"] is True
+        assert recovered.value["bound_8765"] is False
+        assert recovered.value["local_operator"] == "unchanged"
 
     with tempfile.TemporaryDirectory() as raw:
         asyncio.run(_run(Path(raw)))

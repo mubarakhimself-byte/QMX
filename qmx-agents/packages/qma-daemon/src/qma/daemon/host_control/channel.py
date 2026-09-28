@@ -1,8 +1,9 @@
-"""Token-gated loopback host-control channel (Stories 67.1–67.3; AM-15).
+"""Token-gated loopback host-control channel (Stories 67.1–67.4; AM-15).
 
 Outside port 8765. Not CT-40, not ``/pair/*``, not ``POST /host/*`` on 8765.
 Running-daemon verbs require the current token. Rotate-control remints while
-that token is held and does not recover a lost file.
+that token is held and does not recover a lost file. recover-control is not a
+live-channel verb: it is a stopped-daemon one-shot writer.
 """
 
 from __future__ import annotations
@@ -34,16 +35,19 @@ __all__ = [
     "HOST_CONTROL_IS_CT40",
     "HOST_CONTROL_VERBS",
     "MAX_HOST_CONTROL_FRAME",
+    "RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA",
     "ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "BoundHostControl",
     "HostControlChannel",
     "claim_host_control_existed_at_inspect_sha",
+    "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "decode_host_control_frame",
     "encode_host_control_frame",
     "ensure_host_control_token",
     "host_control_call",
+    "mint_recovered_host_control_token",
     "read_host_control_bind",
     "read_host_control_token",
     "redact_host_surface",
@@ -59,6 +63,7 @@ HOST_CONTROL_IS_CT40: Final[bool] = False
 HOST_CONTROL_INSPECT_SHA: Final[str] = "34c148be"
 HOST_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
     {"status", "stop", "configure", "rotate-control"}
 )
@@ -132,6 +137,24 @@ def claim_rotate_control_existed_at_inspect_sha(existed: object) -> Result[bool]
         return _policy(
             "host.rotate-control",
             "qmb host rotate-control was absent at inspect SHA 34c148be",
+            existed_at_inspect_sha=False,
+            inspect_sha=HOST_CONTROL_INSPECT_SHA,
+        )
+    if existed is not False:
+        return _invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_recover_control_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host recover-control`` existed at ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return _policy(
+            "host.recover-control",
+            "qmb host recover-control was absent at inspect SHA 34c148be",
             existed_at_inspect_sha=False,
             inspect_sha=HOST_CONTROL_INSPECT_SHA,
         )
@@ -266,6 +289,24 @@ def rotate_host_control_token(root: Path) -> Result[str]:
     except OSError as exc:
         return storage_failure(
             f"could not rotate host_control: {exc}",
+            context={"field": "host_control", "root": str(root)},
+        )
+    return Ok(token)
+
+
+def mint_recovered_host_control_token(root: Path) -> Result[str]:
+    """Write a new owner-only ``host_control`` when the previous file is lost."""
+    path = root / HOST_CONTROL_FILE
+    token = secrets.token_urlsafe(32)
+    try:
+        if path.exists():
+            with contextlib.suppress(OSError):
+                os.chmod(path, 0o600)
+        path.write_text(token + "\n", encoding="utf-8")
+        _restrict_owner_only(path)
+    except OSError as exc:
+        return storage_failure(
+            f"could not recover host_control: {exc}",
             context={"field": "host_control", "root": str(root)},
         )
     return Ok(token)
@@ -624,12 +665,22 @@ class HostControlChannel:
             return self._configure(request), False
         if verb == "rotate-control":
             return self._rotate(), False
-        if verb in {"pair", "recover-control"}:
+        if verb == "pair":
             return (
                 _fail(
                     RefusalCategory.UNSUPPORTED_CAPABILITY,
                     "verb",
-                    "pair / recover-control are not this story",
+                    "pair is not this story",
+                    given=repr(verb),
+                ),
+                False,
+            )
+        if verb == "recover-control":
+            return (
+                _fail(
+                    RefusalCategory.POLICY_REJECTION,
+                    "recover-control",
+                    "recover-control requires a stopped daemon; stop first",
                     given=repr(verb),
                 ),
                 False,

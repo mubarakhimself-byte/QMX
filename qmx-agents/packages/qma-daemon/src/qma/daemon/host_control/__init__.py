@@ -1,7 +1,8 @@
-"""Local host-control channel under product ``QMA_DAEMON_ROOT`` (Stories 67.1–67.3).
+"""Local host-control channel under product ``QMA_DAEMON_ROOT`` (Stories 67.1–67.4).
 
 Token-gated loopback, outside port 8765. Not CT-40 and not a new sqlite class.
 AM-03 ``local_operator`` is a named add on the existing sqlite class.
+recover-control is a stopped-daemon one-shot journal writer (C1).
 """
 
 from __future__ import annotations
@@ -15,16 +16,19 @@ from qma.daemon.host_control.channel import (
     HOST_CONTROL_INSPECT_SHA,
     HOST_CONTROL_IS_CT40,
     HOST_CONTROL_VERBS,
+    RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA,
     ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
     BoundHostControl,
     HostControlChannel,
     claim_host_control_existed_at_inspect_sha,
+    claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     decode_host_control_frame,
     encode_host_control_frame,
     ensure_host_control_token,
     host_control_call,
+    mint_recovered_host_control_token,
     read_host_control_bind,
     read_host_control_token,
     redact_host_surface,
@@ -40,6 +44,7 @@ from qma.daemon.host_control.local_operator import (
     LOCAL_OPERATOR_FOLD_ID,
     LOCAL_OPERATOR_NEW_SQLITE_CLASS,
     LOCAL_OPERATOR_PRINCIPAL_ID,
+    LOCAL_OPERATOR_RECOVERED_EVENT,
     LOCAL_OPERATOR_ROTATED_EVENT,
     LOCAL_OPERATOR_STORE,
     LOCAL_OPERATOR_STORE_CLASS,
@@ -52,10 +57,12 @@ from qma.daemon.host_control.local_operator import (
     host_control_fp1,
     load_local_operator,
     principal_count,
+    recover_local_operator_control,
     rotate_local_operator_control,
 )
 from qma.daemon.host_control.root import (
     INSPECT_CWD_RELATIVE_ROOT,
+    caller_owns_daemon_root,
     product_daemon_root,
     resolve_daemon_root,
 )
@@ -78,19 +85,23 @@ __all__ = [
     "LOCAL_OPERATOR_FOLD_ID",
     "LOCAL_OPERATOR_NEW_SQLITE_CLASS",
     "LOCAL_OPERATOR_PRINCIPAL_ID",
+    "LOCAL_OPERATOR_RECOVERED_EVENT",
     "LOCAL_OPERATOR_ROTATED_EVENT",
     "LOCAL_OPERATOR_STORE",
     "LOCAL_OPERATOR_STORE_CLASS",
     "LOCAL_OPERATOR_TABLE",
+    "RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA",
     "ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "BoundHostControl",
     "HostControlChannel",
     "HostControlRotation",
     "LocalOperatorLive",
     "bootstrap_first_operator",
+    "caller_owns_daemon_root",
     "claim_host_configure_existed_at_inspect_sha",
     "claim_host_control_existed_at_inspect_sha",
     "claim_local_operator_existed_at_inspect_sha",
+    "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "decode_host_control_frame",
@@ -99,10 +110,12 @@ __all__ = [
     "host_control_call",
     "host_control_fp1",
     "load_local_operator",
+    "mint_recovered_host_control_token",
     "principal_count",
     "product_daemon_root",
     "read_host_control_bind",
     "read_host_control_token",
+    "recover_local_operator_control",
     "redact_host_surface",
     "resolve_daemon_root",
     "rotate_host_control_token",

@@ -1,4 +1,4 @@
-"""Stories 67.1–67.3 — product QMA_DAEMON_ROOT, host start|status|stop|configure|rotate-control."""
+"""Stories 67.1–67.4 — product QMA_DAEMON_ROOT and qmb host verbs."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from qmb.doors.cli import (
     HOST_CONFIGURE_COMMANDS,
     command_tree,
     invoke_host_configure_pairing_ttl,
+    invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
     invoke_host_status,
@@ -28,6 +29,8 @@ from qmb.doors.cli.host import (
     BROWSER_SPAWNS_PYTHON,
     CT40_BIND_PORT,
     DAEMON_LOCK_NAME,
+    DAEMON_RECOVER_ENV,
+    DAEMON_RECOVER_FLAG,
     HOST_CONTROL_BIND_NAME,
     HOST_CONTROL_FILE,
     INSPECT_CWD_RELATIVE_ROOT,
@@ -35,6 +38,7 @@ from qmb.doors.cli.host import (
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
+    QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
     START_GRANTS,
     START_ORCHESTRATES_MISSIONS,
@@ -43,6 +47,7 @@ from qmb.doors.cli.host import (
     STOP_STOPS_REMOTE,
     claim_host_configure_existed_at_inspect_sha,
     claim_qmb_host_existed_at_inspect_sha,
+    claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     product_daemon_root,
@@ -227,11 +232,11 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
             "stop",
             "configure",
             "rotate-control",
+            "recover-control",
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
     assert "pair" not in HOST_COMMANDS
-    assert "recover-control" not in HOST_COMMANDS
     runner = CliRunner()
     helped = runner.invoke(main, ["host", "--help"])
     assert helped.exit_code == 0, helped.output
@@ -240,8 +245,8 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "stop" in helped.output
     assert "configure" in helped.output
     assert "rotate-control" in helped.output
+    assert "recover-control" in helped.output
     assert "pair" not in helped.output
-    assert "recover-control" not in helped.output
     missing = runner.invoke(main, ["host", "pair"])
     assert missing.exit_code != 0
     configure_help = runner.invoke(main, ["host", "configure", "--help"])
@@ -390,6 +395,7 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA is False
     claimed = claim_qmb_host_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_qmb_host_existed_at_inspect_sha(False))
@@ -399,6 +405,9 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     rotate_claimed = claim_rotate_control_existed_at_inspect_sha(True)
     assert is_refusal(rotate_claimed)
     assert is_ok(claim_rotate_control_existed_at_inspect_sha(False))
+    recover_claimed = claim_recover_control_existed_at_inspect_sha(True)
+    assert is_refusal(recover_claimed)
+    assert is_ok(claim_recover_control_existed_at_inspect_sha(False))
     absent = claim_types_absent_at_inspect_sha(True)
     assert is_refusal(absent)
     assert is_ok(claim_types_absent_at_inspect_sha(False))
@@ -607,3 +616,227 @@ def test_running_daemon_verbs_refuse_unreadable_token(tmp_path: Path, verb: str)
         assert refused.context["field"] == "host_control"
     finally:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def _recover_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+    assert DAEMON_RECOVER_FLAG in argv
+    assert env[DAEMON_RECOVER_ENV] == "1"
+    assert env["QMA_DAEMON_ROOT"] == str(root)
+    _write_token(root, "recovered-" + _TOKEN)
+    (root / DAEMON_LOCK_NAME).unlink(missing_ok=True)
+    return os.getpid()
+
+
+def test_recover_control_c1_positive_then_start_is_legal(tmp_path: Path) -> None:
+    journal = tmp_path / "journal.ndjson"
+    journal.write_text('{"event":"local_operator.established"}\n', encoding="utf-8")
+    sqlite = tmp_path / "daemon.sqlite"
+    sqlite.write_bytes(b"sqlite-fixture")
+    report = _ok_mapping(
+        invoke_host_recover_control(
+            root=tmp_path,
+            spawn=_recover_spawn,
+            wait_attempts=1,
+            sleeper=_no_sleep,
+            owns_root=True,
+        )
+    )
+    assert report["verb"] == "host.recover-control"
+    assert report["recovered"] is True
+    assert report["local_operator"] == "unchanged"
+    assert report["bound_8765"] is False
+    assert report["lock"] == "free"
+    dumped = json.dumps(dict(report))
+    assert "recovered-" + _TOKEN not in dumped
+    assert (tmp_path / HOST_CONTROL_FILE).is_file()
+    assert journal.read_text(encoding="utf-8") == '{"event":"local_operator.established"}\n'
+    assert sqlite.read_bytes() == b"sqlite-fixture"
+
+    def start_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+        assert DAEMON_RECOVER_FLAG not in argv
+        assert env["QMA_DAEMON_ROOT"] == str(root)
+        _write_lock(root, os.getpid())
+        _write_bind(root, "127.0.0.1", 19250)
+        return os.getpid()
+
+    started = _ok_mapping(
+        invoke_host_start(root=tmp_path, spawn=start_spawn, wait_attempts=1, sleeper=_no_sleep)
+    )
+    assert started["state"] == "started"
+
+
+def test_recover_control_negative_a_other_os_user(tmp_path: Path) -> None:
+    journal = tmp_path / "journal.ndjson"
+    journal.write_text("prior-journal\n", encoding="utf-8")
+    spawned: list[object] = []
+
+    def spawn(*_args: object, **_kwargs: object) -> int:
+        spawned.append(1)
+        return 0
+
+    refused = invoke_host_recover_control(
+        root=tmp_path,
+        spawn=spawn,
+        wait_attempts=1,
+        owns_root=False,
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "QMA_DAEMON_ROOT"
+    assert spawned == []
+    assert not (tmp_path / HOST_CONTROL_FILE).exists()
+    assert journal.read_text(encoding="utf-8") == "prior-journal\n"
+
+
+def test_recover_control_negative_b_file_still_readable(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+    spawned: list[object] = []
+
+    def spawn(*_args: object, **_kwargs: object) -> int:
+        spawned.append(1)
+        return 0
+
+    refused = invoke_host_recover_control(
+        root=tmp_path,
+        spawn=spawn,
+        wait_attempts=1,
+        owns_root=True,
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "recover-control"
+    assert "rotate-control" in str(refused.context.get("reason", ""))
+    assert spawned == []
+    assert (tmp_path / HOST_CONTROL_FILE).read_text(encoding="utf-8").strip() == _TOKEN
+
+
+def test_recover_control_negative_c_live_then_owner_stop(tmp_path: Path) -> None:
+    _write_lock(tmp_path, os.getpid())
+    spawned: list[object] = []
+
+    def spawn(*_args: object, **_kwargs: object) -> int:
+        spawned.append(1)
+        return 0
+
+    refused = invoke_host_recover_control(
+        root=tmp_path,
+        spawn=spawn,
+        wait_attempts=1,
+        owns_root=True,
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "recover-control"
+    assert "live" in str(refused.context.get("reason", ""))
+    assert spawned == []
+    assert (tmp_path / DAEMON_LOCK_NAME).is_file()
+
+    def signal_stop(pid: int) -> None:
+        assert pid == os.getpid()
+        (tmp_path / DAEMON_LOCK_NAME).unlink()
+
+    stopped = _ok_mapping(
+        invoke_host_stop(
+            root=tmp_path,
+            wait_attempts=1,
+            sleeper=_no_sleep,
+            owns_root=True,
+            signal_stop=signal_stop,
+        )
+    )
+    assert stopped["state"] == "stopped"
+    assert stopped["owner_stop_file_missing"] is True
+    assert not (tmp_path / DAEMON_LOCK_NAME).exists()
+
+    recovered = _ok_mapping(
+        invoke_host_recover_control(
+            root=tmp_path,
+            spawn=_recover_spawn,
+            wait_attempts=1,
+            sleeper=_no_sleep,
+            owns_root=True,
+        )
+    )
+    assert recovered["recovered"] is True
+
+
+def test_owner_stop_when_file_missing_is_not_broadened(tmp_path: Path) -> None:
+    _write_lock(tmp_path, os.getpid())
+    status = invoke_host_status(root=tmp_path)
+    assert is_refusal(status)
+    assert status.context["field"] == "host_control"
+    configure = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
+    assert is_refusal(configure)
+    assert configure.context["field"] == "host_control"
+    rotate = invoke_host_rotate_control(root=tmp_path)
+    assert is_refusal(rotate)
+    assert rotate.context["field"] == "host_control"
+    signaled: list[int] = []
+
+    def signal_stop(pid: int) -> None:
+        signaled.append(pid)
+
+    stranger = invoke_host_stop(
+        root=tmp_path,
+        wait_attempts=1,
+        owns_root=False,
+        signal_stop=signal_stop,
+    )
+    assert is_refusal(stranger)
+    assert stranger.context["field"] == "host_control"
+    assert signaled == []
+    assert (tmp_path / DAEMON_LOCK_NAME).is_file()
+    (tmp_path / DAEMON_LOCK_NAME).unlink()
+    idle = invoke_host_stop(
+        root=tmp_path,
+        wait_attempts=1,
+        owns_root=True,
+        signal_stop=signal_stop,
+    )
+    assert is_refusal(idle)
+    assert idle.context["field"] == "host_control"
+    assert signaled == []
+
+
+def test_t_h_03_start_without_recover_does_not_remint(tmp_path: Path) -> None:
+    def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+        _ = argv, env
+        _write_lock(root, os.getpid())
+        _write_bind(root, "127.0.0.1", 19251)
+        return os.getpid()
+
+    started = _ok_mapping(
+        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+    )
+    assert started["state"] == "started"
+    assert not (tmp_path / HOST_CONTROL_FILE).exists()
+    status = invoke_host_status(root=tmp_path)
+    assert is_refusal(status)
+    rotate = invoke_host_rotate_control(root=tmp_path)
+    assert is_refusal(rotate)
+    live_recover = invoke_host_recover_control(
+        root=tmp_path,
+        spawn=_recover_spawn,
+        wait_attempts=1,
+        owns_root=True,
+    )
+    assert is_refusal(live_recover)
+    assert live_recover.context["field"] == "recover-control"
+    assert not (tmp_path / HOST_CONTROL_FILE).exists()
+
+
+def test_click_host_recover_control(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recovered = runner.invoke(
+        main,
+        ["host", "recover-control"],
+        obj={
+            "root": tmp_path,
+            "spawn": _recover_spawn,
+            "wait_attempts": 1,
+            "sleeper": _no_sleep,
+            "owns_root": True,
+        },
+    )
+    assert recovered.exit_code == 0, recovered.output
+    payload = json.loads(recovered.stdout)
+    assert payload["recovered"] is True
+    assert payload["bound_8765"] is False
+    assert "recovered-" + _TOKEN not in recovered.output

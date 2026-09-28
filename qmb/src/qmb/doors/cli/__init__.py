@@ -75,6 +75,7 @@ from qmb.doors.cli.tree import (
     invoke_config_show,
     invoke_data,
     invoke_host_configure_pairing_ttl,
+    invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
     invoke_host_status,
@@ -166,6 +167,7 @@ __all__ = [
     "invoke_config_show",
     "invoke_data",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
     "invoke_host_status",
@@ -1686,6 +1688,8 @@ def host_stop(ctx: click.Context) -> None:
             transport=payload.get("transport"),
             wait_attempts=payload.get("wait_attempts"),
             sleeper=payload.get("sleeper"),
+            owns_root=payload.get("owns_root"),
+            signal_stop=payload.get("signal_stop"),
         ),
     )
 
@@ -1723,6 +1727,25 @@ def host_rotate_control(ctx: click.Context) -> None:
             root=payload.get("root"),
             environ=payload.get("environ"),
             transport=payload.get("transport"),
+        ),
+    )
+
+
+@host_group.command("recover-control")
+@click.pass_context
+def host_recover_control(ctx: click.Context) -> None:
+    """Remint host_control on a stopped root without the lost token. Does not bind 8765."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_recover_control(
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            spawn=payload.get("spawn"),
+            python=payload.get("python"),
+            wait_attempts=payload.get("wait_attempts"),
+            sleeper=payload.get("sleeper"),
+            owns_root=payload.get("owns_root"),
         ),
     )
 
@@ -1806,6 +1829,7 @@ def _format_ok(value: object) -> str:
             "host.stop",
             "host.configure.pairing-ttl",
             "host.rotate-control",
+            "host.recover-control",
         }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.

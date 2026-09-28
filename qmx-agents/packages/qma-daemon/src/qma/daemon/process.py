@@ -17,6 +17,9 @@ QMB LogSink may remain and no third logger is minted.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import ctypes
+import json
 import logging
 import os
 import subprocess
@@ -64,10 +67,15 @@ from qma.daemon.host_control import (
     HostControlChannel,
     LocalOperatorLive,
     bootstrap_first_operator,
+    caller_owns_daemon_root,
     claim_host_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
+    load_local_operator,
+    read_host_control_token,
+    recover_local_operator_control,
     rotate_local_operator_control,
 )
+from qma.daemon.host_control.local_operator import fold_local_operator_from_journal
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.journal.variables import (
@@ -123,6 +131,8 @@ from qmf.data.store.refusals import invalid_input, policy_rejection, storage_fai
 __all__ = [
     "BROWSER_SPAWNS_PYTHON",
     "COMP_EXP_MINTED",
+    "DAEMON_RECOVER_ENV",
+    "DAEMON_RECOVER_FLAG",
     "DAEMON_SPAWN_MODULE",
     "DEFAULT_BIND_PORT",
     "HOST_CONTROL_ON_CT40_PORT",
@@ -136,7 +146,9 @@ __all__ = [
     "STOP_STOPS_REMOTE",
     "BoundListener",
     "DaemonProcess",
+    "run_recover_entry",
     "spawn_supervised_daemon",
+    "supervised_recover_argv",
     "supervised_spawn_argv",
 ]
 
@@ -147,6 +159,9 @@ SIXTH_APPLICATION_MINTED: Final[bool] = False
 QMB_JSONL_MERGED_INTO_SQLITE: Final[bool] = False
 DEFAULT_BIND_PORT: Final[int] = 8765
 DAEMON_SPAWN_MODULE: Final[str] = "qma.daemon"
+DAEMON_RECOVER_FLAG: Final[str] = "--recover-control"
+DAEMON_RECOVER_ENV: Final[str] = "QMA_DAEMON_RECOVER_CONTROL"
+DAEMON_LOCK_NAME: Final[str] = ".daemon_writer"
 START_ORCHESTRATES_MISSIONS: Final[bool] = False
 START_GRANTS: Final[bool] = False
 START_STARTS_QMN: Final[bool] = False
@@ -160,6 +175,11 @@ def supervised_spawn_argv(python: str | None = None) -> tuple[str, ...]:
     """Canonical ``python -m qma.daemon`` argv (Story 67.1)."""
     exe = sys.executable if python is None else python
     return (exe, "-m", DAEMON_SPAWN_MODULE)
+
+
+def supervised_recover_argv(python: str | None = None) -> tuple[str, ...]:
+    """One-shot recover entry. Does not bind 8765."""
+    return (*supervised_spawn_argv(python), DAEMON_RECOVER_FLAG)
 
 
 def spawn_supervised_daemon(
@@ -195,6 +215,107 @@ def spawn_supervised_daemon(
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+
+def _pid_is_live(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        access = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(access, False, pid)
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError, ProcessLookupError:
+        return False
+    return True
+
+
+def _live_writer_pid(root: Path) -> int | None:
+    path = root / DAEMON_LOCK_NAME
+    if not path.is_file():
+        return None
+    try:
+        raw: object = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, json.JSONDecodeError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    pid = raw.get("pid")
+    if isinstance(pid, bool) or not isinstance(pid, int):
+        return None
+    if _pid_is_live(pid):
+        return pid
+    return None
+
+
+def run_recover_entry(
+    root: Path | str,
+    *,
+    machine: str,
+    boot_epoch_id: str,
+    plugins_root: Path | None = None,
+    plugin_load_configs: Mapping[str, Mapping[str, object]] | None = None,
+    log_handler: logging.Handler | None = None,
+    owns_root: object = None,
+) -> Result[Mapping[str, object]]:
+    """Acquire ``.daemon_writer``, remint host_control, exit without binding 8765."""
+    path = Path(root)
+    owned = caller_owns_daemon_root(path) if owns_root is None else owns_root is True
+    if owns_root is not None and callable(owns_root):
+        try:
+            owned = owns_root(path) is True
+        except OSError, TypeError, ValueError:
+            owned = False
+    if not owned:
+        return policy_rejection(
+            "QMA_DAEMON_ROOT",
+            "caller is not the OS owner of the daemon root",
+            root=str(path),
+        )
+    held = read_host_control_token(path)
+    if not is_refusal(held):
+        return policy_rejection(
+            "recover-control",
+            "host_control is still readable; use rotate-control",
+            root=str(path),
+        )
+    live = _live_writer_pid(path)
+    if live is not None:
+        return policy_rejection(
+            "recover-control",
+            "daemon is live; stop first then recover-control",
+            pid=live,
+        )
+    stale = path / DAEMON_LOCK_NAME
+    if stale.is_file():
+        with contextlib.suppress(OSError):
+            stale.unlink()
+    composed = DaemonProcess.compose(
+        path,
+        machine=machine,
+        boot_epoch_id=boot_epoch_id,
+        bind_port=0,
+        plugins_root=plugins_root,
+        plugin_load_configs=plugin_load_configs,
+        log_handler=log_handler,
+        bootstrap=False,
+    )
+    if is_refusal(composed):
+        return composed
+    process = composed.value
+    try:
+        if process.bound is not None:
+            return policy_rejection(
+                "recover-control",
+                "recover-control must not bind 8765",
+            )
+        return process.recover_control(owns_root=owns_root)
+    finally:
+        process.close()
 
 
 _QMB_SQLITE_TABLE_DENY: Final[frozenset[str]] = frozenset(
@@ -271,8 +392,13 @@ class DaemonProcess:
         plugin_load_configs: Mapping[str, Mapping[str, object]] | None = None,
         world: World = World.LIVE,
         log_handler: logging.Handler | None = None,
+        bootstrap: bool = True,
     ) -> Result[DaemonProcess]:
-        """Compose the daemon from existing modules. Does not mint a new COMP."""
+        """Compose the daemon from existing modules. Does not mint a new COMP.
+
+        ``bootstrap=False`` is the recover-control one-shot: load an existing
+        ``local_operator`` and do not mint a principal.
+        """
         if COMP_EXP_MINTED or SIXTH_APPLICATION_MINTED or HTTP_EXPERIMENT_SERVICE_MINTED:
             return policy_rejection(
                 "daemon_runtime",
@@ -387,17 +513,23 @@ class DaemonProcess:
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,
             )
-            bootstrapped = bootstrap_first_operator(
-                process.root,
-                journal=process.journal,
-                sqlite=process.sqlite,
-            )
-            if is_refusal(bootstrapped):
-                process._closed = True
-                process._journal.close()
-                process._substrate.close()
-                return bootstrapped
-            process._local_operator = bootstrapped.value
+            if bootstrap:
+                bootstrapped = bootstrap_first_operator(
+                    process.root,
+                    journal=process.journal,
+                    sqlite=process.sqlite,
+                )
+                if is_refusal(bootstrapped):
+                    process._closed = True
+                    process._journal.close()
+                    process._substrate.close()
+                    return bootstrapped
+                process._local_operator = bootstrapped.value
+            else:
+                existing = load_local_operator(process.sqlite)
+                if existing is None:
+                    existing = fold_local_operator_from_journal(process.journal)
+                process._local_operator = existing
             process._restore_pairing_ttl()
             _process_gate.holder = process
             return Ok(process)
@@ -695,6 +827,37 @@ class DaemonProcess:
                     "host_control_fp1": result.live.host_control_fp1,
                     "previous_host_control_fp1": result.previous_host_control_fp1,
                     "writer": "host.rotate-control",
+                }
+            )
+        )
+
+    def recover_control(self, *, owns_root: object = None) -> Result[Mapping[str, object]]:
+        """One-shot recover writer. Does not bind 8765 (C1 / T-H-02)."""
+        if self._bound is not None or self._server is not None or self._host_control is not None:
+            return policy_rejection(
+                "recover-control",
+                "daemon is live; stop first then recover-control",
+            )
+        recovered = recover_local_operator_control(
+            self.root,
+            journal=self._journal,
+            sqlite=self._substrate.sqlite,
+            owns_root=owns_root,
+        )
+        if is_refusal(recovered):
+            return recovered
+        result = recovered.value
+        self._local_operator = result.live
+        return Ok(
+            MappingProxyType(
+                {
+                    "recovered": True,
+                    "local_operator": "unchanged",
+                    "principal_id": result.live.principal_id,
+                    "host_control_fp1": result.live.host_control_fp1,
+                    "previous_host_control_fp1": result.previous_host_control_fp1,
+                    "writer": "host.recover-control",
+                    "bound_8765": False,
                 }
             )
         )

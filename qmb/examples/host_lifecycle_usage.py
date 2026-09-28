@@ -1,4 +1,4 @@
-"""L27 reference usage: qmb host start|status|stop|configure|rotate-control (67.1–67.3)."""
+"""L27 reference usage: qmb host start|status|stop|configure|rotate-control|recover-control."""
 
 from __future__ import annotations
 
@@ -17,9 +17,11 @@ from qmb.doors.cli.host import (
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
     claim_host_configure_existed_at_inspect_sha,
     claim_qmb_host_existed_at_inspect_sha,
+    claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     invoke_host_configure_pairing_ttl,
+    invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
     invoke_host_status,
@@ -41,6 +43,7 @@ def main() -> None:
             "stop",
             "configure",
             "rotate-control",
+            "recover-control",
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
@@ -49,6 +52,7 @@ def main() -> None:
     assert is_refusal(claim_qmb_host_existed_at_inspect_sha(True))
     assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
     assert is_refusal(claim_rotate_control_existed_at_inspect_sha(True))
+    assert is_refusal(claim_recover_control_existed_at_inspect_sha(True))
     assert is_refusal(claim_types_absent_at_inspect_sha(True))
     product = product_daemon_root()
     assert product.name != INSPECT_CWD_RELATIVE_ROOT
@@ -149,7 +153,27 @@ def main() -> None:
         stopped = invoke_host_stop(root=root, transport=transport, wait_attempts=1)
         assert is_ok(stopped), stopped
         assert stopped.value["state"] == "stopped"
-    print("qmb host start|status|stop|configure|rotate-control ok")
+        (root / "host_control").unlink()
+
+        def recover_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+            assert "--recover-control" in argv
+            assert env["QMA_DAEMON_RECOVER_CONTROL"] == "1"
+            (root / "host_control").write_text("recovered-token\n", encoding="utf-8")
+            return os.getpid()
+
+        recovered = invoke_host_recover_control(
+            root=root,
+            spawn=recover_spawn,
+            wait_attempts=1,
+            sleeper=sleeper,
+            owns_root=True,
+        )
+        assert is_ok(recovered), recovered
+        assert recovered.value["recovered"] is True
+        assert recovered.value["bound_8765"] is False
+        readable = invoke_host_recover_control(root=root, spawn=recover_spawn, owns_root=True)
+        assert is_refusal(readable)
+    print("qmb host start|status|stop|configure|rotate-control|recover-control ok")
 
 
 if __name__ == "__main__":
