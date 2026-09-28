@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -48,8 +49,7 @@ def _is_test_command(name: str, argv: Sequence[str]) -> bool:
     if "reticle" in blob:
         return False
     return any(
-        token in blob
-        for token in ("pytest", "vitest", "playwright", "poe test", "run test")
+        token in blob for token in ("pytest", "vitest", "playwright", "poe test", "run test")
     )
 
 
@@ -118,10 +118,7 @@ def run_command(
     resolved = _which(binary) or shutil.which(binary)
     if resolved:
         argv = [resolved, *list(argv[1:])]
-    missing_named = (
-        resolved is None
-        and not Path(binary).exists()
-    )
+    missing_named = resolved is None and not Path(binary).exists()
     if missing_named:
         return CommandResult(
             name=name,
@@ -138,19 +135,33 @@ def run_command(
     if env:
         merged.update(dict(env))
     start = time.perf_counter()
-    proc = subprocess.run(
-        argv,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-        env=merged,
-        shell=False,
-    )
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=merged,
+            shell=False,
+        )
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        exit_code = int(proc.returncode)
+    except subprocess.TimeoutExpired as exc:
+        stdout = (
+            (exc.stdout or b"").decode(errors="replace")
+            if isinstance(exc.stdout, bytes)
+            else exc.stdout or ""
+        )
+        stderr = f"Command deadline exceeded ({timeout}s)"
+        exit_code = 124
+    except OSError as exc:
+        stdout = ""
+        stderr = f"Command launch failed: {exc}"
+        exit_code = 127
     duration = int((time.perf_counter() - start) * 1000)
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
     log_path = write_command_log(log_dir, name, stdout, stderr)
     counts = _parse_test_counts(stdout + "\n" + stderr)
     if _is_test_command(name, argv):
@@ -161,7 +172,7 @@ def run_command(
         name=name,
         argv=argv,
         cwd=str(cwd),
-        exit_code=int(proc.returncode),
+        exit_code=exit_code,
         duration_ms=duration,
         stdout_sha256=sha256_text(stdout),
         stderr_sha256=sha256_text(stderr),
@@ -234,9 +245,7 @@ def run_profiles(
     reticle: Mapping[str, str] | None = None,
 ) -> tuple[EvidenceRecord, bool, str]:
     profiles = load_profiles()
-    host = find_host_root(
-        worktree, config.host_app_roots, factory_mode=factory_mode
-    )
+    host = find_host_root(worktree, config.host_app_roots, factory_mode=factory_mode)
     toolchain = toolchain_fingerprint(observed_toolchain())
     dirty = dirty_fingerprint(worktree)
     existing = evidence_dir / f"quality-{unit_id}.json"
@@ -250,11 +259,13 @@ def run_profiles(
             dirty=dirty,
             profiles=list(profile_names),
         )
-        if stale == "":
+        if stale == "" and not user_facing:
             ok, reason = evidence_ok(previous, require_reticle=user_facing)
             return previous, ok, "reused evidence" if ok else reason
     results: list[CommandResult] = []
     log_dir = evidence_dir / "logs" / unit_id
+    live_reticle = log_dir / "reticle-result.json"
+    live_reticle.unlink(missing_ok=True)
     for name in profile_names:
         profile = profiles.get(name)
         if not isinstance(profile, dict):
@@ -293,6 +304,14 @@ def run_profiles(
         env_map: dict[str, str] | None = None
         if isinstance(env_raw, dict):
             env_map = {str(k): str(v) for k, v in env_raw.items()}
+        if name == "ui-reticle":
+            env_map = dict(env_map or {})
+            env_map.update(
+                {
+                    "QMX_CANDIDATE_SHA": candidate_sha,
+                    "RETICLE_RESULT_FILE": str(live_reticle.resolve()),
+                }
+            )
         for cmd_name, argv, cwd, timeout in _profile_commands(
             profile, worktree=worktree, host_root=host_path
         ):
@@ -306,7 +325,20 @@ def run_profiles(
                     timeout=timeout,
                 )
             )
-    reticle_map = dict(reticle or {})
+    # A caller-supplied sidecar cannot bypass the command that just ran.
+    reticle_map: dict[str, str] = {}
+    if live_reticle.is_file():
+        try:
+            live = json.loads(live_reticle.read_text(encoding="utf-8"))
+            if live.get("candidate_sha") == candidate_sha:
+                reticle_map = {
+                    "verdict": str(live.get("verified", "unknown")),
+                    "source": "mcp",
+                    "tool": str(live.get("tool", "")),
+                    "journey": str(live.get("journey", "")),
+                }
+        except (ValueError, OSError, AttributeError):
+            reticle_map = {"verdict": "unknown"}
     verdict = reticle_map.get("verdict", "")
     source = reticle_map.get("source", "")
     if not user_facing:

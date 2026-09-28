@@ -19,12 +19,13 @@ let build_schema = #{
 };
 let verify_schema = #{
     "type": "object",
-    "required": ["passed", "failures", "evidence_path", "exit_code"],
+    "required": ["passed", "failures", "evidence_path", "exit_code", "failure_kind"],
     "properties": #{
         passed: #{ "type": "boolean" },
         failures: #{ "type": "array", "items": #{ "type": "string" } },
         evidence_path: #{ "type": "string" },
         exit_code: #{ "type": "integer" },
+        failure_kind: #{ "type": "string", "enum": ["none", "application", "infrastructure", "unknown"] },
     },
 };
 let review_schema = #{
@@ -170,7 +171,8 @@ for story in stories {
             let round = 0;
             let passed = false;
             let failures_text = "not run";
-            while round < 4 && !passed {
+            let infrastructure_blocked = false;
+            while round < 4 && !passed && !infrastructure_blocked {
                 let vp = unattended_rules();
                 vp += "In this worktree RUN the factory CLI. Do not judge by reading code. Set cwd to the worktree.\n";
                 vp += factory_cli;
@@ -199,7 +201,8 @@ for story in stories {
                 vp += "\n";
                 vp += "passed is true only if quality CLI exits 0 AND inspect-evidence ok=true AND evidence JSON exists. ";
                 vp += "Do not trust an agent opinion. User-facing units without Reticle act_and_wait/assert yes fail. ";
-                vp += "If the CLI is missing, passed=false and missing_tool. Return JSON {passed, failures, evidence_path, exit_code}.";
+                vp += "For Reticle use the checked-in ui-reticle quality profile. It runs node scripts/reticle-check.mjs against the existing daemon, acquires its own lease, and has a 60-second whole-run deadline plus a hard process cutoff. Do not spawn npx verify, manually drive MCP tools, wait on a background check, or write a verdict sidecar. Set RETICLE_VERIFY_URL to the candidate server URL; require its full SHA. A missing daemon, version mismatch, dead lease, timeout, no or unknown is a failed unit: retain reticle-result.json and stop this unit after the bounded check. Do not restart the same Reticle check in a loop. Do not fix application code for a Reticle infrastructure failure. ";
+                vp += "failure_kind=none on success, application only for a proven application failure, infrastructure for Reticle unavailable/version mismatch/timeout/unknown/lease failure, unknown when unclassified. Infrastructure and unknown stop this unit immediately without an application repair loop. If the CLI is missing, passed=false and failure_kind=infrastructure. Return JSON {passed, failures, evidence_path, exit_code, failure_kind}.";
                 let verify = agent(vp, #{
                     label: "verify:" + sid + "." + round.to_string(),
                     phase: "Stories",
@@ -210,6 +213,7 @@ for story in stories {
                 if ok_map(verify) {
                     passed = verify.output.passed == true;
                     exit_code = verify.output.exit_code;
+                    infrastructure_blocked = verify.output.failure_kind == "infrastructure" || verify.output.failure_kind == "unknown";
                     if exit_code != 0 {
                         passed = false;
                     }
@@ -222,9 +226,10 @@ for story in stories {
                     }
                 } else {
                     passed = false;
+                    infrastructure_blocked = true;
                     failures_text = "[\"verify agent failed or returned no object\"]";
                 }
-                if !passed && round < 3 {
+                if !passed && round < 3 && !infrastructure_blocked {
                     log("Quality red for " + sid + " round " + round.to_string() + " — sending fix");
                     let fp = unattended_rules();
                     fp += "Work ONLY inside ";

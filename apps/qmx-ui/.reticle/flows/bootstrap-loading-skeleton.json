@@ -13,9 +13,20 @@
       "args": {},
       "action": "click",
       "expect": {
-        "element": {
-          "testid": "bootstrap-skeleton"
-        }
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "bootstrap-skeleton" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-bootstrap",
+            "path": "chromeState",
+            "equals": "loading"
+          }
+        ]
       }
     }
   ],

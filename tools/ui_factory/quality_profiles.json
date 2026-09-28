@@ -99,11 +99,11 @@
   "ui-reticle": {
     "description": "Required running-app Reticle evidence. unknown is not a pass.",
     "cwd": "host",
-    "timeout_seconds": 600,
+    "timeout_seconds": 65,
     "commands": [
       {
         "name": "reticle-cli",
-        "argv": ["pnpm", "run", "test:reticle"]
+        "argv": ["node", "scripts/reticle-check.mjs"]
       }
     ]
   },

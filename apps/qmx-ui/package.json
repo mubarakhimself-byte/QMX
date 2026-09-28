@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:contract": "node ./scripts/contract-check.mjs",
     "test:reticle": "node ./scripts/reticle-check.mjs",
+    "test:reticle:runner": "node --test ./scripts/reticle-check.test.mjs",
     "test:perf": "node ./scripts/perf-check.mjs"
   },
   "dependencies": {
