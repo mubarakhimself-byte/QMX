@@ -51,6 +51,7 @@ from qmb.doors.cli.tree import (
     DATA_RUN_COMMANDS,
     HOLDS_CACHE,
     HOST_COMMANDS,
+    HOST_CONFIGURE_COMMANDS,
     LIBRARY_COMMANDS,
     LIBRARY_KINDS_OCCUPANCY,
     LIBRARY_MINTS_CT32,
@@ -73,6 +74,7 @@ from qmb.doors.cli.tree import (
     invoke_config_compile,
     invoke_config_show,
     invoke_data,
+    invoke_host_configure_pairing_ttl,
     invoke_host_start,
     invoke_host_status,
     invoke_host_stop,
@@ -139,6 +141,7 @@ __all__ = [
     "DATA_RUN_COMMANDS",
     "HOLDS_CACHE",
     "HOST_COMMANDS",
+    "HOST_CONFIGURE_COMMANDS",
     "LIBRARY_COMMANDS",
     "LIBRARY_KINDS_OCCUPANCY",
     "LIBRARY_MINTS_CT32",
@@ -161,6 +164,7 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_configure_pairing_ttl",
     "invoke_host_start",
     "invoke_host_status",
     "invoke_host_stop",
@@ -1684,6 +1688,28 @@ def host_stop(ctx: click.Context) -> None:
     )
 
 
+@host_group.group("configure")
+def host_configure() -> None:
+    """Host-control configuration. pairing-ttl is the sole TTL writer."""
+
+
+@host_configure.command("pairing-ttl")
+@click.argument("duration")
+@click.pass_context
+def host_configure_pairing_ttl(ctx: click.Context, duration: str) -> None:
+    """Write registry:pairing.session_ttl. Operator supplies the duration."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_configure_pairing_ttl(
+            duration,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
 def _payload(ctx: click.Context, **parsed: object) -> dict[str, object]:
     raw = ctx.obj
     payload: dict[str, object] = {}
@@ -1757,7 +1783,12 @@ def _format_ok(value: object) -> str:
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
         verb = mapping.get("verb")
-        if verb in {"host.start", "host.status", "host.stop"}:
+        if verb in {
+            "host.start",
+            "host.status",
+            "host.stop",
+            "host.configure.pairing-ttl",
+        }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.
         if "entries" in mapping and mapping.get("command") in {"list", "catalog"}:

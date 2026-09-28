@@ -1,4 +1,4 @@
-"""``qmb host start|status|stop`` over local host-control (Story 67.1).
+"""``qmb host start|status|stop|configure`` over local host-control (Stories 67.1–67.2).
 
 Do not reuse package ``qmb.host`` (CT-33 HostedBot). QMB never writes daemon
 sqlite. The browser does not spawn Python. Pair is not this story.
@@ -27,18 +27,23 @@ __all__ = [
     "DAEMON_LOCK_NAME",
     "DAEMON_SPAWN_MODULE",
     "HOST_COMMANDS",
+    "HOST_CONFIGURE_COMMANDS",
     "HOST_CONTROL_BIND_NAME",
     "HOST_CONTROL_FILE",
     "INSPECT_CWD_RELATIVE_ROOT",
     "INSPECT_SHA_COMMAND_GROUPS",
+    "PAIRING_SESSION_TTL_REGISTRY_KEY",
+    "QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_EXISTED_AT_INSPECT_SHA",
     "START_GRANTS",
     "START_ORCHESTRATES_MISSIONS",
     "START_STARTS_QMN",
     "STOP_CANCELS_QMN",
     "STOP_STOPS_REMOTE",
+    "claim_host_configure_existed_at_inspect_sha",
     "claim_qmb_host_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
+    "invoke_host_configure_pairing_ttl",
     "invoke_host_start",
     "invoke_host_status",
     "invoke_host_stop",
@@ -47,7 +52,10 @@ __all__ = [
 ]
 
 
-HOST_COMMANDS: Final[tuple[str, ...]] = ("start", "status", "stop")
+HOST_COMMANDS: Final[tuple[str, ...]] = ("start", "status", "stop", "configure")
+HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
+PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
+QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 DAEMON_LOCK_NAME: Final[str] = ".daemon_writer"
 DAEMON_SPAWN_MODULE: Final[str] = "qma.daemon"
 HOST_CONTROL_FILE: Final[str] = "host_control"
@@ -95,6 +103,7 @@ _REDACT_KEYS: Final[frozenset[str]] = frozenset(
 )
 _REDACT_PREFIXES: Final[tuple[str, ...]] = ("qmx.pair.", "pairing:")
 
+
 def product_daemon_root(
     *,
     system: str | None = None,
@@ -129,6 +138,24 @@ def claim_qmb_host_existed_at_inspect_sha(existed: object) -> Result[bool]:
             existed_at_inspect_sha=False,
             inspect_sha=INSPECT_SHA,
             inspect_groups=list(INSPECT_SHA_COMMAND_GROUPS),
+        )
+    if existed is not False:
+        return invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_host_configure_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host configure`` existed at inspect SHA ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return policy(
+            "host.configure",
+            "qmb host configure was absent at inspect SHA 34c148be",
+            existed_at_inspect_sha=False,
+            inspect_sha=INSPECT_SHA,
         )
     if existed is not False:
         return invalid(
@@ -317,6 +344,7 @@ def _host_control_call(
     verb: str,
     *,
     timeout_s: float = 2.0,
+    fields: Mapping[str, object] | None = None,
 ) -> Result[Mapping[str, object]]:
     token = _read_token(root)
     if not isinstance(token, Ok):
@@ -325,7 +353,13 @@ def _host_control_call(
     if not isinstance(bound, Ok):
         return bound
     host, port = bound.value
-    request = {"verb": verb, "host_control": token.value}
+    request: dict[str, object] = {"verb": verb, "host_control": token.value}
+    if fields is not None:
+        for key, item in fields.items():
+            name = str(key)
+            if name in {"verb", "host_control"}:
+                continue
+            request[name] = item
     try:
         with socket.create_connection((host, port), timeout=timeout_s) as sock:
             sock.sendall(_encode_frame(request))
@@ -417,9 +451,36 @@ def _ready(root: Path) -> bool:
     pid = _live_lock_pid(root)
     if pid is None:
         return False
-    bind = root / HOST_CONTROL_BIND_NAME
-    token = root / HOST_CONTROL_FILE
-    return bind.is_file() and token.is_file()
+    return (root / HOST_CONTROL_BIND_NAME).is_file()
+
+
+def _environ_map(environ: object) -> Result[Mapping[str, str] | None]:
+    if environ is None:
+        return Ok(None)
+    if isinstance(environ, Mapping):
+        return Ok(cast("Mapping[str, str]", environ))
+    return invalid("environ", "environ is a string mapping")
+
+
+def _payload_refusal(payload: Mapping[str, object], *, verb: str) -> Result[Mapping[str, object]]:
+    if payload.get("ok") is not False:
+        return Ok(payload)
+    refusal = payload.get("refusal")
+    if isinstance(refusal, Mapping):
+        body = cast("Mapping[str, object]", refusal)
+        category = body.get("category")
+        context = body.get("context")
+        if isinstance(category, str) and isinstance(context, Mapping):
+            try:
+                parsed = RefusalCategory(category)
+            except ValueError:
+                parsed = RefusalCategory.POLICY_REJECTION
+            return TypedRefusal(
+                category=parsed,
+                retryability=Retryability.NO,
+                context=dict(cast("Mapping[str, object]", context)),
+            )
+    return policy("host_control", f"host-control {verb} refused")
 
 
 def invoke_host_start(
@@ -636,3 +697,59 @@ def invoke_host_stop(
         "local stop did not release .daemon_writer",
         root=str(target),
     )
+
+
+def invoke_host_configure_pairing_ttl(
+    duration: object,
+    *,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Write ``registry:pairing.session_ttl`` over host-control. Mint no duration."""
+    if not isinstance(duration, str) or duration.strip() == "":
+        return invalid(
+            "duration",
+            "qmb host configure pairing-ttl requires an operator-supplied "
+            "duration; this increment mints no duration (GAP-0109)",
+            given=repr(duration),
+        )
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object] = {
+        "target": "pairing-ttl",
+        "duration": duration.strip(),
+    }
+    if callable(transport):
+        called = transport("configure", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("configure", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "configure", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="configure")
+    if not isinstance(refused, Ok):
+        return refused
+    configured = payload.get("configured")
+    fields_out: dict[str, object]
+    if isinstance(configured, Mapping):
+        fields_out = dict(cast("Mapping[str, object]", configured))
+    else:
+        fields_out = {}
+    report: dict[str, object] = {
+        "verb": "host.configure.pairing-ttl",
+        "registry_key": fields_out.get("registry_key", PAIRING_SESSION_TTL_REGISTRY_KEY),
+        "ttl": fields_out.get("ttl", "set"),
+        "writer": fields_out.get("writer", "host.configure.pairing-ttl"),
+    }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))

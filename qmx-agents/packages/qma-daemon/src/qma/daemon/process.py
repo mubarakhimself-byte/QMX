@@ -62,12 +62,19 @@ from qma.daemon.host_control import (
     HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
     HOST_CONTROL_IS_CT40,
     HostControlChannel,
+    LocalOperatorLive,
+    bootstrap_first_operator,
     claim_host_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
-    ensure_host_control_token,
 )
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
+from qma.daemon.journal.variables import (
+    PAIRING_SESSION_TTL_META_KEY,
+    PAIRING_SESSION_TTL_REGISTRY_KEY,
+    GovernedVariableRegistry,
+    fold_pairing_ttl_from_journal,
+)
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
 from qma.daemon.observability_boundary import (
     LOGS_REMAIN_LOGS,
@@ -247,6 +254,8 @@ class DaemonProcess:
         self._operator_logger = configure_daemon_logging()
         self._diagnosis = DiagnosisQueryService()
         self._host_control: HostControlChannel | None = None
+        self._variables = GovernedVariableRegistry.with_builtins()
+        self._local_operator: LocalOperatorLive | None = None
 
     @classmethod
     def compose(
@@ -377,12 +386,18 @@ class DaemonProcess:
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,
             )
-            minted = ensure_host_control_token(process.root)
-            if is_refusal(minted):
+            bootstrapped = bootstrap_first_operator(
+                process.root,
+                journal=process.journal,
+                sqlite=process.sqlite,
+            )
+            if is_refusal(bootstrapped):
                 process._closed = True
                 process._journal.close()
                 process._substrate.close()
-                return minted
+                return bootstrapped
+            process._local_operator = bootstrapped.value
+            process._restore_pairing_ttl()
             _process_gate.holder = process
             return Ok(process)
 
@@ -401,6 +416,22 @@ class DaemonProcess:
     @property
     def journal(self) -> AuthoritativeJournal:
         return self._journal
+
+    @property
+    def variables(self) -> GovernedVariableRegistry:
+        return self._variables
+
+    @property
+    def local_operator(self) -> LocalOperatorLive | None:
+        return self._local_operator
+
+    @property
+    def host_control(self) -> HostControlChannel | None:
+        return self._host_control
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
 
     @property
     def experiments(self) -> ExperimentSpecService:
@@ -633,12 +664,53 @@ class DaemonProcess:
                 "lock": "held" if self._substrate.lock_held else "free",
                 "pid": os.getpid(),
                 "bind": bind,
-                "operator_established": False,
-                "ttl": "unset",
+                "operator_established": self._local_operator is not None,
+                "ttl": self._variables.pairing_ttl_status(),
                 "pending_record_ids": (),
                 "bound_record_ids": (),
             }
         )
+
+    def configure_pairing_ttl(self, duration: object) -> Result[Mapping[str, object]]:
+        """Sole writer of ``registry:pairing.session_ttl`` (AM-10; GAP-0109)."""
+        written = self._variables.configure_pairing_session_ttl(
+            duration,
+            journal=self._journal,
+        )
+        if is_refusal(written):
+            return written
+        self._substrate.sqlite.execute(
+            "INSERT OR REPLACE INTO daemon_meta (key, value) VALUES (?, ?)",
+            (PAIRING_SESSION_TTL_META_KEY, written.value),
+        )
+        return Ok(
+            MappingProxyType(
+                {
+                    "registry_key": PAIRING_SESSION_TTL_REGISTRY_KEY,
+                    "ttl": "set",
+                    "writer": "host.configure.pairing-ttl",
+                }
+            )
+        )
+
+    def refuse_pair_issue(self) -> Result[None]:
+        """Missing-TTL refuse gate. Does not land ``/pair/*`` HTTP."""
+        return self._variables.refuse_pair_issue()
+
+    def _restore_pairing_ttl(self) -> None:
+        folded = fold_pairing_ttl_from_journal(self._journal)
+        if folded is not None:
+            self._variables.load_pairing_session_ttl(folded)
+            return
+        rows = self._substrate.sqlite.execute(
+            "SELECT value FROM daemon_meta WHERE key = ?",
+            (PAIRING_SESSION_TTL_META_KEY,),
+        )
+        if not rows:
+            return
+        cached = rows[0][0]
+        if isinstance(cached, str) and cached.strip():
+            self._variables.load_pairing_session_ttl(cached)
 
     def claim_host_control_at_inspect_sha(self, existed: object) -> Result[bool]:
         """Claiming ``qmb host`` / host-control existed at 34c148be fails."""
@@ -716,6 +788,7 @@ class DaemonProcess:
             self.root,
             status=self.host_status_snapshot,
             on_stop=self.request_stop,
+            on_configure_pairing_ttl=self.configure_pairing_ttl,
         )
         bound = await channel.bind()
         if is_refusal(bound):

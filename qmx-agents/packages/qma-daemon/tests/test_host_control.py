@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from typing import cast
 
 from qma.daemon.host_control import (
     CT40_BIND_PORT,
@@ -13,9 +14,15 @@ from qma.daemon.host_control import (
     HOST_CONTROL_FILE,
     HOST_CONTROL_IS_CT40,
     INSPECT_CWD_RELATIVE_ROOT,
+    LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA,
+    LOCAL_OPERATOR_NEW_SQLITE_CLASS,
+    claim_host_configure_existed_at_inspect_sha,
     claim_host_control_existed_at_inspect_sha,
+    claim_local_operator_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     host_control_call,
+    load_local_operator,
+    principal_count,
     product_daemon_root,
     read_host_control_bind,
     read_host_control_token,
@@ -87,7 +94,7 @@ def test_host_control_binds_outside_8765_and_status_stop(tmp_path: Path) -> None
             assert is_ok(bound), bound
             listener = bound.value
             assert listener.port != 0
-            channel = process._host_control
+            channel = process.host_control
             assert channel is not None
             assert channel.bound is not None
             assert channel.bound.port != CT40_BIND_PORT
@@ -107,9 +114,15 @@ def test_host_control_binds_outside_8765_and_status_stop(tmp_path: Path) -> None
             assert payload["ok"] is True
             snapshot = payload["status"]
             assert isinstance(snapshot, dict)
-            assert snapshot["lock"] == "held"
-            assert snapshot["pid"] == os.getpid()
-            assert str(listener.port) in str(snapshot["bind"])
+            fields = cast("dict[str, object]", snapshot)
+            assert fields["lock"] == "held"
+            assert fields["pid"] == os.getpid()
+            assert fields["operator_established"] is True
+            assert fields["ttl"] == "unset"
+            assert str(listener.port) in str(fields["bind"])
+            live = load_local_operator(process.sqlite)
+            assert live is not None
+            assert principal_count(process.sqlite) == 1
             dumped = json.dumps(dict(payload))
             assert token.value not in dumped
             assert "Authorization" not in dumped
@@ -119,12 +132,12 @@ def test_host_control_binds_outside_8765_and_status_stop(tmp_path: Path) -> None
             assert is_ok(stopped), stopped
             assert stopped.value.get("stopped") is True
             for _ in range(50):
-                if process._closed:
+                if process.is_closed:
                     break
                 await asyncio.sleep(0.01)
-            assert process._closed is True
+            assert process.is_closed is True
         finally:
-            if not process._closed:
+            if not process.is_closed:
                 await process.aclose()
 
     asyncio.run(_run())
@@ -155,7 +168,7 @@ def _stale_status(root: Path) -> dict[str, object]:
         body = sock.recv(size)
     parsed: object = json.loads(body.decode("utf-8"))
     assert isinstance(parsed, dict)
-    return parsed
+    return cast("dict[str, object]", parsed)
 
 
 def test_ct40_still_discards_bytes_and_host_control_is_separate(tmp_path: Path) -> None:
@@ -198,9 +211,15 @@ def test_spawn_argv_and_lifecycle_flags() -> None:
 
 def test_honesty_inspect_sha() -> None:
     assert HOST_CONTROL_EXISTED_AT_INSPECT_SHA is False
+    assert LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA is False
+    assert LOCAL_OPERATOR_NEW_SQLITE_CLASS is False
     claimed = claim_host_control_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_host_control_existed_at_inspect_sha(False))
+    assert is_refusal(claim_local_operator_existed_at_inspect_sha(True))
+    assert is_ok(claim_local_operator_existed_at_inspect_sha(False))
+    assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
+    assert is_ok(claim_host_configure_existed_at_inspect_sha(False))
     assert INVOCATION_ENVELOPE_EXISTED_AT_INSPECT_SHA_34C148B is True
     assert PRODUCT_SESSION_TYPES_EXISTED_AT_INSPECT_SHA_34C148B is True
     assert WireEnvelope.__name__ == "WireEnvelope"

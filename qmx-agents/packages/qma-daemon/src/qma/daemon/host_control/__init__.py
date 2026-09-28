@@ -1,6 +1,7 @@
-"""Local host-control channel under product ``QMA_DAEMON_ROOT`` (Story 67.1).
+"""Local host-control channel under product ``QMA_DAEMON_ROOT`` (Story 67.1/67.2).
 
 Token-gated loopback, outside port 8765. Not CT-40 and not a new sqlite class.
+AM-03 ``local_operator`` is a named add on the existing sqlite class.
 """
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 from qma.daemon.host_control.channel import (
     CT40_BIND_PORT,
     HOST_CONTROL_BIND_NAME,
+    HOST_CONTROL_CONFIGURE_TARGET,
     HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
     HOST_CONTROL_FILE,
     HOST_CONTROL_INSPECT_SHA,
@@ -26,6 +28,26 @@ from qma.daemon.host_control.channel import (
     redact_host_surface,
     write_host_control_bind,
 )
+from qma.daemon.host_control.local_operator import (
+    DEC_0429_SUPERSEDED_BY,
+    DEC_0440_SUPERSEDED_BY,
+    HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
+    LOCAL_OPERATOR_ESTABLISHED_EVENT,
+    LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA,
+    LOCAL_OPERATOR_FOLD_ID,
+    LOCAL_OPERATOR_NEW_SQLITE_CLASS,
+    LOCAL_OPERATOR_PRINCIPAL_ID,
+    LOCAL_OPERATOR_STORE,
+    LOCAL_OPERATOR_STORE_CLASS,
+    LOCAL_OPERATOR_TABLE,
+    LocalOperatorLive,
+    bootstrap_first_operator,
+    claim_host_configure_existed_at_inspect_sha,
+    claim_local_operator_existed_at_inspect_sha,
+    host_control_fp1,
+    load_local_operator,
+    principal_count,
+)
 from qma.daemon.host_control.root import (
     INSPECT_CWD_RELATIVE_ROOT,
     product_daemon_root,
@@ -34,21 +56,40 @@ from qma.daemon.host_control.root import (
 
 __all__ = [
     "CT40_BIND_PORT",
+    "DEC_0429_SUPERSEDED_BY",
+    "DEC_0440_SUPERSEDED_BY",
+    "HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "HOST_CONTROL_BIND_NAME",
+    "HOST_CONTROL_CONFIGURE_TARGET",
     "HOST_CONTROL_EXISTED_AT_INSPECT_SHA",
     "HOST_CONTROL_FILE",
     "HOST_CONTROL_INSPECT_SHA",
     "HOST_CONTROL_IS_CT40",
     "HOST_CONTROL_VERBS",
     "INSPECT_CWD_RELATIVE_ROOT",
+    "LOCAL_OPERATOR_ESTABLISHED_EVENT",
+    "LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA",
+    "LOCAL_OPERATOR_FOLD_ID",
+    "LOCAL_OPERATOR_NEW_SQLITE_CLASS",
+    "LOCAL_OPERATOR_PRINCIPAL_ID",
+    "LOCAL_OPERATOR_STORE",
+    "LOCAL_OPERATOR_STORE_CLASS",
+    "LOCAL_OPERATOR_TABLE",
     "BoundHostControl",
     "HostControlChannel",
+    "LocalOperatorLive",
+    "bootstrap_first_operator",
+    "claim_host_configure_existed_at_inspect_sha",
     "claim_host_control_existed_at_inspect_sha",
+    "claim_local_operator_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "decode_host_control_frame",
     "encode_host_control_frame",
     "ensure_host_control_token",
     "host_control_call",
+    "host_control_fp1",
+    "load_local_operator",
+    "principal_count",
     "product_daemon_root",
     "read_host_control_bind",
     "read_host_control_token",

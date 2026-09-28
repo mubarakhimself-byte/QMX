@@ -93,6 +93,7 @@ CLOSED_PROJECTIONS: Final[frozenset[str]] = frozenset(
         "desk_ledger_views",
         "ledger_quarantine_stream",
         "definition_store",
+        "local_operator",
     }
 )
 

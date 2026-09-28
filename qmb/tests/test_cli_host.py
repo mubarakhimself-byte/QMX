@@ -1,4 +1,4 @@
-"""Story 67.1 — product QMA_DAEMON_ROOT and qmb host start|status|stop."""
+"""Stories 67.1–67.2 — product QMA_DAEMON_ROOT, host start|status|stop|configure."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ from click.testing import CliRunner
 from qmb.doors.cli import (
     COMMAND_GROUPS,
     HOST_COMMANDS,
+    HOST_CONFIGURE_COMMANDS,
     command_tree,
+    invoke_host_configure_pairing_ttl,
     invoke_host_start,
     invoke_host_status,
     invoke_host_stop,
@@ -27,12 +29,15 @@ from qmb.doors.cli.host import (
     HOST_CONTROL_FILE,
     INSPECT_CWD_RELATIVE_ROOT,
     INSPECT_SHA_COMMAND_GROUPS,
+    PAIRING_SESSION_TTL_REGISTRY_KEY,
+    QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
     START_GRANTS,
     START_ORCHESTRATES_MISSIONS,
     START_STARTS_QMN,
     STOP_CANCELS_QMN,
     STOP_STOPS_REMOTE,
+    claim_host_configure_existed_at_inspect_sha,
     claim_qmb_host_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     product_daemon_root,
@@ -150,6 +155,15 @@ class _HostControlServer(threading.Thread):
             if lock.is_file():
                 lock.unlink()
             payload = {"ok": True, "stopped": True}
+        elif verb == "configure":
+            payload = {
+                "ok": True,
+                "configured": {
+                    "registry_key": PAIRING_SESSION_TTL_REGISTRY_KEY,
+                    "ttl": "set",
+                    "writer": "host.configure.pairing-ttl",
+                },
+            }
         else:
             payload = {"ok": False, "refusal": {"category": "invalid_input"}}
         raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -183,10 +197,11 @@ def test_product_root_is_not_cwd_relative_qma_daemon_data() -> None:
     assert INSPECT_CWD_RELATIVE_ROOT not in product.parts
 
 
-def test_command_tree_named_adds_host_start_status_stop_only() -> None:
+def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "host" not in INSPECT_SHA_COMMAND_GROUPS
     assert COMMAND_GROUPS[-1] == "host"
-    assert command_tree()["host"] == HOST_COMMANDS == ("start", "status", "stop")
+    assert command_tree()["host"] == HOST_COMMANDS == ("start", "status", "stop", "configure")
+    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
     assert "pair" not in HOST_COMMANDS
     runner = CliRunner()
     helped = runner.invoke(main, ["host", "--help"])
@@ -194,9 +209,13 @@ def test_command_tree_named_adds_host_start_status_stop_only() -> None:
     assert "start" in helped.output
     assert "status" in helped.output
     assert "stop" in helped.output
+    assert "configure" in helped.output
     assert "pair" not in helped.output
     missing = runner.invoke(main, ["host", "pair"])
     assert missing.exit_code != 0
+    configure_help = runner.invoke(main, ["host", "configure", "--help"])
+    assert configure_help.exit_code == 0, configure_help.output
+    assert "pairing-ttl" in configure_help.output
 
 
 def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
@@ -338,9 +357,13 @@ def test_click_host_start_status_stop(tmp_path: Path) -> None:
 
 def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
     claimed = claim_qmb_host_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_qmb_host_existed_at_inspect_sha(False))
+    configure_claimed = claim_host_configure_existed_at_inspect_sha(True)
+    assert is_refusal(configure_claimed)
+    assert is_ok(claim_host_configure_existed_at_inspect_sha(False))
     absent = claim_types_absent_at_inspect_sha(True)
     assert is_refusal(absent)
     assert is_ok(claim_types_absent_at_inspect_sha(False))
@@ -356,3 +379,75 @@ def test_cli_host_module_does_not_reuse_hosted_bot_or_write_sqlite() -> None:
     assert "from qmn" not in text
     assert "/pair/" not in text
     assert "POST /host/" not in text
+    assert "PT15M" not in text
+
+
+def test_start_ready_without_token_does_not_write_host_control(tmp_path: Path) -> None:
+    def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+        _ = argv, env
+        _write_lock(root, os.getpid())
+        _write_bind(root, "127.0.0.1", 19236)
+        return os.getpid()
+
+    report = _ok_mapping(
+        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+    )
+    assert report["state"] == "started"
+    assert not (tmp_path / HOST_CONTROL_FILE).exists()
+
+
+def test_configure_pairing_ttl_over_host_control(tmp_path: Path) -> None:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        _write_token(tmp_path)
+        _write_bind(tmp_path, "127.0.0.1", server.port)
+        fixture_duration = "PT15M"
+        report = _ok_mapping(invoke_host_configure_pairing_ttl(fixture_duration, root=tmp_path))
+        assert report["verb"] == "host.configure.pairing-ttl"
+        assert report["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
+        assert report["ttl"] == "set"
+        assert "configure" in server.seen_verbs
+        missing = invoke_host_configure_pairing_ttl("", root=tmp_path)
+        assert is_refusal(missing)
+        assert missing.context["field"] == "duration"
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+def test_click_host_configure_pairing_ttl(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+
+    def transport(
+        verb: str,
+        token: str,
+        *,
+        root: Path,
+        extra: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        _ = root
+        assert token == _TOKEN
+        assert verb == "configure"
+        assert extra is not None
+        assert extra["target"] == "pairing-ttl"
+        assert extra["duration"] == "PT15M"
+        return {
+            "ok": True,
+            "configured": {
+                "registry_key": PAIRING_SESSION_TTL_REGISTRY_KEY,
+                "ttl": "set",
+                "writer": "host.configure.pairing-ttl",
+            },
+        }
+
+    runner = CliRunner()
+    configured = runner.invoke(
+        main,
+        ["host", "configure", "pairing-ttl", "PT15M"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert configured.exit_code == 0, configured.output
+    payload = json.loads(configured.stdout)
+    assert payload["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
+    assert payload["ttl"] == "set"

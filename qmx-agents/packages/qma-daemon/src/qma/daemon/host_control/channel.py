@@ -17,13 +17,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
-from qmf.core import Ok, Result
+from qma.core.refusals.variants import CredentialOutOfScope
+from qmf.core import Ok, Result, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
     "CT40_BIND_PORT",
     "HOST_CONTROL_BIND_NAME",
+    "HOST_CONTROL_CONFIGURE_TARGET",
     "HOST_CONTROL_EXISTED_AT_INSPECT_SHA",
     "HOST_CONTROL_FILE",
     "HOST_CONTROL_INSPECT_SHA",
@@ -51,8 +53,10 @@ CT40_BIND_PORT: Final[int] = 8765
 HOST_CONTROL_IS_CT40: Final[bool] = False
 HOST_CONTROL_INSPECT_SHA: Final[str] = "34c148be"
 HOST_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
-HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset({"status", "stop"})
+HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset({"status", "stop", "configure"})
+HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
 MAX_HOST_CONTROL_FRAME: Final[int] = 65536
+_LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localhost"})
 
 _REDACT_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -306,6 +310,7 @@ def host_control_call(
     verb: str,
     *,
     timeout_s: float = 2.0,
+    fields: Mapping[str, object] | None = None,
 ) -> Result[Mapping[str, object]]:
     """Present the current token on the loopback channel (sync client)."""
     token = read_host_control_token(root)
@@ -315,7 +320,13 @@ def host_control_call(
     if not isinstance(bound, Ok):
         return bound
     host, port = bound.value
-    request = {"verb": verb, "host_control": token.value}
+    request: dict[str, object] = {"verb": verb, "host_control": token.value}
+    if fields is not None:
+        for key, item in fields.items():
+            name = str(key)
+            if name in {"verb", "host_control"}:
+                continue
+            request[name] = item
     try:
         with socket.create_connection((host, port), timeout=timeout_s) as sock:
             sock.sendall(encode_host_control_frame(request))
@@ -370,6 +381,32 @@ def _fail(
     }
 
 
+def _refusal_frame(refusal: TypedRefusal) -> dict[str, object]:
+    return {
+        "ok": False,
+        "refusal": {
+            "category": refusal.category.value,
+            "retryability": refusal.retryability.value,
+            "context": dict(refusal.context),
+        },
+    }
+
+
+def _credential_proof(request: Mapping[str, object]) -> str | None:
+    for key in ("credential_ref", "host_control", "proof", "operator_login"):
+        value = request.get(key)
+        if isinstance(value, str) and value.startswith("cred://"):
+            return value
+    return None
+
+
+def _peer_is_loopback(peer: object) -> bool:
+    if not isinstance(peer, tuple) or not peer:
+        return False
+    host = cast("object", peer[0])
+    return isinstance(host, str) and host in _LOOPBACK_HOSTS
+
+
 def _mapping(value: object) -> Mapping[str, object]:
     if isinstance(value, dict):
         return cast("dict[str, object]", value)
@@ -394,10 +431,12 @@ class HostControlChannel:
         *,
         status: Callable[[], Mapping[str, object]],
         on_stop: Callable[[], None],
+        on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
     ) -> None:
         self._root = root
         self._status = status
         self._on_stop = on_stop
+        self._on_configure_pairing_ttl = on_configure_pairing_ttl
         self._server: asyncio.Server | None = None
         self._bound: BoundHostControl | None = None
         self._expected: str = ""
@@ -409,10 +448,8 @@ class HostControlChannel:
     async def bind(self) -> Result[BoundHostControl]:
         if self._bound is not None and self._server is not None:
             return Ok(self._bound)
-        minted = ensure_host_control_token(self._root)
-        if not isinstance(minted, Ok):
-            return minted
-        self._expected = minted.value
+        token = read_host_control_token(self._root)
+        self._expected = token.value if isinstance(token, Ok) else ""
         try:
             server = await asyncio.start_server(self._handle, host="127.0.0.1", port=0)
         except OSError as exc:
@@ -455,7 +492,8 @@ class HostControlChannel:
     ) -> None:
         stopped = False
         try:
-            response, stopped = await self._dispatch(reader)
+            peer = writer.get_extra_info("peername")
+            response, stopped = await self._dispatch(reader, peer=peer)
             writer.write(encode_host_control_frame(_mapping(redact_host_surface(response))))
             await writer.drain()
         except asyncio.IncompleteReadError, json.JSONDecodeError, UnicodeDecodeError, OSError:
@@ -471,6 +509,8 @@ class HostControlChannel:
     async def _dispatch(
         self,
         reader: asyncio.StreamReader,
+        *,
+        peer: object = None,
     ) -> tuple[dict[str, object], bool]:
         header = await reader.readexactly(4)
         size = int.from_bytes(header, "big")
@@ -488,10 +528,22 @@ class HostControlChannel:
                 False,
             )
         request = cast("dict[str, object]", parsed)
+        forged = _credential_proof(request)
+        if forged is not None:
+            return _refusal_frame(CredentialOutOfScope.of(credential_ref=forged)), False
         presented = request.get("host_control")
         expected = self._expected.encode("utf-8")
         got = presented.encode("utf-8") if isinstance(presented, str) else b""
-        if not got or not hmac.compare_digest(got, expected):
+        if not expected or not got or not hmac.compare_digest(got, expected):
+            if not _peer_is_loopback(peer) and not got:
+                return (
+                    _fail(
+                        RefusalCategory.POLICY_REJECTION,
+                        "host_control",
+                        "a remote caller without host_control is refused",
+                    ),
+                    False,
+                )
             return (
                 _fail(
                     RefusalCategory.POLICY_REJECTION,
@@ -506,12 +558,14 @@ class HostControlChannel:
             return {"ok": True, "status": redact_host_surface(snapshot)}, False
         if verb == "stop":
             return {"ok": True, "stopped": True}, True
-        if verb in {"pair", "configure", "rotate-control", "recover-control"}:
+        if verb == "configure":
+            return self._configure(request), False
+        if verb in {"pair", "rotate-control", "recover-control"}:
             return (
                 _fail(
                     RefusalCategory.UNSUPPORTED_CAPABILITY,
                     "verb",
-                    "qmb host start|status|stop only; pair is not this story",
+                    "pair / rotate-control / recover-control are not this story",
                     given=repr(verb),
                 ),
                 False,
@@ -526,6 +580,27 @@ class HostControlChannel:
             ),
             False,
         )
+
+    def _configure(self, request: Mapping[str, object]) -> dict[str, object]:
+        target = request.get("target")
+        if target != HOST_CONTROL_CONFIGURE_TARGET:
+            return _fail(
+                RefusalCategory.INVALID_INPUT,
+                "target",
+                "qmb host configure pairing-ttl is the sole TTL writer",
+                given=repr(target),
+            )
+        callback = self._on_configure_pairing_ttl
+        if callback is None:
+            return _fail(
+                RefusalCategory.UNSUPPORTED_CAPABILITY,
+                "configure",
+                "host-control configure pairing-ttl is not bound",
+            )
+        written = callback(request.get("duration"))
+        if is_refusal(written):
+            return _refusal_frame(written)
+        return {"ok": True, "configured": redact_host_surface(written.value)}
 
     def close(self) -> None:
         server = self._server

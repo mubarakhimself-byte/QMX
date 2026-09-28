@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qma.core.refusals import OperatorPrincipalRequired
 from qma.core.vocabulary import (
@@ -29,10 +29,15 @@ from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
+    "HOST_CONFIGURE_PAIRING_TTL_SOURCE",
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_KEY",
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_REGISTRY_KEY",
     "HOST_RETRY_ATTEMPT_CEILING_KEY",
     "HOST_RETRY_ATTEMPT_CEILING_REGISTRY_KEY",
+    "PAIRING_SESSION_TTL_KEY",
+    "PAIRING_SESSION_TTL_META_KEY",
+    "PAIRING_SESSION_TTL_REGISTRY_KEY",
+    "PAIRING_TTL_CONFIGURED_EVENT",
     "REGISTRY_HOME",
     "STORE_BACKUP_CADENCE_KEY",
     "STORE_FULL_RESTORE_REHEARSAL_CADENCE_KEY",
@@ -45,7 +50,12 @@ __all__ = [
     "VariableSetReceipt",
     "builtin_qma_variable_rows",
     "cite_store_lifecycle_key",
+    "claim_pairing_ttl_ct40_writable_at_inspect_sha",
+    "fold_pairing_ttl_from_journal",
     "has_variable_edit_kind",
+    "pairing_session_ttl_is_set",
+    "parse_operator_pairing_ttl_duration",
+    "refuse_pair_issue_without_ttl",
     "registry_key",
 ]
 
@@ -53,6 +63,13 @@ __all__ = [
 VARIABLE_SET_COMMAND: Final[str] = "variable.set"
 VARIABLE_SET_EVENT: Final[str] = "variable.set"
 REGISTRY_HOME: Final[str] = "registry"
+PAIRING_SESSION_TTL_KEY: Final[str] = "pairing.session_ttl"
+PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
+PAIRING_SESSION_TTL_META_KEY: Final[str] = "registry:pairing.session_ttl"
+PAIRING_TTL_CONFIGURED_EVENT: Final[str] = "pairing.ttl_configured"
+HOST_CONFIGURE_PAIRING_TTL_SOURCE: Final[str] = "host.configure.pairing-ttl"
+PAIRING_TTL_CT40_WRITABLE_AT_INSPECT_SHA: Final[bool] = False
+PAIRING_TTL_INSPECT_SHA: Final[str] = "34c148be"
 HOST_RETRY_ATTEMPT_CEILING_KEY: Final[str] = "host.retry_attempt_ceiling"
 HOST_RETRY_ATTEMPT_CEILING_REGISTRY_KEY: Final[str] = "registry:host.retry_attempt_ceiling"
 # Story 63.2 / FR-PG-32: nested Mission call_depth ceiling. Not GAP-0108.
@@ -106,6 +123,94 @@ def cite_store_lifecycle_key(name: object) -> Result[str]:
             allowed=sorted(STORE_LIFECYCLE_KEYS),
         )
     return Ok(key)
+
+
+def parse_operator_pairing_ttl_duration(value: object) -> Result[str]:
+    """Accept an operator-supplied duration. Mint no sitting default (GAP-0109)."""
+    if not isinstance(value, str) or value.strip() == "":
+        return invalid_input(
+            "duration",
+            "qmb host configure pairing-ttl requires an operator-supplied "
+            "duration; this increment mints no duration (GAP-0109)",
+            given=repr(value),
+        )
+    return Ok(value.strip())
+
+
+def pairing_session_ttl_is_set(value: object) -> bool:
+    """True when ``registry:pairing.session_ttl`` holds an operator duration."""
+    if value is None:
+        return False
+    if not isinstance(value, str):
+        return True
+    return value.strip() != ""
+
+
+def refuse_pair_issue_without_ttl(value: object) -> Result[None]:
+    """Missing TTL refuses ``/pair/start`` or ``/pair/confirm`` issue (FR-UI-20).
+
+    Lands the refuse gate only. Does not implement pair HTTP.
+    """
+    if pairing_session_ttl_is_set(value):
+        return Ok(None)
+    return policy_rejection(
+        PAIRING_SESSION_TTL_KEY,
+        "missing registry:pairing.session_ttl refuses /pair/start and "
+        "/pair/confirm issue (FR-UI-20; GAP-0109)",
+        registry_key=PAIRING_SESSION_TTL_REGISTRY_KEY,
+        ttl="unset",
+        pair_http=False,
+    )
+
+
+def claim_pairing_ttl_ct40_writable_at_inspect_sha(writable: object) -> Result[bool]:
+    """The write path at inspect SHA was not CT-40 ``variable.set`` (DEC-0507)."""
+    if writable is True or writable == "true":
+        return policy_rejection(
+            PAIRING_SESSION_TTL_KEY,
+            "registry:pairing.session_ttl was not a CT-40 variable.set write "
+            "path at inspect SHA 34c148be; only host-control configure "
+            "pairing-ttl writes it (AM-10)",
+            ct40_writable_at_inspect_sha=False,
+            inspect_sha=PAIRING_TTL_INSPECT_SHA,
+            registry_key=PAIRING_SESSION_TTL_REGISTRY_KEY,
+        )
+    if writable is not False:
+        return invalid_input(
+            "ct40_writable_at_inspect_sha",
+            "inspect-SHA CT-40 writable claim is a boolean",
+            given=repr(writable),
+        )
+    return Ok(False)
+
+
+def fold_pairing_ttl_from_journal(journal: AuthoritativeJournal) -> str | None:
+    """Latest host-control TTL write: ``as_of`` recorded_at, then journal_seq."""
+    rows = journal.read_all()
+    if is_refusal(rows):
+        return None
+    chosen_key: tuple[int, int] | None = None
+    chosen: str | None = None
+    for row in rows.value:
+        if row.get("event") != PAIRING_TTL_CONFIGURED_EVENT:
+            continue
+        recorded_at = row.get("recorded_at")
+        journal_seq = row.get("journal_seq")
+        payload = row.get("payload")
+        if not isinstance(recorded_at, int) or isinstance(recorded_at, bool):
+            continue
+        if not isinstance(journal_seq, int) or isinstance(journal_seq, bool):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        duration = cast("dict[str, object]", payload).get("duration")
+        if not isinstance(duration, str) or duration.strip() == "":
+            continue
+        key = (recorded_at, journal_seq)
+        if chosen_key is None or key >= chosen_key:
+            chosen_key = key
+            chosen = duration.strip()
+    return chosen
 
 
 def has_variable_edit_kind() -> bool:
@@ -481,6 +586,15 @@ def builtin_qma_variable_rows() -> tuple[VariableRow, ...]:
             units="count",
             default=3,
         ),
+        _row(
+            PAIRING_SESSION_TTL_KEY,
+            owning_subsystem=daemon,
+            scope=g,
+            value_type="duration",
+            units="duration",
+            # GAP-0109 / DEC-0510 A10: row exists; this increment mints no duration.
+            default=None,
+        ),
     )
 
 
@@ -606,6 +720,17 @@ class GovernedVariableRegistry:
             return row_result
         row = row_result.value
 
+        if row.name == PAIRING_SESSION_TTL_KEY:
+            return policy_rejection(
+                "variable_set",
+                "CT-40 variable.set naming registry:pairing.session_ttl is "
+                "refused for any principal; only qmb host configure pairing-ttl "
+                "over host-control may write it (AM-10; DEC-0492)",
+                name=row.name,
+                registry_key=row.registry_key,
+                writer=HOST_CONFIGURE_PAIRING_TTL_SOURCE,
+            )
+
         if row.editability is VariableEditability.UNEDITABLE:
             return policy_rejection(
                 "variable_set",
@@ -647,6 +772,59 @@ class GovernedVariableRegistry:
                 journal=append.value,
             )
         )
+
+    def pairing_ttl_is_set(self) -> bool:
+        """True when host-control has written ``registry:pairing.session_ttl``."""
+        return pairing_session_ttl_is_set(self._values.get(PAIRING_SESSION_TTL_KEY))
+
+    def pairing_ttl_status(self) -> str:
+        """Status surface: ``set`` or ``unset``. Never the duration secret-or-default."""
+        return "set" if self.pairing_ttl_is_set() else "unset"
+
+    def refuse_pair_issue(self) -> Result[None]:
+        """Missing-TTL refuse gate for pair issue. Does not land ``/pair/*``."""
+        return refuse_pair_issue_without_ttl(self._values.get(PAIRING_SESSION_TTL_KEY))
+
+    def configure_pairing_session_ttl(
+        self,
+        duration: object,
+        *,
+        journal: AuthoritativeJournal,
+        source: object = HOST_CONFIGURE_PAIRING_TTL_SOURCE,
+    ) -> Result[str]:
+        """Sole writer of ``registry:pairing.session_ttl`` (AM-10; GAP-0109)."""
+        if source != HOST_CONFIGURE_PAIRING_TTL_SOURCE:
+            return policy_rejection(
+                PAIRING_SESSION_TTL_KEY,
+                "only qmb host configure pairing-ttl over host-control may write "
+                "registry:pairing.session_ttl (AM-10; DEC-0492)",
+                source=repr(source),
+                writer=HOST_CONFIGURE_PAIRING_TTL_SOURCE,
+            )
+        parsed = parse_operator_pairing_ttl_duration(duration)
+        if is_refusal(parsed):
+            return parsed
+        append = journal.append_event(
+            PAIRING_TTL_CONFIGURED_EVENT,
+            payload={
+                "name": PAIRING_SESSION_TTL_KEY,
+                "registry_key": PAIRING_SESSION_TTL_REGISTRY_KEY,
+                "duration": parsed.value,
+                "writer": HOST_CONFIGURE_PAIRING_TTL_SOURCE,
+            },
+        )
+        if is_refusal(append):
+            return append
+        self._values[PAIRING_SESSION_TTL_KEY] = parsed.value
+        return Ok(parsed.value)
+
+    def load_pairing_session_ttl(self, duration: object) -> Result[str]:
+        """Restore a previously journaled host-control TTL. Not a writer."""
+        parsed = parse_operator_pairing_ttl_duration(duration)
+        if is_refusal(parsed):
+            return parsed
+        self._values[PAIRING_SESSION_TTL_KEY] = parsed.value
+        return Ok(parsed.value)
 
     def refuse_non_operator_route(
         self,
