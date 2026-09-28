@@ -264,15 +264,19 @@ class CliQmbDoorTransport:
         cancel_path = self._cancel_path_for(job_id)
         Path(cancel_path).write_text("JobHandle.cancel", encoding="utf-8")
         if proc.poll() is None:
-            if sys.platform != "win32":
-                try:
-                    os.kill(int(proc.pid), signal.SIGINT)
-                except OSError:
-                    proc.terminate()
+            # Cooperative cancel first: the child writes the aborted ledger
+            # when it sees cancel_path. SIGINT/terminate before that race
+            # kills the hang loop on Linux and the ledger never appears.
             try:
                 proc.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
-                proc.terminate()
+                if sys.platform != "win32":
+                    try:
+                        os.kill(int(proc.pid), signal.SIGINT)
+                    except OSError:
+                        proc.terminate()
+                else:
+                    proc.terminate()
                 try:
                     proc.wait(timeout=2.0)
                 except subprocess.TimeoutExpired:
