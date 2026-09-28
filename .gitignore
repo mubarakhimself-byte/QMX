@@ -43,7 +43,12 @@ Thumbs.db
 node_modules/
 playwright-report/
 test-results/
-.reticle/
+.reticle/*
+!.reticle/flows/
+!.reticle/flows/**
+apps/*/.reticle/*
+!apps/*/.reticle/flows/
+!apps/*/.reticle/flows/**
 .svelte-kit/
 tools/ui_factory/fixtures/**/dist
 tools/ui_factory/fixtures/**/.svelte-kit
