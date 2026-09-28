@@ -111,6 +111,8 @@ def peak_rss_bytes() -> int:
 
 def _peak_rss_windows() -> int:
     """Peak working set via Win32 ``GetProcessMemoryInfo``."""
+    if sys.platform != "win32":
+        return 0
     import ctypes  # noqa: PLC0415 — Windows-only
     from ctypes import wintypes  # noqa: PLC0415
 
