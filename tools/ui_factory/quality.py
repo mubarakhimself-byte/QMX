@@ -45,6 +45,8 @@ def _parse_test_counts(text: str) -> dict[str, int]:
 
 def _is_test_command(name: str, argv: Sequence[str]) -> bool:
     blob = " ".join(argv).lower()
+    if "reticle" in blob:
+        return False
     return any(
         token in blob
         for token in ("pytest", "vitest", "playwright", "poe test", "run test")

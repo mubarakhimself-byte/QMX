@@ -23,11 +23,11 @@ from ui_factory.runtime_verify import classify_reticle, persistence_check
 from ui_factory.state import StateStore, UnitRecord
 
 
-def _git(cwd: Path, args: list[str]) -> None:
+def _git(cwd: Path, args: list[str]) -> None:  # pyright: ignore[reportUnusedFunction]
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
-def _cfg(root: Path) -> FactoryConfig:
+def _cfg(root: Path) -> FactoryConfig:  # pyright: ignore[reportUnusedFunction]
     return FactoryConfig(
         destination_branch="ui-integration",
         backend_branch="integration",
@@ -104,7 +104,7 @@ def test_exit_zero_survives_round_trip(tmp_path: Path) -> None:
 
 
 def test_pytest_summary_populates_counts() -> None:
-    from ui_factory.quality import _parse_test_counts
+    from ui_factory.quality import _parse_test_counts  # pyright: ignore[reportPrivateUsage]
 
     counts = _parse_test_counts("25 passed, 1 skipped in 5.58s")
     assert counts["passed"] == 25
@@ -325,7 +325,7 @@ def test_good_persist() -> None:
 
 
 def test_named_ci_ignores_unrelated_success() -> None:
-    from ui_factory.ci_wait import _named_status
+    from ui_factory.ci_wait import _named_status  # pyright: ignore[reportPrivateUsage]
 
     rows = [{"name": "unrelated", "conclusion": "success", "headSha": "abc"}]
     conclusion, _found, detail = _named_status(rows, ["Skylos", "QA Battery", "UI quality"])
