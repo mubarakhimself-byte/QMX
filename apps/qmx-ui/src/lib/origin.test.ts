@@ -12,6 +12,7 @@ import {
 import {
   ENVELOPE_TYPES_AT_INSPECT,
   FIRST_PARTY_SVELTE_HOST_AT_INSPECT,
+  PLATFORM_RAIL_AT_INSPECT,
   HOST_IDENTITY,
   INSPECT_SHA,
   QMA_UI_CONTRACT_AT_INSPECT,
@@ -69,7 +70,10 @@ describe("isolated SPA scaffold", () => {
     const src = [
       read("src/lib/spawn.ts"),
       read("src/lib/screens/Bootstrap.svelte"),
+      read("src/lib/shell/PlatformRail.svelte"),
+      read("src/lib/shell/openedApps.ts"),
       read("src/routes/+page.svelte"),
+      read("src/routes/+layout.svelte"),
     ].join("\n");
     expect(src).not.toMatch(/child_process/);
     expect(src).not.toMatch(/spawn\(/);
@@ -80,6 +84,7 @@ describe("isolated SPA scaffold", () => {
   it("is honest about inspect SHA 34c148be", () => {
     expect(INSPECT_SHA).toBe("34c148be404a375cbfd79fd4ce6997452e4f1d20");
     expect(FIRST_PARTY_SVELTE_HOST_AT_INSPECT).toBe(false);
+    expect(PLATFORM_RAIL_AT_INSPECT).toBe(false);
     expect(QMA_UI_CONTRACT_AT_INSPECT).toBe("stub");
     expect(ENVELOPE_TYPES_AT_INSPECT).toBe("fixtures-not-e2e");
     expect(HOST_IDENTITY.compUi).toBe(false);

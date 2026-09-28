@@ -119,9 +119,9 @@ try {
     )?.[1];
   if (servedSha !== sha)
     throw new Error("Running app does not serve the candidate SHA");
-  const files = readdirSync(resolve(root, ".reticle/flows")).filter((f) =>
-    f.endsWith(".json"),
-  );
+  const files = readdirSync(resolve(root, ".reticle/flows"))
+    .filter((f) => f.endsWith(".json"))
+    .sort();
   if (!files.length)
     throw new Error(
       "No committed Reticle flows; verifying nothing cannot pass",
