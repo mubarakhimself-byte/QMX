@@ -77,9 +77,7 @@ _SENSING: Final[frozenset[str]] = frozenset(
         "ungoverned-work-config",
     }
 )
-_ATC: Final[frozenset[str]] = frozenset(
-    {"alternative", "alternative-trading-composition", "atc"}
-)
+_ATC: Final[frozenset[str]] = frozenset({"alternative", "alternative-trading-composition", "atc"})
 _SEAT: Final[frozenset[str]] = frozenset({"qmn-seat", "qmn_seat", "seat"})
 _LABEL_KEYS: Final[frozenset[str]] = frozenset(
     {"class", "composition_class", "config_class", "kind", "label", "role"}
@@ -207,11 +205,7 @@ def _section(
         if token is None:
             return invalid(raw_key, "PolicyPair field values are non-empty tokens")
         folded = token.strip().casefold().replace("_", "-")
-        if (
-            token in _DUMMY_SENTINEL
-            or folded in _DUMMY_POLICY
-            or token.casefold() in _DUMMY_POLICY
-        ):
+        if token in _DUMMY_SENTINEL or folded in _DUMMY_POLICY or token.casefold() in _DUMMY_POLICY:
             return invalid(raw_key, "dummy PolicyPair is invalid input", policy=token)
         out[raw_key] = token
     missing = [name for name in required if name not in out]

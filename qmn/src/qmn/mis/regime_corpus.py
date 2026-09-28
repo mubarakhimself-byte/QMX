@@ -190,9 +190,7 @@ class CorpusAcquisitionPlan:
             "data_windows": self.data_windows.fp1_identity(),
             "calendar_kinds_named_apart": list(self.calendar_kinds_named_apart),
             "acquisition_context": self.acquisition_context,
-            "provider_fetch_in_training_forbidden": (
-                self.provider_fetch_in_training_forbidden
-            ),
+            "provider_fetch_in_training_forbidden": (self.provider_fetch_in_training_forbidden),
             "live_network_forbidden": self.live_network_forbidden,
             "world": self.world,
             "format_version": CORPUS_FORMAT_VERSION,
@@ -503,13 +501,10 @@ def build_acquisition_plan(
     if is_refusal(contract_fp):
         return contract_fp
     windows = resolved_contract.data_windows
-    if windows.source_law != (
-        "governed-qmf-qmb-tools-only-no-provider-fetch-inside-training"
-    ):
+    if windows.source_law != ("governed-qmf-qmb-tools-only-no-provider-fetch-inside-training"):
         return policy(
             "source_law",
-            "acquisition cites only governed QMF/QMB tools with no provider "
-            "fetch inside training",
+            "acquisition cites only governed QMF/QMB tools with no provider fetch inside training",
             given=windows.source_law,
         )
     if tuple(windows.sessions) != DECLARED_TRADING_SESSIONS:
@@ -709,9 +704,7 @@ def clean_corpus(
     receipts: tuple[SourceReceipt, ...]
     if source_receipts is None:
         receipts = ()
-    elif isinstance(source_receipts, Sequence) and not isinstance(
-        source_receipts, (str, bytes)
-    ):
+    elif isinstance(source_receipts, Sequence) and not isinstance(source_receipts, (str, bytes)):
         built: list[SourceReceipt] = []
         for index, item in enumerate(cast("Sequence[object]", source_receipts)):
             if not isinstance(item, SourceReceipt):

@@ -502,9 +502,8 @@ def gate_amend_protection(
         )
 
     # Dynamic Book ratchet under unproven atomicity.
-    if (
-        resolved_origin is DynamicProtectionOrigin.BREAKEVEN_RATCHET
-        and _atomicity_unproven(resolved_atomicity)
+    if resolved_origin is DynamicProtectionOrigin.BREAKEVEN_RATCHET and _atomicity_unproven(
+        resolved_atomicity
     ):
         if policy is BookDynamicProtectionPolicy.REFUSE_BEFORE_ORIGINATION:
             return _policy(
@@ -514,9 +513,7 @@ def gate_amend_protection(
                 atomicity=resolved_atomicity.value,
                 book_policy=policy.value,
             )
-        ratchet = is_breakeven_ratchet_amendment(
-            amendment, breakeven_offset=breakeven_offset
-        )
+        ratchet = is_breakeven_ratchet_amendment(amendment, breakeven_offset=breakeven_offset)
         if is_refusal(ratchet):
             return ratchet
         if not ratchet.value:

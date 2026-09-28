@@ -110,9 +110,7 @@ def _workspace_constraints(members: Sequence[Member], path: Path) -> Path:
     path that resolves outside its parent is refused rather than followed
     (SKY-D324).
     """
-    data = "".join(f"{member.name}=={member.version}\n" for member in members).encode(
-        "utf-8"
-    )
+    data = "".join(f"{member.name}=={member.version}\n" for member in members).encode("utf-8")
     contain_within = path.parent
     try:
         resolved = Path(os.path.realpath(path))
@@ -136,8 +134,7 @@ def _workspace_constraints(members: Sequence[Member], path: Path) -> Path:
         )
     except OSError as exc:
         raise SmokeError(
-            f"constraints: exclusive no-follow create failed for {path} "
-            f"({type(exc).__name__})"
+            f"constraints: exclusive no-follow create failed for {path} ({type(exc).__name__})"
         ) from exc
     try:
         view = memoryview(data)
@@ -145,9 +142,7 @@ def _workspace_constraints(members: Sequence[Member], path: Path) -> Path:
         while offset < len(view):
             offset += os.write(fd, view[offset:])
     except OSError as exc:
-        raise SmokeError(
-            f"constraints: write failed for {path} ({type(exc).__name__})"
-        ) from exc
+        raise SmokeError(f"constraints: write failed for {path} ({type(exc).__name__})") from exc
     finally:
         os.close(fd)
     return path

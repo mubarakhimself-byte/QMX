@@ -252,10 +252,7 @@ class OrderPath:
                 retryability=Retryability.NO,
                 context={
                     "field": "unknown_boundary",
-                    "reason": (
-                        "order path gates through a CommandStreamUnknownBoundary "
-                        "or None"
-                    ),
+                    "reason": ("order path gates through a CommandStreamUnknownBoundary or None"),
                     "given": type(unknown_boundary).__name__,
                 },
             )
@@ -264,9 +261,7 @@ class OrderPath:
             policy = book_dynamic_protection_policy
         elif isinstance(book_dynamic_protection_policy, str):
             try:
-                policy = BookDynamicProtectionPolicy(
-                    book_dynamic_protection_policy.strip().lower()
-                )
+                policy = BookDynamicProtectionPolicy(book_dynamic_protection_policy.strip().lower())
             except ValueError:
                 return TypedRefusal(
                     category=RefusalCategory.INVALID_INPUT,
@@ -326,9 +321,7 @@ class OrderPath:
                 binder=binder,
                 pacer=pacer,
                 client=client,
-                forms_per_order_type=dict(
-                    cast("Mapping[str, object]", forms_per_order_type)
-                ),
+                forms_per_order_type=dict(cast("Mapping[str, object]", forms_per_order_type)),
                 submission_deadline_duration=submission_deadline_duration,
                 unknown_boundary=boundary,
                 amend_atomicity=resolved_atomicity,
@@ -407,8 +400,7 @@ class OrderPath:
                 retryability=Retryability.AFTER_CONDITION,
                 context={
                     "field": "command_sequencer",
-                    "reason": "command sequencer is closed until ordinal high-water "
-                    "is recovered",
+                    "reason": "command sequencer is closed until ordinal high-water is recovered",
                 },
                 after_condition_descriptor="recover ordinal high-water then open_sequencer",
             )
@@ -429,9 +421,7 @@ class OrderPath:
                     },
                 )
             present = (
-                True
-                if subject_present_at_submission is None
-                else subject_present_at_submission
+                True if subject_present_at_submission is None else subject_present_at_submission
             )
             observations: Sequence[object] | tuple[()] = (
                 ()
@@ -480,8 +470,7 @@ class OrderPath:
                         context={
                             "field": "handed_off_at",
                             "reason": (
-                                "amend_protection journals before dispatch at a "
-                                "wall Instant"
+                                "amend_protection journals before dispatch at a wall Instant"
                             ),
                             "given": repr(handed_off_at),
                         },
@@ -511,9 +500,7 @@ class OrderPath:
                         "given": repr(handed_off_at),
                     },
                 )
-            gated = self.unknown_boundary.admit(
-                command, receive_instant=handed_off_at
-            )
+            gated = self.unknown_boundary.admit(command, receive_instant=handed_off_at)
             if is_refusal(gated):
                 return gated
             gate_value = gated.value
@@ -616,6 +603,7 @@ class OrderPath:
 
         # Past handoff: never retry — a failed submit is terminal for this mint.
         if self.command_journal is not None:
+
             def _submit(_payload: Mapping[str, object]) -> Result[SubmissionResult]:
                 del _payload
                 return self.client.submit(command)

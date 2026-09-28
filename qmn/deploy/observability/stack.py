@@ -210,9 +210,7 @@ def inspect_compose_text(text: str) -> tuple[str, ...]:
 def inspect_stack_tree(root: Path | None = None) -> StackInspection:
     """Inspect the observability tree for AR-83 completeness."""
     base = observability_root(root)
-    missing = tuple(
-        rel for rel in _REQUIRED_RELATIVE if not (base / rel).is_file()
-    )
+    missing = tuple(rel for rel in _REQUIRED_RELATIVE if not (base / rel).is_file())
     findings: list[str] = []
     if missing:
         findings.extend(f"missing required file: {rel}" for rel in missing)

@@ -200,8 +200,7 @@ def decide_resolve_path(
             context={
                 "field": "clarity",
                 "reason": (
-                    "read-back clarity is observed-accepted | observed-absent | "
-                    "ambiguous | absent"
+                    "read-back clarity is observed-accepted | observed-absent | ambiguous | absent"
                 ),
                 "given": repr(clarity),
             },
@@ -221,8 +220,7 @@ def decide_resolve_path(
     if (
         verdict is ReconciliationVerdict.RECONCILED
         and covers_lookback
-        and resolved_clarity
-        in {ReadbackClarity.OBSERVED_ACCEPTED, ReadbackClarity.OBSERVED_ABSENT}
+        and resolved_clarity in {ReadbackClarity.OBSERVED_ACCEPTED, ReadbackClarity.OBSERVED_ABSENT}
     ):
         auto = (
             ResolveResolution.OBSERVED_ACCEPTED
@@ -324,8 +322,7 @@ class ProtectionIntentExtent:
             )
         if len(self._records) >= self.capacity:
             return unpersistable(
-                "reserved protection-intent extent is full; standing intent cannot "
-                "be persisted"
+                "reserved protection-intent extent is full; standing intent cannot be persisted"
             )
         self._records.append(dict(cast("Mapping[str, object]", record)))
         return Ok(SinkAck())
@@ -569,8 +566,7 @@ class CommandStreamUnknownBoundary:
                         context={
                             "field": "standing_intent",
                             "reason": (
-                                "HELD_AS_STANDING_INTENT requires a standing protection "
-                                "intent"
+                                "HELD_AS_STANDING_INTENT requires a standing protection intent"
                             ),
                             "command_fp1": result.command_fp1.value,
                         },

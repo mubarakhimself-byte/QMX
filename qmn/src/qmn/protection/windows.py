@@ -144,9 +144,7 @@ class ResolvedWindowSettings:
                 self.session_handover_buffer_width.fp1_identity()
             ),
             SESSION_HANDOVER_BUFFER_ANCHOR_VARIABLE: self.session_handover_buffer_anchor.value,
-            NEWS_CALENDAR_MAX_STALENESS_VARIABLE: (
-                self.news_calendar_max_staleness.fp1_identity()
-            ),
+            NEWS_CALENDAR_MAX_STALENESS_VARIABLE: (self.news_calendar_max_staleness.fp1_identity()),
         }
 
 
@@ -174,9 +172,7 @@ def require_resolved_window_settings(
     )
     if isinstance(handover, TypedRefusal):
         return handover
-    staleness = _require_duration(
-        news_calendar_max_staleness, NEWS_CALENDAR_MAX_STALENESS_VARIABLE
-    )
+    staleness = _require_duration(news_calendar_max_staleness, NEWS_CALENDAR_MAX_STALENESS_VARIABLE)
     if isinstance(staleness, TypedRefusal):
         return staleness
     if isinstance(session_handover_buffer_anchor, AnchorSide):
@@ -554,9 +550,7 @@ def apply_news_revision(
 
 
 def _is_narrowing(prior: WindowBounds, later: WindowBounds) -> bool:
-    return (
-        later.start.value_ns > prior.start.value_ns or later.end.value_ns < prior.end.value_ns
-    )
+    return later.start.value_ns > prior.start.value_ns or later.end.value_ns < prior.end.value_ns
 
 
 def _same_trading_day_start(prior: ControlWindowRecord, decision_at: Instant) -> bool:

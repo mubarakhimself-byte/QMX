@@ -151,9 +151,7 @@ class RecordingEffectDispatcher:
 
     trace: HappensBeforeTrace | None = None
     fail: bool = False
-    calls: MutableSequence[Mapping[str, object]] = field(
-        default_factory=list[Mapping[str, object]]
-    )
+    calls: MutableSequence[Mapping[str, object]] = field(default_factory=list[Mapping[str, object]])
 
     def dispatch(self, payload: Mapping[str, object], /) -> Result[object]:
         if self.trace is not None:
@@ -170,9 +168,7 @@ class CallableDispatcher(Generic[_T]):
 
     fn: Callable[[Mapping[str, object]], Result[_T]]
     trace: HappensBeforeTrace | None = None
-    calls: MutableSequence[Mapping[str, object]] = field(
-        default_factory=list[Mapping[str, object]]
-    )
+    calls: MutableSequence[Mapping[str, object]] = field(default_factory=list[Mapping[str, object]])
 
     def dispatch(self, payload: Mapping[str, object], /) -> Result[_T]:
         if self.trace is not None:
@@ -283,8 +279,7 @@ def journal_before_effect(
     if best_effort is True or getattr(journal, "best_effort", False) is True:
         return _policy(
             "journal",
-            "a best-effort write is not journal evidence and cannot pass "
-            "journal-before-dispatch",
+            "a best-effort write is not journal evidence and cannot pass journal-before-dispatch",
             failure_id="storage.best_effort_path",
             best_effort_permitted=BEST_EFFORT_PATH_PERMITTED,
             blocks_entries=True,

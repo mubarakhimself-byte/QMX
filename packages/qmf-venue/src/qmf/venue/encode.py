@@ -507,9 +507,7 @@ def encode_place_order(
         if isinstance(raw_subset, Mapping):
             body = cast("Mapping[str, object]", raw_subset)
             tif_tokens = body.get("time_in_force")
-            has_tif = isinstance(tif_tokens, Sequence) and not isinstance(
-                tif_tokens, (str, bytes)
-            )
+            has_tif = isinstance(tif_tokens, Sequence) and not isinstance(tif_tokens, (str, bytes))
             if has_tif and tuple(cast("Sequence[object]", tif_tokens)):
                 tif_ok = decl.value.order_parameter(time_in_force=params.time_in_force)
                 if is_refusal(tif_ok):

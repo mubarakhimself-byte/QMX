@@ -69,9 +69,7 @@ _OCCURRENCE_KEYS: Final[frozenset[str]] = frozenset(
     }
 )
 _CLASS_REASON: Final[str] = "class is Stage 0 taxonomy"
-_ORIGIN_REASON: Final[str] = (
-    "a hypothesis may start from idea, chart, journal, or seed_package"
-)
+_ORIGIN_REASON: Final[str] = "a hypothesis may start from idea, chart, journal, or seed_package"
 _HypothesisParts: TypeAlias = tuple[
     str,
     str,

@@ -105,8 +105,7 @@ def validate_network_posture(posture: NetworkPosture) -> tuple[str, ...]:
         findings.append("SSH password auth must be disabled (key-only)")
     if frozenset(posture.ssh_identities) != frozenset(INBOUND_SSH_IDENTITIES):
         findings.append(
-            f"ssh_identities={posture.ssh_identities!r} "
-            f"expected {INBOUND_SSH_IDENTITIES!r}"
+            f"ssh_identities={posture.ssh_identities!r} expected {INBOUND_SSH_IDENTITIES!r}"
         )
     if posture.public_node_doors:
         findings.append("node doors must not be public")

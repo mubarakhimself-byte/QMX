@@ -193,8 +193,7 @@ _BOOK_ABSENT_REASON: Final[str] = (
     "AlternativeRunConfig Book/BMS/bot keys are absent, not null (DEC-0424)"
 )
 _CLIENT_AUTH_REASON: Final[str] = (
-    "admission is an authoritative host result; client booleans cannot authorize "
-    "(DEC-0436)"
+    "admission is an authoritative host result; client booleans cannot authorize (DEC-0436)"
 )
 _INSPECT_SHA_REASON: Final[str] = (
     "AlternativeRunConfig / PolicyPair were not in code at inspect SHA 270e992 "
@@ -792,8 +791,7 @@ def adopt_selected_composition(
         if is_refusal(sensing):
             return sensing
         labels = {
-            clean_token(selected_map.get(key))
-            for key in ("class", "config_class", "kind", "label")
+            clean_token(selected_map.get(key)) for key in ("class", "config_class", "kind", "label")
         }
         folded = {item.strip().casefold().replace("_", "-") for item in labels if item is not None}
         if folded & {"ungoverned", "ungoverned-work-config", "sensing", "research"}:
@@ -1009,8 +1007,7 @@ def _host_verdict(
     l17: str | None,
 ) -> str:
     live_requested = (
-        command.venue_kind is not None
-        or command.adapter_capability != ADAPTER_INTERNAL_SIMULATE
+        command.venue_kind is not None or command.adapter_capability != ADAPTER_INTERNAL_SIMULATE
     )
     papered = paper_run is not None and paper_evidence is not None
     if live_requested:

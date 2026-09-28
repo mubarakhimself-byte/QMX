@@ -593,14 +593,10 @@ def derive_regression_thresholds(
                 repeats=len(samples),
                 mean_wall_ns=wall_stats[0],
                 stdev_wall_ns=wall_stats[1],
-                regression_threshold_wall_ns=_ceiling(
-                    wall_stats[0], wall_stats[1], multiple.value
-                ),
+                regression_threshold_wall_ns=_ceiling(wall_stats[0], wall_stats[1], multiple.value),
                 mean_peak_rss_bytes=rss_stats[0],
                 stdev_peak_rss_bytes=rss_stats[1],
-                regression_threshold_rss_bytes=_ceiling(
-                    rss_stats[0], rss_stats[1], multiple.value
-                ),
+                regression_threshold_rss_bytes=_ceiling(rss_stats[0], rss_stats[1], multiple.value),
                 rungs=rungs.value,
                 backpressure_observed=backpressure,
             )
@@ -1098,5 +1094,3 @@ def _non_negative_int(field: str, value: object) -> Result[int]:
             failure_id=_ID_INPUTS,
         )
     return Ok(value)
-
-

@@ -173,8 +173,7 @@ def prove_attribution_partition(
             for right in decls[i + 1 :]:
                 overlap = left.instruments & right.instruments
                 if overlap and (
-                    left.shared_flatten_signature is None
-                    or right.shared_flatten_signature is None
+                    left.shared_flatten_signature is None or right.shared_flatten_signature is None
                 ):
                     return unsupported(
                         "shared_flatten_signature",

@@ -134,8 +134,7 @@ def sqs_baseline_key(
     if env is None:
         return invalid(
             "environment",
-            "SQS baseline is keyed by a non-empty environment token "
-            "(demo vs live are distinct)",
+            "SQS baseline is keyed by a non-empty environment token (demo vs live are distinct)",
             given=repr(environment),
         )
     if not isinstance(instrument, Instrument):

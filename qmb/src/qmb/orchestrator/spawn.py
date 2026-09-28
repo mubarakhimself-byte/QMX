@@ -1455,9 +1455,7 @@ def _reap_live(
             output_dir=item.output_dir,
             pid=item.pid,
         )
-        minted = mint_aborted_line(
-            job.config, refusal, workbench_lane=WORKBENCH_LANE_GOVERNED
-        )
+        minted = mint_aborted_line(job.config, refusal, workbench_lane=WORKBENCH_LANE_GOVERNED)
         if is_refusal(minted):
             first_ledger_failure = first_ledger_failure or minted
             continue

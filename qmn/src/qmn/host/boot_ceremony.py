@@ -173,9 +173,7 @@ class BootAttemptRecord:
 class InMemoryBootAttemptSink:
     """Test/double sink — append-only list under the reserved supervisor writer."""
 
-    records: MutableSequence[BootAttemptRecord] = field(
-        default_factory=list[BootAttemptRecord]
-    )
+    records: MutableSequence[BootAttemptRecord] = field(default_factory=list[BootAttemptRecord])
 
     def append(self, record: BootAttemptRecord, /) -> Result[BootAttemptRecord]:
         if self.records and record.sequence <= self.records[-1].sequence:
@@ -266,9 +264,7 @@ class CompositionFingerprintInputs:
     calendar_code_identities: Mapping[str, str] = field(default_factory=dict[str, str])
     os_cpu_class: str = "unset"
     shadow_candidate_identities: Mapping[str, str] = field(default_factory=dict[str, str])
-    workload_claim_identities: Mapping[str, object] = field(
-        default_factory=dict[str, object]
-    )
+    workload_claim_identities: Mapping[str, object] = field(default_factory=dict[str, object])
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -302,21 +298,15 @@ class CompositionFingerprintInputs:
         return {
             "class": "composition_fp",
             "config_fp": self.config_fp.value,
-            "distribution_identities": dict(
-                sorted(self.distribution_identities.items())
-            ),
+            "distribution_identities": dict(sorted(self.distribution_identities.items())),
             "extension_identities": dict(sorted(self.extension_identities.items())),
             "proto_release_tag": self.proto_release_tag,
             "tzdata_version": self.tzdata_version,
-            "adapter_capability_fps": tuple(
-                sorted(fp.value for fp in self.adapter_capability_fps)
-            ),
+            "adapter_capability_fps": tuple(sorted(fp.value for fp in self.adapter_capability_fps)),
             "registry_as_of_fp": (
                 None if self.registry_as_of_fp is None else self.registry_as_of_fp.value
             ),
-            "calendar_code_identities": dict(
-                sorted(self.calendar_code_identities.items())
-            ),
+            "calendar_code_identities": dict(sorted(self.calendar_code_identities.items())),
             "os_cpu_class": self.os_cpu_class,
             "workload_claim_identities": dict(self.workload_claim_identities),
         }
@@ -380,9 +370,7 @@ class BootCeremonyOutcome:
     composition_classes: ResolvedCompositionClasses | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "preflight_status", MappingProxyType(dict(self.preflight_status))
-        )
+        object.__setattr__(self, "preflight_status", MappingProxyType(dict(self.preflight_status)))
 
 
 def preflight_checks_for_mode(mode: object) -> Result[tuple[str, ...]]:
@@ -600,9 +588,7 @@ def _run_preflight(
     return Ok(MappingProxyType(status))
 
 
-def _evaluate_check(
-    name: str, facts: PreflightFacts
-) -> tuple[bool, str, dict[str, object]]:
+def _evaluate_check(name: str, facts: PreflightFacts) -> tuple[bool, str, dict[str, object]]:
     if name == "host_machine_tuple":
         return (
             facts.host_machine_tuple_ok,
@@ -863,9 +849,7 @@ def run_boot_ceremony(
 
     classified = _classify_workload_claims(workload_claims)
     if is_refusal(classified):
-        failure_id = str(
-            classified.context.get("failure_id", "compose.light_heavy")
-        )
+        failure_id = str(classified.context.get("failure_id", "compose.light_heavy"))
         attempt = BootAttemptRecord(
             boot_epoch_id=boot_token,
             unit_role=role_token,
@@ -899,9 +883,7 @@ def run_boot_ceremony(
 
     isolation = refuse_shadow_governed_wiring(shadow_consumer_wiring)
     if is_refusal(isolation):
-        failure_id = str(
-            isolation.context.get("failure_id", "compose.shadow_isolation")
-        )
+        failure_id = str(isolation.context.get("failure_id", "compose.shadow_isolation"))
         attempt = BootAttemptRecord(
             boot_epoch_id=boot_token,
             unit_role=role_token,
@@ -927,9 +909,7 @@ def run_boot_ceremony(
 
     population = _admit_risk_population(risk_population)
     if is_refusal(population):
-        failure_id = str(
-            population.context.get("failure_id", "compose.risk_population")
-        )
+        failure_id = str(population.context.get("failure_id", "compose.risk_population"))
         attempt = BootAttemptRecord(
             boot_epoch_id=boot_token,
             unit_role=role_token,
@@ -1102,9 +1082,7 @@ def _classify_workload_claims(
     """Evaluate assembled claims at Compose; empty means no light claims."""
     if workload_claims is None:
         claims: tuple[WorkloadClaim, ...] = ()
-    elif isinstance(workload_claims, Sequence) and not isinstance(
-        workload_claims, (str, bytes)
-    ):
+    elif isinstance(workload_claims, Sequence) and not isinstance(workload_claims, (str, bytes)):
         typed: list[WorkloadClaim] = []
         for item in cast("Sequence[object]", workload_claims):
             if not isinstance(item, WorkloadClaim):

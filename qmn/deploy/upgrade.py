@@ -112,9 +112,9 @@ def default_upgrade_policy() -> UpgradePolicy:
 def apt_unattended_fragment() -> str:
     """``/etc/apt/apt.conf.d/52qmx-no-auto-reboot`` body."""
     return (
-        '// QMX Trading VPS — unattended upgrades stage/verify only (NFR-18).\n'
-        '// Never reboot; never restart qmn.service. Release changes require\n'
-        '// an explicit ops-principal `just node-switch` at a safe point.\n'
+        "// QMX Trading VPS — unattended upgrades stage/verify only (NFR-18).\n"
+        "// Never reboot; never restart qmn.service. Release changes require\n"
+        "// an explicit ops-principal `just node-switch` at a safe point.\n"
         'Unattended-Upgrade::Automatic-Reboot "false";\n'
         'Unattended-Upgrade::Automatic-Reboot-WithUsers "false";\n'
         'Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";\n'
@@ -129,7 +129,7 @@ def needrestart_fragment() -> str:
         "$nrconf{override_rc} = {",
     ]
     for unit in NEVER_RESTART_UNITS:
-        lines.append(f'  qr(^{unit}$) => 0,')
+        lines.append(f"  qr(^{unit}$) => 0,")
     lines.append("};")
     lines.append("")
     return "\n".join(lines) + "\n"
@@ -161,9 +161,9 @@ def inspect_upgrade_policy(
     texts = dict(fragments or {})
     if "apt" in texts:
         apt = texts["apt"]
-        if 'Automatic-Reboot "false"' not in apt and "Automatic-Reboot \"false\"" not in apt:
+        if 'Automatic-Reboot "false"' not in apt and 'Automatic-Reboot "false"' not in apt:
             findings.append("apt fragment must disable Automatic-Reboot")
-        if "true" in apt.lower() and "automatic-reboot \"true\"" in apt.lower():
+        if "true" in apt.lower() and 'automatic-reboot "true"' in apt.lower():
             findings.append("apt fragment enables Automatic-Reboot")
     if "needrestart" in texts:
         nr = texts["needrestart"]

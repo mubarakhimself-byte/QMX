@@ -77,9 +77,7 @@ UNKNOWN_SHUTDOWN_TRIGGER: Final[str] = "disconnect"
 SILENT_DEGRADATION_ALARM_CLASS: Final[str] = "silent-degradation"
 
 # Entry-side intents refused in stand-down / under suspend_new (L39 / DEC-0189).
-_ENTRY_KINDS: Final[frozenset[str]] = frozenset(
-    {"place_order", "risk_increasing_amend_protection"}
-)
+_ENTRY_KINDS: Final[frozenset[str]] = frozenset({"place_order", "risk_increasing_amend_protection"})
 _RISK_NON_INCREASING_KINDS: Final[frozenset[str]] = frozenset(
     {
         "cancel_order",
@@ -341,9 +339,7 @@ class CrashLoopFold:
 
     max_boots: int
     window_ns: int
-    _stamps: MutableSequence[BootAttemptStamp] = field(
-        default_factory=list[BootAttemptStamp]
-    )
+    _stamps: MutableSequence[BootAttemptStamp] = field(default_factory=list[BootAttemptStamp])
 
     @classmethod
     def load(
@@ -402,9 +398,7 @@ class CrashLoopFold:
 
     def evaluate(self, *, now_ns: object) -> CrashLoopVerdict:
         if not isinstance(now_ns, int) or isinstance(now_ns, bool):
-            return CrashLoopVerdict(
-                counted_boots=0, threshold_breached=False, counted_epoch_ids=()
-            )
+            return CrashLoopVerdict(counted_boots=0, threshold_breached=False, counted_epoch_ids=())
         window_start = now_ns - self.window_ns
         counted: list[str] = []
         for stamp in self._stamps:
@@ -433,9 +427,7 @@ class SafePointSnapshot:
     positions_flat: bool | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "command_fates", MappingProxyType(dict(self.command_fates))
-        )
+        object.__setattr__(self, "command_fates", MappingProxyType(dict(self.command_fates)))
 
     @property
     def unresolved_command_ids(self) -> tuple[str, ...]:
@@ -635,9 +627,7 @@ class LifecycleSupervisor:
         if self.slice_start_mono_ns is None:
             return Ok(None)
         elapsed = now_mono_ns - self.slice_start_mono_ns
-        threshold = (
-            self.config.seat_callback_deadline_ns * self.config.slice_watch_trip_multiple
-        )
+        threshold = self.config.seat_callback_deadline_ns * self.config.slice_watch_trip_multiple
         if elapsed <= threshold:
             return Ok(None)
         triggered = notify_watchdog_trigger(transport=self.notify)
@@ -896,9 +886,7 @@ class LifecycleSupervisor:
         self.sessions_closed = True
         minted: list[str] = []
         pending = (
-            tuple(self.command_fates)
-            if unresolved_command_ids is None
-            else unresolved_command_ids
+            tuple(self.command_fates) if unresolved_command_ids is None else unresolved_command_ids
         )
         for raw_id in pending:
             cid = clean_token(raw_id)

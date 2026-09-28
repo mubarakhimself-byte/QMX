@@ -204,9 +204,7 @@ class _EdgeLogHost(Protocol):
 
 
 def _is_kind_registry(obj: object) -> TypeIs[_KindRegistryHost]:
-    return callable(getattr(obj, "register", None)) and callable(
-        getattr(obj, "contract_for", None)
-    )
+    return callable(getattr(obj, "register", None)) and callable(getattr(obj, "contract_for", None))
 
 
 def _is_registrar(obj: object) -> TypeIs[_RegistrarHost]:

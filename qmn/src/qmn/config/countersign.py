@@ -165,9 +165,7 @@ def _rows_as_layer_maps(
         if row.value_status == "blank" or row.source_layer is None:
             continue
         entry: dict[str, object] = {
-            "value_status": (
-                VALUE_STATUS_RATIFIED if name in flip else row.value_status
-            ),
+            "value_status": (VALUE_STATUS_RATIFIED if name in flip else row.value_status),
         }
         if row.value is not None:
             entry["value"] = row.value

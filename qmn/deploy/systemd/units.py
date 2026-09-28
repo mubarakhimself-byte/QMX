@@ -45,9 +45,7 @@ OBSERVABILITY_UNIT: Final[str] = "qmx-observability.service"
 POWERS_SOCKET_PATH: Final[str] = "/run/qmn/powers.sock"
 READ_WRITE_PATHS_NODE: Final[str] = "/var/lib/qmx"
 READ_WRITE_PATHS_OBS: Final[str] = "/var/lib/qmx-observability"
-REQUIRED_RESTRICT_FAMILIES: Final[frozenset[str]] = frozenset(
-    {"AF_UNIX", "AF_INET", "AF_INET6"}
-)
+REQUIRED_RESTRICT_FAMILIES: Final[frozenset[str]] = frozenset({"AF_UNIX", "AF_INET", "AF_INET6"})
 HARDENING_KEYS: Final[frozenset[str]] = frozenset(
     {
         "ProtectSystem",
@@ -167,9 +165,7 @@ def render_template(
     if _PLACEHOLDER_WATCHDOG in out:
         if watchdog_interval is None:
             raise ValueError("watchdog_interval required to render WatchdogSec")
-        out = out.replace(
-            _PLACEHOLDER_WATCHDOG, duration_to_systemd_sec(watchdog_interval)
-        )
+        out = out.replace(_PLACEHOLDER_WATCHDOG, duration_to_systemd_sec(watchdog_interval))
     return out
 
 
@@ -280,9 +276,7 @@ def inspect_unit_text(name: str, text: str) -> UnitInspection:
         if POWERS_SOCKET_PATH not in text:
             findings.append("powers socket path not referenced")
         if _setting(text, "LogNamespace") != "qmn":
-            findings.append(
-                "qmn.service must set LogNamespace=qmn for the observability stack"
-            )
+            findings.append("qmn.service must set LogNamespace=qmn for the observability stack")
 
     # Credential-consuming units: only LoadCredentialEncrypted, never plaintext
     # LoadCredential for secret material; seal flag is provision-time.
@@ -290,13 +284,10 @@ def inspect_unit_text(name: str, text: str) -> UnitInspection:
     load_enc = _all_settings(text, "LoadCredentialEncrypted")
     if load_plain:
         findings.append(
-            f"LoadCredential= present ({load_plain!r}); secrets must use "
-            "LoadCredentialEncrypted="
+            f"LoadCredential= present ({load_plain!r}); secrets must use LoadCredentialEncrypted="
         )
     if is_obs and not load_enc:
-        findings.append(
-            "observability unit must LoadCredentialEncrypted its own material"
-        )
+        findings.append("observability unit must LoadCredentialEncrypted its own material")
     credential_units = {
         "qmn.service",
         "qmn-backup.service",

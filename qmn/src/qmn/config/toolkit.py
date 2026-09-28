@@ -193,9 +193,7 @@ def _explain_one(row: ResolvedValueRow) -> dict[str, object]:
         record["value"] = "<blank>"
     elif is_secret_ref_key(row.name):
         # Reference id is the safe handle; never a SecretValue plaintext.
-        record["value"] = (
-            row.value if isinstance(row.value, str) else _SECRET_REF_DISPLAY
-        )
+        record["value"] = row.value if isinstance(row.value, str) else _SECRET_REF_DISPLAY
         record["secret_ref"] = True
     else:
         record["value"] = row.value

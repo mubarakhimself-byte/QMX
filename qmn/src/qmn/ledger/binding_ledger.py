@@ -129,9 +129,7 @@ class BindingVirtualLedger:
 
     @property
     def open_positions(self) -> tuple[VirtualPosition, ...]:
-        return tuple(
-            p for p in self._positions.values() if p.status is VirtualPositionStatus.OPEN
-        )
+        return tuple(p for p in self._positions.values() if p.status is VirtualPositionStatus.OPEN)
 
     def position_snapshots(self) -> Mapping[str, tuple[str, Mapping[str, object]]]:
         """Public position identity snapshot for boundary-act invariants."""
@@ -418,8 +416,7 @@ def refuse_float_money(value: object) -> Result[None]:
     if isinstance(value, float):
         return invalid(
             "value",
-            "no float on the money path; money is an exact scaled integer with a "
-            "declared scale",
+            "no float on the money path; money is an exact scaled integer with a declared scale",
             given=repr(value),
         )
     if isinstance(value, Money):
