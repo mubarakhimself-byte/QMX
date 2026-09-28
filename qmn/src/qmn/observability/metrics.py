@@ -215,7 +215,7 @@ class NodeMetricsRegistry:
         self,
         name: str,
         *,
-        amount: float = 1.0,
+        amount: float = 1.0,  # mock-data-scan: allow - counter increment default
         labels: Mapping[str, str] | None = None,
     ) -> None:
         counter = self._counters[name]

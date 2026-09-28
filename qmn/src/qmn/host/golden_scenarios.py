@@ -1963,7 +1963,10 @@ def _account(venue: VenueId, account_id: str, role: AccountRole) -> Result[Accou
     return Account.try_create(account_id, venue, role)
 
 
-def _instrument(venue: VenueId, symbol: str = "EURUSD") -> Result[Instrument]:
+def _instrument(
+    venue: VenueId,
+    symbol: str = "EURUSD",  # mock-data-scan: allow - golden-scenario harness default
+) -> Result[Instrument]:
     return Instrument.try_create(venue, symbol)
 
 

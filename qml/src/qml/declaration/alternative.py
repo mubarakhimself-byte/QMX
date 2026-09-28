@@ -53,19 +53,21 @@ BOOK_KEYS: Final[frozenset[str]] = frozenset(
         "bot_fp1",
     }
 )
-_DUMMY_POLICY: Final[frozenset[str]] = frozenset(
-    {
-        "identity",
-        "no-op",
-        "noop",
-        "unlimited",
-        "pass-through",
-        "passthrough",
-        "pass_through",
-    }
+_DUMMY_POLICY: Final[frozenset[str]] = (  # mock-data-scan: allow - Epic 58 dummy policy tokens
+    frozenset(
+        {
+            "identity",
+            "no-op",
+            "noop",
+            "unlimited",
+            "pass-through",
+            "passthrough",
+            "pass_through",
+        }
+    )
 )
-_DUMMY_SENTINEL: Final[frozenset[str]] = frozenset(
-    {"NULL_BOOK", "NULL_BMS", "NULL_BOT", "NULL_POLICY_PAIR"}
+_DUMMY_SENTINEL: Final[frozenset[str]] = (  # mock-data-scan: allow - Epic 58 dummy sentinels
+    frozenset({"NULL_BOOK", "NULL_BMS", "NULL_BOT", "NULL_POLICY_PAIR"})
 )
 _SENSING: Final[frozenset[str]] = frozenset(
     {
@@ -146,7 +148,11 @@ def author_policy_pair(
         return invalid("policy_pair_id", "PolicyPair identity includes policy_pair_id")
     folded_sentinels = {item.casefold() for item in _DUMMY_SENTINEL}
     if pair_id in _DUMMY_SENTINEL or pair_id.casefold() in folded_sentinels:
-        return invalid("policy_pair_id", "dummy PolicyPair is invalid input", sentinel=pair_id)
+        return invalid(
+            "policy_pair_id",
+            "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+            sentinel=pair_id,
+        )
     if isinstance(policy_pair_version, bool) or not isinstance(policy_pair_version, int):
         return invalid(
             "policy_pair_version",
@@ -206,7 +212,11 @@ def _section(
             return invalid(raw_key, "PolicyPair field values are non-empty tokens")
         folded = token.strip().casefold().replace("_", "-")
         if token in _DUMMY_SENTINEL or folded in _DUMMY_POLICY or token.casefold() in _DUMMY_POLICY:
-            return invalid(raw_key, "dummy PolicyPair is invalid input", policy=token)
+            return invalid(
+                raw_key,
+                "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+                policy=token,
+            )
         out[raw_key] = token
     missing = [name for name in required if name not in out]
     if missing:

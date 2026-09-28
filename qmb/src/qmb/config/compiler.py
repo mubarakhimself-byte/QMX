@@ -425,10 +425,14 @@ class ResolvedRunConfig:
                 given=repr(type(keys).__name__),
             )
         keys_map = cast("Mapping[str, object]", keys)
-        dummy_keys = refuse_dummy_mapping(keys_map, field="keys")
+        dummy_keys = refuse_dummy_mapping(  # mock-data-scan: allow - Epic 58 dummy Book refused
+            keys_map, field="keys"
+        )
         if dummy_keys is not None:
             return dummy_keys
-        dummy_identity = refuse_dummy_mapping(body, field="identity")
+        dummy_identity = refuse_dummy_mapping(  # mock-data-scan: allow - Epic 58 dummy Book refused
+            body, field="identity"
+        )
         if dummy_identity is not None:
             return dummy_identity
         special = [key for key in keys_map if key in _SPECIAL_KEYS]
@@ -514,7 +518,9 @@ def compile_run_config(
     bms = _require_fragment(bms_fragment, SOURCE_BMS, "bms_fragment")
     if is_refusal(bms):
         return bms
-    dummy_fragments = refuse_dummy_fragments(book.value, bms.value)
+    dummy_fragments = refuse_dummy_fragments(  # mock-data-scan: allow - Epic 58 dummy Book refused
+        book.value, bms.value
+    )
     if dummy_fragments is not None:
         return dummy_fragments
     spec = _as_mapping(run_spec, "run_spec")
@@ -576,20 +582,26 @@ def compile_run_config(
             "the run spec (bot layer) cites a bot by fp1 or a human alias; "
             "the resolved artifact cites fp1, never name@version",
         )
-    dummy_bot = refuse_dummy_cite("bot", bot_ref)
+    dummy_bot = refuse_dummy_cite(  # mock-data-scan: allow - Epic 58 dummy bot refused
+        "bot", bot_ref
+    )
     if dummy_bot is not None:
         return dummy_bot
     sensing = refuse_sensing_as_atc(acc)
     if is_refusal(sensing):
         return sensing
-    dummy_layers = refuse_dummy_mapping(acc, field="keys")
+    dummy_layers = refuse_dummy_mapping(  # mock-data-scan: allow - Epic 58 dummy Book refused
+        acc, field="keys"
+    )
     if dummy_layers is not None:
         return dummy_layers
     bot = _resolve_cite(resolved_port.value, "bot", bot_ref)
     if is_refusal(bot):
         return bot
     if bot.value.record is not None:
-        dummy_ct33 = refuse_dummy_mapping(bot.value.record.body, field="bot")
+        dummy_ct33 = refuse_dummy_mapping(  # mock-data-scan: allow - Epic 58 dummy bot refused
+            bot.value.record.body, field="bot"
+        )
         if dummy_ct33 is not None:
             return dummy_ct33
     if "binding" in acc:
@@ -854,7 +866,7 @@ def _resolve_cite(port: RegistryReadPort, field: str, value: object) -> Result[R
 
 def _parse_cite(value: object, field: str) -> Result[Fingerprint | str]:
     """Split a cite into fp1 or alias. ``name@version`` is always refused."""
-    dummy = refuse_dummy_cite(field, value)
+    dummy = refuse_dummy_cite(field, value)  # mock-data-scan: allow - Epic 58 dummy cite refused
     if dummy is not None:
         return dummy
     if isinstance(value, Fingerprint):
@@ -1043,7 +1055,7 @@ def _overlay(base: dict[str, object], incoming: Mapping[str, object]) -> dict[st
 
 
 def _require_fingerprint(value: object, field: str) -> Result[Fingerprint]:
-    dummy = refuse_dummy_cite(field, value)
+    dummy = refuse_dummy_cite(field, value)  # mock-data-scan: allow - Epic 58 dummy cite refused
     if dummy is not None:
         return dummy
     parsed = _coerce_fingerprint(value)

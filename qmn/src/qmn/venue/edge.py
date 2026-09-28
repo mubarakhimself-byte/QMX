@@ -94,7 +94,7 @@ def companion_source_implementation_allowed() -> bool:
 
 def requote_error_map_row(
     *,
-    venue_code: object = "REQUOTE",
+    venue_code: object = "REQUOTE",  # mock-data-scan: allow - pinned requote error-map code
     context: object = "place_order",
 ) -> Result[ErrorMapRow]:
     """Build the pinned error-map row that makes a requote ``rejected-by-venue``."""

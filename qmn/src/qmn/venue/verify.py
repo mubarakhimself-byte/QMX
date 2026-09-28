@@ -922,7 +922,7 @@ def conformance_measured_facts(
     amend_atomicity: str = "non-atomic",
     pacing_scope: str = "connection",
     protective_stop_forms: Sequence[str] | None = None,
-    quote_type: str = "bid",
+    quote_type: str = "bid",  # mock-data-scan: allow - conformance-double default
     utc_minute_of_day: int = 1020,
     money_digits: int = 2,
     pip_position: int = 4,

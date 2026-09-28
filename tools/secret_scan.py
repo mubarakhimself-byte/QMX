@@ -13,9 +13,9 @@ credential in a workflow, a queued brief, or a root dotfile is exactly as danger
 as one in source. Covered surfaces explicitly include source, fixtures, unit files,
 rendered config, logs, and refusal snapshots (QMX-F064 / Story 25.13). ``adws/`` is
 scanned **read-only** (the factory machinery is never modified). Machine-noise and
-vendored trees are skipped by ``SKIP_DIRS``; only this scanner's own planted fixture
-corpus under ``tools/tests/fixtures`` is path-skipped so deliberately assembled fake
-secrets cannot trip the live gate.
+vendored trees are skipped by ``SKIP_DIRS``; path-skipped files are this scanner's
+own planted fixture corpus under ``tools/tests/fixtures`` and the pack-lifecycle
+export-scan fixture that plants a fake PEM so the export oracle can refuse it.
 
 **Detection** is pattern-based and deliberately high-precision (private-key blocks,
 cloud/provider access keys, and quoted credential assignments) to keep the gate free
@@ -56,11 +56,13 @@ SKIP_DIRS: frozenset[str] = frozenset(
     }
 )
 
-# Only this scanner's planted must_flag corpus is path-skipped. Project fixtures,
-# unit files, rendered config, logs, and refusal snapshots stay in scope (QMX-F064).
+# Planted must_flag corpus, plus the pack-lifecycle export-scan fixture that
+# plants a fake PEM for the export oracle. Other project fixtures stay in scope
+# (QMX-F064).
 SKIP_PATH_PREFIXES: frozenset[str] = frozenset(
     {
         "tools/tests/fixtures",
+        "qmx-agents/packages/qma-daemon/tests/test_pack_lifecycle_fixture.py",
     }
 )
 
@@ -139,11 +141,12 @@ def iter_scanned_files(root: Path = ROOT) -> Iterator[Path]:
     """Yield every scannable file in the repository tree, root files included.
 
     Walks ``root`` with in-place directory pruning so a ``SKIP_DIRS`` tree (a
-    virtualenv, a cache) is never descended into. The scanner's own planted fixture
-    corpus under ``tools/tests/fixtures`` is path-skipped; project fixtures, unit
-    files, rendered config, logs, and refusal snapshots remain in scope. Only
-    recognized text suffixes are yielded, and the scanner's own source is skipped so
-    its pattern definitions cannot trip it.
+    virtualenv, a cache) is never descended into. ``SKIP_PATH_PREFIXES`` (the
+    planted corpus under ``tools/tests/fixtures``, plus the pack-lifecycle fake
+    PEM fixture) are path-skipped; other project fixtures, unit files, rendered
+    config, logs, and refusal snapshots remain in scope. Only recognized text
+    suffixes are yielded, and the scanner's own source is skipped so its pattern
+    definitions cannot trip it.
     """
     root_resolved = root.resolve()
     for dirpath, dirnames, filenames in os.walk(root):

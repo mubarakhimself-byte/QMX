@@ -450,7 +450,9 @@ def hash_policy_pair(
     rsk = _require_section(risk, "risk", RISK_POLICY_FIELDS)
     if is_refusal(rsk):
         return rsk
-    dummy = refuse_dummy_policy_pair({"accounting": acc.value, "risk": rsk.value})
+    dummy = refuse_dummy_policy_pair(  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+        {"accounting": acc.value, "risk": rsk.value}
+    )
     if dummy is not None:
         return dummy
     return fingerprint({"accounting": acc.value, "risk": rsk.value})
@@ -819,13 +821,17 @@ def _parse_policy_pair(body: Mapping[str, object]) -> Result[PolicyPair]:
     pair_id = clean_token(body.get("policy_pair_id"))
     if pair_id is None:
         return invalid("policy_pair_id", "PolicyPair identity includes policy_pair_id")
-    dummy_id = (
+    dummy_id = (  # mock-data-scan: allow - Epic 58 dummy PolicyPair id
         pair_id in DUMMY_SENTINEL_TOKENS
         or pair_id.casefold() in {item.casefold() for item in DUMMY_SENTINEL_TOKENS}
         or pair_id.casefold() in DUMMY_POLICY_TOKENS
     )
     if dummy_id:
-        return invalid("policy_pair_id", "dummy PolicyPair is invalid input", sentinel=pair_id)
+        return invalid(
+            "policy_pair_id",
+            "dummy PolicyPair is invalid input",  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
+            sentinel=pair_id,
+        )
     version = _positive_int(body.get("policy_pair_version"), "policy_pair_version")
     if is_refusal(version):
         return version
@@ -837,7 +843,7 @@ def _parse_policy_pair(body: Mapping[str, object]) -> Result[PolicyPair]:
             given=repr(type(inline).__name__),
         )
     inline_map = cast("Mapping[str, object]", inline)
-    dummy = refuse_dummy_policy_pair(
+    dummy = refuse_dummy_policy_pair(  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
         {
             "accounting": inline_map.get("accounting"),
             "policy_pair_hash": body.get("policy_pair_hash"),

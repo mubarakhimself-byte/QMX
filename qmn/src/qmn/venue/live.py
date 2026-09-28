@@ -1086,7 +1086,7 @@ class LiveCTraderClient:
         native_id: object,
         instrument: object = None,
         venue_time_raw: object = None,
-        venue_time_unit: object = "milliseconds",
+        venue_time_unit: object = "milliseconds",  # mock-data-scan: allow - wire time-unit default
         revision: object = 0,
         lifecycle_kind: object = None,
         fill_price_wire: object = None,

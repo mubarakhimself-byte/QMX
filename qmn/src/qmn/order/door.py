@@ -354,7 +354,7 @@ def admit_entry_at_book_door(
     r_unit_price: object,
     value_factor: object,
     money_scale: object,
-    quantity_unit: object = "lot",
+    quantity_unit: object = "lot",  # mock-data-scan: allow - Book-door unit default
     quantity_scale: object = 0,
     ct23_format_version: object = CT23_ACTIVE_FORMAT_VERSION,
     has_open_virtual_position: object = False,

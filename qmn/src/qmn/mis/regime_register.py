@@ -857,7 +857,7 @@ def build_non_authoritative_registration(
         resolved_model_fp = fingerprint_bytes(payload)
     else:
         # Content-address a declared external stub so provenance stays honest.
-        stub = fingerprint(
+        stub = fingerprint(  # mock-data-scan: allow - honest external-candidate stub
             {
                 "class": "regime-external-candidate-stub",
                 "family": family_token,
