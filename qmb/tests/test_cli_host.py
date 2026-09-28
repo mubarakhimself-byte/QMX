@@ -8,7 +8,6 @@ import socket
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
 
 from click.testing import CliRunner
 from qmb.doors.cli import (
@@ -39,7 +38,7 @@ from qmb.doors.cli.host import (
     product_daemon_root,
     redact_host_surface,
 )
-from qmf.core.refusal import RefusalCategory, is_ok, is_refusal
+from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 
 _TOKEN = "fixture-host-control-token"
 
@@ -73,11 +72,13 @@ def _write_bind(root: Path, host: str, port: int) -> None:
     )
 
 
-def _ok_mapping(result: object) -> Mapping[str, object]:
+def _no_sleep(_seconds: float) -> None:
+    return None
+
+
+def _ok_mapping(result: Result[Mapping[str, object]]) -> Mapping[str, object]:
     assert is_ok(result), result
-    value = result.value
-    assert isinstance(value, Mapping)
-    return cast("Mapping[str, object]", value)
+    return result.value
 
 
 class _HostControlServer(threading.Thread):
@@ -211,7 +212,7 @@ def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
         return os.getpid()
 
     report = _ok_mapping(
-        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=lambda _s: None)
+        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
     )
     assert report["state"] == "started"
     assert report["spawned"] is True
@@ -294,7 +295,7 @@ def test_click_host_start_status_stop(tmp_path: Path) -> None:
     started = runner.invoke(
         main,
         ["host", "start"],
-        obj={"root": tmp_path, "spawn": spawn, "wait_attempts": 1, "sleeper": lambda _s: None},
+        obj={"root": tmp_path, "spawn": spawn, "wait_attempts": 1, "sleeper": _no_sleep},
     )
     assert started.exit_code == 0, started.output
     payload = json.loads(started.stdout)

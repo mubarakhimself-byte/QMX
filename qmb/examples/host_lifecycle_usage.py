@@ -60,9 +60,10 @@ def main() -> None:
             )
             return os.getpid()
 
-        started = invoke_host_start(
-            root=root, spawn=spawn, wait_attempts=1, sleeper=lambda _s: None
-        )
+        def sleeper(_seconds: float) -> None:
+            return None
+
+        started = invoke_host_start(root=root, spawn=spawn, wait_attempts=1, sleeper=sleeper)
         assert is_ok(started), started
         assert started.value["state"] == "started"
         again = invoke_host_start(root=root, spawn=spawn, wait_attempts=1)
