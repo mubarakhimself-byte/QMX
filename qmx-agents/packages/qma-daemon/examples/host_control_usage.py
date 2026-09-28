@@ -1,4 +1,4 @@
-"""L27 reference usage: product QMA_DAEMON_ROOT and host-control (Story 67.1)."""
+"""L27 reference usage: product QMA_DAEMON_ROOT and host-control (Stories 67.1–67.3)."""
 
 from __future__ import annotations
 
@@ -15,11 +15,13 @@ from qma.daemon.host_control import (
     claim_host_configure_existed_at_inspect_sha,
     claim_host_control_existed_at_inspect_sha,
     claim_local_operator_existed_at_inspect_sha,
+    claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     host_control_call,
     load_local_operator,
     principal_count,
     product_daemon_root,
+    read_host_control_token,
 )
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import (
@@ -47,6 +49,7 @@ def main() -> None:
     assert is_refusal(claim_host_control_existed_at_inspect_sha(True))
     assert is_refusal(claim_local_operator_existed_at_inspect_sha(True))
     assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
+    assert is_refusal(claim_rotate_control_existed_at_inspect_sha(True))
     assert is_refusal(claim_types_absent_at_inspect_sha(True))
     assert WireEnvelope.__name__ == "WireEnvelope"
     assert GrantRecord.__name__ == "GrantRecord"
@@ -79,6 +82,19 @@ def main() -> None:
             assert isinstance(snapshot, dict)
             assert snapshot["operator_established"] is True
             assert snapshot["ttl"] == "unset"
+            old = read_host_control_token(root)
+            assert is_ok(old)
+            rotated = await asyncio.to_thread(host_control_call, root, "rotate-control")
+            assert is_ok(rotated), rotated
+            assert rotated.value["ok"] is True
+            stale = await asyncio.to_thread(
+                host_control_call,
+                root,
+                "status",
+                token=old.value,
+            )
+            assert is_ok(stale)
+            assert stale.value["ok"] is False
             stopped = await asyncio.to_thread(host_control_call, root, "stop")
             assert is_ok(stopped), stopped
             for _ in range(50):

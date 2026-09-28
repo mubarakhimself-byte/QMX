@@ -20,6 +20,7 @@ from qma.daemon.host_control.channel import (
     HOST_CONTROL_INSPECT_SHA,
     ensure_host_control_token,
     read_host_control_token,
+    rotate_host_control_token,
 )
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.stores import StoreClass
@@ -37,9 +38,11 @@ __all__ = [
     "LOCAL_OPERATOR_FOLD_ID",
     "LOCAL_OPERATOR_NEW_SQLITE_CLASS",
     "LOCAL_OPERATOR_PRINCIPAL_ID",
+    "LOCAL_OPERATOR_ROTATED_EVENT",
     "LOCAL_OPERATOR_STORE",
     "LOCAL_OPERATOR_STORE_CLASS",
     "LOCAL_OPERATOR_TABLE",
+    "HostControlRotation",
     "LocalOperatorLive",
     "bootstrap_first_operator",
     "claim_host_configure_existed_at_inspect_sha",
@@ -47,6 +50,7 @@ __all__ = [
     "host_control_fp1",
     "load_local_operator",
     "principal_count",
+    "rotate_local_operator_control",
 ]
 
 
@@ -56,6 +60,7 @@ LOCAL_OPERATOR_TABLE: Final[str] = "local_operator"
 LOCAL_OPERATOR_STORE_CLASS: Final[str] = StoreClass.JOURNAL_DERIVED_PROJECTION.value
 LOCAL_OPERATOR_PRINCIPAL_ID: Final[str] = "local_operator"
 LOCAL_OPERATOR_ESTABLISHED_EVENT: Final[str] = "local_operator.established"
+LOCAL_OPERATOR_ROTATED_EVENT: Final[str] = "local_operator.host_control_rotated"
 LOCAL_OPERATOR_NEW_SQLITE_CLASS: Final[bool] = False
 LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -132,6 +137,15 @@ def claim_host_configure_existed_at_inspect_sha(existed: object) -> Result[bool]
 def host_control_fp1(token: str) -> str:
     """fp1 of the host_control token bytes. Journal stores this, never the token."""
     return fingerprint_bytes(token.encode("utf-8")).value
+
+
+@dataclass(frozen=True, slots=True)
+class HostControlRotation:
+    """In-process rotate-control result. The token is never journaled."""
+
+    live: LocalOperatorLive
+    previous_host_control_fp1: str
+    token: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,3 +365,74 @@ def bootstrap_first_operator(
             root=str(root),
         )
     return Ok(live)
+
+
+def _restore_host_control_token(root: Path, token: str) -> None:
+    path = root / HOST_CONTROL_FILE
+    try:
+        path.write_text(token + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def rotate_local_operator_control(
+    root: Path,
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+) -> Result[HostControlRotation]:
+    """Remint host_control while held. Same principal; journals stay intact."""
+    existing = load_local_operator(sqlite)
+    if existing is None:
+        existing = fold_local_operator_from_journal(journal)
+        if existing is not None:
+            _put(sqlite, existing)
+    if existing is None:
+        return policy_rejection(
+            "local_operator",
+            "rotate-control requires an established local_operator",
+            root=str(root),
+        )
+    held = read_host_control_token(root)
+    if is_refusal(held):
+        return held
+    previous_token = held.value
+    minted = rotate_host_control_token(root)
+    if is_refusal(minted):
+        return minted
+    new_token = minted.value
+    new_fp1 = host_control_fp1(new_token)
+    previous_fp1 = existing.host_control_fp1
+    payload: dict[str, object] = {
+        "principal_id": existing.principal_id,
+        "principal_class": existing.principal_class,
+        "host_control_fp1": new_fp1,
+        "previous_host_control_fp1": previous_fp1,
+    }
+    append = journal.append_event(LOCAL_OPERATOR_ROTATED_EVENT, payload=payload)
+    if is_refusal(append):
+        _restore_host_control_token(root, previous_token)
+        return append
+    record = append.value.record
+    live = LocalOperatorLive(
+        principal_id=existing.principal_id,
+        principal_class=existing.principal_class,
+        host_control_fp1=new_fp1,
+        journal_seq=record.journal_seq,
+        recorded_at=record.recorded_at,
+        minted=False,
+    )
+    _put(sqlite, live)
+    if principal_count(sqlite) != 1:
+        return policy_rejection(
+            "local_operator",
+            "live shape is a single local operator principal (AM-03)",
+            count=principal_count(sqlite),
+        )
+    return Ok(
+        HostControlRotation(
+            live=live,
+            previous_host_control_fp1=previous_fp1,
+            token=new_token,
+        )
+    )

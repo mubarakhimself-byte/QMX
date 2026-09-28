@@ -66,6 +66,7 @@ from qma.daemon.host_control import (
     bootstrap_first_operator,
     claim_host_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
+    rotate_local_operator_control,
 )
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
@@ -671,6 +672,33 @@ class DaemonProcess:
             }
         )
 
+    def rotate_control(self) -> Result[Mapping[str, object]]:
+        """Remint host_control while the current token is held (T-H-01)."""
+        rotated = rotate_local_operator_control(
+            self.root,
+            journal=self._journal,
+            sqlite=self._substrate.sqlite,
+        )
+        if is_refusal(rotated):
+            return rotated
+        result = rotated.value
+        self._local_operator = result.live
+        channel = self._host_control
+        if channel is not None:
+            channel.replace_expected_token(result.token)
+        return Ok(
+            MappingProxyType(
+                {
+                    "rotated": True,
+                    "local_operator": "unchanged",
+                    "principal_id": result.live.principal_id,
+                    "host_control_fp1": result.live.host_control_fp1,
+                    "previous_host_control_fp1": result.previous_host_control_fp1,
+                    "writer": "host.rotate-control",
+                }
+            )
+        )
+
     def configure_pairing_ttl(self, duration: object) -> Result[Mapping[str, object]]:
         """Sole writer of ``registry:pairing.session_ttl`` (AM-10; GAP-0109)."""
         written = self._variables.configure_pairing_session_ttl(
@@ -789,6 +817,7 @@ class DaemonProcess:
             status=self.host_status_snapshot,
             on_stop=self.request_stop,
             on_configure_pairing_ttl=self.configure_pairing_ttl,
+            on_rotate_control=self.rotate_control,
         )
         bound = await channel.bind()
         if is_refusal(bound):

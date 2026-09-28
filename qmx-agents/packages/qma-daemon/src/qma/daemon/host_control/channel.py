@@ -1,6 +1,8 @@
-"""Token-gated loopback host-control channel (Story 67.1; AM-15).
+"""Token-gated loopback host-control channel (Stories 67.1–67.3; AM-15).
 
 Outside port 8765. Not CT-40, not ``/pair/*``, not ``POST /host/*`` on 8765.
+Running-daemon verbs require the current token. Rotate-control remints while
+that token is held and does not recover a lost file.
 """
 
 from __future__ import annotations
@@ -32,9 +34,11 @@ __all__ = [
     "HOST_CONTROL_IS_CT40",
     "HOST_CONTROL_VERBS",
     "MAX_HOST_CONTROL_FRAME",
+    "ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "BoundHostControl",
     "HostControlChannel",
     "claim_host_control_existed_at_inspect_sha",
+    "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "decode_host_control_frame",
     "encode_host_control_frame",
@@ -43,6 +47,7 @@ __all__ = [
     "read_host_control_bind",
     "read_host_control_token",
     "redact_host_surface",
+    "rotate_host_control_token",
     "write_host_control_bind",
 ]
 
@@ -53,7 +58,10 @@ CT40_BIND_PORT: Final[int] = 8765
 HOST_CONTROL_IS_CT40: Final[bool] = False
 HOST_CONTROL_INSPECT_SHA: Final[str] = "34c148be"
 HOST_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
-HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset({"status", "stop", "configure"})
+ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
+    {"status", "stop", "configure", "rotate-control"}
+)
 HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
 MAX_HOST_CONTROL_FRAME: Final[int] = 65536
 _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -106,6 +114,24 @@ def claim_host_control_existed_at_inspect_sha(existed: object) -> Result[bool]:
             "host_control",
             "qmb host and host-control were absent at inspect SHA 34c148be "
             "(COMMAND_GROUPS has no host; DaemonProcess discards TCP bytes)",
+            existed_at_inspect_sha=False,
+            inspect_sha=HOST_CONTROL_INSPECT_SHA,
+        )
+    if existed is not False:
+        return _invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_rotate_control_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host rotate-control`` existed at ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return _policy(
+            "host.rotate-control",
+            "qmb host rotate-control was absent at inspect SHA 34c148be",
             existed_at_inspect_sha=False,
             inspect_sha=HOST_CONTROL_INSPECT_SHA,
         )
@@ -224,6 +250,27 @@ def ensure_host_control_token(root: Path) -> Result[str]:
     return Ok(token)
 
 
+def rotate_host_control_token(root: Path) -> Result[str]:
+    """Mint a new owner-only ``host_control`` file. Does not recover a lost file."""
+    current = read_host_control_token(root)
+    if not isinstance(current, Ok):
+        return current
+    previous = current.value
+    token = secrets.token_urlsafe(32)
+    while token == previous:
+        token = secrets.token_urlsafe(32)
+    path = root / HOST_CONTROL_FILE
+    try:
+        path.write_text(token + "\n", encoding="utf-8")
+        _restrict_owner_only(path)
+    except OSError as exc:
+        return storage_failure(
+            f"could not rotate host_control: {exc}",
+            context={"field": "host_control", "root": str(root)},
+        )
+    return Ok(token)
+
+
 def read_host_control_token(root: Path) -> Result[str]:
     path = root / HOST_CONTROL_FILE
     try:
@@ -311,16 +358,25 @@ def host_control_call(
     *,
     timeout_s: float = 2.0,
     fields: Mapping[str, object] | None = None,
+    token: str | None = None,
 ) -> Result[Mapping[str, object]]:
-    """Present the current token on the loopback channel (sync client)."""
-    token = read_host_control_token(root)
-    if not isinstance(token, Ok):
-        return token
+    """Present a host-control token on the loopback channel (sync client).
+
+    When ``token`` is omitted, the current ``host_control`` file is read.
+    """
+    presented: str
+    if token is None:
+        held = read_host_control_token(root)
+        if not isinstance(held, Ok):
+            return held
+        presented = held.value
+    else:
+        presented = token
     bound = read_host_control_bind(root)
     if not isinstance(bound, Ok):
         return bound
     host, port = bound.value
-    request: dict[str, object] = {"verb": verb, "host_control": token.value}
+    request: dict[str, object] = {"verb": verb, "host_control": presented}
     if fields is not None:
         for key, item in fields.items():
             name = str(key)
@@ -432,11 +488,13 @@ class HostControlChannel:
         status: Callable[[], Mapping[str, object]],
         on_stop: Callable[[], None],
         on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
+        on_rotate_control: Callable[[], Result[Mapping[str, object]]] | None = None,
     ) -> None:
         self._root = root
         self._status = status
         self._on_stop = on_stop
         self._on_configure_pairing_ttl = on_configure_pairing_ttl
+        self._on_rotate_control = on_rotate_control
         self._server: asyncio.Server | None = None
         self._bound: BoundHostControl | None = None
         self._expected: str = ""
@@ -444,6 +502,10 @@ class HostControlChannel:
     @property
     def bound(self) -> BoundHostControl | None:
         return self._bound
+
+    def replace_expected_token(self, token: str) -> None:
+        """Invalidate the previous fingerprint by accepting only the new token."""
+        self._expected = token
 
     async def bind(self) -> Result[BoundHostControl]:
         if self._bound is not None and self._server is not None:
@@ -560,12 +622,14 @@ class HostControlChannel:
             return {"ok": True, "stopped": True}, True
         if verb == "configure":
             return self._configure(request), False
-        if verb in {"pair", "rotate-control", "recover-control"}:
+        if verb == "rotate-control":
+            return self._rotate(), False
+        if verb in {"pair", "recover-control"}:
             return (
                 _fail(
                     RefusalCategory.UNSUPPORTED_CAPABILITY,
                     "verb",
-                    "pair / rotate-control / recover-control are not this story",
+                    "pair / recover-control are not this story",
                     given=repr(verb),
                 ),
                 False,
@@ -601,6 +665,19 @@ class HostControlChannel:
         if is_refusal(written):
             return _refusal_frame(written)
         return {"ok": True, "configured": redact_host_surface(written.value)}
+
+    def _rotate(self) -> dict[str, object]:
+        callback = self._on_rotate_control
+        if callback is None:
+            return _fail(
+                RefusalCategory.UNSUPPORTED_CAPABILITY,
+                "rotate-control",
+                "host-control rotate-control is not bound",
+            )
+        written = callback()
+        if is_refusal(written):
+            return _refusal_frame(written)
+        return {"ok": True, "rotated": redact_host_surface(written.value)}
 
     def close(self) -> None:
         server = self._server

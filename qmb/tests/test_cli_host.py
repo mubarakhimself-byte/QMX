@@ -1,14 +1,16 @@
-"""Stories 67.1–67.2 — product QMA_DAEMON_ROOT, host start|status|stop|configure."""
+"""Stories 67.1–67.3 — product QMA_DAEMON_ROOT, host start|status|stop|configure|rotate-control."""
 
 from __future__ import annotations
 
 import json
 import os
 import socket
+import stat
 import threading
 from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from qmb.doors.cli import (
     COMMAND_GROUPS,
@@ -16,6 +18,7 @@ from qmb.doors.cli import (
     HOST_CONFIGURE_COMMANDS,
     command_tree,
     invoke_host_configure_pairing_ttl,
+    invoke_host_rotate_control,
     invoke_host_start,
     invoke_host_status,
     invoke_host_stop,
@@ -32,6 +35,7 @@ from qmb.doors.cli.host import (
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
+    QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
     START_GRANTS,
     START_ORCHESTRATES_MISSIONS,
     START_STARTS_QMN,
@@ -39,6 +43,7 @@ from qmb.doors.cli.host import (
     STOP_STOPS_REMOTE,
     claim_host_configure_existed_at_inspect_sha,
     claim_qmb_host_existed_at_inspect_sha,
+    claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     product_daemon_root,
     redact_host_surface,
@@ -164,6 +169,19 @@ class _HostControlServer(threading.Thread):
                     "writer": "host.configure.pairing-ttl",
                 },
             }
+        elif verb == "rotate-control":
+            rotated = "rotated-" + self._token
+            (self._root / HOST_CONTROL_FILE).write_text(rotated + "\n", encoding="utf-8")
+            self._token = rotated
+            payload = {
+                "ok": True,
+                "rotated": {
+                    "rotated": True,
+                    "local_operator": "unchanged",
+                    "writer": "host.rotate-control",
+                    "host_control": rotated,
+                },
+            }
         else:
             payload = {"ok": False, "refusal": {"category": "invalid_input"}}
         raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -200,9 +218,20 @@ def test_product_root_is_not_cwd_relative_qma_daemon_data() -> None:
 def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "host" not in INSPECT_SHA_COMMAND_GROUPS
     assert COMMAND_GROUPS[-1] == "host"
-    assert command_tree()["host"] == HOST_COMMANDS == ("start", "status", "stop", "configure")
+    assert (
+        command_tree()["host"]
+        == HOST_COMMANDS
+        == (
+            "start",
+            "status",
+            "stop",
+            "configure",
+            "rotate-control",
+        )
+    )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
     assert "pair" not in HOST_COMMANDS
+    assert "recover-control" not in HOST_COMMANDS
     runner = CliRunner()
     helped = runner.invoke(main, ["host", "--help"])
     assert helped.exit_code == 0, helped.output
@@ -210,7 +239,9 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "status" in helped.output
     assert "stop" in helped.output
     assert "configure" in helped.output
+    assert "rotate-control" in helped.output
     assert "pair" not in helped.output
+    assert "recover-control" not in helped.output
     missing = runner.invoke(main, ["host", "pair"])
     assert missing.exit_code != 0
     configure_help = runner.invoke(main, ["host", "configure", "--help"])
@@ -358,12 +389,16 @@ def test_click_host_start_status_stop(tmp_path: Path) -> None:
 def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA is False
     claimed = claim_qmb_host_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_qmb_host_existed_at_inspect_sha(False))
     configure_claimed = claim_host_configure_existed_at_inspect_sha(True)
     assert is_refusal(configure_claimed)
     assert is_ok(claim_host_configure_existed_at_inspect_sha(False))
+    rotate_claimed = claim_rotate_control_existed_at_inspect_sha(True)
+    assert is_refusal(rotate_claimed)
+    assert is_ok(claim_rotate_control_existed_at_inspect_sha(False))
     absent = claim_types_absent_at_inspect_sha(True)
     assert is_refusal(absent)
     assert is_ok(claim_types_absent_at_inspect_sha(False))
@@ -451,3 +486,124 @@ def test_click_host_configure_pairing_ttl(tmp_path: Path) -> None:
     payload = json.loads(configured.stdout)
     assert payload["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
     assert payload["ttl"] == "set"
+
+
+def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        _write_token(tmp_path)
+        _write_bind(tmp_path, "127.0.0.1", server.port)
+        report = _ok_mapping(invoke_host_rotate_control(root=tmp_path))
+        assert report["verb"] == "host.rotate-control"
+        assert report["rotated"] is True
+        assert report["local_operator"] == "unchanged"
+        dumped = json.dumps(dict(report))
+        assert _TOKEN not in dumped
+        new_token = (tmp_path / HOST_CONTROL_FILE).read_text(encoding="utf-8").strip()
+        assert new_token != _TOKEN
+        assert new_token not in dumped
+        assert "rotate-control" in server.seen_verbs
+        _write_token(tmp_path, _TOKEN)
+        stale = invoke_host_status(root=tmp_path)
+        assert is_refusal(stale)
+        assert stale.context["field"] == "host_control"
+        _write_token(tmp_path, new_token)
+        status = _ok_mapping(invoke_host_status(root=tmp_path))
+        status_dump = json.dumps(dict(status))
+        assert new_token not in status_dump
+        assert _TOKEN not in status_dump
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+def test_click_host_rotate_control(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+
+    def transport(verb: str, token: str, *, root: Path) -> Mapping[str, object]:
+        _ = root
+        assert token == _TOKEN
+        assert verb == "rotate-control"
+        return {
+            "ok": True,
+            "rotated": {
+                "rotated": True,
+                "local_operator": "unchanged",
+                "writer": "host.rotate-control",
+                "host_control": "should-redact",
+            },
+        }
+
+    runner = CliRunner()
+    rotated = runner.invoke(
+        main,
+        ["host", "rotate-control"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert rotated.exit_code == 0, rotated.output
+    payload = json.loads(rotated.stdout)
+    assert payload["rotated"] is True
+    assert payload["local_operator"] == "unchanged"
+    assert "should-redact" not in rotated.output
+    assert _TOKEN not in rotated.output
+
+
+@pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
+def test_running_daemon_verbs_refuse_without_token(tmp_path: Path, verb: str) -> None:
+    _write_bind(tmp_path, "127.0.0.1", 19240)
+    if verb == "status":
+        refused = invoke_host_status(root=tmp_path)
+    elif verb == "stop":
+        refused = invoke_host_stop(root=tmp_path, wait_attempts=1)
+    elif verb == "configure":
+        refused = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
+    else:
+        refused = invoke_host_rotate_control(root=tmp_path)
+    assert is_refusal(refused)
+    assert refused.context["field"] == "host_control"
+
+
+@pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
+def test_running_daemon_verbs_refuse_stale_token(tmp_path: Path, verb: str) -> None:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        _write_token(tmp_path, "stale-token")
+        _write_bind(tmp_path, "127.0.0.1", server.port)
+        _write_lock(tmp_path, os.getpid())
+        if verb == "status":
+            refused = invoke_host_status(root=tmp_path)
+        elif verb == "stop":
+            refused = invoke_host_stop(root=tmp_path, wait_attempts=1)
+        elif verb == "configure":
+            refused = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
+        else:
+            refused = invoke_host_rotate_control(root=tmp_path)
+        assert is_refusal(refused)
+        assert refused.context["field"] == "host_control"
+        assert (tmp_path / DAEMON_LOCK_NAME).is_file()
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="posix chmod 000 is the unreadable-file stand-in")
+@pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
+def test_running_daemon_verbs_refuse_unreadable_token(tmp_path: Path, verb: str) -> None:
+    path = tmp_path / HOST_CONTROL_FILE
+    path.write_text(_TOKEN + "\n", encoding="utf-8")
+    os.chmod(path, 0)
+    try:
+        if verb == "status":
+            refused = invoke_host_status(root=tmp_path)
+        elif verb == "stop":
+            refused = invoke_host_stop(root=tmp_path, wait_attempts=1)
+        elif verb == "configure":
+            refused = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
+        else:
+            refused = invoke_host_rotate_control(root=tmp_path)
+        assert is_refusal(refused)
+        assert refused.context["field"] == "host_control"
+    finally:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)

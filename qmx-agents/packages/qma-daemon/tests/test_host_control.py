@@ -16,9 +16,11 @@ from qma.daemon.host_control import (
     INSPECT_CWD_RELATIVE_ROOT,
     LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA,
     LOCAL_OPERATOR_NEW_SQLITE_CLASS,
+    ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
     claim_host_configure_existed_at_inspect_sha,
     claim_host_control_existed_at_inspect_sha,
     claim_local_operator_existed_at_inspect_sha,
+    claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     host_control_call,
     load_local_operator,
@@ -206,6 +208,7 @@ def test_spawn_argv_and_lifecycle_flags() -> None:
     assert "start" not in HUMAN_GATE_COMMANDS
     assert "stop" not in HUMAN_GATE_COMMANDS
     assert "recover-control" not in HUMAN_GATE_COMMANDS
+    assert "rotate-control" not in HUMAN_GATE_COMMANDS
     assert "host.start" not in HUMAN_GATE_COMMANDS
 
 
@@ -213,6 +216,7 @@ def test_honesty_inspect_sha() -> None:
     assert HOST_CONTROL_EXISTED_AT_INSPECT_SHA is False
     assert LOCAL_OPERATOR_EXISTED_AT_INSPECT_SHA is False
     assert LOCAL_OPERATOR_NEW_SQLITE_CLASS is False
+    assert ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA is False
     claimed = claim_host_control_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_host_control_existed_at_inspect_sha(False))
@@ -220,6 +224,8 @@ def test_honesty_inspect_sha() -> None:
     assert is_ok(claim_local_operator_existed_at_inspect_sha(False))
     assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
     assert is_ok(claim_host_configure_existed_at_inspect_sha(False))
+    assert is_refusal(claim_rotate_control_existed_at_inspect_sha(True))
+    assert is_ok(claim_rotate_control_existed_at_inspect_sha(False))
     assert INVOCATION_ENVELOPE_EXISTED_AT_INSPECT_SHA_34C148B is True
     assert PRODUCT_SESSION_TYPES_EXISTED_AT_INSPECT_SHA_34C148B is True
     assert WireEnvelope.__name__ == "WireEnvelope"

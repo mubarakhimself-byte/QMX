@@ -1,4 +1,4 @@
-"""``qmb host start|status|stop|configure`` over local host-control (Stories 67.1–67.2).
+"""``qmb host start|status|stop|configure|rotate-control`` (Stories 67.1–67.3).
 
 Do not reuse package ``qmb.host`` (CT-33 HostedBot). QMB never writes daemon
 sqlite. The browser does not spawn Python. Pair is not this story.
@@ -35,6 +35,7 @@ __all__ = [
     "PAIRING_SESSION_TTL_REGISTRY_KEY",
     "QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "START_GRANTS",
     "START_ORCHESTRATES_MISSIONS",
     "START_STARTS_QMN",
@@ -42,8 +43,10 @@ __all__ = [
     "STOP_STOPS_REMOTE",
     "claim_host_configure_existed_at_inspect_sha",
     "claim_qmb_host_existed_at_inspect_sha",
+    "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_rotate_control",
     "invoke_host_start",
     "invoke_host_status",
     "invoke_host_stop",
@@ -52,10 +55,17 @@ __all__ = [
 ]
 
 
-HOST_COMMANDS: Final[tuple[str, ...]] = ("start", "status", "stop", "configure")
+HOST_COMMANDS: Final[tuple[str, ...]] = (
+    "start",
+    "status",
+    "stop",
+    "configure",
+    "rotate-control",
+)
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
 QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 DAEMON_LOCK_NAME: Final[str] = ".daemon_writer"
 DAEMON_SPAWN_MODULE: Final[str] = "qma.daemon"
 HOST_CONTROL_FILE: Final[str] = "host_control"
@@ -154,6 +164,24 @@ def claim_host_configure_existed_at_inspect_sha(existed: object) -> Result[bool]
         return policy(
             "host.configure",
             "qmb host configure was absent at inspect SHA 34c148be",
+            existed_at_inspect_sha=False,
+            inspect_sha=INSPECT_SHA,
+        )
+    if existed is not False:
+        return invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_rotate_control_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host rotate-control`` existed at inspect SHA ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return policy(
+            "host.rotate-control",
+            "qmb host rotate-control was absent at inspect SHA 34c148be",
             existed_at_inspect_sha=False,
             inspect_sha=INSPECT_SHA,
         )
@@ -672,8 +700,9 @@ def invoke_host_stop(
         if not isinstance(remote, Ok):
             return remote
         payload = dict(remote.value)
-    if payload.get("ok") is False:
-        return policy("host_control", "host-control stop refused")
+    refused = _payload_refusal(payload, verb="stop")
+    if not isinstance(refused, Ok):
+        return refused
     parsed_attempts = _wait_attempts(wait_attempts)
     if not isinstance(parsed_attempts, Ok):
         return parsed_attempts
@@ -752,4 +781,50 @@ def invoke_host_configure_pairing_ttl(
         "ttl": fields_out.get("ttl", "set"),
         "writer": fields_out.get("writer", "host.configure.pairing-ttl"),
     }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_rotate_control(
+    *,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Remint host_control while presenting the current token. Does not recover."""
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    if callable(transport):
+        called = transport("rotate-control", token.value, root=target)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("rotate-control", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "rotate-control")
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="rotate-control")
+    if not isinstance(refused, Ok):
+        return refused
+    rotated = payload.get("rotated")
+    fields_out: dict[str, object] = (
+        dict(cast("Mapping[str, object]", rotated)) if isinstance(rotated, Mapping) else {}
+    )
+    report: dict[str, object] = {
+        "verb": "host.rotate-control",
+        "rotated": fields_out.get("rotated", True),
+        "local_operator": fields_out.get("local_operator", "unchanged"),
+        "writer": fields_out.get("writer", "host.rotate-control"),
+    }
+    if "host_control_fp1" in fields_out:
+        report["host_control_fp1"] = fields_out.get("host_control_fp1")
+    if "previous_host_control_fp1" in fields_out:
+        report["previous_host_control_fp1"] = fields_out.get("previous_host_control_fp1")
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
