@@ -274,9 +274,7 @@ class ResolvedCompositionClasses:
     identity_content: Mapping[str, object]
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "identity_content", MappingProxyType(dict(self.identity_content))
-        )
+        object.__setattr__(self, "identity_content", MappingProxyType(dict(self.identity_content)))
 
     def effective_class_for(self, definition_fp: Fingerprint) -> CompositionClass | None:
         for assignment in self.assignments:

@@ -162,9 +162,7 @@ class ReconnectReport:
                     for item in self.outstanding_resolutions
                 ],
                 "receive_frontier": dict(self.receive_frontier),
-                "interpretation_cursor_observation_id": (
-                    self.interpretation_cursor_observation_id
-                ),
+                "interpretation_cursor_observation_id": (self.interpretation_cursor_observation_id),
                 "commands_resubmitted": self.commands_resubmitted,
                 "correlation_evidence": dict(self.correlation_evidence),
                 "resubmits_command": SessionRecovery.resubmits_command,
@@ -425,9 +423,7 @@ class ReconnectGapRecovery:
                 recovered=tuple(recovered_rows),
                 outstanding_resolutions=resolved.value,
                 receive_frontier=self.receive_frontier.as_mapping(),
-                interpretation_cursor_observation_id=(
-                    self.interpretation_cursor_observation_id
-                ),
+                interpretation_cursor_observation_id=(self.interpretation_cursor_observation_id),
                 commands_resubmitted=self._commands_resubmitted,
                 correlation_evidence=correlation,
             )
@@ -485,11 +481,7 @@ class ReconnectGapRecovery:
                     allowed=sorted(_PERSISTABLE_KINDS),
                 )
             # Skip events at-or-before the last-seen execution identity.
-            if (
-                since is not None
-                and row.execution_id is not None
-                and row.execution_id == since
-            ):
+            if since is not None and row.execution_id is not None and row.execution_id == since:
                 continue
             recorded = self._persist(row)
             if is_refusal(recorded):
@@ -563,9 +555,7 @@ class ReconnectGapRecovery:
                     for item in outstanding
                 ),
                 "receive_frontier": dict(self.receive_frontier.as_mapping()),
-                "interpretation_cursor_observation_id": (
-                    self.interpretation_cursor_observation_id
-                ),
+                "interpretation_cursor_observation_id": (self.interpretation_cursor_observation_id),
                 "frontiers_distinct": True,
                 "correlation_instant_ns": instant_ns,
                 "commands_resubmitted": self._commands_resubmitted,

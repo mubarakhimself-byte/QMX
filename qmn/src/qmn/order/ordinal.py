@@ -281,9 +281,7 @@ class CommandOrdinalStore:
     def was_issued(self, ordinal: object) -> bool:
         """True when ``ordinal`` was allocated from this recovered store."""
         return (
-            isinstance(ordinal, int)
-            and not isinstance(ordinal, bool)
-            and ordinal in self._issued
+            isinstance(ordinal, int) and not isinstance(ordinal, bool) and ordinal in self._issued
         )
 
     def mark_submitted(self, ordinal: object) -> Result[bool]:

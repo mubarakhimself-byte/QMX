@@ -77,9 +77,7 @@ def test_empty_migrations_must_not_declare_rollback() -> None:
 
 def test_reversible_migrations_require_down() -> None:
     with pytest.raises(ManifestError, match="declares a 'down'"):
-        parse_plugin_manifest(
-            _manifest(migrations=[{"id": "m1", "up": {"add": "col"}}])
-        )
+        parse_plugin_manifest(_manifest(migrations=[{"id": "m1", "up": {"add": "col"}}]))
     validate_migration_rollback_contract(
         ({"id": "m1", "up": {"add": "col"}, "down": {"drop": "col"}},),
         None,
@@ -237,9 +235,7 @@ def test_forward_only_accepts_after_operator_confirm_and_disable_keeps_data(
     assert confirmed.value.correlation_id == "corr-fo-1"
     assert confirmed.value.fingerprint.startswith("fp1:sha256:")
 
-    installed = loader.install(
-        raw, activator=_activate, correlation_id="corr-install-fo"
-    )
+    installed = loader.install(raw, activator=_activate, correlation_id="corr-install-fo")
     assert is_ok(installed), installed
     assert installed.value.migration_report is not None
     assert installed.value.migration_report.rollback_mode == "forward_only"
@@ -394,4 +390,3 @@ def test_reference_usage_example_runs() -> None:
     path = Path(__file__).resolve().parents[1] / "examples" / "plugin_migrations_usage.py"
     namespace = runpy.run_path(str(path))
     namespace["main"]()
-

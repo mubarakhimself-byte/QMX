@@ -76,9 +76,7 @@ def _failure(refusal: TypedRefusal, *, failure_id: str) -> TypedRefusal:
     )
 
 
-def _as_record_tuple(
-    value: object, field: str, expected: type[_T]
-) -> Result[tuple[_T, ...]]:
+def _as_record_tuple(value: object, field: str, expected: type[_T]) -> Result[tuple[_T, ...]]:
     if value is None:
         return Ok(())
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
@@ -126,8 +124,7 @@ class PopulationBmsRecord:
         if bms is None or venue is None or account is None or definition is None:
             return invalid(
                 "bms",
-                "a BMS record names bms_instance_id, venue_id, account_id, and "
-                "definition_fp1",
+                "a BMS record names bms_instance_id, venue_id, account_id, and definition_fp1",
                 failure_id="compose.risk_population.referential_integrity",
             )
         return Ok(
@@ -162,8 +159,7 @@ class PopulationBookRecord:
         if book is None or bms is None or definition is None:
             return invalid(
                 "book",
-                "a Book record names book_instance_id, bms_instance_id, and "
-                "definition_fp1",
+                "a Book record names book_instance_id, bms_instance_id, and definition_fp1",
                 failure_id="compose.risk_population.referential_integrity",
             )
         return Ok(
@@ -378,8 +374,7 @@ class PairedTargetRecord:
         if live is None or paper is None or paper_bms is None:
             return invalid(
                 "paired_target",
-                "a paired target names the live binding, demo account, and "
-                "paper BMS instance",
+                "a paired target names the live binding, demo account, and paper BMS instance",
                 failure_id="compose.risk_population.one_active_paper_target",
             )
         if not isinstance(paper_role, AccountRole):
@@ -593,30 +588,22 @@ class RuntimeRiskGraph:
         parsed_books = _as_record_tuple(books, "books", PopulationBookRecord)
         if is_refusal(parsed_books):
             return parsed_books
-        parsed_bindings = _as_record_tuple(
-            bindings, "bindings", PopulationBindingRecord
-        )
+        parsed_bindings = _as_record_tuple(bindings, "bindings", PopulationBindingRecord)
         if is_refusal(parsed_bindings):
             return parsed_bindings
         parsed_seats = _as_record_tuple(seats, "seats", SeatRecord)
         if is_refusal(parsed_seats):
             return parsed_seats
-        parsed_targets = _as_record_tuple(
-            paired_targets, "paired_targets", PairedTargetRecord
-        )
+        parsed_targets = _as_record_tuple(paired_targets, "paired_targets", PairedTargetRecord)
         if is_refusal(parsed_targets):
             return parsed_targets
         parsed_windows = _as_record_tuple(windows, "windows", WindowRecord)
         if is_refusal(parsed_windows):
             return parsed_windows
-        parsed_priorities = _as_record_tuple(
-            priorities, "priorities", PriorityRecord
-        )
+        parsed_priorities = _as_record_tuple(priorities, "priorities", PriorityRecord)
         if is_refusal(parsed_priorities):
             return parsed_priorities
-        parsed_caps = _as_record_tuple(
-            capabilities, "capabilities", CapabilityRecord
-        )
+        parsed_caps = _as_record_tuple(capabilities, "capabilities", CapabilityRecord)
         if is_refusal(parsed_caps):
             return parsed_caps
         parsed_scopes = _as_record_tuple(scopes, "scopes", ScopeRecord)
@@ -704,9 +691,7 @@ def admit_runtime_risk_population(graph: object) -> Result[Layer1PopulationProof
 
     bms_card = _check_one_bms_per_account_many_books(graph)
     if is_refusal(bms_card):
-        return _failure(
-            bms_card, failure_id="compose.risk_population.one_bms_per_account"
-        )
+        return _failure(bms_card, failure_id="compose.risk_population.one_bms_per_account")
 
     book_card = _check_one_book_per_bot(graph)
     if is_refusal(book_card):
@@ -714,9 +699,7 @@ def admit_runtime_risk_population(graph: object) -> Result[Layer1PopulationProof
 
     paper_card = _check_one_active_paper_target(graph)
     if is_refusal(paper_card):
-        return _failure(
-            paper_card, failure_id="compose.risk_population.one_active_paper_target"
-        )
+        return _failure(paper_card, failure_id="compose.risk_population.one_active_paper_target")
 
     roster = _check_roster_alignment(graph)
     if is_refusal(roster):
@@ -868,9 +851,7 @@ def _check_referential_integrity(graph: RuntimeRiskGraph) -> Result[None]:
     required_kinds = {member.value for member in WindowKind}
     bindings_with_windows = {window.binding_id for window in graph.windows}
     for binding_id in bindings_with_windows:
-        present = {
-            window.kind for window in graph.windows if window.binding_id == binding_id
-        }
+        present = {window.kind for window in graph.windows if window.binding_id == binding_id}
         missing = required_kinds - present
         if missing:
             return invalid(
@@ -981,8 +962,7 @@ def _check_declared_scopes(graph: RuntimeRiskGraph) -> Result[None]:
         if missing:
             return unavailable(
                 "scope",
-                "every command stream is covered by a declared stream scope or "
-                "the global scope",
+                "every command stream is covered by a declared stream scope or the global scope",
                 missing=sorted(missing),
                 failure_id="compose.risk_population.declared_scopes",
             )
@@ -1032,8 +1012,7 @@ def _check_one_bms_per_account_many_books(graph: RuntimeRiskGraph) -> Result[Non
         if prior is not None and prior != bms.bms_instance_id:
             return invalid(
                 "bms",
-                "one BMS instance per account; a second BMS on the same account "
-                "is refused",
+                "one BMS instance per account; a second BMS on the same account is refused",
                 account=account,
                 existing=prior,
                 extra=bms.bms_instance_id,

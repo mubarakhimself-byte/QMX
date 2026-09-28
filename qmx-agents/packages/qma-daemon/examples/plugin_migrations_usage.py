@@ -76,9 +76,7 @@ def main() -> None:
                 "desk": "research",
                 "entrypoint": "research_corpus.activate",
                 "contributions": [{"point": "tool", "local_id": "search"}],
-                "migrations": [
-                    {"id": "m1", "up": {"add": "col"}, "down": {"drop": "col"}}
-                ],
+                "migrations": [{"id": "m1", "up": {"add": "col"}, "down": {"drop": "col"}}],
             }
         )
         report = runner.run_plugin_migrations(
@@ -113,9 +111,7 @@ def main() -> None:
                 principal=PrincipalClass.OPERATOR,
             )
         )
-        installed = loader.install(
-            fo_raw, activator=_activate, correlation_id="corr-fo-install"
-        )
+        installed = loader.install(fo_raw, activator=_activate, correlation_id="corr-fo-install")
         assert is_ok(installed)
         disabled = loader.disable("research-corpus")
         assert is_ok(disabled)

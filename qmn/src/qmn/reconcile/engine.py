@@ -203,8 +203,7 @@ def run_reconciliation(
         if venue_realized_balance is None or virtual_realized_cash is None:
             return invalid(
                 "cash",
-                "cash residual requires both venue_realized_balance and "
-                "virtual_realized_cash",
+                "cash residual requires both venue_realized_balance and virtual_realized_cash",
             )
         cash_r = compute_cash_residual(
             venue_realized_balance=venue_realized_balance,
@@ -354,8 +353,7 @@ def _parse_quantity_pairs(value: object) -> Result[tuple[_InstrumentQtyPair, ...
         if not isinstance(raw_item, Sequence) or isinstance(raw_item, (str, bytes)):
             return invalid(
                 "quantity_pairs",
-                "each pair is a 3-tuple (instrument, virtual, venue) or "
-                "QuantityResidual",
+                "each pair is a 3-tuple (instrument, virtual, venue) or QuantityResidual",
                 given=repr(raw_item) if not isinstance(raw_item, Sequence) else "non-triple",
             )
         triple = tuple(cast("Sequence[object]", raw_item))

@@ -40,12 +40,10 @@ def _test_clock(*, boot: str = "boot-42-5", n: int = 64) -> DataDrivenClock:
     return DataDrivenClock(boot_epoch_id=boot, wall_instants=walls, monotonic_ns=monos)
 
 
-def _open_journal(tmp_path: Path, *, boot: str = "boot-42-5") -> tuple[
-    PersistenceSubstrate, AuthoritativeJournal
-]:
-    substrate_result = PersistenceSubstrate.open(
-        tmp_path, machine="test-host", boot_epoch_id=boot
-    )
+def _open_journal(
+    tmp_path: Path, *, boot: str = "boot-42-5"
+) -> tuple[PersistenceSubstrate, AuthoritativeJournal]:
+    substrate_result = PersistenceSubstrate.open(tmp_path, machine="test-host", boot_epoch_id=boot)
     assert is_ok(substrate_result), substrate_result
     substrate = substrate_result.value
     journal_result = AuthoritativeJournal.bind(substrate, clock=_test_clock(boot=boot))
@@ -142,9 +140,7 @@ def test_substrate_refuses_unknown_journal_schema_before_reading(tmp_path: Path)
 
 def test_substrate_refuses_unknown_sqlite_schema(tmp_path: Path) -> None:
     # First open stamps v1, then close and rewrite the meta stamp to a newer version.
-    first = PersistenceSubstrate.open(
-        tmp_path, machine="test-host", boot_epoch_id="boot-sql-1"
-    )
+    first = PersistenceSubstrate.open(tmp_path, machine="test-host", boot_epoch_id="boot-sql-1")
     assert is_ok(first), first
     db_path = first.value.sqlite.db_path
     first.value.close()
@@ -159,9 +155,7 @@ def test_substrate_refuses_unknown_sqlite_schema(tmp_path: Path) -> None:
     conn.commit()
     conn.close()
 
-    refused = PersistenceSubstrate.open(
-        tmp_path, machine="test-host", boot_epoch_id="boot-sql-2"
-    )
+    refused = PersistenceSubstrate.open(tmp_path, machine="test-host", boot_epoch_id="boot-sql-2")
     assert is_refusal(refused)
     assert StoreVersionMismatch.matches(refused)
     assert refused.context["store"] == SQLITE_STORE_NAME

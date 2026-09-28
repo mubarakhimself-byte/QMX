@@ -688,7 +688,10 @@ def _rate(numerator: int, denominator: int = 1) -> Result[ExactRational]:
     return ExactRational.try_create(numerator, denominator, UnitKind.RATE)
 
 
-def _instrument(venue: VenueId, symbol: str = "EURUSD") -> Result[Instrument]:
+def _instrument(
+    venue: VenueId,
+    symbol: str = "EURUSD",  # mock-data-scan: allow - risk-gate harness default
+) -> Result[Instrument]:
     return Instrument.try_create(venue, symbol)
 
 

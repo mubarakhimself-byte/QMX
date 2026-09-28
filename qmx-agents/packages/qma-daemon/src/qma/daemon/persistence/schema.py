@@ -35,9 +35,7 @@ KNOWN_STORE_SCHEMA_VERSION: Final[int] = 1
 
 JOURNAL_STORE_NAME: Final[str] = "journal"
 SQLITE_STORE_NAME: Final[str] = "sqlite"
-VERSIONED_OPEN_STORES: Final[frozenset[str]] = frozenset(
-    {JOURNAL_STORE_NAME, SQLITE_STORE_NAME}
-)
+VERSIONED_OPEN_STORES: Final[frozenset[str]] = frozenset({JOURNAL_STORE_NAME, SQLITE_STORE_NAME})
 
 JOURNAL_SCHEMA_MARKER_NAME: Final[str] = "journal.store_schema_version"
 SQLITE_META_SCHEMA_KEY: Final[str] = "store_schema_version"
@@ -146,7 +144,7 @@ def ensure_sqlite_schema_version(
         return Ok(known)
     try:
         stamped = int(read_value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return refuse_unknown_store_schema(
             store=SQLITE_STORE_NAME,
             expected_schema_version=known,

@@ -23,7 +23,7 @@ on:
     tags:
       - 'factory-candidate/**'
   pull_request:
-    branches: [main]
+    branches: [main, integration]
 
 # Workflow-level permissions stay minimal (read-only). The job below writes
 # nothing: GitHub annotations are emitted as workflow commands on stdout, which

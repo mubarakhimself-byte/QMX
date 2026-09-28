@@ -120,8 +120,8 @@ GAP_0063_ALGORITHM_CHOICES: Final[frozenset[str]] = frozenset(
         "ct34_placeholder",
         "logic-synthesis",
         "logic_synthesis",
-        "placeholder-fill",
-        "placeholder_fill",
+        "placeholder-fill",  # mock-data-scan: allow - GAP-0063 unfilled algorithm name
+        "placeholder_fill",  # mock-data-scan: allow - GAP-0063 unfilled algorithm name
         "python-logic-synthesis",
         "python_logic_synthesis",
     }

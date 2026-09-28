@@ -113,9 +113,7 @@ def record_local_proxy_startup_evidence(
     allow_unauthenticated_loopback: bool,
 ) -> LocalProxyStartupEvidence:
     """Record each registered local-proxy Deployment and the registry setting."""
-    proxy_ids = tuple(
-        entry.deployment_id for entry in catalog if is_local_proxy_deployment(entry)
-    )
+    proxy_ids = tuple(entry.deployment_id for entry in catalog if is_local_proxy_deployment(entry))
     return LocalProxyStartupEvidence(
         proxy_deployment_ids=proxy_ids,
         allow_unauthenticated_loopback=allow_unauthenticated_loopback,

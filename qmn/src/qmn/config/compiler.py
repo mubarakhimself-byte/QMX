@@ -66,9 +66,7 @@ HAS_INVOCATION_OVERRIDE_LAYER: Final[bool] = False
 NODE_CONFIG_CLASS: Final[str] = "resolved-node-config"
 NODE_CONFIG_FORMAT_VERSION_1: Final[int] = 1
 NODE_CONFIG_FORMAT_VERSION: Final[int] = NODE_CONFIG_FORMAT_VERSION_1
-NODE_CONFIG_KNOWN_FORMAT_VERSIONS: Final[frozenset[int]] = frozenset(
-    {NODE_CONFIG_FORMAT_VERSION_1}
-)
+NODE_CONFIG_KNOWN_FORMAT_VERSIONS: Final[frozenset[int]] = frozenset({NODE_CONFIG_FORMAT_VERSION_1})
 NODE_CONFIG_ARTIFACT_NAME: Final[str] = "node-config.json"
 
 VALUE_STATUS_BLANK: Final[str] = "blank"
@@ -276,11 +274,7 @@ class ResolvedValueRow:
             entry["admission_impact"] = self.admission_impact
         if self.evidence_fp1 is not None:
             entry["evidence_fp1"] = self.evidence_fp1.value
-        if (
-            not self.is_blank
-            and self.value is not None
-            and not is_secret_ref_key(self.name)
-        ):
+        if not self.is_blank and self.value is not None and not is_secret_ref_key(self.name):
             entry["value"] = self.value
         elif not self.is_blank and is_secret_ref_key(self.name):
             # Presence only — the reference id is occurrence/display (CT-21).
@@ -301,9 +295,7 @@ class ResolvedNodeConfig:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rows", MappingProxyType(dict(self.rows)))
-        object.__setattr__(
-            self, "roster_identity", MappingProxyType(dict(self.roster_identity))
-        )
+        object.__setattr__(self, "roster_identity", MappingProxyType(dict(self.roster_identity)))
 
     def fp1_identity(self) -> dict[str, object]:
         """Identity content for ``fp1``. Display aliases and secrets omitted."""
@@ -329,9 +321,7 @@ class ResolvedNodeConfig:
         return tuple(sorted(name for name, row in self.rows.items() if row.blocks_boot))
 
     def live_blocking_rows(self) -> tuple[str, ...]:
-        return tuple(
-            sorted(name for name, row in self.rows.items() if row.blocks_role_live)
-        )
+        return tuple(sorted(name for name, row in self.rows.items() if row.blocks_role_live))
 
     def soak_blocking_rows(self) -> tuple[str, ...]:
         return tuple(sorted(name for name, row in self.rows.items() if row.blocks_soak))
@@ -576,8 +566,7 @@ def _refuse_layer_keys(
         if key in RETIRED_DEAD_MANS_SWITCH_NAMES:
             return invalid(
                 key,
-                "dead_mans_switch_* names are retired; use liveness_heartbeat_* "
-                "(DEC-0261)",
+                "dead_mans_switch_* names are retired; use liveness_heartbeat_* (DEC-0261)",
                 required=sorted(LIVENESS_HEARTBEAT_NAMES),
             )
         if key in RUNTIME_FOLD_KEYS:

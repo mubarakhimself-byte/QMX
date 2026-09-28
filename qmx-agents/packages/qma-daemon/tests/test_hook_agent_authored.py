@@ -48,15 +48,18 @@ def _approve_basic(registrar: AgentAuthoredHookRegistrar, template_id: str = "tp
 
 
 def test_forbidden_result_fields_closed_at_five() -> None:
-    assert frozenset(
-        {
-            "updated_input",
-            "updated_output",
-            "injected_context",
-            "ledger_entry",
-            "verifier_ref",
-        }
-    ) == AGENT_AUTHORED_FORBIDDEN_RESULT_FIELDS
+    assert (
+        frozenset(
+            {
+                "updated_input",
+                "updated_output",
+                "injected_context",
+                "ledger_entry",
+                "verifier_ref",
+            }
+        )
+        == AGENT_AUTHORED_FORBIDDEN_RESULT_FIELDS
+    )
 
 
 def test_template_schema_validation_and_observe_or_deny_only() -> None:
@@ -194,9 +197,7 @@ def test_agent_authored_hook_result_only_decision_and_reason() -> None:
         ),
         (
             "injected_context",
-            build_hook_result(
-                HookResultDecision.OBSERVE, reason="x", injected_context={"z": 3}
-            ),
+            build_hook_result(HookResultDecision.OBSERVE, reason="x", injected_context={"z": 3}),
         ),
         (
             "ledger_entry",
@@ -206,9 +207,7 @@ def test_agent_authored_hook_result_only_decision_and_reason() -> None:
         ),
         (
             "verifier_ref",
-            build_hook_result(
-                HookResultDecision.OBSERVE, reason="x", verifier_ref="fp1:sha256:ab"
-            ),
+            build_hook_result(HookResultDecision.OBSERVE, reason="x", verifier_ref="fp1:sha256:ab"),
         ),
     ]
     for field, result in cases:

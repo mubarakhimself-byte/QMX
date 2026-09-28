@@ -273,8 +273,7 @@ def compute_cash_residual(
         if item.kind is CashComponentKind.FLOATING_PNL:
             return policy(
                 "explained_components",
-                "floating P&L is an equity-narrative component and never enters "
-                "either residual",
+                "floating P&L is an equity-narrative component and never enters either residual",
                 kind=item.kind.value,
             )
         if item.kind not in _RESIDUAL_CASH_KINDS:

@@ -196,8 +196,7 @@ def refuse_cut_plugin_surface(surface: str) -> Result[str]:
     """Typed refusal for a Cut marketplace / trust / solver surface."""
     return policy_rejection(
         surface,
-        f"{surface!r} is Cut in v1 — first-party plugins only "
-        "(DEC-0361, DEC-0362; FR-Q70; CT-42)",
+        f"{surface!r} is Cut in v1 — first-party plugins only (DEC-0361, DEC-0362; FR-Q70; CT-42)",
         cut_surfaces=sorted(CUT_PLUGIN_SURFACES),
     )
 

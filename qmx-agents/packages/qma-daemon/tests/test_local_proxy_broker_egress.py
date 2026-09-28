@@ -113,9 +113,7 @@ def test_unauthenticated_proxy_gated_by_registry_variable() -> None:
 def test_startup_evidence_records_proxies_and_setting() -> None:
     registry = DeploymentRegistry(allow_unauthenticated_loopback=True)
     assert is_ok(
-        registry.register(
-            build_opencodex_deployment_record("p1", ModelClass.WORKHORSE_GENERAL)
-        )
+        registry.register(build_opencodex_deployment_record("p1", ModelClass.WORKHORSE_GENERAL))
     )
     assert is_ok(
         registry.register(

@@ -60,9 +60,7 @@ class TreasuryBoundaryActKind(StrEnum):
     ACCOUNTING_ROLLOVER = "accounting_rollover"
 
 
-TREASURY_BOUNDARY_KINDS: Final[tuple[TreasuryBoundaryActKind, ...]] = tuple(
-    TreasuryBoundaryActKind
-)
+TREASURY_BOUNDARY_KINDS: Final[tuple[TreasuryBoundaryActKind, ...]] = tuple(TreasuryBoundaryActKind)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,8 +115,7 @@ class TreasuryBoundaryJournal:
         if act.touches_positions or act.rebases_frozen_r:
             return policy(
                 "boundary",
-                "a treasury boundary act never touches positions and never "
-                "re-bases a frozen R",
+                "a treasury boundary act never touches positions and never re-bases a frozen R",
             )
         self._acts.append(act)
         return Ok(act)
@@ -178,8 +175,7 @@ def mint_treasury_boundary_act(
     else:
         return invalid(
             "kind",
-            "treasury boundary kind is sweep|refund|re_seed|paper_epoch_reset|"
-            "accounting_rollover",
+            "treasury boundary kind is sweep|refund|re_seed|paper_epoch_reset|accounting_rollover",
             given=repr(kind),
         )
     if not isinstance(binding_epoch, Fingerprint):

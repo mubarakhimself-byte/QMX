@@ -71,9 +71,7 @@ class BreakevenRatchetProposal:
     trigger_registry_key: str = BREAKEVEN_RATCHET_TRIGGER_REGISTRY_KEY
     offset_registry_key: str = BREAKEVEN_RATCHET_OFFSET_REGISTRY_KEY
     min_improvement_registry_key: str = AMEND_MIN_IMPROVEMENT_REGISTRY_KEY
-    grammar: DynamicProtectionGrammar = (
-        DynamicProtectionGrammar.SINGLE_SIDED_BREAKEVEN_RATCHET
-    )
+    grammar: DynamicProtectionGrammar = DynamicProtectionGrammar.SINGLE_SIDED_BREAKEVEN_RATCHET
 
     def as_mapping(self) -> Mapping[str, object]:
         body: dict[str, object] = {
@@ -90,9 +88,8 @@ class BreakevenRatchetProposal:
 
 def v1_dynamic_protection_is_breakeven_ratchet_only() -> bool:
     """True when the closed V1 grammar is exactly the breakeven ratchet."""
-    return (
-        frozenset(member.value for member in DynamicProtectionGrammar)
-        == frozenset({V1_DYNAMIC_PROTECTION_GRAMMAR})
+    return frozenset(member.value for member in DynamicProtectionGrammar) == frozenset(
+        {V1_DYNAMIC_PROTECTION_GRAMMAR}
     )
 
 
@@ -239,9 +236,7 @@ def originate_breakeven_ratchet(
     )
     if is_refusal(amendment_r):
         return amendment_r
-    is_be = is_breakeven_ratchet_amendment(
-        amendment_r.value, breakeven_offset=resolved_offset
-    )
+    is_be = is_breakeven_ratchet_amendment(amendment_r.value, breakeven_offset=resolved_offset)
     if is_refusal(is_be):
         return is_be
     if not is_be.value:
@@ -299,9 +294,7 @@ def dispatch_originated_breakeven_ratchet(
     if is_refusal(gated):
         return gated
     # Admit without re-applying amend_min_improvement (origination policy only).
-    admitted = admit_risk_non_increasing_amend_protection(
-        gated.value, amend_min_improvement=None
-    )
+    admitted = admit_risk_non_increasing_amend_protection(gated.value, amend_min_improvement=None)
     if is_refusal(admitted):
         return admitted
     return admitted

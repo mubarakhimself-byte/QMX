@@ -490,9 +490,7 @@ def rebase_partial_entry(
             amount=str(product),
             scale=scale,
         )
-    rebased_money = Money.try_create(
-        scaled.numerator, admission_amount.currency, scale
-    )
+    rebased_money = Money.try_create(scaled.numerator, admission_amount.currency, scale)
     if is_refusal(rebased_money):
         return rebased_money
     rebased_faces = RFaces.try_create(

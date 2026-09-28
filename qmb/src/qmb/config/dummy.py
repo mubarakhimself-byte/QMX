@@ -35,18 +35,20 @@ __all__ = [
     "refuse_sensing_as_atc",
 ]
 
-DUMMY_SENTINEL_TOKENS: Final[frozenset[str]] = frozenset(
-    {
-        "NULL_BOOK",
-        "NULL_BMS",
-        "NULL_BOT",
-        "NULL_POLICY_PAIR",
-    }
+DUMMY_SENTINEL_TOKENS: Final[frozenset[str]] = (  # mock-data-scan: allow - Epic 58 dummy sentinels
+    frozenset(
+        {
+            "NULL_BOOK",
+            "NULL_BMS",
+            "NULL_BOT",
+            "NULL_POLICY_PAIR",
+        }
+    )
 )
-_DUMMY_SENTINEL_FOLD: Final[frozenset[str]] = frozenset(
-    item.casefold() for item in DUMMY_SENTINEL_TOKENS
+_DUMMY_SENTINEL_FOLD: Final[frozenset[str]] = (  # mock-data-scan: allow - Epic 58 dummy sentinels
+    frozenset(item.casefold() for item in DUMMY_SENTINEL_TOKENS)
 )
-DUMMY_POLICY_TOKENS: Final[frozenset[str]] = frozenset(
+DUMMY_POLICY_TOKENS: Final[frozenset[str]] = frozenset(  # mock-data-scan: allow
     {
         "identity",
         "no-op",
@@ -104,7 +106,7 @@ _LABEL_KEYS: Final[frozenset[str]] = frozenset(
         "role",
     }
 )
-_DUMMY_REASON: Final[str] = (
+_DUMMY_REASON: Final[str] = (  # mock-data-scan: allow - Epic 58 dummy Book refused
     "dummy Book/BMS/bot or dummy PolicyPair is invalid input at compile, "
     "register, validate, simulate, and seat; identity / no-op / unlimited / "
     "pass-through / sentinel fps including NULL_BOOK, empty-object Book, and "
@@ -120,7 +122,9 @@ _ATC_THROUGH_DEFAULT_REASON: Final[str] = (
 )
 
 
-def refuse_dummy_cite(field: str, value: object) -> TypedRefusal | None:
+def refuse_dummy_cite(  # mock-data-scan: allow - Epic 58 dummy cite refused
+    field: str, value: object
+) -> TypedRefusal | None:
     """Refuse a sentinel Book/BMS/bot cite used to satisfy a required field."""
     token = _cite_token(value)
     if token is None:
@@ -130,7 +134,7 @@ def refuse_dummy_cite(field: str, value: object) -> TypedRefusal | None:
     return None
 
 
-def refuse_dummy_fragments(
+def refuse_dummy_fragments(  # mock-data-scan: allow - Epic 58 dummy Book/BMS refused
     book: ConfigFragment,
     bms: ConfigFragment,
 ) -> TypedRefusal | None:
@@ -151,7 +155,7 @@ def refuse_dummy_fragments(
     return None
 
 
-def refuse_dummy_definition(
+def refuse_dummy_definition(  # mock-data-scan: allow - Epic 58 dummy Book/BMS refused
     definition: BookDefinition | BmsDefinition,
 ) -> TypedRefusal | None:
     """Refuse an empty-object or dummy-policy CT-22/CT-27 at register."""
@@ -161,7 +165,7 @@ def refuse_dummy_definition(
     return refuse_dummy_mapping(definition.fp1_identity(), field=field)
 
 
-def refuse_dummy_mapping(
+def refuse_dummy_mapping(  # mock-data-scan: allow - Epic 58 dummy Book/BMS refused
     value: object,
     *,
     field: str,
@@ -178,7 +182,7 @@ def refuse_dummy_mapping(
     return _walk(mapping, field=field, path=())
 
 
-def refuse_dummy_policy_pair(
+def refuse_dummy_policy_pair(  # mock-data-scan: allow - Epic 58 dummy PolicyPair refused
     value: object,
     *,
     field: str = "policy_pair",

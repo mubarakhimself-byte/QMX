@@ -2269,8 +2269,7 @@ class ProductSessionService:
             if is_ok(caller_loaded):
                 caller_ops = caller_loaded.value.granted_ops
         nested_transport = (
-            transport is PublicCallTransport.NESTED
-            or transport == PublicCallTransport.NESTED.value
+            transport is PublicCallTransport.NESTED or transport == PublicCallTransport.NESTED.value
         )
         if nested_transport:
             proposed: object | None = (*caller_ops, *session.granted_ops) if union_grants else None

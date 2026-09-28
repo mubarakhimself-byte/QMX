@@ -636,9 +636,7 @@ class ConnectionManager:
         self, *, next_sequence: int | None = None
     ) -> Result[Mapping[str, object]]:
         """Write the durable sequence cursor through the observation sink."""
-        cursor = (
-            self._sequencer.next_sequence if next_sequence is None else next_sequence
-        )
+        cursor = self._sequencer.next_sequence if next_sequence is None else next_sequence
         record: dict[str, object] = {
             "class": SEQUENCE_CURSOR_RECORD_CLASS,
             "writer_stream": self._writer_id.stream,

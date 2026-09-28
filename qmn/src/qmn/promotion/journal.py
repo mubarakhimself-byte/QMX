@@ -602,9 +602,7 @@ def commit_activation(
     apply = (
         dispatcher
         if dispatcher is not None
-        else CallableDispatcher(
-            lambda _payload: Ok(MappingProxyType({"applied": applied}))
-        )
+        else CallableDispatcher(lambda _payload: Ok(MappingProxyType({"applied": applied})))
     )
     receipt = journal_before_effect(
         kind="activation",

@@ -204,7 +204,7 @@ class ConcurrencyLoad:
         seed: object,
         stream_count: object = 2,
         observations_per_stream: object = 8,
-        timer_ticks: object = 4,
+        timer_ticks: object = 4,  # mock-data-scan: allow - concurrency load harness default
         door_interleave_every: object = 2,
     ) -> Result[ConcurrencyLoad]:
         """Validate load parameters (all positive integers; seed may be zero)."""

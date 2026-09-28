@@ -296,8 +296,7 @@ def persist_composition_lineage(
     if not isinstance(persistence, RegistryPersistence):
         return invalid(
             "persistence",
-            "composition lineage persists through the CT-09 RegistryPersistence "
-            "registry→data edge",
+            "composition lineage persists through the CT-09 RegistryPersistence registry→data edge",
             given=type(persistence).__name__,
         )
     if not isinstance(writer, WriterId):

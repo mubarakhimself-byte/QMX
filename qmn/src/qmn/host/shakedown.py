@@ -213,8 +213,7 @@ class ShakedownPlan:
         if not isinstance(window_settings, ResolvedWindowSettings):
             return invalid(
                 "window_settings",
-                "required windows resolve through ResolvedWindowSettings; "
-                "blank invents nothing",
+                "required windows resolve through ResolvedWindowSettings; blank invents nothing",
                 given=type(window_settings).__name__,
             )
         if not isinstance(ledger_binding_epoch, Fingerprint):
@@ -329,9 +328,7 @@ class ShakedownPlan:
                 "claim_sqs_live_conditioned is a bool",
                 given=repr(claim_sqs_live_conditioned),
             )
-        if not isinstance(memory_ceiling_bytes, int) or isinstance(
-            memory_ceiling_bytes, bool
-        ):
+        if not isinstance(memory_ceiling_bytes, int) or isinstance(memory_ceiling_bytes, bool):
             return refuse_invented_seat_bounds(
                 "seat_memory_ceiling", given=repr(memory_ceiling_bytes)
             )
@@ -443,9 +440,7 @@ def assemble_shakedown_signature_page(
         )
     if shakedown.is_performance_proof or not shakedown.for_human_signature:
         return refuse_shakedown_as_performance_proof()
-    if not isinstance(layer1_checks_run, Sequence) or isinstance(
-        layer1_checks_run, (str, bytes)
-    ):
+    if not isinstance(layer1_checks_run, Sequence) or isinstance(layer1_checks_run, (str, bytes)):
         return invalid(
             "layer1_checks_run",
             "the signature page cites the Layer-1 checks that already passed",
@@ -675,8 +670,7 @@ def _exercise_command_path_dry_run(plan: ShakedownPlan) -> Result[str]:
     if double.value.kind is not VenueClientKind.CONFORMANCE:
         return policy(
             "venue_client",
-            "command-path dry run binds the conformance double, never a live "
-            "cTrader client",
+            "command-path dry run binds the conformance double, never a live cTrader client",
             kind=double.value.kind.value,
         )
     stop = require_venue_resident_protective_stop(

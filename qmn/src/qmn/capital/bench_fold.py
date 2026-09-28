@@ -160,9 +160,7 @@ def evaluate_qualifying_loss_bench(
         )
 
     # Breakevens never count toward the qualifying fold under any q.
-    for record, disposition in zip(
-        folded.value.considered, folded.value.dispositions, strict=True
-    ):
+    for record, disposition in zip(folded.value.considered, folded.value.dispositions, strict=True):
         if disposition is BenchDisposition.BREAKEVEN:
             continue
         classified = classify_bench_disposition(record, q=q)

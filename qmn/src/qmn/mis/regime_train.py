@@ -1991,7 +1991,9 @@ def _training_code_fp() -> Result[Fingerprint]:
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return datetime.now(UTC).strftime(  # ambient-scan: allow - MIS training record wall stamp
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
 
 
 def _probe_memory_total_bytes() -> int | None:

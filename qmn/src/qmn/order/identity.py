@@ -96,9 +96,7 @@ class CommandIdentityBinder:
                     "given": repr(record_sink),
                 },
             )
-        registry = CommandIdBindingRegistry.try_create(
-            cast("RecordSink[object]", record_sink)
-        )
+        registry = CommandIdBindingRegistry.try_create(cast("RecordSink[object]", record_sink))
         if is_refusal(registry):
             return registry
         return Ok(cls(registry=registry.value, injective_total=injective_total))

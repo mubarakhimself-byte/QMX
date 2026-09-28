@@ -231,7 +231,9 @@ def register_book_bms_variant(
     chosen = _one_definition(definition=definition, book=book, bms=bms, fragment=fragment)
     if is_refusal(chosen):
         return chosen
-    dummy = refuse_dummy_definition(chosen.value)
+    dummy = refuse_dummy_definition(  # mock-data-scan: allow - Epic 58 dummy Book refused
+        chosen.value
+    )
     if dummy is not None:
         return dummy
     if not isinstance(writer, WriterId):

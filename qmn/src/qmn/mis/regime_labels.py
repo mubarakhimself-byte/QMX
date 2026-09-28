@@ -623,11 +623,7 @@ def audit_regime_labels(
             previous = row.class_label
 
     train_counts = split_distribution.get(SegmentRole.TRAIN.value, {})
-    unsupported = tuple(
-        name
-        for name in REGIME_CLASS_VOCABULARY
-        if train_counts.get(name, 0) <= 0
-    )
+    unsupported = tuple(name for name in REGIME_CLASS_VOCABULARY if train_counts.get(name, 0) <= 0)
     total_classed = sum(class_counts.values())
     balance: dict[str, tuple[int, int]] = {}
     for name, count in class_counts.items():
@@ -640,9 +636,7 @@ def audit_regime_labels(
             row.event_bound_ns == row.event_time_ns and row.knowledge_bound_ns >= row.event_time_ns
             for row in admitted
         ),
-        "closed_vocabulary_only": all(
-            row.class_label in labeled_counts for row in admitted
-        ),
+        "closed_vocabulary_only": all(row.class_label in labeled_counts for row in admitted),
         "exclusion_class_is_insufficient_evidence": all(
             row.class_label != EXCLUSION_CLASS or row.exclusion_reason is not None
             for row in admitted
@@ -656,9 +650,7 @@ def audit_regime_labels(
             exclusion_count=labeled_counts[EXCLUSION_CLASS],
             labeled_counts=MappingProxyType(dict(sorted(labeled_counts.items()))),
             balance_ratios=MappingProxyType(dict(sorted(balance.items()))),
-            transition_frequencies=MappingProxyType(
-                dict(sorted(transition_frequencies.items()))
-            ),
+            transition_frequencies=MappingProxyType(dict(sorted(transition_frequencies.items()))),
             gap_count=gap_count,
             missingness=MappingProxyType(dict(sorted(missingness.items()))),
             session_distribution=MappingProxyType(

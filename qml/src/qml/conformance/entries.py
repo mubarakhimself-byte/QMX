@@ -118,14 +118,9 @@ def refuse_auto_mint(
         )
     base = token.rsplit("/", maxsplit=1)[-1]
     looks_like_auto = any(
-        tip in token
-        for tip in ("dna", "graph.yaml", "hypothesis", "layout-demo", "graph_yaml")
+        tip in token for tip in ("dna", "graph.yaml", "hypothesis", "layout-demo", "graph_yaml")
     )
-    if (
-        base not in AUTO_MINT_SOURCES
-        and token not in AUTO_MINT_SOURCES
-        and not looks_like_auto
-    ):
+    if base not in AUTO_MINT_SOURCES and token not in AUTO_MINT_SOURCES and not looks_like_auto:
         return invalid(
             "source",
             "auto-mint refusal names dna, graph.yaml, or a hypothesis package",

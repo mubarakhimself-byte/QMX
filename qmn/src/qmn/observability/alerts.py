@@ -277,9 +277,7 @@ def _read_failures_path(path: Path) -> Result[str]:
         # see the no-follow flag; Windows has no O_NOFOLLOW (value 0).
         fd = os.open(  # skylos: ignore[SKY-D215] contained, no-follow read
             path,
-            os.O_RDONLY
-            | getattr(os, "O_NOFOLLOW", 0)
-            | getattr(os, "O_BINARY", 0),
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0),
         )
     except OSError as exc:
         return invalid("failures_path", f"cannot read FAILURES.md: {exc}")
@@ -300,9 +298,7 @@ def _read_failures_path(path: Path) -> Result[str]:
                 size=size,
                 max_bytes=_MAX_FAILURES_BYTES,
             )
-        limit = (
-            _MAX_FAILURES_BYTES if size <= 0 else min(size, _MAX_FAILURES_BYTES)
-        )
+        limit = _MAX_FAILURES_BYTES if size <= 0 else min(size, _MAX_FAILURES_BYTES)
         buf = bytearray()
         while len(buf) < limit:
             chunk = os.read(fd, limit - len(buf))
@@ -451,9 +447,7 @@ def generate_alert_allow_list(
                 by_class[class_name].add(detection_id)
                 member_ids.add(detection_id)
 
-    frozen = MappingProxyType(
-        {name: frozenset(by_class[name]) for name in PUSH_ALERT_CLASSES}
-    )
+    frozen = MappingProxyType({name: frozenset(by_class[name]) for name in PUSH_ALERT_CLASSES})
     # Vocabulary coverage: all three closed classes exist as keys even if empty.
     if tuple(frozen.keys()) != PUSH_ALERT_CLASSES:
         return policy("allow_list", "push class vocabulary drifted from PUSH_ALERT_CLASSES")

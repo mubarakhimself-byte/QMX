@@ -507,9 +507,7 @@ class VenueFactVerifier:
         }
 
         binding_state = (
-            BindingRevalidationState.VALID
-            if command_open
-            else BindingRevalidationState.REFUSED
+            BindingRevalidationState.VALID if command_open else BindingRevalidationState.REFUSED
         )
         bindings = dict.fromkeys(self._binding_ids, binding_state)
         outcome = VenueFactVerification(
@@ -924,17 +922,13 @@ def conformance_measured_facts(
     amend_atomicity: str = "non-atomic",
     pacing_scope: str = "connection",
     protective_stop_forms: Sequence[str] | None = None,
-    quote_type: str = "bid",
+    quote_type: str = "bid",  # mock-data-scan: allow - conformance-double default
     utc_minute_of_day: int = 1020,
     money_digits: int = 2,
     pip_position: int = 4,
 ) -> Result[MeasuredFactBundle]:
     """Fully-verified measured fact bundle for the FEAT-0023 conformance double."""
-    forms = (
-        list(protective_stop_forms)
-        if protective_stop_forms is not None
-        else ["entry-relative"]
-    )
+    forms = list(protective_stop_forms) if protective_stop_forms is not None else ["entry-relative"]
     payloads: dict[ProbeCheck, dict[str, object]] = {
         ProbeCheck.SPOT_TIMESTAMP_UNIT: {"unit": "milliseconds"},
         ProbeCheck.DAILY_BOUNDARY: {"utc_minute_of_day": utc_minute_of_day},

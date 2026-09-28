@@ -102,9 +102,7 @@ def default_ownership_table() -> Mapping[str, OwnershipRule]:
             store_class=PersistenceClass.MEMORY,
             writer="memory_provider",
             crossing_rule="recalled into Context only",
-            retention_rule=(
-                "until admitted, superseded, invalidated, expired or contradicted"
-            ),
+            retention_rule=("until admitted, superseded, invalidated, expired or contradicted"),
             posture="provider_owned",
         ),
         OwnershipRule(
@@ -165,16 +163,14 @@ class StoreOwnershipRegistry:
         if not isinstance(store_class, str) or store_class.strip() == "":
             return invalid_input(
                 "store_class",
-                "ownership lookup names one of the eight AD-8 store classes "
-                "(FR-Q26; AD-8)",
+                "ownership lookup names one of the eight AD-8 store classes (FR-Q26; AD-8)",
                 given=repr(store_class),
             )
         rule = self._rules.get(store_class)
         if rule is None:
             return policy_rejection(
                 "store_ownership",
-                "a store class outside the eight AD-8 classes has no ownership "
-                "row (FR-Q26; AD-8)",
+                "a store class outside the eight AD-8 classes has no ownership row (FR-Q26; AD-8)",
                 store_class=store_class,
                 closed=sorted(EIGHT_STORE_CLASSES),
             )
@@ -208,8 +204,7 @@ class StoreOwnershipRegistry:
         if not context.is_invocation_only:
             return policy_rejection(
                 "store_ownership",
-                "context remains invocation-only rather than durable state "
-                "(FR-Q26; AD-8)",
+                "context remains invocation-only rather than durable state (FR-Q26; AD-8)",
                 store_class=PersistenceClass.CONTEXT.value,
                 posture=context.posture,
             )

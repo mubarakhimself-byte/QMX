@@ -169,8 +169,7 @@ class ReplayAdapter:
                 retryability=Retryability.NO,
                 context={
                     "field": "credential",
-                    "reason": "replay resolves no credential reference and holds "
-                    "no venue secret",
+                    "reason": "replay resolves no credential reference and holds no venue secret",
                     "given_type": type(credential).__name__,
                 },
             )
@@ -179,8 +178,7 @@ class ReplayAdapter:
             retryability=Retryability.NO,
             context={
                 "field": "credential",
-                "reason": "replay resolves no credential reference and holds "
-                "no venue secret",
+                "reason": "replay resolves no credential reference and holds no venue secret",
                 "given": repr(credential),
             },
         )
@@ -262,8 +260,7 @@ class ReplayAdapter:
                         "field": "command_sequencer",
                         "reason": "verified profile left the command sequencer closed",
                         "defects": {
-                            key: value.value
-                            for key, value in self._verification.defects.items()
+                            key: value.value for key, value in self._verification.defects.items()
                         },
                     },
                 )

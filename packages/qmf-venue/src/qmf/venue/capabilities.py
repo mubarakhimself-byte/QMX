@@ -990,9 +990,7 @@ class CapabilityDiscovery:
         time_in_force: object = None,
     ) -> Result[Mapping[str, str]]:
         """Admit order parameters (see :meth:`CapabilityDeclaration.order_parameter`)."""
-        return self.declaration.order_parameter(
-            order_type=order_type, time_in_force=time_in_force
-        )
+        return self.declaration.order_parameter(order_type=order_type, time_in_force=time_in_force)
 
     def resolve_error(self, venue_code: object, context: object) -> Result[ErrorMapResolution]:
         """Resolve a venue error code through the pinned error map (see ErrorMap.resolve)."""
