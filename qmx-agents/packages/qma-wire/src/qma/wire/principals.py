@@ -86,6 +86,8 @@ HUMAN_GATE_COMMANDS: Final[frozenset[str]] = frozenset(
         # Seed packet aliases that fall under the AD-24 list (DEC-0304 nouns).
         "install_enable_plugin",
         "approve_hook_action",
+        # AM-09 addable transfer is operator-issued (Story 70.2).
+        "transfer_artifact",
     }
 )
 

@@ -96,6 +96,7 @@ CLOSED_PROJECTIONS: Final[frozenset[str]] = frozenset(
         "local_operator",
         "pairing_pending",
         "pairing_session",
+        "artifact_transfer_ticket",
     }
 )
 

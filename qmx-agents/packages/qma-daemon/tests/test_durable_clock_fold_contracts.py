@@ -209,6 +209,7 @@ def test_v1_fold_contracts_declare_four_elements() -> None:
     assert "local_operator" in V1_FOLD_IDS
     assert "pairing_pending" in V1_FOLD_IDS
     assert "pairing_session" in V1_FOLD_IDS
+    assert "artifact_transfer_ticket" in V1_FOLD_IDS
     for member in DEFINITION_STORE_MEMBERS:
         assert member in V1_FOLD_IDS
 

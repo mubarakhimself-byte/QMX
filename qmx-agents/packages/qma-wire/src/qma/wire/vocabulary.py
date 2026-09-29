@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import Final
 
 __all__ = [
+    "ADDABLE_COMMAND_COUNT",
     "ADDABLE_QUERY_COUNT",
     "SEED_COMMAND_COUNT",
     "SEED_EVENT_COUNT",
@@ -43,6 +44,8 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # get_instance_health for pack-instance typed-report (Story 64.2; DEC-0112),
 # and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08).
 ADDABLE_QUERY_COUNT: Final[int] = 7
+# transfer_artifact (Story 70.2; AM-09). Seed 9/7/10 stay the seed.
+ADDABLE_COMMAND_COUNT: Final[int] = 1
 
 
 class MessageFamily(StrEnum):
@@ -54,10 +57,12 @@ class MessageFamily(StrEnum):
 
 
 class WireCommand(StrEnum):
-    """The nine seed commands (packet nouns; DEC-0304).
+    """Closed-and-addable commands (packet seed plus AM-09 transfer).
 
-    Wire ``type`` values are snake_case identifiers derived from the packet's
-    English labels (``install/enable plugin`` → ``install_enable_plugin``).
+    The nine packet-seed commands (DEC-0304) plus addable ``transfer_artifact``
+    (Story 70.2; AM-09). Seed count stays 9. Wire ``type`` values are
+    snake_case identifiers derived from the packet's English labels
+    (``install/enable plugin`` → ``install_enable_plugin``).
     """
 
     START_MISSION = "start_mission"
@@ -69,6 +74,7 @@ class WireCommand(StrEnum):
     UPDATE_CONFIGURATION = "update_configuration"
     LAUNCH_TASK = "launch_task"
     RETRY_TASK = "retry_task"
+    TRANSFER_ARTIFACT = "transfer_artifact"
 
 
 class WireQuery(StrEnum):

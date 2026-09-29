@@ -19,7 +19,8 @@
         "install_enable_plugin",
         "update_configuration",
         "launch_task",
-        "retry_task"
+        "retry_task",
+        "transfer_artifact"
       ]
     },
     "principal_class": {

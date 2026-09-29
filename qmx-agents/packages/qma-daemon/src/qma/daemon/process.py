@@ -54,8 +54,13 @@ from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.artifacts import (
     ArtifactStore,
+    DestControlHandle,
+    DestinationPlacement,
     StagedArtifact,
+    TransferArtifactResult,
+    TransferTicketStore,
     handle_stage_artifact_put,
+    handle_transfer_artifact,
     parse_stage_content_length,
     refuse_interrupted_stage_put,
 )
@@ -164,6 +169,7 @@ from qma.daemon.taskgraph.projection import (
 from qma.daemon.telemetry.store import TelemetryStore
 from qma.wire.initialize import (
     JSONRPC_VERSION,
+    TRANSFER_ARTIFACT_CAPABILITY,
     InitializeParams,
     LiveProducerRegistry,
     WireConnection,
@@ -188,6 +194,7 @@ from qma.wire.stage_artifact import (
     refuse_jsonrpc_stage_artifact,
     require_stage_artifact_capability,
 )
+from qma.wire.transfer_artifact import require_transfer_artifact_capability
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand
 from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
 from qmf.core.refusal import TypedRefusal
@@ -692,6 +699,11 @@ class DaemonProcess:
             _sessions=self._product_sessions,
         )
         self._artifacts = ArtifactStore(hooks=HookRegistry())
+        self._transfers = TransferTicketStore(
+            journal=journal,
+            sqlite=substrate.sqlite,
+            artifacts=self._artifacts,
+        )
         self._live_producers = LiveProducerRegistry()
         self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
 
@@ -859,6 +871,12 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_mailbox
+            restored_tickets = process._transfers.restore()
+            if is_refusal(restored_tickets):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_tickets
             _process_gate.holder = process
             return Ok(process)
 
@@ -934,6 +952,42 @@ class DaemonProcess:
             capabilities=caps,
         )
 
+    @property
+    def transfers(self) -> TransferTicketStore:
+        return self._transfers
+
+    def record_source_tls_origin(self, origin: object) -> Result[str]:
+        """Operator-recorded non-loopback TLS origin dest will pull."""
+        return self._transfers.record_source_tls_origin(origin)
+
+    def register_destination_placement(self, placement: DestinationPlacement) -> None:
+        self._transfers.register_destination(placement)
+
+    def dest_control_up(self, credential_ref: object) -> Result[DestControlHandle]:
+        """Dest control reconnect: issued tickets become notified."""
+        return self._transfers.dest_control_up(credential_ref)
+
+    def dest_control_down(self, credential_ref: str) -> None:
+        self._transfers.dest_control_down(credential_ref)
+
+    def transfer_artifact(
+        self,
+        payload: object,
+        *,
+        capabilities: object | None = None,
+        principal_class: object = PrincipalClass.OPERATOR,
+    ) -> Result[TransferArtifactResult]:
+        """Library admission of transfer_artifact. Live CT-40 must call the WS path."""
+        caps: object = (
+            {TRANSFER_ARTIFACT_CAPABILITY: True} if capabilities is None else capabilities
+        )
+        return handle_transfer_artifact(
+            self._transfers,
+            payload,
+            capabilities=caps,
+            principal_class=principal_class,
+        )
+
     def _paired_http_capabilities(self, pairing_record_id: object) -> object:
         stored = self._initialize_capabilities
         if isinstance(pairing_record_id, str) and pairing_record_id in stored:
@@ -941,6 +995,7 @@ class DaemonProcess:
         return {
             LIST_MAILBOX_CAPABILITY: True,
             STAGE_ARTIFACT_CAPABILITY: True,
+            TRANSFER_ARTIFACT_CAPABILITY: True,
         }
 
     @property
@@ -1833,6 +1888,7 @@ class DaemonProcess:
                 advertise = (
                     raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
                     or raw_caps.get(STAGE_ARTIFACT_CAPABILITY) is True
+                    or raw_caps.get(TRANSFER_ARTIFACT_CAPABILITY) is True
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -1850,6 +1906,8 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method == WireCommand.TRANSFER_ARTIFACT.value:
+            return self._dispatch_transfer_artifact(connection, request, req_id)
         if method != WireCommand.SEND_MESSAGE.value:
             return _jsonrpc_error(
                 req_id,
@@ -1887,6 +1945,43 @@ class DaemonProcess:
         if is_refusal(sent):
             return _jsonrpc_refusal(req_id, sent)
         return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
+
+    def _dispatch_transfer_artifact(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object]:
+        """Serve addable transfer_artifact on the live paired CT-40 socket."""
+        gated = require_transfer_artifact_capability(connection.capabilities)
+        if is_refusal(gated):
+            return _jsonrpc_refusal(req_id, gated)
+        authorized = connection.authorize_command(WireCommand.TRANSFER_ARTIFACT.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        raw_params = request.get("params")
+        if not isinstance(raw_params, Mapping):
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="params must be an object",
+            )
+        principal = connection.principal_class
+        if principal is None:
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_APP_ERROR,
+                message="unauthenticated",
+            )
+        transferred = handle_transfer_artifact(
+            self._transfers,
+            dict(cast("Mapping[str, object]", raw_params)),
+            capabilities=connection.capabilities,
+            principal_class=principal,
+        )
+        if is_refusal(transferred):
+            return _jsonrpc_refusal(req_id, transferred)
+        return _jsonrpc_result(req_id, transferred.value.to_payload())
 
     def sqlite_table_names(self) -> frozenset[str]:
         rows = self._substrate.sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")

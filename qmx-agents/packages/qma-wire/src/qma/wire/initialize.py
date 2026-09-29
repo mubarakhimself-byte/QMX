@@ -8,10 +8,12 @@ Story 68.6: authenticated ``initialize`` advertises capability ``pairing``.
 Story 69.2: authenticated ``initialize`` also advertises ``list_mailbox``.
 Story 70.1: authenticated ``initialize`` advertises ``stage_artifact`` meaning
 authenticated PUT ``/artifacts/stage`` exists — not a ``WireCommand``.
+Story 70.2: authenticated ``initialize`` advertises addable ``transfer_artifact``.
 Missing ``pairing`` is a typed mismatch; the shell stays usable. Missing
 ``list_mailbox`` is typed ``query_unavailable`` when the query is requested.
 Missing ``stage_artifact`` is a typed mismatch, not a silent empty upload.
-This handshake does not mint ``cancel_job`` or pack/draft names. Sharing a
+Missing ``transfer_artifact`` is a typed mismatch. This handshake does not
+mint ``cancel_job``, ``transfer_complete``, or pack/draft names. Sharing a
 live ``producer_id`` across tabs is forbidden.
 """
 
@@ -54,6 +56,8 @@ __all__ = [
     "STAGE_ARTIFACT_CAPABILITY",
     "STAGE_ARTIFACT_CAPABILITY_MINTED",
     "SUPPORTED_PROTOCOL_VERSIONS",
+    "TRANSFER_ARTIFACT_CAPABILITY",
+    "TRANSFER_ARTIFACT_CAPABILITY_MINTED",
     "WIRE_PROTOCOL_VERSION",
     "InitializeError",
     "InitializeParams",
@@ -83,11 +87,12 @@ LIST_MAILBOX_CAPABILITY: Final[str] = "list_mailbox"
 LIST_MAILBOX_CAPABILITY_MINTED: Final[bool] = True
 STAGE_ARTIFACT_CAPABILITY: Final[str] = "stage_artifact"
 STAGE_ARTIFACT_CAPABILITY_MINTED: Final[bool] = True
+TRANSFER_ARTIFACT_CAPABILITY: Final[str] = "transfer_artifact"
+TRANSFER_ARTIFACT_CAPABILITY_MINTED: Final[bool] = True
 # AR-UI-06 remainder — other epics mint these. Additive CT-40 only.
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
         "cancel_job",
-        "transfer_artifact",
         "transfer_complete",
         "pack_ui_request",
         "get_pack_ui_request",
@@ -139,11 +144,12 @@ def mint_tab_producer_id() -> str:
 def advertise_pairing_capabilities(
     server_capabilities: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Server advertised set: pairing, list_mailbox, and stage_artifact PUT."""
+    """Server advertised set: pairing, list_mailbox, PUT, and transfer_artifact."""
     caps = dict(server_capabilities or {})
     caps[PAIRING_CAPABILITY] = True
     caps[LIST_MAILBOX_CAPABILITY] = True
     caps[STAGE_ARTIFACT_CAPABILITY] = True
+    caps[TRANSFER_ARTIFACT_CAPABILITY] = True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         caps.pop(name, None)
     return caps
@@ -408,9 +414,10 @@ def negotiate_initialize(
 ) -> Result[InitializeResult]:
     """Negotiate ``protocolVersion`` and capabilities; assign ``producer_id``.
 
-    Authenticated initialize advertises ``pairing``, ``list_mailbox``, and
-    ``stage_artifact`` (the PUT). Remaining deferred AR-UI-06 names are not
-    minted here. ``producer_id`` is one live identity per tab.
+    Authenticated initialize advertises ``pairing``, ``list_mailbox``,
+    ``stage_artifact`` (the PUT), and addable ``transfer_artifact``. Remaining
+    deferred AR-UI-06 names are not minted here. ``producer_id`` is one live
+    identity per tab.
     """
     if params.protocol_version not in SUPPORTED_PROTOCOL_VERSIONS:
         return _invalid(
@@ -441,6 +448,10 @@ def negotiate_initialize(
             negotiated[STAGE_ARTIFACT_CAPABILITY] = True
         else:
             negotiated.pop(STAGE_ARTIFACT_CAPABILITY, None)
+        if not params.capabilities or params.capabilities.get(TRANSFER_ARTIFACT_CAPABILITY) is True:
+            negotiated[TRANSFER_ARTIFACT_CAPABILITY] = True
+        else:
+            negotiated.pop(TRANSFER_ARTIFACT_CAPABILITY, None)
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
