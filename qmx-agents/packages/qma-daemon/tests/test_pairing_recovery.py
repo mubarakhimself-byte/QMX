@@ -170,14 +170,13 @@ def test_reload_presents_same_proof_until_expiry(tmp_path: Path) -> None:
     try:
         record_id, proof = _issue(journal, substrate.sqlite)
         producers = LiveProducerRegistry()
-        token = "tab-reload"
         recovered = recover_pairing_connection(
             substrate.sqlite,
             origin=_ORIGIN,
             stored_proof=proof,
             client_producer_id="tab:reload",
             live_producers=producers,
-            connection_token=token,
+            connection_token="tab-reload",
             now_ns=_NOW_NS,
             journal=journal,
         )
