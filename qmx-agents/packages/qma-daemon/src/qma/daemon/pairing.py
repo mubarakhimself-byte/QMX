@@ -16,6 +16,9 @@ CT-28 ``pairing_record``. Do not mint ``pairing_session_id``.
 Authenticated HTTP is ``Authorization: Bearer pairing:<proof>`` plus Origin.
 Authenticated WebSocket offers ``qmx.ct40.v1`` and ``qmx.pair.<proof>``; the
 daemon echoes ``qmx.ct40.v1``. Access logs redact ``qmx.pair.*`` values.
+
+Story 68.6: reload, cold start, clone, and renew are different recoveries.
+Expiry closes WS. Authenticated CORS is the exact paired Origin.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ import threading
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Final, cast
 
 from qma.daemon.host_control.channel import HOST_CONTROL_INSPECT_SHA, redact_host_surface
@@ -51,6 +55,12 @@ from qma.wire.auth import (
     parse_pairing_bearer_authorization,
     refuse_pairing_proof_in_query,
 )
+from qma.wire.initialize import (
+    LiveProducerRegistry,
+    mint_tab_producer_id,
+    refuse_page_machine_principal,
+    refuse_shared_live_producer_id,
+)
 from qma.wire.listener import (
     COOKIE_LOGIN_SHIPPED,
     CT40_WS_SUBPROTOCOL,
@@ -69,13 +79,16 @@ from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, storage_failure
 
 __all__ = [
+    "CHROME_SERVED_FROM_DAEMON_PORT",
     "CONFIRM_ONCE_COUNT",
     "COOKIE_LOGIN_SHIPPED",
     "CT28_PAIRING_RECORD_REUSED",
     "CT40_WS_SUBPROTOCOL",
+    "DAEMON_HTTP_PORT",
     "DEC_0429_SUPERSEDED_BY",
     "DEC_0440_SUPERSEDED_BY",
     "HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA",
+    "LIST_MAILBOX_MINTED_THIS_STORY",
     "LOCALSTORAGE_PROOF_SHIPPED",
     "LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY",
     "ORIGIN_ONLY_AUTO_APPROVE",
@@ -110,16 +123,21 @@ __all__ = [
     "PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA",
+    "QMX_UI_SCAFFOLDED_THIS_STORY",
+    "SPA_SAMPLE_ORIGIN",
     "WEBSOCKETS_IMPORTS_AT_INSPECT_SHA",
     "IssuedPairingPending",
     "IssuedPairingProof",
     "PairingPendingLive",
+    "PairingRecovery",
+    "PairingRecoveryKind",
     "PairingSessionLive",
     "PairingWsHandle",
     "PairingWsRegistry",
     "PairingWsUpgrade",
     "authenticate_http_pairing_bearer",
     "authenticate_ws_pairing_upgrade",
+    "claim_chrome_served_from_8765",
     "claim_cookie_login_or_localstorage_proof_shipped",
     "claim_local_operator_bootstrap_is_this_story",
     "claim_pair_http_existed_at_inspect_sha",
@@ -130,12 +148,16 @@ __all__ = [
     "claim_qmb_host_pair_existed_at_inspect_sha",
     "claim_qmb_host_pair_revoke_existed_at_inspect_sha",
     "claim_this_story_delivered_copilot_profile",
+    "claim_this_story_scaffolded_qmx_ui",
+    "classify_pairing_recovery",
+    "close_expired_pairing_sockets",
     "close_ws_for_proof_fp1",
     "confirm_pairing_pending_by_code",
     "confirm_pairing_session_once",
     "fold_origin_barriers_from_journal",
     "fold_pairing_pendings_from_journal",
     "fold_pairing_sessions_from_journal",
+    "is_daemon_http_origin",
     "issue_pairing_session",
     "journal_blob_contains_secret",
     "live_pairing_sessions_for_origin",
@@ -149,7 +171,11 @@ __all__ = [
     "origin_revoke_pairing",
     "pairing_proof_fp1",
     "pairing_status_record_ids",
+    "recover_pairing_connection",
     "redact_pairing_access_log",
+    "refuse_auto_resend",
+    "refuse_journal_proof_retrieval",
+    "refuse_origin_only_recovery",
     "renew_pairing_session",
     "restore_pairing_projections",
     "session_revoke_pairing",
@@ -191,6 +217,11 @@ PAIRING_SESSION_ID_FIELD_MINTED: Final[bool] = False
 CT28_PAIRING_RECORD_REUSED: Final[bool] = False
 PAIRING_DELIVERED_COPILOT_PROFILE: Final[bool] = False
 PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS: Final[bool] = True
+CHROME_SERVED_FROM_DAEMON_PORT: Final[bool] = False
+LIST_MAILBOX_MINTED_THIS_STORY: Final[bool] = False
+QMX_UI_SCAFFOLDED_THIS_STORY: Final[bool] = False
+SPA_SAMPLE_ORIGIN: Final[str] = "http://127.0.0.1:5173"
+DAEMON_HTTP_PORT: Final[int] = 8765
 
 _PENDING_SCHEMA_SQL: Final[str] = """
 CREATE TABLE IF NOT EXISTS pairing_pending (
@@ -1793,11 +1824,13 @@ def match_pairing_session_by_proof(
     origin: object,
     proof: object,
     now_ns: object = None,
+    ws_registry: PairingWsRegistry | None = None,
 ) -> Result[PairingSessionLive]:
     """Match Origin + proof_fp1. Does not store the presented proof.
 
     One unexpired unrevoked proof may be presented on multiple connections for
-    that Origin until expiry, revoke, or rotate.
+    that Origin until expiry, revoke, or rotate. Expiry closes WS for that
+    proof; HTTP Bearer of a dead proof refuses.
     """
     parsed_origin = _require_origin(origin)
     if is_refusal(parsed_origin):
@@ -1815,6 +1848,7 @@ def match_pairing_session_by_proof(
     rows = sqlite.execute(_SESSION_SELECT)
     origin_mismatch = False
     expired_match = False
+    expired_fp1 = hashed
     now = _as_int(now_ns)
     for row in rows:
         live = _session_from_tuple(row)
@@ -1831,6 +1865,7 @@ def match_pairing_session_by_proof(
             continue
         if now is not None and live.expires_at <= now:
             expired_match = True
+            expired_fp1 = live.proof_fp1
             continue
         return Ok(live)
     if origin_mismatch:
@@ -1839,6 +1874,7 @@ def match_pairing_session_by_proof(
             "Origin + proof_fp1 do not match the pairing table",
         )
     if expired_match:
+        close_ws_for_proof_fp1(expired_fp1, ws_registry)
         return _policy("pairing_proof", "pairing_proof is expired")
     return _policy("pairing_proof", "pairing table has no matching proof_fp1")
 
@@ -1851,11 +1887,18 @@ def authenticate_http_pairing_bearer(
     query: object = None,
     now_ns: object = None,
     cookie: object = None,
+    ws_registry: PairingWsRegistry | None = None,
+    principal_class: object = None,
 ) -> Result[AuthenticatedWireSession]:
     """HTTP Bearer pairing:<proof> plus Origin. Never pairing:<id> or cred://.
 
     A cookie presented is ignored as proof (DEC-0501). Fetch credentials omit.
+    A page presenting ``principal_class=machine`` is ``POLICY_REJECTION``.
     """
+    if principal_class is not None:
+        page = refuse_page_machine_principal(principal_class)
+        if is_refusal(page):
+            return page
     refused_query = refuse_pairing_proof_in_query(query)
     if is_refusal(refused_query):
         return refused_query
@@ -1880,6 +1923,7 @@ def authenticate_http_pairing_bearer(
         origin=origin,
         proof=parsed.value,
         now_ns=now_ns,
+        ws_registry=ws_registry,
     )
     if is_refusal(matched):
         return matched
@@ -1915,13 +1959,19 @@ def authenticate_ws_pairing_upgrade(
     now_ns: object = None,
     query: object = None,
     cookie: object = None,
+    ws_registry: PairingWsRegistry | None = None,
+    principal_class: object = None,
 ) -> Result[PairingWsUpgrade]:
     """Inspect offered subprotocols; refuse missing/malformed/expired/mismatch.
 
     Browsers cannot set ``Authorization`` on ``WebSocket``. The subprotocol is
     the proof. A cookie presented is ignored as proof. Refused upgrades send no
-    CT-40 bytes and do not ``initialize``.
+    CT-40 bytes and do not ``initialize``. Expiry closes WS.
     """
+    if principal_class is not None:
+        page = refuse_page_machine_principal(principal_class)
+        if is_refusal(page):
+            return page
     refused_query = refuse_pairing_proof_in_query(query)
     if is_refusal(refused_query):
         return refused_query
@@ -1934,6 +1984,7 @@ def authenticate_ws_pairing_upgrade(
         origin=origin,
         proof=extracted.value,
         now_ns=now_ns,
+        ws_registry=ws_registry,
     )
     if is_refusal(matched):
         return matched
@@ -2055,3 +2106,263 @@ def journal_blob_contains_secret(journal: AuthoritativeJournal, secret: str) -> 
         return False
     blob = json.dumps(rows.value, ensure_ascii=True)
     return secret in blob
+
+
+class PairingRecoveryKind(StrEnum):
+    """Daemon-visible recoveries. Reload ≠ cold start ≠ clone ≠ renew."""
+
+    RELOAD = "reload"
+    COLD_START = "cold_start"
+    CLONE = "clone"
+    RENEW = "renew"
+
+
+@dataclass(frozen=True, slots=True)
+class PairingRecovery:
+    """Reconnect result. Never carries the raw proof."""
+
+    kind: PairingRecoveryKind
+    session: AuthenticatedWireSession
+    producer_id: str
+    pairing_record_id: str
+    origin: str
+    same_proof: bool
+
+
+def is_daemon_http_origin(origin: object) -> bool:
+    """True when Origin is the daemon bind (port 8765). SPA origin must differ."""
+    if not isinstance(origin, str) or origin.strip() == "":
+        return False
+    folded = origin.strip().casefold()
+    return folded.endswith(f":{DAEMON_HTTP_PORT}") or f":{DAEMON_HTTP_PORT}/" in folded
+
+
+def claim_chrome_served_from_8765(served: object) -> Result[bool]:
+    """Serving chrome from 8765 to fix CORS fails the story."""
+    if served is True or served == "true":
+        return _policy(
+            "origin",
+            "serving chrome from 8765 to fix CORS fails the story; SPA origin ≠ daemon origin",
+            chrome_from_daemon_port=CHROME_SERVED_FROM_DAEMON_PORT,
+            daemon_port=DAEMON_HTTP_PORT,
+            sample_origin=SPA_SAMPLE_ORIGIN,
+        )
+    if served is not False:
+        return invalid_input(
+            "chrome_served_from_8765",
+            "chrome-from-8765 claim is a boolean",
+            given=repr(served),
+        )
+    return Ok(False)
+
+
+def claim_this_story_scaffolded_qmx_ui(scaffolded: object) -> Result[bool]:
+    """This story is daemon + contract; do not scaffold apps/qmx-ui."""
+    if scaffolded is True or scaffolded == "true":
+        return _policy(
+            "apps/qmx-ui",
+            "this story is daemon + contract; chrome consume of sessionStorage "
+            "is Epic 66 — do not scaffold apps/qmx-ui",
+            scaffolded=QMX_UI_SCAFFOLDED_THIS_STORY,
+        )
+    if scaffolded is not False:
+        return invalid_input(
+            "qmx_ui_scaffolded",
+            "apps/qmx-ui scaffold claim is a boolean",
+            given=repr(scaffolded),
+        )
+    return Ok(False)
+
+
+def refuse_journal_proof_retrieval(
+    journal: AuthoritativeJournal,
+    secret: object,
+) -> Result[None]:
+    """Never retrieve the raw proof from the journal."""
+    if not isinstance(secret, str) or secret.strip() == "":
+        return invalid_input(
+            "pairing_proof",
+            "journal retrieval requires the presented secret to scan",
+            given=repr(secret),
+        )
+    if journal_blob_contains_secret(journal, secret):
+        return storage_failure(
+            "raw proof must not appear in the journal",
+            context={"field": "pairing_proof"},
+        )
+    return _policy(
+        "pairing_proof",
+        "never retrieve the proof from the journal",
+        journal_retrieval=False,
+    )
+
+
+def refuse_auto_resend() -> TypedRefusal:
+    """Cold start never auto-resends mailbox intent."""
+    return _policy(
+        "auto_resend",
+        "cold start never auto-resends; list_mailbox is not minted here",
+        auto_resend=False,
+        list_mailbox_minted=LIST_MAILBOX_MINTED_THIS_STORY,
+    )
+
+
+def refuse_origin_only_recovery(origin: object, stored_proof: object) -> Result[None]:
+    """Clone/reload with Origin only is never sufficient."""
+    has_proof = isinstance(stored_proof, str) and stored_proof.strip() != ""
+    if has_proof:
+        return Ok(None)
+    _ = origin
+    return _origin_never_sufficient()
+
+
+def classify_pairing_recovery(
+    *,
+    stored_proof: object,
+    producer_id_is_live: bool,
+    explicit_renew: bool = False,
+) -> PairingRecoveryKind:
+    """Reload, cold start, clone, and renew are different recoveries."""
+    if explicit_renew:
+        return PairingRecoveryKind.RENEW
+    has_proof = isinstance(stored_proof, str) and stored_proof.strip() != ""
+    if not has_proof:
+        return PairingRecoveryKind.COLD_START
+    if producer_id_is_live:
+        return PairingRecoveryKind.CLONE
+    return PairingRecoveryKind.RELOAD
+
+
+def close_expired_pairing_sockets(
+    sqlite: SingleSqliteWriter,
+    *,
+    now_ns: object,
+    ws_registry: PairingWsRegistry | None = None,
+) -> int:
+    """TTL elapsed: close WS on expired proofs. HTTP Bearer of a dead proof refuses."""
+    now = _as_int(now_ns)
+    if now is None:
+        return 0
+    closed = 0
+    seen: set[str] = set()
+    for session in _iter_sessions(sqlite):
+        if session.revoked or session.expires_at > now:
+            continue
+        if session.proof_fp1 in seen:
+            continue
+        seen.add(session.proof_fp1)
+        closed += close_ws_for_proof_fp1(session.proof_fp1, ws_registry)
+    return closed
+
+
+def recover_pairing_connection(
+    sqlite: SingleSqliteWriter,
+    *,
+    origin: object,
+    stored_proof: object,
+    client_producer_id: object = None,
+    live_producers: LiveProducerRegistry,
+    connection_token: str,
+    now_ns: object = None,
+    explicit_renew: bool = False,
+    ws_registry: PairingWsRegistry | None = None,
+    principal_class: object = None,
+    journal: AuthoritativeJournal | None = None,
+) -> Result[PairingRecovery]:
+    """Reconnect with a stored proof. Chrome sessionStorage is Epic 66.
+
+    Reload presents the same proof. Clone presents the same proof and a new
+    live ``producer_id``. Cold start cannot renew and cannot retrieve the
+    proof from the journal. ``/pair/renew`` is not this path.
+    """
+    if is_daemon_http_origin(origin):
+        return _policy(
+            "origin",
+            "SPA origin ≠ daemon origin (never port 8765)",
+            daemon_port=DAEMON_HTTP_PORT,
+            sample_origin=SPA_SAMPLE_ORIGIN,
+        )
+    if principal_class is not None:
+        page = refuse_page_machine_principal(principal_class)
+        if is_refusal(page):
+            return page
+    if explicit_renew:
+        return _policy(
+            "renew",
+            "/pair/renew is not the clone path; renew is an explicit rotate "
+            "that closes sockets on the old proof",
+            recovery=PairingRecoveryKind.RENEW.value,
+        )
+    producer_live = live_producers.is_live(client_producer_id)
+    kind = classify_pairing_recovery(
+        stored_proof=stored_proof,
+        producer_id_is_live=producer_live,
+        explicit_renew=False,
+    )
+    if kind is PairingRecoveryKind.COLD_START:
+        return _policy(
+            "pairing_proof",
+            "cold start: storage empty; /pair/renew is impossible; new pair "
+            "needs QMB confirm of a new pending",
+            recovery=kind.value,
+            auto_resend=False,
+            journal_retrieval=False,
+            list_mailbox_minted=LIST_MAILBOX_MINTED_THIS_STORY,
+        )
+    if (
+        journal is not None
+        and isinstance(stored_proof, str)
+        and journal_blob_contains_secret(journal, stored_proof)
+    ):
+        return storage_failure(
+            "raw proof must not appear in the journal",
+            context={"field": "pairing_proof"},
+        )
+    close_expired_pairing_sockets(sqlite, now_ns=now_ns, ws_registry=ws_registry)
+    matched = match_pairing_session_by_proof(
+        sqlite,
+        origin=origin,
+        proof=stored_proof,
+        now_ns=now_ns,
+        ws_registry=ws_registry,
+    )
+    if is_refusal(matched):
+        return matched
+    session = authenticate_pairing_record(matched.value.pairing_record_id)
+    if is_refusal(session):
+        return session
+    if session.value.credential_ref is not None:
+        return _policy(
+            "credential_ref",
+            "browser-paired session does not populate credential_ref",
+        )
+    shared = refuse_shared_live_producer_id(
+        client_producer_id,
+        live_producers=live_producers,
+        connection_token=connection_token,
+    )
+    hint: object
+    if is_refusal(shared) or kind is PairingRecoveryKind.CLONE:
+        hint = mint_tab_producer_id()
+    else:
+        hint = client_producer_id
+    producer_id = live_producers.assign(hint, connection_token=connection_token)
+    record_id = session.value.pairing_record_id
+    if record_id is None:
+        return _policy(
+            "pairing_record_id",
+            "browser-paired session carries pairing_record_id",
+        )
+    parsed_origin = _require_origin(origin)
+    if is_refusal(parsed_origin):
+        return parsed_origin
+    return Ok(
+        PairingRecovery(
+            kind=kind,
+            session=session.value,
+            producer_id=producer_id,
+            pairing_record_id=record_id,
+            origin=parsed_origin.value,
+            same_proof=True,
+        )
+    )

@@ -31,9 +31,12 @@ from qma.daemon.journal.variables import (
 )
 from qma.daemon.pairing import (
     PAIRING_HTTP_EXISTED_AT_INSPECT_SHA,
+    SPA_SAMPLE_ORIGIN,
     PairingWsRegistry,
     claim_pair_http_existed_at_inspect_sha,
     confirm_pairing_session_once,
+    is_daemon_http_origin,
+    live_pairing_sessions_for_origin,
     renew_pairing_session,
     start_pairing_pending,
 )
@@ -75,11 +78,13 @@ from qmf.core.refusal import (
 
 __all__ = [
     "ACCEPT_HEADER_OR_COOKIE",
+    "ACCESS_CONTROL_ALLOW_CREDENTIALS",
     "AM_01_NAME",
     "AM_01_UNAUTHENTICATED_POST_PATHS",
     "BROKER_ALLOWLIST_WIDENED",
     "COOKIE_IS_OPERATOR_PROOF",
     "CORS_EXISTED_AT_INSPECT_SHA",
+    "CORS_REFLECT_ANY_AFTER_PAIR",
     "CT40_BIND_PORT",
     "DEC_0304_SUPERSEDED_BY",
     "DEC_0323_SUPERSEDED_BY",
@@ -93,6 +98,7 @@ __all__ = [
     "PAIRING_HTTP_EXISTED_AT_INSPECT_SHA",
     "PAIRING_HTTP_OPENS_AUTHENTICATED_WIRE",
     "SET_COOKIE_ON_PAIR_HTTP_IS_SPEC_MISS",
+    "SPA_SAMPLE_ORIGIN",
     "UNAUTHENTICATED_BIND_SENTENCE",
     "UNAUTHENTICATED_BIND_SENTENCE_HELD",
     "PairHttpAdmission",
@@ -107,6 +113,7 @@ __all__ = [
     "claim_pair_http_existed_at_inspect_sha",
     "claim_unauthenticated_bind_sentence_dropped",
     "classify_am01_unauthenticated_http",
+    "cors_allow_origin",
     "cors_options_response",
     "handle_pair_confirm",
     "handle_pair_http",
@@ -116,6 +123,7 @@ __all__ = [
     "is_host_control_http",
     "is_websocket_upgrade",
     "operator_proof_from_headers",
+    "refuse_cors_preflight_retarget",
     "require_pair_renew_bearer",
 ]
 
@@ -137,6 +145,8 @@ _PAIR_ALLOW_METHODS: Final[str] = "POST, OPTIONS"
 _PUT_ALLOW_METHODS: Final[str] = "PUT, OPTIONS"
 _GET_ALLOW_METHODS: Final[str] = "GET, OPTIONS"
 _EMPTY_HEADERS: Final[Mapping[str, str]] = MappingProxyType({})
+ACCESS_CONTROL_ALLOW_CREDENTIALS: Final[str] = "false"
+CORS_REFLECT_ANY_AFTER_PAIR: Final[bool] = False
 
 
 def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -327,6 +337,12 @@ class PairHttpResponse:
         if origin == "*":
             msg = "CORS Access-Control-Allow-Origin must never be *"
             raise ValueError(msg)
+        creds = self.headers.get("Access-Control-Allow-Credentials") or self.headers.get(
+            "access-control-allow-credentials"
+        )
+        if creds is not None and creds.strip().casefold() == "true":
+            msg = "Access-Control-Allow-Credentials must be false"
+            raise ValueError(msg)
 
 
 def _allow_methods_for(path: str) -> str:
@@ -337,8 +353,49 @@ def _allow_methods_for(path: str) -> str:
     return _GET_ALLOW_METHODS
 
 
-def cors_options_response(request: PairHttpRequest) -> Result[PairHttpResponse]:
-    """CORS preflight: empty body, no proof, no Upgrade, no artifact bytes."""
+def refuse_cors_preflight_retarget() -> TypedRefusal:
+    """Preflight failure is not a retarget to another origin or host."""
+    return _policy(
+        "cors",
+        "preflight failure is not a retarget",
+        retarget=False,
+        sample_origin=SPA_SAMPLE_ORIGIN,
+    )
+
+
+def cors_allow_origin(
+    *,
+    path: str,
+    request_origin: str | None,
+    paired_origin: str | None = None,
+) -> str | None:
+    """start/confirm may reflect; authenticated CORS is the exact paired Origin."""
+    if request_origin is None or request_origin == "*":
+        return None
+    if is_daemon_http_origin(request_origin):
+        return None
+    if path in {PAIR_START_PATH, PAIR_CONFIRM_PATH}:
+        return request_origin
+    if CORS_REFLECT_ANY_AFTER_PAIR:
+        return None
+    if paired_origin is None:
+        return None
+    if request_origin == paired_origin:
+        return paired_origin
+    return None
+
+
+def cors_options_response(
+    request: PairHttpRequest,
+    *,
+    sqlite: SingleSqliteWriter | None = None,
+    now_ns: int | None = None,
+) -> Result[PairHttpResponse]:
+    """CORS preflight: empty body, no proof, no Upgrade, no artifact bytes.
+
+    Authenticated routes emit the exact paired Origin, never ``*``, never
+    reflect-any after pair. Credentials omit.
+    """
     if request.method != "OPTIONS":
         return _invalid(
             "method",
@@ -353,13 +410,30 @@ def cors_options_response(request: PairHttpRequest) -> Result[PairHttpResponse]:
             named_amendment=AM_01_NAME,
         )
     origin = header_value(request.headers, "Origin")
+    if origin is not None and is_daemon_http_origin(origin):
+        return refuse_cors_preflight_retarget()
+    paired: str | None = None
+    if (
+        sqlite is not None
+        and origin is not None
+        and request.path not in {PAIR_START_PATH, PAIR_CONFIRM_PATH}
+    ):
+        live = live_pairing_sessions_for_origin(sqlite, origin=origin, now_ns=now_ns)
+        if live:
+            paired = live[0].origin
+    allowed = cors_allow_origin(
+        path=request.path,
+        request_origin=origin,
+        paired_origin=paired,
+    )
     headers: dict[str, str] = {
         "Access-Control-Allow-Methods": _allow_methods_for(request.path),
         "Access-Control-Allow-Headers": _CORS_ALLOW_HEADERS,
+        "Access-Control-Allow-Credentials": ACCESS_CONTROL_ALLOW_CREDENTIALS,
         "Vary": "Origin",
     }
-    if origin is not None and origin != "*":
-        headers["Access-Control-Allow-Origin"] = origin
+    if allowed is not None:
+        headers["Access-Control-Allow-Origin"] = allowed
     # OPTIONS never issues a pairing_proof, never upgrades WS, never returns
     # artifact or pairing bytes, and never Set-Cookie.
     response = PairHttpResponse(status=204, headers=MappingProxyType(headers), body=b"")
@@ -527,6 +601,12 @@ def _require_origin_header(request: PairHttpRequest) -> Result[str]:
     origin = header_value(request.headers, "Origin")
     if origin is None or origin == "*":
         return _invalid("origin", "Origin is required", given=repr(origin))
+    if is_daemon_http_origin(origin):
+        return _policy(
+            "origin",
+            "SPA origin ≠ daemon origin (never port 8765)",
+            sample_origin=SPA_SAMPLE_ORIGIN,
+        )
     return Ok(origin)
 
 
@@ -546,6 +626,7 @@ def _cors_json(status: int, body: Mapping[str, object], origin: str) -> PairHttp
     headers: dict[str, str] = {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": ACCESS_CONTROL_ALLOW_CREDENTIALS,
         "Vary": "Origin",
     }
     return PairHttpResponse(
@@ -668,7 +749,11 @@ def handle_pair_http(
 ) -> Result[PairHttpResponse]:
     """Dispatch start / confirm / renew / CORS OPTIONS."""
     if request.method == "OPTIONS":
-        return cors_options_response(request)
+        return cors_options_response(
+            request,
+            sqlite=deps.sqlite,
+            now_ns=deps.now_ns,
+        )
     if request.method == "POST" and request.path == PAIR_START_PATH:
         return handle_pair_start(request, deps)
     if request.method == "POST" and request.path == PAIR_CONFIRM_PATH:
