@@ -94,6 +94,8 @@ CLOSED_PROJECTIONS: Final[frozenset[str]] = frozenset(
         "ledger_quarantine_stream",
         "definition_store",
         "local_operator",
+        "pairing_pending",
+        "pairing_session",
     }
 )
 

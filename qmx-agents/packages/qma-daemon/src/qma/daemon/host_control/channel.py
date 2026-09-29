@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Final, cast
 
 from qma.core.refusals.variants import CredentialOutOfScope
+from qma.wire.auth import looks_like_bearer_proof
 from qmf.core import Ok, Result, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
@@ -188,7 +189,9 @@ def claim_types_absent_at_inspect_sha(absent: object) -> Result[bool]:
 
 def _looks_like_secret_value(value: str) -> bool:
     folded = value.strip()
-    return any(folded.startswith(prefix) for prefix in _REDACT_PREFIXES)
+    if any(folded.startswith(prefix) for prefix in _REDACT_PREFIXES):
+        return True
+    return looks_like_bearer_proof(value)
 
 
 def redact_host_surface(value: object) -> object:
@@ -203,7 +206,10 @@ def redact_host_surface(value: object) -> object:
             name = str(key)
             folded = name.casefold()
             if folded == "pairing_record_id" or folded.endswith("_record_id"):
-                out[name] = redact_host_surface(item)
+                if isinstance(item, str) and _looks_like_secret_value(item):
+                    out[name] = "[redacted]"
+                else:
+                    out[name] = redact_host_surface(item)
                 continue
             if folded in _REDACT_KEYS or folded.startswith("qmx.pair."):
                 out[name] = "[redacted]"

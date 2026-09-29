@@ -109,6 +109,7 @@ from qma.daemon.operator_log import (
 )
 from qma.daemon.operator_log import emit_operator_event as write_operator_json_line
 from qma.daemon.operator_log import fingerprint_operator_log as refuse_operator_log_fp1
+from qma.daemon.pairing import pairing_status_record_ids, restore_pairing_projections
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
 from qma.daemon.plugins.packs import DeskPluginRoster
@@ -532,6 +533,12 @@ class DaemonProcess:
                     existing = fold_local_operator_from_journal(process.journal)
                 process._local_operator = existing
             process._restore_pairing_ttl()
+            restored_pairing = restore_pairing_projections(process.journal, process.sqlite)
+            if is_refusal(restored_pairing):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_pairing
             _process_gate.holder = process
             return Ok(process)
 
@@ -793,6 +800,7 @@ class DaemonProcess:
         """Lock, pid, CT-40 bind, operator/TTL/record-id presence. Never secrets."""
         bound = self._bound
         bind = None if bound is None else f"{bound.host}:{bound.port}"
+        record_ids = pairing_status_record_ids(self._substrate.sqlite)
         return MappingProxyType(
             {
                 "lock": "held" if self._substrate.lock_held else "free",
@@ -800,8 +808,8 @@ class DaemonProcess:
                 "bind": bind,
                 "operator_established": self._local_operator is not None,
                 "ttl": self._variables.pairing_ttl_status(),
-                "pending_record_ids": (),
-                "bound_record_ids": (),
+                "pending_record_ids": record_ids["pending_record_ids"],
+                "bound_record_ids": record_ids["bound_record_ids"],
             }
         )
 

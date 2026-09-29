@@ -99,6 +99,8 @@ _CORE_V1_FOLDS: Final[dict[str, FoldContract]] = {
     ),
     # AM-03 named add — journal projection, not definition-store slot 17+.
     "local_operator": _contract("local_operator", "local_operator.*"),
+    "pairing_pending": _contract("pairing_pending", "pairing_pending.*"),
+    "pairing_session": _contract("pairing_session", "pairing_session.*"),
 }
 
 # Definition-store registries are each a v1 fold over their noun.verb stream.
@@ -147,6 +149,8 @@ _STORE_TO_FOLD: Final[Mapping[str, str]] = MappingProxyType(
         "operator_approval_queue": "mailbox_delivery_state",
         "deployment_registry": "deployment_registry",
         "local_operator": "local_operator",
+        "pairing_pending": "pairing_pending",
+        "pairing_session": "pairing_session",
         **{member: member for member in DEFINITION_STORE_MEMBERS},
     }
 )

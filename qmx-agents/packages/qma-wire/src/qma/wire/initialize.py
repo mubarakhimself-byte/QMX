@@ -305,8 +305,14 @@ class WireConnection:
         )
         if not isinstance(session, Ok):
             return session
+        bound_ref = session.value.credential_ref
+        if bound_ref is None:
+            return _policy(
+                "authentication",
+                "machine clients present credential_ref before protocol bytes",
+            )
         self._authenticated = True
-        self._credential_ref = str(session.value.credential_ref)
+        self._credential_ref = str(bound_ref)
         self._principal_class = session.value.principal_class
         return Ok(self._credential_ref)
 

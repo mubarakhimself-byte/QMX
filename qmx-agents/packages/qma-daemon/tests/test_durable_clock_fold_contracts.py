@@ -207,6 +207,8 @@ def test_v1_fold_contracts_declare_four_elements() -> None:
     assert "deployment_provider_health" in V1_FOLD_IDS
     assert "staging_application_state" in V1_FOLD_IDS
     assert "local_operator" in V1_FOLD_IDS
+    assert "pairing_pending" in V1_FOLD_IDS
+    assert "pairing_session" in V1_FOLD_IDS
     for member in DEFINITION_STORE_MEMBERS:
         assert member in V1_FOLD_IDS
 
