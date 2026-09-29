@@ -47,17 +47,17 @@ def test_transfer_artifact_is_addable_ct40_and_absent_at_inspect_sha() -> None:
     assert TRANSFER_ARTIFACT_IS_PACK_OP is False
     assert TRANSFER_ARTIFACT_IS_DISPATCH_INVOKE is False
     assert TRANSFER_ARTIFACT_IS_HOST_CONTROL is False
-    assert TRANSFER_COMPLETE_MINTED is False
+    assert TRANSFER_COMPLETE_MINTED is True
     assert TRANSFER_ARTIFACT_AMENDMENT == "AM-09"
     assert SEED_COMMAND_COUNT == 9
-    assert ADDABLE_COMMAND_COUNT == 1
+    assert ADDABLE_COMMAND_COUNT == 2
     assert SEED_QUERY_COUNT == 7
     assert SEED_EVENT_COUNT == 10
     assert TRANSFER_ARTIFACT_EXISTED_AT_INSPECT_SHA is False
     assert ARTIFACT_STORE_TYPES_EXISTED_AT_INSPECT_SHA is True
     assert TRANSFER_ARTIFACT_COMMAND in HUMAN_GATE_COMMANDS
     assert TRANSFER_ARTIFACT_CAPABILITY not in DEFERRED_INITIALIZE_CAPABILITIES
-    assert "transfer_complete" in DEFERRED_INITIALIZE_CAPABILITIES
+    assert "transfer_complete" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert is_refusal(claim_transfer_artifact_existed_at_inspect_sha(True))
     assert is_ok(claim_transfer_artifact_existed_at_inspect_sha(False))
     assert is_refusal(claim_artifact_store_types_absent_at_inspect_sha(True))

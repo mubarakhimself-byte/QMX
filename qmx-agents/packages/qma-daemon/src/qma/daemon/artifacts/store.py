@@ -81,6 +81,15 @@ class ArtifactStore:
     def abandon_incomplete(self) -> None:
         """Interrupted PUT: drop unregistered bytes. Store holds only complete objects."""
 
+    def drop_incomplete(self, fp1: str) -> None:
+        """Dest interrupt/mismatch: never leave a runnable incomplete object.
+
+        Complete dest objects with this fp1 stay. The store holds only complete
+        objects, so a first-time mismatch has nothing to drop.
+        """
+        if self._artifacts.get(fp1) is None:
+            return
+
     def stage_complete_bytes(self, body: bytes) -> Result[StagedArtifact]:
         """Register complete bytes through before_artifact_register.
 

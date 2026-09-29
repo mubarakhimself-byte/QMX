@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 from qma.core.barriers.credential_allowlist import is_credential_ref_allowed
 from qma.core.vocabulary.enums import PrincipalClass
-from qma.daemon.artifacts.store import ArtifactStore
+from qma.daemon.artifacts.store import ArtifactStore, StagedArtifact
 from qma.daemon.host_control.local_operator import (
     DEC_0429_SUPERSEDED_BY,
     DEC_0440_SUPERSEDED_BY,
@@ -43,7 +43,12 @@ from qma.wire.transfer_artifact import (
     parse_transfer_artifact_payload,
     require_transfer_artifact_capability,
 )
+from qma.wire.transfer_complete import (
+    parse_transfer_complete_payload,
+    require_transfer_complete_capability,
+)
 from qmf.core import Ok, Result, is_refusal
+from qmf.core.fingerprint import fingerprint_bytes
 from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
@@ -63,17 +68,27 @@ __all__ = [
     "INTER_DAEMON_DISCOVERY",
     "LOCAL_INVOKE_FALLBACK",
     "OPEN_TICKET_STATES",
+    "TICKET_CLAIMED_EVENT",
+    "TICKET_COMPLETE_EVENT",
     "TICKET_ID_PREFIX",
     "TICKET_STATES",
+    "TRANSFER_TICKET_HEADER",
+    "ArtifactGetRedeem",
     "DestControlHandle",
     "DestControlRegistry",
     "DestinationPlacement",
+    "InvokeTransferGate",
     "TransferArtifactResult",
+    "TransferCompleteResult",
     "TransferTicket",
     "TransferTicketStore",
     "claim_artifact_store_types_absent_at_inspect_sha",
     "claim_transfer_artifact_existed_at_inspect_sha",
+    "gate_invoke_until_transfer_complete",
     "handle_transfer_artifact",
+    "handle_transfer_complete",
+    "loopback_source_not_get_target",
+    "place_dest_pulled_bytes",
     "source_unreachable",
 ]
 
@@ -90,7 +105,16 @@ ARTIFACT_TRANSFER_TICKET_INSPECT_SHA: Final[str] = TRANSFER_ARTIFACT_INSPECT_SHA
 TICKET_ID_PREFIX: Final[str] = "att:"
 TICKET_ISSUED_EVENT: Final[str] = "artifact_transfer_ticket.issued"
 TICKET_NOTIFIED_EVENT: Final[str] = "artifact_transfer_ticket.notified"
+TICKET_CLAIMED_EVENT: Final[str] = "artifact_transfer_ticket.claimed"
+TICKET_COMPLETE_EVENT: Final[str] = "artifact_transfer_ticket.complete"
 ORIGIN_RECORDED_EVENT: Final[str] = "artifact_transfer_ticket.origin_recorded"
+TRANSFER_TICKET_HEADER: Final[str] = "X-QMX-Transfer-Ticket"
+_STATE_EVENTS: Final[dict[str, str]] = {
+    "issued": TICKET_ISSUED_EVENT,
+    "notified": TICKET_NOTIFIED_EVENT,
+    "claimed": TICKET_CLAIMED_EVENT,
+    "complete": TICKET_COMPLETE_EVENT,
+}
 DEST_CONTROL_NOTIFY_METHOD: Final[str] = "artifact_transfer_ticket.notified"
 TICKET_STATES: Final[frozenset[str]] = frozenset(
     {"issued", "notified", "claimed", "complete", "failed", "expired"}
@@ -243,6 +267,90 @@ class TransferTicket:
         }
         if self.product_session_ref is not None:
             payload["product_session_ref"] = self.product_session_ref
+        return MappingProxyType(payload)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactGetRedeem:
+    """AM-13 machine byte pull: complete bytes plus the claimed ticket."""
+
+    content: bytes
+    ticket: TransferTicket
+    content_type: str = "application/octet-stream"
+
+    def to_payload(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "ticket_id": self.ticket.ticket_id,
+                "fp1": self.ticket.fp1,
+                "byte_count": len(self.content),
+                "state": self.ticket.state,
+                "content_type": self.content_type,
+                "invoke": False,
+                "pairing_http": False,
+                "bff": False,
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TransferCompleteResult:
+    """Source ack of dest-authored transfer_complete. Source does not write dest."""
+
+    ticket_id: str
+    state: str
+    fp1: str
+    byte_count: int
+    prior_complete: bool = False
+    dest_bytes_written_on_source: bool = False
+    second_ticket: bool = False
+
+    def to_payload(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "ticket_id": self.ticket_id,
+                "state": self.state,
+                "fp1": self.fp1,
+                "byte_count": self.byte_count,
+                "prior_complete": self.prior_complete,
+                "dest_bytes_written_on_source": self.dest_bytes_written_on_source,
+                "second_ticket": self.second_ticket,
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeTransferGate:
+    """Invoke-until-complete transfer gate. Does not grant an instance_id."""
+
+    transfer_gate_satisfied: bool
+    instance_id: str
+    same_daemon: bool = False
+    ticket_id: str | None = None
+    fp1: str | None = None
+    instance_granted: bool = False
+    instance_enabled: bool = False
+    instance_guessed: bool = False
+    local_fallback: bool = False
+    finish_on_local_disk: bool = False
+    composer_ref_rewritten: bool = False
+
+    def to_payload(self) -> Mapping[str, object]:
+        payload: dict[str, object] = {
+            "transfer_gate_satisfied": self.transfer_gate_satisfied,
+            "instance_id": self.instance_id,
+            "same_daemon": self.same_daemon,
+            "instance_granted": self.instance_granted,
+            "instance_enabled": self.instance_enabled,
+            "instance_guessed": self.instance_guessed,
+            "local_fallback": self.local_fallback,
+            "finish_on_local_disk": self.finish_on_local_disk,
+            "composer_ref_rewritten": self.composer_ref_rewritten,
+        }
+        if self.ticket_id is not None:
+            payload["ticket_id"] = self.ticket_id
+        if self.fp1 is not None:
+            payload["fp1"] = self.fp1
         return MappingProxyType(payload)
 
 
@@ -544,6 +652,7 @@ class TransferTicketStore:
     journal: AuthoritativeJournal
     sqlite: SingleSqliteWriter
     artifacts: ArtifactStore
+    dest_artifacts: ArtifactStore = field(default_factory=ArtifactStore)
     placements: dict[str, DestinationPlacement] = field(
         default_factory=dict[str, DestinationPlacement]
     )
@@ -691,7 +800,9 @@ class TransferTicketStore:
             return declared
         payload = dict(ticket.to_payload())
         payload["state"] = state
-        event = TICKET_NOTIFIED_EVENT if state == "notified" else TICKET_ISSUED_EVENT
+        event = _STATE_EVENTS.get(state)
+        if event is None:
+            return invalid_input("state", "unknown ticket state", given=state)
         append = self.journal.append_event(event, payload=payload)
         if is_refusal(append):
             return append
@@ -767,6 +878,99 @@ class TransferTicketStore:
                 handle.notify(notified.value.to_payload())
             return notified
         return Ok(ticket)
+
+    def tickets_for_placement(self, *, fp1: str, instance_id: str) -> tuple[TransferTicket, ...]:
+        _ensure_schema(self.sqlite)
+        rows = self.sqlite.execute(
+            "SELECT ticket_id, source_origin, fp1, byte_count, operator_principal, "
+            "product_session_ref, environment_id, placement_revision, instance_id, "
+            "credential_ref, state, command_id, durable_command_id, journal_seq, "
+            "recorded_at FROM artifact_transfer_ticket WHERE fp1 = ? AND "
+            "instance_id = ? ORDER BY journal_seq ASC",
+            (fp1, instance_id),
+        )
+        tickets: list[TransferTicket] = []
+        for row in rows:
+            ticket = _row_to_ticket(row)
+            if ticket is not None:
+                tickets.append(ticket)
+        return tuple(tickets)
+
+    def redeem_get(
+        self,
+        *,
+        ticket_id: object,
+        fp1: object,
+        credential_ref: object,
+    ) -> Result[ArtifactGetRedeem]:
+        """Live AM-13 machine GET: notified → claimed; return complete bytes."""
+        if not isinstance(ticket_id, str) or ticket_id.strip() == "":
+            return invalid_input(
+                "ticket_id",
+                "X-QMX-Transfer-Ticket is a required ticket_id",
+                given=repr(ticket_id),
+                invoke=False,
+                pairing_http=False,
+                bff=False,
+            )
+        if not isinstance(fp1, str) or fp1.strip() == "":
+            return invalid_input("fp1", "GET /artifacts/<fp1> requires an fp1")
+        if not isinstance(credential_ref, str) or credential_ref.strip() == "":
+            return invalid_input(
+                "credential_ref",
+                "machine GET audience is a credential_ref",
+                given=repr(credential_ref),
+            )
+        ticket = self.get(ticket_id.strip())
+        if ticket is None:
+            return policy_rejection(
+                "ticket_id",
+                "unknown transfer ticket",
+                given=ticket_id.strip(),
+                invoke=False,
+            )
+        loopback = loopback_source_not_get_target(ticket.source_origin)
+        if is_refusal(loopback):
+            return loopback
+        if ticket.fp1 != fp1.strip():
+            return policy_rejection(
+                "fp1",
+                "ticket fp1 must match GET /artifacts/<fp1>",
+                given=fp1.strip(),
+                ticket_fp1=ticket.fp1,
+            )
+        if ticket.credential_ref != credential_ref:
+            return policy_rejection(
+                "credential_ref",
+                "only the ticket audience may redeem",
+                given=credential_ref,
+                audience=ticket.credential_ref,
+            )
+        if ticket.state in {"failed", "expired", "issued"}:
+            return policy_rejection(
+                "state",
+                "ticket must be notified before machine GET redeem",
+                given=ticket.state,
+                invoke=False,
+            )
+        staged = self.artifacts.get(ticket.fp1)
+        if staged is None:
+            return invalid_input(
+                "fp1",
+                "source local-complete bytes are required for GET redeem",
+                given=ticket.fp1,
+            )
+        claimed = ticket
+        if ticket.state == "notified":
+            advanced = self._journal_state(ticket, state="claimed")
+            if is_refusal(advanced):
+                return advanced
+            claimed = advanced.value
+        return Ok(ArtifactGetRedeem(content=bytes(staged.content), ticket=claimed))
+
+    def complete_ack(self, ticket: TransferTicket) -> Result[TransferTicket]:
+        """Record dest-authored complete. Source does not write dest bytes."""
+        return self._journal_state(ticket, state="complete")
 
 
 def _same_daemon_result(fp1: str) -> TransferArtifactResult:
@@ -883,5 +1087,235 @@ def handle_transfer_artifact(
             transfer_required=True,
             ticket_id=ticket.value.ticket_id,
             state=ticket.value.state,
+        )
+    )
+
+
+def loopback_source_not_get_target(origin: object) -> Result[str]:
+    """Loopback source is never offered as a GET target (AM-13)."""
+    if not isinstance(origin, str) or origin.strip() == "":
+        return source_unreachable(recorded=False, get_target=True)
+    parsed = urlsplit(origin.strip())
+    hostname = parsed.hostname
+    if hostname is None or is_loopback_host(hostname) or parsed.scheme != "https":
+        return source_unreachable(
+            given=origin.strip(),
+            get_target=True,
+            loopback=hostname is None or is_loopback_host(hostname),
+            tls=parsed.scheme == "https",
+        )
+    return Ok(origin.strip())
+
+
+def place_dest_pulled_bytes(
+    store: TransferTicketStore,
+    body: object,
+    *,
+    ticket_id: object,
+    interrupted: bool = False,
+) -> Result[StagedArtifact]:
+    """Dest-only write: verify hash plus byte count, else delete incomplete."""
+    if not isinstance(ticket_id, str) or ticket_id.strip() == "":
+        return invalid_input("ticket_id", "dest pull names a ticket_id")
+    ticket = store.get(ticket_id.strip())
+    if ticket is None:
+        return policy_rejection("ticket_id", "unknown transfer ticket", given=ticket_id)
+    if interrupted or not isinstance(body, bytes):
+        store.dest_artifacts.drop_incomplete(ticket.fp1)
+        return policy_rejection(
+            "body",
+            "interrupted dest pull deletes the incomplete object",
+            runnable_remote_ref=False,
+            dest_object=False,
+            ticket_state=ticket.state,
+            source_fp1_unchanged=True,
+            composer_ref_rewritten=False,
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+        )
+    recomputed = fingerprint_bytes(body).value
+    byte_count = len(body)
+    if recomputed != ticket.fp1 or byte_count != ticket.byte_count:
+        store.dest_artifacts.drop_incomplete(ticket.fp1)
+        return policy_rejection(
+            "fp1",
+            "dest hash and byte_count must match the ticket",
+            runnable_remote_ref=False,
+            dest_object=False,
+            ticket_state=ticket.state,
+            source_fp1_unchanged=True,
+            composer_ref_rewritten=False,
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+            given_fp1=recomputed,
+            ticket_fp1=ticket.fp1,
+            given_byte_count=byte_count,
+            ticket_byte_count=ticket.byte_count,
+        )
+    placed = store.dest_artifacts.stage_complete_bytes(body)
+    if is_refusal(placed):
+        store.dest_artifacts.drop_incomplete(ticket.fp1)
+        return placed
+    return placed
+
+
+def handle_transfer_complete(
+    store: TransferTicketStore,
+    payload: object,
+    *,
+    capabilities: object,
+    principal_class: object,
+) -> Result[TransferCompleteResult]:
+    """Source records dest-authored complete. Does not write dest bytes."""
+    gated = require_transfer_complete_capability(capabilities)
+    if is_refusal(gated):
+        return gated
+    if principal_class is not PrincipalClass.MACHINE and principal_class != (
+        PrincipalClass.MACHINE.value
+    ):
+        return policy_rejection(
+            "principal_class",
+            "transfer_complete is dest-authored as a machine principal",
+            given=repr(principal_class),
+        )
+    parsed = parse_transfer_complete_payload(payload)
+    if is_refusal(parsed):
+        return parsed
+    args = parsed.value
+    ticket_id = str(args["ticket_id"])
+    parsed_fp1 = args["fp1"]
+    parsed_count = args["byte_count"]
+    parsed_command_id = args["command_id"]
+    if not isinstance(parsed_count, int) or isinstance(parsed_count, bool):
+        return invalid_input(
+            "byte_count",
+            "transfer_complete byte_count must be a non-negative integer",
+            given=repr(parsed_count),
+        )
+    ticket = store.get(ticket_id)
+    if ticket is None:
+        return policy_rejection("ticket_id", "unknown transfer ticket", given=ticket_id)
+    if ticket.command_id != str(parsed_command_id):
+        return policy_rejection(
+            "command_id",
+            "transfer_complete identity is ticket_id plus the original command_id",
+            given=str(parsed_command_id),
+            original=ticket.command_id,
+        )
+    if ticket.fp1 != str(parsed_fp1) or ticket.byte_count != parsed_count:
+        return policy_rejection(
+            "fp1",
+            "transfer_complete fp1 and byte_count must match the ticket",
+            given_fp1=str(parsed_fp1),
+            ticket_fp1=ticket.fp1,
+            given_byte_count=parsed_count,
+            ticket_byte_count=ticket.byte_count,
+        )
+    if ticket.state == "complete":
+        return Ok(
+            TransferCompleteResult(
+                ticket_id=ticket.ticket_id,
+                state=ticket.state,
+                fp1=ticket.fp1,
+                byte_count=ticket.byte_count,
+                prior_complete=True,
+            )
+        )
+    if ticket.state not in {"notified", "claimed"}:
+        return policy_rejection(
+            "state",
+            "transfer_complete requires a notified or claimed ticket",
+            given=ticket.state,
+        )
+    completed = store.complete_ack(ticket)
+    if is_refusal(completed):
+        return completed
+    ack = completed.value
+    return Ok(
+        TransferCompleteResult(
+            ticket_id=ack.ticket_id,
+            state=ack.state,
+            fp1=ack.fp1,
+            byte_count=ack.byte_count,
+        )
+    )
+
+
+def gate_invoke_until_transfer_complete(
+    store: TransferTicketStore,
+    *,
+    fp1: object,
+    instance_id: object,
+) -> Result[InvokeTransferGate]:
+    """Refuse remote invoke citing fp1 until the ticket is complete.
+
+    Exactly one instance_id is required (Epic 60). This gate does not grant,
+    enable, or guess an instance. Silent local fallback is refused.
+    """
+    if not isinstance(instance_id, str) or instance_id.strip() == "":
+        return invalid_input(
+            "instance_id",
+            "invoke still needs exactly one instance_id; this story does not "
+            "grant, enable, or guess an instance",
+            instance_granted=False,
+            instance_enabled=False,
+            instance_guessed=False,
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+            finish_on_local_disk=False,
+            composer_ref_rewritten=False,
+        )
+    if not isinstance(fp1, str) or fp1.strip() == "":
+        return invalid_input("fp1", "invoke cites an fp1")
+    dest = store.placements.get(instance_id.strip())
+    if dest is None:
+        return invalid_input(
+            "instance_id",
+            "destination placement must be registered for invoke",
+            given=instance_id.strip(),
+            instance_granted=False,
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+            finish_on_local_disk=False,
+            composer_ref_rewritten=False,
+        )
+    if dest.same_daemon:
+        return Ok(
+            InvokeTransferGate(
+                transfer_gate_satisfied=True,
+                instance_id=instance_id.strip(),
+                same_daemon=True,
+                fp1=fp1.strip(),
+            )
+        )
+    tickets = store.tickets_for_placement(fp1=fp1.strip(), instance_id=instance_id.strip())
+    complete = [ticket for ticket in tickets if ticket.state == "complete"]
+    if not complete:
+        return policy_rejection(
+            "invoke",
+            "invoke refuses until transfer_complete; local-complete is not remote possession",
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+            finish_on_local_disk=False,
+            composer_ref_rewritten=False,
+            local_complete_is_remote=False,
+            silent_local_fallback=False,
+            ticket_complete=False,
+            instance_granted=False,
+        )
+    ticket = complete[-1]
+    dest_object = store.dest_artifacts.get(fp1.strip())
+    if dest_object is None:
+        return policy_rejection(
+            "invoke",
+            "dest has no runnable remote ref",
+            runnable_remote_ref=False,
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+            finish_on_local_disk=False,
+            composer_ref_rewritten=False,
+            instance_granted=False,
+            ticket_id=ticket.ticket_id,
+        )
+    return Ok(
+        InvokeTransferGate(
+            transfer_gate_satisfied=True,
+            instance_id=instance_id.strip(),
+            ticket_id=ticket.ticket_id,
+            fp1=fp1.strip(),
         )
     )

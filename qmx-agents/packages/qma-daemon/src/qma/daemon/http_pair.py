@@ -21,6 +21,7 @@ from qma.core.barriers.credential_allowlist import (
     is_credential_ref_allowed,
     refuse_credential_out_of_scope,
 )
+from qma.core.plugins.credential import CredentialRefError, parse_credential_ref
 from qma.core.vocabulary import PrincipalClass
 from qma.daemon.host_control.channel import CT40_BIND_PORT
 from qma.daemon.host_control.local_operator import LOCAL_OPERATOR_PRINCIPAL_ID
@@ -123,6 +124,7 @@ __all__ = [
     "is_host_control_http",
     "is_websocket_upgrade",
     "operator_proof_from_headers",
+    "parse_machine_pull_authorization",
     "refuse_cors_preflight_retarget",
     "require_pair_renew_bearer",
 ]
@@ -536,6 +538,37 @@ def require_pair_renew_bearer(request: PairHttpRequest) -> Result[str]:
             "pairing HTTP must not open the authenticated wire",
         )
     return proof
+
+
+def parse_machine_pull_authorization(header: object) -> Result[str]:
+    """Machine GET / WS Authorization is a credential_ref, never pairing Bearer."""
+    if not isinstance(header, str) or header.strip() == "":
+        return _invalid(
+            "authorization",
+            "machine artifact pull requires a Credential-Broker credential_ref",
+            given=repr(header),
+            pairing_bearer=False,
+        )
+    raw = header.strip()
+    folded = raw.casefold()
+    token = raw[7:].strip() if folded.startswith("bearer ") else raw
+    if token.casefold().startswith("pairing:"):
+        return _policy(
+            "credential_ref",
+            "operator pairing Bearer is not this pull",
+            pairing_bearer=True,
+            machine_byte_pull=True,
+        )
+    try:
+        parsed = parse_credential_ref(token)
+    except CredentialRefError:
+        return _invalid(
+            "credential_ref",
+            "machine artifact pull Authorization is a credential_ref",
+            given="redacted",
+            pairing_bearer=False,
+        )
+    return Ok(str(parsed))
 
 
 def authenticate_machine_or_worker(

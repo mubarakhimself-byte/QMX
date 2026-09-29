@@ -76,6 +76,7 @@ __all__ = [
     "AuthenticatedHttpFetch",
     "ListenerBindConfig",
     "ListenerPosture",
+    "artifacts_get_fp1",
     "authenticated_http_fetch",
     "claim_cookie_login_or_localstorage_proof_shipped",
     "claim_cors_existed_at_inspect_sha",
@@ -216,6 +217,14 @@ def is_artifacts_get_path(path: str) -> bool:
         return False
     rest = path[len(ARTIFACTS_GET_PREFIX) :]
     return rest not in {"", "stage"} and "/" not in rest
+
+
+def artifacts_get_fp1(path: object) -> str | None:
+    """Return the fp1 token from ``GET /artifacts/<fp1>``, or ``None``."""
+    normalized = normalize_http_path(path)
+    if normalized is None or not is_artifacts_get_path(normalized):
+        return None
+    return normalized[len(ARTIFACTS_GET_PREFIX) :]
 
 
 def is_am01_cors_route(path: object) -> bool:

@@ -20,7 +20,8 @@
         "update_configuration",
         "launch_task",
         "retry_task",
-        "transfer_artifact"
+        "transfer_artifact",
+        "transfer_complete"
       ]
     },
     "principal_class": {

@@ -44,8 +44,9 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # get_instance_health for pack-instance typed-report (Story 64.2; DEC-0112),
 # and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08).
 ADDABLE_QUERY_COUNT: Final[int] = 7
-# transfer_artifact (Story 70.2; AM-09). Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 1
+# transfer_artifact (Story 70.2; AM-09) plus transfer_complete (Story 70.3).
+# Seed 9/7/10 stay the seed.
+ADDABLE_COMMAND_COUNT: Final[int] = 2
 
 
 class MessageFamily(StrEnum):
@@ -60,8 +61,9 @@ class WireCommand(StrEnum):
     """Closed-and-addable commands (packet seed plus AM-09 transfer).
 
     The nine packet-seed commands (DEC-0304) plus addable ``transfer_artifact``
-    (Story 70.2; AM-09). Seed count stays 9. Wire ``type`` values are
-    snake_case identifiers derived from the packet's English labels
+    (Story 70.2; AM-09) and dest-authored ``transfer_complete`` (Story 70.3).
+    Seed count stays 9. Wire ``type`` values are snake_case identifiers
+    derived from the packet's English labels
     (``install/enable plugin`` → ``install_enable_plugin``).
     """
 
@@ -75,6 +77,7 @@ class WireCommand(StrEnum):
     LAUNCH_TASK = "launch_task"
     RETRY_TASK = "retry_task"
     TRANSFER_ARTIFACT = "transfer_artifact"
+    TRANSFER_COMPLETE = "transfer_complete"
 
 
 class WireQuery(StrEnum):

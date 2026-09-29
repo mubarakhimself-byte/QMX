@@ -33,6 +33,7 @@ from qma.wire.listener import (
     PAIR_CONFIRM_PATH,
     PAIR_RENEW_PATH,
     PAIR_START_PATH,
+    artifacts_get_fp1,
     is_artifacts_get_path,
     is_snapshot_family_path,
 )
@@ -154,7 +155,9 @@ def test_cors_routes_are_the_named_ad5_catalogue() -> None:
     assert is_snapshot_family_path("/q/get_pack_ui_request") is True
     assert is_snapshot_family_path("/q/get_editor_draft_head") is True
     assert is_artifacts_get_path("/artifacts/fp1:sha256:deadbeef") is True
+    assert artifacts_get_fp1("/artifacts/fp1:sha256:deadbeef") == "fp1:sha256:deadbeef"
     assert is_artifacts_get_path("/artifacts/stage") is False
+    assert artifacts_get_fp1("/artifacts/stage") is None
     assert is_am01_cors_route("/initialize") is False
     assert is_am01_cors_route("/") is False
 

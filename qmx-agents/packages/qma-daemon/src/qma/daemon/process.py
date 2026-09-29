@@ -56,12 +56,17 @@ from qma.daemon.artifacts import (
     ArtifactStore,
     DestControlHandle,
     DestinationPlacement,
+    InvokeTransferGate,
     StagedArtifact,
     TransferArtifactResult,
+    TransferCompleteResult,
     TransferTicketStore,
+    gate_invoke_until_transfer_complete,
     handle_stage_artifact_put,
     handle_transfer_artifact,
+    handle_transfer_complete,
     parse_stage_content_length,
+    place_dest_pulled_bytes,
     refuse_interrupted_stage_put,
 )
 from qma.daemon.backtest.service import BacktestingService
@@ -106,10 +111,12 @@ from qma.daemon.http_pair import (
     PairHttpDeps,
     PairHttpRequest,
     PairHttpResponse,
+    authenticate_machine_or_worker,
     handle_pair_http,
     header_value,
     is_host_control_http,
     is_websocket_upgrade,
+    parse_machine_pull_authorization,
 )
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
@@ -170,19 +177,25 @@ from qma.daemon.telemetry.store import TelemetryStore
 from qma.wire.initialize import (
     JSONRPC_VERSION,
     TRANSFER_ARTIFACT_CAPABILITY,
+    TRANSFER_COMPLETE_CAPABILITY,
     InitializeParams,
     LiveProducerRegistry,
     WireConnection,
 )
 from qma.wire.list_mailbox import LIST_MAILBOX_CAPABILITY, MailboxSnapshot
 from qma.wire.listener import (
+    CT40_WS_SUBPROTOCOL,
     DEFAULT_BIND_HOST,
     PAIR_CONFIRM_PATH,
     PAIR_RENEW_PATH,
     PAIR_START_PATH,
+    PAIRING_WS_SUBPROTOCOL_PREFIX,
     ListenerBindConfig,
     ListenerPosture,
+    artifacts_get_fp1,
     is_am01_cors_route,
+    is_artifacts_get_path,
+    parse_offered_websocket_subprotocols,
     selected_websocket_subprotocol,
     validate_listener_startup,
 )
@@ -195,6 +208,7 @@ from qma.wire.stage_artifact import (
     require_stage_artifact_capability,
 )
 from qma.wire.transfer_artifact import require_transfer_artifact_capability
+from qma.wire.transfer_complete import require_transfer_complete_capability
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand
 from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
 from qmf.core.refusal import TypedRefusal
@@ -361,6 +375,20 @@ def _jsonrpc_refusal(req_id: object, refusal: TypedRefusal) -> dict[str, object]
             "context": dict(refusal.context),
         },
     )
+
+
+def _offered_pairing_ws(offered: str | None) -> bool:
+    parsed = parse_offered_websocket_subprotocols(offered)
+    if is_refusal(parsed):
+        return False
+    return any(token.startswith(PAIRING_WS_SUBPROTOCOL_PREFIX) for token in parsed.value)
+
+
+def _offered_ct40_ws(offered: str | None) -> bool:
+    parsed = parse_offered_websocket_subprotocols(offered)
+    if is_refusal(parsed):
+        return False
+    return CT40_WS_SUBPROTOCOL in parsed.value
 
 
 def _encode_http_response(
@@ -988,6 +1016,56 @@ class DaemonProcess:
             principal_class=principal_class,
         )
 
+    @property
+    def dest_artifacts(self) -> ArtifactStore:
+        return self._transfers.dest_artifacts
+
+    def place_dest_pulled_bytes(
+        self,
+        body: object,
+        *,
+        ticket_id: object,
+        interrupted: bool = False,
+    ) -> Result[StagedArtifact]:
+        """Dest daemon sole writer of dest store. Source bytes stay on source."""
+        return place_dest_pulled_bytes(
+            self._transfers,
+            body,
+            ticket_id=ticket_id,
+            interrupted=interrupted,
+        )
+
+    def transfer_complete(
+        self,
+        payload: object,
+        *,
+        capabilities: object | None = None,
+        principal_class: object = PrincipalClass.MACHINE,
+    ) -> Result[TransferCompleteResult]:
+        """Library admission of transfer_complete. Live CT-40 must call the WS path."""
+        caps: object = (
+            {TRANSFER_COMPLETE_CAPABILITY: True} if capabilities is None else capabilities
+        )
+        return handle_transfer_complete(
+            self._transfers,
+            payload,
+            capabilities=caps,
+            principal_class=principal_class,
+        )
+
+    def gate_invoke_until_transfer_complete(
+        self,
+        *,
+        fp1: object,
+        instance_id: object,
+    ) -> Result[InvokeTransferGate]:
+        """Refuse remote invoke citing fp1 until dest-authored transfer_complete."""
+        return gate_invoke_until_transfer_complete(
+            self._transfers,
+            fp1=fp1,
+            instance_id=instance_id,
+        )
+
     def _paired_http_capabilities(self, pairing_record_id: object) -> object:
         stored = self._initialize_capabilities
         if isinstance(pairing_record_id, str) and pairing_record_id in stored:
@@ -996,6 +1074,7 @@ class DaemonProcess:
             LIST_MAILBOX_CAPABILITY: True,
             STAGE_ARTIFACT_CAPABILITY: True,
             TRANSFER_ARTIFACT_CAPABILITY: True,
+            TRANSFER_COMPLETE_CAPABILITY: True,
         }
 
     @property
@@ -1595,6 +1674,15 @@ class DaemonProcess:
         method, path, query, headers, body = parsed
         origin = header_value(headers, "Origin")
         if is_websocket_upgrade(headers):
+            offered = header_value(headers, "Sec-WebSocket-Protocol")
+            authorization = header_value(headers, "Authorization")
+            if (
+                not _offered_pairing_ws(offered)
+                and _offered_ct40_ws(offered)
+                and authorization is not None
+            ):
+                await self._serve_machine_ws(reader, writer, headers, query)
+                return
             await self._serve_pairing_ws(reader, writer, headers, query)
             return
         built = PairHttpRequest.try_create(
@@ -1626,6 +1714,14 @@ class DaemonProcess:
                 await self._write_pair_response(writer, handled.value)
                 return
             await self._write_refusal(writer, handled, origin=origin)
+            return
+        if request.method == "GET" and is_artifacts_get_path(request.path):
+            await self._serve_artifact_machine_get(
+                writer,
+                request,
+                headers,
+                origin=origin,
+            )
             return
         if is_am01_cors_route(request.path):
             authed = authenticate_http_pairing_bearer(
@@ -1691,6 +1787,46 @@ class DaemonProcess:
         )
         await self._write_refusal(writer, refused, origin=origin)
 
+    async def _serve_artifact_machine_get(
+        self,
+        writer: asyncio.StreamWriter,
+        request: PairHttpRequest,
+        headers: Mapping[str, str],
+        *,
+        origin: str | None,
+    ) -> None:
+        """AM-13 machine GET /artifacts/<fp1> with X-QMX-Transfer-Ticket."""
+        fp1 = artifacts_get_fp1(request.path)
+        if fp1 is None:
+            refused = policy_rejection("path", "GET /artifacts/<fp1> requires an fp1")
+            await self._write_refusal(writer, refused, origin=origin)
+            return
+        parsed_auth = parse_machine_pull_authorization(header_value(headers, "Authorization"))
+        if is_refusal(parsed_auth):
+            await self._write_refusal(writer, parsed_auth, origin=origin)
+            return
+        session = authenticate_machine_or_worker(parsed_auth.value)
+        if is_refusal(session):
+            await self._write_refusal(writer, session, origin=origin)
+            return
+        credential_ref = session.value.credential_ref
+        redeemed = self._transfers.redeem_get(
+            ticket_id=header_value(headers, "X-QMX-Transfer-Ticket"),
+            fp1=fp1,
+            credential_ref=credential_ref,
+        )
+        if is_refusal(redeemed):
+            await self._write_refusal(writer, redeemed, origin=origin)
+            return
+        out_headers: dict[str, str] = {
+            "Content-Type": "application/octet-stream",
+            "Access-Control-Allow-Credentials": "false",
+            "Vary": "Origin",
+        }
+        if origin is not None and origin != "*" and not is_daemon_http_origin(origin):
+            out_headers["Access-Control-Allow-Origin"] = origin
+        await self._write_http(writer, 200, out_headers, redeemed.value.content)
+
     async def _serve_stage_artifact_put(
         self,
         reader: asyncio.StreamReader,
@@ -1750,6 +1886,101 @@ class DaemonProcess:
             _cors_headers_for_origin(origin),
             payload,
         )
+
+    async def _serve_machine_ws(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: Mapping[str, str],
+        query: str | None,
+    ) -> None:
+        """Machine CT-40: qmx.ct40.v1 plus credential_ref Authorization."""
+        origin = header_value(headers, "Origin")
+        _ = query
+        parsed_auth = parse_machine_pull_authorization(header_value(headers, "Authorization"))
+        if is_refusal(parsed_auth):
+            await self._write_refusal(writer, parsed_auth, origin=origin)
+            return
+        session = authenticate_machine_or_worker(parsed_auth.value)
+        if is_refusal(session):
+            await self._write_refusal(writer, session, origin=origin)
+            return
+        credential_ref = session.value.credential_ref
+        if credential_ref is None:
+            refused = policy_rejection(
+                "credential_ref",
+                "machine CT-40 sessions carry credential_ref",
+            )
+            await self._write_refusal(writer, refused, origin=origin)
+            return
+        key = header_value(headers, "Sec-WebSocket-Key")
+        if key is None:
+            refused = policy_rejection(
+                "upgrade",
+                "WebSocket upgrade requires Sec-WebSocket-Key",
+            )
+            await self._write_refusal(writer, refused, origin=origin)
+            return
+        opening = _encode_http_response(
+            101,
+            {
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Accept": _ws_accept_key(key),
+                "Sec-WebSocket-Protocol": selected_websocket_subprotocol(),
+            },
+        )
+        writer.write(opening)
+        await writer.drain()
+        connection = WireConnection()
+        authed = connection.authenticate(
+            credential_ref,
+            principal_class=PrincipalClass.MACHINE,
+        )
+        if is_refusal(authed):
+            return
+        connection_token = f"{credential_ref}:{id(connection)}"
+        buf = b""
+        try:
+            while not reader.at_eof() and not self._closed:
+                chunk = await reader.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                if len(buf) > _WS_MAX_BUFFER:
+                    break
+                while True:
+                    decoded = _decode_ws_frame(buf)
+                    if decoded is None:
+                        break
+                    opcode, payload, buf = decoded
+                    if opcode == _WS_OP_CLOSE:
+                        writer.write(_encode_ws_frame(payload, opcode=_WS_OP_CLOSE))
+                        await writer.drain()
+                        return
+                    if opcode == _WS_OP_PING:
+                        writer.write(_encode_ws_frame(payload, opcode=_WS_OP_PONG))
+                        await writer.drain()
+                        continue
+                    if opcode != _WS_OP_TEXT:
+                        continue
+                    response = self._dispatch_paired_ct40(
+                        connection,
+                        payload,
+                        session_key=credential_ref,
+                        connection_token=connection_token,
+                    )
+                    if response is None:
+                        continue
+                    writer.write(_encode_ws_frame(json.dumps(response).encode("utf-8")))
+                    await writer.drain()
+        finally:
+            producer_id = connection.producer_id
+            if producer_id is not None:
+                self._live_producers.release(
+                    producer_id,
+                    connection_token=connection_token,
+                )
 
     async def _serve_pairing_ws(
         self,
@@ -1829,7 +2060,7 @@ class DaemonProcess:
                     response = self._dispatch_paired_ct40(
                         connection,
                         payload,
-                        pairing_record_id=admitted.value.pairing_record_id,
+                        session_key=admitted.value.pairing_record_id,
                         connection_token=connection_token,
                     )
                     if response is None:
@@ -1850,7 +2081,7 @@ class DaemonProcess:
         connection: WireConnection,
         payload: bytes,
         *,
-        pairing_record_id: str,
+        session_key: str,
         connection_token: str,
     ) -> dict[str, object] | None:
         """Authenticated JSON-RPC on a paired CT-40 socket. Host-control stays off."""
@@ -1889,6 +2120,7 @@ class DaemonProcess:
                     raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
                     or raw_caps.get(STAGE_ARTIFACT_CAPABILITY) is True
                     or raw_caps.get(TRANSFER_ARTIFACT_CAPABILITY) is True
+                    or raw_caps.get(TRANSFER_COMPLETE_CAPABILITY) is True
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -1899,7 +2131,7 @@ class DaemonProcess:
             )
             if is_refusal(completed):
                 return _jsonrpc_refusal(req_id, completed)
-            self._initialize_capabilities[pairing_record_id] = dict(connection.capabilities)
+            self._initialize_capabilities[session_key] = dict(connection.capabilities)
             return completed.value.to_dict()
         if method == STAGE_ARTIFACT_CAPABILITY:
             return _jsonrpc_refusal(req_id, refuse_jsonrpc_stage_artifact())
@@ -1908,6 +2140,8 @@ class DaemonProcess:
             return _jsonrpc_refusal(req_id, accepted)
         if method == WireCommand.TRANSFER_ARTIFACT.value:
             return self._dispatch_transfer_artifact(connection, request, req_id)
+        if method == WireCommand.TRANSFER_COMPLETE.value:
+            return self._dispatch_transfer_complete(connection, request, req_id)
         if method != WireCommand.SEND_MESSAGE.value:
             return _jsonrpc_error(
                 req_id,
@@ -1982,6 +2216,43 @@ class DaemonProcess:
         if is_refusal(transferred):
             return _jsonrpc_refusal(req_id, transferred)
         return _jsonrpc_result(req_id, transferred.value.to_payload())
+
+    def _dispatch_transfer_complete(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object]:
+        """Serve dest-authored transfer_complete on the live CT-40 socket."""
+        gated = require_transfer_complete_capability(connection.capabilities)
+        if is_refusal(gated):
+            return _jsonrpc_refusal(req_id, gated)
+        authorized = connection.authorize_command(WireCommand.TRANSFER_COMPLETE.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        raw_params = request.get("params")
+        if not isinstance(raw_params, Mapping):
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="params must be an object",
+            )
+        principal = connection.principal_class
+        if principal is None:
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_APP_ERROR,
+                message="unauthenticated",
+            )
+        completed = handle_transfer_complete(
+            self._transfers,
+            dict(cast("Mapping[str, object]", raw_params)),
+            capabilities=connection.capabilities,
+            principal_class=principal,
+        )
+        if is_refusal(completed):
+            return _jsonrpc_refusal(req_id, completed)
+        return _jsonrpc_result(req_id, completed.value.to_payload())
 
     def sqlite_table_names(self) -> frozenset[str]:
         rows = self._substrate.sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")
