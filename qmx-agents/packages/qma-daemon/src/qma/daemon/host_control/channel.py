@@ -66,7 +66,7 @@ HOST_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
-    {"status", "stop", "configure", "rotate-control"}
+    {"status", "stop", "configure", "rotate-control", "pair"}
 )
 HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
 MAX_HOST_CONTROL_FRAME: Final[int] = 65536
@@ -496,7 +496,7 @@ def _refusal_frame(refusal: TypedRefusal) -> dict[str, object]:
 
 
 def _credential_proof(request: Mapping[str, object]) -> str | None:
-    for key in ("credential_ref", "host_control", "proof", "operator_login"):
+    for key in ("credential_ref", "host_control", "proof", "operator_login", "code"):
         value = request.get(key)
         if isinstance(value, str) and value.startswith("cred://"):
             return value
@@ -536,12 +536,14 @@ class HostControlChannel:
         on_stop: Callable[[], None],
         on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_rotate_control: Callable[[], Result[Mapping[str, object]]] | None = None,
+        on_pair: Callable[[object], Result[Mapping[str, object]]] | None = None,
     ) -> None:
         self._root = root
         self._status = status
         self._on_stop = on_stop
         self._on_configure_pairing_ttl = on_configure_pairing_ttl
         self._on_rotate_control = on_rotate_control
+        self._on_pair = on_pair
         self._server: asyncio.Server | None = None
         self._bound: BoundHostControl | None = None
         self._expected: str = ""
@@ -672,15 +674,7 @@ class HostControlChannel:
         if verb == "rotate-control":
             return self._rotate(), False
         if verb == "pair":
-            return (
-                _fail(
-                    RefusalCategory.UNSUPPORTED_CAPABILITY,
-                    "verb",
-                    "pair is not this story",
-                    given=repr(verb),
-                ),
-                False,
-            )
+            return self._pair(request), False
         if verb == "recover-control":
             return (
                 _fail(
@@ -735,6 +729,19 @@ class HostControlChannel:
         if is_refusal(written):
             return _refusal_frame(written)
         return {"ok": True, "rotated": redact_host_surface(written.value)}
+
+    def _pair(self, request: Mapping[str, object]) -> dict[str, object]:
+        callback = self._on_pair
+        if callback is None:
+            return _fail(
+                RefusalCategory.UNSUPPORTED_CAPABILITY,
+                "pair",
+                "host-control pair is not bound",
+            )
+        written = callback(request.get("code"))
+        if is_refusal(written):
+            return _refusal_frame(written)
+        return {"ok": True, "paired": redact_host_surface(written.value)}
 
     def close(self) -> None:
         server = self._server

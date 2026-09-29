@@ -75,6 +75,7 @@ from qmb.doors.cli.tree import (
     invoke_config_show,
     invoke_data,
     invoke_host_configure_pairing_ttl,
+    invoke_host_pair,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -167,6 +168,7 @@ __all__ = [
     "invoke_config_show",
     "invoke_data",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_pair",
     "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
@@ -1750,6 +1752,23 @@ def host_recover_control(ctx: click.Context) -> None:
     )
 
 
+@host_group.command("pair")
+@click.argument("code")
+@click.pass_context
+def host_pair(ctx: click.Context, code: str) -> None:
+    """Confirm a pending pairing code over host-control. Does not issue a proof."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_pair(
+            code,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
 def _payload(ctx: click.Context, **parsed: object) -> dict[str, object]:
     raw = ctx.obj
     payload: dict[str, object] = {}
@@ -1830,6 +1849,7 @@ def _format_ok(value: object) -> str:
             "host.configure.pairing-ttl",
             "host.rotate-control",
             "host.recover-control",
+            "host.pair",
         }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.

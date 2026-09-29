@@ -1,8 +1,10 @@
-"""``qmb host start|status|stop|configure|rotate-control|recover-control``.
+"""``qmb host start|status|stop|configure|rotate-control|recover-control|pair``.
 
-Stories 67.1–67.4. Do not reuse package ``qmb.host`` (CT-33 HostedBot). QMB
-never writes daemon sqlite. The browser does not spawn Python. Pair is not
-this story. recover-control is a QMB door to a one-shot daemon writer.
+Stories 67.1–67.4 and 68.4. Do not reuse package ``qmb.host`` (CT-33 HostedBot).
+QMB never writes daemon sqlite. The browser does not spawn Python.
+``qmb host pair <code>`` confirms a pending over host-control and does not
+issue the browser proof. recover-control is a QMB door to a one-shot daemon
+writer.
 """
 
 from __future__ import annotations
@@ -43,11 +45,14 @@ __all__ = [
     "HOST_CONTROL_FILE",
     "INSPECT_CWD_RELATIVE_ROOT",
     "INSPECT_SHA_COMMAND_GROUPS",
+    "LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY",
     "PAIRING_SESSION_TTL_REGISTRY_KEY",
     "QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
+    "REUSES_QMB_HOST_PACKAGE",
     "START_GRANTS",
     "START_ORCHESTRATES_MISSIONS",
     "START_STARTS_QMN",
@@ -55,11 +60,14 @@ __all__ = [
     "STOP_STOPS_REMOTE",
     "caller_owns_daemon_root",
     "claim_host_configure_existed_at_inspect_sha",
+    "claim_local_operator_bootstrap_is_this_story",
     "claim_qmb_host_existed_at_inspect_sha",
+    "claim_qmb_host_pair_existed_at_inspect_sha",
     "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_pair",
     "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
@@ -77,6 +85,7 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
     "configure",
     "rotate-control",
     "recover-control",
+    "pair",
 )
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
@@ -92,6 +101,9 @@ HOST_CONTROL_BIND_NAME: Final[str] = "host_control.bind"
 CT40_BIND_PORT: Final[int] = 8765
 INSPECT_CWD_RELATIVE_ROOT: Final[str] = "qma-daemon-data"
 QMB_HOST_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY: Final[bool] = False
+REUSES_QMB_HOST_PACKAGE: Final[bool] = False
 INSPECT_SHA: Final[str] = "34c148be"
 INSPECT_SHA_COMMAND_GROUPS: Final[tuple[str, ...]] = (
     "backtest",
@@ -173,6 +185,41 @@ def claim_qmb_host_existed_at_inspect_sha(existed: object) -> Result[bool]:
             "existed_at_inspect_sha",
             "inspect-SHA claim is a boolean",
             given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_qmb_host_pair_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host pair`` existed at inspect SHA ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return policy(
+            "host.pair",
+            "qmb host pair was absent at inspect SHA 34c148be (COMMAND_GROUPS had no host)",
+            existed_at_inspect_sha=False,
+            inspect_sha=INSPECT_SHA,
+        )
+    if existed is not False:
+        return invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_local_operator_bootstrap_is_this_story(claimed: object) -> Result[bool]:
+    """Claiming local_operator / host_control bootstrap is Story 68.4 fails."""
+    if claimed is True or claimed == "true":
+        return policy(
+            "bootstrap",
+            "local_operator / host_control bootstrap belongs to Epic 67, not Story 68.4",
+            this_story=False,
+        )
+    if claimed is not False:
+        return invalid(
+            "local_operator_bootstrap_is_this_story",
+            "bootstrap claim is a boolean",
+            given=repr(claimed),
         )
     return Ok(False)
 
@@ -1056,6 +1103,60 @@ def invoke_host_configure_pairing_ttl(
         "registry_key": fields_out.get("registry_key", PAIRING_SESSION_TTL_REGISTRY_KEY),
         "ttl": fields_out.get("ttl", "set"),
         "writer": fields_out.get("writer", "host.configure.pairing-ttl"),
+    }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_pair(
+    code: object,
+    *,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Confirm a pending over host-control. Does not issue a browser proof."""
+    if not isinstance(code, str) or code.strip() == "":
+        return invalid(
+            "code",
+            "qmb host pair requires the pending code",
+            given=repr(code),
+        )
+    presented = code.strip()
+    if presented.startswith("cred://"):
+        return policy(
+            "code",
+            "forged cred:// as login refuses",
+            given="cred",
+        )
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object] = {"code": presented}
+    if callable(transport):
+        called = transport("pair", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("pair", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "pair", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="pair")
+    if not isinstance(refused, Ok):
+        return refused
+    paired = payload.get("paired")
+    fields_out = dict(cast("Mapping[str, object]", paired)) if isinstance(paired, Mapping) else {}
+    report: dict[str, object] = {
+        "verb": "host.pair",
+        "pairing_record_id": fields_out.get("pairing_record_id"),
+        "confirmed": fields_out.get("confirmed", True),
     }
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 

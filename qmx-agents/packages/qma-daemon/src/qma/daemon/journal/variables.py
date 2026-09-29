@@ -10,6 +10,7 @@ one. Store-lifecycle cadences are cited by ``registry:`` key and never copied.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -25,7 +26,7 @@ from qma.core.vocabulary import (
 )
 from qma.daemon.journal.authoritative import AuthoritativeJournal, JournalAppendReceipt
 from qma.wire.principals import authorize_wire_command
-from qmf.core import Ok, Result, is_refusal
+from qmf.core import Duration, Instant, Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
@@ -51,9 +52,11 @@ __all__ = [
     "builtin_qma_variable_rows",
     "cite_store_lifecycle_key",
     "claim_pairing_ttl_ct40_writable_at_inspect_sha",
+    "expires_at_from_pairing_ttl",
     "fold_pairing_ttl_from_journal",
     "has_variable_edit_kind",
     "pairing_session_ttl_is_set",
+    "pairing_ttl_duration_ns",
     "parse_operator_pairing_ttl_duration",
     "refuse_pair_issue_without_ttl",
     "registry_key",
@@ -70,6 +73,15 @@ PAIRING_TTL_CONFIGURED_EVENT: Final[str] = "pairing.ttl_configured"
 HOST_CONFIGURE_PAIRING_TTL_SOURCE: Final[str] = "host.configure.pairing-ttl"
 PAIRING_TTL_CT40_WRITABLE_AT_INSPECT_SHA: Final[bool] = False
 PAIRING_TTL_INSPECT_SHA: Final[str] = "34c148be"
+_ISO8601_DURATION: Final[re.Pattern[str]] = re.compile(
+    r"^P(?=[WT0-9])(?:(\d+)W)?(?:(\d+)D)?"
+    r"(?:T(?=[0-9])(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$"
+)
+_NS_PER_SECOND: Final[int] = 1_000_000_000
+_NS_PER_MINUTE: Final[int] = 60 * _NS_PER_SECOND
+_NS_PER_HOUR: Final[int] = 60 * _NS_PER_MINUTE
+_NS_PER_DAY: Final[int] = 24 * _NS_PER_HOUR
+_NS_PER_WEEK: Final[int] = 7 * _NS_PER_DAY
 HOST_RETRY_ATTEMPT_CEILING_KEY: Final[str] = "host.retry_attempt_ceiling"
 HOST_RETRY_ATTEMPT_CEILING_REGISTRY_KEY: Final[str] = "registry:host.retry_attempt_ceiling"
 # Story 63.2 / FR-PG-32: nested Mission call_depth ceiling. Not GAP-0108.
@@ -135,6 +147,66 @@ def parse_operator_pairing_ttl_duration(value: object) -> Result[str]:
             given=repr(value),
         )
     return Ok(value.strip())
+
+
+def pairing_ttl_duration_ns(value: object) -> Result[int]:
+    """Parse an operator ISO-8601 duration to nanoseconds. Mint no default."""
+    parsed = parse_operator_pairing_ttl_duration(value)
+    if is_refusal(parsed):
+        return parsed
+    matched = _ISO8601_DURATION.fullmatch(parsed.value.upper())
+    if matched is None:
+        return invalid_input(
+            "duration",
+            "registry:pairing.session_ttl must be an ISO-8601 duration "
+            "(PnW / PnD / PTnHnMnS); this epic mints no duration (GAP-0109)",
+            given=parsed.value,
+            registry_key=PAIRING_SESSION_TTL_REGISTRY_KEY,
+        )
+    weeks, days, hours, minutes, seconds = matched.groups()
+    total = 0
+    if weeks is not None:
+        total += int(weeks) * _NS_PER_WEEK
+    if days is not None:
+        total += int(days) * _NS_PER_DAY
+    if hours is not None:
+        total += int(hours) * _NS_PER_HOUR
+    if minutes is not None:
+        total += int(minutes) * _NS_PER_MINUTE
+    if seconds is not None:
+        total += int(seconds) * _NS_PER_SECOND
+    if total <= 0:
+        return invalid_input(
+            "duration",
+            "registry:pairing.session_ttl must be a positive ISO-8601 duration",
+            given=parsed.value,
+            registry_key=PAIRING_SESSION_TTL_REGISTRY_KEY,
+        )
+    created = Duration.try_create(total)
+    if is_refusal(created):
+        return created
+    return Ok(created.value.value_ns)
+
+
+def expires_at_from_pairing_ttl(*, now_ns: object, ttl: object) -> Result[int]:
+    """``expires_at`` = now + configured TTL. Mint no duration (GAP-0109)."""
+    start = Instant.try_create(now_ns)
+    if is_refusal(start):
+        return invalid_input(
+            "now_ns",
+            "now_ns is a signed int64 nanosecond instant",
+            given=repr(now_ns),
+        )
+    span = pairing_ttl_duration_ns(ttl)
+    if is_refusal(span):
+        return span
+    duration = Duration.try_create(span.value)
+    if is_refusal(duration):
+        return duration
+    added = start.value.add_duration(duration.value)
+    if is_refusal(added):
+        return added
+    return Ok(added.value.value_ns)
 
 
 def pairing_session_ttl_is_set(value: object) -> bool:
@@ -782,8 +854,22 @@ class GovernedVariableRegistry:
         return "set" if self.pairing_ttl_is_set() else "unset"
 
     def refuse_pair_issue(self) -> Result[None]:
-        """Missing-TTL refuse gate for pair issue. Does not land ``/pair/*``."""
+        """Missing-TTL refuse gate for ``/pair/start`` and ``/pair/confirm`` issue."""
         return refuse_pair_issue_without_ttl(self._values.get(PAIRING_SESSION_TTL_KEY))
+
+    def pairing_ttl_duration(self) -> Result[str]:
+        """Configured TTL string. Missing TTL refuses issue (GAP-0109)."""
+        value = self._values.get(PAIRING_SESSION_TTL_KEY)
+        refused = refuse_pair_issue_without_ttl(value)
+        if is_refusal(refused):
+            return refused
+        if not isinstance(value, str):
+            return invalid_input(
+                PAIRING_SESSION_TTL_KEY,
+                "registry:pairing.session_ttl is an operator-supplied duration string",
+                given=repr(value),
+            )
+        return Ok(value.strip())
 
     def configure_pairing_session_ttl(
         self,

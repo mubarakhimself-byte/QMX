@@ -1286,7 +1286,10 @@ def test_host_lifecycle_usage_example_runs_clean() -> None:
     )
     assert completed.returncode == 0, completed.stderr
     assert "product QMA_DAEMON_ROOT is not qma-daemon-data" in completed.stdout
-    assert "qmb host start|status|stop|configure|rotate-control|recover-control ok" in completed.stdout
+    assert (
+        "qmb host start|status|stop|configure|rotate-control|recover-control|pair ok"
+        in completed.stdout
+    )
 
 
 def test_cli_tree_usage_example_runs_clean() -> None:

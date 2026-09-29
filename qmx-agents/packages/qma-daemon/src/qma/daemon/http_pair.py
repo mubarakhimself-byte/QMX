@@ -10,6 +10,7 @@ refused. Pairing HTTP does not open the authenticated wire. ``Set-Cookie`` on
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -22,10 +23,21 @@ from qma.core.barriers.credential_allowlist import (
 )
 from qma.core.vocabulary import PrincipalClass
 from qma.daemon.host_control.channel import CT40_BIND_PORT
+from qma.daemon.host_control.local_operator import LOCAL_OPERATOR_PRINCIPAL_ID
+from qma.daemon.journal.authoritative import AuthoritativeJournal
+from qma.daemon.journal.variables import (
+    expires_at_from_pairing_ttl,
+    refuse_pair_issue_without_ttl,
+)
 from qma.daemon.pairing import (
     PAIRING_HTTP_EXISTED_AT_INSPECT_SHA,
+    PairingWsRegistry,
     claim_pair_http_existed_at_inspect_sha,
+    confirm_pairing_session_once,
+    renew_pairing_session,
+    start_pairing_pending,
 )
+from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.wire.auth import (
     AuthenticatedWireSession,
     authenticate_before_protocol,
@@ -40,7 +52,9 @@ from qma.wire.listener import (
     DEC_0304_SUPERSEDED_BY,
     DEC_0323_SUPERSEDED_BY,
     LISTENER_POSTURE_TYPES_EXISTED_AT_INSPECT_SHA,
+    PAIR_CONFIRM_PATH,
     PAIR_RENEW_PATH,
+    PAIR_START_PATH,
     UNAUTHENTICATED_BIND_SENTENCE,
     UNAUTHENTICATED_BIND_SENTENCE_HELD,
     Am01UnauthenticatedHttp,
@@ -82,6 +96,7 @@ __all__ = [
     "UNAUTHENTICATED_BIND_SENTENCE",
     "UNAUTHENTICATED_BIND_SENTENCE_HELD",
     "PairHttpAdmission",
+    "PairHttpDeps",
     "PairHttpRequest",
     "PairHttpResponse",
     "admit_unauthenticated_http",
@@ -93,6 +108,10 @@ __all__ = [
     "claim_unauthenticated_bind_sentence_dropped",
     "classify_am01_unauthenticated_http",
     "cors_options_response",
+    "handle_pair_confirm",
+    "handle_pair_http",
+    "handle_pair_renew",
+    "handle_pair_start",
     "header_value",
     "is_host_control_http",
     "is_websocket_upgrade",
@@ -490,3 +509,173 @@ def authenticate_machine_or_worker(
             "machine and worker sessions carry credential_ref",
         )
     return session
+
+
+@dataclass(frozen=True, slots=True)
+class PairHttpDeps:
+    """Journal, sqlite, operator TTL, and clock for pair HTTP issue."""
+
+    journal: AuthoritativeJournal
+    sqlite: SingleSqliteWriter
+    ttl: object
+    now_ns: int
+    operator_principal: str = LOCAL_OPERATOR_PRINCIPAL_ID
+    ws_registry: PairingWsRegistry | None = None
+
+
+def _require_origin_header(request: PairHttpRequest) -> Result[str]:
+    origin = header_value(request.headers, "Origin")
+    if origin is None or origin == "*":
+        return _invalid("origin", "Origin is required", given=repr(origin))
+    return Ok(origin)
+
+
+def _json_object(body: bytes) -> Result[dict[str, object]]:
+    if body == b"":
+        return Ok({})
+    try:
+        parsed: object = json.loads(body.decode("utf-8"))
+    except UnicodeDecodeError, json.JSONDecodeError:
+        return _invalid("body", "JSON object required")
+    if not isinstance(parsed, dict):
+        return _invalid("body", "JSON object required")
+    return Ok(cast("dict[str, object]", parsed))
+
+
+def _cors_json(status: int, body: Mapping[str, object], origin: str) -> PairHttpResponse:
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": origin,
+        "Vary": "Origin",
+    }
+    return PairHttpResponse(
+        status=status,
+        headers=MappingProxyType(headers),
+        body=json.dumps(dict(body), ensure_ascii=True).encode("utf-8"),
+    )
+
+
+def _expires_from_ttl(deps: PairHttpDeps) -> Result[int]:
+    refused = refuse_pair_issue_without_ttl(deps.ttl)
+    if not isinstance(refused, Ok):
+        return refused
+    return expires_at_from_pairing_ttl(now_ns=deps.now_ns, ttl=deps.ttl)
+
+
+def handle_pair_start(
+    request: PairHttpRequest,
+    deps: PairHttpDeps,
+) -> Result[PairHttpResponse]:
+    """``POST /pair/start``: pending code once. Missing TTL refuses issue."""
+    admitted = admit_unauthenticated_http(request)
+    if not isinstance(admitted, Ok):
+        return admitted
+    origin = _require_origin_header(request)
+    if not isinstance(origin, Ok):
+        return origin
+    expires = _expires_from_ttl(deps)
+    if not isinstance(expires, Ok):
+        return expires
+    started = start_pairing_pending(
+        journal=deps.journal,
+        sqlite=deps.sqlite,
+        origin=origin.value,
+        expires_at=expires.value,
+        operator_principal=deps.operator_principal,
+    )
+    if not isinstance(started, Ok):
+        return started
+    issued = started.value
+    return Ok(
+        _cors_json(
+            200,
+            {
+                "pairing_record_id": issued.pairing_record_id,
+                "pending_code": issued.pending_code,
+                "expires_at": issued.expires_at,
+            },
+            origin.value,
+        )
+    )
+
+
+def handle_pair_confirm(
+    request: PairHttpRequest,
+    deps: PairHttpDeps,
+) -> Result[PairHttpResponse]:
+    """``POST /pair/confirm``: proof JSON once after host pair of that pending."""
+    admitted = admit_unauthenticated_http(request)
+    if not isinstance(admitted, Ok):
+        return admitted
+    origin = _require_origin_header(request)
+    if not isinstance(origin, Ok):
+        return origin
+    expires = _expires_from_ttl(deps)
+    if not isinstance(expires, Ok):
+        return expires
+    parsed = _json_object(request.body)
+    if not isinstance(parsed, Ok):
+        return parsed
+    pending_id = parsed.value.get("pending_id")
+    if pending_id is None:
+        pending_id = parsed.value.get("pairing_record_id")
+    issued = confirm_pairing_session_once(
+        journal=deps.journal,
+        sqlite=deps.sqlite,
+        origin=origin.value,
+        pending_id=pending_id,
+        expires_at=expires.value,
+        now_ns=deps.now_ns,
+        operator_principal=deps.operator_principal,
+    )
+    if not isinstance(issued, Ok):
+        return issued
+    return Ok(_cors_json(200, issued.value.to_once_returned_body(), origin.value))
+
+
+def handle_pair_renew(
+    request: PairHttpRequest,
+    deps: PairHttpDeps,
+) -> Result[PairHttpResponse]:
+    """Authenticated rotate. Renew without Bearer refuses. Closes old WS."""
+    proof = require_pair_renew_bearer(request)
+    if not isinstance(proof, Ok):
+        return proof
+    origin = _require_origin_header(request)
+    if not isinstance(origin, Ok):
+        return origin
+    expires = _expires_from_ttl(deps)
+    if not isinstance(expires, Ok):
+        return expires
+    issued = renew_pairing_session(
+        journal=deps.journal,
+        sqlite=deps.sqlite,
+        origin=origin.value,
+        proof=proof.value,
+        expires_at=expires.value,
+        now_ns=deps.now_ns,
+        operator_principal=deps.operator_principal,
+        ws_registry=deps.ws_registry,
+    )
+    if not isinstance(issued, Ok):
+        return issued
+    return Ok(_cors_json(200, issued.value.to_once_returned_body(), origin.value))
+
+
+def handle_pair_http(
+    request: PairHttpRequest,
+    deps: PairHttpDeps,
+) -> Result[PairHttpResponse]:
+    """Dispatch start / confirm / renew / CORS OPTIONS."""
+    if request.method == "OPTIONS":
+        return cors_options_response(request)
+    if request.method == "POST" and request.path == PAIR_START_PATH:
+        return handle_pair_start(request, deps)
+    if request.method == "POST" and request.path == PAIR_CONFIRM_PATH:
+        return handle_pair_confirm(request, deps)
+    if request.method == "POST" and request.path == PAIR_RENEW_PATH:
+        return handle_pair_renew(request, deps)
+    admitted = admit_unauthenticated_http(request)
+    if not isinstance(admitted, Ok):
+        return admitted
+    return _policy("path", "pairing HTTP dispatch is start, confirm, or renew")

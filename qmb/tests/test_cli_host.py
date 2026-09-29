@@ -18,6 +18,7 @@ from qmb.doors.cli import (
     HOST_CONFIGURE_COMMANDS,
     command_tree,
     invoke_host_configure_pairing_ttl,
+    invoke_host_pair,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -35,18 +36,23 @@ from qmb.doors.cli.host import (
     HOST_CONTROL_FILE,
     INSPECT_CWD_RELATIVE_ROOT,
     INSPECT_SHA_COMMAND_GROUPS,
+    LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY,
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
+    QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
+    REUSES_QMB_HOST_PACKAGE,
     START_GRANTS,
     START_ORCHESTRATES_MISSIONS,
     START_STARTS_QMN,
     STOP_CANCELS_QMN,
     STOP_STOPS_REMOTE,
     claim_host_configure_existed_at_inspect_sha,
+    claim_local_operator_bootstrap_is_this_story,
     claim_qmb_host_existed_at_inspect_sha,
+    claim_qmb_host_pair_existed_at_inspect_sha,
     claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
@@ -192,6 +198,16 @@ class _HostControlServer(threading.Thread):
                     "writer": "host.configure.pairing-ttl",
                 },
             }
+        elif verb == "pair":
+            payload = {
+                "ok": True,
+                "paired": {
+                    "pairing_record_id": "pr_fixture",
+                    "confirmed": True,
+                    "pairing_proof": "must-not-leak",
+                    "code": request.get("code"),
+                },
+            }
         elif verb == "rotate-control":
             rotated = "rotated-" + self._token
             _write_token(self._root, rotated)
@@ -251,10 +267,11 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
             "configure",
             "rotate-control",
             "recover-control",
+            "pair",
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
-    assert "pair" not in HOST_COMMANDS
+    assert "pair" in HOST_COMMANDS
     runner = CliRunner()
     helped = runner.invoke(main, ["host", "--help"])
     assert helped.exit_code == 0, helped.output
@@ -264,7 +281,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "configure" in helped.output
     assert "rotate-control" in helped.output
     assert "recover-control" in helped.output
-    assert "pair" not in helped.output
+    assert "pair" in helped.output
     missing = runner.invoke(main, ["host", "pair"])
     assert missing.exit_code != 0
     configure_help = runner.invoke(main, ["host", "configure", "--help"])
@@ -414,6 +431,9 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA is False
+    assert LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY is False
+    assert REUSES_QMB_HOST_PACKAGE is False
     claimed = claim_qmb_host_existed_at_inspect_sha(True)
     assert is_refusal(claimed)
     assert is_ok(claim_qmb_host_existed_at_inspect_sha(False))
@@ -426,6 +446,11 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     recover_claimed = claim_recover_control_existed_at_inspect_sha(True)
     assert is_refusal(recover_claimed)
     assert is_ok(claim_recover_control_existed_at_inspect_sha(False))
+    pair_claimed = claim_qmb_host_pair_existed_at_inspect_sha(True)
+    assert is_refusal(pair_claimed)
+    assert is_ok(claim_qmb_host_pair_existed_at_inspect_sha(False))
+    assert is_refusal(claim_local_operator_bootstrap_is_this_story(True))
+    assert is_ok(claim_local_operator_bootstrap_is_this_story(False))
     absent = claim_types_absent_at_inspect_sha(True)
     assert is_refusal(absent)
     assert is_ok(claim_types_absent_at_inspect_sha(False))
@@ -473,6 +498,29 @@ def test_configure_pairing_ttl_over_host_control(tmp_path: Path) -> None:
         missing = invoke_host_configure_pairing_ttl("", root=tmp_path)
         assert is_refusal(missing)
         assert missing.context["field"] == "duration"
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+def test_host_pair_confirms_without_issuing_proof(tmp_path: Path) -> None:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        _write_token(tmp_path)
+        _write_bind(tmp_path, "127.0.0.1", server.port)
+        report = _ok_mapping(invoke_host_pair("pending-code", root=tmp_path))
+        assert report["verb"] == "host.pair"
+        assert report["confirmed"] is True
+        assert report["pairing_record_id"] == "pr_fixture"
+        assert "pairing_proof" not in report
+        assert "pair" in server.seen_verbs
+        missing = invoke_host_pair("", root=tmp_path)
+        assert is_refusal(missing)
+        assert missing.context["field"] == "code"
+        forged = invoke_host_pair("cred://operator/login", root=tmp_path)
+        assert is_refusal(forged)
+        assert forged.context["field"] == "code"
     finally:
         server.close()
         server.join(timeout=2)

@@ -1,5 +1,8 @@
 """Pairing bearer custody, AM-03 projections (Story 68.1), HTTP/WS auth (68.3).
 
+Story 68.4: Origin never issues a proof. Issuance is confirm-once after
+``qmb host pair <code>`` of that pending, or authenticated ``/pair/renew``.
+
 ``pairing_proof`` is the RFC 6750 bearer. ``pairing_record_id`` is the nonsecret
 journal identity. Projections ``pairing_pending`` and ``pairing_session`` store
 ``proof_fp1`` (and pending ``code_fp1``) never the raw proof. Named add on the
@@ -17,9 +20,10 @@ import hmac
 import json
 import secrets
 import sqlite3
+import threading
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, cast
 
 from qma.daemon.host_control.channel import HOST_CONTROL_INSPECT_SHA, redact_host_surface
@@ -61,6 +65,7 @@ from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, storage_failure
 
 __all__ = [
+    "CONFIRM_ONCE_COUNT",
     "COOKIE_LOGIN_SHIPPED",
     "CT28_PAIRING_RECORD_REUSED",
     "CT40_WS_SUBPROTOCOL",
@@ -68,11 +73,15 @@ __all__ = [
     "DEC_0440_SUPERSEDED_BY",
     "HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA",
     "LOCALSTORAGE_PROOF_SHIPPED",
+    "LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY",
+    "ORIGIN_ONLY_AUTO_APPROVE",
     "PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA",
     "PAIRING_DELIVERED_COPILOT_PROFILE",
     "PAIRING_HTTP_EXISTED_AT_INSPECT_SHA",
     "PAIRING_INSPECT_SHA",
     "PAIRING_NEW_SQLITE_CLASS",
+    "PAIRING_PENDING_EVENT_CONFIRMED",
+    "PAIRING_PENDING_EVENT_CONSUMED",
     "PAIRING_PENDING_EVENT_STARTED",
     "PAIRING_PENDING_EXISTED_AT_INSPECT_SHA",
     "PAIRING_PENDING_FOLD_ID",
@@ -80,6 +89,7 @@ __all__ = [
     "PAIRING_PENDING_TABLE",
     "PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS",
     "PAIRING_SESSION_EVENT_ISSUED",
+    "PAIRING_SESSION_EVENT_REVOKED",
     "PAIRING_SESSION_EXISTED_AT_INSPECT_SHA",
     "PAIRING_SESSION_FOLD_ID",
     "PAIRING_SESSION_ID_FIELD_MINTED",
@@ -88,33 +98,44 @@ __all__ = [
     "PAIRING_STORE_CLASS",
     "PAIRING_TABLE_EXISTED_AT_INSPECT_SHA",
     "PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA",
     "WEBSOCKETS_IMPORTS_AT_INSPECT_SHA",
     "IssuedPairingPending",
     "IssuedPairingProof",
     "PairingPendingLive",
     "PairingSessionLive",
+    "PairingWsHandle",
+    "PairingWsRegistry",
     "PairingWsUpgrade",
     "authenticate_http_pairing_bearer",
     "authenticate_ws_pairing_upgrade",
     "claim_cookie_login_or_localstorage_proof_shipped",
+    "claim_local_operator_bootstrap_is_this_story",
     "claim_pair_http_existed_at_inspect_sha",
     "claim_pairing_pending_existed_at_inspect_sha",
     "claim_pairing_session_existed_at_inspect_sha",
     "claim_pairing_table_existed_at_inspect_sha",
     "claim_pairing_transports_existed_at_inspect_sha",
+    "claim_qmb_host_pair_existed_at_inspect_sha",
     "claim_this_story_delivered_copilot_profile",
+    "close_ws_for_proof_fp1",
+    "confirm_pairing_pending_by_code",
+    "confirm_pairing_session_once",
     "fold_pairing_pendings_from_journal",
     "fold_pairing_sessions_from_journal",
     "issue_pairing_session",
     "journal_blob_contains_secret",
+    "live_pairing_sessions_for_origin",
     "load_pairing_pending",
     "load_pairing_session",
+    "match_pairing_pending_by_code",
     "match_pairing_session_by_proof",
     "mint_pairing_proof",
     "mint_pairing_record_id",
     "pairing_proof_fp1",
     "pairing_status_record_ids",
     "redact_pairing_access_log",
+    "renew_pairing_session",
     "restore_pairing_projections",
     "start_pairing_pending",
 ]
@@ -128,7 +149,15 @@ PAIRING_PENDING_TABLE: Final[str] = "pairing_pending"
 PAIRING_SESSION_TABLE: Final[str] = "pairing_session"
 PAIRING_STORE_CLASS: Final[str] = StoreClass.JOURNAL_DERIVED_PROJECTION.value
 PAIRING_PENDING_EVENT_STARTED: Final[str] = "pairing_pending.started"
+PAIRING_PENDING_EVENT_CONFIRMED: Final[str] = "pairing_pending.confirmed"
+PAIRING_PENDING_EVENT_CONSUMED: Final[str] = "pairing_pending.consumed"
 PAIRING_SESSION_EVENT_ISSUED: Final[str] = "pairing_session.issued"
+PAIRING_SESSION_EVENT_REVOKED: Final[str] = "pairing_session.revoked"
+CONFIRM_ONCE_COUNT: Final[int] = 1
+ORIGIN_ONLY_AUTO_APPROVE: Final[bool] = False
+QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY: Final[bool] = False
+_CONFIRM_ONCE_LOCK: Final[threading.Lock] = threading.Lock()
 PAIRING_NEW_SQLITE_CLASS: Final[bool] = False
 PAIRING_INSPECT_SHA: Final[str] = HOST_CONTROL_INSPECT_SHA
 PAIRING_HTTP_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -152,7 +181,9 @@ CREATE TABLE IF NOT EXISTS pairing_pending (
     revoked INTEGER NOT NULL,
     pending_lineage TEXT NOT NULL,
     journal_seq INTEGER NOT NULL,
-    recorded_at INTEGER NOT NULL
+    recorded_at INTEGER NOT NULL,
+    confirmed_at INTEGER NOT NULL,
+    consumed INTEGER NOT NULL
 );
 """
 
@@ -172,6 +203,16 @@ CREATE TABLE IF NOT EXISTS pairing_session (
 """
 
 _EMPTY_PROOF_FP1: Final[str] = ""
+_PENDING_SELECT: Final[str] = (
+    "SELECT pairing_record_id, origin, operator_principal, proof_fp1, code_fp1, "
+    "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at, "
+    "confirmed_at, consumed FROM pairing_pending"
+)
+_SESSION_SELECT: Final[str] = (
+    "SELECT pairing_record_id, origin, operator_principal, proof_fp1, "
+    "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at "
+    "FROM pairing_session"
+)
 
 
 def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -235,6 +276,32 @@ def claim_pairing_session_existed_at_inspect_sha(existed: object) -> Result[bool
         "pairing_session was absent at inspect SHA 34c148be (AM-03 named add)",
         existed,
     )
+
+
+def claim_qmb_host_pair_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host pair`` existed at inspect SHA ``34c148be`` fails."""
+    return _claim_absent(
+        "host.pair",
+        "qmb host pair was absent at inspect SHA 34c148be (COMMAND_GROUPS had no host)",
+        existed,
+    )
+
+
+def claim_local_operator_bootstrap_is_this_story(claimed: object) -> Result[bool]:
+    """Claiming local_operator / host_control bootstrap is Story 68.4 fails."""
+    if claimed is True or claimed == "true":
+        return _policy(
+            "bootstrap",
+            "local_operator / host_control bootstrap belongs to Epic 67, not Story 68.4",
+            this_story=False,
+        )
+    if claimed is not False:
+        return invalid_input(
+            "local_operator_bootstrap_is_this_story",
+            "bootstrap claim is a boolean",
+            given=repr(claimed),
+        )
+    return Ok(False)
 
 
 def claim_this_story_delivered_copilot_profile(delivered: object) -> Result[bool]:
@@ -321,6 +388,8 @@ class PairingPendingLive:
     pending_lineage: str
     journal_seq: int
     recorded_at: int
+    confirmed_at: int = 0
+    consumed: bool = False
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -333,6 +402,8 @@ class PairingPendingLive:
             "expires_at": self.expires_at,
             "revoked": self.revoked,
             "pending_lineage": self.pending_lineage,
+            "confirmed_at": self.confirmed_at,
+            "consumed": self.consumed,
         }
 
 
@@ -364,10 +435,54 @@ class PairingSessionLive:
         }
 
 
+@dataclass(slots=True)
+class PairingWsHandle:
+    """In-memory WS handle closed on renew of the offered proof."""
+
+    proof_fp1: str
+    closed: bool = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class PairingWsRegistry:
+    """Process-local registry of WS handles keyed by ``proof_fp1``."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._handles: dict[str, list[PairingWsHandle]] = {}
+
+    def register(self, handle: PairingWsHandle) -> None:
+        with self._lock:
+            self._handles.setdefault(handle.proof_fp1, []).append(handle)
+
+    def close_for_proof_fp1(self, proof_fp1: str) -> int:
+        with self._lock:
+            handles = self._handles.pop(proof_fp1, [])
+        closed = 0
+        for handle in handles:
+            handle.close()
+            closed += 1
+        return closed
+
+
+_DEFAULT_WS_REGISTRY = PairingWsRegistry()
+
+
 def _ensure_schema(sqlite: SingleSqliteWriter) -> None:
     def _ddl(conn: sqlite3.Connection) -> None:
         conn.executescript(_PENDING_SCHEMA_SQL)
         conn.executescript(_SESSION_SCHEMA_SQL)
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(pairing_pending)")}
+        if "confirmed_at" not in columns:
+            conn.execute(
+                "ALTER TABLE pairing_pending ADD COLUMN confirmed_at INTEGER NOT NULL DEFAULT 0"
+            )
+        if "consumed" not in columns:
+            conn.execute(
+                "ALTER TABLE pairing_pending ADD COLUMN consumed INTEGER NOT NULL DEFAULT 0"
+            )
 
     sqlite.run(_ddl)
 
@@ -419,6 +534,13 @@ def _pending_from_tuple(row: tuple[object, ...]) -> PairingPendingLive | None:
         return None
     if not isinstance(lineage, str):
         return None
+    confirmed_at = 0
+    consumed = False
+    if len(row) >= 13:
+        parsed_confirmed = _as_int(row[11])
+        if parsed_confirmed is not None:
+            confirmed_at = parsed_confirmed
+        consumed = _int_flag(row[12])
     return PairingPendingLive(
         pairing_record_id=pairing_record_id,
         origin=origin,
@@ -431,6 +553,8 @@ def _pending_from_tuple(row: tuple[object, ...]) -> PairingPendingLive | None:
         pending_lineage=lineage,
         journal_seq=seq,
         recorded_at=recorded,
+        confirmed_at=confirmed_at,
+        consumed=consumed,
     )
 
 
@@ -475,10 +599,9 @@ def load_pairing_pending(
     names = _table_names(sqlite)
     if PAIRING_PENDING_TABLE not in names:
         return None
+    _ensure_schema(sqlite)
     rows = sqlite.execute(
-        "SELECT pairing_record_id, origin, operator_principal, proof_fp1, code_fp1, "
-        "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at "
-        "FROM pairing_pending WHERE pairing_record_id = ?",
+        _PENDING_SELECT + " WHERE pairing_record_id = ?",
         (pairing_record_id,),
     )
     if not rows:
@@ -494,9 +617,7 @@ def load_pairing_session(
     if PAIRING_SESSION_TABLE not in names:
         return None
     rows = sqlite.execute(
-        "SELECT pairing_record_id, origin, operator_principal, proof_fp1, "
-        "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at "
-        "FROM pairing_session WHERE pairing_record_id = ?",
+        _SESSION_SELECT + " WHERE pairing_record_id = ?",
         (pairing_record_id,),
     )
     if not rows:
@@ -509,8 +630,9 @@ def _put_pending(sqlite: SingleSqliteWriter, live: PairingPendingLive) -> None:
     sqlite.execute(
         "INSERT OR REPLACE INTO pairing_pending "
         "(pairing_record_id, origin, operator_principal, proof_fp1, code_fp1, "
-        "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at, "
+        "confirmed_at, consumed) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             live.pairing_record_id,
             live.origin,
@@ -523,6 +645,8 @@ def _put_pending(sqlite: SingleSqliteWriter, live: PairingPendingLive) -> None:
             live.pending_lineage,
             live.journal_seq,
             live.recorded_at,
+            live.confirmed_at,
+            1 if live.consumed else 0,
         ),
     )
 
@@ -595,6 +719,10 @@ def _pending_from_row(row: Mapping[str, object]) -> PairingPendingLive | None:
         return None
     if not isinstance(lineage, str):
         return None
+    confirmed_raw = body.get("confirmed_at", 0)
+    confirmed_at = _as_int(confirmed_raw)
+    if confirmed_at is None:
+        confirmed_at = 0
     return PairingPendingLive(
         pairing_record_id=pairing_record_id,
         origin=origin,
@@ -607,6 +735,8 @@ def _pending_from_row(row: Mapping[str, object]) -> PairingPendingLive | None:
         pending_lineage=lineage,
         journal_seq=seq,
         recorded_at=recorded,
+        confirmed_at=confirmed_at,
+        consumed=bool(body.get("consumed", False)),
     )
 
 
@@ -805,6 +935,8 @@ def start_pairing_pending(
         "expires_at": parsed_expires.value,
         "revoked": False,
         "pending_lineage": "",
+        "confirmed_at": 0,
+        "consumed": False,
     }
     if _payload_has_raw_secret(payload):
         return storage_failure(
@@ -827,6 +959,8 @@ def start_pairing_pending(
         pending_lineage="",
         journal_seq=record.journal_seq,
         recorded_at=record.recorded_at,
+        confirmed_at=0,
+        consumed=False,
     )
     _put_pending(sqlite, live)
     materialized = journal.stores.materialize_on_first_write(PAIRING_PENDING_STORE)
@@ -916,6 +1050,315 @@ def issue_pairing_session(
     return Ok(issued)
 
 
+def _origin_never_sufficient() -> TypedRefusal:
+    return _policy(
+        "origin",
+        "Origin match is required and is never sufficient; Origin never issues a proof",
+        origin_only=True,
+        origin_only_auto_approve=ORIGIN_ONLY_AUTO_APPROVE,
+        confirm_once_count=CONFIRM_ONCE_COUNT,
+    )
+
+
+def _already_issued() -> TypedRefusal:
+    return _policy(
+        "already_issued",
+        "confirm-once already issued; retry of a consumed pending never returns the raw proof",
+        already_issued=True,
+        confirm_once_count=CONFIRM_ONCE_COUNT,
+    )
+
+
+def _claim_consume_pending(sqlite: SingleSqliteWriter, pairing_record_id: str) -> bool:
+    _ensure_schema(sqlite)
+
+    def _work(conn: sqlite3.Connection) -> int:
+        cur = conn.execute(
+            "UPDATE pairing_pending SET consumed = 1 "
+            "WHERE pairing_record_id = ? AND consumed = 0 AND revoked = 0",
+            (pairing_record_id,),
+        )
+        return int(cur.rowcount)
+
+    return sqlite.run(_work) == 1
+
+
+def match_pairing_pending_by_code(
+    sqlite: SingleSqliteWriter,
+    *,
+    code: object,
+    now_ns: object = None,
+) -> Result[PairingPendingLive]:
+    """Match pending ``code_fp1``. Host pair never returns a browser proof."""
+    if isinstance(code, str) and code.startswith("cred://"):
+        return _policy(
+            "code",
+            "forged cred:// as login refuses",
+            given="cred",
+        )
+    if not isinstance(code, str) or code.strip() == "":
+        return invalid_input("code", "qmb host pair requires the pending code", given=repr(code))
+    hashed = _code_fp1(code.strip())
+    names = _table_names(sqlite)
+    if PAIRING_PENDING_TABLE not in names:
+        return _policy("code", "no pending matches that code")
+    _ensure_schema(sqlite)
+    rows = sqlite.execute(_PENDING_SELECT)
+    expired_match = False
+    consumed_match = False
+    now = _as_int(now_ns)
+    presented = hashed.encode("utf-8")
+    for row in rows:
+        live = _pending_from_tuple(row)
+        if live is None:
+            continue
+        stored = live.code_fp1.encode("utf-8")
+        if not (len(stored) == len(presented) and hmac.compare_digest(stored, presented)):
+            continue
+        if live.revoked:
+            continue
+        if live.consumed:
+            consumed_match = True
+            continue
+        if now is not None and live.expires_at <= now:
+            expired_match = True
+            continue
+        return Ok(live)
+    if consumed_match:
+        return _already_issued()
+    if expired_match:
+        return _policy("code", "pending code is expired")
+    return _policy("code", "no pending matches that code")
+
+
+def confirm_pairing_pending_by_code(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    code: object,
+    now_ns: object = None,
+) -> Result[PairingPendingLive]:
+    """``qmb host pair <code>``: set ``confirmed_at``. Does not mint a proof."""
+    declared = _declare_folds(journal)
+    if is_refusal(declared):
+        return declared
+    matched = match_pairing_pending_by_code(sqlite, code=code, now_ns=now_ns)
+    if is_refusal(matched):
+        return matched
+    live = matched.value
+    if live.confirmed_at > 0:
+        return Ok(live)
+    stamps = journal.stamp_durable()
+    if is_refusal(stamps):
+        return stamps
+    updated = replace(live, confirmed_at=stamps.value.recorded_at)
+    payload = updated.to_payload()
+    if _payload_has_raw_secret(payload):
+        return storage_failure(
+            "pending payload refused raw secret",
+            context={"field": "pairing_pending"},
+        )
+    append = journal.append_event(PAIRING_PENDING_EVENT_CONFIRMED, payload=payload)
+    if is_refusal(append):
+        return append
+    record = append.value.record
+    stored = replace(
+        updated,
+        journal_seq=record.journal_seq,
+        recorded_at=record.recorded_at,
+    )
+    _put_pending(sqlite, stored)
+    materialized = journal.stores.materialize_on_first_write(PAIRING_PENDING_STORE)
+    if is_refusal(materialized):
+        return materialized
+    return Ok(stored)
+
+
+def confirm_pairing_session_once(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    origin: object,
+    pending_id: object,
+    expires_at: object,
+    now_ns: object = None,
+    operator_principal: object = LOCAL_OPERATOR_PRINCIPAL_ID,
+) -> Result[IssuedPairingProof]:
+    """Mint the browser proof once after host pair of that pending."""
+    parsed_origin = _require_origin(origin)
+    if is_refusal(parsed_origin):
+        return parsed_origin
+    parsed_expires = _require_expires_at(expires_at)
+    if is_refusal(parsed_expires):
+        return parsed_expires
+    parsed_operator = _require_operator(operator_principal)
+    if is_refusal(parsed_operator):
+        return parsed_operator
+    if not isinstance(pending_id, str) or not is_pairing_record_id(pending_id):
+        return _origin_never_sufficient()
+    with _CONFIRM_ONCE_LOCK:
+        live = load_pairing_pending(sqlite, pending_id)
+        if live is None:
+            return _origin_never_sufficient()
+        if live.origin != parsed_origin.value:
+            return _policy(
+                "origin",
+                "Origin + pending do not match; Origin is required and never sufficient",
+                origin_only_auto_approve=ORIGIN_ONLY_AUTO_APPROVE,
+            )
+        if live.revoked:
+            return _policy("pending", "pending is revoked")
+        now = _as_int(now_ns)
+        if now is not None and live.expires_at <= now:
+            return _policy("expires_at", "pending is expired")
+        if live.consumed:
+            return _already_issued()
+        if live.confirmed_at <= 0:
+            return _origin_never_sufficient()
+        if not _claim_consume_pending(sqlite, pending_id):
+            return _already_issued()
+        consumed = replace(live, consumed=True)
+        payload = consumed.to_payload()
+        if _payload_has_raw_secret(payload):
+            return storage_failure(
+                "pending payload refused raw secret",
+                context={"field": "pairing_pending"},
+            )
+        append = journal.append_event(PAIRING_PENDING_EVENT_CONSUMED, payload=payload)
+        if is_refusal(append):
+            return append
+        record = append.value.record
+        stored = replace(
+            consumed,
+            journal_seq=record.journal_seq,
+            recorded_at=record.recorded_at,
+        )
+        _put_pending(sqlite, stored)
+        materialized = journal.stores.materialize_on_first_write(PAIRING_PENDING_STORE)
+        if is_refusal(materialized):
+            return materialized
+        return issue_pairing_session(
+            journal=journal,
+            sqlite=sqlite,
+            origin=parsed_origin.value,
+            expires_at=parsed_expires.value,
+            operator_principal=parsed_operator.value,
+            pending_lineage=pending_id,
+        )
+
+
+def live_pairing_sessions_for_origin(
+    sqlite: SingleSqliteWriter,
+    *,
+    origin: object,
+    now_ns: object = None,
+) -> tuple[PairingSessionLive, ...]:
+    """Unrevoked unexpired sessions for one Origin. Never raw proofs."""
+    parsed_origin = _require_origin(origin)
+    if is_refusal(parsed_origin):
+        return ()
+    names = _table_names(sqlite)
+    if PAIRING_SESSION_TABLE not in names:
+        return ()
+    rows = sqlite.execute(_SESSION_SELECT)
+    now = _as_int(now_ns)
+    found: list[PairingSessionLive] = []
+    for row in rows:
+        live = _session_from_tuple(row)
+        if live is None or live.origin != parsed_origin.value or live.revoked:
+            continue
+        if now is not None and live.expires_at <= now:
+            continue
+        found.append(live)
+    return tuple(found)
+
+
+def close_ws_for_proof_fp1(
+    proof_fp1: object,
+    registry: PairingWsRegistry | None = None,
+) -> int:
+    """Close WS that offered the old ``qmx.pair.<proof>`` subprotocol."""
+    if not isinstance(proof_fp1, str) or proof_fp1.strip() == "":
+        return 0
+    target = registry if registry is not None else _DEFAULT_WS_REGISTRY
+    return target.close_for_proof_fp1(proof_fp1)
+
+
+def _revoke_pairing_session(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    live: PairingSessionLive,
+    successor_pairing_record_id: str,
+) -> Result[PairingSessionLive]:
+    revoked = replace(live, revoked=True)
+    payload = revoked.to_payload()
+    payload["successor_pairing_record_id"] = successor_pairing_record_id
+    if _payload_has_raw_secret(payload):
+        return storage_failure(
+            "session payload refused raw secret",
+            context={"field": "pairing_session"},
+        )
+    append = journal.append_event(PAIRING_SESSION_EVENT_REVOKED, payload=payload)
+    if is_refusal(append):
+        return append
+    record = append.value.record
+    stored = replace(
+        revoked,
+        journal_seq=record.journal_seq,
+        recorded_at=record.recorded_at,
+    )
+    _put_session(sqlite, stored)
+    materialized = journal.stores.materialize_on_first_write(PAIRING_SESSION_STORE)
+    if is_refusal(materialized):
+        return materialized
+    return Ok(stored)
+
+
+def renew_pairing_session(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    origin: object,
+    proof: object,
+    expires_at: object,
+    now_ns: object = None,
+    operator_principal: object = LOCAL_OPERATOR_PRINCIPAL_ID,
+    ws_registry: PairingWsRegistry | None = None,
+) -> Result[IssuedPairingProof]:
+    """Rotate: new record + proof; old ``proof_fp1`` revoked; old WS closed."""
+    matched = match_pairing_session_by_proof(
+        sqlite,
+        origin=origin,
+        proof=proof,
+        now_ns=now_ns,
+    )
+    if is_refusal(matched):
+        return matched
+    old = matched.value
+    lineage = old.pairing_record_id
+    issued = issue_pairing_session(
+        journal=journal,
+        sqlite=sqlite,
+        origin=origin,
+        expires_at=expires_at,
+        operator_principal=operator_principal,
+        pending_lineage=lineage,
+    )
+    if is_refusal(issued):
+        return issued
+    revoked = _revoke_pairing_session(
+        journal=journal,
+        sqlite=sqlite,
+        live=old,
+        successor_pairing_record_id=issued.value.pairing_record_id,
+    )
+    if is_refusal(revoked):
+        return revoked
+    close_ws_for_proof_fp1(old.proof_fp1, ws_registry)
+    return issued
+
+
 def match_pairing_session_by_proof(
     sqlite: SingleSqliteWriter,
     *,
@@ -941,11 +1384,7 @@ def match_pairing_session_by_proof(
     names = _table_names(sqlite)
     if PAIRING_SESSION_TABLE not in names:
         return _policy("pairing_proof", "pairing table has no matching proof_fp1")
-    rows = sqlite.execute(
-        "SELECT pairing_record_id, origin, operator_principal, proof_fp1, "
-        "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at "
-        "FROM pairing_session"
-    )
+    rows = sqlite.execute(_SESSION_SELECT)
     origin_mismatch = False
     expired_match = False
     now = _as_int(now_ns)

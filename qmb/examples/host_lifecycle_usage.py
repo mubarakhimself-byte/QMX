@@ -1,4 +1,4 @@
-"""L27 reference usage: qmb host start|status|stop|configure|rotate-control|recover-control."""
+"""L27 reference usage: qmb host start|status|stop|configure|rotate-control|recover-control|pair."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from qmb.doors.cli.host import (
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     invoke_host_configure_pairing_ttl,
+    invoke_host_pair,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -45,6 +46,7 @@ def main() -> None:
             "configure",
             "rotate-control",
             "recover-control",
+            "pair",
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
@@ -139,6 +141,16 @@ def main() -> None:
                         "writer": "host.configure.pairing-ttl",
                     },
                 }
+            if verb == "pair":
+                assert extra is not None
+                assert extra["code"] == "pending-code"
+                return {
+                    "ok": True,
+                    "paired": {
+                        "pairing_record_id": "pr_example",
+                        "confirmed": True,
+                    },
+                }
             if verb == "rotate-control":
                 return {
                     "ok": True,
@@ -156,6 +168,10 @@ def main() -> None:
         configured = invoke_host_configure_pairing_ttl("PT15M", root=root, transport=transport)
         assert is_ok(configured), configured
         assert configured.value["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
+        paired = invoke_host_pair("pending-code", root=root, transport=transport)
+        assert is_ok(paired), paired
+        assert paired.value["confirmed"] is True
+        assert "pairing_proof" not in paired.value
         rotated = invoke_host_rotate_control(root=root, transport=transport)
         assert is_ok(rotated), rotated
         assert rotated.value["rotated"] is True
@@ -188,7 +204,7 @@ def main() -> None:
         assert recovered.value["bound_8765"] is False
         readable = invoke_host_recover_control(root=root, spawn=recover_spawn, owns_root=True)
         assert is_refusal(readable)
-    print("qmb host start|status|stop|configure|rotate-control|recover-control ok")
+    print("qmb host start|status|stop|configure|rotate-control|recover-control|pair ok")
 
 
 if __name__ == "__main__":

@@ -146,6 +146,7 @@ def test_command_tree_exposes_platform_groups() -> None:
         "configure",
         "rotate-control",
         "recover-control",
+        "pair",
     )
     identity = cli_tree_identity()
     assert identity["computes_run_id"] is COMPUTES_RUN_ID is False

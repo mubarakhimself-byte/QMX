@@ -109,7 +109,11 @@ from qma.daemon.operator_log import (
 )
 from qma.daemon.operator_log import emit_operator_event as write_operator_json_line
 from qma.daemon.operator_log import fingerprint_operator_log as refuse_operator_log_fp1
-from qma.daemon.pairing import pairing_status_record_ids, restore_pairing_projections
+from qma.daemon.pairing import (
+    confirm_pairing_pending_by_code,
+    pairing_status_record_ids,
+    restore_pairing_projections,
+)
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
 from qma.daemon.plugins.packs import DeskPluginRoster
@@ -894,8 +898,30 @@ class DaemonProcess:
         )
 
     def refuse_pair_issue(self) -> Result[None]:
-        """Missing-TTL refuse gate. Does not land ``/pair/*`` HTTP."""
+        """Missing-TTL refuse gate for ``/pair/start`` and ``/pair/confirm`` issue."""
         return self._variables.refuse_pair_issue()
+
+    def pair_pending(self, code: object) -> Result[Mapping[str, object]]:
+        """Host-control pair: confirm pending by code. Does not mint a browser proof."""
+        stamps = self._journal.stamp_durable()
+        now_ns = None if is_refusal(stamps) else stamps.value.recorded_at
+        confirmed = confirm_pairing_pending_by_code(
+            journal=self._journal,
+            sqlite=self.sqlite,
+            code=code,
+            now_ns=now_ns,
+        )
+        if is_refusal(confirmed):
+            return confirmed
+        live = confirmed.value
+        return Ok(
+            MappingProxyType(
+                {
+                    "pairing_record_id": live.pairing_record_id,
+                    "confirmed": True,
+                }
+            )
+        )
 
     def _restore_pairing_ttl(self) -> None:
         folded = fold_pairing_ttl_from_journal(self._journal)
@@ -990,6 +1016,7 @@ class DaemonProcess:
             on_stop=self.request_stop,
             on_configure_pairing_ttl=self.configure_pairing_ttl,
             on_rotate_control=self.rotate_control,
+            on_pair=self.pair_pending,
         )
         bound = await channel.bind()
         if is_refusal(bound):
