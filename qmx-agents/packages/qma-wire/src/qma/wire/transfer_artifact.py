@@ -221,6 +221,27 @@ def durable_transfer_command_id(
     return f"{product_session_ref}/{command_id}"
 
 
+def _parse_reachable_hosts(value: object) -> Result[tuple[str, ...]]:
+    if isinstance(value, str) and value.strip() != "":
+        return Ok((value.strip(),))
+    if isinstance(value, (list, tuple)):
+        hosts: list[str] = []
+        for item in cast("list[object] | tuple[object, ...]", value):
+            if not isinstance(item, str) or item.strip() == "":
+                return _invalid(
+                    "reachable_hosts",
+                    "reachable_hosts items are non-empty strings",
+                    given=repr(item),
+                )
+            hosts.append(item.strip())
+        return Ok(tuple(hosts))
+    return _invalid(
+        "reachable_hosts",
+        "reachable_hosts is a list of hostnames when present",
+        given=repr(value),
+    )
+
+
 def _parse_required_token(field: str, value: object) -> Result[str]:
     if not isinstance(value, str) or value.strip() == "":
         return _invalid(field, f"{field} is a required non-empty string", given=repr(value))
@@ -278,6 +299,7 @@ def _merge_destination(entry: Mapping[str, object]) -> Result[dict[str, object]]
         "placement_revision",
         "credential_ref",
         "same_daemon",
+        "reachable_hosts",
     ):
         if field in nested:
             merged[field] = nested[field]
@@ -342,6 +364,11 @@ def parse_transfer_artifact_payload(value: object) -> Result[Mapping[str, object
                 given=repr(flag),
             )
         outbound["same_daemon"] = flag
+    if "reachable_hosts" in dest_fields:
+        hosts = _parse_reachable_hosts(dest_fields.get("reachable_hosts"))
+        if not isinstance(hosts, Ok):
+            return hosts
+        outbound["reachable_hosts"] = hosts.value
     if ENVELOPE_PRODUCT_SESSION_FIELD in entry:
         parsed = _parse_optional_psess(entry.get(ENVELOPE_PRODUCT_SESSION_FIELD))
         if not isinstance(parsed, Ok):

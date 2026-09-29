@@ -76,6 +76,7 @@ from qmb.doors.cli.tree import (
     invoke_config_show,
     invoke_data,
     invoke_host_configure_pairing_ttl,
+    invoke_host_configure_source_origin,
     invoke_host_pair,
     invoke_host_pair_revoke,
     invoke_host_recover_control,
@@ -171,6 +172,7 @@ __all__ = [
     "invoke_config_show",
     "invoke_data",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_configure_source_origin",
     "invoke_host_pair",
     "invoke_host_pair_revoke",
     "invoke_host_recover_control",
@@ -1722,6 +1724,23 @@ def host_configure_pairing_ttl(ctx: click.Context, duration: str) -> None:
     )
 
 
+@host_configure.command("source-origin")
+@click.argument("origin")
+@click.pass_context
+def host_configure_source_origin(ctx: click.Context, origin: str) -> None:
+    """Record the TLS origin dest will pull. Loopback/http refuse."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_configure_source_origin(
+            origin,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
 @host_group.command("rotate-control")
 @click.pass_context
 def host_rotate_control(ctx: click.Context) -> None:
@@ -1890,6 +1909,7 @@ def _format_ok(value: object) -> str:
             "host.status",
             "host.stop",
             "host.configure.pairing-ttl",
+            "host.configure.source-origin",
             "host.rotate-control",
             "host.recover-control",
             "host.pair",

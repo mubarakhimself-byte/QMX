@@ -26,7 +26,7 @@ from qma.daemon.pairing import CT40_WS_SUBPROTOCOL
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.wire.auth import format_pairing_authorization
-from qma.wire.initialize import WIRE_PROTOCOL_VERSION
+from qma.wire.initialize import PAIRING_CAPABILITY, WIRE_PROTOCOL_VERSION
 from qma.wire.stage_artifact import STAGE_ARTIFACT_CAPABILITY, STAGE_ARTIFACT_HTTP_PATH
 from qmf.core import is_ok, is_refusal
 from qmf.core.fingerprint import fingerprint_bytes
@@ -738,6 +738,65 @@ def test_initialize_omit_stage_artifact_refuses_put(tmp_path: Path) -> None:
             assert ctx["missing"] == STAGE_ARTIFACT_CAPABILITY
             assert ctx["empty_upload"] is False
             assert process.artifacts.objects() == ()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_initialize_pairing_only_then_put_stage(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix-home-put")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            _inject_stage_max(process, 1024)
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={PAIRING_CAPABILITY: True},
+                )
+                assert "error" not in init_resp, init_resp
+                result_obj = init_resp["result"]
+                assert isinstance(result_obj, dict)
+                result = cast("dict[str, object]", result_obj)
+                caps_obj = result["capabilities"]
+                assert isinstance(caps_obj, dict)
+                caps = cast("dict[str, object]", caps_obj)
+                assert caps.get(PAIRING_CAPABILITY) is True
+                assert caps.get(STAGE_ARTIFACT_CAPABILITY) is True
+            finally:
+                writer.close()
+                await writer.wait_closed()
+            payload = b"home-put-bytes"
+            put_raw = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "PUT",
+                    STAGE_ARTIFACT_HTTP_PATH,
+                    headers={"Origin": _ORIGIN, "Authorization": _bearer(proof)},
+                    body=payload,
+                ),
+            )
+            status, _headers, body = _split_http(put_raw)
+            assert status == 200, put_raw
+            listed = _json_object(body)
+            result_obj = listed["result"]
+            assert isinstance(result_obj, dict)
+            result = cast("dict[str, object]", result_obj)
+            fp1 = result["fp1"]
+            assert isinstance(fp1, str)
+            assert fp1 == fingerprint_bytes(payload).value
+            assert result["local_complete"] is True
+            held = process.artifacts.get(fp1)
+            assert held is not None
+            assert held.content == payload
         finally:
             await process.aclose()
 

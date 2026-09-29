@@ -19,7 +19,11 @@ from qma.daemon.artifacts.ticket import (
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
-from qma.wire.initialize import TRANSFER_COMPLETE_CAPABILITY, WIRE_PROTOCOL_VERSION
+from qma.wire.initialize import (
+    PAIRING_CAPABILITY,
+    TRANSFER_COMPLETE_CAPABILITY,
+    WIRE_PROTOCOL_VERSION,
+)
 from qma.wire.transfer_complete import (
     claim_machine_artifact_get_existed_at_inspect_sha,
     claim_transfer_complete_existed_at_inspect_sha,
@@ -225,6 +229,35 @@ async def _upgrade_machine_ws(
             "Sec-WebSocket-Key": key,
             "Sec-WebSocket-Protocol": CT40_WS_SUBPROTOCOL,
             "Authorization": f"Bearer {credential_ref}",
+        },
+    )
+    reader, writer = await asyncio.open_connection(host, port)
+    writer.write(handshake)
+    await writer.drain()
+    raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
+    status, headers, _body = _split_http(raw)
+    assert status == 101, raw
+    assert headers.get("sec-websocket-protocol") == CT40_WS_SUBPROTOCOL
+    return reader, writer
+
+
+async def _upgrade_paired_ws(
+    host: str,
+    port: int,
+    proof: str,
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    handshake = _http_bytes(
+        "GET",
+        "/",
+        headers={
+            "Host": f"{host}:{port}",
+            "Upgrade": "websocket",
+            "Connection": "Upgrade",
+            "Sec-WebSocket-Version": "13",
+            "Sec-WebSocket-Key": key,
+            "Sec-WebSocket-Protocol": f"{CT40_WS_SUBPROTOCOL}, qmx.pair.{proof}",
+            "Origin": _ORIGIN,
         },
     )
     reader, writer = await asyncio.open_connection(host, port)
@@ -600,6 +633,99 @@ def test_live_machine_get_and_dest_authored_transfer_complete(tmp_path: Path) ->
             source = process.artifacts.get(fp1)
             assert source is not None
             assert source.content == body
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_live_start_mission_invoke_gate(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix-invoke-gate")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            ticket_id, fp1, body = _issue_notified(process, command_id="cmd-invoke")
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={PAIRING_CAPABILITY: True},
+                )
+                assert "error" not in init_resp, init_resp
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "start_mission",
+                        "params": {
+                            "fp1": fp1,
+                            "instance_id": "inst-remote",
+                        },
+                    },
+                )
+                await writer.drain()
+                refused = await _ws_read_json(reader)
+                assert "error" in refused, refused
+                error_obj = refused["error"]
+                assert isinstance(error_obj, dict)
+                error = cast("dict[str, object]", error_obj)
+                assert error["code"] == -32000
+                data_obj = error["data"]
+                assert isinstance(data_obj, dict)
+                data = cast("dict[str, object]", data_obj)
+                context_obj = data["context"]
+                assert isinstance(context_obj, dict)
+                context = cast("dict[str, object]", context_obj)
+                assert context["ticket_complete"] is False
+                assert context["local_fallback"] is False
+                assert context["silent_local_fallback"] is False
+                assert context["finish_on_local_disk"] is False
+                redeemed = process.transfers.redeem_get(
+                    ticket_id=ticket_id,
+                    fp1=fp1,
+                    credential_ref=_DEST_CRED,
+                )
+                assert is_ok(redeemed), redeemed
+                placed = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
+                assert is_ok(placed), placed
+                completed = process.transfer_complete(
+                    {
+                        "ticket_id": ticket_id,
+                        "fp1": fp1,
+                        "byte_count": len(body),
+                        "command_id": "cmd-invoke",
+                    }
+                )
+                assert is_ok(completed), completed
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "start_mission",
+                        "params": {
+                            "fp1": fp1,
+                            "instance_id": "inst-remote",
+                        },
+                    },
+                )
+                await writer.drain()
+                admitted = await _ws_read_json(reader)
+                assert "error" in admitted, admitted
+                admitted_error_obj = admitted["error"]
+                assert isinstance(admitted_error_obj, dict)
+                admitted_error = cast("dict[str, object]", admitted_error_obj)
+                assert admitted_error["code"] == -32601
+                assert admitted_error["message"] == "method not found"
+            finally:
+                writer.close()
+                await writer.wait_closed()
         finally:
             await process.aclose()
 

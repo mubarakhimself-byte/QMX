@@ -29,7 +29,10 @@ from qmf.data.store.refusals import invalid_input, policy_rejection, storage_fai
 __all__ = [
     "CT40_BIND_PORT",
     "HOST_CONTROL_BIND_NAME",
+    "HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET",
+    "HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET",
     "HOST_CONTROL_CONFIGURE_TARGET",
+    "HOST_CONTROL_CONFIGURE_TARGETS",
     "HOST_CONTROL_EXISTED_AT_INSPECT_SHA",
     "HOST_CONTROL_FILE",
     "HOST_CONTROL_INSPECT_SHA",
@@ -69,6 +72,15 @@ HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
     {"status", "stop", "configure", "rotate-control", "pair", "pair-revoke"}
 )
 HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
+HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET: Final[str] = "source-origin"
+HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET: Final[str] = "dest-placement"
+HOST_CONTROL_CONFIGURE_TARGETS: Final[frozenset[str]] = frozenset(
+    {
+        HOST_CONTROL_CONFIGURE_TARGET,
+        HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET,
+        HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET,
+    }
+)
 MAX_HOST_CONTROL_FRAME: Final[int] = 65536
 _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -496,7 +508,14 @@ def _refusal_frame(refusal: TypedRefusal) -> dict[str, object]:
 
 
 def _credential_proof(request: Mapping[str, object]) -> str | None:
-    for key in ("credential_ref", "host_control", "proof", "operator_login", "code"):
+    keys = ("credential_ref", "host_control", "proof", "operator_login", "code")
+    if (
+        request.get("verb") == "configure"
+        and request.get("target") == HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET
+    ):
+        # Dest identity is an allowlisted machine ref, not a pairing proof.
+        keys = ("host_control", "proof", "operator_login", "code")
+    for key in keys:
         value = request.get(key)
         if isinstance(value, str) and value.startswith("cred://"):
             return value
@@ -535,6 +554,8 @@ class HostControlChannel:
         status: Callable[[], Mapping[str, object]],
         on_stop: Callable[[], None],
         on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
+        on_configure_source_origin: Callable[[object], Result[Mapping[str, object]]] | None = None,
+        on_configure_dest_placement: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_rotate_control: Callable[[], Result[Mapping[str, object]]] | None = None,
         on_pair: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_pair_revoke: (Callable[[object, object], Result[Mapping[str, object]]] | None) = None,
@@ -543,6 +564,8 @@ class HostControlChannel:
         self._status = status
         self._on_stop = on_stop
         self._on_configure_pairing_ttl = on_configure_pairing_ttl
+        self._on_configure_source_origin = on_configure_source_origin
+        self._on_configure_dest_placement = on_configure_dest_placement
         self._on_rotate_control = on_rotate_control
         self._on_pair = on_pair
         self._on_pair_revoke = on_pair_revoke
@@ -702,24 +725,52 @@ class HostControlChannel:
 
     def _configure(self, request: Mapping[str, object]) -> dict[str, object]:
         target = request.get("target")
-        if target != HOST_CONTROL_CONFIGURE_TARGET:
-            return _fail(
-                RefusalCategory.INVALID_INPUT,
-                "target",
-                "qmb host configure pairing-ttl is the sole TTL writer",
-                given=repr(target),
-            )
-        callback = self._on_configure_pairing_ttl
-        if callback is None:
-            return _fail(
-                RefusalCategory.UNSUPPORTED_CAPABILITY,
-                "configure",
-                "host-control configure pairing-ttl is not bound",
-            )
-        written = callback(request.get("duration"))
-        if is_refusal(written):
-            return _refusal_frame(written)
-        return {"ok": True, "configured": redact_host_surface(written.value)}
+        if target == HOST_CONTROL_CONFIGURE_TARGET:
+            callback = self._on_configure_pairing_ttl
+            if callback is None:
+                return _fail(
+                    RefusalCategory.UNSUPPORTED_CAPABILITY,
+                    "configure",
+                    "host-control configure pairing-ttl is not bound",
+                )
+            written = callback(request.get("duration"))
+            if is_refusal(written):
+                return _refusal_frame(written)
+            return {"ok": True, "configured": redact_host_surface(written.value)}
+        if target == HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET:
+            origin_callback = self._on_configure_source_origin
+            if origin_callback is None:
+                return _fail(
+                    RefusalCategory.UNSUPPORTED_CAPABILITY,
+                    "configure",
+                    "host-control configure source-origin is not bound",
+                )
+            origin = request.get("origin")
+            if origin is None:
+                origin = request.get("source_origin")
+            written = origin_callback(origin)
+            if is_refusal(written):
+                return _refusal_frame(written)
+            return {"ok": True, "configured": redact_host_surface(written.value)}
+        if target == HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET:
+            placement_callback = self._on_configure_dest_placement
+            if placement_callback is None:
+                return _fail(
+                    RefusalCategory.UNSUPPORTED_CAPABILITY,
+                    "configure",
+                    "host-control configure dest-placement is not bound",
+                )
+            written = placement_callback(request)
+            if is_refusal(written):
+                return _refusal_frame(written)
+            return {"ok": True, "configured": redact_host_surface(written.value)}
+        return _fail(
+            RefusalCategory.INVALID_INPUT,
+            "target",
+            "unknown host-control configure target",
+            legal=sorted(HOST_CONTROL_CONFIGURE_TARGETS),
+            given=repr(target),
+        )
 
     def _rotate(self) -> dict[str, object]:
         callback = self._on_rotate_control

@@ -449,15 +449,18 @@ def negotiate_initialize(
     if advertise_pairing:
         negotiated[PAIRING_CAPABILITY] = True
         negotiated[LIST_MAILBOX_CAPABILITY] = True
-        if not params.capabilities or params.capabilities.get(STAGE_ARTIFACT_CAPABILITY) is True:
+        pairing_requested = (
+            not params.capabilities or params.capabilities.get(PAIRING_CAPABILITY) is True
+        )
+        if pairing_requested or params.capabilities.get(STAGE_ARTIFACT_CAPABILITY) is True:
             negotiated[STAGE_ARTIFACT_CAPABILITY] = True
         else:
             negotiated.pop(STAGE_ARTIFACT_CAPABILITY, None)
-        if not params.capabilities or params.capabilities.get(TRANSFER_ARTIFACT_CAPABILITY) is True:
+        if pairing_requested or params.capabilities.get(TRANSFER_ARTIFACT_CAPABILITY) is True:
             negotiated[TRANSFER_ARTIFACT_CAPABILITY] = True
         else:
             negotiated.pop(TRANSFER_ARTIFACT_CAPABILITY, None)
-        if not params.capabilities or params.capabilities.get(TRANSFER_COMPLETE_CAPABILITY) is True:
+        if pairing_requested or params.capabilities.get(TRANSFER_COMPLETE_CAPABILITY) is True:
             negotiated[TRANSFER_COMPLETE_CAPABILITY] = True
         else:
             negotiated.pop(TRANSFER_COMPLETE_CAPABILITY, None)

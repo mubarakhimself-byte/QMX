@@ -38,6 +38,7 @@ from qma.daemon.artifacts.ticket import (
     handle_transfer_complete,
     loopback_source_not_get_target,
     place_dest_pulled_bytes,
+    placement_from_transfer_args,
     source_unreachable,
 )
 
@@ -68,6 +69,7 @@ __all__ = [
     "loopback_source_not_get_target",
     "parse_stage_content_length",
     "place_dest_pulled_bytes",
+    "placement_from_transfer_args",
     "refuse_interrupted_stage_put",
     "source_unreachable",
 ]

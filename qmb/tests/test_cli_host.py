@@ -19,6 +19,7 @@ from qmb.doors.cli import (
     HOST_PAIR_COMMANDS,
     command_tree,
     invoke_host_configure_pairing_ttl,
+    invoke_host_configure_source_origin,
     invoke_host_pair,
     invoke_host_pair_revoke,
     invoke_host_recover_control,
@@ -288,7 +289,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
             "pair",
         )
     )
-    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
+    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin")
     assert HOST_PAIR_COMMANDS == ("revoke",)
     assert "pair" in HOST_COMMANDS
     runner = CliRunner()
@@ -306,6 +307,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     configure_help = runner.invoke(main, ["host", "configure", "--help"])
     assert configure_help.exit_code == 0, configure_help.output
     assert "pairing-ttl" in configure_help.output
+    assert "source-origin" in configure_help.output
     pair_help = runner.invoke(main, ["host", "pair", "--help"])
     assert pair_help.exit_code == 0, pair_help.output
     assert "revoke" in pair_help.output
@@ -679,6 +681,45 @@ def test_click_host_configure_pairing_ttl(tmp_path: Path) -> None:
     payload = json.loads(configured.stdout)
     assert payload["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
     assert payload["ttl"] == "set"
+
+
+def test_click_host_configure_source_origin(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+
+    def transport(
+        verb: str,
+        token: str,
+        *,
+        root: Path,
+        extra: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        _ = root
+        assert token == _TOKEN
+        assert verb == "configure"
+        assert extra is not None
+        assert extra["target"] == "source-origin"
+        assert extra["origin"] == "https://artifacts.example:8443"
+        return {
+            "ok": True,
+            "configured": {
+                "source_origin": "https://artifacts.example:8443",
+                "writer": "host.configure.source-origin",
+            },
+        }
+
+    runner = CliRunner()
+    configured = runner.invoke(
+        main,
+        ["host", "configure", "source-origin", "https://artifacts.example:8443"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert configured.exit_code == 0, configured.output
+    payload = json.loads(configured.stdout)
+    assert payload["verb"] == "host.configure.source-origin"
+    assert payload["source_origin"] == "https://artifacts.example:8443"
+    missing = invoke_host_configure_source_origin("", root=tmp_path)
+    assert is_refusal(missing)
+    assert missing.context["field"] == "origin"
 
 
 def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None:

@@ -120,12 +120,17 @@ def test_parse_transfer_artifact_payload_and_durable_command_id() -> None:
                 "environment_id": "env-a",
                 "placement_revision": "rev-1",
                 "credential_ref": "cred://compute/worker-a",
+                "reachable_hosts": ["artifacts.example", "artifacts.example:8443"],
             },
         }
     )
     assert isinstance(nested, Ok)
     assert nested.value["instance_id"] == "inst-2"
     assert nested.value["credential_ref"] == "cred://compute/worker-a"
+    assert nested.value["reachable_hosts"] == (
+        "artifacts.example",
+        "artifacts.example:8443",
+    )
     for field in FORBIDDEN_TRANSFER_CONTRACT_KEYS:
         refused = parse_transfer_artifact_payload(
             {

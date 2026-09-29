@@ -67,6 +67,7 @@ from qma.daemon.artifacts import (
     handle_transfer_complete,
     parse_stage_content_length,
     place_dest_pulled_bytes,
+    placement_from_transfer_args,
     refuse_interrupted_stage_put,
 )
 from qma.daemon.backtest.service import BacktestingService
@@ -176,6 +177,7 @@ from qma.daemon.taskgraph.projection import (
 from qma.daemon.telemetry.store import TelemetryStore
 from qma.wire.initialize import (
     JSONRPC_VERSION,
+    PAIRING_CAPABILITY,
     TRANSFER_ARTIFACT_CAPABILITY,
     TRANSFER_COMPLETE_CAPABILITY,
     InitializeParams,
@@ -1009,11 +1011,15 @@ class DaemonProcess:
         caps: object = (
             {TRANSFER_ARTIFACT_CAPABILITY: True} if capabilities is None else capabilities
         )
+        operator_id = (
+            self._local_operator.principal_id if self._local_operator is not None else None
+        )
         return handle_transfer_artifact(
             self._transfers,
             payload,
             capabilities=caps,
             principal_class=principal_class,
+            operator_principal=operator_id,
         )
 
     @property
@@ -1404,6 +1410,52 @@ class DaemonProcess:
             )
         )
 
+    def configure_source_origin(self, origin: object) -> Result[Mapping[str, object]]:
+        """Operator-recorded TLS origin dest will pull. Loopback/http refuse."""
+        recorded = self.record_source_tls_origin(origin)
+        if is_refusal(recorded):
+            return recorded
+        return Ok(
+            MappingProxyType(
+                {
+                    "source_origin": recorded.value,
+                    "writer": "host.configure.source-origin",
+                }
+            )
+        )
+
+    def configure_dest_placement(self, payload: object) -> Result[Mapping[str, object]]:
+        """Register a remote destination placement. Payload same_daemon is ignored."""
+        if not isinstance(payload, Mapping):
+            return invalid_input(
+                "dest-placement",
+                "destination placement is an object",
+                given=repr(payload),
+                local_fallback=False,
+            )
+        entry = cast("Mapping[str, object]", payload)
+        placement = placement_from_transfer_args(entry)
+        if placement is None:
+            return invalid_input(
+                "dest-placement",
+                "destination placement requires instance_id, environment_id, "
+                "placement_revision, credential_ref, and reachable_hosts",
+                local_fallback=False,
+            )
+        self._transfers.register_destination(placement)
+        return Ok(
+            MappingProxyType(
+                {
+                    "instance_id": placement.instance_id,
+                    "environment_id": placement.environment_id,
+                    "placement_revision": placement.placement_revision,
+                    "credential_ref": placement.credential_ref,
+                    "same_daemon": False,
+                    "writer": "host.configure.dest-placement",
+                }
+            )
+        )
+
     def refuse_pair_issue(self) -> Result[None]:
         """Missing-TTL refuse gate for ``/pair/start`` and ``/pair/confirm`` issue."""
         return self._variables.refuse_pair_issue()
@@ -1558,6 +1610,8 @@ class DaemonProcess:
             status=self.host_status_snapshot,
             on_stop=self.request_stop,
             on_configure_pairing_ttl=self.configure_pairing_ttl,
+            on_configure_source_origin=self.configure_source_origin,
+            on_configure_dest_placement=self.configure_dest_placement,
             on_rotate_control=self.rotate_control,
             on_pair=self.pair_pending,
             on_pair_revoke=self.pair_revoke,
@@ -1921,6 +1975,7 @@ class DaemonProcess:
             )
             await self._write_refusal(writer, refused, origin=origin)
             return
+        self.dest_control_up(credential_ref)
         opening = _encode_http_response(
             101,
             {
@@ -1938,6 +1993,7 @@ class DaemonProcess:
             principal_class=PrincipalClass.MACHINE,
         )
         if is_refusal(authed):
+            self.dest_control_down(credential_ref)
             return
         connection_token = f"{credential_ref}:{id(connection)}"
         buf = b""
@@ -1975,6 +2031,7 @@ class DaemonProcess:
                     writer.write(_encode_ws_frame(json.dumps(response).encode("utf-8")))
                     await writer.drain()
         finally:
+            self.dest_control_down(credential_ref)
             producer_id = connection.producer_id
             if producer_id is not None:
                 self._live_producers.release(
@@ -2117,7 +2174,8 @@ class DaemonProcess:
             advertise = True
             if raw_caps:
                 advertise = (
-                    raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
+                    raw_caps.get(PAIRING_CAPABILITY) is True
+                    or raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
                     or raw_caps.get(STAGE_ARTIFACT_CAPABILITY) is True
                     or raw_caps.get(TRANSFER_ARTIFACT_CAPABILITY) is True
                     or raw_caps.get(TRANSFER_COMPLETE_CAPABILITY) is True
@@ -2142,6 +2200,10 @@ class DaemonProcess:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:
             return self._dispatch_transfer_complete(connection, request, req_id)
+        if method in {WireCommand.START_MISSION.value, WireCommand.LAUNCH_TASK.value}:
+            gated = self._gate_live_invoke(method, request, req_id)
+            if gated is not None:
+                return gated
         if method != WireCommand.SEND_MESSAGE.value:
             return _jsonrpc_error(
                 req_id,
@@ -2180,6 +2242,32 @@ class DaemonProcess:
             return _jsonrpc_refusal(req_id, sent)
         return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
 
+    def _gate_live_invoke(
+        self,
+        method: object,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object] | None:
+        """Refuse start_mission (and launch_task citing fp1) until transfer_complete."""
+        raw_params = request.get("params")
+        params: Mapping[str, object] = (
+            cast("Mapping[str, object]", raw_params) if isinstance(raw_params, Mapping) else {}
+        )
+        fp1 = params.get("fp1")
+        instance_id = params.get("instance_id")
+        if method == WireCommand.LAUNCH_TASK.value and not (
+            isinstance(fp1, str) and fp1.strip() != ""
+        ):
+            return None
+        gated = gate_invoke_until_transfer_complete(
+            self._transfers,
+            fp1=fp1,
+            instance_id=instance_id,
+        )
+        if is_refusal(gated):
+            return _jsonrpc_refusal(req_id, gated)
+        return None
+
     def _dispatch_transfer_artifact(
         self,
         connection: WireConnection,
@@ -2207,11 +2295,15 @@ class DaemonProcess:
                 code=_JSONRPC_APP_ERROR,
                 message="unauthenticated",
             )
+        operator_id = connection.pairing_record_id
+        if operator_id is None and self._local_operator is not None:
+            operator_id = self._local_operator.principal_id
         transferred = handle_transfer_artifact(
             self._transfers,
             dict(cast("Mapping[str, object]", raw_params)),
             capabilities=connection.capabilities,
             principal_class=principal,
+            operator_principal=operator_id,
         )
         if is_refusal(transferred):
             return _jsonrpc_refusal(req_id, transferred)

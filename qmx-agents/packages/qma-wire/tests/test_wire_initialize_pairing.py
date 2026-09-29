@@ -87,6 +87,19 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert isinstance(asked_neg, Ok)
     assert asked_neg.value.capabilities["stage_artifact"] is True
 
+    pairing_only = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        capabilities={PAIRING_CAPABILITY: True},
+        client_producer_id="tab:home",
+    )
+    assert isinstance(pairing_only, Ok)
+    pairing_neg = negotiate_initialize(pairing_only.value, assign_producer_id="tab:home")
+    assert isinstance(pairing_neg, Ok)
+    assert pairing_neg.value.capabilities[PAIRING_CAPABILITY] is True
+    assert pairing_neg.value.capabilities["stage_artifact"] is True
+    assert pairing_neg.value.capabilities["transfer_artifact"] is True
+    assert pairing_neg.value.capabilities["transfer_complete"] is True
+
 
 def test_missing_pairing_is_typed_mismatch_shell_usable() -> None:
     refused = evaluate_pairing_capability({})

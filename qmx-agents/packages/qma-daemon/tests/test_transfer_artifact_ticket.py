@@ -26,6 +26,7 @@ from qma.daemon.artifacts.ticket import (
     LOCAL_INVOKE_FALLBACK,
     DestinationPlacement,
 )
+from qma.daemon.host_control import host_control_call
 from qma.daemon.journal import CLOSED_PROJECTIONS, DEFINITION_STORE_MEMBERS, v1_fold_contract
 from qma.daemon.journal.stores import StoreClass
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL
@@ -215,6 +216,35 @@ async def _ws_read_json(reader: asyncio.StreamReader) -> dict[str, object]:
         parsed: object = json.loads(payload.decode("utf-8"))
         assert isinstance(parsed, dict)
         return cast("dict[str, object]", parsed)
+
+
+async def _upgrade_machine_ws(
+    host: str,
+    port: int,
+    credential_ref: str,
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    handshake = _http_bytes(
+        "GET",
+        "/",
+        headers={
+            "Host": f"{host}:{port}",
+            "Upgrade": "websocket",
+            "Connection": "Upgrade",
+            "Sec-WebSocket-Version": "13",
+            "Sec-WebSocket-Key": key,
+            "Sec-WebSocket-Protocol": CT40_WS_SUBPROTOCOL,
+            "Authorization": f"Bearer {credential_ref}",
+        },
+    )
+    reader, writer = await asyncio.open_connection(host, port)
+    writer.write(handshake)
+    await writer.drain()
+    raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
+    status, headers, _body = _split_http(raw)
+    assert status == 101, raw
+    assert headers.get("sec-websocket-protocol") == CT40_WS_SUBPROTOCOL
+    return reader, writer
 
 
 async def _upgrade_paired_ws(
@@ -586,6 +616,190 @@ def test_live_ws_notifies_when_dest_control_is_up(tmp_path: Path) -> None:
                 note = handle.value.notifications[-1]
                 assert note["method"] == DEST_CONTROL_NOTIFY_METHOD
                 assert "id" not in note
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_payload_same_daemon_is_not_authority(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="boot-70-fix-same-daemon")
+    try:
+        fp1 = _stage(process)
+        refused = process.transfer_artifact(
+            {
+                "fp1": fp1,
+                "command_id": "cmd-sd",
+                "instance_id": "inst-unregistered",
+                "same_daemon": True,
+            }
+        )
+        assert is_refusal(refused)
+        assert refused.context["local_fallback"] is False
+        assert "registered" in str(refused.context.get("reason", ""))
+        assert process.transfers.open_tickets() == ()
+    finally:
+        process.close()
+
+
+def test_payload_dest_identity_registers_remote(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="boot-70-fix-payload-dest")
+    try:
+        fp1 = _stage(process)
+        recorded = process.record_source_tls_origin(_TLS_ORIGIN)
+        assert is_ok(recorded), recorded
+        issued = process.transfer_artifact(
+            {
+                "fp1": fp1,
+                "command_id": "cmd-payload-dest",
+                "instance_id": "inst-from-payload",
+                "environment_id": "env-remote",
+                "placement_revision": "rev-1",
+                "credential_ref": _DEST_CRED,
+                "reachable_hosts": [
+                    "artifacts.example",
+                    "artifacts.example:8443",
+                    _TLS_ORIGIN,
+                ],
+                "same_daemon": True,
+            }
+        )
+        assert is_ok(issued), issued
+        assert issued.value.transfer_required is True
+        ticket_id = issued.value.ticket_id
+        assert isinstance(ticket_id, str)
+        ticket = process.transfers.get(ticket_id)
+        assert ticket is not None
+        assert ticket.state == "issued"
+        dest = process.transfers.placements.get("inst-from-payload")
+        assert dest is not None
+        assert dest.same_daemon is False
+        assert dest.credential_ref == _DEST_CRED
+    finally:
+        process.close()
+
+
+def test_live_machine_ws_notifies_issued_ticket(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix-dest-up")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            fp1 = _stage(process)
+            recorded = process.record_source_tls_origin(_TLS_ORIGIN)
+            assert is_ok(recorded), recorded
+            process.register_destination_placement(_remote_placement())
+            issued = process.transfer_artifact(
+                {
+                    "fp1": fp1,
+                    "command_id": "cmd-dest-up",
+                    "instance_id": "inst-remote",
+                }
+            )
+            assert is_ok(issued), issued
+            ticket_id = issued.value.ticket_id
+            assert isinstance(ticket_id, str)
+            ticket = process.transfers.get(ticket_id)
+            assert ticket is not None
+            assert ticket.state == "issued"
+            _reader, writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
+            try:
+                notified = process.transfers.get(ticket_id)
+                assert notified is not None
+                assert notified.state == "notified"
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_live_transfer_after_host_configure_source_origin(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix-source-origin")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            fp1 = _stage(process)
+            loopback = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={"target": "source-origin", "origin": "https://127.0.0.1:8765"},
+            )
+            assert is_ok(loopback), loopback
+            assert loopback.value.get("ok") is False
+            configured = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={"target": "source-origin", "origin": _TLS_ORIGIN},
+            )
+            assert is_ok(configured), configured
+            assert configured.value.get("ok") is True
+            placed = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={
+                    "target": "dest-placement",
+                    "instance_id": "inst-remote",
+                    "environment_id": "env-remote",
+                    "placement_revision": "rev-1",
+                    "credential_ref": _DEST_CRED,
+                    "reachable_hosts": [
+                        "artifacts.example",
+                        "artifacts.example:8443",
+                        _TLS_ORIGIN,
+                    ],
+                },
+            )
+            assert is_ok(placed), placed
+            assert placed.value.get("ok") is True
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={TRANSFER_ARTIFACT_CAPABILITY: True},
+                )
+                assert "error" not in init_resp, init_resp
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "transfer_artifact",
+                        "params": {
+                            "fp1": fp1,
+                            "command_id": "cmd-live-origin",
+                            "instance_id": "inst-remote",
+                        },
+                    },
+                )
+                await writer.drain()
+                issued = await _ws_read_json(reader)
+                assert "error" not in issued, issued
+                issued_result_obj = issued["result"]
+                assert isinstance(issued_result_obj, dict)
+                issued_result = cast("dict[str, object]", issued_result_obj)
+                ticket_id = issued_result["ticket_id"]
+                assert isinstance(ticket_id, str)
+                assert issued_result["state"] == "issued"
+                ticket = process.transfers.get(ticket_id)
+                assert ticket is not None
+                assert ticket.source_origin == _TLS_ORIGIN
+                assert ticket.operator_principal == _record_id
             finally:
                 writer.close()
                 await writer.wait_closed()

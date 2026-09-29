@@ -71,6 +71,7 @@ __all__ = [
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "invoke_host_configure_pairing_ttl",
+    "invoke_host_configure_source_origin",
     "invoke_host_pair",
     "invoke_host_pair_revoke",
     "invoke_host_recover_control",
@@ -92,7 +93,7 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
     "recover-control",
     "pair",
 )
-HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
+HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl", "source-origin")
 HOST_PAIR_COMMANDS: Final[tuple[str, ...]] = ("revoke",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
 QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -1128,6 +1129,60 @@ def invoke_host_configure_pairing_ttl(
         "registry_key": fields_out.get("registry_key", PAIRING_SESSION_TTL_REGISTRY_KEY),
         "ttl": fields_out.get("ttl", "set"),
         "writer": fields_out.get("writer", "host.configure.pairing-ttl"),
+    }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_configure_source_origin(
+    origin: object,
+    *,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Record the TLS origin dest will pull. Loopback/http stay source_unreachable."""
+    if not isinstance(origin, str) or origin.strip() == "":
+        return invalid(
+            "origin",
+            "qmb host configure source-origin requires a non-empty https origin",
+            given=repr(origin),
+        )
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object] = {
+        "target": "source-origin",
+        "origin": origin.strip(),
+    }
+    if callable(transport):
+        called = transport("configure", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("configure", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "configure", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="configure")
+    if not isinstance(refused, Ok):
+        return refused
+    configured = payload.get("configured")
+    fields_out: dict[str, object]
+    if isinstance(configured, Mapping):
+        fields_out = dict(cast("Mapping[str, object]", configured))
+    else:
+        fields_out = {}
+    report: dict[str, object] = {
+        "verb": "host.configure.source-origin",
+        "source_origin": fields_out.get("source_origin", origin.strip()),
+        "writer": fields_out.get("writer", "host.configure.source-origin"),
     }
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 

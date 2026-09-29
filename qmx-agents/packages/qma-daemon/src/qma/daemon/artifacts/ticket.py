@@ -89,6 +89,7 @@ __all__ = [
     "handle_transfer_complete",
     "loopback_source_not_get_target",
     "place_dest_pulled_bytes",
+    "placement_from_transfer_args",
     "source_unreachable",
 ]
 
@@ -981,12 +982,52 @@ def _same_daemon_result(fp1: str) -> TransferArtifactResult:
     )
 
 
+def placement_from_transfer_args(args: Mapping[str, object]) -> DestinationPlacement | None:
+    """Remote placement from operator dest identity. ``same_daemon`` is never authority."""
+    instance_id = args.get("instance_id")
+    environment_id = args.get("environment_id")
+    placement_revision = args.get("placement_revision")
+    credential_ref = args.get("credential_ref")
+    if not all(
+        isinstance(item, str) and item.strip() != ""
+        for item in (instance_id, environment_id, placement_revision, credential_ref)
+    ):
+        return None
+    hosts_obj = args.get("reachable_hosts")
+    hosts: tuple[str, ...] = ()
+    if isinstance(hosts_obj, tuple):
+        hosts = tuple(
+            item.strip()
+            for item in cast("tuple[object, ...]", hosts_obj)
+            if isinstance(item, str) and item.strip() != ""
+        )
+    elif isinstance(hosts_obj, list):
+        hosts = tuple(
+            item.strip()
+            for item in cast("list[object]", hosts_obj)
+            if isinstance(item, str) and item.strip() != ""
+        )
+    elif isinstance(hosts_obj, str) and hosts_obj.strip() != "":
+        hosts = (hosts_obj.strip(),)
+    if not hosts:
+        return None
+    return DestinationPlacement(
+        instance_id=str(instance_id).strip(),
+        environment_id=str(environment_id).strip(),
+        placement_revision=str(placement_revision).strip(),
+        credential_ref=str(credential_ref).strip(),
+        same_daemon=False,
+        reachable_hosts=hosts,
+    )
+
+
 def handle_transfer_artifact(
     store: TransferTicketStore,
     payload: object,
     *,
     capabilities: object,
     principal_class: object,
+    operator_principal: object = None,
 ) -> Result[TransferArtifactResult]:
     """Issue an AM-03 ticket, or report same-daemon local-complete possession."""
     gated = require_transfer_artifact_capability(capabilities)
@@ -1015,15 +1056,18 @@ def handle_transfer_artifact(
         )
     instance_id = str(args["instance_id"])
     dest = store.placements.get(instance_id)
-    same_daemon = dest.same_daemon if dest is not None else args.get("same_daemon") is True
-    if dest is None and args.get("same_daemon") is not True:
-        return invalid_input(
-            "instance_id",
-            "destination placement must be registered for a remote transfer",
-            given=instance_id,
-            local_fallback=LOCAL_INVOKE_FALLBACK,
-        )
-    if dest is not None:
+    if dest is None:
+        registered = placement_from_transfer_args(args)
+        if registered is None:
+            return invalid_input(
+                "instance_id",
+                "destination placement must be registered for a remote transfer",
+                given=instance_id,
+                local_fallback=LOCAL_INVOKE_FALLBACK,
+            )
+        store.register_destination(registered)
+        dest = registered
+    else:
         for field, expected in (
             ("environment_id", dest.environment_id),
             ("placement_revision", dest.placement_revision),
@@ -1037,15 +1081,8 @@ def handle_transfer_artifact(
                     given=repr(supplied),
                     registered=expected,
                 )
-    if same_daemon:
+    if dest.same_daemon:
         return Ok(_same_daemon_result(fp1))
-    if dest is None:
-        return invalid_input(
-            "instance_id",
-            "destination placement must be registered for a remote transfer",
-            given=instance_id,
-            local_fallback=LOCAL_INVOKE_FALLBACK,
-        )
     if DAEMON_DIALS_IN or DAEMON_OPENS_DEST_INBOUND_PORT or LOCAL_INVOKE_FALLBACK:
         return source_unreachable(local_invoke=True)
     if not is_credential_ref_allowed(dest.credential_ref):
@@ -1069,9 +1106,13 @@ def handle_transfer_artifact(
             reachable_hosts=list(dest.reachable_hosts),
         )
     operator = (
-        principal_class.value
-        if isinstance(principal_class, PrincipalClass)
-        else str(principal_class)
+        operator_principal.strip()
+        if isinstance(operator_principal, str) and operator_principal.strip() != ""
+        else (
+            principal_class.value
+            if isinstance(principal_class, PrincipalClass)
+            else str(principal_class)
+        )
     )
     ticket = store.issue(
         parsed=args,
