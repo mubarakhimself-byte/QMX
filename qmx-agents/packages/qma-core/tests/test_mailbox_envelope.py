@@ -17,8 +17,10 @@ from qma.core.ports.mailbox import (
     GAP_0071_LEAD_MAILBOX_CATCH_ALL,
     GAP_0079_EXTERNAL_TRANSPORT,
     HUMAN_APPROVAL_CHANNEL,
+    INHERITING_MESSAGE_KINDS,
     MAILBOX_INSPECT_SHA,
     MESSAGE_KIND_VALUES,
+    PRODUCT_CHAT_MESSAGE_KINDS,
     PRODUCT_SESSION_OWN_IDENTITY_FIELD,
     PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA,
     claim_envelope_types_absent_at_inspect_sha,
@@ -83,6 +85,15 @@ def test_closed_vocabs_cover_message_kind_and_delivery_state() -> None:
         "dead_letter",
     } == DELIVERY_STATE_VALUES
     assert HUMAN_APPROVAL_CHANNEL is MessageKind.APPROVAL_REQUEST
+    assert {
+        "handoff",
+        "reply",
+        "notify",
+        "status",
+        "question",
+    } == PRODUCT_CHAT_MESSAGE_KINDS
+    assert {"reply", "question"} == INHERITING_MESSAGE_KINDS
+    assert MessageKind.APPROVAL_REQUEST.value not in PRODUCT_CHAT_MESSAGE_KINDS
     assert is_human_approval_channel("approval_request")
     assert is_human_approval_channel(MessageKind.APPROVAL_REQUEST)
     assert not is_human_approval_channel("handoff")

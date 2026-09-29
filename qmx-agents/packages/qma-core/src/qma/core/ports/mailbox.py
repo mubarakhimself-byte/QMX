@@ -50,9 +50,11 @@ __all__ = [
     "GAP_0071_LEAD_MAILBOX_CATCH_ALL",
     "GAP_0079_EXTERNAL_TRANSPORT",
     "HUMAN_APPROVAL_CHANNEL",
+    "INHERITING_MESSAGE_KINDS",
     "MAILBOX_INSPECT_SHA",
     "MAX_WAKES_PER_WINDOW_REGISTRY_KEY",
     "MESSAGE_KIND_VALUES",
+    "PRODUCT_CHAT_MESSAGE_KINDS",
     "PRODUCT_SESSION_OWN_IDENTITY_FIELD",
     "PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA",
     "PRODUCT_SESSION_REF_PREFIX",
@@ -137,6 +139,21 @@ ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
 
 MESSAGE_KIND_VALUES: Final[frozenset[str]] = frozenset(member.value for member in MessageKind)
 DELIVERY_STATE_VALUES: Final[frozenset[str]] = frozenset(member.value for member in DeliveryState)
+
+# Product-chat send uses mailbox kinds; approval_request is the gate-raised
+# human-approval channel, not a Home composer mint (Story 69.4; CT-48).
+PRODUCT_CHAT_MESSAGE_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        MessageKind.HANDOFF.value,
+        MessageKind.REPLY.value,
+        MessageKind.NOTIFY.value,
+        MessageKind.STATUS.value,
+        MessageKind.QUESTION.value,
+    }
+)
+INHERITING_MESSAGE_KINDS: Final[frozenset[str]] = frozenset(
+    {MessageKind.REPLY.value, MessageKind.QUESTION.value}
+)
 
 HUMAN_APPROVAL_CHANNEL: Final[MessageKind] = MessageKind.APPROVAL_REQUEST
 

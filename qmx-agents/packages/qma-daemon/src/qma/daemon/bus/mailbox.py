@@ -27,13 +27,21 @@ from qma.core.ports.mailbox import (
     FORBIDDEN_ENVELOPE_SESSION_FIELDS,
     GAP_0071_LEAD_MAILBOX_CATCH_ALL,
     GAP_0079_EXTERNAL_TRANSPORT,
+    INHERITING_MESSAGE_KINDS,
+    PRODUCT_CHAT_MESSAGE_KINDS,
     Envelope,
     parse_envelope,
     product_session_ref_matches,
     refuse_external_agent_transport,
     refuse_lead_mailbox_catch_all,
 )
-from qma.core.vocabulary.enums import DeliveryState, HookResultDecision, HookVerb, MessageKind
+from qma.core.vocabulary.enums import (
+    DeliveryState,
+    HookResultDecision,
+    HookVerb,
+    MessageKind,
+    PrincipalClass,
+)
 from qma.daemon.hooks.registry import HookRegistry, event_names_for_verb
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.fold_contracts import v1_fold_contract
@@ -57,6 +65,13 @@ from qma.wire.mailbox_send import (
     refuse_substitute_live_producer_id,
 )
 from qma.wire.principals import authorize_wire_command, parse_principal_class
+from qma.wire.selected_ref import INSTANCE_ID_KIND
+from qma.wire.send_message import (
+    HOME_COMPOSER_FORBIDDEN_KINDS,
+    MAILBOX_SEND_REQUIRES_GRANT_RECORD,
+    MAILBOX_SEND_REQUIRES_INSTANCE_ID,
+    refuse_mailbox_chat_contract,
+)
 from qmf.core import Clock, DataDrivenClock, Instant, Ok, Result, is_refusal
 from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
@@ -75,7 +90,10 @@ __all__ = [
     "MailboxStore",
     "admit_named_product_session",
     "copy_product_session_ref_at_write",
+    "inherit_product_session_ref_at_write",
     "principal_tokens_equal",
+    "refuse_mailbox_instance_mint",
+    "refuse_product_session_retarget",
 ]
 
 
@@ -238,6 +256,126 @@ def copy_product_session_ref_at_write(
         )
     inbound[ENVELOPE_PRODUCT_SESSION_FIELD] = value
     return Ok(MappingProxyType(inbound))
+
+
+def refuse_product_session_retarget(
+    *,
+    parent_ref: object,
+    given: object,
+    **extra: object,
+) -> TypedRefusal:
+    """A reply/question cannot jump onto another product session (AM-02)."""
+    return policy_rejection(
+        ENVELOPE_PRODUCT_SESSION_FIELD,
+        "child inherits product_session_ref from the authorized parent; "
+        "retarget onto another psess: is refused (AM-02; DEC-0495)",
+        parent_product_session_ref=parent_ref,
+        given=given,
+        retarget=False,
+        **extra,
+    )
+
+
+def refuse_mailbox_instance_mint(**extra: object) -> TypedRefusal:
+    """Home send_message must not mint a synthetic instance (DEC-0484)."""
+    return policy_rejection(
+        "instance_id",
+        "authoring send_message with app_instance_id absent is legal; the "
+        "daemon must not mint a synthetic instance. Envelope instance_id "
+        "remains required on invoke (Epic 60 / FEAT-0058), a different path "
+        "(DEC-0484; DEC-0463; FR-UI-36)",
+        minted=False,
+        send_requires_instance_id=MAILBOX_SEND_REQUIRES_INSTANCE_ID,
+        send_requires_grant_record=MAILBOX_SEND_REQUIRES_GRANT_RECORD,
+        **extra,
+    )
+
+
+def inherit_product_session_ref_at_write(
+    envelope: Mapping[str, object],
+    payload: Mapping[str, object],
+    parent: Envelope | None,
+    *,
+    parent_named: bool,
+    principal_class: object | None = None,
+) -> Result[Mapping[str, object]]:
+    """Reply/question children inherit ``product_session_ref`` from the parent.
+
+    Named payload field must equal the parent or the write is refused. Daemon
+    (machine) replies may not accept an arbitrary session.
+    """
+    outbound = dict(envelope)
+    kind = outbound.get("kind")
+    inheriting = isinstance(kind, str) and kind in INHERITING_MESSAGE_KINDS
+    named = ENVELOPE_PRODUCT_SESSION_FIELD in payload
+    named_ref = payload.get(ENVELOPE_PRODUCT_SESSION_FIELD) if named else None
+    machine = principal_class is PrincipalClass.MACHINE or principal_class == "machine"
+    if not inheriting:
+        return Ok(MappingProxyType(outbound))
+    if parent_named and parent is None:
+        field = "reply_to_ref" if "reply_to_ref" in outbound else "causation_id"
+        return policy_rejection(
+            field,
+            "child inherits product_session_ref from an authorized parent "
+            "named by reply_to_ref / causation_id (AM-02; DEC-0495)",
+            parent_found=False,
+        )
+    if parent is None:
+        if machine and named:
+            return policy_rejection(
+                ENVELOPE_PRODUCT_SESSION_FIELD,
+                "daemon-originated replies may not accept an arbitrary session (AM-02; DEC-0495)",
+                given=repr(named_ref),
+                arbitrary=True,
+            )
+        return Ok(MappingProxyType(outbound))
+    parent_ref = parent.product_session_ref
+    if named and named_ref != parent_ref:
+        return refuse_product_session_retarget(parent_ref=parent_ref, given=named_ref)
+    if parent_ref is None:
+        outbound.pop(ENVELOPE_PRODUCT_SESSION_FIELD, None)
+    else:
+        outbound[ENVELOPE_PRODUCT_SESSION_FIELD] = parent_ref
+    return Ok(MappingProxyType(outbound))
+
+
+def _parent_token(envelope: Mapping[str, object]) -> tuple[str | None, bool]:
+    reply_to = envelope.get("reply_to_ref")
+    causation = envelope.get("causation_id")
+    if isinstance(reply_to, str) and reply_to.strip() != "":
+        return reply_to.strip(), True
+    if isinstance(causation, str) and causation.strip() != "":
+        return causation.strip(), True
+    return None, False
+
+
+_MINT_INSTANCE_KEYS: Final[frozenset[str]] = frozenset(
+    {"mint_instance", "synthetic_instance", "app_instance_id"}
+)
+
+
+def _refuse_if_mailbox_mints_instance(
+    payload: Mapping[str, object],
+    session: ProductSession,
+) -> Result[None]:
+    """Authoring without instance is legal; never mint a synthetic instance."""
+    nested = payload.get("envelope")
+    bodies: list[Mapping[str, object]] = [payload]
+    if isinstance(nested, Mapping):
+        bodies.append(cast("Mapping[str, object]", nested))
+    for body in bodies:
+        for key in _MINT_INSTANCE_KEYS:
+            if key in body and _truthy(body.get(key)):
+                return refuse_mailbox_instance_mint(
+                    mint_key=key,
+                    given=repr(body.get(key)),
+                    product_session_id=session.product_session_id,
+                    app_instance_id=session.app_instance_id,
+                )
+    instance_refs = tuple(ref.id for ref in session.selected_refs if ref.kind == INSTANCE_ID_KIND)
+    if session.app_instance_id is None and not instance_refs:
+        return Ok(None)
+    return Ok(None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -535,12 +673,14 @@ class MailboxStore:
         principal_class: object,
         sessions: ProductSessionService | None = None,
     ) -> Result[DeliveryRecord]:
-        """Admit seed ``send_message`` and copy ``product_session_ref`` at write.
+        """Admit seed ``send_message`` as mailbox delivery, not invoke.
 
         Named ``product_session_ref`` resolves the product session and requires
         principal equality before append. Ordinary product chat needs no
-        GrantRecord. Machine payloads that omit the field stay legal. Body text
-        is never parsed to recover a session pointer (AM-02; DEC-0495).
+        GrantRecord and no instance. Machine payloads that omit the field stay
+        legal. Body text is never parsed to recover a session pointer
+        (AM-02; DEC-0495). Reply/question children inherit the parent's
+        ``product_session_ref`` and cannot retarget (Story 69.4).
 
         Pre-ack identity is the wire pair ``(producer_id, id)`` (query name
         ``wire_id``) plus the payload hash of the wire payload bytes. Same pair
@@ -550,6 +690,9 @@ class MailboxStore:
         parsed_principal = parse_principal_class(principal_class)
         if is_refusal(parsed_principal):
             return parsed_principal
+        contract = refuse_mailbox_chat_contract(payload)
+        if is_refusal(contract):
+            return contract
         nested = payload.get("envelope")
         if isinstance(nested, Mapping):
             base: dict[str, object] = dict(cast("Mapping[str, object]", nested))
@@ -562,13 +705,50 @@ class MailboxStore:
         copied = copy_product_session_ref_at_write(base, payload)
         if is_refusal(copied):
             return copied
-        admitted = admit_named_product_session(
+        parent_token, parent_named = _parent_token(copied.value)
+        parent_record = None if parent_token is None else self._by_msg_id.get(parent_token)
+        parent_envelope = None if parent_record is None else parent_record.envelope
+        inherited = inherit_product_session_ref_at_write(
             copied.value,
+            payload,
+            parent_envelope,
+            parent_named=parent_named,
+            principal_class=parsed_principal.value,
+        )
+        if is_refusal(inherited):
+            return inherited
+        kind = inherited.value.get("kind")
+        if (
+            ENVELOPE_PRODUCT_SESSION_FIELD in inherited.value
+            and isinstance(kind, str)
+            and kind in HOME_COMPOSER_FORBIDDEN_KINDS
+        ):
+            return policy_rejection(
+                "kind",
+                "product-chat send uses mailbox kinds handoff|reply|notify|"
+                "status|question; approval_request is not a Home composer mint "
+                "(CT-48; Story 46.4; FR-UI-33)",
+                given=kind,
+                allowed=sorted(PRODUCT_CHAT_MESSAGE_KINDS),
+            )
+        admit_payload = (
+            inherited.value
+            if parsed_principal.value is PrincipalClass.OPERATOR
+            or ENVELOPE_PRODUCT_SESSION_FIELD in payload
+            else copied.value
+        )
+        admitted = admit_named_product_session(
+            admit_payload,
             operator_principal=parsed_principal.value,
             sessions=self._sessions if sessions is None else sessions,
         )
         if is_refusal(admitted):
             return admitted
+        session = admitted.value
+        if session is not None:
+            minted_instance = _refuse_if_mailbox_mints_instance(payload, session)
+            if is_refusal(minted_instance):
+                return minted_instance
         pair = parse_mailbox_send_pair(payload)
         if is_refusal(pair):
             return pair
@@ -591,7 +771,7 @@ class MailboxStore:
                     )
                 return Ok(stored_record)
         sent = self.send(
-            copied.value,
+            inherited.value,
             producer_id=None if identity is None else identity.producer_id,
             wire_id=None if identity is None else identity.wire_id,
             payload_hash=hashed,

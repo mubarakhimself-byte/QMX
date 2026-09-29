@@ -261,16 +261,12 @@ def test_ordinary_chat_needs_no_grant_record() -> None:
     store, sender, recipient = _open_store()
     sessions = _mint_session()
     sent = store.send_message(
-        _body(
-            sender,
-            recipient,
-            product_session_ref="psess:H",
-            grant_id="grant:ignored",
-        ),
+        _body(sender, recipient, product_session_ref="psess:H"),
         principal_class="operator",
         sessions=sessions,
     )
     assert is_ok(sent)
+    assert "grant_id" not in sent.value.envelope.to_payload()
     listed = handle_list_mailbox_query(
         store,
         {ENVELOPE_PRODUCT_SESSION_FIELD: "psess:H"},

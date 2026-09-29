@@ -16,7 +16,10 @@ from qma.daemon.bus.mailbox import (
     MailboxStore,
     admit_named_product_session,
     copy_product_session_ref_at_write,
+    inherit_product_session_ref_at_write,
     principal_tokens_equal,
+    refuse_mailbox_instance_mint,
+    refuse_product_session_retarget,
 )
 from qma.daemon.bus.mailbox_query import (
     LIST_MAILBOX_HTTP_PATH,
@@ -40,6 +43,9 @@ __all__ = [
     "admit_named_product_session",
     "copy_product_session_ref_at_write",
     "handle_list_mailbox_query",
+    "inherit_product_session_ref_at_write",
     "principal_tokens_equal",
     "query_string_to_args",
+    "refuse_mailbox_instance_mint",
+    "refuse_product_session_retarget",
 ]

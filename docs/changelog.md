@@ -14,6 +14,12 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 This records changes to the QMF knowledge base. It is not a software release log and does not convert provisional decisions into implementation authority.
 
+## 2026-09-29 — Story 69.4: send_message stays mailbox, not invoke; replies inherit and cannot retarget
+
+Home/Copilot product chat remains mailbox `send_message`, not invoke. No `InvocationEnvelope`, no required `instance_id`, no GrantRecord, no invoke `idempotency_key` or product-session `command_id` as send identity. Authoring `psess:` with `app_instance_id` absent is a legal send; the daemon does not mint a synthetic instance. Envelope `instance_id` remains required on invoke (Epic 60). A mailbox `reply` or `question` named by `reply_to_ref` / `causation_id` inherits `product_session_ref` from that authorized parent; a named payload field must equal the parent or the write is refused. Daemon-originated replies may not accept an arbitrary session. `MessageKind` and `DeliveryState` stay closed. Product-chat send uses `handoff|reply|notify|status|question`; `approval_request` is not a Home composer mint. `message.delta` remains progress only; `list_mailbox` snapshots remain truth. Unique chrome issuer `dispatchChat` is Epic 66.
+
+Touched: COMP-QMA-DAEMON inherit/retarget on `send_message`; COMP-QMA-WIRE mailbox-not-invoke payload refuse; [ct-48-qma-mailbox-envelope.yaml](contracts/ct-48-qma-mailbox-envelope.yaml); [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+
 ## 2026-09-29 — Story 69.1: additive Envelope product_session_ref is excluded from fp1
 
 Operator product-chat Envelopes persist additive `product_session_ref` (`psess:` pointer at the product-session projection) on the existing CT-48 / journal `message.*` row. Story 46.4's field list is held. No parallel conversation store, no new sqlite class, no new CT. The field is excluded from Envelope fp1 with `correlation_id` and `causation_id`; changing only the session pointer does not mint a different fp1. Optional value is an omitted key, never null. Quant/machine bus rows with no product conversation omit the field; seed `send_message` stays legal for `machine` when absent. Admitted operator `send_message` copies the named payload field onto the Envelope at write; body text is never parsed. ProductSession own identity remains `product_session_id` on that row. The field was absent at inspect SHA `34c148be`; Envelope types existed as fixtures there.
