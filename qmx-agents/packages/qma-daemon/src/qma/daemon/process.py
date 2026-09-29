@@ -17,8 +17,10 @@ QMB LogSink may remain and no third logger is minted.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import ctypes
+import hashlib
 import json
 import logging
 import os
@@ -30,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
+from urllib.parse import urlsplit
 
 from qma.core.plugins.hooks import HookSource
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
@@ -75,7 +78,19 @@ from qma.daemon.host_control import (
     recover_local_operator_control,
     rotate_local_operator_control,
 )
-from qma.daemon.host_control.local_operator import fold_local_operator_from_journal
+from qma.daemon.host_control.local_operator import (
+    LOCAL_OPERATOR_PRINCIPAL_ID,
+    fold_local_operator_from_journal,
+)
+from qma.daemon.http_pair import (
+    PairHttpDeps,
+    PairHttpRequest,
+    PairHttpResponse,
+    handle_pair_http,
+    header_value,
+    is_host_control_http,
+    is_websocket_upgrade,
+)
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.journal.variables import (
@@ -110,10 +125,15 @@ from qma.daemon.operator_log import (
 from qma.daemon.operator_log import emit_operator_event as write_operator_json_line
 from qma.daemon.operator_log import fingerprint_operator_log as refuse_operator_log_fp1
 from qma.daemon.pairing import (
+    PairingWsHandle,
     PairingWsRegistry,
+    authenticate_http_pairing_bearer,
+    authenticate_ws_pairing_upgrade,
     confirm_pairing_pending_by_code,
+    is_daemon_http_origin,
     origin_revoke_pairing,
     pairing_status_record_ids,
+    redact_pairing_access_log,
     restore_pairing_projections,
     session_revoke_pairing,
 )
@@ -127,13 +147,19 @@ from qma.daemon.taskgraph.projection import (
 from qma.daemon.telemetry.store import TelemetryStore
 from qma.wire.listener import (
     DEFAULT_BIND_HOST,
+    PAIR_CONFIRM_PATH,
+    PAIR_RENEW_PATH,
+    PAIR_START_PATH,
     ListenerBindConfig,
     ListenerPosture,
+    is_am01_cors_route,
+    selected_websocket_subprotocol,
     validate_listener_startup,
 )
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER
-from qmf.core import Ok, Result, World, WriterId, is_refusal
+from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
+from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
@@ -177,6 +203,132 @@ BROWSER_SPAWNS_PYTHON: Final[bool] = False
 STOP_CANCELS_QMN: Final[bool] = False
 STOP_STOPS_REMOTE: Final[bool] = False
 HOST_CONTROL_ON_CT40_PORT: Final[bool] = HOST_CONTROL_IS_CT40
+_MAX_HTTP_HEAD: Final[int] = 65536
+_MAX_HTTP_BODY: Final[int] = 65536
+_WS_ACCEPT_GUID: Final[str] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+_HTTP_REASONS: Final[Mapping[int, str]] = MappingProxyType(
+    {
+        101: "Switching Protocols",
+        200: "OK",
+        204: "No Content",
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+    }
+)
+_PAIR_POST_PATHS: Final[frozenset[str]] = frozenset(
+    {PAIR_START_PATH, PAIR_CONFIRM_PATH, PAIR_RENEW_PATH}
+)
+
+
+def _ws_accept_key(key: str) -> str:
+    digest = hashlib.sha1((key.strip() + _WS_ACCEPT_GUID).encode("ascii")).digest()  # noqa: S324
+    return base64.b64encode(digest).decode("ascii")
+
+
+def _encode_http_response(
+    status: int,
+    headers: Mapping[str, str],
+    body: bytes = b"",
+) -> bytes:
+    reason = _HTTP_REASONS.get(status, "OK")
+    lines = [f"HTTP/1.1 {status} {reason}"]
+    emitted = {name.casefold(): name for name in headers}
+    for name, value in headers.items():
+        lines.append(f"{name}: {value}")
+    if "content-length" not in emitted and status != 101:
+        lines.append(f"Content-Length: {len(body)}")
+    if "connection" not in emitted and status != 101:
+        lines.append("Connection: close")
+    return ("\r\n".join(lines) + "\r\n\r\n").encode("ascii") + body
+
+
+def _http_status_for_refusal(refusal: TypedRefusal) -> int:
+    field = str(refusal.context.get("field", ""))
+    if field in {"authorization", "authentication", "cookie", "subprotocol"}:
+        return 401
+    if refusal.category is RefusalCategory.INVALID_INPUT:
+        return 400
+    if refusal.category is RefusalCategory.UNAVAILABLE_DEPENDENCY:
+        return 503
+    return 403
+
+
+def _refusal_http_body(refusal: TypedRefusal) -> bytes:
+    redacted = redact_pairing_access_log(dict(refusal.context))
+    context: dict[str, object]
+    if isinstance(redacted, dict):
+        raw = cast("dict[object, object]", redacted)
+        context = {str(key): item for key, item in raw.items()}
+    else:
+        context = {}
+    payload: dict[str, object] = {
+        "ok": False,
+        "refusal": {
+            "category": refusal.category.value,
+            "retryability": refusal.retryability.value,
+            "context": context,
+        },
+    }
+    return json.dumps(payload, ensure_ascii=True).encode("utf-8")
+
+
+def _cors_headers_for_origin(origin: str | None) -> dict[str, str]:
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Credentials": "false",
+        "Vary": "Origin",
+    }
+    if origin is not None and origin != "*" and not is_daemon_http_origin(origin):
+        headers["Access-Control-Allow-Origin"] = origin
+    return headers
+
+
+async def _read_http_request(
+    reader: asyncio.StreamReader,
+) -> tuple[str, str, str | None, dict[str, str], bytes] | None:
+    try:
+        head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
+    except TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError:
+        return None
+    if not head or len(head) > _MAX_HTTP_HEAD:
+        return None
+    text = head.decode("iso-8859-1")
+    request_line, _, rest = text.partition("\r\n")
+    parts = request_line.split()
+    if len(parts) < 2:
+        return None
+    method = parts[0].strip().upper()
+    target = parts[1]
+    if method == "" or not target.startswith("/"):
+        return None
+    headers: dict[str, str] = {}
+    for line in rest.split("\r\n"):
+        if line in {"", "\r"}:
+            continue
+        name, sep, value = line.partition(":")
+        if sep == "":
+            return None
+        headers[name.strip()] = value.strip()
+    split = urlsplit(target)
+    path = split.path or "/"
+    query = split.query if split.query else None
+    length_raw = header_value(headers, "Content-Length")
+    body = b""
+    if length_raw is not None:
+        try:
+            length = int(length_raw)
+        except ValueError:
+            return None
+        if length < 0 or length > _MAX_HTTP_BODY:
+            return None
+        if length > 0:
+            try:
+                body = await asyncio.wait_for(reader.readexactly(length), timeout=5.0)
+            except TimeoutError, asyncio.IncompleteReadError:
+                return None
+    return method, path, query, headers, body
 
 
 def supervised_spawn_argv(python: str | None = None) -> tuple[str, ...]:
@@ -1095,14 +1247,196 @@ class DaemonProcess:
     ) -> None:
         self._accepted += 1
         try:
-            while not reader.at_eof():
+            await self._serve_bound_client(reader, writer)
+        except OSError, ConnectionResetError, asyncio.IncompleteReadError:
+            return
+        finally:
+            if not writer.is_closing():
+                writer.close()
+            with contextlib.suppress(OSError, ConnectionResetError):
+                await writer.wait_closed()
+
+    def _pair_http_deps(self) -> PairHttpDeps:
+        ttl_result = self._variables.pairing_ttl_duration()
+        ttl: object = None if is_refusal(ttl_result) else ttl_result.value
+        principal = LOCAL_OPERATOR_PRINCIPAL_ID
+        live = self._local_operator
+        if live is not None:
+            principal = live.principal_id
+        stamps = self._journal.stamp_durable()
+        now_ns = 0 if is_refusal(stamps) else stamps.value.recorded_at
+        return PairHttpDeps(
+            journal=self._journal,
+            sqlite=self.sqlite,
+            ttl=ttl,
+            now_ns=now_ns,
+            operator_principal=principal,
+            ws_registry=self._pairing_ws,
+        )
+
+    def _now_ns(self) -> int | None:
+        stamps = self._journal.stamp_durable()
+        if is_refusal(stamps):
+            return None
+        return stamps.value.recorded_at
+
+    async def _write_http(
+        self,
+        writer: asyncio.StreamWriter,
+        status: int,
+        headers: Mapping[str, str],
+        body: bytes = b"",
+    ) -> None:
+        writer.write(_encode_http_response(status, headers, body))
+        await writer.drain()
+
+    async def _write_refusal(
+        self,
+        writer: asyncio.StreamWriter,
+        refusal: TypedRefusal,
+        *,
+        origin: str | None,
+    ) -> None:
+        headers = _cors_headers_for_origin(origin)
+        await self._write_http(
+            writer,
+            _http_status_for_refusal(refusal),
+            headers,
+            _refusal_http_body(refusal),
+        )
+
+    async def _write_pair_response(
+        self,
+        writer: asyncio.StreamWriter,
+        response: PairHttpResponse,
+    ) -> None:
+        await self._write_http(writer, response.status, response.headers, response.body)
+
+    async def _serve_bound_client(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        parsed = await _read_http_request(reader)
+        if parsed is None:
+            return
+        method, path, query, headers, body = parsed
+        origin = header_value(headers, "Origin")
+        if is_websocket_upgrade(headers):
+            await self._serve_pairing_ws(reader, writer, headers, query)
+            return
+        built = PairHttpRequest.try_create(
+            method=method,
+            path=path,
+            headers=headers,
+            query=query,
+            body=body,
+            port=CT40_BIND_PORT,
+        )
+        if is_refusal(built):
+            await self._write_refusal(writer, built, origin=origin)
+            return
+        request = built.value
+        if is_host_control_http(request.path, port=CT40_BIND_PORT):
+            refused = policy_rejection(
+                "host_control",
+                "host-control stays outside port 8765 and is not AM-01 HTTP",
+                path=request.path,
+                ct40_port=CT40_BIND_PORT,
+            )
+            await self._write_refusal(writer, refused, origin=origin)
+            return
+        if request.method == "OPTIONS" or (
+            request.method == "POST" and request.path in _PAIR_POST_PATHS
+        ):
+            handled = handle_pair_http(request, self._pair_http_deps())
+            if is_ok(handled):
+                await self._write_pair_response(writer, handled.value)
+                return
+            await self._write_refusal(writer, handled, origin=origin)
+            return
+        if is_am01_cors_route(request.path):
+            authed = authenticate_http_pairing_bearer(
+                self.sqlite,
+                authorization=header_value(headers, "Authorization"),
+                origin=origin,
+                query=query,
+                now_ns=self._now_ns(),
+                cookie=header_value(headers, "Cookie"),
+                ws_registry=self._pairing_ws,
+            )
+            if is_refusal(authed):
+                await self._write_refusal(writer, authed, origin=origin)
+                return
+            missing = policy_rejection(
+                "path",
+                "authenticated route is not pairing HTTP",
+                path=request.path,
+            )
+            await self._write_http(
+                writer,
+                404,
+                _cors_headers_for_origin(origin),
+                _refusal_http_body(missing),
+            )
+            return
+        refused = policy_rejection(
+            "authentication",
+            "every other HTTP method and every WebSocket authenticates before protocol bytes",
+            method=request.method,
+            path=request.path,
+        )
+        await self._write_refusal(writer, refused, origin=origin)
+
+    async def _serve_pairing_ws(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: Mapping[str, str],
+        query: str | None,
+    ) -> None:
+        origin = header_value(headers, "Origin")
+        offered = header_value(headers, "Sec-WebSocket-Protocol")
+        admitted = authenticate_ws_pairing_upgrade(
+            self.sqlite,
+            offered_subprotocols=offered,
+            origin=origin,
+            now_ns=self._now_ns(),
+            query=query,
+            cookie=header_value(headers, "Cookie"),
+            ws_registry=self._pairing_ws,
+        )
+        if is_refusal(admitted):
+            await self._write_refusal(writer, admitted, origin=origin)
+            return
+        key = header_value(headers, "Sec-WebSocket-Key")
+        if key is None:
+            refused = policy_rejection(
+                "upgrade",
+                "WebSocket upgrade requires Sec-WebSocket-Key",
+            )
+            await self._write_refusal(writer, refused, origin=origin)
+            return
+        handle = PairingWsHandle(proof_fp1=admitted.value.proof_fp1, writer=writer)
+        self._pairing_ws.register(handle)
+        opening = _encode_http_response(
+            101,
+            {
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Accept": _ws_accept_key(key),
+                "Sec-WebSocket-Protocol": selected_websocket_subprotocol(),
+            },
+        )
+        writer.write(opening)
+        await writer.drain()
+        try:
+            while not handle.closed and not reader.at_eof() and not self._closed:
                 chunk = await reader.read(65536)
                 if not chunk:
                     break
         finally:
-            if not writer.is_closing():
-                writer.close()
-            await writer.wait_closed()
+            handle.close()
 
     def sqlite_table_names(self) -> frozenset[str]:
         rows = self._substrate.sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -1186,6 +1520,7 @@ class DaemonProcess:
 
     def close(self) -> None:
         """Release the listener sockets and the sole-writer substrate."""
+        self._pairing_ws.close_all()
         channel = self._host_control
         self._host_control = None
         if channel is not None:
@@ -1197,6 +1532,7 @@ class DaemonProcess:
         self._release()
 
     async def aclose(self) -> None:
+        self._pairing_ws.close_all()
         channel = self._host_control
         self._host_control = None
         if channel is not None:

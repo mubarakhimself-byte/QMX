@@ -20,6 +20,7 @@ from qma.daemon.http_pair import (
     handle_pair_start,
     require_pair_renew_bearer,
 )
+from qma.daemon.journal.authoritative import JournalAppendReceipt
 from qma.daemon.journal.variables import (
     expires_at_from_pairing_ttl,
     pairing_ttl_duration_ns,
@@ -30,6 +31,7 @@ from qma.daemon.pairing import (
     LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY,
     ORIGIN_ONLY_AUTO_APPROVE,
     PAIRING_HTTP_EXISTED_AT_INSPECT_SHA,
+    PAIRING_SESSION_EVENT_ISSUED,
     QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA,
     IssuedPairingProof,
     PairingWsHandle,
@@ -45,6 +47,7 @@ from qma.daemon.pairing import (
     load_pairing_pending,
     match_pairing_session_by_proof,
     pairing_status_record_ids,
+    renew_pairing_session,
     start_pairing_pending,
 )
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
@@ -57,6 +60,7 @@ from qma.wire.auth import (
 )
 from qmf.core import DataDrivenClock, Instant, Result, is_ok, is_refusal
 from qmf.core.refusal import RefusalCategory
+from qmf.data.store.refusals import storage_failure
 
 _ORIGIN = "http://127.0.0.1:5173"
 _FIXTURE_TTL = "PT15M"
@@ -546,3 +550,115 @@ def test_running_daemon_pair_sets_confirmed_at_without_proof(tmp_path: Path) -> 
                 await process.aclose()
 
     asyncio.run(_run())
+
+
+def _issued_session(
+    journal: AuthoritativeJournal, sqlite: SingleSqliteWriter
+) -> IssuedPairingProof:
+    pending = start_pairing_pending(
+        journal=journal,
+        sqlite=sqlite,
+        origin=_ORIGIN,
+        expires_at=_expires(),
+    )
+    assert is_ok(pending)
+    host = confirm_pairing_pending_by_code(
+        journal=journal,
+        sqlite=sqlite,
+        code=pending.value.pending_code,
+        now_ns=_NOW_NS,
+    )
+    assert is_ok(host)
+    issued = confirm_pairing_session_once(
+        journal=journal,
+        sqlite=sqlite,
+        origin=_ORIGIN,
+        pending_id=pending.value.pairing_record_id,
+        expires_at=_expires(),
+        now_ns=_NOW_NS,
+    )
+    assert is_ok(issued)
+    return issued.value
+
+
+def test_renew_failed_second_append_does_not_leave_two_live_proofs(tmp_path: Path) -> None:
+    substrate, journal = _open_journal(tmp_path, boot="boot-68-4-renew-fail")
+    try:
+        issued = _issued_session(journal, substrate.sqlite)
+        old_proof = issued.pairing_proof
+        real_append = journal.append_event
+
+        def _fail_issued(
+            event: object,
+            *args: object,
+            **kwargs: object,
+        ) -> Result[JournalAppendReceipt]:
+            if event == PAIRING_SESSION_EVENT_ISSUED:
+                return storage_failure(
+                    "injected second-append failure",
+                    context={"field": "journal", "event": event},
+                )
+            return real_append(event, *args, **kwargs)
+
+        journal.append_event = _fail_issued  # type: ignore[method-assign]
+        rotated = renew_pairing_session(
+            journal=journal,
+            sqlite=substrate.sqlite,
+            origin=_ORIGIN,
+            proof=old_proof,
+            expires_at=_expires(),
+            now_ns=_NOW_NS,
+        )
+        assert is_refusal(rotated)
+        live = live_pairing_sessions_for_origin(substrate.sqlite, origin=_ORIGIN, now_ns=_NOW_NS)
+        assert live == ()
+        old = match_pairing_session_by_proof(
+            substrate.sqlite, origin=_ORIGIN, proof=old_proof, now_ns=_NOW_NS
+        )
+        assert is_refusal(old)
+    finally:
+        journal.close()
+        substrate.close()
+
+
+def test_renew_lock_serializes_and_does_not_issue_two_live_proofs(tmp_path: Path) -> None:
+    substrate, journal = _open_journal(tmp_path, boot="boot-68-4-renew-lock")
+    try:
+        issued = _issued_session(journal, substrate.sqlite)
+        old_proof = issued.pairing_proof
+        results: list[Result[IssuedPairingProof]] = []
+        barrier = threading.Barrier(2)
+
+        def _worker() -> None:
+            barrier.wait()
+            results.append(
+                renew_pairing_session(
+                    journal=journal,
+                    sqlite=substrate.sqlite,
+                    origin=_ORIGIN,
+                    proof=old_proof,
+                    expires_at=_expires(),
+                    now_ns=_NOW_NS,
+                )
+            )
+
+        first = threading.Thread(target=_worker)
+        second = threading.Thread(target=_worker)
+        first.start()
+        second.start()
+        first.join()
+        second.join()
+        oks = [item for item in results if is_ok(item)]
+        refusals = [item for item in results if is_refusal(item)]
+        assert len(oks) == 1
+        assert len(refusals) == 1
+        live = live_pairing_sessions_for_origin(substrate.sqlite, origin=_ORIGIN, now_ns=_NOW_NS)
+        assert len(live) == 1
+        assert live[0].pairing_record_id == oks[0].value.pairing_record_id
+        old = match_pairing_session_by_proof(
+            substrate.sqlite, origin=_ORIGIN, proof=old_proof, now_ns=_NOW_NS
+        )
+        assert is_refusal(old)
+    finally:
+        journal.close()
+        substrate.close()

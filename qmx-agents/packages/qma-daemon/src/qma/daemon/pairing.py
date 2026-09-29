@@ -23,6 +23,7 @@ Expiry closes WS. Authenticated CORS is the exact paired Origin.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import secrets
@@ -30,7 +31,7 @@ import sqlite3
 import threading
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Final, cast
 
@@ -508,13 +509,55 @@ class PairingSessionLive:
 
 @dataclass(slots=True)
 class PairingWsHandle:
-    """In-memory WS handle closed on renew of the offered proof."""
+    """Live WS handle. ``close`` shuts the writer/socket, not only a flag."""
 
     proof_fp1: str
     closed: bool = False
+    writer: object | None = None
+    _loop: object | None = field(default=None, repr=False)
+
+    def attach_loop(self) -> None:
+        if self._loop is not None:
+            return
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
     def close(self) -> None:
+        if self.closed:
+            return
         self.closed = True
+        writer = self.writer
+        loop = self._loop
+        self.writer = None
+        self._loop = None
+        if writer is None:
+            return
+        closer = getattr(writer, "close", None)
+        if not callable(closer):
+            return
+
+        def _close_writer() -> None:
+            is_closing = getattr(writer, "is_closing", None)
+            if callable(is_closing) and is_closing():
+                return
+            closer()
+
+        if loop is not None:
+            is_running = getattr(loop, "is_running", None)
+            call_soon = getattr(loop, "call_soon_threadsafe", None)
+            if callable(is_running) and is_running() and callable(call_soon):
+                try:
+                    running = asyncio.get_running_loop()
+                except RuntimeError:
+                    running = None
+                if running is loop:
+                    _close_writer()
+                else:
+                    call_soon(_close_writer)
+                return
+        _close_writer()
 
 
 class PairingWsRegistry:
@@ -525,6 +568,7 @@ class PairingWsRegistry:
         self._handles: dict[str, list[PairingWsHandle]] = {}
 
     def register(self, handle: PairingWsHandle) -> None:
+        handle.attach_loop()
         with self._lock:
             self._handles.setdefault(handle.proof_fp1, []).append(handle)
 
@@ -535,6 +579,17 @@ class PairingWsRegistry:
         for handle in handles:
             handle.close()
             closed += 1
+        return closed
+
+    def close_all(self) -> int:
+        with self._lock:
+            groups = list(self._handles.values())
+            self._handles.clear()
+        closed = 0
+        for handles in groups:
+            for handle in handles:
+                handle.close()
+                closed += 1
         return closed
 
 
@@ -1796,6 +1851,15 @@ def renew_pairing_session(
             return matched
         old = matched.value
         lineage = old.pairing_record_id
+        # Revoke-old-then-issue under the write lock. Issue-then-revoke can leave
+        # two live proofs when the second journal append fails.
+        revoked = _revoke_pairing_session(
+            journal=journal,
+            sqlite=sqlite,
+            live=old,
+        )
+        if is_refusal(revoked):
+            return revoked
         issued = issue_pairing_session(
             journal=journal,
             sqlite=sqlite,
@@ -1806,14 +1870,6 @@ def renew_pairing_session(
         )
         if is_refusal(issued):
             return issued
-        revoked = _revoke_pairing_session(
-            journal=journal,
-            sqlite=sqlite,
-            live=old,
-            successor_pairing_record_id=issued.value.pairing_record_id,
-        )
-        if is_refusal(revoked):
-            return revoked
         close_ws_for_proof_fp1(old.proof_fp1, ws_registry)
         return issued
 
@@ -1938,6 +1994,7 @@ class PairingWsUpgrade:
     pairing_record_id: str
     origin: str
     session: AuthenticatedWireSession
+    proof_fp1: str
     sends_ct40_bytes: bool = False
     initializes: bool = False
     multiple_connections_allowed: bool = PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS
@@ -1997,6 +2054,7 @@ def authenticate_ws_pairing_upgrade(
             pairing_record_id=matched.value.pairing_record_id,
             origin=matched.value.origin,
             session=session.value,
+            proof_fp1=matched.value.proof_fp1,
             sends_ct40_bytes=False,
             initializes=False,
         )
