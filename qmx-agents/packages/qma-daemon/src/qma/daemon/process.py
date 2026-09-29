@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import os
+import struct
 import subprocess
 import sys
 import threading
@@ -152,6 +153,12 @@ from qma.daemon.taskgraph.projection import (
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
+from qma.wire.initialize import (
+    JSONRPC_VERSION,
+    InitializeParams,
+    LiveProducerRegistry,
+    WireConnection,
+)
 from qma.wire.list_mailbox import LIST_MAILBOX_CAPABILITY, MailboxSnapshot
 from qma.wire.listener import (
     DEFAULT_BIND_HOST,
@@ -165,7 +172,8 @@ from qma.wire.listener import (
     validate_listener_startup,
 )
 from qma.wire.schemas import SCHEMA_FILES
-from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER
+from qma.wire.send_message import parse_send_message_payload
+from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand
 from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
 from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
@@ -228,11 +236,109 @@ _HTTP_REASONS: Final[Mapping[int, str]] = MappingProxyType(
 _PAIR_POST_PATHS: Final[frozenset[str]] = frozenset(
     {PAIR_START_PATH, PAIR_CONFIRM_PATH, PAIR_RENEW_PATH}
 )
+_WS_OP_TEXT: Final[int] = 0x1
+_WS_OP_CLOSE: Final[int] = 0x8
+_WS_OP_PING: Final[int] = 0x9
+_WS_OP_PONG: Final[int] = 0xA
+_WS_MAX_BUFFER: Final[int] = 1_048_576
+_JSONRPC_APP_ERROR: Final[int] = -32000
+_JSONRPC_PARSE_ERROR: Final[int] = -32700
+_JSONRPC_INVALID_REQUEST: Final[int] = -32600
+_JSONRPC_METHOD_NOT_FOUND: Final[int] = -32601
 
 
 def _ws_accept_key(key: str) -> str:
     digest = hashlib.sha1((key.strip() + _WS_ACCEPT_GUID).encode("ascii")).digest()  # noqa: S324
     return base64.b64encode(digest).decode("ascii")
+
+
+def _encode_ws_frame(
+    payload: bytes,
+    *,
+    opcode: int = _WS_OP_TEXT,
+    mask: bytes | None = None,
+) -> bytes:
+    header = bytearray()
+    header.append(0x80 | (opcode & 0x0F))
+    length = len(payload)
+    masked = mask is not None
+    flag = 0x80 if masked else 0x00
+    if length < 126:
+        header.append(flag | length)
+    elif length < 65536:
+        header.append(flag | 126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(flag | 127)
+        header.extend(struct.pack("!Q", length))
+    if mask is None:
+        return bytes(header) + payload
+    header.extend(mask)
+    masked_payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return bytes(header) + masked_payload
+
+
+def _decode_ws_frame(buf: bytes) -> tuple[int, bytes, bytes] | None:
+    if len(buf) < 2:
+        return None
+    opcode = buf[0] & 0x0F
+    masked = (buf[1] & 0x80) != 0
+    length = buf[1] & 0x7F
+    offset = 2
+    if length == 126:
+        if len(buf) < 4:
+            return None
+        length = struct.unpack("!H", buf[2:4])[0]
+        offset = 4
+    elif length == 127:
+        if len(buf) < 10:
+            return None
+        length = struct.unpack("!Q", buf[2:10])[0]
+        offset = 10
+    mask = b""
+    if masked:
+        if len(buf) < offset + 4:
+            return None
+        mask = buf[offset : offset + 4]
+        offset += 4
+    if len(buf) < offset + length:
+        return None
+    payload = buf[offset : offset + length]
+    if masked:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return opcode, payload, buf[offset + length :]
+
+
+def _jsonrpc_result(req_id: object, result: Mapping[str, object]) -> dict[str, object]:
+    return {"jsonrpc": JSONRPC_VERSION, "id": req_id, "result": dict(result)}
+
+
+def _jsonrpc_error(
+    req_id: object,
+    *,
+    code: int,
+    message: str,
+    data: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    error: dict[str, object] = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = dict(data)
+    return {"jsonrpc": JSONRPC_VERSION, "id": req_id, "error": error}
+
+
+def _jsonrpc_refusal(req_id: object, refusal: TypedRefusal) -> dict[str, object]:
+    reason = refusal.context.get("reason")
+    message = reason if isinstance(reason, str) and reason else refusal.category.value
+    return _jsonrpc_error(
+        req_id,
+        code=_JSONRPC_APP_ERROR,
+        message=message,
+        data={
+            "category": refusal.category.value,
+            "retryability": refusal.retryability.value,
+            "context": dict(refusal.context),
+        },
+    )
 
 
 def _encode_http_response(
@@ -556,6 +662,8 @@ class DaemonProcess:
             _journal=journal,
             _sessions=self._product_sessions,
         )
+        self._live_producers = LiveProducerRegistry()
+        self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
 
     @classmethod
     def compose(
@@ -715,6 +823,12 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_pairing
+            restored_mailbox = process._mailboxes.restore_from_journal()
+            if is_refusal(restored_mailbox):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_mailbox
             _process_gate.holder = process
             return Ok(process)
 
@@ -1410,11 +1524,17 @@ class DaemonProcess:
                 await self._write_refusal(writer, authed, origin=origin)
                 return
             if request.method == "GET" and request.path == LIST_MAILBOX_HTTP_PATH:
+                record_id = authed.value.pairing_record_id
+                if isinstance(record_id, str) and record_id in self._initialize_capabilities:
+                    caps: object = self._initialize_capabilities[record_id]
+                else:
+                    caps = {LIST_MAILBOX_CAPABILITY: True}
                 listed = handle_list_mailbox_query(
                     self._mailboxes,
                     query_string_to_args(request.query),
                     operator_principal=authed.value.principal_class,
                     sessions=self._product_sessions,
+                    capabilities=caps,
                 )
                 if is_refusal(listed):
                     await self._write_refusal(writer, listed, origin=origin)
@@ -1492,13 +1612,150 @@ class DaemonProcess:
         )
         writer.write(opening)
         await writer.drain()
+        connection = WireConnection()
+        paired = connection.authenticate_pairing(
+            admitted.value.pairing_record_id,
+            principal_class=admitted.value.session.principal_class,
+        )
+        if is_refusal(paired):
+            handle.close()
+            return
+        connection_token = f"{admitted.value.pairing_record_id}:{id(connection)}"
+        buf = b""
         try:
             while not handle.closed and not reader.at_eof() and not self._closed:
                 chunk = await reader.read(65536)
                 if not chunk:
                     break
+                buf += chunk
+                if len(buf) > _WS_MAX_BUFFER:
+                    break
+                while True:
+                    decoded = _decode_ws_frame(buf)
+                    if decoded is None:
+                        break
+                    opcode, payload, buf = decoded
+                    if opcode == _WS_OP_CLOSE:
+                        writer.write(_encode_ws_frame(payload, opcode=_WS_OP_CLOSE))
+                        await writer.drain()
+                        return
+                    if opcode == _WS_OP_PING:
+                        writer.write(_encode_ws_frame(payload, opcode=_WS_OP_PONG))
+                        await writer.drain()
+                        continue
+                    if opcode != _WS_OP_TEXT:
+                        continue
+                    response = self._dispatch_paired_ct40(
+                        connection,
+                        payload,
+                        pairing_record_id=admitted.value.pairing_record_id,
+                        connection_token=connection_token,
+                    )
+                    if response is None:
+                        continue
+                    writer.write(_encode_ws_frame(json.dumps(response).encode("utf-8")))
+                    await writer.drain()
         finally:
+            producer_id = connection.producer_id
+            if producer_id is not None:
+                self._live_producers.release(
+                    producer_id,
+                    connection_token=connection_token,
+                )
             handle.close()
+
+    def _dispatch_paired_ct40(
+        self,
+        connection: WireConnection,
+        payload: bytes,
+        *,
+        pairing_record_id: str,
+        connection_token: str,
+    ) -> dict[str, object] | None:
+        """Authenticated JSON-RPC on a paired CT-40 socket. Host-control stays off."""
+        try:
+            parsed_obj: object = json.loads(payload.decode("utf-8"))
+        except UnicodeDecodeError, json.JSONDecodeError:
+            return _jsonrpc_error(
+                None,
+                code=_JSONRPC_PARSE_ERROR,
+                message="parse error",
+            )
+        if not isinstance(parsed_obj, dict):
+            return _jsonrpc_error(
+                None,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="invalid request",
+            )
+        request = cast("dict[str, object]", parsed_obj)
+        req_id = request.get("id")
+        method = request.get("method")
+        if method == "initialize":
+            begun = connection.begin_initialize(request)
+            if is_refusal(begun):
+                return _jsonrpc_refusal(req_id, begun)
+            params = InitializeParams.try_create(
+                protocol_version=begun.value.params.get("protocolVersion"),
+                capabilities=begun.value.params.get("capabilities"),
+                client_producer_id=begun.value.params.get("producer_id"),
+            )
+            if is_refusal(params):
+                return _jsonrpc_refusal(req_id, params)
+            raw_caps = params.value.capabilities
+            advertise = True
+            if raw_caps:
+                advertise = raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
+            completed = connection.complete_initialize(
+                params.value,
+                request_id=begun.value.id,
+                live_producers=self._live_producers,
+                connection_token=connection_token,
+                advertise_pairing=advertise,
+            )
+            if is_refusal(completed):
+                return _jsonrpc_refusal(req_id, completed)
+            self._initialize_capabilities[pairing_record_id] = dict(connection.capabilities)
+            return completed.value.to_dict()
+        accepted = connection.accept_family_message(method)
+        if is_refusal(accepted):
+            return _jsonrpc_refusal(req_id, accepted)
+        if method != WireCommand.SEND_MESSAGE.value:
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_METHOD_NOT_FOUND,
+                message="method not found",
+            )
+        authorized = connection.authorize_command(WireCommand.SEND_MESSAGE.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        raw_params = request.get("params")
+        if not isinstance(raw_params, Mapping):
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="params must be an object",
+            )
+        send_payload: dict[str, object] = dict(cast("Mapping[str, object]", raw_params))
+        if "producer_id" not in send_payload and connection.producer_id is not None:
+            send_payload["producer_id"] = connection.producer_id
+        parsed_send = parse_send_message_payload(send_payload)
+        if is_refusal(parsed_send):
+            return _jsonrpc_refusal(req_id, parsed_send)
+        principal = connection.principal_class
+        if principal is None:
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_APP_ERROR,
+                message="unauthenticated",
+            )
+        sent = self._mailboxes.send_message(
+            parsed_send.value,
+            principal_class=principal,
+            sessions=self._product_sessions,
+        )
+        if is_refusal(sent):
+            return _jsonrpc_refusal(req_id, sent)
+        return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
 
     def sqlite_table_names(self) -> frozenset[str]:
         rows = self._substrate.sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")

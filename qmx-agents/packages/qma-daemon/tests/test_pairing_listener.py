@@ -6,13 +6,16 @@ import asyncio
 import base64
 import json
 import os
+import struct
 from pathlib import Path
 from typing import cast
 
+from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL, PairingWsHandle
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.wire.auth import format_pairing_authorization
+from qma.wire.initialize import WIRE_PROTOCOL_VERSION
 from qmf.core import is_ok
 
 _ORIGIN = "http://127.0.0.1:5173"
@@ -255,6 +258,324 @@ def test_ws_upgrade_registers_and_close_shuts_the_socket(tmp_path: Path) -> None
             refused_status, _refused_headers, _refused_body = _split_http(refused_raw)
             assert refused_status != 101
             assert refused_status in {400, 401, 403}
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def _client_ws_frame(payload: bytes) -> bytes:
+    mask = os.urandom(4)
+    header = bytearray()
+    header.append(0x81)
+    length = len(payload)
+    if length < 126:
+        header.append(0x80 | length)
+    elif length < 65536:
+        header.append(0x80 | 126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack("!Q", length))
+    header.extend(mask)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return bytes(header) + masked
+
+
+def _decode_server_ws_frame(buf: bytes) -> tuple[int, bytes, bytes] | None:
+    if len(buf) < 2:
+        return None
+    opcode = buf[0] & 0x0F
+    masked = (buf[1] & 0x80) != 0
+    length = buf[1] & 0x7F
+    offset = 2
+    if length == 126:
+        if len(buf) < 4:
+            return None
+        length = struct.unpack("!H", buf[2:4])[0]
+        offset = 4
+    elif length == 127:
+        if len(buf) < 10:
+            return None
+        length = struct.unpack("!Q", buf[2:10])[0]
+        offset = 10
+    mask = b""
+    if masked:
+        if len(buf) < offset + 4:
+            return None
+        mask = buf[offset : offset + 4]
+        offset += 4
+    if len(buf) < offset + length:
+        return None
+    payload = buf[offset : offset + length]
+    if masked:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return opcode, payload, buf[offset + length :]
+
+
+def _ws_write(writer: asyncio.StreamWriter, obj: dict[str, object]) -> None:
+    payload = json.dumps(obj).encode("utf-8")
+    writer.write(_client_ws_frame(payload))
+
+
+async def _ws_read_json(reader: asyncio.StreamReader) -> dict[str, object]:
+    buf = b""
+    while True:
+        chunk = await asyncio.wait_for(reader.read(65536), timeout=5.0)
+        assert chunk, "paired CT-40 socket closed before a JSON-RPC frame"
+        buf += chunk
+        decoded = _decode_server_ws_frame(buf)
+        if decoded is None:
+            continue
+        opcode, payload, buf = decoded
+        if opcode != 0x1:
+            continue
+        parsed: object = json.loads(payload.decode("utf-8"))
+        assert isinstance(parsed, dict)
+        return cast("dict[str, object]", parsed)
+
+
+async def _upgrade_paired_ws(
+    host: str,
+    port: int,
+    proof: str,
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    handshake = _http_bytes(
+        "GET",
+        "/",
+        headers={
+            "Host": f"{host}:{port}",
+            "Upgrade": "websocket",
+            "Connection": "Upgrade",
+            "Sec-WebSocket-Version": "13",
+            "Sec-WebSocket-Key": key,
+            "Sec-WebSocket-Protocol": f"{CT40_WS_SUBPROTOCOL}, qmx.pair.{proof}",
+            "Origin": _ORIGIN,
+        },
+    )
+    reader, writer = await asyncio.open_connection(host, port)
+    writer.write(handshake)
+    await writer.drain()
+    raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
+    status, headers, _body = _split_http(raw)
+    assert status == 101, raw
+    assert headers.get("sec-websocket-protocol") == CT40_WS_SUBPROTOCOL
+    return reader, writer
+
+
+def _actor(slug: str) -> ActorId:
+    minted = ActorId.mint(DeskSlug.RESEARCH, slug)
+    assert is_ok(minted)
+    return minted.value
+
+
+def _quant(*, slug: str) -> Quant:
+    return Quant(
+        actor_id=_actor(slug),
+        desk=DeskSlug.RESEARCH,
+        quant_slug=slug,
+        role=RoleName.RESEARCHER,
+        name=f"Quant {slug}",
+        lead=False,
+    )
+
+
+def _mint_process_session(process: DaemonProcess) -> None:
+    minted = process.product_sessions.mint(
+        product_session_id="psess:H",
+        profile="authoring",
+        principal="operator",
+        contribution={"package_version": "0.1.0", "qualified_id": "analysis-backtest:qmb"},
+        instance_id=None,
+        config_revision=4,
+        as_of="2026-09-20T00:00:00Z",
+        granted_ops=(),
+        selected_refs=(),
+        scope_path=[{"kind": "desk", "id": "research"}],
+    )
+    assert is_ok(minted), minted
+
+
+async def _initialize_ws(
+    writer: asyncio.StreamWriter,
+    reader: asyncio.StreamReader,
+    *,
+    capabilities: dict[str, object],
+    req_id: int = 1,
+) -> dict[str, object]:
+    _ws_write(
+        writer,
+        {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": WIRE_PROTOCOL_VERSION,
+                "capabilities": capabilities,
+            },
+        },
+    )
+    await writer.drain()
+    return await _ws_read_json(reader)
+
+
+def test_live_send_message_on_bound_pairing_ws(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-69-live-send")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            sender = _quant(slug="alpha")
+            recipient = _quant(slug="beta")
+            assert is_ok(process.mailboxes.open_for_quant(sender))
+            assert is_ok(process.mailboxes.open_for_quant(recipient))
+            _mint_process_session(process)
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(writer, reader, capabilities={})
+                assert "error" not in init_resp, init_resp
+                result_obj = init_resp["result"]
+                assert isinstance(result_obj, dict)
+                result = cast("dict[str, object]", result_obj)
+                producer_id = result["producer_id"]
+                assert isinstance(producer_id, str)
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "send_message",
+                        "params": {
+                            "msg_id": "msg-live",
+                            "from": sender.actor_id.value,
+                            "to": recipient.actor_id.value,
+                            "kind": "handoff",
+                            "correlation_id": "corr-live",
+                            "body": {"text": "hello"},
+                            "priority": 1,
+                            "product_session_ref": "psess:H",
+                            "producer_id": producer_id,
+                            "wire_id": "C1",
+                        },
+                    },
+                )
+                await writer.drain()
+                sent = await _ws_read_json(reader)
+                assert "error" not in sent, sent
+                sent_result = sent["result"]
+                assert isinstance(sent_result, dict)
+                assert sent_result["msg_id"] == "msg-live"
+                landed = process.mailboxes.record_for("msg-live")
+                assert landed is not None
+                assert landed.envelope.product_session_ref == "psess:H"
+                assert landed.producer_id == producer_id
+                assert landed.wire_id == "C1"
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_list_mailbox_http_follows_initialize_capabilities(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-69-list-caps")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            auth = format_pairing_authorization(proof)
+            assert is_ok(auth), auth
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                omitted = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={"commands": True},
+                )
+                assert "error" not in omitted, omitted
+                omit_result_obj = omitted["result"]
+                assert isinstance(omit_result_obj, dict)
+                omit_caps = cast("dict[str, object]", omit_result_obj)
+                advertised_obj = omit_caps["capabilities"]
+                assert isinstance(advertised_obj, dict)
+                advertised = cast("dict[str, object]", advertised_obj)
+                assert advertised.get("list_mailbox") is not True
+            finally:
+                writer.close()
+                await writer.wait_closed()
+            unavailable = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    "/q/list_mailbox",
+                    headers={"Origin": _ORIGIN, "Authorization": auth.value},
+                ),
+            )
+            unavail_status, _unavail_headers, unavail_body = _split_http(unavailable)
+            assert unavail_status in {400, 403}
+            refused = _json_object(unavail_body)
+            refusal_obj = refused["refusal"]
+            assert isinstance(refusal_obj, dict)
+            refusal = cast("dict[str, object]", refusal_obj)
+            context_obj = refusal["context"]
+            assert isinstance(context_obj, dict)
+            context = cast("dict[str, object]", context_obj)
+            assert context["reason"] == "query_unavailable"
+            assert context["name"] == "list_mailbox"
+            assert context["empty_mailbox"] is False
+            assert refused.get("ok") is False
+
+            _present_id, present_proof = await _pair_over_listener(process, host, port)
+            present_auth = format_pairing_authorization(present_proof)
+            assert is_ok(present_auth), present_auth
+            _mint_process_session(process)
+            present_reader, present_writer = await _upgrade_paired_ws(host, port, present_proof)
+            try:
+                present_init = await _initialize_ws(
+                    present_writer,
+                    present_reader,
+                    capabilities={"list_mailbox": True},
+                )
+                assert "error" not in present_init, present_init
+            finally:
+                present_writer.close()
+                await present_writer.wait_closed()
+            empty_raw = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    "/q/list_mailbox?product_session_ref=psess:H",
+                    headers={"Origin": _ORIGIN, "Authorization": present_auth.value},
+                ),
+            )
+            empty_status, _empty_headers, empty_body = _split_http(empty_raw)
+            assert empty_status == 200, empty_raw
+            empty = _json_object(empty_body)
+            assert empty["ok"] is True
+            empty_result = empty["result"]
+            assert isinstance(empty_result, dict)
+            assert empty_result["query"] == "list_mailbox"
+            assert empty_result["product_chat"] is True
+            assert empty_result["product_session_ref"] == "psess:H"
+            assert empty_result["rows"] == []
+            host_raw = await _exchange(
+                host,
+                port,
+                _http_bytes("POST", "/host/stop", headers={"Origin": _ORIGIN}),
+            )
+            host_status, _host_headers, _host_body = _split_http(host_raw)
+            assert host_status in {401, 403}
         finally:
             await process.aclose()
 

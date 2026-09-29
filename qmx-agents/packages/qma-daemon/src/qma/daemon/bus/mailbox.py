@@ -30,6 +30,7 @@ from qma.core.ports.mailbox import (
     INHERITING_MESSAGE_KINDS,
     PRODUCT_CHAT_MESSAGE_KINDS,
     Envelope,
+    parse_delivery_state,
     parse_envelope,
     product_session_ref_matches,
     refuse_external_agent_transport,
@@ -158,6 +159,11 @@ _TERMINAL_DELIVERY: Final[frozenset[DeliveryState]] = frozenset(
         DeliveryState.DEAD_LETTER,
     }
 )
+
+
+def _journal_seq_key(row: Mapping[str, object]) -> int:
+    seq = row.get("journal_seq")
+    return seq if isinstance(seq, int) else -1
 
 
 def _default_clock() -> DataDrivenClock:
@@ -542,6 +548,7 @@ class MailboxStore:
     _wake_counts: dict[str, dict[str, int]] = field(default_factory=dict[str, dict[str, int]])
     _running_agents: dict[str, set[str]] = field(default_factory=dict[str, set[str]])
     _sessions: ProductSessionService | None = None
+    _journal_folded: bool = False
 
     @property
     def store_name(self) -> str:
@@ -687,6 +694,9 @@ class MailboxStore:
         plus same hash returns the prior result. Same pair plus a different
         hash refuses for journal lifetime (AM-12; mailbox sends only).
         """
+        folded = self.restore_from_journal()
+        if is_refusal(folded):
+            return folded
         parsed_principal = parse_principal_class(principal_class)
         if is_refusal(parsed_principal):
             return parsed_principal
@@ -794,6 +804,9 @@ class MailboxStore:
         empty/unknown, not a new send. A later live ``producer_id`` is never
         substituted into the lookup.
         """
+        folded = self.restore_from_journal()
+        if is_refusal(folded):
+            return folded
         session_ref = args.get(ENVELOPE_PRODUCT_SESSION_FIELD)
         producer = args.get("producer_id")
         wire = args.get("wire_id")
@@ -1331,6 +1344,105 @@ class MailboxStore:
             {"kind": "desk", "id": quant.desk.value},
             {"kind": "quant", "id": quant.quant_slug},
         ]
+
+    def restore_from_journal(self) -> Result[None]:
+        """Fold durable ``message.*`` rows into RAM for journal-lifetime identity.
+
+        Rebuilds ``_by_msg_id`` / ``_by_wire_pair`` and merges owner mailboxes.
+        Does not reconstruct a Quant from ActorId. Malformed rows are skipped.
+        """
+        if self._journal is None or self._journal_folded:
+            return Ok(None)
+        rows = self._journal.read_all()
+        if is_refusal(rows):
+            return rows
+        message_rows: list[dict[str, object]] = []
+        for raw in rows.value:
+            event = raw.get("event")
+            if isinstance(event, str) and event.startswith("message."):
+                message_rows.append(raw)
+        message_rows.sort(key=_journal_seq_key)
+        for raw in message_rows:
+            self._fold_message_row(raw)
+        self._journal_folded = True
+        return Ok(None)
+
+    def _fold_message_row(self, raw: Mapping[str, object]) -> None:
+        payload_obj = raw.get("payload")
+        if not isinstance(payload_obj, Mapping):
+            return
+        payload = cast("Mapping[str, object]", payload_obj)
+        envelope_obj = payload.get("envelope")
+        parsed = parse_envelope(envelope_obj)
+        if is_refusal(parsed):
+            return
+        envelope = parsed.value
+        existing = self._by_msg_id.get(envelope.msg_id)
+        state_obj = payload.get("delivery_state")
+        if state_obj is None:
+            state = existing.state if existing is not None else DeliveryState.QUEUED
+        else:
+            parsed_state = parse_delivery_state(state_obj)
+            if is_refusal(parsed_state):
+                return
+            state = parsed_state.value
+        seq = raw.get("journal_seq")
+        if isinstance(seq, int):
+            journal_seq: int | None = seq
+        elif existing is None:
+            journal_seq = None
+        else:
+            journal_seq = existing.journal_seq
+        producer = payload.get("producer_id")
+        wire = payload.get("wire_id")
+        hashed = payload.get("payload_hash")
+        producer_id = (
+            producer
+            if isinstance(producer, str)
+            else (None if existing is None else existing.producer_id)
+        )
+        wire_id = (
+            wire if isinstance(wire, str) else (None if existing is None else existing.wire_id)
+        )
+        payload_hash = (
+            hashed
+            if isinstance(hashed, str)
+            else (None if existing is None else existing.payload_hash)
+        )
+        acked = False if existing is None else existing.acked
+        if raw.get("event") == _MESSAGE_ACKED_EVENT or payload.get("acked") is True:
+            acked = True
+        answered = False if existing is None else existing.answered
+        if payload.get("answered") is True:
+            answered = True
+        wake_obj = payload.get("wake_at")
+        wake_at = (
+            wake_obj
+            if isinstance(wake_obj, int)
+            else (None if existing is None else existing.wake_at)
+        )
+        record = DeliveryRecord(
+            envelope=envelope,
+            state=state,
+            journal_seq=journal_seq,
+            acked=acked,
+            answered=answered,
+            wake_at=wake_at,
+            producer_id=producer_id,
+            wire_id=wire_id,
+            payload_hash=payload_hash,
+        )
+        self._index(record)
+        key = envelope.to_actor.value
+        mailbox = self._mailboxes.get(key)
+        if mailbox is None:
+            self._mailboxes[key] = Mailbox(owner=envelope.to_actor).append(record)
+        elif mailbox.record_for(envelope.msg_id) is None:
+            self._mailboxes[key] = mailbox.append(record)
+        else:
+            self._mailboxes[key] = mailbox.replace(record)
+        if acked:
+            self._mailboxes[key] = self._mailboxes[key].with_ack_cursor(envelope.msg_id)
 
     def _remember_wire_pair(self, record: DeliveryRecord) -> None:
         if record.producer_id is None or record.wire_id is None or record.payload_hash is None:

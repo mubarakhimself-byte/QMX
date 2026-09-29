@@ -306,3 +306,55 @@ def test_live_socket_dispatch_was_absent_at_inspect_sha() -> None:
     assert LIVE_SOCKET_DISPATCH_EXISTED_AT_INSPECT_SHA is False
     assert is_refusal(claim_live_socket_dispatch_existed_at_inspect_sha("send_message", True))
     assert is_refusal(claim_live_socket_dispatch_existed_at_inspect_sha("list_mailbox", True))
+
+
+def test_pair_collision_and_snapshot_survive_fresh_store(tmp_path: Path) -> None:
+    substrate, journal = _open_journal(tmp_path, boot="boot-fold-1")
+    try:
+        store = MailboxStore(_journal=journal)
+        sender = _quant(slug="alpha")
+        recipient = _quant(slug="beta")
+        assert is_ok(store.open_for_quant(sender))
+        assert is_ok(store.open_for_quant(recipient))
+        sessions = _mint_session()
+        payload = _body(sender, recipient)
+        sent = store.send_message(payload, principal_class="operator", sessions=sessions)
+        assert is_ok(sent)
+        assert sent.value.envelope.msg_id == "msg-1"
+    finally:
+        journal.close()
+        substrate.close()
+
+    substrate2, journal2 = _open_journal(tmp_path, boot="boot-fold-2")
+    try:
+        store2 = MailboxStore(_journal=journal2)
+        sessions2 = _mint_session()
+        sender = _quant(slug="alpha")
+        recipient = _quant(slug="beta")
+        listed = store2.list_mailbox({ENVELOPE_PRODUCT_SESSION_FIELD: "psess:H"})
+        assert is_ok(listed)
+        assert listed.value.product_chat is True
+        assert len(listed.value.rows) == 1
+        assert listed.value.rows[0].msg_id == "msg-1"
+        assert listed.value.rows[0].producer_id == "P"
+        assert listed.value.rows[0].wire_id == "C1"
+        collided = store2.send_message(
+            _body(sender, recipient, msg_id="msg-2", body={"text": "different"}),
+            principal_class="operator",
+            sessions=sessions2,
+        )
+        assert is_refusal(collided)
+        assert collided.category is RefusalCategory.POLICY_REJECTION
+        assert collided.context["reason"] == "payload_hash_collision"
+        assert collided.context["retention"] == MAILBOX_SEND_RETENTION_FLOOR
+        assert store2.record_for("msg-2") is None
+        replay = store2.send_message(
+            _body(sender, recipient),
+            principal_class="operator",
+            sessions=sessions2,
+        )
+        assert is_ok(replay)
+        assert replay.value.envelope.msg_id == "msg-1"
+    finally:
+        journal2.close()
+        substrate2.close()
