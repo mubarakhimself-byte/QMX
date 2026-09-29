@@ -159,8 +159,15 @@ def test_pair_http_and_authenticated_bearer_on_bound_listener(tmp_path: Path) ->
                     headers={"Origin": _ORIGIN, "Authorization": auth.value},
                 ),
             )
-            authed_status, _authed_headers, _authed_body = _split_http(authed)
-            assert authed_status == 404
+            authed_status, _authed_headers, authed_body = _split_http(authed)
+            assert authed_status == 200
+            listed = _json_object(authed_body)
+            assert listed["ok"] is True
+            result = listed["result"]
+            assert isinstance(result, dict)
+            assert result["query"] == "list_mailbox"
+            assert result["product_chat"] is False
+            assert result["rows"] == []
             unauth = await _exchange(
                 host,
                 port,

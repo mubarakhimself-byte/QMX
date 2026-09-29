@@ -5,9 +5,11 @@ its stable ``producer_id``, and gates every command / query / event family
 message until the exchange completes.
 
 Story 68.6: authenticated ``initialize`` advertises capability ``pairing``.
-Missing ``pairing`` is a typed mismatch; the shell stays usable. This story
-does not mint ``list_mailbox``, ``cancel_job``, ``stage_artifact``, or
-pack/draft names. Sharing a live ``producer_id`` across tabs is forbidden.
+Story 69.2: authenticated ``initialize`` also advertises ``list_mailbox``.
+Missing ``pairing`` is a typed mismatch; the shell stays usable. Missing
+``list_mailbox`` is typed ``query_unavailable`` when the query is requested.
+This handshake does not mint ``cancel_job``, ``stage_artifact``, or pack/draft
+names. Sharing a live ``producer_id`` across tabs is forbidden.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Final, cast
 
 from qma.core.vocabulary import PrincipalClass
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
+from qma.wire.list_mailbox import query_unavailable
 from qma.wire.principals import (
     AuthorizedWireCommand,
     authorize_wire_command,
@@ -41,6 +44,7 @@ __all__ = [
     "CONNECT_TYPES_EXISTED_AT_INSPECT_SHA",
     "DEFERRED_INITIALIZE_CAPABILITIES",
     "JSONRPC_VERSION",
+    "LIST_MAILBOX_CAPABILITY",
     "LIST_MAILBOX_CAPABILITY_MINTED",
     "PAIRING_CAPABILITY",
     "PAIRING_INSPECT_SHA",
@@ -70,11 +74,11 @@ SUPPORTED_PROTOCOL_VERSIONS: Final[frozenset[str]] = frozenset({WIRE_PROTOCOL_VE
 PAIRING_CAPABILITY: Final[str] = "pairing"
 PAIRING_INSPECT_SHA: Final[str] = "34c148be"
 CONNECT_TYPES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
-LIST_MAILBOX_CAPABILITY_MINTED: Final[bool] = False
+LIST_MAILBOX_CAPABILITY: Final[str] = "list_mailbox"
+LIST_MAILBOX_CAPABILITY_MINTED: Final[bool] = True
 # AR-UI-06 remainder — other epics mint these. Additive CT-40 only.
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
-        "list_mailbox",
         "cancel_job",
         "stage_artifact",
         "transfer_artifact",
@@ -129,9 +133,10 @@ def mint_tab_producer_id() -> str:
 def advertise_pairing_capabilities(
     server_capabilities: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Server advertised set for this story: ``pairing`` only of AR-UI-06."""
+    """Server advertised set: ``pairing`` plus minted ``list_mailbox`` (AM-08)."""
     caps = dict(server_capabilities or {})
     caps[PAIRING_CAPABILITY] = True
+    caps[LIST_MAILBOX_CAPABILITY] = True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         caps.pop(name, None)
     return caps
@@ -179,12 +184,11 @@ def claim_connect_types_absent_at_inspect_sha(absent: object) -> Result[bool]:
 
 
 def claim_deferred_initialize_capabilities_minted(minted: object) -> Result[bool]:
-    """Claiming this story minted list_mailbox / cancel_job / pack names fails."""
+    """Claiming this handshake minted cancel_job / pack names fails."""
     if minted is True or minted == "true":
         return _policy(
             "capabilities",
-            "this story does not mint list_mailbox, cancel_job, stage_artifact, "
-            "or pack/draft names",
+            "this handshake does not mint cancel_job, stage_artifact, or pack/draft names",
             minted=False,
             deferred=sorted(DEFERRED_INITIALIZE_CAPABILITIES),
         )
@@ -397,8 +401,9 @@ def negotiate_initialize(
 ) -> Result[InitializeResult]:
     """Negotiate ``protocolVersion`` and capabilities; assign ``producer_id``.
 
-    Authenticated initialize advertises ``pairing``. Deferred AR-UI-06 names are
-    not minted here. ``producer_id`` is one live identity per tab.
+    Authenticated initialize advertises ``pairing`` and ``list_mailbox``.
+    Remaining deferred AR-UI-06 names are not minted here. ``producer_id`` is
+    one live identity per tab.
     """
     if params.protocol_version not in SUPPORTED_PROTOCOL_VERSIONS:
         return _invalid(
@@ -424,6 +429,7 @@ def negotiate_initialize(
             negotiated.setdefault(key, value)
     if advertise_pairing:
         negotiated[PAIRING_CAPABILITY] = True
+        negotiated[LIST_MAILBOX_CAPABILITY] = True
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
@@ -710,3 +716,14 @@ class WireConnection:
         except ValueError as exc:
             return _invalid("type", str(exc), given=repr(wire_type))
         return Ok(family_of(name))
+
+    def require_query_capability(self, wire_type: object) -> Result[MessageFamily]:
+        """Family gate plus minted-query capability. Missing list_mailbox is typed."""
+        accepted = self.accept_family_message(wire_type)
+        if not isinstance(accepted, Ok):
+            return accepted
+        if str(wire_type) != LIST_MAILBOX_CAPABILITY:
+            return accepted
+        if self._capabilities.get(LIST_MAILBOX_CAPABILITY) is True:
+            return accepted
+        return query_unavailable(LIST_MAILBOX_CAPABILITY)

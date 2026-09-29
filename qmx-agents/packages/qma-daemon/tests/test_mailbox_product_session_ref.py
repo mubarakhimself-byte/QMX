@@ -15,6 +15,7 @@ from qma.core.ports.mailbox import (
 from qma.core.vocabulary.enums import DeliveryState
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
 from qma.daemon.bus import MailboxStore, copy_product_session_ref_at_write
+from qma.daemon.sessions import ProductSessionService
 from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
 
 
@@ -53,6 +54,24 @@ def _open_journal(
     return substrate, journal_result.value
 
 
+def _sessions(*, product_session_id: str = "psess:H") -> ProductSessionService:
+    service = ProductSessionService()
+    minted = service.mint(
+        product_session_id=product_session_id,
+        profile="authoring",
+        principal="operator",
+        contribution={"package_version": "0.1.0", "qualified_id": "analysis-backtest:qmb"},
+        instance_id=None,
+        config_revision=4,
+        as_of="2026-09-20T00:00:00Z",
+        granted_ops=(),
+        selected_refs=(),
+        scope_path=[{"kind": "desk", "id": "research"}],
+    )
+    assert is_ok(minted), minted
+    return service
+
+
 def _send_body(
     sender: Quant,
     recipient: Quant,
@@ -81,7 +100,7 @@ def test_operator_send_message_copies_product_session_ref_at_write() -> None:
     assert is_ok(store.open_for_quant(sender))
     assert is_ok(store.open_for_quant(recipient))
     payload = _send_body(sender, recipient, product_session_ref="psess:H")
-    sent = store.send_message(payload, principal_class="operator")
+    sent = store.send_message(payload, principal_class="operator", sessions=_sessions())
     assert is_ok(sent)
     envelope = sent.value.envelope
     assert envelope.product_session_ref == "psess:H"
@@ -169,6 +188,7 @@ def test_journal_message_row_persists_copied_product_session_ref(tmp_path: Path)
         sent = store.send_message(
             _send_body(sender, recipient, product_session_ref="psess:H"),
             principal_class="operator",
+            sessions=_sessions(),
         )
         assert is_ok(sent)
         rows = journal.read_all()

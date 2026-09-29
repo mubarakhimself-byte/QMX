@@ -37,16 +37,14 @@ _AUTH_SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "wire" / "auth
 
 def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert PAIRING_CAPABILITY == "pairing"
-    assert LIST_MAILBOX_CAPABILITY_MINTED is False
-    assert "list_mailbox" in DEFERRED_INITIALIZE_CAPABILITIES
+    assert LIST_MAILBOX_CAPABILITY_MINTED is True
+    assert "list_mailbox" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "cancel_job" in DEFERRED_INITIALIZE_CAPABILITIES
     assert "stage_artifact" in DEFERRED_INITIALIZE_CAPABILITIES
     assert "pack_ui_request" in DEFERRED_INITIALIZE_CAPABILITIES
-    caps = advertise_pairing_capabilities(
-        {"commands": True, "list_mailbox": True, "cancel_job": True}
-    )
+    caps = advertise_pairing_capabilities({"commands": True, "cancel_job": True})
     assert caps[PAIRING_CAPABILITY] is True
-    assert "list_mailbox" not in caps
+    assert caps["list_mailbox"] is True
     assert "cancel_job" not in caps
 
     params = InitializeParams.try_create(
@@ -58,6 +56,7 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     negotiated = negotiate_initialize(params.value, assign_producer_id="tab:one")
     assert isinstance(negotiated, Ok)
     assert negotiated.value.capabilities[PAIRING_CAPABILITY] is True
+    assert negotiated.value.capabilities["list_mailbox"] is True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         assert name not in negotiated.value.capabilities
 

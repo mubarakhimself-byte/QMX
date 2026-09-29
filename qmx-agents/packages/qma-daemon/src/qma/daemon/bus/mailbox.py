@@ -29,6 +29,7 @@ from qma.core.ports.mailbox import (
     GAP_0079_EXTERNAL_TRANSPORT,
     Envelope,
     parse_envelope,
+    product_session_ref_matches,
     refuse_external_agent_transport,
     refuse_lead_mailbox_catch_all,
 )
@@ -47,8 +48,11 @@ from qma.daemon.scheduler.wake import (
     routine_fire_suppressed_by_quiet_hours,
     running_agent_paused_by_quiet_hours,
 )
+from qma.daemon.sessions.product_session import ProductSession, ProductSessionService
+from qma.wire.list_mailbox import MailboxSnapshot, MailboxSnapshotRow
 from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Clock, DataDrivenClock, Instant, Ok, Result, is_refusal
+from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
@@ -63,7 +67,9 @@ __all__ = [
     "DeliveryRecord",
     "Mailbox",
     "MailboxStore",
+    "admit_named_product_session",
     "copy_product_session_ref_at_write",
+    "principal_tokens_equal",
 ]
 
 
@@ -108,7 +114,16 @@ _MESSAGE_DELIVERED_EVENT: Final[str] = "message.delivered"
 _MESSAGE_ACKED_EVENT: Final[str] = "message.acked"
 _MESSAGE_WOKE_EVENT: Final[str] = "message.woke"
 _KEEP: Final[object] = object()
-_SEND_MESSAGE_NON_ENVELOPE_KEYS: Final[frozenset[str]] = frozenset({"envelope", "principal_class"})
+_SEND_MESSAGE_NON_ENVELOPE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "envelope",
+        "principal_class",
+        "producer_id",
+        "wire_id",
+        "grant_id",
+        "grant_record",
+    }
+)
 _TERMINAL_DELIVERY: Final[frozenset[DeliveryState]] = frozenset(
     {
         DeliveryState.DELIVERED,
@@ -131,6 +146,58 @@ def _default_clock() -> DataDrivenClock:
 
 def _truthy(value: object) -> bool:
     return value not in (None, False, 0, "", ())
+
+
+def principal_tokens_equal(left: object, right: object) -> Result[bool]:
+    """True when both values name the same principal class (operator | machine)."""
+    parsed_left = parse_principal_class(left)
+    if is_refusal(parsed_left):
+        return parsed_left
+    parsed_right = parse_principal_class(right)
+    if is_refusal(parsed_right):
+        return parsed_right
+    return Ok(parsed_left.value is parsed_right.value)
+
+
+def _principal_mismatch(operator_principal: object, session_principal: object) -> TypedRefusal:
+    return policy_rejection(
+        "principal",
+        "connection operator principal must equal the product session durable principal",
+        operator_principal=repr(operator_principal),
+        session_principal=repr(session_principal),
+        empty_mailbox=False,
+    )
+
+
+def admit_named_product_session(
+    payload: Mapping[str, object],
+    *,
+    operator_principal: object,
+    sessions: ProductSessionService | None,
+) -> Result[ProductSession | None]:
+    """Resolve a named product_session_ref and require principal equality.
+
+    Ordinary product chat needs no GrantRecord. A mismatch is a typed refusal,
+    never an empty success. Omitted field skips this gate.
+    """
+    if ENVELOPE_PRODUCT_SESSION_FIELD not in payload:
+        return Ok(None)
+    if sessions is None:
+        return policy_rejection(
+            ENVELOPE_PRODUCT_SESSION_FIELD,
+            "named product_session_ref resolves a product session before append or snapshot",
+            empty_mailbox=False,
+        )
+    resolved = sessions.get(payload[ENVELOPE_PRODUCT_SESSION_FIELD])
+    if is_refusal(resolved):
+        return resolved
+    session = resolved.value
+    equal = principal_tokens_equal(operator_principal, session.principal)
+    if is_refusal(equal):
+        return equal
+    if not equal.value:
+        return _principal_mismatch(operator_principal, session.principal)
+    return Ok(session)
 
 
 def copy_product_session_ref_at_write(
@@ -175,6 +242,8 @@ class DeliveryRecord:
     acked: bool = False
     answered: bool = False
     wake_at: int | None = None
+    producer_id: str | None = None
+    wire_id: str | None = None
 
     def with_state(
         self,
@@ -185,8 +254,12 @@ class DeliveryRecord:
         answered: bool | None = None,
         envelope: Envelope | None = None,
         wake_at: object = _KEEP,
+        producer_id: object = _KEEP,
+        wire_id: object = _KEEP,
     ) -> DeliveryRecord:
         resolved_wake = self.wake_at if wake_at is _KEEP else wake_at
+        resolved_producer = self.producer_id if producer_id is _KEEP else producer_id
+        resolved_wire = self.wire_id if wire_id is _KEEP else wire_id
         return DeliveryRecord(
             envelope=self.envelope if envelope is None else envelope,
             state=state,
@@ -196,7 +269,12 @@ class DeliveryRecord:
             wake_at=(
                 resolved_wake if isinstance(resolved_wake, int) or resolved_wake is None else None
             ),
+            producer_id=resolved_producer if isinstance(resolved_producer, str) else None,
+            wire_id=resolved_wire if isinstance(resolved_wire, str) else None,
         )
+
+    def with_wire_pair(self, producer_id: str, wire_id: str) -> DeliveryRecord:
+        return self.with_state(self.state, producer_id=producer_id, wire_id=wire_id)
 
     @property
     def is_work(self) -> bool:
@@ -204,17 +282,32 @@ class DeliveryRecord:
         return False
 
     def to_payload(self) -> Mapping[str, object]:
-        return MappingProxyType(
-            {
-                "envelope": dict(self.envelope.to_payload()),
-                "delivery_state": self.state.value,
-                "journal_seq": self.journal_seq,
-                "acked": self.acked,
-                "answered": self.answered,
-                "wake_at": self.wake_at,
-                "is_work": False,
-                "external_relay": False,
-            }
+        payload: dict[str, object] = {
+            "envelope": dict(self.envelope.to_payload()),
+            "delivery_state": self.state.value,
+            "journal_seq": self.journal_seq,
+            "acked": self.acked,
+            "answered": self.answered,
+            "wake_at": self.wake_at,
+            "is_work": False,
+            "external_relay": False,
+        }
+        if self.producer_id is not None:
+            payload["producer_id"] = self.producer_id
+        if self.wire_id is not None:
+            payload["wire_id"] = self.wire_id
+        return MappingProxyType(payload)
+
+    def to_snapshot_row(self) -> MailboxSnapshotRow:
+        committed = self.envelope.msg_id if self.state in _TERMINAL_DELIVERY else None
+        if committed is None and self.state is DeliveryState.QUEUED:
+            committed = self.envelope.msg_id
+        return MailboxSnapshotRow(
+            envelope=dict(self.envelope.to_payload()),
+            delivery_state=self.state.value,
+            msg_id=committed,
+            producer_id=self.producer_id,
+            wire_id=self.wire_id,
         )
 
 
@@ -282,6 +375,7 @@ class MailboxStore:
     _journal_rows: int = 0
     _wake_counts: dict[str, dict[str, int]] = field(default_factory=dict[str, dict[str, int]])
     _running_agents: dict[str, set[str]] = field(default_factory=dict[str, set[str]])
+    _sessions: ProductSessionService | None = None
 
     @property
     def store_name(self) -> str:
@@ -399,11 +493,14 @@ class MailboxStore:
         payload: Mapping[str, object],
         *,
         principal_class: object,
+        sessions: ProductSessionService | None = None,
     ) -> Result[DeliveryRecord]:
         """Admit seed ``send_message`` and copy ``product_session_ref`` at write.
 
-        Machine payloads that omit the field stay legal. Body text is never
-        parsed to recover a session pointer (AM-02; DEC-0495).
+        Named ``product_session_ref`` resolves the product session and requires
+        principal equality before append. Ordinary product chat needs no
+        GrantRecord. Machine payloads that omit the field stay legal. Body text
+        is never parsed to recover a session pointer (AM-02; DEC-0495).
         """
         parsed_principal = parse_principal_class(principal_class)
         if is_refusal(parsed_principal):
@@ -420,7 +517,61 @@ class MailboxStore:
         copied = copy_product_session_ref_at_write(base, payload)
         if is_refusal(copied):
             return copied
-        return self.send(copied.value)
+        admitted = admit_named_product_session(
+            copied.value,
+            operator_principal=parsed_principal.value,
+            sessions=self._sessions if sessions is None else sessions,
+        )
+        if is_refusal(admitted):
+            return admitted
+        sent = self.send(copied.value)
+        if is_refusal(sent):
+            return sent
+        producer = payload.get("producer_id")
+        wire = payload.get("wire_id")
+        if (
+            isinstance(producer, str)
+            and producer.strip() != ""
+            and isinstance(wire, str)
+            and wire.strip() != ""
+        ):
+            stamped = sent.value.with_wire_pair(producer.strip(), wire.strip())
+            self._replace(stamped)
+            return Ok(stamped)
+        return sent
+
+    def list_mailbox(self, args: Mapping[str, object]) -> Result[MailboxSnapshot]:
+        """Fold a mailbox snapshot by Envelope field equality (AM-08).
+
+        Named ``product_session_ref`` is the product-chat snapshot. Rows that
+        omit the field, and rows whose field differs, stay off it. Body text,
+        ``private_notes``, and ``sess:`` are never consulted. Pair lookup is
+        ``producer_id`` + ``wire_id`` and never client ``msg_id``.
+        """
+        session_ref = args.get(ENVELOPE_PRODUCT_SESSION_FIELD)
+        producer = args.get("producer_id")
+        wire = args.get("wire_id")
+        pair = isinstance(producer, str) and isinstance(wire, str)
+        matched: list[DeliveryRecord] = []
+        if isinstance(session_ref, str):
+            token = session_ref
+            for record in self._by_msg_id.values():
+                if not product_session_ref_matches(record.envelope, token):
+                    continue
+                if pair and (record.producer_id != producer or record.wire_id != wire):
+                    continue
+                matched.append(record)
+            matched.sort(key=lambda item: (item.envelope.created_at, item.envelope.msg_id))
+            if pair:
+                matched = matched[:1]
+            return Ok(
+                MailboxSnapshot(
+                    product_chat=True,
+                    rows=tuple(item.to_snapshot_row() for item in matched),
+                    product_session_ref=token,
+                )
+            )
+        return Ok(MailboxSnapshot(product_chat=False, rows=()))
 
     def write_wake_policy(
         self,

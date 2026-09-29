@@ -52,6 +52,12 @@ from qma.core.ports.qmb import (
 from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.backtest.service import BacktestingService
+from qma.daemon.bus.mailbox import MailboxStore
+from qma.daemon.bus.mailbox_query import (
+    LIST_MAILBOX_HTTP_PATH,
+    handle_list_mailbox_query,
+    query_string_to_args,
+)
 from qma.daemon.diagnosis import (
     DIAGNOSIS_EXISTED_AT_INSPECT_SHA,
     DIAGNOSIS_SQLITE_CLASS_MINTED,
@@ -140,11 +146,13 @@ from qma.daemon.pairing import (
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.taskgraph.projection import (
     TASK_GRAPH_STATE_SQLITE_TABLES,
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
+from qma.wire.list_mailbox import LIST_MAILBOX_CAPABILITY, MailboxSnapshot
 from qma.wire.listener import (
     DEFAULT_BIND_HOST,
     PAIR_CONFIRM_PATH,
@@ -540,6 +548,14 @@ class DaemonProcess:
         self._variables = GovernedVariableRegistry.with_builtins()
         self._local_operator: LocalOperatorLive | None = None
         self._pairing_ws = PairingWsRegistry()
+        self._product_sessions = ProductSessionService(
+            journal=journal,
+            sqlite=substrate.sqlite,
+        )
+        self._mailboxes = MailboxStore(
+            _journal=journal,
+            _sessions=self._product_sessions,
+        )
 
     @classmethod
     def compose(
@@ -725,6 +741,31 @@ class DaemonProcess:
     @property
     def local_operator(self) -> LocalOperatorLive | None:
         return self._local_operator
+
+    @property
+    def mailboxes(self) -> MailboxStore:
+        return self._mailboxes
+
+    @property
+    def product_sessions(self) -> ProductSessionService:
+        return self._product_sessions
+
+    def list_mailbox(
+        self,
+        args: object,
+        *,
+        operator_principal: object,
+        capabilities: object | None = None,
+    ) -> Result[MailboxSnapshot]:
+        """Authenticated list_mailbox snapshot. Missing capability is typed."""
+        caps: object = {LIST_MAILBOX_CAPABILITY: True} if capabilities is None else capabilities
+        return handle_list_mailbox_query(
+            self._mailboxes,
+            args,
+            operator_principal=operator_principal,
+            sessions=self._product_sessions,
+            capabilities=caps,
+        )
 
     @property
     def host_control(self) -> HostControlChannel | None:
@@ -1367,6 +1408,27 @@ class DaemonProcess:
             )
             if is_refusal(authed):
                 await self._write_refusal(writer, authed, origin=origin)
+                return
+            if request.method == "GET" and request.path == LIST_MAILBOX_HTTP_PATH:
+                listed = handle_list_mailbox_query(
+                    self._mailboxes,
+                    query_string_to_args(request.query),
+                    operator_principal=authed.value.principal_class,
+                    sessions=self._product_sessions,
+                )
+                if is_refusal(listed):
+                    await self._write_refusal(writer, listed, origin=origin)
+                    return
+                body = json.dumps(
+                    {"ok": True, "result": dict(listed.value.to_payload())},
+                    ensure_ascii=True,
+                ).encode("utf-8")
+                await self._write_http(
+                    writer,
+                    200,
+                    _cors_headers_for_origin(origin),
+                    body,
+                )
                 return
             missing = policy_rejection(
                 "path",

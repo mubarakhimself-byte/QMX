@@ -23,7 +23,8 @@
         "facade_search",
         "facade_get",
         "get_diagnosis",
-        "get_instance_health"
+        "get_instance_health",
+        "list_mailbox"
       ]
     },
     "args": { "type": "object" }
