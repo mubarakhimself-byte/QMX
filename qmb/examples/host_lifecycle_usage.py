@@ -28,6 +28,7 @@ from qmb.doors.cli.host import (
     invoke_host_stop,
     product_daemon_root,
 )
+from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import is_ok, is_refusal
 
 
@@ -64,7 +65,8 @@ def main() -> None:
         def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
             assert argv[-2:] == ("-m", "qma.daemon")
             assert env["QMA_DAEMON_ROOT"] == str(root)
-            (root / ".daemon_writer").write_text(
+            lock = write_bytes_exclusive_no_follow(
+                root / ".daemon_writer",
                 json.dumps(
                     {
                         "boot_epoch_id": "boot",
@@ -74,14 +76,22 @@ def main() -> None:
                     },
                     separators=(",", ":"),
                     sort_keys=True,
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
+                contain_within=root,
             )
-            (root / "host_control").write_text("example-token\n", encoding="utf-8")
-            (root / "host_control.bind").write_text(
-                json.dumps({"host": "127.0.0.1", "port": 19236}),
-                encoding="utf-8",
+            assert is_ok(lock), lock
+            token = write_bytes_exclusive_no_follow(
+                root / "host_control",
+                b"example-token\n",
+                contain_within=root,
             )
+            assert is_ok(token), token
+            bind = write_bytes_exclusive_no_follow(
+                root / "host_control.bind",
+                json.dumps({"host": "127.0.0.1", "port": 19236}).encode("utf-8"),
+                contain_within=root,
+            )
+            assert is_ok(bind), bind
             return os.getpid()
 
         def sleeper(_seconds: float) -> None:
@@ -158,7 +168,12 @@ def main() -> None:
         def recover_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
             assert "--recover-control" in argv
             assert env["QMA_DAEMON_RECOVER_CONTROL"] == "1"
-            (root / "host_control").write_text("recovered-token\n", encoding="utf-8")
+            recovered_token = write_bytes_exclusive_no_follow(
+                root / "host_control",
+                b"recovered-token\n",
+                contain_within=root,
+            )
+            assert is_ok(recovered_token), recovered_token
             return os.getpid()
 
         recovered = invoke_host_recover_control(

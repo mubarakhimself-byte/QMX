@@ -53,6 +53,7 @@ from qmb.doors.cli.host import (
     product_daemon_root,
     redact_host_surface,
 )
+from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 
 _TOKEN = "fixture-host-control-token"
@@ -73,18 +74,35 @@ def _lock_payload(pid: int) -> str:
 
 
 def _write_lock(root: Path, pid: int) -> None:
-    (root / DAEMON_LOCK_NAME).write_text(_lock_payload(pid), encoding="utf-8")
+    written = write_bytes_exclusive_no_follow(
+        root / DAEMON_LOCK_NAME,
+        _lock_payload(pid).encode("utf-8"),
+        contain_within=root,
+    )
+    assert is_ok(written), written
 
 
 def _write_token(root: Path, token: str = _TOKEN) -> None:
-    (root / HOST_CONTROL_FILE).write_text(token + "\n", encoding="utf-8")
+    path = root / HOST_CONTROL_FILE
+    if path.exists():
+        path.unlink()
+    written = write_bytes_exclusive_no_follow(
+        path,
+        (token + "\n").encode("utf-8"),
+        contain_within=root,
+    )
+    assert is_ok(written), written
 
 
 def _write_bind(root: Path, host: str, port: int) -> None:
-    (root / HOST_CONTROL_BIND_NAME).write_text(
-        json.dumps({"host": host, "port": port}, separators=(",", ":"), sort_keys=True),
-        encoding="utf-8",
+    written = write_bytes_exclusive_no_follow(
+        root / HOST_CONTROL_BIND_NAME,
+        json.dumps({"host": host, "port": port}, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        ),
+        contain_within=root,
     )
+    assert is_ok(written), written
 
 
 def _no_sleep(_seconds: float) -> None:
@@ -176,7 +194,7 @@ class _HostControlServer(threading.Thread):
             }
         elif verb == "rotate-control":
             rotated = "rotated-" + self._token
-            (self._root / HOST_CONTROL_FILE).write_text(rotated + "\n", encoding="utf-8")
+            _write_token(self._root, rotated)
             self._token = rotated
             payload = {
                 "ok": True,
@@ -601,7 +619,7 @@ def test_running_daemon_verbs_refuse_stale_token(tmp_path: Path, verb: str) -> N
 @pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
 def test_running_daemon_verbs_refuse_unreadable_token(tmp_path: Path, verb: str) -> None:
     path = tmp_path / HOST_CONTROL_FILE
-    path.write_text(_TOKEN + "\n", encoding="utf-8")
+    _write_token(tmp_path)
     os.chmod(path, 0)
     try:
         if verb == "status":
@@ -629,9 +647,19 @@ def _recover_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path)
 
 def test_recover_control_c1_positive_then_start_is_legal(tmp_path: Path) -> None:
     journal = tmp_path / "journal.ndjson"
-    journal.write_text('{"event":"local_operator.established"}\n', encoding="utf-8")
+    journal_written = write_bytes_exclusive_no_follow(
+        journal,
+        b'{"event":"local_operator.established"}\n',
+        contain_within=tmp_path,
+    )
+    assert is_ok(journal_written), journal_written
     sqlite = tmp_path / "daemon.sqlite"
-    sqlite.write_bytes(b"sqlite-fixture")
+    sqlite_written = write_bytes_exclusive_no_follow(
+        sqlite,
+        b"sqlite-fixture",
+        contain_within=tmp_path,
+    )
+    assert is_ok(sqlite_written), sqlite_written
     report = _ok_mapping(
         invoke_host_recover_control(
             root=tmp_path,
@@ -667,7 +695,12 @@ def test_recover_control_c1_positive_then_start_is_legal(tmp_path: Path) -> None
 
 def test_recover_control_negative_a_other_os_user(tmp_path: Path) -> None:
     journal = tmp_path / "journal.ndjson"
-    journal.write_text("prior-journal\n", encoding="utf-8")
+    journal_written = write_bytes_exclusive_no_follow(
+        journal,
+        b"prior-journal\n",
+        contain_within=tmp_path,
+    )
+    assert is_ok(journal_written), journal_written
     spawned: list[object] = []
 
     def spawn(*_args: object, **_kwargs: object) -> int:
