@@ -6,6 +6,7 @@ import asyncio
 import json
 import threading
 from pathlib import Path
+from typing import cast
 
 from qma.core.refusals.variants import CredentialOutOfScope
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
@@ -30,6 +31,7 @@ from qma.daemon.pairing import (
     ORIGIN_ONLY_AUTO_APPROVE,
     PAIRING_HTTP_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA,
+    IssuedPairingProof,
     PairingWsHandle,
     PairingWsRegistry,
     authenticate_ws_pairing_upgrade,
@@ -53,7 +55,7 @@ from qma.wire.auth import (
     is_pairing_record_id,
     is_rfc6455_token,
 )
-from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
+from qmf.core import DataDrivenClock, Instant, Result, is_ok, is_refusal
 from qmf.core.refusal import RefusalCategory
 
 _ORIGIN = "http://127.0.0.1:5173"
@@ -124,7 +126,7 @@ def _json_body(response: object) -> dict[str, object]:
     assert isinstance(body, bytes)
     parsed: object = json.loads(body.decode("utf-8"))
     assert isinstance(parsed, dict)
-    return parsed
+    return cast("dict[str, object]", parsed)
 
 
 def test_honesty_origin_never_issues_and_inspect_sha() -> None:
@@ -274,7 +276,7 @@ def test_concurrent_confirm_loser_is_already_issued(tmp_path: Path) -> None:
             now_ns=_NOW_NS,
         )
         assert is_ok(host)
-        results: list[object] = []
+        results: list[Result[IssuedPairingProof]] = []
         barrier = threading.Barrier(2)
 
         def _confirm() -> None:
@@ -533,8 +535,10 @@ def test_running_daemon_pair_sets_confirmed_at_without_proof(tmp_path: Path) -> 
             assert forged_payload["ok"] is False
             refusal = forged_payload.get("refusal")
             assert isinstance(refusal, dict)
-            context = refusal.get("context")
-            assert isinstance(context, dict)
+            body = cast("dict[str, object]", refusal)
+            context_raw: object = body.get("context")
+            assert isinstance(context_raw, dict)
+            context = cast("dict[str, object]", context_raw)
             assert context.get("variant") == CredentialOutOfScope.VARIANT
             assert str(context.get("credential_ref", "")).startswith("cred://")
         finally:
