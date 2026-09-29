@@ -30,6 +30,8 @@ from qmf.core import Duration, Instant, Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
+    "ARTIFACT_STAGE_MAX_BYTES_KEY",
+    "ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY",
     "HOST_CONFIGURE_PAIRING_TTL_SOURCE",
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_KEY",
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_REGISTRY_KEY",
@@ -60,6 +62,7 @@ __all__ = [
     "parse_operator_pairing_ttl_duration",
     "refuse_pair_issue_without_ttl",
     "registry_key",
+    "resolve_artifact_stage_max_bytes",
 ]
 
 
@@ -82,6 +85,8 @@ _NS_PER_MINUTE: Final[int] = 60 * _NS_PER_SECOND
 _NS_PER_HOUR: Final[int] = 60 * _NS_PER_MINUTE
 _NS_PER_DAY: Final[int] = 24 * _NS_PER_HOUR
 _NS_PER_WEEK: Final[int] = 7 * _NS_PER_DAY
+ARTIFACT_STAGE_MAX_BYTES_KEY: Final[str] = "artifact.stage_max_bytes"
+ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY: Final[str] = "registry:artifact.stage_max_bytes"
 HOST_RETRY_ATTEMPT_CEILING_KEY: Final[str] = "host.retry_attempt_ceiling"
 HOST_RETRY_ATTEMPT_CEILING_REGISTRY_KEY: Final[str] = "registry:host.retry_attempt_ceiling"
 # Story 63.2 / FR-PG-32: nested Mission call_depth ceiling. Not GAP-0108.
@@ -110,6 +115,28 @@ def registry_key(name: str) -> str:
     if name.startswith("registry:"):
         return name
     return f"registry:{name}"
+
+
+def resolve_artifact_stage_max_bytes(value: object) -> Result[int]:
+    """Require an injected ``registry:artifact.stage_max_bytes``. Mint no number."""
+    if value is None:
+        return policy_rejection(
+            "stage_max_bytes",
+            "registry:artifact.stage_max_bytes is missing; PUT /artifacts/stage "
+            "is refused and writes no object (GAP-0110; DEC-0510 A11); this "
+            "increment mints no number",
+            registry_key=ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
+            wrote_object=False,
+        )
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return invalid_input(
+            "stage_max_bytes",
+            "registry:artifact.stage_max_bytes must be a non-negative int when set",
+            given=repr(value),
+            registry_key=ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
+            wrote_object=False,
+        )
+    return Ok(value)
 
 
 def cite_store_lifecycle_key(name: object) -> Result[str]:
@@ -667,6 +694,15 @@ def builtin_qma_variable_rows() -> tuple[VariableRow, ...]:
             # GAP-0109 / DEC-0510 A10: row exists; this increment mints no duration.
             default=None,
         ),
+        _row(
+            ARTIFACT_STAGE_MAX_BYTES_KEY,
+            owning_subsystem=daemon,
+            scope=g,
+            value_type="count",
+            units="bytes",
+            # GAP-0110 / DEC-0510 A11: row exists; this increment mints no number.
+            default=None,
+        ),
     )
 
 
@@ -821,17 +857,19 @@ class GovernedVariableRegistry:
             )
 
         previous = self._values.get(row.name, row.default)
+        payload: dict[str, object] = {
+            "name": row.name,
+            "registry_key": row.registry_key,
+            "value": value,
+            "home": row.home,
+            "scope": row.scope.value,
+        }
+        if previous is not None:
+            payload["previous"] = previous
         append = journal.append_event(
             VARIABLE_SET_EVENT,
             scope_path=scope_path,
-            payload={
-                "name": row.name,
-                "registry_key": row.registry_key,
-                "value": value,
-                "previous": previous,
-                "home": row.home,
-                "scope": row.scope.value,
-            },
+            payload=payload,
         )
         if is_refusal(append):
             return append
@@ -844,6 +882,13 @@ class GovernedVariableRegistry:
                 journal=append.value,
             )
         )
+
+    def artifact_stage_max_bytes(self) -> Result[int]:
+        """Read injected ``registry:artifact.stage_max_bytes``. Missing refuses PUT."""
+        got = self.get_value(ARTIFACT_STAGE_MAX_BYTES_KEY)
+        if is_refusal(got):
+            return got
+        return resolve_artifact_stage_max_bytes(got.value)
 
     def pairing_ttl_is_set(self) -> bool:
         """True when host-control has written ``registry:pairing.session_ttl``."""

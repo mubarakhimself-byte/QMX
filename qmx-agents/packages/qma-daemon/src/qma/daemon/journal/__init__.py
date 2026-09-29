@@ -64,6 +64,8 @@ from qma.daemon.journal.stores import (
     is_closed_store,
 )
 from qma.daemon.journal.variables import (
+    ARTIFACT_STAGE_MAX_BYTES_KEY,
+    ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
     HOST_CONFIGURE_PAIRING_TTL_SOURCE,
     HOST_NESTED_MISSION_CALL_DEPTH_CEILING_KEY,
     HOST_NESTED_MISSION_CALL_DEPTH_CEILING_REGISTRY_KEY,
@@ -94,11 +96,14 @@ from qma.daemon.journal.variables import (
     parse_operator_pairing_ttl_duration,
     refuse_pair_issue_without_ttl,
     registry_key,
+    resolve_artifact_stage_max_bytes,
 )
 
 __all__ = [
     "ANNOUNCEMENT_EVENT_BY_STORE",
     "ANNOUNCEMENT_REQUIRED_STORES",
+    "ARTIFACT_STAGE_MAX_BYTES_KEY",
+    "ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY",
     "CLOSED_INDEPENDENT_STORES",
     "CLOSED_PROJECTIONS",
     "CLOSED_STORE_NAMES",
@@ -168,5 +173,6 @@ __all__ = [
     "refuse_pair_issue_without_ttl",
     "refuse_worker_evidence_timestamp",
     "registry_key",
+    "resolve_artifact_stage_max_bytes",
     "v1_fold_contract",
 ]

@@ -40,11 +40,12 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert LIST_MAILBOX_CAPABILITY_MINTED is True
     assert "list_mailbox" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "cancel_job" in DEFERRED_INITIALIZE_CAPABILITIES
-    assert "stage_artifact" in DEFERRED_INITIALIZE_CAPABILITIES
+    assert "stage_artifact" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "pack_ui_request" in DEFERRED_INITIALIZE_CAPABILITIES
     caps = advertise_pairing_capabilities({"commands": True, "cancel_job": True})
     assert caps[PAIRING_CAPABILITY] is True
     assert caps["list_mailbox"] is True
+    assert caps["stage_artifact"] is True
     assert "cancel_job" not in caps
 
     params = InitializeParams.try_create(
@@ -57,8 +58,28 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert isinstance(negotiated, Ok)
     assert negotiated.value.capabilities[PAIRING_CAPABILITY] is True
     assert negotiated.value.capabilities["list_mailbox"] is True
+    assert negotiated.value.capabilities.get("stage_artifact") is not True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         assert name not in negotiated.value.capabilities
+
+    empty = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        client_producer_id="tab:empty",
+    )
+    assert isinstance(empty, Ok)
+    empty_neg = negotiate_initialize(empty.value, assign_producer_id="tab:empty")
+    assert isinstance(empty_neg, Ok)
+    assert empty_neg.value.capabilities["stage_artifact"] is True
+
+    asked = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        capabilities={"stage_artifact": True},
+        client_producer_id="tab:asked",
+    )
+    assert isinstance(asked, Ok)
+    asked_neg = negotiate_initialize(asked.value, assign_producer_id="tab:asked")
+    assert isinstance(asked_neg, Ok)
+    assert asked_neg.value.capabilities["stage_artifact"] is True
 
 
 def test_missing_pairing_is_typed_mismatch_shell_usable() -> None:

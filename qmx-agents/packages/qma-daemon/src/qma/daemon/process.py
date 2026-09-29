@@ -52,6 +52,13 @@ from qma.core.ports.qmb import (
 )
 from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.vocabulary.enums import PrincipalClass
+from qma.daemon.artifacts import (
+    ArtifactStore,
+    StagedArtifact,
+    handle_stage_artifact_put,
+    parse_stage_content_length,
+    refuse_interrupted_stage_put,
+)
 from qma.daemon.backtest.service import BacktestingService
 from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.bus.mailbox_query import (
@@ -70,6 +77,7 @@ from qma.daemon.diagnosis import (
     refuse_qmn_alert_failure_class,
 )
 from qma.daemon.experiments import EXPERIMENT_SQLITE_TABLES, ExperimentSpecService
+from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.host_control import (
     CT40_BIND_PORT,
     HOST_CONTROL_EXISTED_AT_INSPECT_SHA,
@@ -101,6 +109,7 @@ from qma.daemon.http_pair import (
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.journal.variables import (
+    ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
     PAIRING_SESSION_TTL_META_KEY,
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     GovernedVariableRegistry,
@@ -173,6 +182,12 @@ from qma.wire.listener import (
 )
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.send_message import parse_send_message_payload
+from qma.wire.stage_artifact import (
+    STAGE_ARTIFACT_CAPABILITY,
+    STAGE_ARTIFACT_HTTP_PATH,
+    refuse_jsonrpc_stage_artifact,
+    require_stage_artifact_capability,
+)
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand
 from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
 from qmf.core.refusal import TypedRefusal
@@ -430,6 +445,10 @@ async def _read_http_request(
     query = split.query if split.query else None
     length_raw = header_value(headers, "Content-Length")
     body = b""
+    # PUT /artifacts/stage is the AM-05 byte channel: cap is injected
+    # registry:artifact.stage_max_bytes, never _MAX_HTTP_BODY (GAP-0110).
+    if method == "PUT" and path == STAGE_ARTIFACT_HTTP_PATH:
+        return method, path, query, headers, body
     if length_raw is not None:
         try:
             length = int(length_raw)
@@ -443,6 +462,16 @@ async def _read_http_request(
             except TimeoutError, asyncio.IncompleteReadError:
                 return None
     return method, path, query, headers, body
+
+
+async def _read_stage_put_body(reader: asyncio.StreamReader, length: int) -> Result[bytes]:
+    """Read exactly Content-Length bytes. Peer close or timeout is interrupt."""
+    if length == 0:
+        return Ok(b"")
+    try:
+        return Ok(await asyncio.wait_for(reader.readexactly(length), timeout=5.0))
+    except TimeoutError, asyncio.IncompleteReadError:
+        return refuse_interrupted_stage_put()
 
 
 def supervised_spawn_argv(python: str | None = None) -> tuple[str, ...]:
@@ -662,6 +691,7 @@ class DaemonProcess:
             _journal=journal,
             _sessions=self._product_sessions,
         )
+        self._artifacts = ArtifactStore(hooks=HookRegistry())
         self._live_producers = LiveProducerRegistry()
         self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
 
@@ -880,6 +910,38 @@ class DaemonProcess:
             sessions=self._product_sessions,
             capabilities=caps,
         )
+
+    @property
+    def artifacts(self) -> ArtifactStore:
+        return self._artifacts
+
+    def stage_artifact(
+        self,
+        body: bytes,
+        *,
+        content_length: object,
+        capabilities: object | None = None,
+    ) -> Result[StagedArtifact]:
+        """Library admission of complete PUT bytes. Live HTTP must call the listener."""
+        caps: object = {STAGE_ARTIFACT_CAPABILITY: True} if capabilities is None else capabilities
+        got = self._variables.artifact_stage_max_bytes()
+        max_bytes: object = None if is_refusal(got) else got.value
+        return handle_stage_artifact_put(
+            self._artifacts,
+            body,
+            content_length=content_length,
+            max_bytes=max_bytes,
+            capabilities=caps,
+        )
+
+    def _paired_http_capabilities(self, pairing_record_id: object) -> object:
+        stored = self._initialize_capabilities
+        if isinstance(pairing_record_id, str) and pairing_record_id in stored:
+            return stored[pairing_record_id]
+        return {
+            LIST_MAILBOX_CAPABILITY: True,
+            STAGE_ARTIFACT_CAPABILITY: True,
+        }
 
     @property
     def host_control(self) -> HostControlChannel | None:
@@ -1524,17 +1586,12 @@ class DaemonProcess:
                 await self._write_refusal(writer, authed, origin=origin)
                 return
             if request.method == "GET" and request.path == LIST_MAILBOX_HTTP_PATH:
-                record_id = authed.value.pairing_record_id
-                if isinstance(record_id, str) and record_id in self._initialize_capabilities:
-                    caps: object = self._initialize_capabilities[record_id]
-                else:
-                    caps = {LIST_MAILBOX_CAPABILITY: True}
                 listed = handle_list_mailbox_query(
                     self._mailboxes,
                     query_string_to_args(request.query),
                     operator_principal=authed.value.principal_class,
                     sessions=self._product_sessions,
-                    capabilities=caps,
+                    capabilities=self._paired_http_capabilities(authed.value.pairing_record_id),
                 )
                 if is_refusal(listed):
                     await self._write_refusal(writer, listed, origin=origin)
@@ -1548,6 +1605,15 @@ class DaemonProcess:
                     200,
                     _cors_headers_for_origin(origin),
                     body,
+                )
+                return
+            if request.method == "PUT" and request.path == STAGE_ARTIFACT_HTTP_PATH:
+                await self._serve_stage_artifact_put(
+                    reader,
+                    writer,
+                    headers,
+                    origin=origin,
+                    pairing_record_id=authed.value.pairing_record_id,
                 )
                 return
             missing = policy_rejection(
@@ -1569,6 +1635,66 @@ class DaemonProcess:
             path=request.path,
         )
         await self._write_refusal(writer, refused, origin=origin)
+
+    async def _serve_stage_artifact_put(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: Mapping[str, str],
+        *,
+        origin: str | None,
+        pairing_record_id: object,
+    ) -> None:
+        """Authenticated AM-05 PUT /artifacts/stage on the bound listener."""
+        caps = self._paired_http_capabilities(pairing_record_id)
+        gated = require_stage_artifact_capability(caps)
+        if is_refusal(gated):
+            await self._write_refusal(writer, gated, origin=origin)
+            return
+        max_bytes = self._variables.artifact_stage_max_bytes()
+        if is_refusal(max_bytes):
+            await self._write_refusal(writer, max_bytes, origin=origin)
+            return
+        length = parse_stage_content_length(header_value(headers, "Content-Length"))
+        if is_refusal(length):
+            await self._write_refusal(writer, length, origin=origin)
+            return
+        if length.value > max_bytes.value:
+            oversize = policy_rejection(
+                "content_length",
+                "Content-Length exceeds registry:artifact.stage_max_bytes",
+                content_length=length.value,
+                registry_key=ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
+                wrote_object=False,
+                http_put=STAGE_ARTIFACT_HTTP_PATH,
+            )
+            await self._write_refusal(writer, oversize, origin=origin)
+            return
+        body = await _read_stage_put_body(reader, length.value)
+        if is_refusal(body):
+            self._artifacts.abandon_incomplete()
+            await self._write_refusal(writer, body, origin=origin)
+            return
+        staged = handle_stage_artifact_put(
+            self._artifacts,
+            body.value,
+            content_length=length.value,
+            max_bytes=max_bytes.value,
+            capabilities=caps,
+        )
+        if is_refusal(staged):
+            await self._write_refusal(writer, staged, origin=origin)
+            return
+        payload = json.dumps(
+            {"ok": True, "result": dict(staged.value.to_payload())},
+            ensure_ascii=True,
+        ).encode("utf-8")
+        await self._write_http(
+            writer,
+            200,
+            _cors_headers_for_origin(origin),
+            payload,
+        )
 
     async def _serve_pairing_ws(
         self,
@@ -1704,7 +1830,10 @@ class DaemonProcess:
             raw_caps = params.value.capabilities
             advertise = True
             if raw_caps:
-                advertise = raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
+                advertise = (
+                    raw_caps.get(LIST_MAILBOX_CAPABILITY) is True
+                    or raw_caps.get(STAGE_ARTIFACT_CAPABILITY) is True
+                )
             completed = connection.complete_initialize(
                 params.value,
                 request_id=begun.value.id,
@@ -1716,6 +1845,8 @@ class DaemonProcess:
                 return _jsonrpc_refusal(req_id, completed)
             self._initialize_capabilities[pairing_record_id] = dict(connection.capabilities)
             return completed.value.to_dict()
+        if method == STAGE_ARTIFACT_CAPABILITY:
+            return _jsonrpc_refusal(req_id, refuse_jsonrpc_stage_artifact())
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
