@@ -9,15 +9,29 @@ AM-01 holds that unauthenticated-bind sentence and names the HTTP carve-out:
 unauthenticated HTTP is only ``POST /pair/start``, ``POST /pair/confirm``, and
 CORS ``OPTIONS`` on the declared daemon HTTP routes. OPTIONS is not an
 unauthenticated WebSocket bind and is not CT-40 ``initialize``.
+
+Story 68.3: authenticated HTTP is ``Authorization: Bearer pairing:<proof>`` plus
+``Origin`` with fetch ``credentials: 'omit'``. Authenticated WebSocket offers
+``qmx.ct40.v1`` and ``qmx.pair.<proof>``; the daemon echoes ``qmx.ct40.v1``.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from ipaddress import ip_address
-from typing import Final, Literal
+from types import MappingProxyType
+from typing import Final, Literal, cast
 
+from qma.wire.auth import (
+    PAIRING_RECORD_ID_PREFIX,
+    PAIRING_WS_SUBPROTOCOL_PREFIX,
+    format_pairing_authorization,
+    is_pairing_record_id,
+    is_rfc6455_token,
+    refuse_pairing_proof_in_query,
+)
 from qma.wire.vocabulary import WIRE_QUERIES
 from qmf.core.refusal import (
     Ok,
@@ -28,17 +42,27 @@ from qmf.core.refusal import (
 )
 
 __all__ = [
+    "ALLOWED_PROOF_HOMES",
     "AM_01_CORS_DECLARED_AT_INSPECT_SHA",
     "AM_01_NAME",
     "AM_01_PAIR_HTTP_EXISTED_AT_INSPECT_SHA",
     "AM_01_UNAUTHENTICATED_POST_PATHS",
     "ARTIFACTS_GET_PREFIX",
     "ARTIFACTS_STAGE_PATH",
+    "COOKIE_LOGIN_SHIPPED",
     "CORS_EXISTED_AT_INSPECT_SHA",
+    "CT40_WS_SUBPROTOCOL",
     "DEC_0304_SUPERSEDED_BY",
     "DEC_0323_SUPERSEDED_BY",
     "DEFAULT_BIND_HOST",
+    "FETCH_CREDENTIALS",
+    "FORBIDDEN_PROOF_HOMES",
+    "HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA",
     "LISTENER_POSTURE_TYPES_EXISTED_AT_INSPECT_SHA",
+    "LOCALSTORAGE_PROOF_SHIPPED",
+    "PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA",
+    "PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA",
+    "PAIRING_WS_SUBPROTOCOL_PREFIX",
     "PAIR_CONFIRM_PATH",
     "PAIR_HTTP_EXISTED_AT_INSPECT_SHA",
     "PAIR_RENEW_PATH",
@@ -47,19 +71,29 @@ __all__ = [
     "SNAPSHOT_PATH_PREFIX",
     "UNAUTHENTICATED_BIND_SENTENCE",
     "UNAUTHENTICATED_BIND_SENTENCE_HELD",
+    "WEBSOCKETS_IMPORTS_AT_INSPECT_SHA",
     "Am01UnauthenticatedHttp",
+    "AuthenticatedHttpFetch",
     "ListenerBindConfig",
     "ListenerPosture",
+    "authenticated_http_fetch",
+    "claim_cookie_login_or_localstorage_proof_shipped",
     "claim_cors_existed_at_inspect_sha",
     "claim_listener_posture_types_absent_at_inspect_sha",
     "claim_pair_http_existed_at_inspect_sha",
+    "claim_pairing_transports_existed_at_inspect_sha",
     "claim_unauthenticated_bind_sentence_dropped",
     "classify_am01_unauthenticated_http",
+    "extract_pairing_ws_proof",
+    "format_pairing_websocket_subprotocols",
     "is_am01_cors_route",
     "is_artifacts_get_path",
     "is_loopback_host",
     "is_snapshot_family_path",
     "normalize_http_path",
+    "parse_offered_websocket_subprotocols",
+    "refuse_forbidden_proof_home",
+    "selected_websocket_subprotocol",
     "validate_listener_startup",
 ]
 
@@ -78,6 +112,18 @@ AM_01_PAIR_HTTP_EXISTED_AT_INSPECT_SHA: Final[bool] = PAIR_HTTP_EXISTED_AT_INSPE
 AM_01_CORS_DECLARED_AT_INSPECT_SHA: Final[bool] = CORS_EXISTED_AT_INSPECT_SHA
 LISTENER_POSTURE_TYPES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
 _AM_01_INSPECT_SHA: Final[str] = "34c148be"
+
+CT40_WS_SUBPROTOCOL: Final[str] = "qmx.ct40.v1"
+FETCH_CREDENTIALS: Final[Literal["omit"]] = "omit"
+FORBIDDEN_PROOF_HOMES: Final[frozenset[str]] = frozenset({"cookie", "localStorage", "IndexedDB"})
+ALLOWED_PROOF_HOMES: Final[frozenset[str]] = frozenset({"memory", "sessionStorage"})
+COOKIE_LOGIN_SHIPPED: Final[bool] = False
+LOCALSTORAGE_PROOF_SHIPPED: Final[bool] = False
+PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+WEBSOCKETS_IMPORTS_AT_INSPECT_SHA: Final[int] = 0
+HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA: Final[bool] = True
+_EMPTY_HEADERS: Final[Mapping[str, str]] = MappingProxyType({})
 
 PAIR_START_PATH: Final[str] = "/pair/start"
 PAIR_CONFIRM_PATH: Final[str] = "/pair/confirm"
@@ -427,3 +473,228 @@ def validate_listener_startup(config: object) -> Result[ListenerPosture]:
             operator_recorded_config=config.operator_recorded_config,
         )
     )
+
+
+def claim_pairing_transports_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming Bearer ``pairing:<proof>`` / WS subprotocols existed at 34c148be fails."""
+    if existed is True or existed == "true":
+        return _policy(
+            "pairing_transports",
+            "Bearer pairing:<proof> and WS subprotocols qmx.ct40.v1 + qmx.pair.<proof> "
+            "were absent at inspect SHA 34c148be (websockets zero imports; "
+            "_handle_client discarded bytes)",
+            existed_at_inspect_sha=False,
+            inspect_sha=_AM_01_INSPECT_SHA,
+            websockets_imports=WEBSOCKETS_IMPORTS_AT_INSPECT_SHA,
+            handle_client_discarded_bytes=HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA,
+        )
+    if existed is not False:
+        return _invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_cookie_login_or_localstorage_proof_shipped(shipped: object) -> Result[bool]:
+    """Claiming this story shipped cookie login or localStorage proof fails."""
+    if shipped is True or shipped == "true":
+        return _policy(
+            "proof_home",
+            "this story did not ship cookie login or localStorage proof; "
+            "allowed homes are memory plus sessionStorage only",
+            cookie_login_shipped=COOKIE_LOGIN_SHIPPED,
+            localstorage_proof_shipped=LOCALSTORAGE_PROOF_SHIPPED,
+            forbidden_homes=sorted(FORBIDDEN_PROOF_HOMES),
+            allowed_homes=sorted(ALLOWED_PROOF_HOMES),
+        )
+    if shipped is not False:
+        return _invalid(
+            "proof_home_shipped",
+            "cookie-login / localStorage-proof claim is a boolean",
+            given=repr(shipped),
+        )
+    return Ok(False)
+
+
+def refuse_forbidden_proof_home(home: object) -> Result[None]:
+    """Cookies, localStorage, and IndexedDB are forbidden homes for the proof."""
+    if not isinstance(home, str) or home.strip() == "":
+        return _invalid("proof_home", "proof home must be a non-empty string", given=repr(home))
+    name = home.strip()
+    forbidden_folded = {item.casefold() for item in FORBIDDEN_PROOF_HOMES}
+    if name in FORBIDDEN_PROOF_HOMES or name.casefold() in forbidden_folded:
+        return _policy(
+            "proof_home",
+            "cookies, localStorage, and IndexedDB are forbidden homes for pairing_proof",
+            home=name,
+            allowed_homes=sorted(ALLOWED_PROOF_HOMES),
+        )
+    if name not in ALLOWED_PROOF_HOMES:
+        return _invalid(
+            "proof_home",
+            "allowed homes are memory plus sessionStorage only",
+            home=name,
+            allowed_homes=sorted(ALLOWED_PROOF_HOMES),
+        )
+    return Ok(None)
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedHttpFetch:
+    """Browser-realizable authenticated HTTP: Bearer pairing:<proof> plus Origin.
+
+    Fetch ``credentials`` is always ``omit``. The proof never travels in the
+    query string. ``pairing:<id>`` and ``cred://`` are not Bearer values.
+    """
+
+    headers: Mapping[str, str]
+    credentials: Literal["omit"] = FETCH_CREDENTIALS
+    query: None = None
+
+
+def authenticated_http_fetch(
+    *,
+    origin: object,
+    proof: object,
+    query: object = None,
+) -> Result[AuthenticatedHttpFetch]:
+    """Build authenticated HTTP headers. Never pairing:<id>, never query proof."""
+    refused_query = refuse_pairing_proof_in_query(query)
+    if not isinstance(refused_query, Ok):
+        return refused_query
+    if not isinstance(origin, str) or origin.strip() == "":
+        return _invalid("origin", "Origin is required", given=repr(origin))
+    if isinstance(proof, str) and "cred://" in proof.casefold():
+        return _policy(
+            "authorization",
+            "never uses a provider cred:// as the Bearer value",
+        )
+    header = format_pairing_authorization(proof)
+    if not isinstance(header, Ok):
+        return header
+    return Ok(
+        AuthenticatedHttpFetch(
+            headers=MappingProxyType(
+                {
+                    "Authorization": header.value,
+                    "Origin": origin.strip(),
+                }
+            ),
+            credentials=FETCH_CREDENTIALS,
+            query=None,
+        )
+    )
+
+
+def selected_websocket_subprotocol() -> str:
+    """RFC 6455 lets the server echo one protocol. Daemon echoes ``qmx.ct40.v1``."""
+    return CT40_WS_SUBPROTOCOL
+
+
+def format_pairing_websocket_subprotocols(proof: object) -> Result[tuple[str, str]]:
+    """WHATWG constructor list: ``qmx.ct40.v1`` then ``qmx.pair.<proof>``."""
+    if not isinstance(proof, str) or proof.strip() == "":
+        return _invalid("pairing_proof", "pairing_proof is a non-empty bearer")
+    token = proof.strip()
+    if is_pairing_record_id(token) or token.startswith(PAIRING_RECORD_ID_PREFIX):
+        return _policy(
+            "subprotocol",
+            "WebSocket offers qmx.pair.<proof> — never pairing:<id>",
+            given="pairing_record_id",
+        )
+    if not is_rfc6455_token(token):
+        return _invalid(
+            "pairing_proof",
+            "pairing_proof must be WebSocket-token-safe (RFC 6455 token charset)",
+        )
+    pair = f"{PAIRING_WS_SUBPROTOCOL_PREFIX}{token}"
+    if not is_rfc6455_token(pair):
+        return _invalid(
+            "subprotocol",
+            "qmx.pair.<proof> must be a single RFC 6455 token",
+        )
+    return Ok((CT40_WS_SUBPROTOCOL, pair))
+
+
+def parse_offered_websocket_subprotocols(offered: object) -> Result[tuple[str, ...]]:
+    """Parse ``Sec-WebSocket-Protocol`` or a WHATWG constructor sequence."""
+    tokens: list[str] = []
+    if offered is None:
+        return Ok(())
+    if isinstance(offered, str):
+        tokens = [part.strip() for part in offered.split(",") if part.strip()]
+    elif isinstance(offered, Sequence) and not isinstance(offered, bytes | bytearray):
+        raw = cast("Sequence[object]", offered)
+        for item in raw:
+            if not isinstance(item, str) or item.strip() == "":
+                return _invalid(
+                    "subprotocol",
+                    "offered WebSocket subprotocols must be non-empty strings",
+                    given=repr(item),
+                )
+            tokens.append(item.strip())
+    else:
+        return _invalid(
+            "subprotocol",
+            "offered WebSocket subprotocols must be a header string or sequence",
+            given=repr(offered),
+        )
+    return Ok(tuple(tokens))
+
+
+def extract_pairing_ws_proof(offered: object) -> Result[str]:
+    """Require ``qmx.ct40.v1`` and one ``qmx.pair.<proof>``. Never pairing:<id>."""
+    parsed = parse_offered_websocket_subprotocols(offered)
+    if not isinstance(parsed, Ok):
+        return parsed
+    tokens = parsed.value
+    if not tokens:
+        return _policy(
+            "subprotocol",
+            "WebSocket requires qmx.ct40.v1 and qmx.pair.<proof>",
+            missing="both",
+        )
+    has_ct40 = False
+    pair_tokens: list[str] = []
+    malformed = False
+    for token in tokens:
+        folded = token.casefold()
+        if folded.startswith("pairing:") or is_pairing_record_id(token):
+            return _policy(
+                "subprotocol",
+                "pairing:<id> subprotocol is refused",
+                given="pairing_record_id",
+            )
+        if token == CT40_WS_SUBPROTOCOL:
+            has_ct40 = True
+            continue
+        if token.startswith(PAIRING_WS_SUBPROTOCOL_PREFIX):
+            proof = token[len(PAIRING_WS_SUBPROTOCOL_PREFIX) :]
+            if is_pairing_record_id(proof) or proof.startswith(PAIRING_RECORD_ID_PREFIX):
+                return _policy(
+                    "subprotocol",
+                    "pairing:<id> subprotocol is refused",
+                    given="pairing_record_id",
+                )
+            pair_tokens.append(token)
+            if proof == "" or not is_rfc6455_token(token) or not is_rfc6455_token(proof):
+                malformed = True
+            continue
+        if not is_rfc6455_token(token):
+            malformed = True
+    if malformed:
+        return _policy(
+            "subprotocol",
+            "malformed qmx.pair.<proof>",
+            given="malformed",
+        )
+    if not has_ct40 or len(pair_tokens) != 1:
+        return _policy(
+            "subprotocol",
+            "WebSocket requires qmx.ct40.v1 and qmx.pair.<proof>",
+            has_ct40=has_ct40,
+            pair_count=len(pair_tokens),
+        )
+    return Ok(pair_tokens[0][len(PAIRING_WS_SUBPROTOCOL_PREFIX) :])

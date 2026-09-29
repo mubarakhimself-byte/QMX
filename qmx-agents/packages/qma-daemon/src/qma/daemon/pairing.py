@@ -1,10 +1,14 @@
-"""Pairing bearer custody and AM-03 journal projections (Story 68.1).
+"""Pairing bearer custody, AM-03 projections (Story 68.1), HTTP/WS auth (68.3).
 
 ``pairing_proof`` is the RFC 6750 bearer. ``pairing_record_id`` is the nonsecret
 journal identity. Projections ``pairing_pending`` and ``pairing_session`` store
 ``proof_fp1`` (and pending ``code_fp1``) never the raw proof. Named add on the
 existing sqlite class — not a new class, not definition-store slot 17+, not
 CT-28 ``pairing_record``. Do not mint ``pairing_session_id``.
+
+Authenticated HTTP is ``Authorization: Bearer pairing:<proof>`` plus Origin.
+Authenticated WebSocket offers ``qmx.ct40.v1`` and ``qmx.pair.<proof>``; the
+daemon echoes ``qmx.ct40.v1``. Access logs redact ``qmx.pair.*`` values.
 """
 
 from __future__ import annotations
@@ -39,14 +43,32 @@ from qma.wire.auth import (
     parse_pairing_bearer_authorization,
     refuse_pairing_proof_in_query,
 )
+from qma.wire.listener import (
+    COOKIE_LOGIN_SHIPPED,
+    CT40_WS_SUBPROTOCOL,
+    HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA,
+    LOCALSTORAGE_PROOF_SHIPPED,
+    PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA,
+    PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA,
+    WEBSOCKETS_IMPORTS_AT_INSPECT_SHA,
+    claim_cookie_login_or_localstorage_proof_shipped,
+    claim_pairing_transports_existed_at_inspect_sha,
+    extract_pairing_ws_proof,
+    selected_websocket_subprotocol,
+)
 from qmf.core import Ok, Result, fingerprint_bytes, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, storage_failure
 
 __all__ = [
+    "COOKIE_LOGIN_SHIPPED",
     "CT28_PAIRING_RECORD_REUSED",
+    "CT40_WS_SUBPROTOCOL",
     "DEC_0429_SUPERSEDED_BY",
     "DEC_0440_SUPERSEDED_BY",
+    "HANDLE_CLIENT_DISCARDED_BYTES_AT_INSPECT_SHA",
+    "LOCALSTORAGE_PROOF_SHIPPED",
+    "PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA",
     "PAIRING_DELIVERED_COPILOT_PROFILE",
     "PAIRING_HTTP_EXISTED_AT_INSPECT_SHA",
     "PAIRING_INSPECT_SHA",
@@ -56,6 +78,7 @@ __all__ = [
     "PAIRING_PENDING_FOLD_ID",
     "PAIRING_PENDING_STORE",
     "PAIRING_PENDING_TABLE",
+    "PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS",
     "PAIRING_SESSION_EVENT_ISSUED",
     "PAIRING_SESSION_EXISTED_AT_INSPECT_SHA",
     "PAIRING_SESSION_FOLD_ID",
@@ -64,15 +87,21 @@ __all__ = [
     "PAIRING_SESSION_TABLE",
     "PAIRING_STORE_CLASS",
     "PAIRING_TABLE_EXISTED_AT_INSPECT_SHA",
+    "PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA",
+    "WEBSOCKETS_IMPORTS_AT_INSPECT_SHA",
     "IssuedPairingPending",
     "IssuedPairingProof",
     "PairingPendingLive",
     "PairingSessionLive",
+    "PairingWsUpgrade",
     "authenticate_http_pairing_bearer",
+    "authenticate_ws_pairing_upgrade",
+    "claim_cookie_login_or_localstorage_proof_shipped",
     "claim_pair_http_existed_at_inspect_sha",
     "claim_pairing_pending_existed_at_inspect_sha",
     "claim_pairing_session_existed_at_inspect_sha",
     "claim_pairing_table_existed_at_inspect_sha",
+    "claim_pairing_transports_existed_at_inspect_sha",
     "claim_this_story_delivered_copilot_profile",
     "fold_pairing_pendings_from_journal",
     "fold_pairing_sessions_from_journal",
@@ -85,6 +114,7 @@ __all__ = [
     "mint_pairing_record_id",
     "pairing_proof_fp1",
     "pairing_status_record_ids",
+    "redact_pairing_access_log",
     "restore_pairing_projections",
     "start_pairing_pending",
 ]
@@ -108,6 +138,7 @@ PAIRING_SESSION_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 PAIRING_SESSION_ID_FIELD_MINTED: Final[bool] = False
 CT28_PAIRING_RECORD_REUSED: Final[bool] = False
 PAIRING_DELIVERED_COPILOT_PROFILE: Final[bool] = False
+PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS: Final[bool] = True
 
 _PENDING_SCHEMA_SQL: Final[str] = """
 CREATE TABLE IF NOT EXISTS pairing_pending (
@@ -890,8 +921,13 @@ def match_pairing_session_by_proof(
     *,
     origin: object,
     proof: object,
+    now_ns: object = None,
 ) -> Result[PairingSessionLive]:
-    """Match Origin + proof_fp1. Does not store the presented proof."""
+    """Match Origin + proof_fp1. Does not store the presented proof.
+
+    One unexpired unrevoked proof may be presented on multiple connections for
+    that Origin until expiry, revoke, or rotate.
+    """
     parsed_origin = _require_origin(origin)
     if is_refusal(parsed_origin):
         return parsed_origin
@@ -910,16 +946,33 @@ def match_pairing_session_by_proof(
         "issued_at, expires_at, revoked, pending_lineage, journal_seq, recorded_at "
         "FROM pairing_session"
     )
+    origin_mismatch = False
+    expired_match = False
+    now = _as_int(now_ns)
     for row in rows:
         live = _session_from_tuple(row)
-        if live is None or live.revoked:
-            continue
-        if live.origin != parsed_origin.value:
+        if live is None:
             continue
         stored = live.proof_fp1.encode("utf-8")
         presented = hashed.encode("utf-8")
-        if len(stored) == len(presented) and hmac.compare_digest(stored, presented):
-            return Ok(live)
+        if not (len(stored) == len(presented) and hmac.compare_digest(stored, presented)):
+            continue
+        if live.origin != parsed_origin.value:
+            origin_mismatch = True
+            continue
+        if live.revoked:
+            continue
+        if now is not None and live.expires_at <= now:
+            expired_match = True
+            continue
+        return Ok(live)
+    if origin_mismatch:
+        return _policy(
+            "origin",
+            "Origin + proof_fp1 do not match the pairing table",
+        )
+    if expired_match:
+        return _policy("pairing_proof", "pairing_proof is expired")
     return _policy("pairing_proof", "pairing table has no matching proof_fp1")
 
 
@@ -929,11 +982,29 @@ def authenticate_http_pairing_bearer(
     authorization: object,
     origin: object,
     query: object = None,
+    now_ns: object = None,
+    cookie: object = None,
 ) -> Result[AuthenticatedWireSession]:
-    """HTTP Bearer pairing:<proof> plus Origin. Never pairing:<id>."""
+    """HTTP Bearer pairing:<proof> plus Origin. Never pairing:<id> or cred://.
+
+    A cookie presented is ignored as proof (DEC-0501). Fetch credentials omit.
+    """
     refused_query = refuse_pairing_proof_in_query(query)
     if is_refusal(refused_query):
         return refused_query
+    if isinstance(authorization, str) and "cred://" in authorization.casefold():
+        return _policy(
+            "authorization",
+            "never uses a provider cred:// as the Bearer value",
+        )
+    auth_missing = not isinstance(authorization, str) or authorization.strip() == ""
+    cookie_presented = cookie is not None and str(cookie).strip() != ""
+    if auth_missing and cookie_presented:
+        return _policy(
+            "cookie",
+            "Cookie header is not operator proof; a cookie presented is ignored as pairing_proof",
+            cookie_is_proof=False,
+        )
     parsed = parse_pairing_bearer_authorization(authorization)
     if is_refusal(parsed):
         return parsed
@@ -941,10 +1012,127 @@ def authenticate_http_pairing_bearer(
         sqlite,
         origin=origin,
         proof=parsed.value,
+        now_ns=now_ns,
     )
     if is_refusal(matched):
         return matched
     return authenticate_pairing_record(matched.value.pairing_record_id)
+
+
+@dataclass(frozen=True, slots=True)
+class PairingWsUpgrade:
+    """Admitted WebSocket upgrade. Echoes ``qmx.ct40.v1``. No initialize yet."""
+
+    echoed_subprotocol: str
+    pairing_record_id: str
+    origin: str
+    session: AuthenticatedWireSession
+    sends_ct40_bytes: bool = False
+    initializes: bool = False
+    multiple_connections_allowed: bool = PAIRING_PROOF_MAY_BIND_MULTIPLE_CONNECTIONS
+
+    def __post_init__(self) -> None:
+        if self.echoed_subprotocol != CT40_WS_SUBPROTOCOL:
+            msg = "daemon echoes qmx.ct40.v1"
+            raise ValueError(msg)
+        if self.sends_ct40_bytes or self.initializes:
+            msg = "WS upgrade does not send CT-40 bytes or initialize"
+            raise ValueError(msg)
+
+
+def authenticate_ws_pairing_upgrade(
+    sqlite: SingleSqliteWriter,
+    *,
+    offered_subprotocols: object,
+    origin: object,
+    now_ns: object = None,
+    query: object = None,
+    cookie: object = None,
+) -> Result[PairingWsUpgrade]:
+    """Inspect offered subprotocols; refuse missing/malformed/expired/mismatch.
+
+    Browsers cannot set ``Authorization`` on ``WebSocket``. The subprotocol is
+    the proof. A cookie presented is ignored as proof. Refused upgrades send no
+    CT-40 bytes and do not ``initialize``.
+    """
+    refused_query = refuse_pairing_proof_in_query(query)
+    if is_refusal(refused_query):
+        return refused_query
+    _ = cookie  # never operator proof; WS proof is qmx.pair.<proof>
+    extracted = extract_pairing_ws_proof(offered_subprotocols)
+    if is_refusal(extracted):
+        return extracted
+    matched = match_pairing_session_by_proof(
+        sqlite,
+        origin=origin,
+        proof=extracted.value,
+        now_ns=now_ns,
+    )
+    if is_refusal(matched):
+        return matched
+    session = authenticate_pairing_record(matched.value.pairing_record_id)
+    if is_refusal(session):
+        return session
+    return Ok(
+        PairingWsUpgrade(
+            echoed_subprotocol=selected_websocket_subprotocol(),
+            pairing_record_id=matched.value.pairing_record_id,
+            origin=matched.value.origin,
+            session=session.value,
+            sends_ct40_bytes=False,
+            initializes=False,
+        )
+    )
+
+
+_PAIR_LOG_PREFIX: Final[str] = "qmx.pair."
+_REDACTED_PAIR_TOKEN: Final[str] = f"{_PAIR_LOG_PREFIX}[redacted]"
+_PAIR_TOKEN_STOP: Final[frozenset[str]] = frozenset(" \t\r\n,;\"'<>")
+
+
+def _redact_qmx_pair_tokens(text: str) -> str:
+    """Replace ``qmx.pair.<proof>`` tokens even when embedded in a header value."""
+    lower = text.casefold()
+    needle = _PAIR_LOG_PREFIX
+    out: list[str] = []
+    cursor = 0
+    while True:
+        idx = lower.find(needle, cursor)
+        if idx < 0:
+            out.append(text[cursor:])
+            return "".join(out)
+        out.append(text[cursor:idx])
+        out.append(_REDACTED_PAIR_TOKEN)
+        end = idx + len(needle)
+        while end < len(text) and text[end] not in _PAIR_TOKEN_STOP:
+            end += 1
+        cursor = end
+
+
+def _redact_access_log_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        body = cast("Mapping[object, object]", value)
+        out: dict[str, object] = {}
+        for key, item in body.items():
+            out[str(key)] = _redact_access_log_value(item)
+        return out
+    if isinstance(value, list):
+        items = cast("list[object]", value)
+        return [_redact_access_log_value(item) for item in items]
+    if isinstance(value, tuple):
+        items = cast("tuple[object, ...]", value)
+        return [_redact_access_log_value(item) for item in items]
+    if isinstance(value, str):
+        return _redact_qmx_pair_tokens(value)
+    return value
+
+
+def redact_pairing_access_log(value: object) -> object:
+    """Access logs redact Authorization, ``qmx.pair.*``, and raw proofs.
+
+    ``pairing_record_id`` may be shown.
+    """
+    return _redact_access_log_value(redact_host_surface(value))
 
 
 def pairing_status_record_ids(
