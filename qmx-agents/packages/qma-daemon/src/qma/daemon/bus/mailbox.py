@@ -50,6 +50,12 @@ from qma.daemon.scheduler.wake import (
 )
 from qma.daemon.sessions.product_session import ProductSession, ProductSessionService
 from qma.wire.list_mailbox import MailboxSnapshot, MailboxSnapshotRow
+from qma.wire.mailbox_send import (
+    hash_wire_payload_bytes,
+    parse_mailbox_send_pair,
+    refuse_mailbox_send_collision,
+    refuse_substitute_live_producer_id,
+)
 from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Clock, DataDrivenClock, Instant, Ok, Result, is_refusal
 from qmf.core.refusal import TypedRefusal
@@ -120,8 +126,10 @@ _SEND_MESSAGE_NON_ENVELOPE_KEYS: Final[frozenset[str]] = frozenset(
         "principal_class",
         "producer_id",
         "wire_id",
+        "id",
         "grant_id",
         "grant_record",
+        "payload_hash",
     }
 )
 _TERMINAL_DELIVERY: Final[frozenset[DeliveryState]] = frozenset(
@@ -244,6 +252,7 @@ class DeliveryRecord:
     wake_at: int | None = None
     producer_id: str | None = None
     wire_id: str | None = None
+    payload_hash: str | None = None
 
     def with_state(
         self,
@@ -256,10 +265,12 @@ class DeliveryRecord:
         wake_at: object = _KEEP,
         producer_id: object = _KEEP,
         wire_id: object = _KEEP,
+        payload_hash: object = _KEEP,
     ) -> DeliveryRecord:
         resolved_wake = self.wake_at if wake_at is _KEEP else wake_at
         resolved_producer = self.producer_id if producer_id is _KEEP else producer_id
         resolved_wire = self.wire_id if wire_id is _KEEP else wire_id
+        resolved_hash = self.payload_hash if payload_hash is _KEEP else payload_hash
         return DeliveryRecord(
             envelope=self.envelope if envelope is None else envelope,
             state=state,
@@ -271,10 +282,21 @@ class DeliveryRecord:
             ),
             producer_id=resolved_producer if isinstance(resolved_producer, str) else None,
             wire_id=resolved_wire if isinstance(resolved_wire, str) else None,
+            payload_hash=resolved_hash if isinstance(resolved_hash, str) else None,
         )
 
     def with_wire_pair(self, producer_id: str, wire_id: str) -> DeliveryRecord:
         return self.with_state(self.state, producer_id=producer_id, wire_id=wire_id)
+
+    def with_wire_identity(
+        self, producer_id: str, wire_id: str, payload_hash: str
+    ) -> DeliveryRecord:
+        return self.with_state(
+            self.state,
+            producer_id=producer_id,
+            wire_id=wire_id,
+            payload_hash=payload_hash,
+        )
 
     @property
     def is_work(self) -> bool:
@@ -296,6 +318,8 @@ class DeliveryRecord:
             payload["producer_id"] = self.producer_id
         if self.wire_id is not None:
             payload["wire_id"] = self.wire_id
+        if self.payload_hash is not None:
+            payload["payload_hash"] = self.payload_hash
         return MappingProxyType(payload)
 
     def to_snapshot_row(self) -> MailboxSnapshotRow:
@@ -308,6 +332,7 @@ class DeliveryRecord:
             msg_id=committed,
             producer_id=self.producer_id,
             wire_id=self.wire_id,
+            payload_hash=self.payload_hash,
         )
 
 
@@ -367,6 +392,9 @@ class MailboxStore:
     _mailboxes: dict[str, Mailbox] = field(default_factory=dict[str, Mailbox])
     _quants: dict[str, Quant] = field(default_factory=dict[str, Quant])
     _by_msg_id: dict[str, DeliveryRecord] = field(default_factory=dict[str, DeliveryRecord])
+    _by_wire_pair: dict[tuple[str, str], tuple[str, DeliveryRecord]] = field(
+        default_factory=dict[tuple[str, str], tuple[str, DeliveryRecord]]
+    )
     _handoff_tasks: dict[str, Task] = field(default_factory=dict[str, Task])
     _clock: Clock = field(default_factory=_default_clock)
     _journal: AuthoritativeJournal | None = None
@@ -446,6 +474,9 @@ class MailboxStore:
         *,
         external_relay: bool = False,
         catch_all_lead: bool = False,
+        producer_id: str | None = None,
+        wire_id: str | None = None,
+        payload_hash: str | None = None,
     ) -> Result[DeliveryRecord]:
         """Accept one Envelope into the daemon Mailbox projection."""
         inbound = dict(envelope.to_payload() if isinstance(envelope, Envelope) else envelope)
@@ -473,15 +504,24 @@ class MailboxStore:
 
         recipient = self._recipient_mailbox(envelope_record.to_actor)
         state = DeliveryState.DEAD_LETTER if recipient is None else DeliveryState.QUEUED
+        draft = DeliveryRecord(
+            envelope=envelope_record,
+            state=state,
+            producer_id=producer_id,
+            wire_id=wire_id,
+            payload_hash=payload_hash,
+        )
         journaled = self._journal_event(
             _MESSAGE_SENT_EVENT,
             envelope_record,
             state=state,
+            producer_id=producer_id,
+            wire_id=wire_id,
+            payload_hash=payload_hash,
         )
         if is_refusal(journaled):
             return journaled
-        seq = journaled.value
-        record = DeliveryRecord(envelope=envelope_record, state=state, journal_seq=seq)
+        record = draft.with_state(state, journal_seq=journaled.value)
         self._index(record)
         if recipient is not None:
             self._mailboxes[recipient.owner.value] = recipient.append(record)
@@ -501,6 +541,11 @@ class MailboxStore:
         principal equality before append. Ordinary product chat needs no
         GrantRecord. Machine payloads that omit the field stay legal. Body text
         is never parsed to recover a session pointer (AM-02; DEC-0495).
+
+        Pre-ack identity is the wire pair ``(producer_id, id)`` (query name
+        ``wire_id``) plus the payload hash of the wire payload bytes. Same pair
+        plus same hash returns the prior result. Same pair plus a different
+        hash refuses for journal lifetime (AM-12; mailbox sends only).
         """
         parsed_principal = parse_principal_class(principal_class)
         if is_refusal(parsed_principal):
@@ -524,18 +569,37 @@ class MailboxStore:
         )
         if is_refusal(admitted):
             return admitted
-        sent = self.send(copied.value)
+        pair = parse_mailbox_send_pair(payload)
+        if is_refusal(pair):
+            return pair
+        identity = pair.value
+        hashed: str | None = None
+        if identity is not None:
+            hashed_result = hash_wire_payload_bytes(payload)
+            if is_refusal(hashed_result):
+                return hashed_result
+            hashed = hashed_result.value
+            prior = self._by_wire_pair.get(identity.as_tuple())
+            if prior is not None:
+                stored_hash, stored_record = prior
+                if stored_hash != hashed:
+                    return refuse_mailbox_send_collision(
+                        producer_id=identity.producer_id,
+                        wire_id=identity.wire_id,
+                        stored_hash=stored_hash,
+                        given_hash=hashed,
+                    )
+                return Ok(stored_record)
+        sent = self.send(
+            copied.value,
+            producer_id=None if identity is None else identity.producer_id,
+            wire_id=None if identity is None else identity.wire_id,
+            payload_hash=hashed,
+        )
         if is_refusal(sent):
             return sent
-        producer = payload.get("producer_id")
-        wire = payload.get("wire_id")
-        if (
-            isinstance(producer, str)
-            and producer.strip() != ""
-            and isinstance(wire, str)
-            and wire.strip() != ""
-        ):
-            stamped = sent.value.with_wire_pair(producer.strip(), wire.strip())
+        if identity is not None and hashed is not None:
+            stamped = sent.value.with_wire_identity(identity.producer_id, identity.wire_id, hashed)
             self._replace(stamped)
             return Ok(stamped)
         return sent
@@ -546,24 +610,41 @@ class MailboxStore:
         Named ``product_session_ref`` is the product-chat snapshot. Rows that
         omit the field, and rows whose field differs, stay off it. Body text,
         ``private_notes``, and ``sess:`` are never consulted. Pair lookup is
-        ``producer_id`` + ``wire_id`` and never client ``msg_id``.
+        ``producer_id`` + ``wire_id`` and never client ``msg_id``. Zero rows is
+        empty/unknown, not a new send. A later live ``producer_id`` is never
+        substituted into the lookup.
         """
         session_ref = args.get(ENVELOPE_PRODUCT_SESSION_FIELD)
         producer = args.get("producer_id")
         wire = args.get("wire_id")
         pair = isinstance(producer, str) and isinstance(wire, str)
+        if args.get("substitute_producer_id") not in (None, False):
+            return refuse_substitute_live_producer_id(
+                stored_producer_id=producer if isinstance(producer, str) else None,
+                given_producer_id=args.get("substitute_producer_id"),
+            )
         matched: list[DeliveryRecord] = []
         if isinstance(session_ref, str):
             token = session_ref
+            if pair:
+                pair_key = (str(producer), str(wire))
+                hit = self._by_wire_pair.get(pair_key)
+                if hit is not None:
+                    _stored_hash, record = hit
+                    if product_session_ref_matches(record.envelope, token):
+                        matched.append(record)
+                return Ok(
+                    MailboxSnapshot(
+                        product_chat=True,
+                        rows=tuple(item.to_snapshot_row() for item in matched),
+                        product_session_ref=token,
+                    )
+                )
             for record in self._by_msg_id.values():
                 if not product_session_ref_matches(record.envelope, token):
                     continue
-                if pair and (record.producer_id != producer or record.wire_id != wire):
-                    continue
                 matched.append(record)
             matched.sort(key=lambda item: (item.envelope.created_at, item.envelope.msg_id))
-            if pair:
-                matched = matched[:1]
             return Ok(
                 MailboxSnapshot(
                     product_chat=True,
@@ -626,6 +707,9 @@ class MailboxStore:
             _MESSAGE_DELIVERED_EVENT,
             current.envelope,
             state=verdict.state,
+            producer_id=current.producer_id,
+            wire_id=current.wire_id,
+            payload_hash=current.payload_hash,
         )
         if is_refusal(journaled):
             return journaled
@@ -658,7 +742,14 @@ class MailboxStore:
                 return decision
             verdict = decision.value
             event = _MESSAGE_WOKE_EVENT if verdict.wake else _MESSAGE_DELIVERED_EVENT
-            journaled = self._journal_event(event, record.envelope, state=verdict.state)
+            journaled = self._journal_event(
+                event,
+                record.envelope,
+                state=verdict.state,
+                producer_id=record.producer_id,
+                wire_id=record.wire_id,
+                payload_hash=record.payload_hash,
+            )
             if is_refusal(journaled):
                 return journaled
             updated = record.with_state(
@@ -742,6 +833,9 @@ class MailboxStore:
             _MESSAGE_ACKED_EVENT,
             record.envelope,
             state=record.state,
+            producer_id=record.producer_id,
+            wire_id=record.wire_id,
+            payload_hash=record.payload_hash,
         )
         if is_refusal(journaled):
             return journaled
@@ -1013,6 +1107,9 @@ class MailboxStore:
         envelope: Envelope,
         *,
         state: DeliveryState,
+        producer_id: str | None = None,
+        wire_id: str | None = None,
+        payload_hash: str | None = None,
     ) -> Result[int | None]:
         if self._journal is None:
             self._journal_rows += 1
@@ -1026,6 +1123,12 @@ class MailboxStore:
             "store": MAILBOX_STORE_NAME,
             "external_relay": False,
         }
+        if producer_id is not None:
+            payload["producer_id"] = producer_id
+        if wire_id is not None:
+            payload["wire_id"] = wire_id
+        if payload_hash is not None:
+            payload["payload_hash"] = payload_hash
         appended = self._journal.append_event(
             event,
             scope_path=self._scope_path(envelope.to_actor, envelope.from_actor),
@@ -1049,11 +1152,21 @@ class MailboxStore:
             {"kind": "quant", "id": quant.quant_slug},
         ]
 
+    def _remember_wire_pair(self, record: DeliveryRecord) -> None:
+        if record.producer_id is None or record.wire_id is None or record.payload_hash is None:
+            return
+        self._by_wire_pair[(record.producer_id, record.wire_id)] = (
+            record.payload_hash,
+            record,
+        )
+
     def _index(self, record: DeliveryRecord) -> None:
         self._by_msg_id[record.envelope.msg_id] = record
+        self._remember_wire_pair(record)
 
     def _replace(self, record: DeliveryRecord) -> None:
         self._by_msg_id[record.envelope.msg_id] = record
+        self._remember_wire_pair(record)
         key = record.envelope.to_actor.value
         mailbox = self._mailboxes.get(key)
         if mailbox is not None and mailbox.record_for(record.envelope.msg_id) is not None:

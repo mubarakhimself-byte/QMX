@@ -207,13 +207,14 @@ def parse_list_mailbox_args(value: object) -> Result[Mapping[str, object]]:
 
 @dataclass(frozen=True, slots=True)
 class MailboxSnapshotRow:
-    """One snapshot row: envelope, delivery state, wire pair, server msg_id."""
+    """One snapshot row: envelope, delivery state, wire pair, hash, server msg_id."""
 
     envelope: Mapping[str, object]
     delivery_state: str
     msg_id: str | None = None
     producer_id: str | None = None
     wire_id: str | None = None
+    payload_hash: str | None = None
 
     def to_payload(self) -> Mapping[str, object]:
         payload: dict[str, object] = {
@@ -226,6 +227,8 @@ class MailboxSnapshotRow:
             payload["producer_id"] = self.producer_id
         if self.wire_id is not None:
             payload["wire_id"] = self.wire_id
+        if self.payload_hash is not None:
+            payload["payload_hash"] = self.payload_hash
         return MappingProxyType(payload)
 
 
@@ -268,6 +271,11 @@ def _parse_snapshot_row(value: object) -> Result[MailboxSnapshotRow]:
     wire = entry.get("wire_id")
     if wire is not None and (not isinstance(wire, str) or wire.strip() == ""):
         return _invalid("wire_id", "wire_id is a non-empty string when present")
+    payload_hash = entry.get("payload_hash")
+    if payload_hash is not None and (
+        not isinstance(payload_hash, str) or payload_hash.strip() == ""
+    ):
+        return _invalid("payload_hash", "payload_hash is a non-empty fp1 when present")
     return Ok(
         MailboxSnapshotRow(
             envelope=MappingProxyType(dict(cast("Mapping[str, object]", envelope))),
@@ -275,6 +283,7 @@ def _parse_snapshot_row(value: object) -> Result[MailboxSnapshotRow]:
             msg_id=None if msg_id is None else msg_id.strip(),
             producer_id=None if producer is None else producer.strip(),
             wire_id=None if wire is None else wire.strip(),
+            payload_hash=None if payload_hash is None else payload_hash.strip(),
         )
     )
 

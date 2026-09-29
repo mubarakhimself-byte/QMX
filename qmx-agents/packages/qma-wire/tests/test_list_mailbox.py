@@ -137,6 +137,7 @@ def test_parse_mailbox_snapshot_round_trip() -> None:
                     "msg_id": "msg-1",
                     "producer_id": "tab:P",
                     "wire_id": "C1",
+                    "payload_hash": "fp1:sha256:" + ("ab" * 32),
                 }
             ],
         }
@@ -149,3 +150,4 @@ def test_parse_mailbox_snapshot_round_trip() -> None:
     assert isinstance(rows, list)
     first = cast("dict[str, object]", rows[0])
     assert first["msg_id"] == "msg-1"
+    assert first["payload_hash"] == "fp1:sha256:" + ("ab" * 32)
