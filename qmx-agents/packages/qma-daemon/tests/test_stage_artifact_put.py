@@ -105,7 +105,8 @@ def _refusal_context(body: bytes) -> dict[str, object]:
     payload = _json_object(body)
     refusal_obj = payload["refusal"]
     assert isinstance(refusal_obj, dict)
-    context_obj = refusal_obj["context"]
+    refusal = cast("dict[str, object]", refusal_obj)
+    context_obj = refusal["context"]
     assert isinstance(context_obj, dict)
     return cast("dict[str, object]", context_obj)
 
@@ -656,9 +657,11 @@ def test_jsonrpc_stage_artifact_refused_on_live_ws(tmp_path: Path) -> None:
                 assert "error" not in init_resp, init_resp
                 result_obj = init_resp["result"]
                 assert isinstance(result_obj, dict)
-                caps_obj = result_obj["capabilities"]
+                result = cast("dict[str, object]", result_obj)
+                caps_obj = result["capabilities"]
                 assert isinstance(caps_obj, dict)
-                assert caps_obj.get(STAGE_ARTIFACT_CAPABILITY) is True
+                caps = cast("dict[str, object]", caps_obj)
+                assert caps.get(STAGE_ARTIFACT_CAPABILITY) is True
                 _ws_write(
                     writer,
                     {
@@ -672,12 +675,15 @@ def test_jsonrpc_stage_artifact_refused_on_live_ws(tmp_path: Path) -> None:
                 refused = await _ws_read_json(reader)
                 error_obj = refused["error"]
                 assert isinstance(error_obj, dict)
-                data_obj = error_obj["data"]
+                error = cast("dict[str, object]", error_obj)
+                data_obj = error["data"]
                 assert isinstance(data_obj, dict)
-                context_obj = data_obj["context"]
+                data = cast("dict[str, object]", data_obj)
+                context_obj = data["context"]
                 assert isinstance(context_obj, dict)
-                assert context_obj["jsonrpc_stage_artifact"] is False
-                assert context_obj["http_put"] == STAGE_ARTIFACT_HTTP_PATH
+                context = cast("dict[str, object]", context_obj)
+                assert context["jsonrpc_stage_artifact"] is False
+                assert context["http_put"] == STAGE_ARTIFACT_HTTP_PATH
                 assert process.artifacts.objects() == ()
             finally:
                 writer.close()
@@ -708,8 +714,10 @@ def test_initialize_omit_stage_artifact_refuses_put(tmp_path: Path) -> None:
                 assert "error" not in omitted, omitted
                 omit_result = omitted["result"]
                 assert isinstance(omit_result, dict)
-                advertised = omit_result["capabilities"]
-                assert isinstance(advertised, dict)
+                omit_caps = cast("dict[str, object]", omit_result)
+                advertised_obj = omit_caps["capabilities"]
+                assert isinstance(advertised_obj, dict)
+                advertised = cast("dict[str, object]", advertised_obj)
                 assert advertised.get(STAGE_ARTIFACT_CAPABILITY) is not True
             finally:
                 writer.close()
