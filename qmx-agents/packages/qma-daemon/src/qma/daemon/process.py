@@ -29,7 +29,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qma.core.plugins.hooks import HookSource
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
@@ -244,7 +244,8 @@ def _live_writer_pid(root: Path) -> int | None:
         return None
     if not isinstance(raw, dict):
         return None
-    pid = raw.get("pid")
+    mapping = cast("dict[str, object]", raw)
+    pid = mapping.get("pid")
     if isinstance(pid, bool) or not isinstance(pid, int):
         return None
     if _pid_is_live(pid):

@@ -73,7 +73,7 @@ def _raw_call(root: Path, verb: str, token: str, **fields: object) -> dict[str, 
     return cast("dict[str, object]", parsed)
 
 
-def _bootstrap_and_stop(tmp_path: Path, *, boot: str) -> tuple[str, str, list[object]]:
+def _bootstrap_and_stop(tmp_path: Path, *, boot: str) -> tuple[str, str, list[dict[str, object]]]:
     process = _compose(tmp_path, boot=boot)
     try:
         token = read_host_control_token(tmp_path)
