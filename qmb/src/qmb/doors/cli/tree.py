@@ -116,8 +116,10 @@ from qmb.workbench import refuse_caller_declared_lane_fields
 from .host import (
     HOST_COMMANDS,
     HOST_CONFIGURE_COMMANDS,
+    HOST_PAIR_COMMANDS,
     invoke_host_configure_pairing_ttl,
     invoke_host_pair,
+    invoke_host_pair_revoke,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -154,6 +156,7 @@ __all__ = [
     "HOLDS_CACHE",
     "HOST_COMMANDS",
     "HOST_CONFIGURE_COMMANDS",
+    "HOST_PAIR_COMMANDS",
     "LIBRARY_COMMANDS",
     "LIBRARY_KINDS_OCCUPANCY",
     "LIBRARY_MINTS_CT32",
@@ -178,6 +181,7 @@ __all__ = [
     "invoke_data",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_pair",
+    "invoke_host_pair_revoke",
     "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
@@ -321,6 +325,7 @@ _COMMAND_PREREQS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "host.rotate-control": (),
         "host.recover-control": (),
         "host.pair": ("code",),
+        "host.pair.revoke": (),
     }
 )
 

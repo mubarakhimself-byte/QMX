@@ -69,6 +69,7 @@ _CLI_INVOKERS: dict[str, str] = {
     "invoke_data": "data",
     "invoke_host_configure_pairing_ttl": "host.configure",
     "invoke_host_pair": "host.pair",
+    "invoke_host_pair_revoke": "host.pair",
     "invoke_host_recover_control": "host.recover-control",
     "invoke_host_rotate_control": "host.rotate-control",
     "invoke_host_start": "host.start",

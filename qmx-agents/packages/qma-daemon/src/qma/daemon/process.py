@@ -110,9 +110,12 @@ from qma.daemon.operator_log import (
 from qma.daemon.operator_log import emit_operator_event as write_operator_json_line
 from qma.daemon.operator_log import fingerprint_operator_log as refuse_operator_log_fp1
 from qma.daemon.pairing import (
+    PairingWsRegistry,
     confirm_pairing_pending_by_code,
+    origin_revoke_pairing,
     pairing_status_record_ids,
     restore_pairing_projections,
+    session_revoke_pairing,
 )
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
@@ -384,6 +387,7 @@ class DaemonProcess:
         self._host_control: HostControlChannel | None = None
         self._variables = GovernedVariableRegistry.with_builtins()
         self._local_operator: LocalOperatorLive | None = None
+        self._pairing_ws = PairingWsRegistry()
 
     @classmethod
     def compose(
@@ -923,6 +927,42 @@ class DaemonProcess:
             )
         )
 
+    def pair_revoke(
+        self,
+        origin: object = None,
+        pairing_record_id: object = None,
+    ) -> Result[Mapping[str, object]]:
+        """Host-control pair revoke: origin barrier or one pairing_record_id."""
+        origin_given = isinstance(origin, str) and origin.strip() != ""
+        session_given = isinstance(pairing_record_id, str) and pairing_record_id.strip() != ""
+        if origin_given and session_given:
+            return policy_rejection(
+                "revoke",
+                "use --origin or --session, not both",
+            )
+        if origin_given:
+            revoked = origin_revoke_pairing(
+                journal=self._journal,
+                sqlite=self.sqlite,
+                origin=origin,
+                ws_registry=self._pairing_ws,
+            )
+        elif session_given:
+            revoked = session_revoke_pairing(
+                journal=self._journal,
+                sqlite=self.sqlite,
+                pairing_record_id=pairing_record_id,
+                ws_registry=self._pairing_ws,
+            )
+        else:
+            return invalid_input(
+                "revoke",
+                "qmb host pair revoke requires --origin or --session",
+            )
+        if is_refusal(revoked):
+            return revoked
+        return Ok(MappingProxyType(dict(revoked.value)))
+
     def _restore_pairing_ttl(self) -> None:
         folded = fold_pairing_ttl_from_journal(self._journal)
         if folded is not None:
@@ -1017,6 +1057,7 @@ class DaemonProcess:
             on_configure_pairing_ttl=self.configure_pairing_ttl,
             on_rotate_control=self.rotate_control,
             on_pair=self.pair_pending,
+            on_pair_revoke=self.pair_revoke,
         )
         bound = await channel.bind()
         if is_refusal(bound):

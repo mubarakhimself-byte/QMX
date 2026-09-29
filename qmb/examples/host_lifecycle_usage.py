@@ -8,20 +8,29 @@ from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from qmb.doors.cli import COMMAND_GROUPS, HOST_COMMANDS, HOST_CONFIGURE_COMMANDS, command_tree
+from qmb.doors.cli import (
+    COMMAND_GROUPS,
+    HOST_COMMANDS,
+    HOST_CONFIGURE_COMMANDS,
+    HOST_PAIR_COMMANDS,
+    command_tree,
+)
 from qmb.doors.cli.host import (
     INSPECT_CWD_RELATIVE_ROOT,
     INSPECT_SHA_COMMAND_GROUPS,
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
+    QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA,
     claim_host_configure_existed_at_inspect_sha,
     claim_qmb_host_existed_at_inspect_sha,
+    claim_qmb_host_pair_revoke_existed_at_inspect_sha,
     claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
     invoke_host_configure_pairing_ttl,
     invoke_host_pair,
+    invoke_host_pair_revoke,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -50,9 +59,12 @@ def main() -> None:
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
+    assert HOST_PAIR_COMMANDS == ("revoke",)
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA is False
     assert is_refusal(claim_qmb_host_existed_at_inspect_sha(True))
+    assert is_refusal(claim_qmb_host_pair_revoke_existed_at_inspect_sha(True))
     assert is_refusal(claim_host_configure_existed_at_inspect_sha(True))
     assert is_refusal(claim_rotate_control_existed_at_inspect_sha(True))
     assert is_refusal(claim_recover_control_existed_at_inspect_sha(True))
@@ -151,6 +163,20 @@ def main() -> None:
                         "confirmed": True,
                     },
                 }
+            if verb == "pair-revoke":
+                assert extra is not None
+                assert extra["origin"] == "http://127.0.0.1:5173"
+                return {
+                    "ok": True,
+                    "revoked": {
+                        "scope": "origin",
+                        "origin": extra["origin"],
+                        "journal_seq": 11,
+                        "barrier": "journal_seq",
+                        "noop": False,
+                        "revoked_record_ids": ["pr_example"],
+                    },
+                }
             if verb == "rotate-control":
                 return {
                     "ok": True,
@@ -172,6 +198,14 @@ def main() -> None:
         assert is_ok(paired), paired
         assert paired.value["confirmed"] is True
         assert "pairing_proof" not in paired.value
+        revoked = invoke_host_pair_revoke(
+            origin="http://127.0.0.1:5173",
+            root=root,
+            transport=transport,
+        )
+        assert is_ok(revoked), revoked
+        assert revoked.value["journal_seq"] == 11
+        assert revoked.value["barrier"] == "journal_seq"
         rotated = invoke_host_rotate_control(root=root, transport=transport)
         assert is_ok(rotated), rotated
         assert rotated.value["rotated"] is True

@@ -16,9 +16,11 @@ from qmb.doors.cli import (
     COMMAND_GROUPS,
     HOST_COMMANDS,
     HOST_CONFIGURE_COMMANDS,
+    HOST_PAIR_COMMANDS,
     command_tree,
     invoke_host_configure_pairing_ttl,
     invoke_host_pair,
+    invoke_host_pair_revoke,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -41,6 +43,7 @@ from qmb.doors.cli.host import (
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA,
+    QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA,
     QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA,
     REUSES_QMB_HOST_PACKAGE,
@@ -53,6 +56,7 @@ from qmb.doors.cli.host import (
     claim_local_operator_bootstrap_is_this_story,
     claim_qmb_host_existed_at_inspect_sha,
     claim_qmb_host_pair_existed_at_inspect_sha,
+    claim_qmb_host_pair_revoke_existed_at_inspect_sha,
     claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
@@ -208,6 +212,20 @@ class _HostControlServer(threading.Thread):
                     "code": request.get("code"),
                 },
             }
+        elif verb == "pair-revoke":
+            payload = {
+                "ok": True,
+                "revoked": {
+                    "scope": "origin" if request.get("origin") else "session",
+                    "origin": request.get("origin"),
+                    "pairing_record_id": request.get("pairing_record_id"),
+                    "journal_seq": 17,
+                    "barrier": "journal_seq",
+                    "noop": False,
+                    "revoked_record_ids": ["pr_fixture"],
+                    "pairing_proof": "must-not-leak",
+                },
+            }
         elif verb == "rotate-control":
             rotated = "rotated-" + self._token
             _write_token(self._root, rotated)
@@ -271,6 +289,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
         )
     )
     assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl",)
+    assert HOST_PAIR_COMMANDS == ("revoke",)
     assert "pair" in HOST_COMMANDS
     runner = CliRunner()
     helped = runner.invoke(main, ["host", "--help"])
@@ -287,6 +306,9 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     configure_help = runner.invoke(main, ["host", "configure", "--help"])
     assert configure_help.exit_code == 0, configure_help.output
     assert "pairing-ttl" in configure_help.output
+    pair_help = runner.invoke(main, ["host", "pair", "--help"])
+    assert pair_help.exit_code == 0, pair_help.output
+    assert "revoke" in pair_help.output
 
 
 def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
@@ -432,6 +454,7 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA is False
+    assert QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA is False
     assert LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY is False
     assert REUSES_QMB_HOST_PACKAGE is False
     claimed = claim_qmb_host_existed_at_inspect_sha(True)
@@ -449,6 +472,9 @@ def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     pair_claimed = claim_qmb_host_pair_existed_at_inspect_sha(True)
     assert is_refusal(pair_claimed)
     assert is_ok(claim_qmb_host_pair_existed_at_inspect_sha(False))
+    revoke_claimed = claim_qmb_host_pair_revoke_existed_at_inspect_sha(True)
+    assert is_refusal(revoke_claimed)
+    assert is_ok(claim_qmb_host_pair_revoke_existed_at_inspect_sha(False))
     assert is_refusal(claim_local_operator_bootstrap_is_this_story(True))
     assert is_ok(claim_local_operator_bootstrap_is_this_story(False))
     absent = claim_types_absent_at_inspect_sha(True)
@@ -524,6 +550,98 @@ def test_host_pair_confirms_without_issuing_proof(tmp_path: Path) -> None:
     finally:
         server.close()
         server.join(timeout=2)
+
+
+def test_host_pair_revoke_origin_and_session_over_host_control(tmp_path: Path) -> None:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        _write_token(tmp_path)
+        _write_bind(tmp_path, "127.0.0.1", server.port)
+        origin = "http://127.0.0.1:5173"
+        report = _ok_mapping(invoke_host_pair_revoke(origin=origin, root=tmp_path))
+        assert report["verb"] == "host.pair.revoke"
+        assert report["scope"] == "origin"
+        assert report["origin"] == origin
+        assert report["journal_seq"] == 17
+        assert report["barrier"] == "journal_seq"
+        assert report["noop"] is False
+        assert "pairing_proof" not in report
+        assert "pair-revoke" in server.seen_verbs
+        session_report = _ok_mapping(invoke_host_pair_revoke(session="pr_old", root=tmp_path))
+        assert session_report["scope"] == "session"
+        assert session_report["pairing_record_id"] == "pr_old"
+        both = invoke_host_pair_revoke(origin=origin, session="pr_old", root=tmp_path)
+        assert is_refusal(both)
+        assert both.context["field"] == "revoke"
+        missing = invoke_host_pair_revoke(root=tmp_path)
+        assert is_refusal(missing)
+        assert missing.context["field"] == "revoke"
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+def test_host_pair_revoke_requires_host_control(tmp_path: Path) -> None:
+    refused = invoke_host_pair_revoke(origin="http://127.0.0.1:5173", root=tmp_path)
+    assert is_refusal(refused)
+    assert refused.context["field"] == "host_control"
+
+
+def test_click_host_pair_code_and_revoke(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+    seen: list[tuple[str, Mapping[str, object] | None]] = []
+
+    def transport(
+        verb: str,
+        token: str,
+        *,
+        root: Path,
+        extra: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        _ = root
+        assert token == _TOKEN
+        seen.append((verb, extra))
+        if verb == "pair":
+            return {
+                "ok": True,
+                "paired": {"pairing_record_id": "pr_click", "confirmed": True},
+            }
+        assert verb == "pair-revoke"
+        return {
+            "ok": True,
+            "revoked": {
+                "scope": "origin",
+                "origin": extra["origin"] if extra is not None else None,
+                "journal_seq": 9,
+                "barrier": "journal_seq",
+                "noop": False,
+                "revoked_record_ids": ["pr_click"],
+            },
+        }
+
+    runner = CliRunner()
+    paired = runner.invoke(
+        main,
+        ["host", "pair", "pending-code"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert paired.exit_code == 0, paired.output
+    pair_payload = json.loads(paired.stdout)
+    assert pair_payload["verb"] == "host.pair"
+    assert pair_payload["confirmed"] is True
+    revoked = runner.invoke(
+        main,
+        ["host", "pair", "revoke", "--origin", "http://127.0.0.1:5173"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert revoked.exit_code == 0, revoked.output
+    revoke_payload = json.loads(revoked.stdout)
+    assert revoke_payload["verb"] == "host.pair.revoke"
+    assert revoke_payload["journal_seq"] == 9
+    assert revoke_payload["barrier"] == "journal_seq"
+    assert seen[0][0] == "pair"
+    assert seen[1][0] == "pair-revoke"
 
 
 def test_click_host_configure_pairing_ttl(tmp_path: Path) -> None:

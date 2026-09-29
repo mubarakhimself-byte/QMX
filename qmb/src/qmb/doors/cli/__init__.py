@@ -52,6 +52,7 @@ from qmb.doors.cli.tree import (
     HOLDS_CACHE,
     HOST_COMMANDS,
     HOST_CONFIGURE_COMMANDS,
+    HOST_PAIR_COMMANDS,
     LIBRARY_COMMANDS,
     LIBRARY_KINDS_OCCUPANCY,
     LIBRARY_MINTS_CT32,
@@ -76,6 +77,7 @@ from qmb.doors.cli.tree import (
     invoke_data,
     invoke_host_configure_pairing_ttl,
     invoke_host_pair,
+    invoke_host_pair_revoke,
     invoke_host_recover_control,
     invoke_host_rotate_control,
     invoke_host_start,
@@ -145,6 +147,7 @@ __all__ = [
     "HOLDS_CACHE",
     "HOST_COMMANDS",
     "HOST_CONFIGURE_COMMANDS",
+    "HOST_PAIR_COMMANDS",
     "LIBRARY_COMMANDS",
     "LIBRARY_KINDS_OCCUPANCY",
     "LIBRARY_MINTS_CT32",
@@ -169,6 +172,7 @@ __all__ = [
     "invoke_data",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_pair",
+    "invoke_host_pair_revoke",
     "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
@@ -1752,16 +1756,55 @@ def host_recover_control(ctx: click.Context) -> None:
     )
 
 
-@host_group.command("pair")
+class HostPairGroup(click.Group):
+    """``qmb host pair CODE`` confirms; ``qmb host pair revoke`` is the subcommand."""
+
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        if args:
+            name = args[0]
+            if name not in self.commands and not name.startswith("-"):
+                confirm = self.get_command(ctx, "confirm")
+                if confirm is not None:
+                    return "confirm", confirm, list(args)
+        return super().resolve_command(ctx, args)
+
+
+@host_group.group("pair", cls=HostPairGroup)
+def host_pair() -> None:
+    """Confirm a pending code, or revoke --origin/--session over host-control."""
+
+
+@host_pair.command("confirm", hidden=True)
 @click.argument("code")
 @click.pass_context
-def host_pair(ctx: click.Context, code: str) -> None:
+def host_pair_confirm(ctx: click.Context, code: str) -> None:
     """Confirm a pending pairing code over host-control. Does not issue a proof."""
     payload = _payload(ctx)
     _transport(
         ctx,
         invoke_host_pair(
             code,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
+@host_pair.command("revoke")
+@click.option("--origin", default=None, help="Static Origin to barrier-revoke.")
+@click.option("--session", default=None, help="pairing_record_id to revoke only.")
+@click.pass_context
+def host_pair_revoke(ctx: click.Context, origin: str | None, session: str | None) -> None:
+    """Origin-revoke is a journal_seq barrier; --session is that record only."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_pair_revoke(
+            origin=origin,
+            session=session,
             root=payload.get("root"),
             environ=payload.get("environ"),
             transport=payload.get("transport"),
@@ -1850,6 +1893,7 @@ def _format_ok(value: object) -> str:
             "host.rotate-control",
             "host.recover-control",
             "host.pair",
+            "host.pair.revoke",
         }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.

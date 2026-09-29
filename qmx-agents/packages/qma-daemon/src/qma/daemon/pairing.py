@@ -3,6 +3,10 @@
 Story 68.4: Origin never issues a proof. Issuance is confirm-once after
 ``qmb host pair <code>`` of that pending, or authenticated ``/pair/renew``.
 
+Story 68.5: ``qmb host pair revoke --origin`` is a ``journal_seq`` barrier at R.
+``--session`` revokes that ``pairing_record_id`` only. Barrier identity is
+``journal_seq`` R, never wall clock and never a minted TTL number.
+
 ``pairing_proof`` is the RFC 6750 bearer. ``pairing_record_id`` is the nonsecret
 journal identity. Projections ``pairing_pending`` and ``pairing_session`` store
 ``proof_fp1`` (and pending ``code_fp1``) never the raw proof. Named add on the
@@ -22,7 +26,7 @@ import secrets
 import sqlite3
 import threading
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final, cast
 
@@ -75,13 +79,19 @@ __all__ = [
     "LOCALSTORAGE_PROOF_SHIPPED",
     "LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY",
     "ORIGIN_ONLY_AUTO_APPROVE",
+    "ORIGIN_REVOKE_MINTS_TTL",
+    "ORIGIN_REVOKE_USES_WALL_CLOCK",
     "PAIRING_BEARER_TRANSPORT_EXISTED_AT_INSPECT_SHA",
     "PAIRING_DELIVERED_COPILOT_PROFILE",
     "PAIRING_HTTP_EXISTED_AT_INSPECT_SHA",
     "PAIRING_INSPECT_SHA",
     "PAIRING_NEW_SQLITE_CLASS",
+    "PAIRING_ORIGIN_BARRIER_TABLE",
+    "PAIRING_ORIGIN_REVOKED_EVENT",
+    "PAIRING_ORIGIN_REVOKE_EXISTED_AT_INSPECT_SHA",
     "PAIRING_PENDING_EVENT_CONFIRMED",
     "PAIRING_PENDING_EVENT_CONSUMED",
+    "PAIRING_PENDING_EVENT_REVOKED",
     "PAIRING_PENDING_EVENT_STARTED",
     "PAIRING_PENDING_EXISTED_AT_INSPECT_SHA",
     "PAIRING_PENDING_FOLD_ID",
@@ -99,6 +109,7 @@ __all__ = [
     "PAIRING_TABLE_EXISTED_AT_INSPECT_SHA",
     "PAIRING_WS_SUBPROTOCOLS_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA",
     "WEBSOCKETS_IMPORTS_AT_INSPECT_SHA",
     "IssuedPairingPending",
     "IssuedPairingProof",
@@ -117,26 +128,31 @@ __all__ = [
     "claim_pairing_table_existed_at_inspect_sha",
     "claim_pairing_transports_existed_at_inspect_sha",
     "claim_qmb_host_pair_existed_at_inspect_sha",
+    "claim_qmb_host_pair_revoke_existed_at_inspect_sha",
     "claim_this_story_delivered_copilot_profile",
     "close_ws_for_proof_fp1",
     "confirm_pairing_pending_by_code",
     "confirm_pairing_session_once",
+    "fold_origin_barriers_from_journal",
     "fold_pairing_pendings_from_journal",
     "fold_pairing_sessions_from_journal",
     "issue_pairing_session",
     "journal_blob_contains_secret",
     "live_pairing_sessions_for_origin",
+    "load_origin_barrier_seq",
     "load_pairing_pending",
     "load_pairing_session",
     "match_pairing_pending_by_code",
     "match_pairing_session_by_proof",
     "mint_pairing_proof",
     "mint_pairing_record_id",
+    "origin_revoke_pairing",
     "pairing_proof_fp1",
     "pairing_status_record_ids",
     "redact_pairing_access_log",
     "renew_pairing_session",
     "restore_pairing_projections",
+    "session_revoke_pairing",
     "start_pairing_pending",
 ]
 
@@ -151,13 +167,20 @@ PAIRING_STORE_CLASS: Final[str] = StoreClass.JOURNAL_DERIVED_PROJECTION.value
 PAIRING_PENDING_EVENT_STARTED: Final[str] = "pairing_pending.started"
 PAIRING_PENDING_EVENT_CONFIRMED: Final[str] = "pairing_pending.confirmed"
 PAIRING_PENDING_EVENT_CONSUMED: Final[str] = "pairing_pending.consumed"
+PAIRING_PENDING_EVENT_REVOKED: Final[str] = "pairing_pending.revoked"
 PAIRING_SESSION_EVENT_ISSUED: Final[str] = "pairing_session.issued"
 PAIRING_SESSION_EVENT_REVOKED: Final[str] = "pairing_session.revoked"
+PAIRING_ORIGIN_REVOKED_EVENT: Final[str] = "pairing.origin_revoked"
+PAIRING_ORIGIN_BARRIER_TABLE: Final[str] = "pairing_origin_barrier"
 CONFIRM_ONCE_COUNT: Final[int] = 1
 ORIGIN_ONLY_AUTO_APPROVE: Final[bool] = False
+ORIGIN_REVOKE_USES_WALL_CLOCK: Final[bool] = False
+ORIGIN_REVOKE_MINTS_TTL: Final[bool] = False
 QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+PAIRING_ORIGIN_REVOKE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY: Final[bool] = False
-_CONFIRM_ONCE_LOCK: Final[threading.Lock] = threading.Lock()
+_PAIRING_WRITE_LOCK: Final[threading.Lock] = threading.Lock()
 PAIRING_NEW_SQLITE_CLASS: Final[bool] = False
 PAIRING_INSPECT_SHA: Final[str] = HOST_CONTROL_INSPECT_SHA
 PAIRING_HTTP_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -197,6 +220,14 @@ CREATE TABLE IF NOT EXISTS pairing_session (
     expires_at INTEGER NOT NULL,
     revoked INTEGER NOT NULL,
     pending_lineage TEXT NOT NULL,
+    journal_seq INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL
+);
+"""
+
+_ORIGIN_BARRIER_SCHEMA_SQL: Final[str] = """
+CREATE TABLE IF NOT EXISTS pairing_origin_barrier (
+    origin TEXT PRIMARY KEY NOT NULL,
     journal_seq INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL
 );
@@ -283,6 +314,15 @@ def claim_qmb_host_pair_existed_at_inspect_sha(existed: object) -> Result[bool]:
     return _claim_absent(
         "host.pair",
         "qmb host pair was absent at inspect SHA 34c148be (COMMAND_GROUPS had no host)",
+        existed,
+    )
+
+
+def claim_qmb_host_pair_revoke_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host pair revoke`` existed at inspect SHA ``34c148be`` fails."""
+    return _claim_absent(
+        "host.pair.revoke",
+        "qmb host pair revoke was absent at inspect SHA 34c148be (DEC-0507 ABSENT)",
         existed,
     )
 
@@ -474,6 +514,7 @@ def _ensure_schema(sqlite: SingleSqliteWriter) -> None:
     def _ddl(conn: sqlite3.Connection) -> None:
         conn.executescript(_PENDING_SCHEMA_SQL)
         conn.executescript(_SESSION_SCHEMA_SQL)
+        conn.executescript(_ORIGIN_BARRIER_SCHEMA_SQL)
         columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(pairing_pending)")}
         if "confirmed_at" not in columns:
             conn.execute(
@@ -673,6 +714,52 @@ def _put_session(sqlite: SingleSqliteWriter, live: PairingSessionLive) -> None:
     )
 
 
+def _put_origin_barrier(
+    sqlite: SingleSqliteWriter,
+    *,
+    origin: str,
+    journal_seq: int,
+    recorded_at: int,
+) -> None:
+    _ensure_schema(sqlite)
+    existing = load_origin_barrier_seq(sqlite, origin)
+    if existing is not None and existing >= journal_seq:
+        return
+    sqlite.execute(
+        "INSERT OR REPLACE INTO pairing_origin_barrier "
+        "(origin, journal_seq, recorded_at) VALUES (?, ?, ?)",
+        (origin, journal_seq, recorded_at),
+    )
+
+
+def load_origin_barrier_seq(sqlite: SingleSqliteWriter, origin: object) -> int | None:
+    """Highest origin-revoke ``journal_seq`` R for this Origin, or None."""
+    parsed = _require_origin(origin)
+    if is_refusal(parsed):
+        return None
+    names = _table_names(sqlite)
+    if PAIRING_ORIGIN_BARRIER_TABLE not in names:
+        return None
+    rows = sqlite.execute(
+        "SELECT journal_seq FROM pairing_origin_barrier WHERE origin = ?",
+        (parsed.value,),
+    )
+    if not rows:
+        return None
+    return _as_int(rows[0][0])
+
+
+def _barred_by_origin_revoke(
+    sqlite: SingleSqliteWriter,
+    origin: str,
+    journal_seq: int,
+) -> bool:
+    barrier = load_origin_barrier_seq(sqlite, origin)
+    if barrier is None:
+        return False
+    return journal_seq < barrier
+
+
 def _payload_has_raw_secret(payload: Mapping[str, object]) -> bool:
     if PAIRING_SESSION_ID_FIELD in payload or "pairing_session_id" in payload:
         return True
@@ -786,6 +873,60 @@ def _session_from_row(row: Mapping[str, object]) -> PairingSessionLive | None:
     )
 
 
+def _origin_barriers_from_rows(
+    rows: Sequence[Mapping[str, object]],
+) -> dict[str, tuple[int, int]]:
+    """origin -> (journal_seq R, recorded_at). Max R wins. Never wall-clock cutoff."""
+    barriers: dict[str, tuple[int, int]] = {}
+    for raw in rows:
+        event = raw.get("event")
+        if event != PAIRING_ORIGIN_REVOKED_EVENT:
+            continue
+        payload = raw.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        body = cast("dict[str, object]", payload)
+        origin = body.get("origin")
+        seq = _as_int(raw.get("journal_seq"))
+        recorded = _as_int(raw.get("recorded_at"))
+        if not isinstance(origin, str) or origin.strip() == "" or seq is None or recorded is None:
+            continue
+        previous = barriers.get(origin.strip())
+        if previous is None or seq >= previous[0]:
+            barriers[origin.strip()] = (seq, recorded)
+    return barriers
+
+
+def fold_origin_barriers_from_journal(
+    journal: AuthoritativeJournal,
+) -> dict[str, tuple[int, int]]:
+    """Fold ``pairing.origin_revoked`` barriers. Identity is ``journal_seq`` R."""
+    rows = journal.read_all()
+    if is_refusal(rows):
+        return {}
+    return _origin_barriers_from_rows(rows.value)
+
+
+def _apply_origin_barrier_pending(
+    live: PairingPendingLive,
+    barriers: Mapping[str, tuple[int, int]],
+) -> PairingPendingLive:
+    barrier = barriers.get(live.origin)
+    if barrier is None or live.revoked or live.journal_seq >= barrier[0]:
+        return live
+    return replace(live, revoked=True)
+
+
+def _apply_origin_barrier_session(
+    live: PairingSessionLive,
+    barriers: Mapping[str, tuple[int, int]],
+) -> PairingSessionLive:
+    barrier = barriers.get(live.origin)
+    if barrier is None or live.revoked or live.journal_seq >= barrier[0]:
+        return live
+    return replace(live, revoked=True)
+
+
 def fold_pairing_pendings_from_journal(
     journal: AuthoritativeJournal,
 ) -> tuple[PairingPendingLive, ...]:
@@ -807,8 +948,9 @@ def fold_pairing_pendings_from_journal(
         if previous is None or key >= previous:
             chosen_key[live.pairing_record_id] = key
             chosen[live.pairing_record_id] = live
+    barriers = _origin_barriers_from_rows(rows.value)
     ordered = sorted(chosen.values(), key=lambda item: (item.recorded_at, item.journal_seq))
-    return tuple(ordered)
+    return tuple(_apply_origin_barrier_pending(item, barriers) for item in ordered)
 
 
 def fold_pairing_sessions_from_journal(
@@ -832,8 +974,9 @@ def fold_pairing_sessions_from_journal(
         if previous is None or key >= previous:
             chosen_key[live.pairing_record_id] = key
             chosen[live.pairing_record_id] = live
+    barriers = _origin_barriers_from_rows(rows.value)
     ordered = sorted(chosen.values(), key=lambda item: (item.recorded_at, item.journal_seq))
-    return tuple(ordered)
+    return tuple(_apply_origin_barrier_session(item, barriers) for item in ordered)
 
 
 def _declare_folds(journal: AuthoritativeJournal) -> Result[None]:
@@ -860,6 +1003,16 @@ def restore_pairing_projections(
         return declared
     pendings = fold_pairing_pendings_from_journal(journal)
     sessions = fold_pairing_sessions_from_journal(journal)
+    barriers = fold_origin_barriers_from_journal(journal)
+    if barriers:
+        _ensure_schema(sqlite)
+        for origin, (seq, recorded_at) in barriers.items():
+            _put_origin_barrier(
+                sqlite,
+                origin=origin,
+                journal_seq=seq,
+                recorded_at=recorded_at,
+            )
     if pendings:
         for live in pendings:
             _put_pending(sqlite, live)
@@ -1115,7 +1268,7 @@ def match_pairing_pending_by_code(
         stored = live.code_fp1.encode("utf-8")
         if not (len(stored) == len(presented) and hmac.compare_digest(stored, presented)):
             continue
-        if live.revoked:
+        if live.revoked or _barred_by_origin_revoke(sqlite, live.origin, live.journal_seq):
             continue
         if live.consumed:
             consumed_match = True
@@ -1142,6 +1295,22 @@ def confirm_pairing_pending_by_code(
     declared = _declare_folds(journal)
     if is_refusal(declared):
         return declared
+    with _PAIRING_WRITE_LOCK:
+        return _confirm_pairing_pending_by_code_locked(
+            journal=journal,
+            sqlite=sqlite,
+            code=code,
+            now_ns=now_ns,
+        )
+
+
+def _confirm_pairing_pending_by_code_locked(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    code: object,
+    now_ns: object = None,
+) -> Result[PairingPendingLive]:
     matched = match_pairing_pending_by_code(sqlite, code=code, now_ns=now_ns)
     if is_refusal(matched):
         return matched
@@ -1196,7 +1365,7 @@ def confirm_pairing_session_once(
         return parsed_operator
     if not isinstance(pending_id, str) or not is_pairing_record_id(pending_id):
         return _origin_never_sufficient()
-    with _CONFIRM_ONCE_LOCK:
+    with _PAIRING_WRITE_LOCK:
         live = load_pairing_pending(sqlite, pending_id)
         if live is None:
             return _origin_never_sufficient()
@@ -1206,7 +1375,7 @@ def confirm_pairing_session_once(
                 "Origin + pending do not match; Origin is required and never sufficient",
                 origin_only_auto_approve=ORIGIN_ONLY_AUTO_APPROVE,
             )
-        if live.revoked:
+        if live.revoked or _barred_by_origin_revoke(sqlite, live.origin, live.journal_seq):
             return _policy("pending", "pending is revoked")
         now = _as_int(now_ns)
         if now is not None and live.expires_at <= now:
@@ -1267,6 +1436,8 @@ def live_pairing_sessions_for_origin(
         live = _session_from_tuple(row)
         if live is None or live.origin != parsed_origin.value or live.revoked:
             continue
+        if _barred_by_origin_revoke(sqlite, live.origin, live.journal_seq):
+            continue
         if now is not None and live.expires_at <= now:
             continue
         found.append(live)
@@ -1289,11 +1460,15 @@ def _revoke_pairing_session(
     journal: AuthoritativeJournal,
     sqlite: SingleSqliteWriter,
     live: PairingSessionLive,
-    successor_pairing_record_id: str,
+    successor_pairing_record_id: str | None = None,
+    noop: bool = False,
 ) -> Result[PairingSessionLive]:
-    revoked = replace(live, revoked=True)
+    revoked = live if noop else replace(live, revoked=True)
     payload = revoked.to_payload()
-    payload["successor_pairing_record_id"] = successor_pairing_record_id
+    if successor_pairing_record_id is not None:
+        payload["successor_pairing_record_id"] = successor_pairing_record_id
+    if noop:
+        payload["noop"] = True
     if _payload_has_raw_secret(payload):
         return storage_failure(
             "session payload refused raw secret",
@@ -1305,14 +1480,266 @@ def _revoke_pairing_session(
     record = append.value.record
     stored = replace(
         revoked,
-        journal_seq=record.journal_seq,
+        journal_seq=live.journal_seq if noop else record.journal_seq,
         recorded_at=record.recorded_at,
     )
-    _put_session(sqlite, stored)
-    materialized = journal.stores.materialize_on_first_write(PAIRING_SESSION_STORE)
-    if is_refusal(materialized):
-        return materialized
+    if not noop:
+        _put_session(sqlite, stored)
+        materialized = journal.stores.materialize_on_first_write(PAIRING_SESSION_STORE)
+        if is_refusal(materialized):
+            return materialized
     return Ok(stored)
+
+
+def _revoke_pairing_pending(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    live: PairingPendingLive,
+    noop: bool = False,
+) -> Result[PairingPendingLive]:
+    revoked = live if noop else replace(live, revoked=True)
+    payload = revoked.to_payload()
+    if noop:
+        payload["noop"] = True
+    if _payload_has_raw_secret(payload):
+        return storage_failure(
+            "pending payload refused raw secret",
+            context={"field": "pairing_pending"},
+        )
+    append = journal.append_event(PAIRING_PENDING_EVENT_REVOKED, payload=payload)
+    if is_refusal(append):
+        return append
+    record = append.value.record
+    stored = replace(
+        revoked,
+        journal_seq=live.journal_seq if noop else record.journal_seq,
+        recorded_at=record.recorded_at,
+    )
+    if not noop:
+        _put_pending(sqlite, stored)
+        materialized = journal.stores.materialize_on_first_write(PAIRING_PENDING_STORE)
+        if is_refusal(materialized):
+            return materialized
+    return Ok(stored)
+
+
+def _iter_pendings(sqlite: SingleSqliteWriter) -> tuple[PairingPendingLive, ...]:
+    names = _table_names(sqlite)
+    if PAIRING_PENDING_TABLE not in names:
+        return ()
+    _ensure_schema(sqlite)
+    found: list[PairingPendingLive] = []
+    for row in sqlite.execute(_PENDING_SELECT):
+        live = _pending_from_tuple(row)
+        if live is not None:
+            found.append(live)
+    return tuple(found)
+
+
+def _iter_sessions(sqlite: SingleSqliteWriter) -> tuple[PairingSessionLive, ...]:
+    names = _table_names(sqlite)
+    if PAIRING_SESSION_TABLE not in names:
+        return ()
+    found: list[PairingSessionLive] = []
+    for row in sqlite.execute(_SESSION_SELECT):
+        live = _session_from_tuple(row)
+        if live is not None:
+            found.append(live)
+    return tuple(found)
+
+
+def origin_revoke_pairing(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    origin: object,
+    ws_registry: PairingWsRegistry | None = None,
+) -> Result[Mapping[str, object]]:
+    """Append origin-revoke at ``journal_seq`` R; revoke that Origin's rows with seq < R.
+
+    Barrier identity is R, not wall clock and not a TTL number. Always appends;
+    never discarded because a renew committed first. Does not delete journal
+    history. Does not cut every Origin on the daemon.
+    """
+    if ORIGIN_REVOKE_USES_WALL_CLOCK or ORIGIN_REVOKE_MINTS_TTL:
+        return _policy(
+            "origin_revoke",
+            "origin-revoke barrier identity is journal_seq, not wall clock or TTL",
+        )
+    declared = _declare_folds(journal)
+    if is_refusal(declared):
+        return declared
+    parsed_origin = _require_origin(origin)
+    if is_refusal(parsed_origin):
+        return parsed_origin
+    with _PAIRING_WRITE_LOCK:
+        payload: dict[str, object] = {
+            "origin": parsed_origin.value,
+            "barrier": "journal_seq",
+        }
+        if _payload_has_raw_secret(payload):
+            return storage_failure(
+                "origin-revoke payload refused raw secret",
+                context={"field": "origin"},
+            )
+        append = journal.append_event(PAIRING_ORIGIN_REVOKED_EVENT, payload=payload)
+        if is_refusal(append):
+            return append
+        record = append.value.record
+        barrier_seq = record.journal_seq
+        _put_origin_barrier(
+            sqlite,
+            origin=parsed_origin.value,
+            journal_seq=barrier_seq,
+            recorded_at=record.recorded_at,
+        )
+        revoked_ids: list[str] = []
+        closed = 0
+        for pending in _iter_pendings(sqlite):
+            if pending.origin != parsed_origin.value or pending.revoked:
+                continue
+            if pending.journal_seq >= barrier_seq:
+                continue
+            revoked = _revoke_pairing_pending(
+                journal=journal,
+                sqlite=sqlite,
+                live=pending,
+            )
+            if is_refusal(revoked):
+                return revoked
+            revoked_ids.append(pending.pairing_record_id)
+        for session in _iter_sessions(sqlite):
+            if session.origin != parsed_origin.value or session.revoked:
+                continue
+            if session.journal_seq >= barrier_seq:
+                continue
+            revoked_session = _revoke_pairing_session(
+                journal=journal,
+                sqlite=sqlite,
+                live=session,
+            )
+            if is_refusal(revoked_session):
+                return revoked_session
+            revoked_ids.append(session.pairing_record_id)
+            closed += close_ws_for_proof_fp1(session.proof_fp1, ws_registry)
+        return Ok(
+            {
+                "scope": "origin",
+                "origin": parsed_origin.value,
+                "journal_seq": barrier_seq,
+                "barrier": "journal_seq",
+                "noop": False,
+                "revoked_record_ids": tuple(revoked_ids),
+                "ws_closed": closed,
+            }
+        )
+
+
+def session_revoke_pairing(
+    *,
+    journal: AuthoritativeJournal,
+    sqlite: SingleSqliteWriter,
+    pairing_record_id: object,
+    ws_registry: PairingWsRegistry | None = None,
+) -> Result[Mapping[str, object]]:
+    """Revoke that ``pairing_record_id`` only. Never origin-wide-cuts.
+
+    After a renew, ``--session`` of the old id is a recorded no-op; the new
+    proof stays live until ``--origin``.
+    """
+    declared = _declare_folds(journal)
+    if is_refusal(declared):
+        return declared
+    if not isinstance(pairing_record_id, str) or not is_pairing_record_id(pairing_record_id):
+        return invalid_input(
+            "session",
+            "qmb host pair revoke --session requires a pairing_record_id",
+            given=repr(pairing_record_id),
+        )
+    with _PAIRING_WRITE_LOCK:
+        session = load_pairing_session(sqlite, pairing_record_id)
+        if session is not None:
+            if session.revoked:
+                recorded = _revoke_pairing_session(
+                    journal=journal,
+                    sqlite=sqlite,
+                    live=session,
+                    noop=True,
+                )
+                if is_refusal(recorded):
+                    return recorded
+                return Ok(
+                    {
+                        "scope": "session",
+                        "pairing_record_id": pairing_record_id,
+                        "journal_seq": recorded.value.journal_seq,
+                        "noop": True,
+                        "revoked_record_ids": (),
+                        "ws_closed": 0,
+                    }
+                )
+            revoked = _revoke_pairing_session(
+                journal=journal,
+                sqlite=sqlite,
+                live=session,
+            )
+            if is_refusal(revoked):
+                return revoked
+            closed = close_ws_for_proof_fp1(session.proof_fp1, ws_registry)
+            return Ok(
+                {
+                    "scope": "session",
+                    "pairing_record_id": pairing_record_id,
+                    "journal_seq": revoked.value.journal_seq,
+                    "noop": False,
+                    "revoked_record_ids": (pairing_record_id,),
+                    "ws_closed": closed,
+                }
+            )
+        pending = load_pairing_pending(sqlite, pairing_record_id)
+        if pending is None:
+            return _policy(
+                "session",
+                "pairing_record_id does not exist",
+                pairing_record_id=pairing_record_id,
+            )
+        if pending.revoked:
+            recorded = _revoke_pairing_pending(
+                journal=journal,
+                sqlite=sqlite,
+                live=pending,
+                noop=True,
+            )
+            if is_refusal(recorded):
+                return recorded
+            return Ok(
+                {
+                    "scope": "session",
+                    "pairing_record_id": pairing_record_id,
+                    "journal_seq": recorded.value.journal_seq,
+                    "noop": True,
+                    "revoked_record_ids": (),
+                    "ws_closed": 0,
+                }
+            )
+        revoked_pending = _revoke_pairing_pending(
+            journal=journal,
+            sqlite=sqlite,
+            live=pending,
+        )
+        if is_refusal(revoked_pending):
+            return revoked_pending
+        return Ok(
+            {
+                "scope": "session",
+                "pairing_record_id": pairing_record_id,
+                "journal_seq": revoked_pending.value.journal_seq,
+                "noop": False,
+                "revoked_record_ids": (pairing_record_id,),
+                "ws_closed": 0,
+            }
+        )
 
 
 def renew_pairing_session(
@@ -1327,36 +1754,37 @@ def renew_pairing_session(
     ws_registry: PairingWsRegistry | None = None,
 ) -> Result[IssuedPairingProof]:
     """Rotate: new record + proof; old ``proof_fp1`` revoked; old WS closed."""
-    matched = match_pairing_session_by_proof(
-        sqlite,
-        origin=origin,
-        proof=proof,
-        now_ns=now_ns,
-    )
-    if is_refusal(matched):
-        return matched
-    old = matched.value
-    lineage = old.pairing_record_id
-    issued = issue_pairing_session(
-        journal=journal,
-        sqlite=sqlite,
-        origin=origin,
-        expires_at=expires_at,
-        operator_principal=operator_principal,
-        pending_lineage=lineage,
-    )
-    if is_refusal(issued):
+    with _PAIRING_WRITE_LOCK:
+        matched = match_pairing_session_by_proof(
+            sqlite,
+            origin=origin,
+            proof=proof,
+            now_ns=now_ns,
+        )
+        if is_refusal(matched):
+            return matched
+        old = matched.value
+        lineage = old.pairing_record_id
+        issued = issue_pairing_session(
+            journal=journal,
+            sqlite=sqlite,
+            origin=origin,
+            expires_at=expires_at,
+            operator_principal=operator_principal,
+            pending_lineage=lineage,
+        )
+        if is_refusal(issued):
+            return issued
+        revoked = _revoke_pairing_session(
+            journal=journal,
+            sqlite=sqlite,
+            live=old,
+            successor_pairing_record_id=issued.value.pairing_record_id,
+        )
+        if is_refusal(revoked):
+            return revoked
+        close_ws_for_proof_fp1(old.proof_fp1, ws_registry)
         return issued
-    revoked = _revoke_pairing_session(
-        journal=journal,
-        sqlite=sqlite,
-        live=old,
-        successor_pairing_record_id=issued.value.pairing_record_id,
-    )
-    if is_refusal(revoked):
-        return revoked
-    close_ws_for_proof_fp1(old.proof_fp1, ws_registry)
-    return issued
 
 
 def match_pairing_session_by_proof(
@@ -1399,7 +1827,7 @@ def match_pairing_session_by_proof(
         if live.origin != parsed_origin.value:
             origin_mismatch = True
             continue
-        if live.revoked:
+        if live.revoked or _barred_by_origin_revoke(sqlite, live.origin, live.journal_seq):
             continue
         if now is not None and live.expires_at <= now:
             expired_match = True

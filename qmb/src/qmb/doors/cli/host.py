@@ -1,10 +1,11 @@
 """``qmb host start|status|stop|configure|rotate-control|recover-control|pair``.
 
-Stories 67.1–67.4 and 68.4. Do not reuse package ``qmb.host`` (CT-33 HostedBot).
+Stories 67.1–67.4 and 68.4–68.5. Do not reuse package ``qmb.host`` (CT-33 HostedBot).
 QMB never writes daemon sqlite. The browser does not spawn Python.
 ``qmb host pair <code>`` confirms a pending over host-control and does not
-issue the browser proof. recover-control is a QMB door to a one-shot daemon
-writer.
+issue the browser proof. ``qmb host pair revoke --origin|--session`` is a
+running-daemon host-control verb. recover-control is a QMB door to a one-shot
+daemon writer.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ __all__ = [
     "HOST_CONFIGURE_COMMANDS",
     "HOST_CONTROL_BIND_NAME",
     "HOST_CONTROL_FILE",
+    "HOST_PAIR_COMMANDS",
     "INSPECT_CWD_RELATIVE_ROOT",
     "INSPECT_SHA_COMMAND_GROUPS",
     "LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY",
@@ -50,6 +52,7 @@ __all__ = [
     "QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA",
+    "QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA",
     "QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA",
     "REUSES_QMB_HOST_PACKAGE",
@@ -63,11 +66,13 @@ __all__ = [
     "claim_local_operator_bootstrap_is_this_story",
     "claim_qmb_host_existed_at_inspect_sha",
     "claim_qmb_host_pair_existed_at_inspect_sha",
+    "claim_qmb_host_pair_revoke_existed_at_inspect_sha",
     "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_pair",
+    "invoke_host_pair_revoke",
     "invoke_host_recover_control",
     "invoke_host_rotate_control",
     "invoke_host_start",
@@ -88,6 +93,7 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
     "pair",
 )
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl",)
+HOST_PAIR_COMMANDS: Final[tuple[str, ...]] = ("revoke",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
 QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 QMB_HOST_ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -102,6 +108,7 @@ CT40_BIND_PORT: Final[int] = 8765
 INSPECT_CWD_RELATIVE_ROOT: Final[str] = "qma-daemon-data"
 QMB_HOST_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 QMB_HOST_PAIR_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+QMB_HOST_PAIR_REVOKE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY: Final[bool] = False
 REUSES_QMB_HOST_PACKAGE: Final[bool] = False
 INSPECT_SHA: Final[str] = "34c148be"
@@ -195,6 +202,24 @@ def claim_qmb_host_pair_existed_at_inspect_sha(existed: object) -> Result[bool]:
         return policy(
             "host.pair",
             "qmb host pair was absent at inspect SHA 34c148be (COMMAND_GROUPS had no host)",
+            existed_at_inspect_sha=False,
+            inspect_sha=INSPECT_SHA,
+        )
+    if existed is not False:
+        return invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_qmb_host_pair_revoke_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming ``qmb host pair revoke`` existed at inspect SHA ``34c148be`` fails."""
+    if existed is True or existed == "true":
+        return policy(
+            "host.pair.revoke",
+            "qmb host pair revoke was absent at inspect SHA 34c148be (DEC-0507 ABSENT)",
             existed_at_inspect_sha=False,
             inspect_sha=INSPECT_SHA,
         )
@@ -1158,6 +1183,72 @@ def invoke_host_pair(
         "pairing_record_id": fields_out.get("pairing_record_id"),
         "confirmed": fields_out.get("confirmed", True),
     }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_pair_revoke(
+    *,
+    origin: object = None,
+    session: object = None,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Revoke over host-control. Running-daemon revoke requires host_control."""
+    origin_given = isinstance(origin, str) and origin.strip() != ""
+    session_given = isinstance(session, str) and session.strip() != ""
+    if origin_given and session_given:
+        return invalid(
+            "revoke",
+            "use --origin or --session, not both",
+        )
+    if not origin_given and not session_given:
+        return invalid(
+            "revoke",
+            "qmb host pair revoke requires --origin or --session",
+        )
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object]
+    if origin_given:
+        fields = {"origin": str(origin).strip()}
+    else:
+        fields = {"pairing_record_id": str(session).strip()}
+    if callable(transport):
+        called = transport("pair-revoke", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("pair-revoke", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "pair-revoke", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="pair-revoke")
+    if not isinstance(refused, Ok):
+        return refused
+    revoked = payload.get("revoked")
+    fields_out = dict(cast("Mapping[str, object]", revoked)) if isinstance(revoked, Mapping) else {}
+    report: dict[str, object] = {
+        "verb": "host.pair.revoke",
+        "scope": fields_out.get("scope"),
+        "journal_seq": fields_out.get("journal_seq"),
+        "barrier": fields_out.get("barrier", "journal_seq" if origin_given else None),
+        "noop": fields_out.get("noop", False),
+    }
+    if origin_given:
+        report["origin"] = fields_out.get("origin", str(origin).strip())
+    else:
+        report["pairing_record_id"] = fields_out.get("pairing_record_id", str(session).strip())
+    if "revoked_record_ids" in fields_out:
+        report["revoked_record_ids"] = fields_out.get("revoked_record_ids")
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 
 

@@ -66,7 +66,7 @@ HOST_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 ROTATE_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
-    {"status", "stop", "configure", "rotate-control", "pair"}
+    {"status", "stop", "configure", "rotate-control", "pair", "pair-revoke"}
 )
 HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
 MAX_HOST_CONTROL_FRAME: Final[int] = 65536
@@ -537,6 +537,7 @@ class HostControlChannel:
         on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_rotate_control: Callable[[], Result[Mapping[str, object]]] | None = None,
         on_pair: Callable[[object], Result[Mapping[str, object]]] | None = None,
+        on_pair_revoke: (Callable[[object, object], Result[Mapping[str, object]]] | None) = None,
     ) -> None:
         self._root = root
         self._status = status
@@ -544,6 +545,7 @@ class HostControlChannel:
         self._on_configure_pairing_ttl = on_configure_pairing_ttl
         self._on_rotate_control = on_rotate_control
         self._on_pair = on_pair
+        self._on_pair_revoke = on_pair_revoke
         self._server: asyncio.Server | None = None
         self._bound: BoundHostControl | None = None
         self._expected: str = ""
@@ -675,6 +677,8 @@ class HostControlChannel:
             return self._rotate(), False
         if verb == "pair":
             return self._pair(request), False
+        if verb == "pair-revoke":
+            return self._pair_revoke(request), False
         if verb == "recover-control":
             return (
                 _fail(
@@ -742,6 +746,19 @@ class HostControlChannel:
         if is_refusal(written):
             return _refusal_frame(written)
         return {"ok": True, "paired": redact_host_surface(written.value)}
+
+    def _pair_revoke(self, request: Mapping[str, object]) -> dict[str, object]:
+        callback = self._on_pair_revoke
+        if callback is None:
+            return _fail(
+                RefusalCategory.UNSUPPORTED_CAPABILITY,
+                "pair-revoke",
+                "host-control pair revoke is not bound",
+            )
+        written = callback(request.get("origin"), request.get("pairing_record_id"))
+        if is_refusal(written):
+            return _refusal_frame(written)
+        return {"ok": True, "revoked": redact_host_surface(written.value)}
 
     def close(self) -> None:
         server = self._server
