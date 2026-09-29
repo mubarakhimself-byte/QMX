@@ -9,7 +9,7 @@ handoff becomes real only when it writes a Task.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -39,14 +39,23 @@ from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
 __all__ = [
     "DELIVERY_STATE_VALUES",
+    "ENVELOPE_ADDITIVE_FIELDS",
     "ENVELOPE_FP1_EXCLUDED_FIELDS",
     "ENVELOPE_OPTIONAL_REFS",
+    "ENVELOPE_PRODUCT_SESSION_FIELD",
+    "ENVELOPE_REF_LAW_EXCEPTIONS",
     "ENVELOPE_REQUIRED_FIELDS",
+    "ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA",
+    "FORBIDDEN_ENVELOPE_SESSION_FIELDS",
     "GAP_0071_LEAD_MAILBOX_CATCH_ALL",
     "GAP_0079_EXTERNAL_TRANSPORT",
     "HUMAN_APPROVAL_CHANNEL",
+    "MAILBOX_INSPECT_SHA",
     "MAX_WAKES_PER_WINDOW_REGISTRY_KEY",
     "MESSAGE_KIND_VALUES",
+    "PRODUCT_SESSION_OWN_IDENTITY_FIELD",
+    "PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA",
+    "PRODUCT_SESSION_REF_PREFIX",
     "QUANT_WRITE_COMMAND",
     "QUIET_HOURS_REGISTRY_KEY",
     "WAKE_CONDITION_ANY",
@@ -57,6 +66,8 @@ __all__ = [
     "QuietHours",
     "WakePolicy",
     "authorize_quant_write",
+    "claim_envelope_types_absent_at_inspect_sha",
+    "claim_product_session_ref_existed_at_inspect_sha",
     "envelope_identity_content",
     "is_human_approval_channel",
     "is_wake_condition",
@@ -65,6 +76,7 @@ __all__ = [
     "parse_message_kind",
     "parse_quiet_hours",
     "parse_wake_policy",
+    "product_session_ref_matches",
     "refuse_external_agent_transport",
     "refuse_lead_mailbox_catch_all",
     "refuse_model_wake_policy_write",
@@ -95,13 +107,33 @@ ENVELOPE_OPTIONAL_REFS: Final[frozenset[str]] = frozenset(
     }
 )
 
-# Explicit versioned declaration: tracing ids are never Envelope identity (DEC-0319).
+# AM-02 / AM-14 additive pointer. Story 46.4 required/optional lists stay held.
+ENVELOPE_PRODUCT_SESSION_FIELD: Final[str] = "product_session_ref"
+PRODUCT_SESSION_OWN_IDENTITY_FIELD: Final[str] = "product_session_id"
+PRODUCT_SESSION_REF_PREFIX: Final[str] = "psess:"
+ENVELOPE_ADDITIVE_FIELDS: Final[frozenset[str]] = frozenset({ENVELOPE_PRODUCT_SESSION_FIELD})
+FORBIDDEN_ENVELOPE_SESSION_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "product_session_id",
+        "originating_psess",
+        "originating_product_session_ref",
+    }
+)
+
+# Explicit versioned declaration: tracing ids and the session pointer are never
+# Envelope identity (DEC-0319; DEC-0495). Changing only product_session_ref does
+# not mint a different fp1.
 ENVELOPE_FP1_EXCLUDED_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "correlation_id",
         "causation_id",
+        ENVELOPE_PRODUCT_SESSION_FIELD,
     }
 )
+
+MAILBOX_INSPECT_SHA: Final[str] = "34c148be"
+PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA: Final[bool] = False
+ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
 
 MESSAGE_KIND_VALUES: Final[frozenset[str]] = frozenset(member.value for member in MessageKind)
 DELIVERY_STATE_VALUES: Final[frozenset[str]] = frozenset(member.value for member in DeliveryState)
@@ -112,7 +144,10 @@ GAP_0071_LEAD_MAILBOX_CATCH_ALL: Final[str] = "GAP-0071"
 GAP_0079_EXTERNAL_TRANSPORT: Final[str] = "GAP-0079"
 
 # from, to, and causation_id are unsuffixed whitelist exceptions (DEC-0304).
-_REF_LAW_EXCEPTIONS: Final[frozenset[str]] = frozenset({"from", "to", "causation_id"})
+# Do not add product_session_id or originating_psess (AM-14; DEC-0495).
+ENVELOPE_REF_LAW_EXCEPTIONS: Final[frozenset[str]] = frozenset({"from", "to", "causation_id"})
+_REF_LAW_EXCEPTIONS: Final[frozenset[str]] = ENVELOPE_REF_LAW_EXCEPTIONS
+_QMA_SESSION_PREFIX: Final[str] = "sess:"
 
 
 def _invalid(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -159,6 +194,49 @@ def refuse_lead_mailbox_catch_all(**extra: object) -> TypedRefusal:
         deferred=True,
         **extra,
     )
+
+
+def claim_product_session_ref_existed_at_inspect_sha(existed: object) -> Result[bool]:
+    """Claiming Envelope product_session_ref already existed at inspect fails."""
+    if existed is True or existed == "true":
+        return _policy(
+            ENVELOPE_PRODUCT_SESSION_FIELD,
+            "product_session_ref was absent on Envelope at inspect SHA "
+            f"{MAILBOX_INSPECT_SHA} (DEC-0507 AMEND-absent; AM-02)",
+            existed_at_inspect_sha=False,
+            inspect_sha=MAILBOX_INSPECT_SHA,
+        )
+    if existed is not False:
+        return _invalid(
+            "existed_at_inspect_sha",
+            "inspect-SHA existence claim is a boolean",
+            given=repr(existed),
+        )
+    return Ok(False)
+
+
+def claim_envelope_types_absent_at_inspect_sha(absent: object) -> Result[bool]:
+    """Claiming Envelope / mailbox types were absent at inspect fails."""
+    if absent is True or absent == "true":
+        return _policy(
+            "envelope",
+            "Envelope / mailbox types existed as fixtures at inspect SHA "
+            f"{MAILBOX_INSPECT_SHA} (DEC-0507 CONNECT; DEC-0286)",
+            existed_at_inspect_sha=True,
+            inspect_sha=MAILBOX_INSPECT_SHA,
+        )
+    if absent is not False:
+        return _invalid(
+            "absent_at_inspect_sha",
+            "inspect-SHA absence claim is a boolean",
+            given=repr(absent),
+        )
+    return Ok(False)
+
+
+def product_session_ref_matches(envelope: Envelope, product_session_ref: str) -> bool:
+    """Fold-by-field equality on the Envelope pointer. Never parse body text."""
+    return envelope.product_session_ref == product_session_ref
 
 
 def is_human_approval_channel(kind: MessageKind | str) -> bool:
@@ -236,6 +314,34 @@ def _parse_optional_ref(entry: Mapping[str, object], field: str) -> Result[str |
     return Ok(value.strip())
 
 
+def _parse_product_session_ref(entry: Mapping[str, object]) -> Result[str | None]:
+    parsed = _parse_optional_ref(entry, ENVELOPE_PRODUCT_SESSION_FIELD)
+    if not isinstance(parsed, Ok):
+        return parsed
+    token = parsed.value
+    if token is None:
+        return Ok(None)
+    if token.casefold().startswith(_QMA_SESSION_PREFIX) and not token.startswith(
+        PRODUCT_SESSION_REF_PREFIX
+    ):
+        return _invalid(
+            ENVELOPE_PRODUCT_SESSION_FIELD,
+            "product_session_ref is a product-session psess: pointer, never a "
+            "QMA sess: id (AM-14; DEC-0495)",
+            given=token,
+        )
+    if not token.startswith(PRODUCT_SESSION_REF_PREFIX) or len(token) <= len(
+        PRODUCT_SESSION_REF_PREFIX
+    ):
+        return _invalid(
+            ENVELOPE_PRODUCT_SESSION_FIELD,
+            "product_session_ref is a non-empty psess: pointer at the "
+            "product-session projection (AM-14; DEC-0495)",
+            given=token,
+        )
+    return Ok(token)
+
+
 def _parse_artifact_refs(value: object) -> Result[tuple[str, ...]]:
     if value is None:
         return _invalid(
@@ -286,6 +392,7 @@ class Envelope:
     task_ref: str | None = None
     reply_to_ref: str | None = None
     causation_id: str | None = None
+    product_session_ref: str | None = None
     artifact_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -295,21 +402,7 @@ class Envelope:
 
     def with_task_ref(self, task_ref: str) -> Envelope:
         """Return a copy carrying the Task this handoff wrote."""
-        return Envelope(
-            msg_id=self.msg_id,
-            from_actor=self.from_actor,
-            to_actor=self.to_actor,
-            kind=self.kind,
-            correlation_id=self.correlation_id,
-            body=self.body,
-            priority=self.priority,
-            created_at=self.created_at,
-            mission_ref=self.mission_ref,
-            task_ref=task_ref,
-            reply_to_ref=self.reply_to_ref,
-            causation_id=self.causation_id,
-            artifact_refs=self.artifact_refs,
-        )
+        return replace(self, task_ref=task_ref)
 
     def to_payload(self) -> Mapping[str, object]:
         body: object = dict(self.body) if isinstance(self.body, Mapping) else self.body
@@ -332,11 +425,13 @@ class Envelope:
             payload["reply_to_ref"] = self.reply_to_ref
         if self.causation_id is not None:
             payload["causation_id"] = self.causation_id
+        if self.product_session_ref is not None:
+            payload[ENVELOPE_PRODUCT_SESSION_FIELD] = self.product_session_ref
         return MappingProxyType(payload)
 
 
 def envelope_identity_content(value: Envelope | Mapping[str, object]) -> Mapping[str, object]:
-    """fp1 identity payload: ``correlation_id`` and ``causation_id`` excluded."""
+    """fp1 identity payload: tracing ids and ``product_session_ref`` excluded."""
     raw = dict(value.to_payload() if isinstance(value, Envelope) else value)
     for field in ENVELOPE_FP1_EXCLUDED_FIELDS:
         raw.pop(field, None)
@@ -413,6 +508,20 @@ def parse_envelope(value: object) -> Result[Envelope]:
             return parsed_ref
         refs[field] = parsed_ref.value
 
+    for field in FORBIDDEN_ENVELOPE_SESSION_FIELDS:
+        if field in aliases:
+            return _invalid(
+                field,
+                "Envelope pointer is product_session_ref (AM-14); ProductSession "
+                "own identity remains product_session_id on that row; "
+                "originating_product_session_ref is Epic 73 (DEC-0495)",
+                given=repr(aliases.get(field)),
+            )
+
+    session_ref = _parse_product_session_ref(aliases)
+    if not isinstance(session_ref, Ok):
+        return session_ref
+
     if "artifact_refs" not in aliases:
         artifact_refs: tuple[str, ...] = ()
     else:
@@ -444,6 +553,7 @@ def parse_envelope(value: object) -> Result[Envelope]:
             task_ref=refs["task_ref"],
             reply_to_ref=refs["reply_to_ref"],
             causation_id=refs["causation_id"],
+            product_session_ref=session_ref.value,
             artifact_refs=artifact_refs,
         )
     )

@@ -6,18 +6,29 @@ from qma.core.content import content_address
 from qma.core.ontology import ActorId, DeskSlug
 from qma.core.ports.mailbox import (
     DELIVERY_STATE_VALUES,
+    ENVELOPE_ADDITIVE_FIELDS,
     ENVELOPE_FP1_EXCLUDED_FIELDS,
     ENVELOPE_OPTIONAL_REFS,
+    ENVELOPE_PRODUCT_SESSION_FIELD,
+    ENVELOPE_REF_LAW_EXCEPTIONS,
     ENVELOPE_REQUIRED_FIELDS,
+    ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA,
+    FORBIDDEN_ENVELOPE_SESSION_FIELDS,
     GAP_0071_LEAD_MAILBOX_CATCH_ALL,
     GAP_0079_EXTERNAL_TRANSPORT,
     HUMAN_APPROVAL_CHANNEL,
+    MAILBOX_INSPECT_SHA,
     MESSAGE_KIND_VALUES,
+    PRODUCT_SESSION_OWN_IDENTITY_FIELD,
+    PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA,
+    claim_envelope_types_absent_at_inspect_sha,
+    claim_product_session_ref_existed_at_inspect_sha,
     envelope_identity_content,
     is_human_approval_channel,
     parse_delivery_state,
     parse_envelope,
     parse_message_kind,
+    product_session_ref_matches,
     refuse_external_agent_transport,
     refuse_lead_mailbox_catch_all,
 )
@@ -160,7 +171,11 @@ def test_fp1_identity_excludes_correlation_and_causation() -> None:
     identity_b = envelope_identity_content(second.value)
     assert "correlation_id" not in identity_a
     assert "causation_id" not in identity_a
-    assert {"correlation_id", "causation_id"} == ENVELOPE_FP1_EXCLUDED_FIELDS
+    assert {
+        "correlation_id",
+        "causation_id",
+        "product_session_ref",
+    } == ENVELOPE_FP1_EXCLUDED_FIELDS
     hashed_a = content_address(dict(identity_a))
     hashed_b = content_address(dict(identity_b))
     assert is_ok(hashed_a) and is_ok(hashed_b)
@@ -169,6 +184,83 @@ def test_fp1_identity_excludes_correlation_and_causation() -> None:
     other = content_address(dict(second.value.to_payload()))
     assert is_ok(distinct) and is_ok(other)
     assert distinct.value != other.value
+
+
+def test_product_session_ref_is_additive_optional_omitted_never_null() -> None:
+    parsed = parse_envelope(_envelope_body(product_session_ref="psess:H"))
+    assert is_ok(parsed)
+    payload = parsed.value.to_payload()
+    assert payload["product_session_ref"] == "psess:H"
+    assert parsed.value.product_session_ref == "psess:H"
+    omitted = parse_envelope(_envelope_body())
+    assert is_ok(omitted)
+    assert "product_session_ref" not in omitted.value.to_payload()
+    assert omitted.value.product_session_ref is None
+    refused = parse_envelope(_envelope_body(product_session_ref=None))
+    assert is_refusal(refused)
+    assert refused.context["field"] == "product_session_ref"
+    qma_sess = parse_envelope(_envelope_body(product_session_ref="sess:H"))
+    assert is_refusal(qma_sess)
+    assert qma_sess.context["field"] == "product_session_ref"
+    prefix_only = parse_envelope(_envelope_body(product_session_ref="psess:"))
+    assert is_refusal(prefix_only)
+    asserted = parsed.value.with_task_ref("task-1")
+    assert asserted.product_session_ref == "psess:H"
+    assert asserted.task_ref == "task-1"
+    assert ENVELOPE_PRODUCT_SESSION_FIELD == "product_session_ref"
+    assert {"product_session_ref"} == ENVELOPE_ADDITIVE_FIELDS
+    assert "product_session_ref" not in ENVELOPE_REQUIRED_FIELDS
+    assert "product_session_ref" not in ENVELOPE_OPTIONAL_REFS
+
+
+def test_product_session_ref_excluded_from_fp1_with_tracing_ids() -> None:
+    first = parse_envelope(_envelope_body(product_session_ref="psess:H"))
+    second = parse_envelope(_envelope_body(product_session_ref="psess:B"))
+    assert is_ok(first) and is_ok(second)
+    identity_a = envelope_identity_content(first.value)
+    identity_b = envelope_identity_content(second.value)
+    assert "product_session_ref" not in identity_a
+    assert "correlation_id" not in identity_a
+    assert "causation_id" not in identity_a
+    hashed_a = content_address(dict(identity_a))
+    hashed_b = content_address(dict(identity_b))
+    assert is_ok(hashed_a) and is_ok(hashed_b)
+    assert hashed_a.value == hashed_b.value
+    assert product_session_ref_matches(first.value, "psess:H")
+    assert not product_session_ref_matches(first.value, "psess:B")
+    body_only = parse_envelope(_envelope_body(body="restore psess:H from text"))
+    assert is_ok(body_only)
+    assert body_only.value.product_session_ref is None
+    assert not product_session_ref_matches(body_only.value, "psess:H")
+
+
+def test_envelope_field_is_product_session_ref_not_own_id() -> None:
+    assert PRODUCT_SESSION_OWN_IDENTITY_FIELD == "product_session_id"
+    assert PRODUCT_SESSION_OWN_IDENTITY_FIELD not in ENVELOPE_REF_LAW_EXCEPTIONS
+    assert "originating_psess" not in ENVELOPE_REF_LAW_EXCEPTIONS
+    assert {
+        "product_session_id",
+        "originating_psess",
+        "originating_product_session_ref",
+    } == FORBIDDEN_ENVELOPE_SESSION_FIELDS
+    for field in FORBIDDEN_ENVELOPE_SESSION_FIELDS:
+        refused = parse_envelope(_envelope_body(**{field: "psess:H"}))
+        assert is_refusal(refused)
+        assert refused.context["field"] == field
+
+
+def test_inspect_sha_honesty_for_product_session_ref() -> None:
+    assert MAILBOX_INSPECT_SHA == "34c148be"
+    assert PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA is False
+    assert ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA is True
+    claimed_field = claim_product_session_ref_existed_at_inspect_sha(True)
+    assert is_refusal(claimed_field)
+    assert claimed_field.context["inspect_sha"] == "34c148be"
+    assert is_ok(claim_product_session_ref_existed_at_inspect_sha(False))
+    claimed_types = claim_envelope_types_absent_at_inspect_sha(True)
+    assert is_refusal(claimed_types)
+    assert claimed_types.context["existed_at_inspect_sha"] is True
+    assert is_ok(claim_envelope_types_absent_at_inspect_sha(False))
 
 
 def test_deferred_gaps_stay_open() -> None:

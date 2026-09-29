@@ -52,6 +52,7 @@ schema:
     - "scope_path: the ordered array of `{kind, id}` segments in the fixed order desk, quant, mission, task, session, agent, subagent, every existing ancestor present; a whitelisted `_ref`-law exception and part of canonical JSON (DEC-0304)"
     - "seq: optional; the per-scope projection index of the scope named last in `scope_path`; never the journal's `journal_seq`, which is opaque to clients (DEC-0304)"
     - "payload: the message body described by its family's JSON Schema (DEC-0304)"
+    - "send_message.product_session_ref (Story 69.1 / AM-02 / AM-14; additive CT-40): optional `psess:` pointer copied onto the CT-48 mailbox Envelope at write; omitted key never null; machine payloads may omit it; body text is never parsed; field is not `product_session_id`; `originating_product_session_ref` is Epic 73; absent at inspect SHA `34c148be` (DEC-0495, DEC-0507)"
     - "federated hit (additive CT-40 family, COMP-QMA-WIRE): exactly one of KnowledgeHit, ArtifactHit, or ContributionHit (DEC-0449; FR-WF-01; Story 53.1 format mint)"
     - "KnowledgeHit: hit_class=knowledge, source_ref, snapshot_ref, locator (CT-44 cite handles on the wire DTO)"
     - "ArtifactHit: hit_class=artifact, fp1, kind where kind is a Workbench AD-3 roster kind or closed query-hit tags saved-view | analysis.published"
@@ -70,6 +71,7 @@ schema:
   enums:
     - "message families: command | query | event — commands mutate and are acked immediately with side effects settling asynchronously, queries read durable state over HTTP GET, events form the durable stream; the family set is closed-and-addable and owned by qma-wire (DEC-0304)"
     - "the 9 seed commands: start mission | send message | steer agent | stop run | approve hook action | install/enable plugin | update configuration | launch task | retry task — the packet seed, closed-and-addable (DEC-0304)"
+    - "send_message args (Story 69.1 / AM-02 / AM-14): may name additive `product_session_ref` (`psess:` pointer). Optional omitted-never-null. Machine payloads may omit it. COMP-QMA-DAEMON copies the named field onto the CT-48 Envelope at write; body text is never parsed. The Envelope field is not `product_session_id`; `originating_product_session_ref` is Epic 73. Additive CT-40; no new CT. The field was absent at inspect SHA `34c148be` (DEC-0495, DEC-0507)."
     - "the 7 seed queries: get quant | list missions | get graph state | inspect ledger | inspect trace | list installed plugins | get provider health — the packet seed, with the seed noun `get bot` reading `get quant` under the Bot-to-Quant rule (DEC-0304, DEC-0331)"
     - "additive discovery queries: facade_search | facade_get — closed-and-addable CT-40 query names for the federated hit DTO (Story 53.1 format mint; FR-WF-01)"
     - "federated hit_class: knowledge | artifact | contribution — closed; strats, qml_candidate, and hypothesis kinds refused (DEC-0389 named-amended by DEC-0449; DEC-0412 stays dead)"

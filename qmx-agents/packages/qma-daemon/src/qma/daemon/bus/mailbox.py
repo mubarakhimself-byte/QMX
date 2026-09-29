@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qma.core.ontology import ActorId, Agent, Quant, Task
 from qma.core.ontology.wake_policy import (
@@ -23,6 +23,8 @@ from qma.core.ontology.wake_policy import (
 )
 from qma.core.plugins.hooks import HookResult
 from qma.core.ports.mailbox import (
+    ENVELOPE_PRODUCT_SESSION_FIELD,
+    FORBIDDEN_ENVELOPE_SESSION_FIELDS,
     GAP_0071_LEAD_MAILBOX_CATCH_ALL,
     GAP_0079_EXTERNAL_TRANSPORT,
     Envelope,
@@ -45,7 +47,7 @@ from qma.daemon.scheduler.wake import (
     routine_fire_suppressed_by_quiet_hours,
     running_agent_paused_by_quiet_hours,
 )
-from qma.wire.principals import authorize_wire_command
+from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Clock, DataDrivenClock, Instant, Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
@@ -61,6 +63,7 @@ __all__ = [
     "DeliveryRecord",
     "Mailbox",
     "MailboxStore",
+    "copy_product_session_ref_at_write",
 ]
 
 
@@ -105,6 +108,7 @@ _MESSAGE_DELIVERED_EVENT: Final[str] = "message.delivered"
 _MESSAGE_ACKED_EVENT: Final[str] = "message.acked"
 _MESSAGE_WOKE_EVENT: Final[str] = "message.woke"
 _KEEP: Final[object] = object()
+_SEND_MESSAGE_NON_ENVELOPE_KEYS: Final[frozenset[str]] = frozenset({"envelope", "principal_class"})
 _TERMINAL_DELIVERY: Final[frozenset[DeliveryState]] = frozenset(
     {
         DeliveryState.DELIVERED,
@@ -127,6 +131,38 @@ def _default_clock() -> DataDrivenClock:
 
 def _truthy(value: object) -> bool:
     return value not in (None, False, 0, "", ())
+
+
+def copy_product_session_ref_at_write(
+    envelope: Mapping[str, object] | Envelope,
+    payload: Mapping[str, object],
+) -> Result[Mapping[str, object]]:
+    """Copy ``product_session_ref`` from send_message payload onto the Envelope.
+
+    Never parse body text. Optional value is an omitted key, never null.
+    Quant/machine rows with no product conversation omit the field.
+    """
+    inbound = dict(envelope.to_payload() if isinstance(envelope, Envelope) else envelope)
+    for forbidden in FORBIDDEN_ENVELOPE_SESSION_FIELDS:
+        if forbidden in payload or forbidden in inbound:
+            return invalid_input(
+                forbidden,
+                "Envelope pointer is product_session_ref (AM-14); ProductSession "
+                "own identity remains product_session_id on that row; "
+                "originating_product_session_ref is Epic 73 (DEC-0495)",
+                given=repr(payload.get(forbidden, inbound.get(forbidden))),
+            )
+    if ENVELOPE_PRODUCT_SESSION_FIELD not in payload:
+        inbound.pop(ENVELOPE_PRODUCT_SESSION_FIELD, None)
+        return Ok(MappingProxyType(inbound))
+    value = payload.get(ENVELOPE_PRODUCT_SESSION_FIELD)
+    if value is None:
+        return invalid_input(
+            ENVELOPE_PRODUCT_SESSION_FIELD,
+            "optional product_session_ref is an omitted key, never null (DEC-0495)",
+        )
+    inbound[ENVELOPE_PRODUCT_SESSION_FIELD] = value
+    return Ok(MappingProxyType(inbound))
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,6 +393,34 @@ class MailboxStore:
             self._mailboxes[recipient.owner.value] = recipient.append(record)
         self._after_message_send(envelope_record, record)
         return Ok(record)
+
+    def send_message(
+        self,
+        payload: Mapping[str, object],
+        *,
+        principal_class: object,
+    ) -> Result[DeliveryRecord]:
+        """Admit seed ``send_message`` and copy ``product_session_ref`` at write.
+
+        Machine payloads that omit the field stay legal. Body text is never
+        parsed to recover a session pointer (AM-02; DEC-0495).
+        """
+        parsed_principal = parse_principal_class(principal_class)
+        if is_refusal(parsed_principal):
+            return parsed_principal
+        nested = payload.get("envelope")
+        if isinstance(nested, Mapping):
+            base: dict[str, object] = dict(cast("Mapping[str, object]", nested))
+        else:
+            base = {
+                key: value
+                for key, value in payload.items()
+                if key not in _SEND_MESSAGE_NON_ENVELOPE_KEYS
+            }
+        copied = copy_product_session_ref_at_write(base, payload)
+        if is_refusal(copied):
+            return copied
+        return self.send(copied.value)
 
     def write_wake_policy(
         self,

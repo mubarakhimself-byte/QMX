@@ -9,7 +9,7 @@ intended_consumers: [COMP-QMA-DAEMON]  # the daemon owns each Quant's durable Ma
 wiring_status: defined-unwired  # ratified surface; no code exists; the Mailbox is a projection over journal message.* events under the AD-6 journal and the AD-1 port pattern; no wiring is authorized from this doc (DEC-0319, DEC-0335)
 layer_from: backend
 layer_to: backend
-decisions: [DEC-0319, DEC-0323, DEC-0325, DEC-0349, DEC-0304]
+decisions: [DEC-0319, DEC-0323, DEC-0325, DEC-0349, DEC-0304, DEC-0495, DEC-0484, DEC-0507]
 gaps: [GAP-0071, GAP-0079, GAP-0089]  # GAP-0071 one lead flag per desk + the lead mailbox as catch-all (undeliverable resolves to dead_letter until ruled); GAP-0079 external agent-to-agent transport; GAP-0089 the delivery-projection trim window
 purpose: >-
   One contract for QMA's internal message bus: each Quant's durable `Mailbox`,
@@ -27,6 +27,7 @@ purpose: >-
 invariants:
   - "CT-48 realizes AD-20: each Quant owns one durable `Mailbox` living in the daemon's own store — no external relay — and the Agent Bus is durable, addressed and non-authoritative; a message may request work but can never BE the work, a handoff becomes real only when it writes a Task, and a reviewer's authoritative act is the task update while the message is only the ping (DEC-0319)."
   - "An `Envelope` carries msg id, from, to, kind, optional mission and task refs, `correlation_id`, optional `reply_to_ref` and `causation_id`, body, artifact refs, priority and creation time; `causation_id` is the `id` of the single record that caused this one — per-record, never copied verbatim down a chain the way `correlation_id` is — and both `causation_id` and `correlation_id` are excluded from `fp1` identity by explicit versioned declaration (DEC-0319)."
+  - "AM-02 / Story 69.1 additive field: operator product-chat Envelopes persist `product_session_ref` (a `psess:` pointer at the product-session projection) on this same CT-48 record / journal `message.*` row. Story 46.4's field list is held, not replaced. No parallel conversation store, no new sqlite class, no new CT. The field is excluded from Envelope `fp1` together with `correlation_id` and `causation_id`; changing only the session pointer does not mint a different Envelope fp1. Optional value is an omitted key, never null. Quant/machine bus rows with no product conversation omit the field; seed `send_message` stays legal for `machine` when the field is absent. Admitted operator `send_message` whose payload names `product_session_ref` is copied onto the Envelope at write; body text is never parsed; rebuild is fold-by-field equality (AM-02, AM-14, DEC-0495). ProductSession own identity remains `product_session_id` on that row; do not name the Envelope field `product_session_id`; do not add `product_session_id` or `originating_psess` to the `_ref` exception list; `originating_product_session_ref` is Epic 73. The field was absent at inspect SHA `34c148be`; Envelope / mailbox types existed as fixtures there (DEC-0507)."
   - "`MessageKind` is one of `handoff`, `reply`, `notify`, `review_request`, `status`, `question` or `approval_request`; `approval_request` is the single human-approval channel AD-10 defines and every gate in this spine raises (DEC-0319)."
   - "`DeliveryState` is one of `delivered`, `queued`, `woke`, `deferred` or `dead_letter`; delivery is at-least-once with idempotent msg-id dedup, a per-actor ack cursor and bounded retention — the bus is not institutional memory (DEC-0319)."
   - "`WakePolicy` is a field of the Quant record in the definition store (AD-6, AD-7) — operator-authored, `ui-editable` under AD-26, scope `quant` — carrying wake conditions, quiet hours (a daily interval plus its IANA zone, registry:quant.quiet_hours) and max wakes per window (registry:quant.max_wakes_per_window); the deterministic scheduler EVALUATES it at delivery time and no model authors, alters or overrides it (DEC-0319, DEC-0325)."
@@ -52,6 +53,7 @@ schema:
     - "envelope.artifact_refs: references to artifacts the message carries — references, never the artifacts themselves (DEC-0319)"
     - "envelope.priority: the message priority (DEC-0319)"
     - "envelope.created_at: the creation time (DEC-0319)"
+    - "envelope.product_session_ref: additive optional `psess:` pointer at the product-session projection (AM-02, AM-14, Story 69.1); Story 46.4 field list is held; excluded from Envelope fp1 with `correlation_id` and `causation_id`; omitted key never null; ProductSession own identity remains `product_session_id` on that row; `originating_product_session_ref` is Epic 73 (DEC-0495)"
     - "wake_policy.wake_conditions: the conditions under which a delivery wakes the owning Quant; scope quant, ui-editable under AD-26 (DEC-0319, DEC-0325)"
     - "wake_policy.quiet_hours: a daily interval plus its IANA zone (registry:quant.quiet_hours); suppresses wakes only (DEC-0319, DEC-0325)"
     - "wake_policy.max_wakes_per_window: registry:quant.max_wakes_per_window (DEC-0319, DEC-0325)"
@@ -66,6 +68,7 @@ schema:
     - "msg ids, ActorIds and refs are opaque qma-core-typed values; an Envelope carries no money or R value of its own (DEC-0319)"
   nullability:
     - "msg id, from, to, kind, body, priority and created_at are mandatory; mission_ref, task_ref, reply_to_ref and causation_id are optional and absent as an omitted key, never null (DEC-0319)"
+    - "additive `product_session_ref` is optional and absent as an omitted key, never null; Quant/machine bus rows with no product conversation omit it (DEC-0495)"
     - "`correlation_id` is mandatory on every Envelope — a record without one is refused at the gate (AD-5) and only an evidence append reaches the `correlation_missing` carve-out, which a mailbox `Envelope` is not; `artifact_refs` may be an empty declared set, never null (DEC-0319, DEC-0304)"
     - "a message inside quiet hours is still delivered and acked with DeliveryState deferred — a deferred message is never a dropped or null delivery (DEC-0319)"
     - "an undeliverable Envelope resolves to DeliveryState dead_letter, never to a silent drop and never to the lead Quant until GAP-0071 is ruled (DEC-0319, DEC-0349)"

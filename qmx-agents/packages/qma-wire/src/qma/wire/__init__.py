@@ -556,6 +556,10 @@ from qma.wire.selected_ref import (
     refuse_layout_widget_json_render_ref,
     validate_selected_ref,
 )
+from qma.wire.send_message import (
+    SEND_MESSAGE_COMMAND,
+    parse_send_message_payload,
+)
 from qma.wire.view_presentation import (
     VIEW_FILLS_GAP_0081_CHROME,
     VIEW_IS_CONTRIBUTION_HIT,
@@ -848,6 +852,7 @@ __all__ = [
     "SELECTED_REF_SCHEMA",
     "SELECTED_REF_SCHEMA_FILE",
     "SELECTED_REF_SCHEMA_NAME",
+    "SEND_MESSAGE_COMMAND",
     "SUPPORTED_PROTOCOL_VERSIONS",
     "UNAUTHENTICATED_BIND_SENTENCE",
     "UNAUTHENTICATED_BIND_SENTENCE_HELD",
@@ -1053,6 +1058,7 @@ __all__ = [
     "parse_scope_path",
     "parse_selected_ref",
     "parse_selected_refs",
+    "parse_send_message_payload",
     "parse_utc_iso_z",
     "parse_view_presentation",
     "parse_wire_copilot_profile",

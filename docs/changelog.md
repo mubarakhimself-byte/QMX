@@ -14,6 +14,12 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 This records changes to the QMF knowledge base. It is not a software release log and does not convert provisional decisions into implementation authority.
 
+## 2026-09-29 — Story 69.1: additive Envelope product_session_ref is excluded from fp1
+
+Operator product-chat Envelopes persist additive `product_session_ref` (`psess:` pointer at the product-session projection) on the existing CT-48 / journal `message.*` row. Story 46.4's field list is held. No parallel conversation store, no new sqlite class, no new CT. The field is excluded from Envelope fp1 with `correlation_id` and `causation_id`; changing only the session pointer does not mint a different fp1. Optional value is an omitted key, never null. Quant/machine bus rows with no product conversation omit the field; seed `send_message` stays legal for `machine` when absent. Admitted operator `send_message` copies the named payload field onto the Envelope at write; body text is never parsed. ProductSession own identity remains `product_session_id` on that row. The field was absent at inspect SHA `34c148be`; Envelope types existed as fixtures there.
+
+Touched: COMP-QMA-CORE mailbox Envelope; COMP-QMA-DAEMON copy-at-write on `send_message`; COMP-QMA-WIRE `send_message` payload; [ct-48-qma-mailbox-envelope.yaml](contracts/ct-48-qma-mailbox-envelope.yaml); [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+
 ## 2026-09-20 — Story 55.4: a tab is not a session; view:* are not contributions
 
 A tab/window/view is not a `product_session` and does not own grants or occupancy. `view:*` remains an AD-17 wire DTO only — not a plugin contribution point and not a ContributionHit (GAP-0081; SCN-0018 Branch B). Occupancy stays none. GAP-0081 chrome is not filled. Additive CT-40; no new CT.

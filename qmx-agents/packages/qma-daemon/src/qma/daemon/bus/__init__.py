@@ -14,6 +14,7 @@ from qma.daemon.bus.mailbox import (
     DeliveryRecord,
     Mailbox,
     MailboxStore,
+    copy_product_session_ref_at_write,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "DeliveryRecord",
     "Mailbox",
     "MailboxStore",
+    "copy_product_session_ref_at_write",
 ]
