@@ -112,6 +112,30 @@ def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(tmp_path:
         assert result["state"] == JobHandleState.CANCELLED.value
         assert result["originating_product_session_ref"] == origin
 
+        extra_field = process._dispatch_paired_ct40(  # pyright: ignore[reportPrivateUsage]
+            conn,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "extra-field-wire-id",
+                    "method": "cancel_job",
+                    "params": {
+                        "handle_id": admitted.value.job_id,
+                        "logical_run_id": admitted.value.logical_run_id,
+                        "attempt_id": admitted.value.attempt_id,
+                        "command_id": "cancel:epic73-extra-field",
+                        "expected_state": "cancelled",
+                        "unexpected_extension": True,
+                    },
+                }
+            ).encode(),
+            session_key=paired.value.pairing_record_id,
+            connection_token="epic73-wire-test",
+        )
+        assert extra_field is not None and "error" in extra_field
+        unchanged = process.backtesting.jobs.handle_for(admitted.value.job_id)
+        assert unchanged is not None and unchanged.state is JobHandleState.CANCELLED
+
         # The CT-42 session exposes only PrincipalClass, so the originating
         # operator resolves to local_operator. The pairing row is the durable
         # identity presented by this connection and must match that singleton.

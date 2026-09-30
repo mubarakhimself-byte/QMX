@@ -45,6 +45,7 @@ def test_payload_fences_alias_and_expected_state() -> None:
     assert is_refusal(parse_cancel_job_payload(_payload(job_id="job:other")))
     assert is_refusal(parse_cancel_job_payload(_payload(attempt_id=True)))
     assert is_refusal(parse_cancel_job_payload(_payload(expected_state="unknown-ish")))
+    assert is_refusal(parse_cancel_job_payload(_payload(unexpected_extension=True)))
 
 
 def test_expected_state_is_excluded_from_stable_cancel_identity() -> None:
@@ -82,4 +83,5 @@ def test_missing_cancel_capability_is_a_typed_mismatch() -> None:
 def test_cancel_job_schema_describes_the_required_payload() -> None:
     assert is_ok(validate_family_payload("cancel_job", _payload()))
     assert is_refusal(validate_family_payload("cancel_job", {"handle_id": "job:missing"}))
+    assert is_refusal(validate_family_payload("cancel_job", _payload(unexpected_extension=True)))
     assert is_refusal(validate_instance({"family": "command", "name": "cancel_job"}, "command"))

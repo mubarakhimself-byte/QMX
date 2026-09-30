@@ -111,6 +111,16 @@ def parse_cancel_job_payload(value: object) -> Result[Mapping[str, object]]:
     if not isinstance(value, Mapping):
         return _invalid("payload", "cancel_job payload must be an object")
     entry = cast("Mapping[str, object]", value)
+    allowed = frozenset(
+        {"handle_id", "job_id", "logical_run_id", "attempt_id", "command_id", "expected_state"}
+    )
+    unknown = tuple(str(key) for key in entry if key not in allowed)
+    if unknown:
+        return _invalid(
+            "payload",
+            "cancel_job payload does not accept unrecognized fields",
+            unexpected=sorted(unknown),
+        )
     handle_id = entry.get("handle_id")
     if not isinstance(handle_id, str) or not handle_id.strip():
         return _invalid("handle_id", "handle_id is the durable JobHandle job_id")
