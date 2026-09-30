@@ -805,7 +805,7 @@ class TransferTicketStore:
         validated = self.validate_dest_control(credential_ref)
         if is_refusal(validated):
             return validated
-        assert isinstance(credential_ref, str)
+        credential_ref = cast("str", credential_ref)
         handle = self.dest_control.register(
             DestControlHandle(credential_ref=credential_ref, live=True)
         )
@@ -861,14 +861,13 @@ class TransferTicketStore:
                     self.dest_control_down(str(credential_ref), writer=writer)
                     return notified
                 continue
-            if ticket.state == "notified":
-                if not handle.notify(ticket.to_payload()):
-                    self.dest_control_down(str(credential_ref), writer=writer)
-                    return policy_rejection(
-                        "dest_control",
-                        "destination control notification delivery failed",
-                        credential_ref=credential_ref,
-                    )
+            if ticket.state == "notified" and not handle.notify(ticket.to_payload()):
+                self.dest_control_down(str(credential_ref), writer=writer)
+                return policy_rejection(
+                    "dest_control",
+                    "destination control notification delivery failed",
+                    credential_ref=credential_ref,
+                )
         return Ok(handle)
 
     def dest_control_down(self, credential_ref: str, *, writer: object | None = None) -> None:
