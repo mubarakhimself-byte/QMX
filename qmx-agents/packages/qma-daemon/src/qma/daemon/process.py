@@ -28,7 +28,7 @@ import struct
 import subprocess
 import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -197,6 +197,7 @@ from qma.wire.initialize import (
     LiveProducerRegistry,
     WireConnection,
 )
+from qma.wire.invocation_envelope import BoundInvocation
 from qma.wire.list_mailbox import LIST_MAILBOX_CAPABILITY, MailboxSnapshot
 from qma.wire.listener import (
     CT40_WS_SUBPROTOCOL,
@@ -1022,13 +1023,18 @@ class DaemonProcess:
         )
 
     def press_pack_ui_action(
-        self, *, mount_id: object, payload: object
+        self,
+        *,
+        mount_id: object,
+        payload: object,
+        execute_invocation: Callable[[BoundInvocation], None],
     ) -> Result[BoundSessionGrant]:
-        """Production invocation bridge; renderer can identify a mount, not retarget it."""
+        """Dispatch through a trusted host executor; renderer input cannot provide it."""
         return self._product_session_chrome.press_pack_ui_action(
             mount_id,
             payload,
             loader=self._roster.loader,
+            execute_invocation=execute_invocation,
         )
 
     def unmount_pack_ui_view(self, mount_id: object) -> bool:

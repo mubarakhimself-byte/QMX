@@ -138,7 +138,6 @@ class ProductSessionChrome:
 
     sessions: ProductSessionService = field(default_factory=ProductSessionService)
     journal: AuthoritativeJournal | None = None
-    execute_invocation: Callable[[BoundInvocation], None] | None = None
     _mounts: dict[str, PackUiMount] = field(default_factory=dict[str, PackUiMount], init=False)
 
     def mount_pack_ui_view(
@@ -316,8 +315,14 @@ class ProductSessionChrome:
         payload: object,
         *,
         loader: PluginLoader,
+        execute_invocation: Callable[[BoundInvocation], None],
     ) -> Result[BoundSessionGrant]:
         """Revalidate and dispatch a renderer action using the frozen host context."""
+        if not callable(execute_invocation):
+            return policy_rejection(
+                "execute_invocation",
+                "trusted host operation executor is required for Pack UI dispatch",
+            )
         if not isinstance(mount_id, str) or mount_id not in self._mounts:
             return policy_rejection("mount_id", "unknown or disposed Pack UI mount")
         mount = self._mounts[mount_id]
@@ -477,6 +482,7 @@ class ProductSessionChrome:
             idempotency_key=f"idem:{logical_id}",
             reconcile_policy=self._reconcile_policy(descriptor.effect_class.value).value,
             input_hash=input_hash.value,
+            caller_session_ref=context.psess,
             call_depth=0,
             caller_kind=CallerKind.USER.value,
         )
@@ -504,7 +510,7 @@ class ProductSessionChrome:
             instances={
                 (instance_record.instance_id, instance_record.config_revision): instance_record
             },
-            execute=self.execute_invocation,
+            execute=execute_invocation,
         )
         if is_refusal(dispatched):
             return dispatched

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,7 +26,12 @@ from qma.daemon.plugins.pack_ui import (
 )
 from qma.daemon.process import DaemonProcess
 from qma.daemon.sessions.chrome import ProductSessionChrome
-from qma.daemon.sessions.product_session import ProductSession, ProductSessionService
+from qma.daemon.sessions.product_session import (
+    BoundSessionGrant,
+    ProductSession,
+    ProductSessionService,
+)
+from qma.wire.invocation_envelope import BoundInvocation
 from qmf.core import DataDrivenClock, Instant, Ok, Result, is_ok, is_refusal
 
 _OPERATION = next(
@@ -425,6 +431,10 @@ def test_daemon_compose_rebuilds_instance_rows_and_reuses_revision(
     seed.mkdir()
     configs = research_corpus_plugin_load_config(seed)
     original_load_manifest = plugin_packs_module.load_pack_manifest_raw
+    # This built-in pack publishes tool:search, while the host descriptor catalog
+    # has no search operation. Adding a synthetic tool declaration for a catalog
+    # op is rejected by the pack's PluginContext during compose, so exercise the
+    # exact valid non-view request persisted by the real composed roster instead.
     empty_ui_request: dict[str, object] = {
         "schema": "qmx.ui.pack_ui_request.v1",
         "pack_id": "research-corpus",
@@ -459,6 +469,9 @@ def test_daemon_compose_rebuilds_instance_rows_and_reuses_revision(
     assert first_record is not None
     first_request = cast("dict[str, object]", first_record["pack_ui_request"])
     assert first_request == empty_ui_request
+    assert first_record["pack_id"] == "research-corpus"
+    assert first_record["pack_version"] == "0.1.0"
+    assert first_record["failure_class"] is None
     assert cast("list[object]", first_record["diagnostics"]) == []
     first_events = first.journal.read_events()
     assert is_ok(first_events), first_events
@@ -468,6 +481,7 @@ def test_daemon_compose_rebuilds_instance_rows_and_reuses_revision(
         if event.event == "plugin.enabled" and event.payload.get("plugin_id") == "research-corpus"
     ]
     assert len(first_plugin_records) == 1
+    assert first_plugin_records[0][1]["pack_ui_request"] == empty_ui_request
     first.close()
 
     second_result = DaemonProcess.compose(
@@ -508,6 +522,8 @@ def test_daemon_compose_rebuilds_instance_rows_and_reuses_revision(
             capabilities={"get_pack_ui_request": True},
         )
         assert is_ok(current), current
+        assert current.value.request.pack_id == "research-corpus"
+        assert current.value.request.pack_version == "0.1.0"
         assert current.value.request.views == ()
     finally:
         second.close()
@@ -546,14 +562,18 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
             )
         )
         executed: list[object] = []
-        chrome = ProductSessionChrome(
-            sessions=sessions,
-            journal=journal,
-            execute_invocation=executed.append,
-        )
+        chrome = ProductSessionChrome(sessions=sessions, journal=journal)
         process = DaemonProcess.__new__(DaemonProcess)
         object.__setattr__(process, "_product_session_chrome", chrome)
         object.__setattr__(process, "_roster", SimpleNamespace(loader=loader))
+
+        def press_action(mount_id: object, payload: object) -> Result[BoundSessionGrant]:
+            return process.press_pack_ui_action(
+                mount_id=mount_id,
+                payload=payload,
+                execute_invocation=executed.append,
+            )
+
         other_session = sessions.mint(
             product_session_id="psess:desk-elsewhere",
             profile="authoring",
@@ -584,9 +604,9 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
         assert ungranted.value.action_context.grant_id is None
         assert ungranted.value.action_context.allowed_op_ids == ()
         assert is_refusal(
-            process.press_pack_ui_action(
-                mount_id=ungranted.value.mount_id,
-                payload={"action": _OPERATION.op_id, "input": {}},
+            press_action(
+                ungranted.value.mount_id,
+                {"action": _OPERATION.op_id, "input": {}},
             )
         )
         expired_only = sessions.host_grant(
@@ -636,9 +656,16 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
         assert is_ok(remount), remount
         assert remount.value.mount_id != one.value.mount_id
         assert remount.value.action_context is not first_context
-        retired_press = process.press_pack_ui_action(
-            mount_id=one.value.mount_id,
-            payload={
+        missing_executor = process.press_pack_ui_action(
+            mount_id=remount.value.mount_id,
+            payload={"action": _OPERATION.op_id, "input": {"run_fp1": "not-run"}},
+            execute_invocation=cast("Callable[[BoundInvocation], None]", None),
+        )
+        assert is_refusal(missing_executor)
+        assert executed == []
+        retired_press = press_action(
+            one.value.mount_id,
+            {
                 "action": _OPERATION.op_id,
                 "input": {"run_fp1": "run-1"},
                 "instance_id": "pack:foreign",
@@ -646,9 +673,9 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
             },
         )
         assert is_refusal(retired_press)
-        press = process.press_pack_ui_action(
-            mount_id=remount.value.mount_id,
-            payload={
+        press = press_action(
+            remount.value.mount_id,
+            {
                 "action": _OPERATION.op_id,
                 "input": {"run_fp1": "run-1"},
                 "instance_id": "pack:foreign",
@@ -659,12 +686,13 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
         assert press.value.invocation is not None
         assert press.value.invocation.envelope.instance_id == loaded.value.instance_id
         assert press.value.invocation.grant.grant_id == "grant:search-a"
+        assert press.value.invocation.envelope.caller_session_ref == "psess:desk-1"
         assert press.value.invocation.validated_payload["run_fp1"] == "run-1"
         assert executed == [press.value.invocation]
         assert is_refusal(
-            process.press_pack_ui_action(
-                mount_id=remount.value.mount_id,
-                payload={"action": _OPERATION.op_id, "input": {}, "unknown": True},
+            press_action(
+                remount.value.mount_id,
+                {"action": _OPERATION.op_id, "input": {}, "unknown": True},
             )
         )
 
@@ -679,18 +707,18 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
             return Ok(config_changed_session)
 
         monkeypatch.setattr(sessions, "get", changed_get)
-        config_changed = process.press_pack_ui_action(
-            mount_id=remount.value.mount_id,
-            payload={"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
+        config_changed = press_action(
+            remount.value.mount_id,
+            {"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
         )
         assert is_refusal(config_changed)
         assert config_changed.context.get("field") == "config_revision"
         monkeypatch.undo()
 
         loaded.value.availability_revision += 1
-        availability_changed = process.press_pack_ui_action(
-            mount_id=remount.value.mount_id,
-            payload={"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
+        availability_changed = press_action(
+            remount.value.mount_id,
+            {"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
         )
         assert is_refusal(availability_changed)
         assert availability_changed.context.get("field") == "availability_revision"
@@ -701,9 +729,9 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
             payload={"product_session_id": "psess:desk-1"},
         )
         assert is_ok(changed_snapshot), changed_snapshot
-        stale_snapshot = process.press_pack_ui_action(
-            mount_id=remount.value.mount_id,
-            payload={"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
+        stale_snapshot = press_action(
+            remount.value.mount_id,
+            {"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
         )
         assert is_refusal(stale_snapshot)
         assert stale_snapshot.context.get("field") == "snapshot_cursor"
@@ -716,9 +744,9 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(
             revoked_at="2026-09-30T00:00:00Z",
         )
         assert is_ok(revoked), revoked
-        revoked_press = process.press_pack_ui_action(
-            mount_id=remount.value.mount_id,
-            payload={"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
+        revoked_press = press_action(
+            remount.value.mount_id,
+            {"action": _OPERATION.op_id, "input": {"run_fp1": "run-2"}},
         )
         assert is_refusal(revoked_press)
         assert revoked_press.context.get("revoked") is True
