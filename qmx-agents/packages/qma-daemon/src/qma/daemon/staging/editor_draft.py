@@ -356,12 +356,28 @@ class EditorDraftService:
         return rows[0] if rows else None
 
     def is_editor_revision(self, fp1: str) -> bool:
-        """Whether an fp1 is named by a durable editor head."""
+        """Whether an fp1 has ever been saved as a durable editor revision.
+
+        The projection stores only the latest CAS head. Older immutable saved
+        revisions remain draft identities too, so consult the authoritative
+        journal for those rather than letting a head advance make one runnable.
+        """
         rows = self.sqlite.execute(
             "SELECT 1 FROM editor_draft_head WHERE editor_revision = ? LIMIT 1",
             (fp1,),
         )
-        return bool(rows)
+        if rows:
+            return True
+        events = self.journal.read_events()
+        if is_refusal(events):
+            # Fail closed: a journal read failure must not admit a potentially
+            # draft-owned immutable fp1 as a runnable target.
+            return True
+        return any(
+            event.event == EDITOR_DRAFT_HEAD_EVENT_SAVED
+            and event.payload.get("editor_revision") == fp1
+            for event in events.value
+        )
 
     def _artifact(self, fp1: object) -> Result[StagedArtifact]:
         token = _require_token("fp1", fp1)
@@ -646,18 +662,53 @@ class EditorDraftService:
             loaded = roster.load()
             if is_refusal(loaded):
                 return loaded
+            if row[5] == contribution_id:
+                # A same-revision retry after a lost acknowledgement returns
+                # the durable receipt without another roster generation or
+                # journal publication event.
+                contributions = loaded.value.get("published", [])
+                if not isinstance(contributions, list):
+                    return invalid_input("authoring_roster", "published roster must be a list")
+                typed_contributions = cast(list[object], contributions)
+                current = next(
+                    (
+                        cast(Mapping[str, object], item)
+                        for item in typed_contributions
+                        if isinstance(item, Mapping)
+                        and cast(Mapping[str, object], item).get("contribution_id")
+                        == contribution_id
+                    ),
+                    None,
+                )
+                if current is None:
+                    return invalid_input(
+                        "authoring_roster",
+                        "published editor draft receipt is missing from the local roster",
+                        contribution_id=contribution_id,
+                    )
+                return Ok(
+                    MappingProxyType(
+                        {
+                            "editor_draft_id": draft.value,
+                            "editor_revision": str(row[2]),
+                            "contribution_id": contribution_id,
+                            "point": "graph_template",
+                            "qualified_id": parsed.value.qualified_id,
+                            "version": parsed.value.version,
+                            "published": True,
+                            "enabled": current.get("enabled") is True,
+                        }
+                    )
+                )
             prior = dict(loaded.value)
             contributions = prior.get("published", [])
             if not isinstance(contributions, list):
                 return invalid_input("authoring_roster", "published roster must be a list")
             updated = list(cast(list[object], contributions))
-            prior_enabled = any(
-                isinstance(item, Mapping)
-                and cast(Mapping[str, object], item).get("qualified_id")
-                == parsed.value.qualified_id
-                and cast(Mapping[str, object], item).get("enabled") is True
-                for item in updated
-            )
+            # Publishing a replacement is not enable/compile identity. The
+            # previous runtime contribution is explicitly disabled by the
+            # authenticated process route after this durable transaction.
+            prior_enabled = False
             record = {
                 "contribution_id": contribution_id,
                 "point": "graph_template",

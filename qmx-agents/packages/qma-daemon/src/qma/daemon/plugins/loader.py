@@ -294,6 +294,7 @@ class PluginLoader:
     plugin_load_configs: dict[str, Mapping[str, object]] = field(
         default_factory=dict[str, Mapping[str, object]]
     )
+    authoring_disable_callback: Callable[[str], Result[None]] | None = None
     _loaded: dict[str, LoadedPlugin] = field(default_factory=dict[str, LoadedPlugin], init=False)
     _singleton_owners: dict[tuple[str, str], str] = field(
         default_factory=dict[tuple[str, str], str], init=False
@@ -1057,6 +1058,10 @@ class PluginLoader:
         loaded = self.get(plugin_id)
         if loaded is not None and rollback_mode_for_manifest(loaded.manifest) == "forward_only":
             self._disabled_data_intact.add(plugin_id)
+        if plugin_id.startswith("research-authoring-") and self.authoring_disable_callback:
+            persisted = self.authoring_disable_callback(plugin_id)
+            if not is_ok(persisted):
+                return persisted
         self.unload(plugin_id)
         return self.migrations.disable_forward_only(plugin_id)
 

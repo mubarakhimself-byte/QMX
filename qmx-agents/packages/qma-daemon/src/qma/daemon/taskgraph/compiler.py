@@ -132,6 +132,12 @@ class GraphTemplateCatalog:
         """Lookup by compile identity ``(qualified_id, version)`` (AD-13)."""
         return self._templates.get((qualified_id, version))
 
+    def unregister(self, qualified_id: str) -> None:
+        """Remove all live versions of a disabled contribution identity."""
+        versions = self._order.pop(qualified_id, ())
+        for version in versions:
+            self._templates.pop((qualified_id, version), None)
+
     def versions_of(self, qualified_id: str) -> tuple[str, ...]:
         return tuple(self._order.get(qualified_id, ()))
 

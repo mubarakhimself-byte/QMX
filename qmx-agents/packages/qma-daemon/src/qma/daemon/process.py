@@ -2405,6 +2405,9 @@ class DaemonProcess:
             )
             if is_refusal(result):
                 return _jsonrpc_refusal(req_id, result)
+            qualified_id = result.value.get("qualified_id")
+            if isinstance(qualified_id, str) and result.value.get("enabled") is False:
+                self._roster.disable_replaced_authoring_template(qualified_id)
             return _jsonrpc_result(req_id, result.value)
         saved = self._editor_drafts.save_editor_draft(
             payload_params,

@@ -40,6 +40,7 @@ from qma.daemon.plugins.lifecycle import (
     PACK_LIFECYCLE_INSPECT_SHA,
     QMA_OPERATOR_CLI,
     QMN_OPERATOR_CLI,
+    AtomicRoster,
 )
 from qmf.core import is_ok, is_refusal
 from qmf.core.refusal import Result
@@ -169,6 +170,49 @@ def test_journaled_transitions_cas_and_atomic_roster(tmp_path: Path) -> None:
     pack = fixture.pack("research-corpus")
     assert pack is not None
     assert pack.state == "enabled"
+
+
+def test_pack_lifecycle_reconciles_shared_roster_generation_and_authoring_state(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _bring_to_validated(fixture)
+    _ok(fixture.enable("research-corpus", transitioned_at=_AT))
+
+    roster = AtomicRoster(fixture.root)
+    current = _ok(roster.load())
+    authoring_row: dict[str, object] = {
+        "contribution_id": "authoring-contribution:edraft:shared:fp1:revision",
+        "point": "graph_template",
+        "qualified_id": "demo:shared-roster",
+        "version": "1.0.0",
+        "editor_revision": "fp1:revision",
+        "bytes": '{"qualified_id":"demo:shared-roster","version":"1.0.0"}',
+        "published": True,
+        "enabled": True,
+    }
+    externally_updated = dict(current)
+    externally_updated["published"] = [authoring_row]
+    external_write = _ok(roster.publish(externally_updated))
+    _ = external_write
+    external_generation = cast(int, _ok(roster.load())["roster_generation"])
+    assert external_generation > fixture.roster_generation
+
+    disabled = _ok(fixture.disable("research-corpus", transitioned_at=_AT))
+    assert disabled.roster_generation == external_generation + 1
+    after_disable = _ok(roster.load())
+    assert after_disable["roster_generation"] == disabled.roster_generation
+    preserved = cast(list[dict[str, object]], after_disable["published"])
+    assert len(preserved) == 1
+    assert preserved[0]["contribution_id"] == authoring_row["contribution_id"]
+    assert preserved[0]["enabled"] is False
+
+    uninstalled, _departure = _ok(fixture.uninstall("research-corpus", transitioned_at=_AT))
+    after_uninstall = _ok(roster.load())
+    assert uninstalled.roster_generation == disabled.roster_generation + 1
+    assert after_uninstall["roster_generation"] == uninstalled.roster_generation
+    preserved_after_uninstall = cast(list[dict[str, object]], after_uninstall["published"])
+    assert preserved_after_uninstall[0]["enabled"] is False
 
 
 def test_failed_validation_and_partial_install_restore_last_usable(

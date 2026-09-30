@@ -7,6 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 from pytest import MonkeyPatch
@@ -682,6 +683,15 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
             (valid_draft.value.editor_draft_id,),
         )
         assert head_rows[0][0] == published.value["contribution_id"]
+        before_retry_events = journal.read_events()
+        roster_store = AtomicRoster(roster.parent)
+        before_retry_roster = roster_store.load()
+        assert is_ok(before_retry_events) and is_ok(before_retry_roster)
+        before_retry_publish_count = sum(
+            getattr(event, "event", None) == "editor_draft.published"
+            for event in before_retry_events.value
+        )
+        before_retry_generation = before_retry_roster.value["roster_generation"]
         repeated = service.publish_editor_draft(
             {
                 "editor_draft_id": valid_draft.value.editor_draft_id,
@@ -691,7 +701,19 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
             capabilities=_CAPS,
         )
         assert is_ok(repeated)
-        assert len(json.loads(roster.read_text(encoding="utf-8"))["published"]) == 1
+        assert repeated.value["contribution_id"] == published.value["contribution_id"]
+        after_retry_events = journal.read_events()
+        after_retry_roster = roster_store.load()
+        assert is_ok(after_retry_events) and is_ok(after_retry_roster)
+        assert (
+            sum(
+                getattr(event, "event", None) == "editor_draft.published"
+                for event in after_retry_events.value
+            )
+            == before_retry_publish_count
+        )
+        assert after_retry_roster.value["roster_generation"] == before_retry_generation
+        assert len(cast(list[object], after_retry_roster.value["published"])) == 1
     finally:
         _close(substrate, journal)
 
@@ -776,6 +798,7 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
             correlation_id="supersede-enable",
         )
         assert is_ok(enabled), enabled
+        assert runtime.templates.get_versioned("demo:supersede", "1.0.0") is not None
 
         second_fp1 = _stage(artifacts, graph_bytes("2.0.0"))
         advanced = service.save_editor_draft(
@@ -788,23 +811,41 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
             capabilities=_CAPS,
         )
         assert is_ok(advanced), advanced
-        second_publish = service.publish_editor_draft(
+        process = object.__new__(DaemonProcess)
+        object.__setattr__(process, "_editor_drafts", service)
+        object.__setattr__(process, "_roster", runtime)
+        object.__setattr__(process, "_local_operator", SimpleNamespace(principal_id="operator-1"))
+        connection = WireConnection()
+        connection._authenticated = True  # pyright: ignore[reportPrivateUsage]
+        connection._principal_class = PrincipalClass.OPERATOR  # pyright: ignore[reportPrivateUsage]
+        connection._capabilities = _CAPS  # pyright: ignore[reportPrivateUsage]
+        second_publish_response = DaemonProcess._dispatch_editor_draft_command(  # pyright: ignore[reportPrivateUsage]
+            process,
+            connection,
             {
-                "editor_draft_id": saved.value.editor_draft_id,
-                "expected_revision": second_fp1,
+                "params": {
+                    "editor_draft_id": saved.value.editor_draft_id,
+                    "expected_revision": second_fp1,
+                }
             },
-            operator_principal="operator-1",
-            capabilities=_CAPS,
+            "publish-replacement",
+            publish=True,
         )
-        assert is_ok(second_publish), second_publish
+        assert "result" in second_publish_response, second_publish_response
+        second_publish = cast(Mapping[str, object], second_publish_response["result"])
+        assert second_publish["enabled"] is False
         roster = AtomicRoster(tmp_path / "authoring-pack")
         current = roster.load()
         assert is_ok(current), current
         rows = cast(list[dict[str, object]], current.value["published"])
         assert len(rows) == 1
         assert rows[0]["version"] == "2.0.0"
-        assert rows[0]["enabled"] is True
+        assert rows[0]["enabled"] is False
         assert rows[0]["published"] is True
+        assert runtime.templates.get("demo:supersede") is None
+        assert runtime.templates.get_versioned("demo:supersede", "1.0.0") is None
+        assert runtime.templates.get_versioned("demo:supersede", "2.0.0") is None
+        assert enabled.value.manifest.id not in runtime.loader.loaded_ids()
 
         damaged = dict(current.value)
         damaged["published"] = []
@@ -817,7 +858,7 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
         recovered_rows = cast(list[dict[str, object]], recovered.value["published"])
         assert len(recovered_rows) == 1
         assert recovered_rows[0]["version"] == "2.0.0"
-        assert recovered_rows[0]["enabled"] is True
+        assert recovered_rows[0]["enabled"] is False
     finally:
         _close(substrate, journal)
 
@@ -1080,6 +1121,46 @@ def test_saved_revision_in_ordinary_fp1_invoke_field_is_refused(tmp_path: Path) 
         )
         assert response is not None
         error = cast(Mapping[str, object], cast(Mapping[str, object], response)["error"])
+        data = cast(Mapping[str, object], error["data"])
+        context = cast(Mapping[str, object], data["context"])
+        assert context["refusal"] == "draft_not_runnable"
+        assert context["minted_job_handle"] is False
+    finally:
+        _close(substrate, journal)
+
+
+def test_superseded_saved_revision_remains_non_runnable(tmp_path: Path) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        old_fp1 = _stage(artifacts, b"saved draft revision one")
+        created = service.save_editor_draft(
+            {"fp1": old_fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(created), created
+        new_fp1 = _stage(artifacts, b"saved draft revision two")
+        advanced = service.save_editor_draft(
+            {
+                "editor_draft_id": created.value.editor_draft_id,
+                "expected_revision": old_fp1,
+                "fp1": new_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(advanced), advanced
+        assert advanced.value.editor_revision == new_fp1
+        assert service.is_editor_revision(old_fp1) is True
+
+        process = object.__new__(DaemonProcess)
+        object.__setattr__(process, "_editor_drafts", service)
+        response = DaemonProcess._gate_live_invoke(  # pyright: ignore[reportPrivateUsage]
+            process,
+            "start_mission",
+            {"params": {"fp1": old_fp1}},
+            "req-old-draft-revision",
+        )
+        assert response is not None
+        error = cast(Mapping[str, object], response["error"])
         data = cast(Mapping[str, object], error["data"])
         context = cast(Mapping[str, object], data["context"])
         assert context["refusal"] == "draft_not_runnable"

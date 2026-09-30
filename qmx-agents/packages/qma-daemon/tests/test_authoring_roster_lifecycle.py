@@ -135,3 +135,45 @@ def test_enable_rolls_back_loader_catalog_when_roster_persist_fails(
         plugin_id.startswith("research-authoring-") for plugin_id in runtime.loader.loaded_ids()
     )
     assert "demo:authoring" not in runtime.templates.ids()
+
+
+def test_generated_authoring_disable_and_uninstall_survive_restart(tmp_path: Path) -> None:
+    roster_root = tmp_path / "authoring-pack"
+    contribution = _contribution(enabled=False)
+    _write_roster(roster_root, contribution)
+    runtime = _runtime(tmp_path, roster_root)
+    enabled = runtime.enable_published_authoring_contribution(
+        str(contribution["contribution_id"]), correlation_id="disable-generated"
+    )
+    assert is_ok(enabled), enabled
+    plugin_id = enabled.value.manifest.id
+    assert runtime.templates.get("demo:authoring") is not None
+
+    disabled = runtime.loader.disable(plugin_id)
+    assert is_ok(disabled), disabled
+    roster = AtomicRoster(roster_root)
+    after_disable = roster.load()
+    assert is_ok(after_disable)
+    rows = cast(list[dict[str, object]], after_disable.value["published"])
+    assert rows[0]["enabled"] is False
+
+    after_disable_restart = _runtime(tmp_path, roster_root)
+    activated = after_disable_restart.activate()
+    assert is_ok(activated), activated
+    assert "demo:authoring" not in after_disable_restart.templates.ids()
+    assert not any(
+        item.startswith("research-authoring-") for item in after_disable_restart.loader.loaded_ids()
+    )
+
+    removed = after_disable_restart.uninstall_published_authoring_contribution(
+        str(contribution["contribution_id"])
+    )
+    assert is_ok(removed), removed
+    after_uninstall = roster.load()
+    assert is_ok(after_uninstall)
+    assert after_uninstall.value["published"] == []
+
+    after_uninstall_restart = _runtime(tmp_path, roster_root)
+    activated_again = after_uninstall_restart.activate()
+    assert is_ok(activated_again), activated_again
+    assert "demo:authoring" not in after_uninstall_restart.templates.ids()

@@ -11,6 +11,7 @@ Story 53.3. Does not close GAP-0098. No new sqlite class.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -794,6 +795,17 @@ class PackLifecycleFixture:
         return service
 
     def _cas(self, expected_generation: object | None) -> Result[int]:
+        current = self.roster.load()
+        if is_refusal(current):
+            return current
+        stored_generation = _require_int(
+            "roster_generation", current.value.get("roster_generation", 0), minimum=0
+        )
+        if is_refusal(stored_generation):
+            return stored_generation
+        # Editor publication and generic pack lifecycle share the same durable
+        # roster. Reconcile before comparing the caller's lifecycle CAS token.
+        self._generation = max(self._generation, stored_generation.value)
         if expected_generation is None:
             return Ok(self._generation)
         parsed = _require_int("roster_generation", expected_generation, minimum=0)
@@ -872,7 +884,21 @@ class PackLifecycleFixture:
             if isinstance(item, Mapping):
                 contribution_id = cast(Mapping[str, object], item).get("contribution_id")
                 if isinstance(contribution_id, str):
-                    contributions[contribution_id] = dict(cast(Mapping[str, object], item))
+                    row = dict(cast(Mapping[str, object], item))
+                    if contribution_id.startswith("authoring-contribution:"):
+                        plugin_digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[
+                            :16
+                        ]
+                        authoring_plugin_id = f"research-authoring-{plugin_digest}"
+                        if (
+                            row.get("enabled") is True
+                            and authoring_plugin_id not in self.loader.loaded_ids()
+                        ):
+                            # A generic disable/uninstall has removed the live
+                            # plugin. Persist that fact so startup cannot
+                            # silently rehydrate it.
+                            row["enabled"] = False
+                    contributions[contribution_id] = row
         for item in self.loader.published_contributions():
             row = dict(item.to_payload())
             contribution_id = row.get("contribution_id")
@@ -1188,7 +1214,12 @@ class PackLifecycleFixture:
         actor = self._principal(principal)
         if is_refusal(actor):
             return actor
-        departed = self._pin_service().disable(ident.value, principal=actor.value)
+        authoring_callback = self.loader.authoring_disable_callback
+        self.loader.authoring_disable_callback = None
+        try:
+            departed = self._pin_service().disable(ident.value, principal=actor.value)
+        finally:
+            self.loader.authoring_disable_callback = authoring_callback
         if is_refusal(departed):
             return departed
         moved = self._append_transition(
@@ -1235,7 +1266,12 @@ class PackLifecycleFixture:
         actor = self._principal(principal)
         if is_refusal(actor):
             return actor
-        departed = self._pin_service().uninstall(ident.value, principal=actor.value)
+        authoring_callback = self.loader.authoring_disable_callback
+        self.loader.authoring_disable_callback = None
+        try:
+            departed = self._pin_service().uninstall(ident.value, principal=actor.value)
+        finally:
+            self.loader.authoring_disable_callback = authoring_callback
         if is_refusal(departed):
             return departed
         moved = self._append_transition(
