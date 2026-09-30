@@ -12,6 +12,7 @@ from qma.wire import (
     parse_cancel_job_payload,
     require_cancel_job_capability,
 )
+from qma.wire.schemas import validate_family_payload
 from qma.wire.vocabulary import WIRE_COMMANDS
 from qmf.core.refusal import is_ok, is_refusal
 
@@ -76,3 +77,8 @@ def test_missing_cancel_capability_is_a_typed_mismatch() -> None:
     assert is_refusal(missing)
     assert missing.context["missing"] == CANCEL_JOB_CAPABILITY
     assert is_ok(require_cancel_job_capability({CANCEL_JOB_CAPABILITY: True}))
+
+
+def test_cancel_job_schema_describes_the_required_payload() -> None:
+    assert is_ok(validate_family_payload("cancel_job", _payload()))
+    assert is_refusal(validate_family_payload("cancel_job", {"handle_id": "job:missing"}))

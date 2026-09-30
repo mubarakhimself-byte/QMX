@@ -319,6 +319,31 @@ def test_disposing_a_panel_does_not_cancel_running_job_handle() -> None:
     assert live.state is JobHandleState.RUNNING
     assert PANEL_DISPOSE_CANCELS_JOB_HANDLE is False
 
+
+def test_copilot_admission_copies_valid_operator_session_origin() -> None:
+    host = _world()
+    admitted = _ok(
+        host.submit_job(
+            owner=_owner(),
+            task_id="task:copilot-origin",
+            job_id="job:copilot-origin",
+            originating_product_session_ref="psess:app-use-1",
+        )
+    )
+    assert admitted.originating_product_session_ref == "psess:app-use-1"
+    assert admitted.to_payload()["originating_product_session_ref"] == "psess:app-use-1"
+
+    headless = _ok(host.submit_job(owner=_owner(), task_id="task:copilot-headless"))
+    assert headless.originating_product_session_ref is None
+    assert "originating_product_session_ref" not in headless.to_payload()
+    assert is_refusal(
+        host.submit_job(
+            owner=_owner(),
+            task_id="task:copilot-missing-origin",
+            originating_product_session_ref="psess:missing",
+        )
+    )
+
     snapshot = _ok(
         host.reconnect(
             "psess:app-use-1",

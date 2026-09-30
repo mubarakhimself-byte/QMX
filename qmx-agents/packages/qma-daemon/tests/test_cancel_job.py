@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from qma.core.ontology import ActorId, DeskSlug
-from qma.core.vocabulary.enums import JobHandleState
-from qma.daemon.envs.jobs import JobHandleService
+from qma.core.ontology import ActorId, DeskSlug, Goal, Quant, RoleName
+from qma.core.ports.execution import ExecutionEnvironmentDeclaration
+from qma.core.ports.jobs import JobHandle
+from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState, TaskMissionState
+from qma.daemon import CompileRequest, MissionCompiler, TaskGraphDispatcher
+from qma.daemon.envs import ComputeRouter, ExecutionEnvironmentRegistry
+from qma.daemon.envs.jobs import JobHandleService, JobHandleStore
 from qmf.core import is_ok, is_refusal
 
 _PRINCIPAL = "principal:local-operator"
@@ -15,6 +19,17 @@ def _owner() -> ActorId:
     result = ActorId.mint(DeskSlug.RESEARCH, "epic73")
     assert is_ok(result)
     return result.value
+
+
+def _quant() -> Quant:
+    actor = _owner()
+    return Quant(
+        actor_id=actor,
+        desk=DeskSlug.RESEARCH,
+        quant_slug="epic73",
+        role=RoleName.RESEARCHER,
+        name="Epic 73",
+    )
 
 
 def _job(
@@ -138,15 +153,51 @@ def test_queued_to_running_and_lost_ack_reuse_command_and_wire_pair() -> None:
     assert replay.value.state is JobHandleState.CANCELLED
     assert len(replay.value.later_commands) == 1
     recorded = replay.value.later_commands[0]
+    assert recorded["command_id"] == "cancel:73-1"
+    assert recorded["durable_command_id"] == f"{_ORIGIN}/cancel:73-1"
+    assert recorded["command_hash"]
+    assert recorded["job_id"] == job_id
     assert recorded["producer_id"] == "tab:one"
     assert recorded["wire_id"] == 71
-    assert recorded["expected_state"] == "running"
+    assert recorded["expected_state"] == "queued"
     duplicate = _cancel(service, _payload(job_id, expected_state="running"), wire_id=71)
     assert is_ok(duplicate)
     assert len(duplicate.value.later_commands) == 1
 
     changed_pair = _cancel(service, _payload(job_id), wire_id=72)
     assert is_refusal(changed_pair)
+
+
+def test_successful_command_identity_rejects_retarget_and_changed_wire_id() -> None:
+    service, first_id = _job()
+    first = _cancel(service, _payload(first_id), wire_id="wire:first")
+    assert is_ok(first), first
+    assert first.value.state is JobHandleState.CANCELLED
+
+    second = service.submit(
+        owner=_owner(),
+        task_id="task:second-cancel-target",
+        job_id="job:second-cancel-target",
+        logical_run_id="run:second-cancel-target",
+        attempt_id=2,
+        originating_product_session_ref=_ORIGIN,
+    )
+    assert is_ok(second), second
+    retargeted = _cancel(
+        service,
+        _payload(
+            second.value.job_id,
+            logical_run_id=second.value.logical_run_id,
+            attempt_id=second.value.attempt_id,
+        ),
+        wire_id="wire:first",
+    )
+    assert is_refusal(retargeted)
+    still_queued = service.handle_for(second.value.job_id)
+    assert still_queued is not None and still_queued.state is JobHandleState.QUEUED
+
+    changed_wire = _cancel(service, _payload(first_id), wire_id="wire:changed")
+    assert is_refusal(changed_wire)
 
 
 def test_terminal_noop_unknown_refusal_and_nested_child_origin() -> None:
@@ -196,3 +247,65 @@ def test_detach_never_cancels_originating_handle() -> None:
     assert detached.value.state is JobHandleState.RUNNING
     assert detached.value.originating_product_session_ref == _ORIGIN
     assert detached.value.later_commands == ()
+
+
+def test_cancel_noop_on_dispatched_terminal_handle_skips_task_remap() -> None:
+    owner = _quant()
+    compiled = MissionCompiler(known_quant_actor_ids={owner.actor_id.value}).compile(
+        CompileRequest(goal=Goal(text="terminal cancellation no-op"), owner=owner)
+    )
+    assert is_ok(compiled), compiled
+    environments = ExecutionEnvironmentRegistry()
+    assert is_ok(
+        environments.register_declaration(
+            ExecutionEnvironmentDeclaration.isolated(
+                ExecutionEnvironmentKind.DOCKER,
+                provider_ref="local-docker",
+            )
+        )
+    )
+    router = ComputeRouter(environments=environments)
+    dispatcher = TaskGraphDispatcher(environments=environments, router=router)
+    dispatcher.materialize(compiled.value.task_graph, mission=compiled.value.mission)
+    task_id = compiled.value.task_graph.tasks[0].id
+    assert is_ok(dispatcher.dispatch_task(task_id=task_id, holder_agent_id="agent:epic73"))
+    service = JobHandleService(dispatcher=dispatcher, router=router)
+    submitted = service.submit(
+        owner=owner.actor_id,
+        task_id=task_id,
+        job_id="job:dispatched-terminal-noop",
+        originating_product_session_ref=_ORIGIN,
+    )
+    assert is_ok(submitted), submitted
+    assert is_ok(service.start(submitted.value.job_id))
+    done = service.complete(submitted.value.job_id, JobHandleState.DONE)
+    assert is_ok(done), done
+
+    no_op = _cancel(
+        service,
+        _payload(
+            submitted.value.job_id,
+            logical_run_id=submitted.value.logical_run_id,
+            attempt_id=submitted.value.attempt_id,
+        ),
+    )
+    assert is_ok(no_op), no_op
+    assert no_op.value.state is JobHandleState.DONE
+    located = dispatcher.store.find_task(task_id)
+    assert located is not None and located[1].state is TaskMissionState.DONE
+
+
+def test_restore_reports_origin_immutability_conflict_as_refusal() -> None:
+    handle = JobHandle.try_create(
+        job_id="job:restore-origin-conflict",
+        owner=_owner(),
+        state=JobHandleState.QUEUED,
+        task_id="task:restore-origin-conflict",
+        originating_product_session_ref=_ORIGIN,
+    )
+    assert is_ok(handle), handle
+    payload = dict(handle.value.to_payload())
+    conflicting_payload = dict(payload)
+    conflicting_payload["originating_product_session_ref"] = "psess:other-origin"
+    restored = JobHandleStore().restore([payload, conflicting_payload])
+    assert is_refusal(restored)

@@ -33,5 +33,38 @@
       "description": "Connection principal class recorded verbatim on every command (DEC-0323)"
     },
     "args": { "type": "object" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "name": { "const": "cancel_job" } },
+        "required": ["name"]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["handle_id", "logical_run_id", "attempt_id", "command_id", "expected_state"],
+            "properties": {
+              "handle_id": { "type": "string", "minLength": 1 },
+              "job_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional compatibility alias; when present it must equal handle_id."
+              },
+              "logical_run_id": { "type": "string", "minLength": 1 },
+              "attempt_id": { "type": "integer", "minimum": 1 },
+              "command_id": { "type": "string", "minLength": 1 },
+              "expected_state": {
+                "type": "string",
+                "enum": ["queued", "running", "done", "failed", "cancelled", "aborted", "unknown"],
+                "description": "Observed state only; excluded from stable cancel command identity."
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

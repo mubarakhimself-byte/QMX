@@ -233,7 +233,15 @@ class JobHandleStore:
             handle = JobHandle.from_payload(payload)
             if is_refusal(handle):
                 return handle
-            self.put(handle.value)
+            try:
+                self.put(handle.value)
+            except ValueError as exc:
+                return policy_rejection(
+                    "originating_product_session_ref",
+                    "restored durable JobHandle cannot change its originating product session",
+                    job_id=handle.value.job_id,
+                    detail=str(exc),
+                )
             count += 1
         return Ok(count)
 
@@ -647,22 +655,20 @@ class JobHandleService:
             values,
             originating_product_session_ref=origin,
         )
-        if handle.state is JobHandleState.UNKNOWN:
-            return policy_rejection(
-                "job_handle",
-                "an unknown JobHandle is not cancellable; use unknown.resolve",
-                job_id=job_id,
-                state=handle.state.value,
-            )
-        if handle.is_terminal:
-            for recorded in handle.later_commands:
+        # The command id is unique within its originating session, not just
+        # within one handle. This also makes a retry aimed at another handle
+        # refuse before it can perform a second cancellation.
+        for recorded_handle in self._store.all():
+            for recorded in recorded_handle.later_commands:
                 if recorded.get("durable_command_id") != durable_id:
                     continue
-                if recorded.get("command_hash") != command_hash:
+                if recorded.get("command_hash") != command_hash or recorded.get("job_id") != job_id:
                     return policy_rejection(
                         "command_id",
-                        "cancel_job command_id was already used with different durable identity",
+                        "cancel_job command_id was already used for different durable identity",
                         durable_command_id=durable_id,
+                        job_id=job_id,
+                        recorded_job_id=recorded_handle.job_id,
                     )
                 if recorded.get("producer_id") != producer or recorded.get("wire_id") != wire:
                     return policy_rejection(
@@ -671,12 +677,21 @@ class JobHandleService:
                         producer_id=producer,
                         wire_id=wire,
                     )
-                return Ok(handle)
+                return Ok(recorded_handle)
+        if handle.state is JobHandleState.UNKNOWN:
+            return policy_rejection(
+                "job_handle",
+                "an unknown JobHandle is not cancellable; use unknown.resolve",
+                job_id=job_id,
+                state=handle.state.value,
+            )
+        if handle.is_terminal:
             no_op = {
                 "command": "cancel_job",
                 "command_id": str(values["command_id"]),
                 "durable_command_id": durable_id,
                 "command_hash": command_hash,
+                "job_id": job_id,
                 "expected_state": expected_state,
                 "terminal_state": handle.state.value,
                 "producer_id": producer,
@@ -684,9 +699,39 @@ class JobHandleService:
                 "noop": True,
             }
             recorded_handle = handle.record_later_command(no_op)
-            return self._commit(recorded_handle, event="cancel_job_noop", previous=handle)
+            self._store.put(recorded_handle)
+            self._append_stream(
+                job_id,
+                "cancel_job_noop",
+                {
+                    "expected_state": expected_state,
+                    "terminal_state": handle.state.value,
+                    "noop": True,
+                },
+            )
+            return Ok(recorded_handle)
         # The queued/running state may have advanced since expected_state was read.
-        return self.cancel(job_id, writer=COORDINATED_CANCEL_AUTHORITY)
+        command_record = {
+            "command": "cancel_job",
+            "command_id": str(values["command_id"]),
+            "durable_command_id": durable_id,
+            "command_hash": command_hash,
+            "job_id": job_id,
+            "expected_state": expected_state,
+            "producer_id": producer,
+            "wire_id": wire,
+            "noop": False,
+        }
+        authorized = authorize_coordinated_cancel(COORDINATED_CANCEL_AUTHORITY)
+        if is_refusal(authorized):
+            return authorized
+        candidate = handle.record_later_command(command_record)
+        return self._transition(
+            candidate,
+            JobHandleState.CANCELLED,
+            event="cancel_job",
+            previous=handle,
+        )
 
     def stream(self, job_id: str) -> Result[tuple[JobStreamEvent, ...]]:
         """Operational logs. Harness telemetry — not the Task Ledger."""
@@ -916,6 +961,7 @@ class JobHandleService:
         nxt: JobHandleState,
         *,
         event: str,
+        previous: JobHandle | None = None,
         abort_reason: str | None = None,
         unknown_trigger: str | None = None,
         recorded_resolution: Mapping[str, object] | None = None,
@@ -960,7 +1006,7 @@ class JobHandleService:
         )
         if is_refusal(minted):
             return minted
-        return self._commit(minted.value, event=event, previous=handle)
+        return self._commit(minted.value, event=event, previous=previous or handle)
 
     def _commit(
         self,

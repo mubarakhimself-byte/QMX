@@ -422,8 +422,27 @@ class CopilotHost:
         owner: ActorId | str,
         task_id: str,
         job_id: str | None = None,
+        originating_product_session_ref: object | None = None,
     ) -> Result[JobHandle]:
-        submitted = self.jobs.submit(owner=owner, task_id=task_id, job_id=job_id)
+        origin: str | None = None
+        if originating_product_session_ref is not None:
+            session = self.sessions.get(originating_product_session_ref)
+            if is_refusal(session):
+                return session
+            if session.value.principal != "operator":
+                return policy_rejection(
+                    "originating_product_session_ref",
+                    "only an operator product session can originate a UI-cancellable JobHandle",
+                    product_session_id=session.value.product_session_id,
+                    principal=session.value.principal,
+                )
+            origin = session.value.product_session_id
+        submitted = self.jobs.submit(
+            owner=owner,
+            task_id=task_id,
+            job_id=job_id,
+            originating_product_session_ref=origin,
+        )
         if is_refusal(submitted):
             return submitted
         started = self.jobs.start(submitted.value.job_id)

@@ -160,6 +160,22 @@ def _validate(instance: object, schema: Mapping[str, object], path: str = "$") -
         else:
             raise SchemaValidationError(f"{path}: matched no oneOf branch ({'; '.join(errors)})")
         return
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list):
+        for option_obj in cast("list[object]", all_of):
+            option = _as_object_map(option_obj)
+            if option is not None:
+                _validate(instance, option, path)
+    conditional = _as_object_map(schema.get("if"))
+    if conditional is not None:
+        try:
+            _validate(instance, conditional, path)
+        except SchemaValidationError:
+            pass
+        else:
+            then_schema = _as_object_map(schema.get("then"))
+            if then_schema is not None:
+                _validate(instance, then_schema, path)
     if "const" in schema and instance != schema["const"]:
         raise SchemaValidationError(f"{path}: expected const {schema['const']!r}")
     if "enum" in schema:
