@@ -43,8 +43,9 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # get_diagnosis for kit failure_class (Story 61.2; DEC-0456),
 # get_instance_health for pack-instance typed-report (Story 64.2; DEC-0112),
 # and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08),
-# and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03).
-ADDABLE_QUERY_COUNT: Final[int] = 8
+# and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03),
+# and get_pack_ui_request for recorded pack chrome (Epic 72).
+ADDABLE_QUERY_COUNT: Final[int] = 9
 # transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3), and
 # save/publish_editor_draft (Story 71; AM-09).
 # Seed 9/7/10 stay the seed.
@@ -116,6 +117,7 @@ class WireQuery(StrEnum):
     GET_INSTANCE_HEALTH = "get_instance_health"
     LIST_MAILBOX = "list_mailbox"
     GET_EDITOR_DRAFT_HEAD = "get_editor_draft_head"
+    GET_PACK_UI_REQUEST = "get_pack_ui_request"
 
 
 class WireEvent(StrEnum):

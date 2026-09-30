@@ -34,6 +34,10 @@ from qma.wire.editor_draft import (
     editor_draft_capability_unavailable,
 )
 from qma.wire.list_mailbox import query_unavailable
+from qma.wire.pack_ui_request import (
+    GET_PACK_UI_REQUEST_CAPABILITY,
+    PACK_UI_REQUEST_CAPABILITY,
+)
 from qma.wire.principals import (
     AuthorizedWireCommand,
     authorize_wire_command,
@@ -53,9 +57,11 @@ __all__ = [
     "CONNECT_TYPES_EXISTED_AT_INSPECT_SHA",
     "DEFERRED_INITIALIZE_CAPABILITIES",
     "GET_EDITOR_DRAFT_HEAD_CAPABILITY",
+    "GET_PACK_UI_REQUEST_CAPABILITY",
     "JSONRPC_VERSION",
     "LIST_MAILBOX_CAPABILITY",
     "LIST_MAILBOX_CAPABILITY_MINTED",
+    "PACK_UI_REQUEST_CAPABILITY",
     "PAIRING_CAPABILITY",
     "PAIRING_INSPECT_SHA",
     "PUBLISH_EDITOR_DRAFT_CAPABILITY",
@@ -107,8 +113,6 @@ PUBLISH_EDITOR_DRAFT_CAPABILITY: Final[str] = "publish_editor_draft"
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
         "cancel_job",
-        "pack_ui_request",
-        "get_pack_ui_request",
     }
 )
 
@@ -164,6 +168,8 @@ def advertise_pairing_capabilities(
     caps[SAVE_EDITOR_DRAFT_CAPABILITY] = True
     caps[GET_EDITOR_DRAFT_HEAD_CAPABILITY] = True
     caps[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
+    caps[PACK_UI_REQUEST_CAPABILITY] = True
+    caps[GET_PACK_UI_REQUEST_CAPABILITY] = True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         caps.pop(name, None)
     return caps

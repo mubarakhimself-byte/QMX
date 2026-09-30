@@ -168,6 +168,7 @@ from qma.daemon.pairing import (
 )
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
+from qma.daemon.plugins.pack_ui import read_pack_ui_request_record
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftService
@@ -208,6 +209,14 @@ from qma.wire.listener import (
     parse_offered_websocket_subprotocols,
     selected_websocket_subprotocol,
     validate_listener_startup,
+)
+from qma.wire.pack_ui_request import (
+    GET_PACK_UI_REQUEST_CAPABILITY,
+    GET_PACK_UI_REQUEST_HTTP_PATH,
+    PackUiRequestSnapshot,
+    parse_pack_ui_request,
+    parse_pack_ui_request_args,
+    require_pack_ui_request_capability,
 )
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.send_message import parse_send_message_payload
@@ -877,6 +886,7 @@ class DaemonProcess:
                 plugin_load_configs=plugin_load_configs,
                 authoring_roster_root=Path(root) / "authoring-pack",
                 authoring_journal=journal,
+                sqlite=substrate.sqlite,
             )
             roster.backtesting.bind_experiments(experiments)
             process = cls(
@@ -994,6 +1004,75 @@ class DaemonProcess:
             sessions=self._product_sessions,
             capabilities=caps,
         )
+
+    def get_pack_ui_request(
+        self,
+        args: object,
+        *,
+        operator_principal: object,
+        capabilities: object | None = None,
+    ) -> Result[PackUiRequestSnapshot]:
+        """Read the exact durable UI request for a currently enabled pack instance."""
+        caps: object = (
+            {GET_PACK_UI_REQUEST_CAPABILITY: True} if capabilities is None else capabilities
+        )
+        gated = require_pack_ui_request_capability(caps)
+        if is_refusal(gated):
+            return gated
+        if operator_principal is not PrincipalClass.OPERATOR:
+            return policy_rejection(
+                "principal_class", "get_pack_ui_request requires an operator pairing"
+            )
+        parsed = parse_pack_ui_request_args(args)
+        if is_refusal(parsed):
+            return parsed
+        instance_id = cast(str, parsed.value["instance_id"])
+        revision = cast(int, parsed.value["availability_revision"])
+        active = next(
+            (
+                plugin
+                for plugin_id in self._roster.loader.loaded_ids()
+                if (plugin := self._roster.loader.get(plugin_id)) is not None
+                and plugin.instance_id == instance_id
+                and plugin.availability_revision == revision
+            ),
+            None,
+        )
+        if active is None:
+            return policy_rejection(
+                "instance_id",
+                "enabled pack instance and availability_revision must match exactly",
+                instance_id=instance_id,
+                availability_revision=revision,
+                mismatch="instance_revision",
+            )
+        try:
+            row = read_pack_ui_request_record(
+                self.sqlite,
+                instance_id=instance_id,
+                availability_revision=revision,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            return storage_failure(
+                f"could not read PackUiRequest projection: {exc}",
+                context={"field": "plugin_install_records", "instance_id": instance_id},
+            )
+        if (
+            row is None
+            or row.get("pack_id") != active.manifest.id
+            or row.get("pack_version") != active.manifest.version
+        ):
+            return policy_rejection(
+                "instance_id",
+                "no exact PackUiRequest record exists for the enabled instance revision",
+                instance_id=instance_id,
+                availability_revision=revision,
+                mismatch="record_unavailable",
+            )
+        request = parse_pack_ui_request(row.get("pack_ui_request"))
+        if is_refusal(request):
+            return request
+        return Ok(PackUiRequestSnapshot(instance_id, revision, request.value))
 
     @property
     def artifacts(self) -> ArtifactStore:
@@ -1116,6 +1195,7 @@ class DaemonProcess:
             return stored[pairing_record_id]
         return {
             LIST_MAILBOX_CAPABILITY: True,
+            GET_PACK_UI_REQUEST_CAPABILITY: True,
             STAGE_ARTIFACT_CAPABILITY: True,
             TRANSFER_ARTIFACT_CAPABILITY: True,
             TRANSFER_COMPLETE_CAPABILITY: True,
@@ -1850,6 +1930,26 @@ class DaemonProcess:
                     body,
                 )
                 return
+            if request.method == "GET" and request.path == GET_PACK_UI_REQUEST_HTTP_PATH:
+                requested = self.get_pack_ui_request(
+                    query_string_to_args(request.query),
+                    operator_principal=authed.value.principal_class,
+                    capabilities=self._paired_http_capabilities(authed.value.pairing_record_id),
+                )
+                if is_refusal(requested):
+                    await self._write_refusal(writer, requested, origin=origin)
+                    return
+                body = json.dumps(
+                    {"ok": True, "result": dict(requested.value.to_payload())},
+                    ensure_ascii=True,
+                ).encode("utf-8")
+                await self._write_http(
+                    writer,
+                    200,
+                    _cors_headers_for_origin(origin),
+                    body,
+                )
+                return
             if request.method == "GET" and request.path == EDITOR_DRAFT_HTTP_PATH:
                 if (
                     authed.value.principal_class is not PrincipalClass.OPERATOR
@@ -2291,6 +2391,18 @@ class DaemonProcess:
             return self._dispatch_editor_draft_command(connection, request, req_id, publish=False)
         if method == WireCommand.PUBLISH_EDITOR_DRAFT.value:
             return self._dispatch_editor_draft_command(connection, request, req_id, publish=True)
+        if method == WireQuery.GET_PACK_UI_REQUEST.value:
+            gated_query = connection.require_query_capability(method)
+            if is_refusal(gated_query):
+                return _jsonrpc_refusal(req_id, gated_query)
+            result = self.get_pack_ui_request(
+                request.get("params"),
+                operator_principal=connection.principal_class,
+                capabilities=connection.capabilities,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value.to_payload())
         if method == WireQuery.GET_EDITOR_DRAFT_HEAD.value:
             gated_query = connection.require_query_capability(method)
             if is_refusal(gated_query):

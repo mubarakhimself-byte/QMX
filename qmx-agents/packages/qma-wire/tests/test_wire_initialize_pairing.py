@@ -43,13 +43,16 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert "stage_artifact" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "transfer_artifact" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "transfer_complete" not in DEFERRED_INITIALIZE_CAPABILITIES
-    assert "pack_ui_request" in DEFERRED_INITIALIZE_CAPABILITIES
+    assert "pack_ui_request" not in DEFERRED_INITIALIZE_CAPABILITIES
+    assert "get_pack_ui_request" not in DEFERRED_INITIALIZE_CAPABILITIES
     caps = advertise_pairing_capabilities({"commands": True, "cancel_job": True})
     assert caps[PAIRING_CAPABILITY] is True
     assert caps["list_mailbox"] is True
     assert caps["stage_artifact"] is True
     assert caps["transfer_artifact"] is True
     assert caps["transfer_complete"] is True
+    assert caps["pack_ui_request"] is True
+    assert caps["get_pack_ui_request"] is True
     assert "cancel_job" not in caps
 
     params = InitializeParams.try_create(

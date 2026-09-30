@@ -20,6 +20,8 @@ from qma.core.ports.extensibility import (
     register_ui_widget_contribution,
     ui_view_contribution_point_minted,
 )
+from qma.core.vocabulary.enums import GrantEvaluationMoment
+from qma.daemon.plugins.loader import PluginLoader
 from qma.daemon.sessions.product_session import (
     CHROME_KINDS,
     CHROME_OWNS_GRANTS,
@@ -37,8 +39,11 @@ from qma.daemon.sessions.product_session import (
     refuse_tab_as_product_session,
     refuse_tab_mints_session,
 )
+from qma.wire.action_context import ActionContext
 from qma.wire.contribution_listing import refuse_hit_as_grant
 from qma.wire.federated_discovery import ContributionHit, parse_federated_hit
+from qma.wire.grant_record import GrantRecord
+from qma.wire.pack_ui_request import PackUiView
 from qma.wire.view_presentation import (
     VIEW_FILLS_GAP_0081_CHROME,
     VIEW_IS_CONTRIBUTION_HIT,
@@ -51,8 +56,8 @@ from qma.wire.view_presentation import (
     refuse_view_as_contribution_hit,
     refuse_view_durable_work,
 )
-from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.data.store.refusals import invalid_input
+from qmf.core.refusal import Ok, RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
+from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
     "CHROME_KINDS",
@@ -241,6 +246,136 @@ class ProductSessionChrome:
         if "view_id" in payload or "tab_id" in payload:
             return refuse_tab_as_product_session(fields=("view_id",))
         return Ok(attached.value)
+
+    def mint_action_context(
+        self,
+        *,
+        product_session_id: object,
+        view: PackUiView,
+        loader: PluginLoader,
+        instance_id: object,
+        config_revision: object,
+        snapshot_cursor: object,
+        now: object,
+        op_version: object = 1,
+    ) -> Result[ActionContext]:
+        """Mint a fresh mount context from live pack and existing session grants."""
+        if not isinstance(instance_id, str):
+            return invalid_input("instance_id", "instance_id is a host-selected identifier")
+        plugin_id = instance_id.removeprefix("pack:")
+        loaded = loader.get(plugin_id)
+        if loaded is None or loaded.instance_id != instance_id:
+            return policy_rejection(
+                "instance_id",
+                "ActionContext requires the selected enabled pack instance",
+                instance_id=instance_id,
+            )
+        if loaded.pack_ui_request is None or view not in loaded.pack_ui_request.request.views:
+            return policy_rejection("view_id", "view is not in the recorded PackUiRequest")
+        contribution = next(
+            (
+                row
+                for row in loader.published_contributions()
+                if row.plugin_id == loaded.manifest.id
+                and row.package_version == loaded.manifest.version
+                and row.availability_revision == loaded.availability_revision
+                and row.qualified_id in {view.op_id, f"{loaded.manifest.id}:{view.op_id}"}
+            ),
+            None,
+        )
+        if contribution is None or contribution.qualified_id is None:
+            return policy_rejection(
+                "op_id",
+                "view operation has no live contribution for this enabled instance",
+                op_id=view.op_id,
+                instance_id=instance_id,
+            )
+        session = self.sessions.get(product_session_id)
+        if is_refusal(session):
+            return session
+        session_instance: object | None = (
+            session.value.app_instance_id or session.value.context.instance_id
+        )
+        if session_instance is None:
+            selected_instance_ids = tuple(
+                row.id for row in session.value.selected_refs if row.kind == "instance_id"
+            )
+            if len(selected_instance_ids) != 1:
+                return policy_rejection(
+                    "instance_id",
+                    "mount requires an app-bound instance or exactly one selected instance_id ref",
+                    selected_instance_count=len(selected_instance_ids),
+                )
+            session_instance = selected_instance_ids[0]
+        if session_instance != instance_id:
+            return policy_rejection(
+                "instance_id",
+                "ActionContext instance_id must come from the existing product session",
+                bound_instance_id=session_instance,
+                given_instance_id=instance_id,
+            )
+        if config_revision != session.value.context.config_revision:
+            return policy_rejection(
+                "config_revision",
+                "ActionContext config_revision must come from the existing product session",
+                bound_config_revision=session.value.context.config_revision,
+                given_config_revision=config_revision,
+            )
+        config_revision = session.value.context.config_revision
+        grants = self.sessions.granted_records(session.value.product_session_id)
+        if is_refusal(grants):
+            return grants
+        matching: list[GrantRecord] = []
+        for grant in grants.value:
+            if (
+                grant.audience != session.value.product_session_id
+                or grant.instance_id != instance_id
+                or grant.config_revision != config_revision
+                or grant.op_id != view.op_id
+                or grant.op_version != op_version
+                or grant.contribution.qualified_id != contribution.qualified_id
+                or grant.contribution.package_version != loaded.manifest.version
+            ):
+                continue
+            active = self.sessions.ledger.evaluate(
+                grant_id=grant.grant_id,
+                moment=GrantEvaluationMoment.ACCEPT,
+                now=now,
+            )
+            if not is_refusal(active):
+                matching.append(active.value)
+            elif active.context.get("code") != "GRANT_INACTIVE":
+                return active
+        if len(matching) > 1:
+            return TypedRefusal(
+                category=RefusalCategory.POLICY_REJECTION,
+                retryability=Retryability.AFTER_CONDITION,
+                context=MappingProxyType(
+                    {
+                        "field": "grant_id",
+                        "reason": "multiple active GrantRecords match this exact mount",
+                        "refusal": "GRANT_AMBIGUOUS",
+                        "instance_id": instance_id,
+                        "op_id": view.op_id,
+                        "product_session_id": session.value.product_session_id,
+                    }
+                ),
+                after_condition_descriptor="the operator leaves exactly one matching GrantRecord",
+            )
+        selected: GrantRecord | None = matching[0] if matching else None
+        built = ActionContext.try_create(
+            psess=session.value.product_session_id,
+            view_id=view.view_id,
+            qualified_id=contribution.qualified_id,
+            package_version=loaded.manifest.version,
+            instance_id=instance_id,
+            config_revision=config_revision,
+            grant_id=None if selected is None else selected.grant_id,
+            allowed_op_ids=() if selected is None else (view.op_id,),
+            account_scope=None if selected is None else selected.account_scope,
+            snapshot_cursor=snapshot_cursor,
+        )
+        return built
 
     def grants_for(self, chrome_id: object) -> TypedRefusal:
         """Chrome never owns grants."""

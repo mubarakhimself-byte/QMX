@@ -40,6 +40,7 @@ from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.capabilities.spawn import SpawnRequest, spawn_agent
 from qma.daemon.knowledge import KnowledgeSourceRegistry
 from qma.daemon.memory import MemoryAdmissionGate
+from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.loader import (
     LoadCommand,
@@ -205,6 +206,7 @@ class DeskPluginRoster:
         plugin_load_configs: Mapping[str, Mapping[str, object]] | None = None,
         authoring_roster_root: Path | None = None,
         authoring_journal: AuthoritativeJournal | None = None,
+        sqlite: SingleSqliteWriter | None = None,
     ) -> None:
         self.plugins_root = plugins_root if plugins_root is not None else default_plugins_root()
         configs: dict[str, Mapping[str, object]] = {
@@ -212,12 +214,14 @@ class DeskPluginRoster:
         }
         if loader is not None:
             self.loader = loader
+            if sqlite is not None:
+                self.loader.pack_ui_sqlite = sqlite
             if configs:
                 merged = dict(loader.plugin_load_configs)
                 merged.update(configs)
                 self.loader.plugin_load_configs = merged
         else:
-            self.loader = PluginLoader(plugin_load_configs=configs)
+            self.loader = PluginLoader(plugin_load_configs=configs, pack_ui_sqlite=sqlite)
         if backtesting is not None:
             self.backtesting = backtesting
         else:

@@ -17,6 +17,7 @@ daemon continuity intact.
 from __future__ import annotations
 
 import re
+import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -37,6 +38,7 @@ from qma.core.plugins.manifest import (
 from qma.core.ports.cardinality import Cardinality
 from qma.core.ports.permissions import check_plugin_permissions_at_load
 from qma.core.vocabulary.enums import PrincipalClass
+from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.plugins.context import DaemonPluginContext, PluginContextError
 from qma.daemon.plugins.exit_stack import PluginExitStack
 from qma.daemon.plugins.load_refusal import (
@@ -58,6 +60,11 @@ from qma.daemon.plugins.migrations import (
     PluginMigrationReport,
     PluginMigrationRunner,
     rollback_mode_for_manifest,
+)
+from qma.daemon.plugins.pack_ui import (
+    IngestedPackUiRequest,
+    ingest_pack_ui_request,
+    write_pack_ui_request_record,
 )
 from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Ok, Result, is_ok
@@ -278,6 +285,9 @@ class LoadedPlugin:
     data_intact: bool = True
     # Install / enable after validate never mint GrantRecord (Story 60.1).
     grant_record_ids: tuple[str, ...] = ()
+    instance_id: str = ""
+    availability_revision: int = 0
+    pack_ui_request: IngestedPackUiRequest | None = None
 
 
 @dataclass
@@ -288,6 +298,7 @@ class PluginLoader:
     permission_allowlist: frozenset[str] = frozenset()
     migrations: PluginMigrationRunner = field(default_factory=PluginMigrationRunner)
     journal: AuthoritativeJournal | None = None
+    pack_ui_sqlite: SingleSqliteWriter | None = None
     migration_source_root: Path | None = None
     migration_destination_root: Path | None = None
     continuity: DaemonContinuitySnapshot = field(default_factory=DaemonContinuitySnapshot)
@@ -748,6 +759,7 @@ class PluginLoader:
         manifest: PluginManifest,
         activator: PluginActivator,
         *,
+        raw_manifest: Mapping[str, object],
         migration_report: PluginMigrationReport | None = None,
     ) -> LoadedPlugin:
         if manifest.id in self._loaded:
@@ -796,6 +808,28 @@ class PluginLoader:
             ) from exc
 
         published = self._commit_roster(staged)
+        ingested = ingest_pack_ui_request(raw_manifest, manifest)
+        instance_id = f"pack:{manifest.id}"
+        availability_revision = self._availability_revision
+        if self.pack_ui_sqlite is not None:
+            try:
+                write_pack_ui_request_record(
+                    self.pack_ui_sqlite,
+                    instance_id=instance_id,
+                    availability_revision=availability_revision,
+                    plugin_id=manifest.id,
+                    package_version=manifest.version,
+                    ingested=ingested,
+                )
+            except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
+                exit_stack.close()
+                self._drop_published(manifest.id)
+                self._availability_revision -= 1
+                raise PluginLoadError(
+                    f"could not persist PackUiRequest projection: {exc}",
+                    plugin_id=manifest.id,
+                    field="pack_ui_request",
+                ) from exc
         loaded = LoadedPlugin(
             manifest=manifest,
             context=context,
@@ -804,6 +838,9 @@ class PluginLoader:
             phases_completed=tuple(phases),
             migration_report=migration_report,
             data_intact=True,
+            instance_id=instance_id,
+            availability_revision=availability_revision,
+            pack_ui_request=ingested,
         )
         self._loaded[manifest.id] = loaded
         return loaded
@@ -828,6 +865,7 @@ class PluginLoader:
             loaded = self._activate(
                 prepared.value,
                 activator,
+                raw_manifest=raw,
                 migration_report=migrated.value,
             )
         except PluginLoadError as exc:
@@ -1135,6 +1173,9 @@ class PluginLoader:
         except PluginLoadError as exc:
             return self._refuse_load_error(exc)
         by_id = {manifest.id: manifest for manifest in parsed}
+        raw_by_id = {
+            cast(str, raw["id"]): raw for raw in manifests if isinstance(raw.get("id"), str)
+        }
         loaded_rows: list[LoadedPlugin] = []
         for plugin_id in order:
             activator = activators.get(plugin_id)
@@ -1158,6 +1199,7 @@ class PluginLoader:
                     self._activate(
                         by_id[plugin_id],
                         activator,
+                        raw_manifest=raw_by_id[plugin_id],
                         migration_report=migrated.value,
                     )
                 )

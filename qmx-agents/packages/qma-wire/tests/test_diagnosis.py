@@ -90,8 +90,8 @@ def test_additive_ct40_query_and_inspect_sha_honesty() -> None:
     assert (SCHEMA_DIR / DIAGNOSIS_SCHEMA_FILE).is_file()
     assert WireQuery.GET_DIAGNOSIS.value == "get_diagnosis"
     assert "get_diagnosis" in WIRE_QUERIES
-    assert ADDABLE_QUERY_COUNT == 8
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 15
+    assert ADDABLE_QUERY_COUNT == 9
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 16
     assert parse_wire_type("get_diagnosis") == "get_diagnosis"
     assert is_ok(validate_family_payload("get_diagnosis", {"correlation_id": "corr-1"}))
     claimed = claim_diagnosis_query_at_inspect_sha(True)
