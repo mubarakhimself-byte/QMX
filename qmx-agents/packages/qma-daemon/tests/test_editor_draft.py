@@ -7,7 +7,6 @@ import json
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 from pytest import MonkeyPatch
@@ -27,7 +26,7 @@ from qma.daemon.process import DaemonProcess
 from qma.daemon.sessions import ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftHead, EditorDraftService
 from qma.daemon.taskgraph.compiler import CompileRequest, MissionCompiler
-from qma.daemon.taskgraph.records import RESERVED_APPROVAL_ROUTE_OPERATOR
+from qma.daemon.taskgraph.records import RESERVED_APPROVAL_ROUTE_OPERATOR, GraphTemplate
 from qma.wire.auth import format_pairing_authorization
 from qma.wire.initialize import (
     GET_EDITOR_DRAFT_HEAD_CAPABILITY,
@@ -762,6 +761,64 @@ def test_publish_journal_failure_compensates_roster(
         _close(substrate, journal)
 
 
+def test_same_revision_retry_refuses_corrupted_durable_receipt(tmp_path: Path) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        body = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:receipt",
+                "version": "1.0.0",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        ).encode()
+        fp1 = _stage(artifacts, body)
+        saved = service.save_editor_draft(
+            {"fp1": fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(saved), saved
+        published = service.publish_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(published), published
+        roster = AtomicRoster(tmp_path / "authoring-pack")
+        current = roster.load()
+        assert is_ok(current), current
+        damaged = dict(current.value)
+        rows = cast(list[dict[str, object]], damaged["published"])
+        rows[0]["bytes"] = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:receipt",
+                "version": "9.9.9",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        )
+        assert is_ok(roster.publish(damaged))
+
+        retry = service.publish_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_refusal(retry)
+        assert "receipt" in str(retry).lower()
+    finally:
+        _close(substrate, journal)
+
+
 def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path: Path) -> None:
     substrate, journal, artifacts, service = _service(tmp_path)
     try:
@@ -778,6 +835,25 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
                 sort_keys=True,
             ).encode()
 
+        runtime = DeskPluginRoster(authoring_roster_root=tmp_path / "authoring-pack")
+        service.authoring_lifecycle = runtime
+        generic = GraphTemplate(qualified_id="demo:supersede", version="0.9.0")
+        assert is_ok(runtime.templates.register(generic))
+        roster = AtomicRoster(tmp_path / "authoring-pack")
+        initial_roster = roster.load()
+        assert is_ok(initial_roster), initial_roster
+        unrelated_provider = {
+            "contribution_id": "pack:unrelated-provider",
+            "point": "graph_template",
+            "qualified_id": "demo:supersede",
+            "version": "0.9.0",
+            "published": True,
+            "enabled": True,
+        }
+        seeded = dict(initial_roster.value)
+        seeded["published"] = [unrelated_provider]
+        assert is_ok(roster.publish(seeded))
+
         first_fp1 = _stage(artifacts, graph_bytes("1.0.0"))
         saved = service.save_editor_draft(
             {"fp1": first_fp1}, operator_principal="operator-1", capabilities=_CAPS
@@ -790,11 +866,20 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
             },
             operator_principal="operator-1",
             capabilities=_CAPS,
+            principal_class=PrincipalClass.OPERATOR,
         )
         assert is_ok(first_publish), first_publish
-        runtime = DeskPluginRoster(authoring_roster_root=tmp_path / "authoring-pack")
+        assert runtime.templates.get_versioned("demo:supersede", "0.9.0") is generic
+        after_first = roster.load()
+        assert is_ok(after_first), after_first
+        after_first_rows = cast(list[dict[str, object]], after_first.value["published"])
+        assert [row["contribution_id"] for row in after_first_rows] == [
+            "pack:unrelated-provider",
+            first_publish.value["contribution_id"],
+        ]
         enabled = runtime.enable_published_authoring_contribution(
             str(first_publish.value["contribution_id"]),
+            principal=PrincipalClass.OPERATOR,
             correlation_id="supersede-enable",
         )
         assert is_ok(enabled), enabled
@@ -811,44 +896,32 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
             capabilities=_CAPS,
         )
         assert is_ok(advanced), advanced
-        process = object.__new__(DaemonProcess)
-        object.__setattr__(process, "_editor_drafts", service)
-        object.__setattr__(process, "_roster", runtime)
-        object.__setattr__(process, "_local_operator", SimpleNamespace(principal_id="operator-1"))
-        connection = WireConnection()
-        connection._authenticated = True  # pyright: ignore[reportPrivateUsage]
-        connection._principal_class = PrincipalClass.OPERATOR  # pyright: ignore[reportPrivateUsage]
-        connection._capabilities = _CAPS  # pyright: ignore[reportPrivateUsage]
-        second_publish_response = DaemonProcess._dispatch_editor_draft_command(  # pyright: ignore[reportPrivateUsage]
-            process,
-            connection,
+        second_publish = service.publish_editor_draft(
             {
-                "params": {
-                    "editor_draft_id": saved.value.editor_draft_id,
-                    "expected_revision": second_fp1,
-                }
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": second_fp1,
             },
-            "publish-replacement",
-            publish=True,
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+            principal_class=PrincipalClass.OPERATOR,
         )
-        assert "result" in second_publish_response, second_publish_response
-        second_publish = cast(Mapping[str, object], second_publish_response["result"])
-        assert second_publish["enabled"] is False
-        roster = AtomicRoster(tmp_path / "authoring-pack")
+        assert is_ok(second_publish), second_publish
+        assert second_publish.value["enabled"] is False
         current = roster.load()
         assert is_ok(current), current
         rows = cast(list[dict[str, object]], current.value["published"])
-        assert len(rows) == 1
-        assert rows[0]["version"] == "2.0.0"
-        assert rows[0]["enabled"] is False
-        assert rows[0]["published"] is True
-        assert runtime.templates.get("demo:supersede") is None
+        assert len(rows) == 2
+        successor = next(row for row in rows if row.get("version") == "2.0.0")
+        assert successor["enabled"] is False
+        assert successor["published"] is True
+        assert next(row for row in rows if row["contribution_id"] == "pack:unrelated-provider")
+        assert runtime.templates.get_versioned("demo:supersede", "0.9.0") is generic
         assert runtime.templates.get_versioned("demo:supersede", "1.0.0") is None
         assert runtime.templates.get_versioned("demo:supersede", "2.0.0") is None
         assert enabled.value.manifest.id not in runtime.loader.loaded_ids()
 
         damaged = dict(current.value)
-        damaged["published"] = []
+        damaged["published"] = [unrelated_provider]
         erased = roster.publish(damaged)
         assert is_ok(erased), erased
         restored = service.restore_from_journal()
@@ -856,9 +929,9 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
         recovered = roster.load()
         assert is_ok(recovered), recovered
         recovered_rows = cast(list[dict[str, object]], recovered.value["published"])
-        assert len(recovered_rows) == 1
-        assert recovered_rows[0]["version"] == "2.0.0"
-        assert recovered_rows[0]["enabled"] is False
+        assert len(recovered_rows) == 2
+        assert any(row["version"] == "2.0.0" and row["enabled"] is False for row in recovered_rows)
+        assert any(row["contribution_id"] == "pack:unrelated-provider" for row in recovered_rows)
     finally:
         _close(substrate, journal)
 
@@ -942,6 +1015,7 @@ def test_compose_restart_restores_draft_bytes_head_and_enabled_template(tmp_path
         assert is_ok(published), published
         enabled = first_process.roster.enable_published_authoring_contribution(
             str(published.value["contribution_id"]),
+            principal=PrincipalClass.OPERATOR,
             correlation_id="draft-restart-enable",
         )
         assert is_ok(enabled), enabled
@@ -970,8 +1044,55 @@ def test_compose_restart_restores_draft_bytes_head_and_enabled_template(tmp_path
                 second_process.roster.templates.get_versioned("demo:restartable", "1.0.0")
                 is not None
             )
+            contribution_id = str(published.value["contribution_id"])
+            disabled = second_process.roster.disable_published_authoring_contribution(
+                contribution_id,
+                principal=PrincipalClass.OPERATOR,
+            )
+            assert is_ok(disabled), disabled
+            removed = second_process.roster.uninstall_published_authoring_contribution(
+                contribution_id,
+                principal=PrincipalClass.OPERATOR,
+            )
+            assert is_ok(removed), removed
+            assert (
+                second_process.roster.templates.get_versioned("demo:restartable", "1.0.0") is None
+            )
         finally:
             await second_process.aclose()
+
+        recovered = DaemonProcess.compose(
+            tmp_path,
+            machine="draft-restart-test",
+            boot_epoch_id="draft-restart-3",
+            bind_port=0,
+            plugin_load_configs={"research-corpus": {"root_path": str(seed)}},
+        )
+        assert is_ok(recovered), recovered
+        third_process = recovered.value
+        try:
+            restored_head = third_process._editor_drafts.get_editor_draft_head(  # pyright: ignore[reportPrivateUsage]
+                {"editor_draft_id": saved.value.editor_draft_id},
+                operator_principal=third_process._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+                capabilities=_CAPS,
+            )
+            assert is_ok(restored_head), restored_head
+            assert restored_head.value.editor_revision == staged.value.fp1
+            projected = third_process.sqlite.execute(
+                "SELECT contribution_id FROM editor_draft_head WHERE editor_draft_id = ?",
+                (saved.value.editor_draft_id,),
+            )
+            assert projected and projected[0][0] is None
+            assert third_process.roster.templates.get_versioned("demo:restartable", "1.0.0") is None
+            assert not any(
+                plugin_id.startswith("research-authoring-")
+                for plugin_id in third_process.roster.loader.loaded_ids()
+            )
+            restored_roster = AtomicRoster(tmp_path / "authoring-pack").load()
+            assert is_ok(restored_roster), restored_roster
+            assert restored_roster.value["published"] == []
+        finally:
+            await third_process.aclose()
 
     asyncio.run(_run())
 

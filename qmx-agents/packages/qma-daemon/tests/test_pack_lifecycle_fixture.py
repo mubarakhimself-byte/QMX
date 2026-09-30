@@ -204,15 +204,14 @@ def test_pack_lifecycle_reconciles_shared_roster_generation_and_authoring_state(
     assert after_disable["roster_generation"] == disabled.roster_generation
     preserved = cast(list[dict[str, object]], after_disable["published"])
     assert len(preserved) == 1
-    assert preserved[0]["contribution_id"] == authoring_row["contribution_id"]
-    assert preserved[0]["enabled"] is False
+    assert preserved == [authoring_row]
 
     uninstalled, _departure = _ok(fixture.uninstall("research-corpus", transitioned_at=_AT))
     after_uninstall = _ok(roster.load())
     assert uninstalled.roster_generation == disabled.roster_generation + 1
     assert after_uninstall["roster_generation"] == uninstalled.roster_generation
     preserved_after_uninstall = cast(list[dict[str, object]], after_uninstall["published"])
-    assert preserved_after_uninstall[0]["enabled"] is False
+    assert preserved_after_uninstall == [authoring_row]
 
 
 def test_failed_validation_and_partial_install_restore_last_usable(

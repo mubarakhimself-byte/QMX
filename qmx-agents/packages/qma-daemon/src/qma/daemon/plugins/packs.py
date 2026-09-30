@@ -42,6 +42,7 @@ from qma.daemon.knowledge import KnowledgeSourceRegistry
 from qma.daemon.memory import MemoryAdmissionGate
 from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.loader import (
+    LoadCommand,
     LoadedPlugin,
     PluginActivator,
     PluginLoader,
@@ -51,9 +52,11 @@ from qma.daemon.staging.proposal import ProposalGate
 from qma.daemon.taskgraph.compiler import GraphTemplateCatalog, MissionCompiler
 from qma.daemon.taskgraph.records import GraphTemplate
 from qmf.core import Ok, Result, is_ok, is_refusal
+from qmf.core.fingerprint import fingerprint_bytes
 
 if TYPE_CHECKING:
     from qma.daemon.backtest.service import BacktestingService
+    from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
@@ -201,6 +204,7 @@ class DeskPluginRoster:
         backtesting: BacktestingService | None = None,
         plugin_load_configs: Mapping[str, Mapping[str, object]] | None = None,
         authoring_roster_root: Path | None = None,
+        authoring_journal: AuthoritativeJournal | None = None,
     ) -> None:
         self.plugins_root = plugins_root if plugins_root is not None else default_plugins_root()
         configs: dict[str, Mapping[str, object]] = {
@@ -225,8 +229,7 @@ class DeskPluginRoster:
         self.knowledge = KnowledgeSourceRegistry()
         self.proposals = ProposalGate()
         self.authoring_roster_root = authoring_roster_root
-        if self.authoring_roster_root is not None:
-            self.loader.authoring_disable_callback = self._persist_authoring_disabled
+        self.authoring_journal = authoring_journal
 
     @property
     def pack_ids(self) -> tuple[str, ...]:
@@ -336,41 +339,205 @@ class DeskPluginRoster:
                 rehydrating=False,
             )
 
-    def disable_replaced_authoring_template(self, qualified_id: str) -> None:
-        """Remove a superseded authoring template from the live runtime.
+    def _require_authoring_operator(
+        self,
+        principal: object,
+        *,
+        command: str = "plugin.enable",
+    ) -> Result[PrincipalClass]:
+        return self.loader.require_operator(cast(LoadCommand, command), principal)
 
-        Publication is not enable/compile identity. If a later saved draft
-        replaces a contribution that had been enabled, the ordinary process
-        publish route disables its generated plugin and removes the old
-        catalog entry. Already-running JobHandles retain their compiled graph.
-        """
-        if self.authoring_roster_root is None:
-            return
-        with AtomicRoster(self.authoring_roster_root).synchronized():
-            plugin_ids: set[str] = set()
-            for plugin_id in self.loader.loaded_ids():
-                if not plugin_id.startswith("research-authoring-"):
-                    continue
-                loaded = self.loader.get(plugin_id)
-                if loaded is None:
-                    continue
-                multis = cast(Mapping[object, object], loaded.context.snapshot()["multis"])
-                if any(
-                    isinstance(value, Mapping)
-                    and cast(Mapping[str, object], value).get("qualified_id") == qualified_id
-                    for value in multis.values()
-                ):
-                    plugin_ids.add(plugin_id)
-            for plugin_id in plugin_ids:
-                self.loader.unload(plugin_id)
-            self.templates.unregister(qualified_id)
+    @staticmethod
+    def _authoring_plugin_id(contribution_id: str) -> str:
+        digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
+        return f"research-authoring-{digest}"
 
-    def uninstall_published_authoring_contribution(self, contribution_id: str) -> Result[None]:
-        """Remove one disabled local authoring contribution from the roster."""
+    @staticmethod
+    def _validated_authoring_identity(row: Mapping[str, object]) -> Result[tuple[str, str]]:
+        contribution_id = row.get("contribution_id")
+        qualified_id = row.get("qualified_id")
+        version = row.get("version")
+        revision = row.get("editor_revision")
+        editor_draft_id = row.get("editor_draft_id")
+        body = row.get("bytes")
+        if (
+            not isinstance(contribution_id, str)
+            or not contribution_id.startswith("authoring-contribution:")
+            or not isinstance(revision, str)
+            or not isinstance(qualified_id, str)
+            or not isinstance(version, str)
+            or row.get("point") != "graph_template"
+            or row.get("published") is not True
+            or not isinstance(body, str)
+            or not isinstance(row.get("enabled"), bool)
+            or fingerprint_bytes(body.encode("utf-8")).value != revision
+        ):
+            return invalid_input(
+                "authoring_roster", "generated authoring contribution is malformed"
+            )
+        prefix = "authoring-contribution:"
+        suffix = f":{revision}"
+        if not contribution_id.endswith(suffix):
+            return invalid_input(
+                "authoring_roster", "generated authoring contribution id is malformed"
+            )
+        derived_draft_id = contribution_id[len(prefix) : -len(suffix)]
+        if (
+            not derived_draft_id
+            or (isinstance(editor_draft_id, str) and editor_draft_id != derived_draft_id)
+            or (editor_draft_id is not None and not isinstance(editor_draft_id, str))
+        ):
+            return invalid_input(
+                "authoring_roster", "generated authoring contribution id is malformed"
+            )
+        try:
+            decoded = json.loads(body)
+            if not isinstance(decoded, dict):
+                raise ValueError("generated graph template bytes must encode an object")
+            parsed = _graph_template_from_mapping(cast(Mapping[str, object], decoded))
+        except (TypeError, ValueError, json.JSONDecodeError, PluginLoadError) as exc:
+            return invalid_input("authoring_roster", str(exc))
+        if parsed.qualified_id != qualified_id or parsed.version != version:
+            return invalid_input(
+                "authoring_roster", "generated authoring contribution bytes do not match identity"
+            )
+        return Ok((qualified_id, version))
+
+    def _authoring_plugin_matches(
+        self,
+        contribution_id: str,
+        qualified_id: str,
+        version: str,
+    ) -> bool:
+        loaded = self.loader.get(self._authoring_plugin_id(contribution_id))
+        if loaded is None:
+            return False
+        multis = cast(Mapping[object, object], loaded.context.snapshot()["multis"])
+        return any(
+            isinstance(value, Mapping)
+            and cast(Mapping[str, object], value).get("qualified_id") == qualified_id
+            and cast(Mapping[str, object], value).get("version") == version
+            for value in multis.values()
+        )
+
+    def _remove_authoring_runtime(
+        self,
+        contribution_id: str,
+        qualified_id: str,
+        version: str,
+    ) -> Result[None]:
+        loaded = self.loader.get(self._authoring_plugin_id(contribution_id))
+        if loaded is not None and not self._authoring_plugin_matches(
+            contribution_id, qualified_id, version
+        ):
+            return policy_rejection(
+                "contribution_id",
+                "generated plugin identity does not match the targeted authoring contribution",
+                contribution_id=contribution_id,
+            )
+        self.loader.unload(self._authoring_plugin_id(contribution_id))
+        self.templates.unregister_version(qualified_id, version)
+        return Ok(None)
+
+    def disable_published_authoring_contribution(
+        self,
+        contribution_id: str,
+        *,
+        principal: object,
+    ) -> Result[None]:
+        """Durably disable one generated authoring contribution as an operator."""
+        authorized = self._require_authoring_operator(principal)
+        if is_refusal(authorized):
+            return authorized
         if self.authoring_roster_root is None:
             return invalid_input(
                 "authoring_roster_root",
                 "local authoring roster is not configured for this daemon",
+            )
+        roster = AtomicRoster(self.authoring_roster_root)
+        with roster.synchronized():
+            loaded = roster.load()
+            if is_refusal(loaded):
+                return loaded
+            rows = loaded.value.get("published", [])
+            if not isinstance(rows, list):
+                return invalid_input("authoring_roster", "published roster must be a list")
+            selected = next(
+                (
+                    cast(Mapping[str, object], item)
+                    for item in cast(list[object], rows)
+                    if isinstance(item, Mapping)
+                    and cast(Mapping[str, object], item).get("contribution_id") == contribution_id
+                ),
+                None,
+            )
+            if selected is None:
+                return invalid_input(
+                    "contribution_id", "published authoring contribution is not present"
+                )
+            identity = self._validated_authoring_identity(selected)
+            if is_refusal(identity):
+                return identity
+            if selected.get("enabled") is True:
+                replacement = dict(loaded.value)
+                replacement["published"] = [
+                    {**dict(cast(Mapping[str, object], item)), "enabled": False}
+                    if isinstance(item, Mapping)
+                    and cast(Mapping[str, object], item).get("contribution_id") == contribution_id
+                    else item
+                    for item in cast(list[object], rows)
+                ]
+                saved = roster.publish(replacement)
+                if is_refusal(saved):
+                    return saved
+            removed = self._remove_authoring_runtime(
+                contribution_id,
+                identity.value[0],
+                identity.value[1],
+            )
+            if is_refusal(removed):
+                return removed
+        return Ok(None)
+
+    def retire_replaced_authoring_contribution(
+        self,
+        contribution_id: str,
+        qualified_id: str,
+        version: str,
+        *,
+        principal: object,
+    ) -> Result[None]:
+        """Remove one exact predecessor from the live publication domain."""
+        authorized = self._require_authoring_operator(principal)
+        if is_refusal(authorized):
+            return authorized
+        if self.authoring_roster_root is None:
+            return invalid_input(
+                "authoring_roster_root",
+                "local authoring roster is not configured for this daemon",
+            )
+        with AtomicRoster(self.authoring_roster_root).synchronized():
+            return self._remove_authoring_runtime(contribution_id, qualified_id, version)
+
+    def uninstall_published_authoring_contribution(
+        self,
+        contribution_id: str,
+        *,
+        principal: object,
+    ) -> Result[None]:
+        """Remove one disabled contribution, journal its tombstone, and clean exact runtime."""
+        authorized = self._require_authoring_operator(principal, command="plugin.install")
+        if is_refusal(authorized):
+            return authorized
+        if self.authoring_roster_root is None:
+            return invalid_input(
+                "authoring_roster_root",
+                "local authoring roster is not configured for this daemon",
+            )
+        if self.authoring_journal is None:
+            return invalid_input(
+                "authoring_journal",
+                "authoring uninstall requires the authoritative journal",
             )
         roster = AtomicRoster(self.authoring_roster_root)
         with roster.synchronized():
@@ -394,12 +561,41 @@ class DeskPluginRoster:
                 return invalid_input(
                     "contribution_id", "published authoring contribution is not present"
                 )
+            identity = self._validated_authoring_identity(matching)
+            if is_refusal(identity):
+                return identity
             if matching.get("enabled") is True:
                 return policy_rejection(
                     "contribution_id",
                     "disable an authoring contribution before uninstall",
                     contribution_id=contribution_id,
                 )
+            remainder = contribution_id[len("authoring-contribution:") :]
+            revision = matching.get("editor_revision")
+            suffix = f":{revision}" if isinstance(revision, str) else ""
+            if not suffix or not remainder.endswith(suffix):
+                return invalid_input(
+                    "contribution_id", "published editor draft identity is malformed"
+                )
+            draft_id = remainder[: -len(suffix)]
+            if not draft_id:
+                return invalid_input(
+                    "contribution_id", "published editor draft identity is malformed"
+                )
+            # The tombstone is authoritative; a subsequent roster write can be
+            # repaired from it if the process stops between these operations.
+            tombstone = self.authoring_journal.append_event(
+                "editor_draft.uninstalled",
+                payload={
+                    "contribution_id": contribution_id,
+                    "editor_draft_id": draft_id,
+                    "qualified_id": identity.value[0],
+                    "version": identity.value[1],
+                    "editor_revision": revision,
+                },
+            )
+            if is_refusal(tombstone):
+                return tombstone
             replacement = dict(loaded.value)
             replacement["published"] = [
                 dict(cast(Mapping[str, object], item))
@@ -412,53 +608,13 @@ class DeskPluginRoster:
             saved = roster.publish(replacement)
             if is_refusal(saved):
                 return saved
-            plugin_id = (
-                "research-authoring-"
-                + hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
+            removed = self._remove_authoring_runtime(
+                contribution_id,
+                identity.value[0],
+                identity.value[1],
             )
-            self.loader.unload(plugin_id)
-            template = matching.get("qualified_id")
-            if isinstance(template, str):
-                self.templates.unregister(template)
-        return Ok(None)
-
-    def _persist_authoring_disabled(self, plugin_id: str) -> Result[None]:
-        if self.authoring_roster_root is None:
-            return Ok(None)
-        roster = AtomicRoster(self.authoring_roster_root)
-        with roster.synchronized():
-            loaded = roster.load()
-            if is_refusal(loaded):
-                return loaded
-            rows = loaded.value.get("published", [])
-            if not isinstance(rows, list):
-                return invalid_input("authoring_roster", "published roster must be a list")
-            typed_rows = cast(list[object], rows)
-            replacement: list[object] = []
-            changed = False
-            for item in typed_rows:
-                if not isinstance(item, Mapping):
-                    replacement.append(item)
-                    continue
-                row = dict(cast(Mapping[str, object], item))
-                contribution_id = row.get("contribution_id")
-                if (
-                    isinstance(contribution_id, str)
-                    and contribution_id.startswith("authoring-contribution:")
-                    and "research-authoring-"
-                    + hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
-                    == plugin_id
-                ):
-                    row["enabled"] = False
-                    changed = True
-                replacement.append(row)
-            if not changed:
-                return Ok(None)
-            payload = dict(loaded.value)
-            payload["published"] = replacement
-            saved = roster.publish(payload)
-            if is_refusal(saved):
-                return saved
+            if is_refusal(removed):
+                return removed
         return Ok(None)
 
     def _enable_published_authoring_contribution_locked(

@@ -138,6 +138,16 @@ class GraphTemplateCatalog:
         for version in versions:
             self._templates.pop((qualified_id, version), None)
 
+    def unregister_version(self, qualified_id: str, version: str) -> None:
+        """Remove one contribution version without disturbing sibling providers."""
+        self._templates.pop((qualified_id, version), None)
+        versions = self._order.get(qualified_id)
+        if versions is None:
+            return
+        self._order[qualified_id] = [item for item in versions if item != version]
+        if not self._order[qualified_id]:
+            self._order.pop(qualified_id, None)
+
     def versions_of(self, qualified_id: str) -> tuple[str, ...]:
         return tuple(self._order.get(qualified_id, ()))
 

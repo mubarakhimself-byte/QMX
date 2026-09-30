@@ -17,9 +17,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, cast
+from typing import Final, Protocol, cast
 
-from qma.core.vocabulary.enums import ArtifactCompleteness
+from qma.core.vocabulary.enums import ArtifactCompleteness, PrincipalClass
 from qma.daemon.artifacts.store import ArtifactStore, StagedArtifact
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
@@ -101,6 +101,19 @@ class EditorDraftHead:
         return MappingProxyType(payload)
 
 
+class AuthoringLifecycle(Protocol):
+    """Narrow live-runtime boundary used by editor publication."""
+
+    def retire_replaced_authoring_contribution(
+        self,
+        contribution_id: str,
+        qualified_id: str,
+        version: str,
+        *,
+        principal: object,
+    ) -> Result[None]: ...
+
+
 @dataclass(slots=True)
 class EditorDraftService:
     """Sole issuer and CAS writer for editor draft identity and publication."""
@@ -109,6 +122,7 @@ class EditorDraftService:
     sqlite: SingleSqliteWriter
     artifacts: ArtifactStore
     authoring_roster_root: Path
+    authoring_lifecycle: AuthoringLifecycle | None = None
 
     def __post_init__(self) -> None:
         declared = self.journal.declare_store(
@@ -129,8 +143,49 @@ class EditorDraftService:
             return stream
         latest: dict[str, tuple[object, ...]] = {}
         published_by_identity: dict[str, dict[str, object]] = {}
+        owned_contribution_ids: set[str] = set()
+        published_history: dict[str, tuple[str, str, str, str]] = {}
         for event in stream.value:
             payload = event.payload
+            if event.event == "editor_draft.uninstalled":
+                contribution_id = payload.get("contribution_id")
+                draft_id = payload.get("editor_draft_id")
+                revision = payload.get("editor_revision")
+                qualified_id = payload.get("qualified_id")
+                version = payload.get("version")
+                if not all(
+                    isinstance(value, str) and value
+                    for value in (contribution_id, draft_id, revision, qualified_id, version)
+                ):
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.uninstalled event is malformed",
+                        journal_seq=event.journal_seq,
+                    )
+                prior = latest.get(cast(str, draft_id))
+                removed = published_by_identity.get(cast(str, qualified_id))
+                if published_history.get(cast(str, contribution_id)) != (
+                    cast(str, draft_id),
+                    cast(str, revision),
+                    cast(str, qualified_id),
+                    cast(str, version),
+                ):
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.uninstalled event is orphaned or mismatched",
+                        journal_seq=event.journal_seq,
+                    )
+                if removed is not None and removed.get("contribution_id") == contribution_id:
+                    published_by_identity.pop(cast(str, qualified_id), None)
+                owned_contribution_ids.add(cast(str, contribution_id))
+                if prior is not None and prior[2] == revision and prior[5] == contribution_id:
+                    latest[cast(str, draft_id)] = (
+                        *prior[:5],
+                        None,
+                        event.journal_seq,
+                        event.recorded_at,
+                    )
+                continue
             if event.event == EDITOR_DRAFT_PUBLISHED_EVENT:
                 draft_id = payload.get("editor_draft_id")
                 revision = payload.get("editor_revision")
@@ -191,6 +246,13 @@ class EditorDraftService:
                         journal_seq=event.journal_seq,
                     )
                 published_by_identity[cast(str, payload["qualified_id"])] = contribution_record
+                owned_contribution_ids.add(contribution_id)
+                published_history[contribution_id] = (
+                    cast(str, draft_id),
+                    cast(str, revision),
+                    cast(str, payload["qualified_id"]),
+                    cast(str, payload["version"]),
+                )
                 latest[cast(str, draft_id)] = (
                     *prior[:5],
                     contribution_id,
@@ -275,7 +337,10 @@ class EditorDraftService:
                 event.recorded_at,
             )
 
-        reconciled = self._reconcile_authoring_roster(published_by_identity)
+        reconciled = self._reconcile_authoring_roster(
+            published_by_identity,
+            owned_contribution_ids=owned_contribution_ids,
+        )
         if is_refusal(reconciled):
             return reconciled
 
@@ -300,6 +365,8 @@ class EditorDraftService:
     def _reconcile_authoring_roster(
         self,
         published_by_identity: Mapping[str, dict[str, object]],
+        *,
+        owned_contribution_ids: set[str],
     ) -> Result[None]:
         roster = AtomicRoster(self.authoring_roster_root)
         with roster.synchronized():
@@ -323,8 +390,9 @@ class EditorDraftService:
             for item in typed_rows:
                 if isinstance(item, Mapping):
                     contribution_id = cast(Mapping[str, object], item).get("contribution_id")
-                    if isinstance(contribution_id, str) and contribution_id.startswith(
-                        "authoring-contribution:"
+                    if (
+                        isinstance(contribution_id, str)
+                        and contribution_id in owned_contribution_ids
                     ):
                         continue
                 replacement.append(cast(object, item))
@@ -617,6 +685,7 @@ class EditorDraftService:
         *,
         operator_principal: object,
         capabilities: object | None = None,
+        principal_class: object | None = None,
     ) -> Result[Mapping[str, object]]:
         gate = require_editor_draft_capability(capabilities, PUBLISH_EDITOR_DRAFT_CAPABILITY)
         if is_refusal(gate):
@@ -686,6 +755,71 @@ class EditorDraftService:
                         "published editor draft receipt is missing from the local roster",
                         contribution_id=contribution_id,
                     )
+                expected_bytes = artifact.value.content.decode("utf-8")
+                if (
+                    current.get("contribution_id") != contribution_id
+                    or current.get("editor_draft_id") not in (None, draft.value)
+                    or current.get("point") != "graph_template"
+                    or current.get("qualified_id") != parsed.value.qualified_id
+                    or current.get("version") != parsed.value.version
+                    or current.get("editor_revision") != row[2]
+                    or current.get("bytes") != expected_bytes
+                    or fingerprint_bytes(expected_bytes.encode("utf-8")).value != row[2]
+                    or current.get("published") is not True
+                    or not isinstance(current.get("enabled"), bool)
+                ):
+                    return invalid_input(
+                        "authoring_roster",
+                        "same-revision publish receipt does not match draft bytes and identity",
+                        contribution_id=contribution_id,
+                    )
+                publish_event = self.journal.read_events()
+                if is_refusal(publish_event):
+                    return publish_event
+                receipt_event = next(
+                    (
+                        event
+                        for event in reversed(publish_event.value)
+                        if event.event == EDITOR_DRAFT_PUBLISHED_EVENT
+                        and event.payload.get("contribution_id") == contribution_id
+                        and event.payload.get("editor_draft_id") == draft.value
+                        and event.payload.get("editor_revision") == row[2]
+                    ),
+                    None,
+                )
+                if receipt_event is None:
+                    return invalid_input(
+                        "authoring_roster",
+                        "same-revision publish receipt has no authoritative journal event",
+                        contribution_id=contribution_id,
+                    )
+                raw_replacements = receipt_event.payload.get("replaced_authoring_contributions", [])
+                if not isinstance(raw_replacements, list):
+                    return invalid_input(
+                        "journal", "published replacement identities must be a list"
+                    )
+                replacement_items = cast(list[object], raw_replacements)
+                replacements: list[dict[str, object]] = []
+                for item in replacement_items:
+                    if not isinstance(item, Mapping):
+                        return invalid_input(
+                            "journal", "published replacement identity is malformed"
+                        )
+                    replacement = dict(cast(Mapping[str, object], item))
+                    replacement_id = replacement.get("contribution_id")
+                    replacement_revision = replacement.get("editor_revision")
+                    if (
+                        not isinstance(replacement_id, str)
+                        or not replacement_id.startswith("authoring-contribution:")
+                        or not isinstance(replacement_revision, str)
+                        or not replacement_id.endswith(f":{replacement_revision}")
+                        or replacement.get("qualified_id") != parsed.value.qualified_id
+                        or not isinstance(replacement.get("version"), str)
+                    ):
+                        return invalid_input(
+                            "journal", "published replacement identity is malformed"
+                        )
+                    replacements.append(replacement)
                 return Ok(
                     MappingProxyType(
                         {
@@ -697,6 +831,7 @@ class EditorDraftService:
                             "version": parsed.value.version,
                             "published": True,
                             "enabled": current.get("enabled") is True,
+                            "_replaced_authoring_contributions": replacements,
                         }
                     )
                 )
@@ -705,12 +840,11 @@ class EditorDraftService:
             if not isinstance(contributions, list):
                 return invalid_input("authoring_roster", "published roster must be a list")
             updated = list(cast(list[object], contributions))
-            # Publishing a replacement is not enable/compile identity. The
-            # previous runtime contribution is explicitly disabled by the
-            # authenticated process route after this durable transaction.
             prior_enabled = False
+            replacements: list[dict[str, object]] = []
             record = {
                 "contribution_id": contribution_id,
+                "editor_draft_id": draft.value,
                 "point": "graph_template",
                 "qualified_id": parsed.value.qualified_id,
                 "version": parsed.value.version,
@@ -721,12 +855,72 @@ class EditorDraftService:
             }
             kept: list[object] = []
             for item in updated:
-                if (
-                    isinstance(item, Mapping)
-                    and cast(Mapping[str, object], item).get("qualified_id")
-                    == parsed.value.qualified_id
-                ):
-                    continue
+                if isinstance(item, Mapping):
+                    candidate = cast(Mapping[str, object], item)
+                    candidate_id = candidate.get("contribution_id")
+                    if (
+                        isinstance(candidate_id, str)
+                        and candidate_id.startswith("authoring-contribution:")
+                        and candidate.get("qualified_id") == parsed.value.qualified_id
+                    ):
+                        candidate_revision = candidate.get("editor_revision")
+                        candidate_bytes = candidate.get("bytes")
+                        candidate_version = candidate.get("version")
+                        candidate_draft_id = candidate.get("editor_draft_id")
+                        candidate_suffix = (
+                            f":{candidate_revision}" if isinstance(candidate_revision, str) else ""
+                        )
+                        candidate_id_draft = (
+                            candidate_id[len("authoring-contribution:") : -len(candidate_suffix)]
+                            if candidate_suffix and candidate_id.endswith(candidate_suffix)
+                            else ""
+                        )
+                        if (
+                            not isinstance(candidate_revision, str)
+                            or not isinstance(candidate_bytes, str)
+                            or not isinstance(candidate_version, str)
+                            or candidate.get("point") != "graph_template"
+                            or candidate.get("published") is not True
+                            or not isinstance(candidate.get("enabled"), bool)
+                            or fingerprint_bytes(candidate_bytes.encode("utf-8")).value
+                            != candidate_revision
+                            or not candidate_id_draft
+                            or (
+                                isinstance(candidate_draft_id, str)
+                                and candidate_id_draft != candidate_draft_id
+                            )
+                            or (
+                                candidate_draft_id is not None
+                                and not isinstance(candidate_draft_id, str)
+                            )
+                        ):
+                            return invalid_input(
+                                "authoring_roster",
+                                "matching editor authoring contribution is malformed",
+                                contribution_id=candidate_id,
+                            )
+                        parsed_previous = _parse_graph_template(candidate_bytes.encode("utf-8"))
+                        if is_refusal(parsed_previous):
+                            return parsed_previous
+                        if (
+                            parsed_previous.value.qualified_id != parsed.value.qualified_id
+                            or parsed_previous.value.version != candidate_version
+                        ):
+                            return invalid_input(
+                                "authoring_roster",
+                                "matching editor authoring bytes do not match the stored identity",
+                                contribution_id=candidate_id,
+                            )
+                        if candidate.get("enabled") is True:
+                            replacements.append(
+                                {
+                                    "contribution_id": candidate_id,
+                                    "qualified_id": parsed.value.qualified_id,
+                                    "version": candidate_version,
+                                    "editor_revision": candidate_revision,
+                                }
+                            )
+                        continue
                 kept.append(cast(object, item))
             updated = kept
             updated.append(record)
@@ -745,6 +939,7 @@ class EditorDraftService:
                     "qualified_id": parsed.value.qualified_id,
                     "version": parsed.value.version,
                     "contribution": record,
+                    "replaced_authoring_contributions": replacements,
                 },
             )
             if is_refusal(appended):
@@ -791,6 +986,7 @@ class EditorDraftService:
                         "version": parsed.value.version,
                         "published": True,
                         "enabled": prior_enabled,
+                        "_replaced_authoring_contributions": replacements,
                     }
                 )
             )
@@ -801,7 +997,42 @@ class EditorDraftService:
             with roster_lock.synchronized():
                 return _publish_locked(conn)
 
-        return self.sqlite.run(_publish)
+        published = self.sqlite.run(_publish)
+        if is_refusal(published):
+            return published
+        result = published.value
+        retired = result.get("_replaced_authoring_contributions", [])
+        if not isinstance(retired, list):
+            return invalid_input("journal", "replacement identities must be a list")
+        if retired and self.authoring_lifecycle is not None:
+            if principal_class is not PrincipalClass.OPERATOR:
+                return policy_rejection(
+                    "principal_class",
+                    "replacing enabled authoring requires an authenticated operator",
+                )
+            for item in cast(list[object], retired):
+                if not isinstance(item, Mapping):
+                    return invalid_input("journal", "replacement identity is malformed")
+                mapping = cast(Mapping[str, object], item)
+                contribution_id = mapping.get("contribution_id")
+                qualified_id = mapping.get("qualified_id")
+                version = mapping.get("version")
+                if not all(
+                    isinstance(value, str) and value
+                    for value in (contribution_id, qualified_id, version)
+                ):
+                    return invalid_input("journal", "replacement identity is malformed")
+                cleaned = self.authoring_lifecycle.retire_replaced_authoring_contribution(
+                    cast(str, contribution_id),
+                    cast(str, qualified_id),
+                    cast(str, version),
+                    principal=principal_class,
+                )
+                if is_refusal(cleaned):
+                    return cleaned
+        public_result = dict(result)
+        public_result.pop("_replaced_authoring_contributions", None)
+        return Ok(MappingProxyType(public_result))
 
 
 def _parse_graph_template(content: bytes) -> Result[GraphTemplate]:

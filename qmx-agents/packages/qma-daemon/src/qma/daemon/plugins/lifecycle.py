@@ -11,7 +11,6 @@ Story 53.3. Does not close GAP-0098. No new sqlite class.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -884,21 +883,7 @@ class PackLifecycleFixture:
             if isinstance(item, Mapping):
                 contribution_id = cast(Mapping[str, object], item).get("contribution_id")
                 if isinstance(contribution_id, str):
-                    row = dict(cast(Mapping[str, object], item))
-                    if contribution_id.startswith("authoring-contribution:"):
-                        plugin_digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[
-                            :16
-                        ]
-                        authoring_plugin_id = f"research-authoring-{plugin_digest}"
-                        if (
-                            row.get("enabled") is True
-                            and authoring_plugin_id not in self.loader.loaded_ids()
-                        ):
-                            # A generic disable/uninstall has removed the live
-                            # plugin. Persist that fact so startup cannot
-                            # silently rehydrate it.
-                            row["enabled"] = False
-                    contributions[contribution_id] = row
+                    contributions[contribution_id] = dict(cast(Mapping[str, object], item))
         for item in self.loader.published_contributions():
             row = dict(item.to_payload())
             contribution_id = row.get("contribution_id")
@@ -1214,12 +1199,7 @@ class PackLifecycleFixture:
         actor = self._principal(principal)
         if is_refusal(actor):
             return actor
-        authoring_callback = self.loader.authoring_disable_callback
-        self.loader.authoring_disable_callback = None
-        try:
-            departed = self._pin_service().disable(ident.value, principal=actor.value)
-        finally:
-            self.loader.authoring_disable_callback = authoring_callback
+        departed = self._pin_service().disable(ident.value, principal=actor.value)
         if is_refusal(departed):
             return departed
         moved = self._append_transition(
@@ -1266,12 +1246,7 @@ class PackLifecycleFixture:
         actor = self._principal(principal)
         if is_refusal(actor):
             return actor
-        authoring_callback = self.loader.authoring_disable_callback
-        self.loader.authoring_disable_callback = None
-        try:
-            departed = self._pin_service().uninstall(ident.value, principal=actor.value)
-        finally:
-            self.loader.authoring_disable_callback = authoring_callback
+        departed = self._pin_service().uninstall(ident.value, principal=actor.value)
         if is_refusal(departed):
             return departed
         moved = self._append_transition(

@@ -15,6 +15,7 @@ from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qmf.core import Result, is_ok, is_refusal
+from qmf.core.fingerprint import fingerprint_bytes
 from qmf.data.store.refusals import policy_rejection
 
 
@@ -35,14 +36,17 @@ def _contribution(*, enabled: bool) -> dict[str, object]:
         "nodes": [],
         "edges": [],
     }
+    body = json.dumps(content, sort_keys=True)
+    revision = fingerprint_bytes(body.encode("utf-8")).value
+    draft_id = "edraft:test"
     return {
-        "contribution_id": "authoring-contribution:edraft:test:fp1:test",
+        "contribution_id": f"authoring-contribution:{draft_id}:{revision}",
         "editor_draft_id": "edraft:test",
-        "editor_revision": "fp1:test",
+        "editor_revision": revision,
         "point": "graph_template",
         "qualified_id": "demo:authoring",
         "version": "1.0.0",
-        "bytes": json.dumps(content, sort_keys=True),
+        "bytes": body,
         "published": True,
         "enabled": enabled,
     }
@@ -125,7 +129,7 @@ def test_enable_rolls_back_loader_catalog_when_roster_persist_fails(
 
     monkeypatch.setattr(AtomicRoster, "publish", fail_publish)
     enabled = runtime.enable_published_authoring_contribution(
-        "authoring-contribution:edraft:test:fp1:test",
+        str(_contribution(enabled=False)["contribution_id"]),
         principal=PrincipalClass.OPERATOR,
         correlation_id="roster-rollback",
     )
@@ -137,25 +141,63 @@ def test_enable_rolls_back_loader_catalog_when_roster_persist_fails(
     assert "demo:authoring" not in runtime.templates.ids()
 
 
-def test_generated_authoring_disable_and_uninstall_survive_restart(tmp_path: Path) -> None:
+def test_authoring_disable_requires_operator_and_preserves_live_state_on_persist_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     roster_root = tmp_path / "authoring-pack"
     contribution = _contribution(enabled=False)
     _write_roster(roster_root, contribution)
     runtime = _runtime(tmp_path, roster_root)
     enabled = runtime.enable_published_authoring_contribution(
-        str(contribution["contribution_id"]), correlation_id="disable-generated"
+        str(contribution["contribution_id"]),
+        principal=PrincipalClass.OPERATOR,
+        correlation_id="disable-generated",
     )
     assert is_ok(enabled), enabled
     plugin_id = enabled.value.manifest.id
     assert runtime.templates.get("demo:authoring") is not None
 
-    disabled = runtime.loader.disable(plugin_id)
-    assert is_ok(disabled), disabled
     roster = AtomicRoster(roster_root)
+    denied_disable = runtime.disable_published_authoring_contribution(
+        str(contribution["contribution_id"]), principal=PrincipalClass.MACHINE
+    )
+    denied_uninstall = runtime.uninstall_published_authoring_contribution(
+        str(contribution["contribution_id"]), principal=PrincipalClass.MACHINE
+    )
+    assert is_refusal(denied_disable)
+    assert is_refusal(denied_uninstall)
+    assert plugin_id in runtime.loader.loaded_ids()
+    assert runtime.templates.get_versioned("demo:authoring", "1.0.0") is not None
+
+    original_publish = AtomicRoster.publish
+
+    def fail_authoring_persist(self: AtomicRoster, payload: Mapping[str, object]) -> Result[Path]:
+        if self.root == roster_root:
+            return policy_rejection("roster", "simulated durable disable failure")
+        return original_publish(self, payload)
+
+    monkeypatch.setattr(AtomicRoster, "publish", fail_authoring_persist)
+    failed_disable = runtime.disable_published_authoring_contribution(
+        str(contribution["contribution_id"]), principal=PrincipalClass.OPERATOR
+    )
+    assert is_refusal(failed_disable)
+    assert plugin_id in runtime.loader.loaded_ids()
+    assert runtime.templates.get_versioned("demo:authoring", "1.0.0") is not None
+    before_success = roster.load()
+    assert is_ok(before_success), before_success
+    assert cast(list[dict[str, object]], before_success.value["published"])[0]["enabled"] is True
+
+    monkeypatch.setattr(AtomicRoster, "publish", original_publish)
+    disabled = runtime.disable_published_authoring_contribution(
+        str(contribution["contribution_id"]), principal=PrincipalClass.OPERATOR
+    )
+    assert is_ok(disabled), disabled
     after_disable = roster.load()
-    assert is_ok(after_disable)
+    assert is_ok(after_disable), after_disable
     rows = cast(list[dict[str, object]], after_disable.value["published"])
     assert rows[0]["enabled"] is False
+    assert plugin_id not in runtime.loader.loaded_ids()
+    assert runtime.templates.get_versioned("demo:authoring", "1.0.0") is None
 
     after_disable_restart = _runtime(tmp_path, roster_root)
     activated = after_disable_restart.activate()
@@ -164,16 +206,3 @@ def test_generated_authoring_disable_and_uninstall_survive_restart(tmp_path: Pat
     assert not any(
         item.startswith("research-authoring-") for item in after_disable_restart.loader.loaded_ids()
     )
-
-    removed = after_disable_restart.uninstall_published_authoring_contribution(
-        str(contribution["contribution_id"])
-    )
-    assert is_ok(removed), removed
-    after_uninstall = roster.load()
-    assert is_ok(after_uninstall)
-    assert after_uninstall.value["published"] == []
-
-    after_uninstall_restart = _runtime(tmp_path, roster_root)
-    activated_again = after_uninstall_restart.activate()
-    assert is_ok(activated_again), activated_again
-    assert "demo:authoring" not in after_uninstall_restart.templates.ids()
