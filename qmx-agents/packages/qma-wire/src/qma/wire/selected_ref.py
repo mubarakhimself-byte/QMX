@@ -87,6 +87,9 @@ FORBIDDEN_SELECTED_REF_KEYS: Final[frozenset[str]] = frozenset(
         "tree",
         "widget",
         "widgets",
+        "editor_draft_id",
+        "editor_revision",
+        "unsaved_buffer",
     }
 )
 
@@ -223,6 +226,12 @@ def parse_selected_ref(value: object) -> Result[SelectedRef]:
     parsed_id = _require_str("selected_refs.id", ident)
     if is_refusal(parsed_id):
         return parsed_id
+    if parsed_id.value.startswith("edraft:"):
+        return _invalid(
+            "selected_refs.id",
+            "editor draft ids are not runnable selected references",
+            refusal="draft_not_runnable",
+        )
     return Ok(SelectedRef(kind=kind.value, id=parsed_id.value, extra=extra))
 
 

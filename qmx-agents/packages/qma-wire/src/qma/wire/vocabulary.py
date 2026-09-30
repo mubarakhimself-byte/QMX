@@ -42,11 +42,13 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # facade_search / facade_get for federated discovery (FR-RES-18; DEC-0449),
 # get_diagnosis for kit failure_class (Story 61.2; DEC-0456),
 # get_instance_health for pack-instance typed-report (Story 64.2; DEC-0112),
-# and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08).
-ADDABLE_QUERY_COUNT: Final[int] = 7
-# transfer_artifact (Story 70.2; AM-09) plus transfer_complete (Story 70.3).
+# and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08),
+# and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03).
+ADDABLE_QUERY_COUNT: Final[int] = 8
+# transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3), and
+# save/publish_editor_draft (Story 71; AM-09).
 # Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 2
+ADDABLE_COMMAND_COUNT: Final[int] = 4
 
 
 class MessageFamily(StrEnum):
@@ -58,10 +60,11 @@ class MessageFamily(StrEnum):
 
 
 class WireCommand(StrEnum):
-    """Closed-and-addable commands (packet seed plus AM-09 transfer).
+    """Closed-and-addable commands (packet seed plus approved amendments).
 
     The nine packet-seed commands (DEC-0304) plus addable ``transfer_artifact``
-    (Story 70.2; AM-09) and dest-authored ``transfer_complete`` (Story 70.3).
+    (Story 70.2; AM-09), dest-authored ``transfer_complete`` (Story 70.3),
+    and editor draft save/publish (Story 71; AM-09).
     Seed count stays 9. Wire ``type`` values are snake_case identifiers
     derived from the packet's English labels
     (``install/enable plugin`` → ``install_enable_plugin``).
@@ -78,6 +81,8 @@ class WireCommand(StrEnum):
     RETRY_TASK = "retry_task"
     TRANSFER_ARTIFACT = "transfer_artifact"
     TRANSFER_COMPLETE = "transfer_complete"
+    SAVE_EDITOR_DRAFT = "save_editor_draft"
+    PUBLISH_EDITOR_DRAFT = "publish_editor_draft"
 
 
 class WireQuery(StrEnum):
@@ -90,7 +95,8 @@ class WireQuery(StrEnum):
     DEC-0449; Story 53.1), ``get_diagnosis`` for kit ``failure_class``
     (Story 61.2; DEC-0456), ``get_instance_health`` for pack-instance
     ``health()`` (Story 64.2; DEC-0112), and ``list_mailbox`` for the
-    product-session mailbox snapshot (Story 69.2; AM-08; DEC-0500). Distinct
+    product-session mailbox snapshot (Story 69.2; AM-08; DEC-0500), and
+    get_editor_draft_head for durable editor state (Story 71.2; AM-03). Distinct
     from ``get_provider_health``. The packet seed ``get bot`` reads
     ``get_quant`` under the Bot-to-Quant rule.
     """
@@ -109,6 +115,7 @@ class WireQuery(StrEnum):
     GET_DIAGNOSIS = "get_diagnosis"
     GET_INSTANCE_HEALTH = "get_instance_health"
     LIST_MAILBOX = "list_mailbox"
+    GET_EDITOR_DRAFT_HEAD = "get_editor_draft_head"
 
 
 class WireEvent(StrEnum):

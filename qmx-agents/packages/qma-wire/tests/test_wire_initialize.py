@@ -174,12 +174,15 @@ def test_initialize_and_family_schemas_load() -> None:
         assert isinstance(enum_obj, list)
         return cast(list[object], enum_obj)
 
-    assert len(_name_enum("command")) == 11
+    assert len(_name_enum("command")) == 13
     assert "transfer_artifact" in _name_enum("command")
     assert "transfer_complete" in _name_enum("command")
-    assert len(_name_enum("query")) == 14
+    assert "save_editor_draft" in _name_enum("command")
+    assert "publish_editor_draft" in _name_enum("command")
+    assert len(_name_enum("query")) == 15
     assert "get_diagnosis" in _name_enum("query")
     assert "get_instance_health" in _name_enum("query")
     assert "get_provider_health" in _name_enum("query")
     assert "list_mailbox" in _name_enum("query")
+    assert "get_editor_draft_head" in _name_enum("query")
     assert len(_name_enum("event")) == 10

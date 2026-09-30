@@ -170,14 +170,19 @@ from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.sessions.product_session import ProductSessionService
+from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.projection import (
     TASK_GRAPH_STATE_SQLITE_TABLES,
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
+from qma.wire.editor_draft import EDITOR_DRAFT_HTTP_PATH
 from qma.wire.initialize import (
+    GET_EDITOR_DRAFT_HEAD_CAPABILITY,
     JSONRPC_VERSION,
     PAIRING_CAPABILITY,
+    PUBLISH_EDITOR_DRAFT_CAPABILITY,
+    SAVE_EDITOR_DRAFT_CAPABILITY,
     TRANSFER_ARTIFACT_CAPABILITY,
     TRANSFER_COMPLETE_CAPABILITY,
     InitializeParams,
@@ -211,7 +216,7 @@ from qma.wire.stage_artifact import (
 )
 from qma.wire.transfer_artifact import require_transfer_artifact_capability
 from qma.wire.transfer_complete import require_transfer_complete_capability
-from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand
+from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand, WireQuery
 from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
 from qmf.core.refusal import TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
@@ -742,6 +747,12 @@ class DaemonProcess:
             _sessions=self._product_sessions,
         )
         self._artifacts = ArtifactStore(hooks=HookRegistry())
+        self._editor_drafts = EditorDraftService(
+            journal=self._journal,
+            sqlite=self.sqlite,
+            artifacts=self._artifacts,
+            authoring_roster_root=self.root / "authoring-pack",
+        )
         self._transfers = TransferTicketStore(
             journal=journal,
             sqlite=substrate.sqlite,
@@ -860,6 +871,7 @@ class DaemonProcess:
             roster = DeskPluginRoster(
                 plugins_root=plugins_root,
                 plugin_load_configs=plugin_load_configs,
+                authoring_roster_root=Path(root) / "authoring-pack",
             )
             roster.backtesting.bind_experiments(experiments)
             activated = roster.activate(
@@ -920,6 +932,12 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_tickets
+            restored_drafts = process._editor_drafts.restore_from_journal()
+            if is_refusal(restored_drafts):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_drafts
             _process_gate.holder = process
             return Ok(process)
 
@@ -1096,7 +1114,14 @@ class DaemonProcess:
             STAGE_ARTIFACT_CAPABILITY: True,
             TRANSFER_ARTIFACT_CAPABILITY: True,
             TRANSFER_COMPLETE_CAPABILITY: True,
+            SAVE_EDITOR_DRAFT_CAPABILITY: True,
+            GET_EDITOR_DRAFT_HEAD_CAPABILITY: True,
+            PUBLISH_EDITOR_DRAFT_CAPABILITY: True,
         }
+
+    def _operator_principal(self) -> str | None:
+        operator = self._local_operator
+        return None if operator is None else operator.principal_id
 
     @property
     def host_control(self) -> HostControlChannel | None:
@@ -1823,6 +1848,26 @@ class DaemonProcess:
                     body,
                 )
                 return
+            if request.method == "GET" and request.path == EDITOR_DRAFT_HTTP_PATH:
+                head = self._editor_drafts.get_editor_draft_head(
+                    query_string_to_args(request.query),
+                    operator_principal=self._operator_principal(),
+                    capabilities=self._paired_http_capabilities(authed.value.pairing_record_id),
+                )
+                if is_refusal(head):
+                    await self._write_refusal(writer, head, origin=origin)
+                    return
+                body = json.dumps(
+                    {"ok": True, "result": dict(head.value.to_payload())},
+                    ensure_ascii=True,
+                ).encode("utf-8")
+                await self._write_http(
+                    writer,
+                    200,
+                    _cors_headers_for_origin(origin),
+                    body,
+                )
+                return
             if request.method == "PUT" and request.path == STAGE_ARTIFACT_HTTP_PATH:
                 await self._serve_stage_artifact_put(
                     reader,
@@ -2202,6 +2247,9 @@ class DaemonProcess:
                     or raw_caps.get(STAGE_ARTIFACT_CAPABILITY) is True
                     or raw_caps.get(TRANSFER_ARTIFACT_CAPABILITY) is True
                     or raw_caps.get(TRANSFER_COMPLETE_CAPABILITY) is True
+                    or raw_caps.get(SAVE_EDITOR_DRAFT_CAPABILITY) is True
+                    or raw_caps.get(GET_EDITOR_DRAFT_HEAD_CAPABILITY) is True
+                    or raw_caps.get(PUBLISH_EDITOR_DRAFT_CAPABILITY) is True
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2219,6 +2267,23 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method == WireCommand.SAVE_EDITOR_DRAFT.value:
+            return self._dispatch_editor_draft_command(connection, request, req_id, publish=False)
+        if method == WireCommand.PUBLISH_EDITOR_DRAFT.value:
+            return self._dispatch_editor_draft_command(connection, request, req_id, publish=True)
+        if method == WireQuery.GET_EDITOR_DRAFT_HEAD.value:
+            gated_query = connection.require_query_capability(method)
+            if is_refusal(gated_query):
+                return _jsonrpc_refusal(req_id, gated_query)
+            raw_params = request.get("params")
+            head = self._editor_drafts.get_editor_draft_head(
+                raw_params,
+                operator_principal=self._operator_principal(),
+                capabilities=connection.capabilities,
+            )
+            if is_refusal(head):
+                return _jsonrpc_refusal(req_id, head)
+            return _jsonrpc_result(req_id, head.value.to_payload())
         if method == WireCommand.TRANSFER_ARTIFACT.value:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:
@@ -2265,6 +2330,48 @@ class DaemonProcess:
             return _jsonrpc_refusal(req_id, sent)
         return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
 
+    def _dispatch_editor_draft_command(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+        *,
+        publish: bool,
+    ) -> dict[str, object]:
+        method = (
+            WireCommand.PUBLISH_EDITOR_DRAFT.value
+            if publish
+            else WireCommand.SAVE_EDITOR_DRAFT.value
+        )
+        authorized = connection.authorize_command(method)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        params = request.get("params")
+        if not isinstance(params, Mapping):
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="params must be an object",
+            )
+        payload_params = cast(Mapping[str, object], params)
+        if publish:
+            result = self._editor_drafts.publish_editor_draft(
+                payload_params,
+                operator_principal=self._operator_principal(),
+                capabilities=connection.capabilities,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value)
+        saved = self._editor_drafts.save_editor_draft(
+            payload_params,
+            operator_principal=self._operator_principal(),
+            capabilities=connection.capabilities,
+        )
+        if is_refusal(saved):
+            return _jsonrpc_refusal(req_id, saved)
+        return _jsonrpc_result(req_id, saved.value.to_payload())
+
     def _gate_live_invoke(
         self,
         method: object,
@@ -2277,6 +2384,16 @@ class DaemonProcess:
         params: Mapping[str, object] = (
             cast("Mapping[str, object]", raw_params) if isinstance(raw_params, Mapping) else {}
         )
+        if any(key in params for key in ("editor_draft_id", "editor_revision", "unsaved_buffer")):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "invoke_target",
+                    "mutable or saved editor drafts are not runnable; publish and enable first",
+                    refusal="draft_not_runnable",
+                    minted_job_handle=False,
+                ),
+            )
         fp1 = params.get("fp1")
         instance_id = params.get("instance_id")
         if not (isinstance(fp1, str) and fp1.strip() != ""):

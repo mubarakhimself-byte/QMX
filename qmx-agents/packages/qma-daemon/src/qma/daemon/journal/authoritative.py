@@ -272,6 +272,58 @@ class AuthoritativeJournal:
         """The single append-only journal stream name."""
         return DAEMON_JOURNAL_STREAM
 
+    def read_events(self) -> Result[tuple[JournalEventRecord, ...]]:
+        """Read the authoritative stream in journal order for projection recovery."""
+        rows = self._journal.read_stream(DAEMON_JOURNAL_STREAM, for_world=self._world)
+        if is_refusal(rows):
+            return rows
+        events: list[JournalEventRecord] = []
+        for row in rows.value:
+            try:
+                raw_scope = row.get("scope_path")
+                segments = parse_scope_path(raw_scope)
+            except Exception as exc:
+                return invalid_input(
+                    "journal_event", "journal scope path is invalid", error=str(exc)
+                )
+            payload = row.get("payload")
+            event = row.get("event")
+            sequence = row.get("journal_seq")
+            occurred_at = row.get("occurred_at")
+            recorded_at = row.get("recorded_at")
+            world = row.get("world")
+            fp = row.get("fingerprint")
+            if (
+                not isinstance(payload, Mapping)
+                or not isinstance(event, str)
+                or not isinstance(sequence, int)
+                or isinstance(sequence, bool)
+                or not isinstance(occurred_at, int)
+                or isinstance(occurred_at, bool)
+                or not isinstance(recorded_at, int)
+                or isinstance(recorded_at, bool)
+                or not isinstance(world, str)
+                or not isinstance(fp, str)
+            ):
+                return invalid_input(
+                    "journal_event",
+                    "journal row has an invalid event shape",
+                    journal_seq=repr(sequence),
+                )
+            events.append(
+                JournalEventRecord(
+                    journal_seq=sequence,
+                    event=event,
+                    scope_path=segments,
+                    payload=_freeze_payload(cast(Mapping[str, object], payload)),
+                    world=world,
+                    fingerprint=fp,
+                    occurred_at=occurred_at,
+                    recorded_at=recorded_at,
+                )
+            )
+        return Ok(tuple(events))
+
     def declare_store(
         self,
         name: object,

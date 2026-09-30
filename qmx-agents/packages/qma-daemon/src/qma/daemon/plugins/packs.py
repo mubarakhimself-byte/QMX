@@ -9,6 +9,7 @@ adapter: one ``qmb`` job per environment through the QMB door.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import json
@@ -19,6 +20,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
 from qma.core.ontology.records import Agent, Subagent
+from qma.core.plugins.context import PluginContext
 from qma.core.plugins.manifest import PluginManifest, parse_plugin_manifest
 from qma.core.plugins.packs import (
     ANALYSIS_BACKTEST_PLUGIN_ID,
@@ -38,6 +40,7 @@ from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.capabilities.spawn import SpawnRequest, spawn_agent
 from qma.daemon.knowledge import KnowledgeSourceRegistry
 from qma.daemon.memory import MemoryAdmissionGate
+from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.loader import (
     LoadedPlugin,
     PluginActivator,
@@ -197,6 +200,7 @@ class DeskPluginRoster:
         loader: PluginLoader | None = None,
         backtesting: BacktestingService | None = None,
         plugin_load_configs: Mapping[str, Mapping[str, object]] | None = None,
+        authoring_roster_root: Path | None = None,
     ) -> None:
         self.plugins_root = plugins_root if plugins_root is not None else default_plugins_root()
         configs: dict[str, Mapping[str, object]] = {
@@ -220,6 +224,7 @@ class DeskPluginRoster:
         self.memory = MemoryAdmissionGate()
         self.knowledge = KnowledgeSourceRegistry()
         self.proposals = ProposalGate()
+        self.authoring_roster_root = authoring_roster_root
 
     @property
     def pack_ids(self) -> tuple[str, ...]:
@@ -298,6 +303,136 @@ class DeskPluginRoster:
                 self.loader.unload(row.manifest.id)
             return ingested
         return Ok(activated.value)
+
+    def enable_published_authoring_contribution(
+        self,
+        contribution_id: str,
+        *,
+        principal: object = PrincipalClass.OPERATOR,
+        correlation_id: object = "authoring-pack-enable",
+    ) -> Result[LoadedPlugin]:
+        """Enable one daemon-published draft through the production PluginLoader.
+
+        Publishing a draft only stages it in the local authoring roster. This
+        explicit operator path is the existing plugin enable flow: the
+        contribution becomes live only after ``PluginLoader.enable`` accepts
+        its generated manifest and scoped registration.
+        """
+        if self.authoring_roster_root is None:
+            return invalid_input(
+                "authoring_roster_root",
+                "local authoring roster is not configured for this daemon",
+            )
+        loaded_roster = AtomicRoster(self.authoring_roster_root).load()
+        if is_refusal(loaded_roster):
+            return loaded_roster
+        published = loaded_roster.value.get("published", [])
+        if not isinstance(published, list):
+            return invalid_input("authoring_roster", "published roster must be a list")
+        record: Mapping[str, object] | None = None
+        for candidate in cast(list[object], published):
+            if not isinstance(candidate, Mapping):
+                continue
+            mapping = cast(Mapping[str, object], candidate)
+            if mapping.get("contribution_id") == contribution_id:
+                record = mapping
+                break
+        if record is None:
+            return invalid_input(
+                "contribution_id",
+                "published authoring contribution is not present in the local roster",
+            )
+        if record.get("enabled") is True:
+            return invalid_input(
+                "contribution_id",
+                "authoring contribution is already enabled",
+                contribution_id=contribution_id,
+            )
+        if record.get("point") != "graph_template":
+            return invalid_input("point", "authoring enable supports graph_template only")
+        try:
+            body = record.get("bytes")
+            if not isinstance(body, str):
+                raise ValueError("published graph template bytes must be text")
+            decoded = json.loads(body)
+            if not isinstance(decoded, dict):
+                raise ValueError("published graph template must be a JSON object")
+            template = cast(dict[str, object], decoded)
+            qualified_id = record.get("qualified_id")
+            version = record.get("version")
+            if not isinstance(qualified_id, str) or not isinstance(version, str):
+                raise ValueError("published graph template identity is malformed")
+            if template.get("qualified_id") != qualified_id or template.get("version") != version:
+                raise ValueError("published graph template identity does not match its roster row")
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            return invalid_input("authoring_roster", str(exc))
+
+        digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
+        plugin_id = f"research-authoring-{digest}"
+        local_id = "draft-template"
+        contribution = dict(template)
+        contribution.update(
+            {
+                "qualified_id": qualified_id,
+                "version": version,
+                "stateless": True,
+                "runtime_state": None,
+            }
+        )
+
+        def activate(context: PluginContext) -> None:
+            context.register_graph_template(local_id, contribution)
+
+        raw_manifest: dict[str, object] = {
+            "id": plugin_id,
+            "version": version,
+            "qma_api": ">=0.1.0,<1.0.0",
+            "desk": "research",
+            "entrypoint": "daemon.plugin:activate",
+            "dependencies": [],
+            "contributions": [
+                {
+                    "point": "graph_template",
+                    "local_id": local_id,
+                    "qualified_id": qualified_id,
+                }
+            ],
+            "permissions": [],
+            "migrations": [],
+            "peer_integration": "qma_wire_only",
+            "daemon_renders": False,
+        }
+        enabled = self.loader.enable(
+            raw_manifest,
+            activator=cast(PluginActivator, activate),
+            principal=principal,
+            correlation_id=correlation_id,
+        )
+        if is_refusal(enabled):
+            return enabled
+        ingested = self._ingest_graph_templates(enabled.value)
+        if is_refusal(ingested):
+            self.loader.unload(enabled.value.manifest.id)
+            return ingested
+
+        replacement = dict(loaded_roster.value)
+        replacement_published: list[object] = []
+        for item in cast(list[object], published):
+            if isinstance(item, Mapping):
+                replacement_published.append(dict(cast(Mapping[str, object], item)))
+            else:
+                replacement_published.append(item)
+        for item in replacement_published:
+            if isinstance(item, dict):
+                row = cast(dict[str, object], item)
+                if row.get("contribution_id") == contribution_id:
+                    row["enabled"] = True
+        replacement["published"] = replacement_published
+        saved = AtomicRoster(self.authoring_roster_root).publish(replacement)
+        if is_refusal(saved):
+            self.loader.unload(enabled.value.manifest.id)
+            return saved
+        return enabled
 
     def _ingest_activated(self, loaded: Sequence[LoadedPlugin]) -> Result[None]:
         for row in loaded:

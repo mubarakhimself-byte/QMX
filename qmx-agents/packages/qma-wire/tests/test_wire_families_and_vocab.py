@@ -39,11 +39,11 @@ from qmf.core.refusal import is_ok, is_refusal
 def test_seed_vocabulary_counts_and_owner() -> None:
     assert WIRE_VOCABULARY_OWNER == "qma-wire"
     assert SEED_COMMAND_COUNT == 9
-    assert ADDABLE_COMMAND_COUNT == 2
-    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 11
+    assert ADDABLE_COMMAND_COUNT == 4
+    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 13
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 7
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 14
+    assert ADDABLE_QUERY_COUNT == 8
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 15
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS
@@ -64,6 +64,8 @@ def test_seed_members_match_ratified_packet() -> None:
         "retry_task",
         "transfer_artifact",
         "transfer_complete",
+        "save_editor_draft",
+        "publish_editor_draft",
     } == WIRE_COMMANDS
     assert WireCommand.TRANSFER_ARTIFACT.value == "transfer_artifact"
     assert WireCommand.TRANSFER_COMPLETE.value == "transfer_complete"
@@ -83,6 +85,8 @@ def test_seed_members_match_ratified_packet() -> None:
     assert WireQuery.GET_INSTANCE_HEALTH.value == "get_instance_health"
     assert "list_mailbox" in WIRE_QUERIES
     assert WireQuery.LIST_MAILBOX.value == "list_mailbox"
+    assert "get_editor_draft_head" in WIRE_QUERIES
+    assert WireQuery.GET_EDITOR_DRAFT_HEAD.value == "get_editor_draft_head"
     assert WireQuery.GET_PROVIDER_HEALTH.value != WireQuery.GET_INSTANCE_HEALTH.value
     assert {
         "agent.started",

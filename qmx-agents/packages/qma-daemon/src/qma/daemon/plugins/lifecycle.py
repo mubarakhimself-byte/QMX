@@ -413,11 +413,11 @@ class AtomicRoster:
 
     def publish(self, payload: Mapping[str, object]) -> Result[Path]:
         """Write staged bytes, fsync, then replace the live roster."""
-        self.root.mkdir(parents=True, exist_ok=True)
         encoded = _dump(payload)
         staged = self.stage_path
         live = self.live_path
         try:
+            self.root.mkdir(parents=True, exist_ok=True)
             with staged.open("wb") as handle:
                 handle.write(encoded)
                 handle.flush()

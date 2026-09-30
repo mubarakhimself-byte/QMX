@@ -97,6 +97,8 @@ CLOSED_PROJECTIONS: Final[frozenset[str]] = frozenset(
         "pairing_pending",
         "pairing_session",
         "artifact_transfer_ticket",
+        # AM-03 named journal projection; not an independent store or SQLite class.
+        "editor_draft_head",
     }
 )
 

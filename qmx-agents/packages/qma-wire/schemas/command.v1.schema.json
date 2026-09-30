@@ -21,7 +21,9 @@
         "launch_task",
         "retry_task",
         "transfer_artifact",
-        "transfer_complete"
+        "transfer_complete",
+        "save_editor_draft",
+        "publish_editor_draft"
       ]
     },
     "principal_class": {

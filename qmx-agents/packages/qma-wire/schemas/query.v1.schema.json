@@ -24,7 +24,8 @@
         "facade_get",
         "get_diagnosis",
         "get_instance_health",
-        "list_mailbox"
+        "list_mailbox",
+        "get_editor_draft_head"
       ]
     },
     "args": { "type": "object" }

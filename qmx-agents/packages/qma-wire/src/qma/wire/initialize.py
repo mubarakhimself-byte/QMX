@@ -14,8 +14,8 @@ Missing ``pairing`` is a typed mismatch; the shell stays usable. Missing
 ``list_mailbox`` is typed ``query_unavailable`` when the query is requested.
 Missing ``stage_artifact`` is a typed mismatch, not a silent empty upload.
 Missing ``transfer_artifact`` is a typed mismatch. Missing ``transfer_complete``
-is a typed mismatch. This handshake does not mint ``cancel_job`` or pack/draft
-names. Sharing a live ``producer_id`` across tabs is forbidden.
+is a typed mismatch. Epic 71 also advertises the editor-draft save, snapshot,
+and publish capabilities. Sharing a live ``producer_id`` across tabs is forbidden.
 """
 
 from __future__ import annotations
@@ -30,6 +30,9 @@ from typing import Final, cast
 
 from qma.core.vocabulary import PrincipalClass
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
+from qma.wire.editor_draft import (
+    editor_draft_capability_unavailable,
+)
 from qma.wire.list_mailbox import query_unavailable
 from qma.wire.principals import (
     AuthorizedWireCommand,
@@ -49,11 +52,14 @@ from qmf.core.refusal import (
 __all__ = [
     "CONNECT_TYPES_EXISTED_AT_INSPECT_SHA",
     "DEFERRED_INITIALIZE_CAPABILITIES",
+    "GET_EDITOR_DRAFT_HEAD_CAPABILITY",
     "JSONRPC_VERSION",
     "LIST_MAILBOX_CAPABILITY",
     "LIST_MAILBOX_CAPABILITY_MINTED",
     "PAIRING_CAPABILITY",
     "PAIRING_INSPECT_SHA",
+    "PUBLISH_EDITOR_DRAFT_CAPABILITY",
+    "SAVE_EDITOR_DRAFT_CAPABILITY",
     "STAGE_ARTIFACT_CAPABILITY",
     "STAGE_ARTIFACT_CAPABILITY_MINTED",
     "SUPPORTED_PROTOCOL_VERSIONS",
@@ -94,15 +100,15 @@ TRANSFER_ARTIFACT_CAPABILITY: Final[str] = "transfer_artifact"
 TRANSFER_ARTIFACT_CAPABILITY_MINTED: Final[bool] = True
 TRANSFER_COMPLETE_CAPABILITY: Final[str] = "transfer_complete"
 TRANSFER_COMPLETE_CAPABILITY_MINTED: Final[bool] = True
+SAVE_EDITOR_DRAFT_CAPABILITY: Final[str] = "save_editor_draft"
+GET_EDITOR_DRAFT_HEAD_CAPABILITY: Final[str] = "get_editor_draft_head"
+PUBLISH_EDITOR_DRAFT_CAPABILITY: Final[str] = "publish_editor_draft"
 # AR-UI-06 remainder — other epics mint these. Additive CT-40 only.
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
         "cancel_job",
         "pack_ui_request",
         "get_pack_ui_request",
-        "save_editor_draft",
-        "get_editor_draft_head",
-        "publish_editor_draft",
     }
 )
 
@@ -155,6 +161,9 @@ def advertise_pairing_capabilities(
     caps[STAGE_ARTIFACT_CAPABILITY] = True
     caps[TRANSFER_ARTIFACT_CAPABILITY] = True
     caps[TRANSFER_COMPLETE_CAPABILITY] = True
+    caps[SAVE_EDITOR_DRAFT_CAPABILITY] = True
+    caps[GET_EDITOR_DRAFT_HEAD_CAPABILITY] = True
+    caps[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         caps.pop(name, None)
     return caps
@@ -464,6 +473,9 @@ def negotiate_initialize(
             negotiated[TRANSFER_COMPLETE_CAPABILITY] = True
         else:
             negotiated.pop(TRANSFER_COMPLETE_CAPABILITY, None)
+        negotiated[SAVE_EDITOR_DRAFT_CAPABILITY] = True
+        negotiated[GET_EDITOR_DRAFT_HEAD_CAPABILITY] = True
+        negotiated[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
@@ -752,11 +764,16 @@ class WireConnection:
         return Ok(family_of(name))
 
     def require_query_capability(self, wire_type: object) -> Result[MessageFamily]:
-        """Family gate plus minted-query capability. Missing list_mailbox is typed."""
+        """Family gate plus minted-query capability checks."""
         accepted = self.accept_family_message(wire_type)
         if not isinstance(accepted, Ok):
             return accepted
-        if str(wire_type) != LIST_MAILBOX_CAPABILITY:
+        name = str(wire_type)
+        if name == GET_EDITOR_DRAFT_HEAD_CAPABILITY:
+            if self._capabilities.get(name) is True:
+                return accepted
+            return editor_draft_capability_unavailable(name)
+        if name != LIST_MAILBOX_CAPABILITY:
             return accepted
         if self._capabilities.get(LIST_MAILBOX_CAPABILITY) is True:
             return accepted
