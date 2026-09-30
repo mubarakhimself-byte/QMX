@@ -15,7 +15,8 @@ Missing ``pairing`` is a typed mismatch; the shell stays usable. Missing
 Missing ``stage_artifact`` is a typed mismatch, not a silent empty upload.
 Missing ``transfer_artifact`` is a typed mismatch. Missing ``transfer_complete``
 is a typed mismatch. Epic 71 also advertises the editor-draft save, snapshot,
-and publish capabilities. Sharing a live ``producer_id`` across tabs is forbidden.
+and publish capabilities. Epic 73 advertises the addable ``cancel_job`` command.
+Sharing a live ``producer_id`` across tabs is forbidden.
 """
 
 from __future__ import annotations
@@ -54,6 +55,8 @@ from qmf.core.refusal import (
 )
 
 __all__ = [
+    "CANCEL_JOB_CAPABILITY",
+    "CANCEL_JOB_CAPABILITY_MINTED",
     "CONNECT_TYPES_EXISTED_AT_INSPECT_SHA",
     "DEFERRED_INITIALIZE_CAPABILITIES",
     "GET_EDITOR_DRAFT_HEAD_CAPABILITY",
@@ -109,14 +112,12 @@ TRANSFER_COMPLETE_CAPABILITY_MINTED: Final[bool] = True
 SAVE_EDITOR_DRAFT_CAPABILITY: Final[str] = "save_editor_draft"
 GET_EDITOR_DRAFT_HEAD_CAPABILITY: Final[str] = "get_editor_draft_head"
 PUBLISH_EDITOR_DRAFT_CAPABILITY: Final[str] = "publish_editor_draft"
+CANCEL_JOB_CAPABILITY: Final[str] = "cancel_job"
+CANCEL_JOB_CAPABILITY_MINTED: Final[bool] = True
 # AR-UI-06 remainder — other epics mint these. Additive CT-40 only.
-DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
-    {
-        "cancel_job",
-    }
-)
+DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset()
 _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
-    {PACK_UI_REQUEST_CAPABILITY, GET_PACK_UI_REQUEST_CAPABILITY}
+    {PACK_UI_REQUEST_CAPABILITY, GET_PACK_UI_REQUEST_CAPABILITY, CANCEL_JOB_CAPABILITY}
 )
 
 _SEMVER: Final[re.Pattern[str]] = re.compile(
@@ -161,7 +162,7 @@ def mint_tab_producer_id() -> str:
 def advertise_pairing_capabilities(
     server_capabilities: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Server advertised set: pairing, PUT, transfer_artifact, transfer_complete."""
+    """Server advertised set: pairing, PUT, transfer, and cancel_job capabilities."""
     caps = dict(server_capabilities or {})
     caps[PAIRING_CAPABILITY] = True
     caps[LIST_MAILBOX_CAPABILITY] = True
@@ -173,6 +174,7 @@ def advertise_pairing_capabilities(
     caps[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
     caps[PACK_UI_REQUEST_CAPABILITY] = True
     caps[GET_PACK_UI_REQUEST_CAPABILITY] = True
+    caps[CANCEL_JOB_CAPABILITY] = True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         caps.pop(name, None)
     return caps
@@ -220,11 +222,11 @@ def claim_connect_types_absent_at_inspect_sha(absent: object) -> Result[bool]:
 
 
 def claim_deferred_initialize_capabilities_minted(minted: object) -> Result[bool]:
-    """Claiming this handshake minted cancel_job / pack names fails."""
+    """Claiming this handshake minted still-deferred pack/draft names fails."""
     if minted is True or minted == "true":
         return _policy(
             "capabilities",
-            "this handshake does not mint cancel_job or pack/draft names",
+            "this handshake does not mint deferred pack/draft names",
             minted=False,
             deferred=sorted(DEFERRED_INITIALIZE_CAPABILITIES),
         )
@@ -485,6 +487,7 @@ def negotiate_initialize(
             negotiated[TRANSFER_COMPLETE_CAPABILITY] = True
         else:
             negotiated.pop(TRANSFER_COMPLETE_CAPABILITY, None)
+        negotiated[CANCEL_JOB_CAPABILITY] = True
         # Editor-draft capabilities are negotiated independently. The client
         # must explicitly request each one before it is enabled on this session.
         for name in (

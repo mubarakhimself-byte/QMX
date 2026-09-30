@@ -46,6 +46,11 @@ from qma.core.vocabulary.registry import VocabularyError, parse_closed
 from qma.daemon.envs.router import ComputeRouter
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher, TaskTransitionResult
 from qma.daemon.taskgraph.state import JobHandleEvidence
+from qma.wire.cancel_job import (
+    cancel_job_command_hash,
+    durable_cancel_command_id,
+    parse_cancel_job_payload,
+)
 from qma.wire.principals import authorize_wire_command
 from qmf.core import Ok, Result, is_ok, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
@@ -201,6 +206,12 @@ class JobHandleStore:
         return matches[-1]
 
     def put(self, handle: JobHandle) -> JobHandle:
+        current = self._by_id.get(handle.job_id)
+        if (
+            current is not None
+            and current.originating_product_session_ref != handle.originating_product_session_ref
+        ):
+            raise ValueError("originating_product_session_ref is immutable for a durable JobHandle")
         self._by_id[handle.job_id] = handle
         self._by_task[handle.task_id] = handle.job_id
         return handle
@@ -285,6 +296,7 @@ class JobHandleService:
         logical_run_id: str = "",
         attempt_id: int = 1,
         artifacts: Sequence[JobArtifact | Mapping[str, object]] | None = None,
+        originating_product_session_ref: str | None = None,
     ) -> Result[JobHandle]:
         """Queue work and return immediately with a durable JobHandle."""
         if not task_id:
@@ -306,6 +318,17 @@ class JobHandleService:
                     existing=existing.job_id,
                     given=durable_id,
                 )
+            if (
+                originating_product_session_ref is not None
+                and existing.originating_product_session_ref != originating_product_session_ref
+            ):
+                return policy_rejection(
+                    "originating_product_session_ref",
+                    "originating product session is immutable after JobHandle admission",
+                    job_id=existing.job_id,
+                    bound=existing.originating_product_session_ref,
+                    given=originating_product_session_ref,
+                )
             return Ok(existing)
         if requirement is not None:
             placed = self._router.place_requirement(task_id=task_id, requirement=requirement)
@@ -325,6 +348,7 @@ class JobHandleService:
             logical_run_id=logical_run_id or correlation_id or durable_id,
             attempt_id=attempt_id,
             artifacts=() if artifacts is None else artifacts,
+            originating_product_session_ref=originating_product_session_ref,
         )
         if is_refusal(minted):
             return minted
@@ -521,6 +545,148 @@ class JobHandleService:
                 job_id=job_id,
             )
         return self._transition(handle, JobHandleState.CANCELLED, event="cancel")
+
+    def cancel_from_product_session(
+        self,
+        payload: object,
+        *,
+        principal_class: PrincipalClass | str,
+        operator_principal: object,
+        originating_session_principal: object,
+        producer_id: object,
+        wire_id: object,
+    ) -> Result[JobHandle]:
+        """Cancel one UI-admitted handle through its immutable originating session.
+
+        ``expected_state`` is retained only as an observation in a no-op record;
+        the stable command hash deliberately excludes it so queued→running is safe.
+        """
+        parsed = parse_cancel_job_payload(payload)
+        if is_refusal(parsed):
+            return parsed
+        caller = _parse_principal(principal_class)
+        if is_refusal(caller):
+            return caller
+        if caller.value is not PrincipalClass.OPERATOR:
+            return policy_rejection(
+                "principal_class",
+                "cancel_job requires the paired operator principal",
+                given=caller.value.value,
+            )
+        if not isinstance(operator_principal, str) or not operator_principal.strip():
+            return policy_rejection(
+                "operator_principal",
+                "cancel_job requires the authenticated operator principal",
+            )
+        producer = producer_id if isinstance(producer_id, str) else ""
+        wire = wire_id if isinstance(wire_id, str | int) and not isinstance(wire_id, bool) else None
+        if not producer.strip() or wire is None or (isinstance(wire, str) and not wire.strip()):
+            return invalid_input(
+                "wire_identity",
+                "cancel_job retry identity is the same non-empty producer_id and JSON-RPC id",
+                producer_id=repr(producer_id),
+                wire_id=repr(wire_id),
+            )
+
+        values = parsed.value
+        job_id = str(values["handle_id"])
+        handle = self._store.get(job_id)
+        if handle is None:
+            return invalid_input(
+                "handle_id", "cancel_job requires a minted JobHandle", given=job_id
+            )
+        if "job_id" in values and values["job_id"] != handle.job_id:
+            return policy_rejection(
+                "job_id",
+                "handle_id is job_id and must exactly match the durable handle",
+                expected=handle.job_id,
+                given=values["job_id"],
+            )
+        if values["logical_run_id"] != handle.logical_run_id:
+            return policy_rejection(
+                "logical_run_id",
+                "cancel_job logical_run_id must exactly match the durable handle",
+                expected=handle.logical_run_id,
+                given=values["logical_run_id"],
+            )
+        if values["attempt_id"] != handle.attempt_id:
+            return policy_rejection(
+                "attempt_id",
+                "cancel_job attempt_id must exactly match the durable handle",
+                expected=handle.attempt_id,
+                given=values["attempt_id"],
+            )
+        origin = handle.originating_product_session_ref
+        if origin is None:
+            return policy_rejection(
+                "originating_product_session_ref",
+                "UI cancel is unavailable for a headless JobHandle",
+                job_id=job_id,
+            )
+        if (
+            not isinstance(originating_session_principal, str)
+            or not originating_session_principal.strip()
+        ):
+            return policy_rejection(
+                "originating_product_session_ref",
+                "cancel_job origin must resolve to a durable product session",
+                job_id=job_id,
+                originating_product_session_ref=origin,
+            )
+        if operator_principal.strip() != originating_session_principal.strip():
+            return policy_rejection(
+                "operator_principal",
+                "cancel_job authority must match the durable originating session principal",
+                job_id=job_id,
+                originating_principal=originating_session_principal.strip(),
+                authenticated_principal=operator_principal.strip(),
+            )
+        expected_state = str(values["expected_state"])
+        durable_id = durable_cancel_command_id(str(values["command_id"]), origin)
+        command_hash = cancel_job_command_hash(
+            values,
+            originating_product_session_ref=origin,
+        )
+        if handle.state is JobHandleState.UNKNOWN:
+            return policy_rejection(
+                "job_handle",
+                "an unknown JobHandle is not cancellable; use unknown.resolve",
+                job_id=job_id,
+                state=handle.state.value,
+            )
+        if handle.is_terminal:
+            for recorded in handle.later_commands:
+                if recorded.get("durable_command_id") != durable_id:
+                    continue
+                if recorded.get("command_hash") != command_hash:
+                    return policy_rejection(
+                        "command_id",
+                        "cancel_job command_id was already used with different durable identity",
+                        durable_command_id=durable_id,
+                    )
+                if recorded.get("producer_id") != producer or recorded.get("wire_id") != wire:
+                    return policy_rejection(
+                        "wire_identity",
+                        "lost-ack retry must reuse the original producer_id and JSON-RPC id",
+                        producer_id=producer,
+                        wire_id=wire,
+                    )
+                return Ok(handle)
+            no_op = {
+                "command": "cancel_job",
+                "command_id": str(values["command_id"]),
+                "durable_command_id": durable_id,
+                "command_hash": command_hash,
+                "expected_state": expected_state,
+                "terminal_state": handle.state.value,
+                "producer_id": producer,
+                "wire_id": wire,
+                "noop": True,
+            }
+            recorded_handle = handle.record_later_command(no_op)
+            return self._commit(recorded_handle, event="cancel_job_noop", previous=handle)
+        # The queued/running state may have advanced since expected_state was read.
+        return self.cancel(job_id, writer=COORDINATED_CANCEL_AUTHORITY)
 
     def stream(self, job_id: str) -> Result[tuple[JobStreamEvent, ...]]:
         """Operational logs. Harness telemetry — not the Task Ledger."""
@@ -790,6 +956,7 @@ class JobHandleService:
             attempt_id=handle.attempt_id,
             artifacts=handle.artifacts,
             later_commands=handle.later_commands,
+            originating_product_session_ref=handle.originating_product_session_ref,
         )
         if is_refusal(minted):
             return minted

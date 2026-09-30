@@ -88,6 +88,52 @@ def test_submit_mints_queued_handle_with_owner_and_operations() -> None:
     assert all(event.to_payload()["ledger"] is False for event in streamed.value)
 
 
+def test_originating_product_session_is_optional_immutable_and_serialized() -> None:
+    service, owner, task_id, _dispatcher = _service()
+    ui = service.submit(
+        owner=owner,
+        task_id=task_id,
+        originating_product_session_ref="psess:ui-origin",
+    )
+    assert is_ok(ui)
+    assert ui.value.originating_product_session_ref == "psess:ui-origin"
+    payload = ui.value.to_payload()
+    assert payload["originating_product_session_ref"] == "psess:ui-origin"
+    assert "product_session_ref" not in payload
+    same_identity = JobHandle.try_create(
+        job_id=ui.value.job_id,
+        owner=owner,
+        state=ui.value.state,
+        task_id=ui.value.task_id,
+        originating_product_session_ref="psess:other-origin",
+    )
+    assert is_ok(same_identity)
+    assert ui.value == same_identity.value
+    started = service.start(ui.value.job_id)
+    assert is_ok(started)
+    assert started.value.originating_product_session_ref == "psess:ui-origin"
+    restored = JobHandle.from_payload(started.value.to_payload())
+    assert is_ok(restored)
+    assert restored.value.originating_product_session_ref == "psess:ui-origin"
+    headless = JobHandle.try_create(
+        job_id="job:headless-origin",
+        owner=owner,
+        state="queued",
+        task_id="task:headless-origin",
+    )
+    assert is_ok(headless)
+    assert "originating_product_session_ref" not in headless.value.to_payload()
+    assert is_refusal(
+        JobHandle.from_payload({**dict(payload), "originating_product_session_ref": None})
+    )
+    changed = service.submit(
+        owner=owner,
+        task_id=task_id,
+        originating_product_session_ref="psess:changed-origin",
+    )
+    assert is_refusal(changed)
+
+
 def test_daemon_applies_total_mapping_agents_cannot() -> None:
     service, owner, task_id, dispatcher = _service()
     submitted = service.submit(owner=owner, task_id=task_id)

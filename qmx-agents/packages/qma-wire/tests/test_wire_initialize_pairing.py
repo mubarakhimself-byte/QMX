@@ -6,6 +6,8 @@ from pathlib import Path
 
 from qma.core.plugins.credential import parse_credential_ref
 from qma.wire import (
+    CANCEL_JOB_CAPABILITY,
+    CANCEL_JOB_CAPABILITY_MINTED,
     CONNECT_TYPES_EXISTED_AT_INSPECT_SHA,
     DEFERRED_INITIALIZE_CAPABILITIES,
     LIST_MAILBOX_CAPABILITY_MINTED,
@@ -43,7 +45,9 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert PAIRING_CAPABILITY == "pairing"
     assert LIST_MAILBOX_CAPABILITY_MINTED is True
     assert "list_mailbox" not in DEFERRED_INITIALIZE_CAPABILITIES
-    assert "cancel_job" in DEFERRED_INITIALIZE_CAPABILITIES
+    assert "cancel_job" not in DEFERRED_INITIALIZE_CAPABILITIES
+    assert CANCEL_JOB_CAPABILITY == "cancel_job"
+    assert CANCEL_JOB_CAPABILITY_MINTED is True
     assert "stage_artifact" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "transfer_artifact" not in DEFERRED_INITIALIZE_CAPABILITIES
     assert "transfer_complete" not in DEFERRED_INITIALIZE_CAPABILITIES
@@ -57,7 +61,7 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert caps["transfer_complete"] is True
     assert caps["pack_ui_request"] is True
     assert caps["get_pack_ui_request"] is True
-    assert "cancel_job" not in caps
+    assert caps["cancel_job"] is True
 
     params = InitializeParams.try_create(
         protocol_version=WIRE_PROTOCOL_VERSION,
@@ -69,6 +73,7 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert isinstance(negotiated, Ok)
     assert negotiated.value.capabilities[PAIRING_CAPABILITY] is True
     assert negotiated.value.capabilities["list_mailbox"] is True
+    assert negotiated.value.capabilities["cancel_job"] is True
     assert negotiated.value.capabilities.get("stage_artifact") is not True
     assert negotiated.value.capabilities.get(PACK_UI_REQUEST_CAPABILITY) is not True
     assert negotiated.value.capabilities.get(GET_PACK_UI_REQUEST_CAPABILITY) is not True
@@ -108,6 +113,7 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert pairing_neg.value.capabilities["stage_artifact"] is True
     assert pairing_neg.value.capabilities["transfer_artifact"] is True
     assert pairing_neg.value.capabilities["transfer_complete"] is True
+    assert pairing_neg.value.capabilities["cancel_job"] is True
 
     pack_requested = InitializeParams.try_create(
         protocol_version=WIRE_PROTOCOL_VERSION,

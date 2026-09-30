@@ -160,6 +160,7 @@ from qma.daemon.pairing import (
     authenticate_ws_pairing_upgrade,
     confirm_pairing_pending_by_code,
     is_daemon_http_origin,
+    load_pairing_session,
     origin_revoke_pairing,
     pairing_status_record_ids,
     redact_pairing_access_log,
@@ -181,11 +182,13 @@ from qma.daemon.taskgraph.projection import (
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
+from qma.wire.cancel_job import require_cancel_job_capability
 from qma.wire.editor_draft import (
     EDITOR_DRAFT_HTTP_PATH,
     require_editor_draft_capability,
 )
 from qma.wire.initialize import (
+    CANCEL_JOB_CAPABILITY,
     GET_EDITOR_DRAFT_HEAD_CAPABILITY,
     JSONRPC_VERSION,
     PAIRING_CAPABILITY,
@@ -2420,6 +2423,7 @@ class DaemonProcess:
                     or raw_caps.get(PUBLISH_EDITOR_DRAFT_CAPABILITY) is True
                     or PACK_UI_REQUEST_CAPABILITY in raw_caps
                     or GET_PACK_UI_REQUEST_CAPABILITY in raw_caps
+                    or raw_caps.get(CANCEL_JOB_CAPABILITY) is True
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2481,6 +2485,8 @@ class DaemonProcess:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:
             return self._dispatch_transfer_complete(connection, request, req_id)
+        if method == WireCommand.CANCEL_JOB.value:
+            return self._dispatch_cancel_job(connection, request, req_id)
         if method in {WireCommand.START_MISSION.value, WireCommand.LAUNCH_TASK.value}:
             gated = self._gate_live_invoke(method, request, req_id)
             if gated is not None:
@@ -2522,6 +2528,103 @@ class DaemonProcess:
         if is_refusal(sent):
             return _jsonrpc_refusal(req_id, sent)
         return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
+
+    def _dispatch_cancel_job(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object]:
+        """Serve originating-session cancel as an additive CT-40 command."""
+        capability = require_cancel_job_capability(connection.capabilities)
+        if is_refusal(capability):
+            return _jsonrpc_refusal(req_id, capability)
+        authorized = connection.authorize_command(WireCommand.CANCEL_JOB.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        raw_params = request.get("params")
+        if not isinstance(raw_params, Mapping):
+            return _jsonrpc_error(
+                req_id,
+                code=_JSONRPC_INVALID_REQUEST,
+                message="params must be an object",
+            )
+        params = cast("Mapping[str, object]", raw_params)
+        # The client does not select authority. The durable handle supplies its
+        # origin; resolve that row only after locating the exact durable handle.
+        handle_id = params.get("handle_id")
+        if not isinstance(handle_id, str):
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input("handle_id", "cancel_job requires a durable JobHandle id"),
+            )
+        handle = self.backtesting.jobs.handle_for(handle_id)
+        if handle is None:
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input(
+                    "handle_id", "cancel_job requires a minted JobHandle", given=handle_id
+                ),
+            )
+        origin = handle.originating_product_session_ref
+        if origin is None:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "originating_product_session_ref",
+                    "UI cancel is unavailable for a headless JobHandle",
+                    handle_id=handle_id,
+                ),
+            )
+        session = self._product_sessions.get(origin)
+        if is_refusal(session):
+            return _jsonrpc_refusal(req_id, session)
+        authenticated_operator = self._operator_principal()
+        pairing_record_id = connection.pairing_record_id
+        pairing = (
+            None
+            if pairing_record_id is None
+            else load_pairing_session(self.sqlite, pairing_record_id)
+        )
+        if (
+            session.value.principal != PrincipalClass.OPERATOR.value
+            or connection.principal_class is not PrincipalClass.OPERATOR
+            or authenticated_operator is None
+            or pairing is None
+            or pairing.revoked
+            or pairing.operator_principal != authenticated_operator
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "operator_principal",
+                    "cancel_job requires the operator who owns the local paired session",
+                    originating_principal_class=session.value.principal,
+                    connection_principal_class=(
+                        None
+                        if connection.principal_class is None
+                        else connection.principal_class.value
+                    ),
+                    pairing_record_id=pairing_record_id,
+                    pairing_operator_principal=(
+                        None if pairing is None else pairing.operator_principal
+                    ),
+                ),
+            )
+        cancelled = self.backtesting.jobs.cancel_from_product_session(
+            params,
+            principal_class=connection.principal_class or "",
+            operator_principal=authenticated_operator,
+            # Pair admission is bound to this daemon's sole local_operator. The
+            # CT-42 ProductSession record stores PrincipalClass, not an identity;
+            # its operator class therefore resolves to that sole durable ID.
+            originating_session_principal=authenticated_operator,
+            producer_id=connection.producer_id,
+            wire_id=req_id,
+        )
+        if is_refusal(cancelled):
+            return _jsonrpc_refusal(req_id, cancelled)
+        return _jsonrpc_result(req_id, cancelled.value.to_payload())
 
     def _dispatch_editor_draft_command(
         self,

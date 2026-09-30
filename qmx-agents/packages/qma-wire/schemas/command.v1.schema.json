@@ -22,6 +22,7 @@
         "retry_task",
         "transfer_artifact",
         "transfer_complete",
+        "cancel_job",
         "save_editor_draft",
         "publish_editor_draft"
       ]

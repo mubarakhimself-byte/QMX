@@ -10,7 +10,7 @@ only by the daemon (DEC-0316; FR-Q51). Coordinated cancel authority is
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -284,6 +284,7 @@ class JobHandle:
     attempt_id: int = 1
     artifacts: tuple[JobArtifact, ...] = ()
     later_commands: tuple[Mapping[str, object], ...] = ()
+    originating_product_session_ref: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if self.recorded_resolution is not None:
@@ -330,6 +331,8 @@ class JobHandle:
             "holds_environment_lease": self.holds_environment_lease,
             "later_commands": [dict(item) for item in self.later_commands],
         }
+        if self.originating_product_session_ref is not None:
+            payload["originating_product_session_ref"] = self.originating_product_session_ref
         if self.abort_reason is not None:
             payload["abort_reason"] = self.abort_reason
         if self.unknown_trigger is not None:
@@ -357,6 +360,7 @@ class JobHandle:
             attempt_id=self.attempt_id,
             artifacts=self.artifacts,
             later_commands=(*self.later_commands, dict(command)),
+            originating_product_session_ref=self.originating_product_session_ref,
         )
 
     def with_state(
@@ -385,6 +389,7 @@ class JobHandle:
             attempt_id=self.attempt_id,
             artifacts=self.artifacts,
             later_commands=self.later_commands,
+            originating_product_session_ref=self.originating_product_session_ref,
         )
 
     @classmethod
@@ -405,6 +410,7 @@ class JobHandle:
         attempt_id: object = 1,
         artifacts: object = (),
         later_commands: object = (),
+        originating_product_session_ref: object = None,
     ) -> Result[JobHandle]:
         if not isinstance(job_id, str) or job_id.strip() == "":
             return _invalid("job_id", "JobHandle requires a durable job id")
@@ -492,6 +498,20 @@ class JobHandle:
         parsed_later = _parse_later_commands(later_commands)
         if not isinstance(parsed_later, Ok):
             return parsed_later
+        if originating_product_session_ref is None:
+            origin: str | None = None
+        elif (
+            isinstance(originating_product_session_ref, str)
+            and originating_product_session_ref.strip().startswith("psess:")
+            and len(originating_product_session_ref.strip()) > len("psess:")
+        ):
+            origin = originating_product_session_ref.strip()
+        else:
+            return _invalid(
+                "originating_product_session_ref",
+                "optional originating product session is a non-empty psess: pointer",
+                given=repr(originating_product_session_ref),
+            )
         return Ok(
             cls(
                 job_id=durable_id,
@@ -508,11 +528,20 @@ class JobHandle:
                 attempt_id=parsed_attempt.value,
                 artifacts=parsed_artifacts.value,
                 later_commands=parsed_later.value,
+                originating_product_session_ref=origin,
             )
         )
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> Result[JobHandle]:
+        if (
+            "originating_product_session_ref" in payload
+            and payload["originating_product_session_ref"] is None
+        ):
+            return _invalid(
+                "originating_product_session_ref",
+                "optional originating product session is an omitted key, never null",
+            )
         recorded = payload.get("recorded_resolution")
         resolution: Mapping[str, object] | None
         if recorded is None:
@@ -537,6 +566,7 @@ class JobHandle:
             attempt_id=payload.get("attempt_id", 1),
             artifacts=payload.get("artifacts", ()),
             later_commands=payload.get("later_commands", ()),
+            originating_product_session_ref=payload.get("originating_product_session_ref"),
         )
 
 
@@ -566,4 +596,5 @@ def parse_job_handle(**fields: object) -> Result[JobHandle]:
         attempt_id=fields.get("attempt_id", 1),
         artifacts=fields.get("artifacts", ()),
         later_commands=fields.get("later_commands", ()),
+        originating_product_session_ref=fields.get("originating_product_session_ref"),
     )

@@ -47,9 +47,9 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # and get_pack_ui_request for recorded pack chrome (Epic 72).
 ADDABLE_QUERY_COUNT: Final[int] = 9
 # transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3), and
-# save/publish_editor_draft (Story 71; AM-09).
+# save/publish_editor_draft (Story 71; AM-09), and cancel_job (Epic 73; AM-09).
 # Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 4
+ADDABLE_COMMAND_COUNT: Final[int] = 5
 
 
 class MessageFamily(StrEnum):
@@ -65,7 +65,8 @@ class WireCommand(StrEnum):
 
     The nine packet-seed commands (DEC-0304) plus addable ``transfer_artifact``
     (Story 70.2; AM-09), dest-authored ``transfer_complete`` (Story 70.3),
-    and editor draft save/publish (Story 71; AM-09).
+    editor draft save/publish (Story 71; AM-09), and ``cancel_job`` (Epic 73;
+    AM-09).
     Seed count stays 9. Wire ``type`` values are snake_case identifiers
     derived from the packet's English labels
     (``install/enable plugin`` → ``install_enable_plugin``).
@@ -84,6 +85,7 @@ class WireCommand(StrEnum):
     TRANSFER_COMPLETE = "transfer_complete"
     SAVE_EDITOR_DRAFT = "save_editor_draft"
     PUBLISH_EDITOR_DRAFT = "publish_editor_draft"
+    CANCEL_JOB = "cancel_job"
 
 
 class WireQuery(StrEnum):

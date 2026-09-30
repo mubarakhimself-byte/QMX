@@ -88,6 +88,8 @@ HUMAN_GATE_COMMANDS: Final[frozenset[str]] = frozenset(
         "approve_hook_action",
         # AM-09 addable transfer is operator-issued (Story 70.2).
         "transfer_artifact",
+        # AM-09 cancel is authorized only by the originating-session operator (Epic 73).
+        "cancel_job",
     }
 )
 
