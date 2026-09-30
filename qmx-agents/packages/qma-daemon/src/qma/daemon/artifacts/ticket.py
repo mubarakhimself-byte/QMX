@@ -1122,14 +1122,16 @@ def placement_from_transfer_args(
     if not hosts:
         return Ok(None)
     instance_id, environment_id, placement_revision, credential_ref = identity
-    return Ok(DestinationPlacement(
-        instance_id=instance_id,
-        environment_id=environment_id,
-        placement_revision=placement_revision,
-        credential_ref=credential_ref,
-        same_daemon=False,
-        reachable_hosts=hosts,
-    ))
+    return Ok(
+        DestinationPlacement(
+            instance_id=instance_id,
+            environment_id=environment_id,
+            placement_revision=placement_revision,
+            credential_ref=credential_ref,
+            same_daemon=False,
+            reachable_hosts=hosts,
+        )
+    )
 
 
 def placement_from_host_configure(args: Mapping[str, object]) -> Result[DestinationPlacement]:

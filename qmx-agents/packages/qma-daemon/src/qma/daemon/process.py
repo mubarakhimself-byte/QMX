@@ -290,9 +290,7 @@ def _ws_accept_key(key: str) -> str:
     return base64.b64encode(digest).decode("ascii")
 
 
-def _emit_dest_control_note(
-    writer: asyncio.StreamWriter, note: Mapping[str, object]
-) -> bool:
+def _emit_dest_control_note(writer: asyncio.StreamWriter, note: Mapping[str, object]) -> bool:
     """Write one dest-control JSON-RPC notification as a WS text frame."""
     is_closing = getattr(writer, "is_closing", None)
     if callable(is_closing) and is_closing():
@@ -300,7 +298,7 @@ def _emit_dest_control_note(
     payload = json.dumps(dict(note), ensure_ascii=True).encode("utf-8")
     try:
         writer.write(_encode_ws_frame(payload))
-    except (ConnectionError, OSError, RuntimeError):
+    except ConnectionError, OSError, RuntimeError:
         return False
     return True
 
@@ -1012,9 +1010,7 @@ class DaemonProcess:
         """Dest control reconnect: issued and notified open tickets are pushed."""
         return self._transfers.dest_control_up(credential_ref)
 
-    def dest_control_down(
-        self, credential_ref: str, *, writer: object | None = None
-    ) -> None:
+    def dest_control_down(self, credential_ref: str, *, writer: object | None = None) -> None:
         self._transfers.dest_control_down(credential_ref, writer=writer)
 
     def transfer_artifact(
