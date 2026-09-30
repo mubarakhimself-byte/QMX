@@ -168,8 +168,12 @@ from qma.daemon.pairing import (
 )
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
-from qma.daemon.plugins.pack_ui import read_pack_ui_request_record
+from qma.daemon.plugins.pack_ui import (
+    read_pack_ui_request_record,
+    restore_plugin_install_records_projection,
+)
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
 from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.projection import (
@@ -754,6 +758,10 @@ class DaemonProcess:
             journal=journal,
             sqlite=substrate.sqlite,
         )
+        self._product_session_chrome = ProductSessionChrome(
+            sessions=self._product_sessions,
+            journal=journal,
+        )
         self._mailboxes = MailboxStore(
             _journal=journal,
             _sessions=self._product_sessions,
@@ -944,10 +952,24 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_drafts
-            activated = roster.activate(
-                principal=PrincipalClass.OPERATOR,
-                correlation_id=f"daemon-process:{boot_epoch_id}",
+            restored_plugin_records = restore_plugin_install_records_projection(
+                process.sqlite,
+                process.journal,
             )
+            if is_refusal(restored_plugin_records):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_plugin_records
+            roster.loader.restore_availability_revision(restored_plugin_records.value)
+            roster.loader.set_rehydrating_persisted_plugins(True)
+            try:
+                activated = roster.activate(
+                    principal=PrincipalClass.OPERATOR,
+                    correlation_id=f"daemon-process:{boot_epoch_id}",
+                )
+            finally:
+                roster.loader.set_rehydrating_persisted_plugins(False)
             if is_refusal(activated):
                 process._closed = True
                 process._journal.close()
@@ -987,6 +1009,25 @@ class DaemonProcess:
     @property
     def product_sessions(self) -> ProductSessionService:
         return self._product_sessions
+
+    def mount_pack_ui_view(
+        self, *, product_session_id: object, view_id: object
+    ) -> Result[PackUiMount]:
+        """Production host entry: derive pack, snapshot, clock, and grants from daemon state."""
+        return self._product_session_chrome.mount_pack_ui_view(
+            product_session_id=product_session_id,
+            view_id=view_id,
+            loader=self._roster.loader,
+        )
+
+    def press_pack_ui_action(
+        self, *, mount_id: object, payload: object
+    ) -> Result[Mapping[str, object]]:
+        """Production action bridge; renderer can identify a mount, not retarget it."""
+        return self._product_session_chrome.press_pack_ui_action(mount_id, payload)
+
+    def unmount_pack_ui_view(self, mount_id: object) -> bool:
+        return self._product_session_chrome.unmount_pack_ui_view(mount_id)
 
     def list_mailbox(
         self,
@@ -1195,7 +1236,6 @@ class DaemonProcess:
             return stored[pairing_record_id]
         return {
             LIST_MAILBOX_CAPABILITY: True,
-            GET_PACK_UI_REQUEST_CAPABILITY: True,
             STAGE_ARTIFACT_CAPABILITY: True,
             TRANSFER_ARTIFACT_CAPABILITY: True,
             TRANSFER_COMPLETE_CAPABILITY: True,

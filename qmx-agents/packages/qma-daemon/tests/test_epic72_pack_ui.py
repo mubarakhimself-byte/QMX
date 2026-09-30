@@ -6,15 +6,29 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+from pytest import MonkeyPatch
+from qma.core.operations import public_operation_descriptors
 from qma.core.plugins.context import PluginContext
 from qma.core.vocabulary.enums import PrincipalClass
+from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.persistence.substrate import PersistenceSubstrate
+from qma.daemon.plugins import loader as plugin_loader_module
+from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.plugins.loader import PluginLoader
-from qma.daemon.plugins.pack_ui import read_pack_ui_request_record
+from qma.daemon.plugins.pack_ui import (
+    read_pack_ui_request_record,
+    restore_plugin_install_records_projection,
+)
 from qma.daemon.process import DaemonProcess
 from qma.daemon.sessions.chrome import ProductSessionChrome
 from qma.daemon.sessions.product_session import ProductSessionService
-from qmf.core import is_ok, is_refusal
+from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
+
+_OPERATION = next(
+    descriptor
+    for descriptor in public_operation_descriptors()
+    if descriptor.op_id == "qmb.analysis.project"
+)
 
 
 def _raw_manifest(*, pack_ui_request: object = None, include_ui: bool = True) -> dict[str, object]:
@@ -25,14 +39,8 @@ def _raw_manifest(*, pack_ui_request: object = None, include_ui: bool = True) ->
         "desk": "research",
         "entrypoint": "research_corpus.activate",
         "dependencies": [],
-        "contributions": [{"point": "tool", "local_id": "search"}],
-        "contributes": [
-            {
-                "point": "tool",
-                "local_id": "search",
-                "input_schema": "search.input.v1",
-            }
-        ],
+        "contributions": [{"point": "tool", "local_id": _OPERATION.op_id}],
+        "contributes": [{"point": "tool", "local_id": _OPERATION.op_id}],
         "permissions": [],
         "migrations": [],
     }
@@ -50,10 +58,10 @@ def _valid_request(**overrides: object) -> dict[str, object]:
             {
                 "view_id": "view:search",
                 "view_version": 1,
-                "op_id": "search",
+                "op_id": _OPERATION.op_id,
                 "renderer": "native",
                 "slot": "canvas-widget",
-                "parameter_binding": {"schema": "search.input.v1"},
+                "parameter_binding": {"schema": _OPERATION.input_schema},
             }
         ],
         "nav": [
@@ -70,7 +78,7 @@ def _valid_view() -> dict[str, object]:
 
 
 def _activate(ctx: PluginContext) -> None:
-    ctx.register_tool("search", {"name": "search"})
+    ctx.register_tool(_OPERATION.op_id, {"name": _OPERATION.op_id})
 
 
 def _open(tmp_path: Path) -> PersistenceSubstrate:
@@ -79,13 +87,28 @@ def _open(tmp_path: Path) -> PersistenceSubstrate:
     return opened.value
 
 
+def _bind_journal(substrate: PersistenceSubstrate) -> AuthoritativeJournal:
+    base = 1_700_000_000_000_000_000
+    clock = DataDrivenClock(
+        boot_epoch_id="boot-72",
+        wall_instants=tuple(Instant(value_ns=base + index) for index in range(128)),
+        monotonic_ns=tuple(index * 1000 for index in range(128)),
+    )
+    bound = AuthoritativeJournal.bind(substrate, clock=clock)
+    assert is_ok(bound), bound
+    return bound.value
+
+
 def test_enable_ingests_valid_view_and_filters_invalid_items(tmp_path: Path) -> None:
     substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
     try:
-        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite)
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
         raw = _valid_request(
+            unknown_top_level="diagnose me",
             views=[
                 _valid_view(),
+                "malformed view item",
                 {
                     **_valid_view(),
                     "view_id": "view:missing-op",
@@ -98,10 +121,11 @@ def test_enable_ingests_valid_view_and_filters_invalid_items(tmp_path: Path) -> 
                 {
                     **_valid_view(),
                     "view_id": "view:schema-drift",
-                    "parameter_binding": {"schema": "search.input.v2"},
+                    "parameter_binding": {"schema": f"{_OPERATION.input_schema}.v2"},
                 },
             ],
             nav=[
+                "malformed nav item",
                 {"id": "search", "title": "Search", "slot": "app-nav", "view_ids": ["view:search"]},
                 {
                     "id": "missing",
@@ -123,7 +147,15 @@ def test_enable_ingests_valid_view_and_filters_invalid_items(tmp_path: Path) -> 
         assert "refuse_view_as_contribution_hit" in loaded.value.pack_ui_request.diagnostics
         assert "view_schema_drift" in loaded.value.pack_ui_request.diagnostics
         assert "nav_view_id_not_declared" in loaded.value.pack_ui_request.diagnostics
+        assert "unknown_pack_ui_field" in loaded.value.pack_ui_request.diagnostics
+        assert any(
+            item.startswith("invalid_view:") for item in loaded.value.pack_ui_request.diagnostics
+        )
+        assert any(
+            item.startswith("invalid_nav:") for item in loaded.value.pack_ui_request.diagnostics
+        )
     finally:
+        journal.close()
         substrate.close()
 
 
@@ -131,8 +163,9 @@ def test_invalid_or_duplicate_ui_does_not_rollback_operations_and_empty_is_valid
     tmp_path: Path,
 ) -> None:
     substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
     try:
-        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite)
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
         malformed = loader.enable(
             _raw_manifest(pack_ui_request={"schema": "qmx.ui.pack_ui_request.v2"}),
             activator=_activate,
@@ -183,6 +216,93 @@ def test_invalid_or_duplicate_ui_does_not_rollback_operations_and_empty_is_valid
         assert headless.value.pack_ui_request.failure_class is None
         assert headless.value.pack_ui_request.request.views == ()
     finally:
+        journal.close()
+        substrate.close()
+
+
+def test_optional_renderer_resource_is_a_mount_diagnostic_not_enable_failure(
+    tmp_path: Path,
+) -> None:
+    substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
+    try:
+        request = _valid_request(views=[{**_valid_view(), "renderer": "mcp-app"}])
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
+        enabled = loader.enable(
+            _raw_manifest(pack_ui_request=request),
+            activator=_activate,
+        )
+        assert is_ok(enabled), enabled
+        assert enabled.value.published
+        assert enabled.value.pack_ui_request is not None
+        assert enabled.value.pack_ui_request.request.views[0].ui_resource is None
+
+        sessions = ProductSessionService(journal=journal, sqlite=substrate.sqlite)
+        minted = sessions.mint(
+            product_session_id="psess:renderer-adapter",
+            profile="authoring",
+            principal="operator",
+            contribution={
+                "qualified_id": f"research-corpus:{_OPERATION.op_id}",
+                "package_version": "0.1.0",
+            },
+            instance_id=enabled.value.instance_id,
+            config_revision=0,
+            as_of="2026-09-30T00:00:00Z",
+            granted_ops=(),
+            scope_path=[{"kind": "desk", "id": "research"}],
+        )
+        assert is_ok(minted), minted
+        mounted = ProductSessionChrome(sessions=sessions, journal=journal).mount_pack_ui_view(
+            product_session_id="psess:renderer-adapter",
+            view_id="view:search",
+            loader=loader,
+        )
+        assert is_ok(mounted), mounted
+        assert mounted.value.pane == "empty"
+        assert mounted.value.diagnostics == ("mcp_app_resource_missing",)
+    finally:
+        journal.close()
+        substrate.close()
+
+
+def test_projection_failure_keeps_ops_and_records_empty_view_diagnostic(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
+
+    def fail_projection(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("synthetic projection fault")
+
+    monkeypatch.setattr(plugin_loader_module, "write_pack_ui_request_record", fail_projection)
+    try:
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
+        loaded = loader.enable(
+            _raw_manifest(pack_ui_request=_valid_request()),
+            activator=_activate,
+        )
+        assert is_ok(loaded), loaded
+        assert loaded.value.published
+        ingested = loaded.value.pack_ui_request
+        assert ingested is not None
+        assert ingested.failure_class == "view"
+        assert ingested.request.views == ()
+        assert "pack_ui_persistence_failed" in ingested.diagnostics
+        record = read_pack_ui_request_record(
+            substrate.sqlite,
+            instance_id=loaded.value.instance_id,
+            availability_revision=loaded.value.availability_revision,
+        )
+        assert record is not None
+        stored_request = cast("dict[str, object]", record["pack_ui_request"])
+        assert stored_request["views"] == []
+        assert record["failure_class"] == "view"
+        events = journal.read_events()
+        assert is_ok(events)
+        assert any(event.event == "plugin.pack_ui_projection_failed" for event in events.value)
+    finally:
+        journal.close()
         substrate.close()
 
 
@@ -190,8 +310,9 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
     tmp_path: Path,
 ) -> None:
     substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
     try:
-        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite)
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
         loaded = loader.enable(
             _raw_manifest(pack_ui_request=_valid_request()),
             activator=_activate,
@@ -239,12 +360,14 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
         assert is_refusal(missing_capability)
         assert missing_capability.context.get("name") == "get_pack_ui_request"
     finally:
+        journal.close()
         substrate.close()
 
 
 def test_pack_ui_request_projection_survives_writer_reopen(tmp_path: Path) -> None:
     substrate = _open(tmp_path)
-    loader = PluginLoader(pack_ui_sqlite=substrate.sqlite)
+    journal = _bind_journal(substrate)
+    loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
     loaded = loader.enable(
         _raw_manifest(pack_ui_request=_valid_request()),
         activator=_activate,
@@ -252,10 +375,14 @@ def test_pack_ui_request_projection_survives_writer_reopen(tmp_path: Path) -> No
     assert is_ok(loaded), loaded
     instance_id = loaded.value.instance_id
     availability_revision = loaded.value.availability_revision
+    journal.close()
     substrate.close()
 
     reopened = _open(tmp_path)
+    reopened_journal = _bind_journal(reopened)
     try:
+        restored = restore_plugin_install_records_projection(reopened.sqlite, reopened_journal)
+        assert is_ok(restored), restored
         record = read_pack_ui_request_record(
             reopened.sqlite,
             instance_id=instance_id,
@@ -264,13 +391,74 @@ def test_pack_ui_request_projection_survives_writer_reopen(tmp_path: Path) -> No
         assert record is not None
         assert record["pack_ui_request"] == _valid_request()
     finally:
+        reopened_journal.close()
         reopened.close()
+
+
+def test_daemon_compose_rebuilds_instance_rows_and_reuses_revision(tmp_path: Path) -> None:
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    configs = research_corpus_plugin_load_config(seed)
+    first_result = DaemonProcess.compose(
+        tmp_path,
+        machine="epic72-compose",
+        boot_epoch_id="boot-72-compose-a",
+        plugin_load_configs=configs,
+    )
+    assert is_ok(first_result), first_result
+    first = first_result.value
+    first_loaded = first.roster.loader.get("research-corpus")
+    assert first_loaded is not None
+    first_revision = first_loaded.availability_revision
+    first_record = read_pack_ui_request_record(
+        first.sqlite,
+        instance_id=first_loaded.instance_id,
+        availability_revision=first_revision,
+    )
+    assert first_record is not None
+    first_request = cast("dict[str, object]", first_record["pack_ui_request"])
+    assert first_request["views"] == []
+    first.close()
+
+    second_result = DaemonProcess.compose(
+        tmp_path,
+        machine="epic72-compose",
+        boot_epoch_id="boot-72-compose-b",
+        plugin_load_configs=configs,
+    )
+    assert is_ok(second_result), second_result
+    second = second_result.value
+    try:
+        second_loaded = second.roster.loader.get("research-corpus")
+        assert second_loaded is not None
+        assert second_loaded.availability_revision == first_revision
+        old_record = read_pack_ui_request_record(
+            second.sqlite,
+            instance_id=first_loaded.instance_id,
+            availability_revision=first_revision,
+        )
+        assert old_record is not None
+        old_request = cast("dict[str, object]", old_record["pack_ui_request"])
+        assert old_request["views"] == []
+        current = second.get_pack_ui_request(
+            {
+                "instance_id": second_loaded.instance_id,
+                "availability_revision": second_loaded.availability_revision,
+            },
+            operator_principal=PrincipalClass.OPERATOR,
+            capabilities={"get_pack_ui_request": True},
+        )
+        assert is_ok(current), current
+        assert current.value.request.views == ()
+    finally:
+        second.close()
 
 
 def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(tmp_path: Path) -> None:
     substrate = _open(tmp_path)
+    journal = _bind_journal(substrate)
     try:
-        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite)
+        loader = PluginLoader(pack_ui_sqlite=substrate.sqlite, journal=journal)
         loaded = loader.enable(
             _raw_manifest(pack_ui_request=_valid_request()),
             activator=_activate,
@@ -279,13 +467,16 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(tmp_path: Pa
         ingested = loaded.value.pack_ui_request
         assert ingested is not None
         view = ingested.request.views[0]
-        sessions = ProductSessionService(sqlite=substrate.sqlite)
+        sessions = ProductSessionService(journal=journal, sqlite=substrate.sqlite)
         assert is_ok(
             sessions.mint(
                 product_session_id="psess:desk-1",
                 profile="authoring",
                 principal="operator",
-                contribution={"qualified_id": "research-corpus:search", "package_version": "0.1.0"},
+                contribution={
+                    "qualified_id": f"research-corpus:{_OPERATION.op_id}",
+                    "package_version": "0.1.0",
+                },
                 instance_id=loaded.value.instance_id,
                 config_revision=4,
                 as_of="2026-09-30T00:00:00Z",
@@ -293,12 +484,18 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(tmp_path: Pa
                 scope_path=[{"kind": "desk", "id": "research"}],
             )
         )
-        chrome = ProductSessionChrome(sessions=sessions)
+        chrome = ProductSessionChrome(sessions=sessions, journal=journal)
+        process = DaemonProcess.__new__(DaemonProcess)
+        object.__setattr__(process, "_product_session_chrome", chrome)
+        object.__setattr__(process, "_roster", SimpleNamespace(loader=loader))
         other_session = sessions.mint(
             product_session_id="psess:desk-elsewhere",
             profile="authoring",
             principal="operator",
-            contribution={"qualified_id": "research-corpus:search", "package_version": "0.1.0"},
+            contribution={
+                "qualified_id": f"research-corpus:{_OPERATION.op_id}",
+                "package_version": "0.1.0",
+            },
             instance_id="pack:another-instance",
             config_revision=4,
             as_of="2026-09-30T00:00:00Z",
@@ -306,65 +503,124 @@ def test_action_context_paint_zero_exactly_one_and_ambiguous_grants(tmp_path: Pa
             scope_path=[{"kind": "desk", "id": "research"}],
         )
         assert is_ok(other_session), other_session
-        cross_instance = chrome.mint_action_context(
+        cross_instance = process.mount_pack_ui_view(
             product_session_id="psess:desk-elsewhere",
-            view=view,
-            loader=loader,
-            instance_id=loaded.value.instance_id,
-            config_revision=4,
-            snapshot_cursor=1,
-            now="2026-09-30T00:00:00Z",
+            view_id=view.view_id,
         )
         assert is_refusal(cross_instance)
 
-        ungranted = chrome.mint_action_context(
+        ungranted = process.mount_pack_ui_view(
             product_session_id="psess:desk-1",
-            view=view,
-            loader=loader,
-            instance_id=loaded.value.instance_id,
-            config_revision=4,
-            snapshot_cursor=1,
-            now="2026-09-30T00:00:00Z",
+            view_id=view.view_id,
         )
         assert is_ok(ungranted), ungranted
-        assert ungranted.value.grant_id is None and ungranted.value.allowed_op_ids == ()
+        assert ungranted.value.action_context is not None
+        assert ungranted.value.action_context.grant_id is None
+        assert ungranted.value.action_context.allowed_op_ids == ()
+        assert is_refusal(
+            process.press_pack_ui_action(
+                mount_id=ungranted.value.mount_id,
+                payload={"action": _OPERATION.op_id, "input": {}},
+            )
+        )
+        expired_only = sessions.host_grant(
+            "psess:desk-1",
+            grant_id="grant:expired-only",
+            op_id=_OPERATION.op_id,
+            op_version=_OPERATION.version,
+            effect_class="read",
+            parameter_ceiling={"allow_keys": list(_OPERATION.configuration.required_keys)},
+            expires_at="2020-01-01T00:00:00Z",
+        )
+        assert is_ok(expired_only), expired_only
+        expired_mount = process.mount_pack_ui_view(
+            product_session_id="psess:desk-1",
+            view_id=view.view_id,
+        )
+        assert is_ok(expired_mount), expired_mount
+        assert expired_mount.value.action_context is not None
+        assert expired_mount.value.action_context.grant_id is None
 
         def grant(grant_id: str) -> None:
             minted = sessions.host_grant(
                 "psess:desk-1",
                 grant_id=grant_id,
-                op_id="search",
-                op_version=1,
+                op_id=_OPERATION.op_id,
+                op_version=_OPERATION.version,
                 effect_class="read",
-                parameter_ceiling={"allow_keys": []},
+                parameter_ceiling={"allow_keys": list(_OPERATION.configuration.required_keys)},
                 expires_at="2026-12-31T00:00:00Z",
             )
             assert is_ok(minted), minted
 
         grant("grant:search-a")
-        one = chrome.mint_action_context(
+        one = process.mount_pack_ui_view(
             product_session_id="psess:desk-1",
-            view=view,
-            loader=loader,
-            instance_id=loaded.value.instance_id,
-            config_revision=4,
-            snapshot_cursor=2,
-            now="2026-09-30T00:00:00Z",
+            view_id=view.view_id,
         )
         assert is_ok(one), one
-        assert one.value.grant_id == "grant:search-a"
-        assert one.value.allowed_op_ids == ("search",)
-        grant("grant:search-b")
-        ambiguous = chrome.mint_action_context(
+        first_context = one.value.action_context
+        assert first_context is not None
+        assert first_context.grant_id == "grant:search-a"
+        assert first_context.allowed_op_ids == (_OPERATION.op_id,)
+        remount = process.mount_pack_ui_view(
             product_session_id="psess:desk-1",
-            view=view,
-            loader=loader,
-            instance_id=loaded.value.instance_id,
-            config_revision=4,
-            snapshot_cursor=3,
-            now="2026-09-30T00:00:00Z",
+            view_id=view.view_id,
+        )
+        assert is_ok(remount), remount
+        assert remount.value.mount_id != one.value.mount_id
+        assert remount.value.action_context is not first_context
+        press = process.press_pack_ui_action(
+            mount_id=one.value.mount_id,
+            payload={
+                "action": _OPERATION.op_id,
+                "input": {"run_fp1": "run-1"},
+                "instance_id": "pack:foreign",
+                "grant_id": "grant:foreign",
+            },
+        )
+        assert is_ok(press), press
+        assert press.value["context"] is first_context
+        assert is_refusal(
+            process.press_pack_ui_action(
+                mount_id=one.value.mount_id,
+                payload={"action": _OPERATION.op_id, "input": {}, "unknown": True},
+            )
+        )
+        grant("grant:search-b")
+        ambiguous = process.mount_pack_ui_view(
+            product_session_id="psess:desk-1",
+            view_id=view.view_id,
         )
         assert is_refusal(ambiguous)
         assert ambiguous.context.get("refusal") == "GRANT_AMBIGUOUS"
+
+        assert is_ok(
+            sessions.revoke_grant(
+                "psess:desk-1",
+                grant_id="grant:search-a",
+                principal="operator",
+                reason="test revocation",
+                revoked_at="2026-09-30T00:00:00Z",
+            )
+        )
+        assert is_ok(
+            sessions.revoke_grant(
+                "psess:desk-1",
+                grant_id="grant:search-b",
+                principal="operator",
+                reason="test revocation",
+                revoked_at="2026-09-30T00:00:00Z",
+            )
+        )
+        after_revoke = process.mount_pack_ui_view(
+            product_session_id="psess:desk-1",
+            view_id=view.view_id,
+        )
+        assert is_ok(after_revoke), after_revoke
+        assert after_revoke.value.action_context is not None
+        assert after_revoke.value.action_context.grant_id is None
+        assert first_context.grant_id == "grant:search-a"
     finally:
+        journal.close()
         substrate.close()

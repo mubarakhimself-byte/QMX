@@ -16,8 +16,8 @@ daemon continuity intact.
 
 from __future__ import annotations
 
+import contextlib
 import re
-import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -63,12 +63,16 @@ from qma.daemon.plugins.migrations import (
 )
 from qma.daemon.plugins.pack_ui import (
     IngestedPackUiRequest,
+    empty_pack_ui_request,
     ingest_pack_ui_request,
+    plugin_availability_revision_high_water,
+    read_latest_plugin_install_record,
+    record_pack_ui_projection_failure,
     write_pack_ui_request_record,
 )
 from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Ok, Result, is_ok
-from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
+from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 if TYPE_CHECKING:
@@ -317,6 +321,7 @@ class PluginLoader:
     )
     _availability_revision: int = field(default=0, init=False)
     _disabled_data_intact: set[str] = field(default_factory=set[str], init=False)
+    _rehydrating_persisted_plugins: bool = field(default=False, init=False)
 
     @property
     def file_watcher_enabled(self) -> bool:
@@ -339,6 +344,16 @@ class PluginLoader:
     def availability_revision(self) -> int:
         """Roster generation stamped onto ContributionHits at the last swap."""
         return self._availability_revision
+
+    def restore_availability_revision(self, revision: int) -> None:
+        """Raise the roster generation from its journal-backed projection high-water."""
+        if revision < 0:
+            raise ValueError("availability revision must be non-negative")
+        self._availability_revision = max(self._availability_revision, revision)
+
+    def set_rehydrating_persisted_plugins(self, enabled: bool) -> None:
+        """Bracket compose-time plugin activation that reuses unchanged journal rows."""
+        self._rehydrating_persisted_plugins = enabled
 
     def continuity_snapshot(self) -> DaemonContinuitySnapshot:
         """Return the continuity markers the loader must leave untouched."""
@@ -716,13 +731,19 @@ class PluginLoader:
     def _commit_roster(
         self,
         staged: tuple[PublishedContribution, ...],
+        *,
+        reuse_availability_revision: int | None = None,
     ) -> tuple[PublishedContribution, ...]:
         """Swap staged rows onto the live roster and publish availability_revision."""
-        next_rev = self._availability_revision + 1
+        next_rev = (
+            self._availability_revision + 1
+            if reuse_availability_revision is None
+            else reuse_availability_revision
+        )
         stamped = tuple(replace(row, availability_revision=next_rev) for row in staged)
         published = [*self._published, *stamped]
         self._published = published
-        self._availability_revision = next_rev
+        self._availability_revision = max(self._availability_revision, next_rev)
         return stamped
 
     def snapshot_published_roster(
@@ -807,29 +828,80 @@ class PluginLoader:
                 field="entrypoint",
             ) from exc
 
-        published = self._commit_roster(staged)
-        ingested = ingest_pack_ui_request(raw_manifest, manifest)
+        if self.journal is not None:
+            high_water = plugin_availability_revision_high_water(self.journal)
+            if is_refusal(high_water):
+                exit_stack.close()
+                raise PluginLoadError(
+                    "could not recover durable plugin availability revision",
+                    plugin_id=manifest.id,
+                    field="availability_revision",
+                )
+            self.restore_availability_revision(high_water.value)
+        try:
+            ingested = ingest_pack_ui_request(raw_manifest, manifest)
+        except Exception:
+            # A malformed renderer document is never allowed to unwind an
+            # already-published operations roster.
+            ingested = empty_pack_ui_request(manifest, "pack_ui_ingestion_failed")
         instance_id = f"pack:{manifest.id}"
-        availability_revision = self._availability_revision
-        if self.pack_ui_sqlite is not None:
+        reuse_revision: int | None = None
+        if self._rehydrating_persisted_plugins and self.pack_ui_sqlite is not None:
+            try:
+                latest = read_latest_plugin_install_record(
+                    self.pack_ui_sqlite,
+                    instance_id=instance_id,
+                )
+                if (
+                    latest is not None
+                    and latest.get("pack_id") == manifest.id
+                    and latest.get("pack_version") == manifest.version
+                    and latest.get("pack_ui_request") == dict(ingested.request.to_payload())
+                    and latest.get("diagnostics") == list(ingested.diagnostics)
+                    and latest.get("failure_class") == ingested.failure_class
+                ):
+                    latest_revision = latest.get("availability_revision")
+                    if isinstance(latest_revision, int) and not isinstance(latest_revision, bool):
+                        reuse_revision = latest_revision
+            except Exception:
+                # A missing or damaged projection will be repaired by the next
+                # append-only plugin event, without blocking operations activation.
+                reuse_revision = None
+        published = self._commit_roster(
+            staged,
+            reuse_availability_revision=reuse_revision,
+        )
+        availability_revision = (
+            self._availability_revision if reuse_revision is None else reuse_revision
+        )
+        if self.pack_ui_sqlite is not None and self.journal is not None and reuse_revision is None:
             try:
                 write_pack_ui_request_record(
                     self.pack_ui_sqlite,
+                    self.journal,
                     instance_id=instance_id,
                     availability_revision=availability_revision,
                     plugin_id=manifest.id,
                     package_version=manifest.version,
                     ingested=ingested,
                 )
-            except (OSError, RuntimeError, sqlite3.Error, ValueError) as exc:
-                exit_stack.close()
-                self._drop_published(manifest.id)
-                self._availability_revision -= 1
-                raise PluginLoadError(
-                    f"could not persist PackUiRequest projection: {exc}",
-                    plugin_id=manifest.id,
-                    field="pack_ui_request",
-                ) from exc
+            except Exception:
+                # UI is best-effort chrome: projection/journal failure cannot roll
+                # back the already-published operations roster.
+                ingested = empty_pack_ui_request(
+                    manifest,
+                    "pack_ui_persistence_failed",
+                )
+                with contextlib.suppress(Exception):
+                    record_pack_ui_projection_failure(
+                        self.pack_ui_sqlite,
+                        self.journal,
+                        instance_id=instance_id,
+                        availability_revision=availability_revision,
+                        plugin_id=manifest.id,
+                        package_version=manifest.version,
+                        ingested=ingested,
+                    )
         loaded = LoadedPlugin(
             manifest=manifest,
             context=context,

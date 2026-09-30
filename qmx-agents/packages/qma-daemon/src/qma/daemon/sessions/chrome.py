@@ -12,7 +12,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final, cast
+from uuid import uuid4
 
+from qma.core.operations import public_operation_descriptors
 from qma.core.ports.extensibility import (
     GAP_0081_STATUS,
     QMA_UI_CONTRACT_STATUS,
@@ -21,7 +23,8 @@ from qma.core.ports.extensibility import (
     ui_view_contribution_point_minted,
 )
 from qma.core.vocabulary.enums import GrantEvaluationMoment
-from qma.daemon.plugins.loader import PluginLoader
+from qma.daemon.journal.authoritative import AuthoritativeJournal
+from qma.daemon.plugins.loader import LoadedPlugin, PluginLoader, PublishedContribution
 from qma.daemon.sessions.product_session import (
     CHROME_KINDS,
     CHROME_OWNS_GRANTS,
@@ -39,10 +42,11 @@ from qma.daemon.sessions.product_session import (
     refuse_tab_as_product_session,
     refuse_tab_mints_session,
 )
-from qma.wire.action_context import ActionContext
+from qma.wire.action_context import ActionContext, validate_action_context_press
 from qma.wire.contribution_listing import refuse_hit_as_grant
 from qma.wire.federated_discovery import ContributionHit, parse_federated_hit
 from qma.wire.grant_record import GrantRecord
+from qma.wire.invocation_envelope import OperationDescriptor, format_utc_iso_z
 from qma.wire.pack_ui_request import PackUiView
 from qma.wire.view_presentation import (
     VIEW_FILLS_GAP_0081_CHROME,
@@ -56,6 +60,7 @@ from qma.wire.view_presentation import (
     refuse_view_as_contribution_hit,
     refuse_view_durable_work,
 )
+from qmf.core.chrono import Instant
 from qmf.core.refusal import Ok, RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
@@ -69,6 +74,7 @@ __all__ = [
     "VIEW_IS_PLUGIN_CONTRIBUTION_POINT",
     "VIEW_IS_PRODUCT_SESSION",
     "VIEW_OWNS_GRANTS",
+    "PackUiMount",
     "ProductSessionChrome",
     "looks_like_chrome_id",
     "refuse_chrome_owns_grants",
@@ -81,6 +87,20 @@ __all__ = [
 CHROME_GAP: Final[str] = "GAP-0081"
 CHROME_UI_CONTRACT_STATUS: Final[str] = QMA_UI_CONTRACT_STATUS
 CHROME_UI_VIEW_MINTED: Final[bool] = ui_view_contribution_point_minted()
+_NATIVE_ADAPTER_AVAILABLE: Final[bool] = True
+
+
+@dataclass(frozen=True, slots=True)
+class PackUiMount:
+    """Opaque host mount handle; context and operation binding are host-owned."""
+
+    mount_id: str
+    instance_id: str
+    view: PackUiView
+    renderer: str
+    pane: str
+    action_context: ActionContext | None
+    diagnostics: tuple[str, ...] = ()
 
 
 def _chrome_token(value: object, field: str) -> Result[str]:
@@ -97,6 +117,223 @@ class ProductSessionChrome:
     """Query-only tab/window/view surface over a journaled product_session."""
 
     sessions: ProductSessionService = field(default_factory=ProductSessionService)
+    journal: AuthoritativeJournal | None = None
+    _mounts: dict[str, PackUiMount] = field(default_factory=dict[str, PackUiMount], init=False)
+
+    def mount_pack_ui_view(
+        self,
+        *,
+        product_session_id: object,
+        view_id: object,
+        loader: PluginLoader,
+    ) -> Result[PackUiMount]:
+        """Resolve the live view and all invocation bindings from host state."""
+        session = self.sessions.get(product_session_id)
+        if is_refusal(session):
+            return session
+        instance = session.value.app_instance_id or session.value.context.instance_id
+        if instance is None:
+            chosen = tuple(
+                item.id for item in session.value.selected_refs if item.kind == "instance_id"
+            )
+            if len(chosen) != 1:
+                return policy_rejection(
+                    "instance_id",
+                    "mount requires an app instance or exactly one selected instance ref",
+                    selected_instance_count=len(chosen),
+                )
+            instance = chosen[0]
+        if not instance.strip():
+            return policy_rejection("instance_id", "product session has no enabled instance")
+        plugin_id = instance.removeprefix("pack:")
+        loaded = loader.get(plugin_id)
+        if loaded is None or loaded.instance_id != instance or loaded.pack_ui_request is None:
+            return policy_rejection(
+                "instance_id",
+                "selected pack instance is not currently enabled",
+                instance_id=instance,
+            )
+        if not isinstance(view_id, str):
+            return invalid_input("view_id", "view_id must select a recorded view")
+        view = next(
+            (item for item in loaded.pack_ui_request.request.views if item.view_id == view_id),
+            None,
+        )
+        if view is None:
+            return policy_rejection("view_id", "view is not in the recorded PackUiRequest")
+
+        descriptor = next(
+            (item for item in public_operation_descriptors() if item.op_id == view.op_id),
+            None,
+        )
+        if descriptor is None or descriptor.input_schema != view.parameter_schema:
+            return self._empty_mount(instance, view, "operation_descriptor_unavailable")
+        contribution = self._resolve_contribution(loader, loaded, view, descriptor)
+        if is_refusal(contribution):
+            return contribution
+
+        diagnostic = self._renderer_diagnostic(view)
+        if diagnostic is not None:
+            return self._empty_mount(instance, view, diagnostic)
+        if self.journal is None:
+            return self._empty_mount(instance, view, "host_journal_unavailable")
+        events = self.journal.read_events()
+        if is_refusal(events):
+            return events
+        snapshot_cursor = events.value[-1].journal_seq if events.value else 0
+        timestamp = self.journal.stamp_durable()
+        if is_refusal(timestamp):
+            return timestamp
+        now = format_utc_iso_z(Instant(value_ns=timestamp.value.recorded_at))
+
+        grants = self.sessions.granted_records(session.value.product_session_id)
+        if is_refusal(grants):
+            return grants
+        config_revision = session.value.context.config_revision
+        matching: list[GrantRecord] = []
+        for grant in grants.value:
+            if (
+                grant.audience != session.value.product_session_id
+                or grant.instance_id != instance
+                or grant.config_revision != config_revision
+                or grant.op_id != descriptor.op_id
+                or grant.op_version != descriptor.version
+                or grant.contribution.qualified_id != contribution.value.qualified_id
+                or grant.contribution.package_version != loaded.manifest.version
+            ):
+                continue
+            active = self.sessions.ledger.evaluate(
+                grant_id=grant.grant_id,
+                moment=GrantEvaluationMoment.ACCEPT,
+                now=now,
+            )
+            if not is_refusal(active):
+                matching.append(active.value)
+            elif active.context.get("code") != "GRANT_INACTIVE":
+                return active
+        if len(matching) > 1:
+            return TypedRefusal(
+                category=RefusalCategory.POLICY_REJECTION,
+                retryability=Retryability.AFTER_CONDITION,
+                context=MappingProxyType(
+                    {
+                        "field": "grant_id",
+                        "reason": "multiple active GrantRecords match this exact mount",
+                        "refusal": "GRANT_AMBIGUOUS",
+                        "instance_id": instance,
+                        "op_id": descriptor.op_id,
+                        "product_session_id": session.value.product_session_id,
+                    }
+                ),
+                after_condition_descriptor="the operator leaves exactly one matching GrantRecord",
+            )
+        selected: GrantRecord | None = matching[0] if matching else None
+        built = ActionContext.try_create(
+            psess=session.value.product_session_id,
+            view_id=view.view_id,
+            qualified_id=contribution.value.qualified_id,
+            package_version=loaded.manifest.version,
+            instance_id=instance,
+            config_revision=config_revision,
+            grant_id=None if selected is None else selected.grant_id,
+            allowed_op_ids=() if selected is None else (descriptor.op_id,),
+            account_scope=None if selected is None else selected.account_scope,
+            snapshot_cursor=snapshot_cursor,
+            operation_descriptor=descriptor,
+            parameter_allow_keys=(
+                () if selected is None else selected.parameter_ceiling.allow_keys
+            ),
+        )
+        if is_refusal(built):
+            return built
+        mount = PackUiMount(
+            mount_id=f"pack-ui-mount:{uuid4().hex}",
+            instance_id=instance,
+            view=view,
+            renderer=view.renderer,
+            pane="native",
+            action_context=built.value,
+        )
+        self._mounts[mount.mount_id] = mount
+        return Ok(mount)
+
+    def press_pack_ui_action(
+        self, mount_id: object, payload: object
+    ) -> Result[Mapping[str, object]]:
+        """Validate a renderer press against the immutable server-owned mount."""
+        if not isinstance(mount_id, str) or mount_id not in self._mounts:
+            return policy_rejection("mount_id", "unknown or disposed Pack UI mount")
+        mount = self._mounts[mount_id]
+        if mount.action_context is None:
+            return policy_rejection("mount_id", "empty renderer mount cannot dispatch actions")
+        return validate_action_context_press(payload, context=mount.action_context)
+
+    def unmount_pack_ui_view(self, mount_id: object) -> bool:
+        """Invalidate a mount context without cancelling any accepted work."""
+        return self._mounts.pop(mount_id, None) is not None if isinstance(mount_id, str) else False
+
+    def _empty_mount(
+        self, instance_id: str, view: PackUiView, diagnostic: str
+    ) -> Result[PackUiMount]:
+        mount = PackUiMount(
+            mount_id=f"pack-ui-mount:{uuid4().hex}",
+            instance_id=instance_id,
+            view=view,
+            renderer=view.renderer,
+            pane="empty",
+            action_context=None,
+            diagnostics=(diagnostic,),
+        )
+        self._mounts[mount.mount_id] = mount
+        return Ok(mount)
+
+    @staticmethod
+    def _renderer_diagnostic(view: PackUiView) -> str | None:
+        if view.renderer == "native" and _NATIVE_ADAPTER_AVAILABLE:
+            return None
+        if view.renderer == "mcp-app" and not view.ui_resource:
+            return "mcp_app_resource_missing"
+        if view.renderer == "json-render" and not view.catalog_ref:
+            return "json_render_catalog_missing"
+        return "renderer_adapter_unavailable"
+
+    @staticmethod
+    def _resolve_contribution(
+        loader: PluginLoader,
+        loaded: LoadedPlugin,
+        view: PackUiView,
+        descriptor: OperationDescriptor,
+    ) -> Result[PublishedContribution]:
+        manifest = loaded.manifest
+        candidates: list[PublishedContribution] = []
+        for declared in manifest.contributes:
+            if declared.point != "tool":
+                continue
+            qualified_id = declared.qualified_id or f"{manifest.id}:{declared.local_id}"
+            local_id = declared.local_id
+            if view.op_id not in {local_id, qualified_id}:
+                continue
+            published = next(
+                (
+                    row
+                    for row in loader.published_contributions()
+                    if row.plugin_id == manifest.id
+                    and row.package_version == manifest.version
+                    and row.availability_revision == loaded.availability_revision
+                    and row.point == declared.point
+                    and row.qualified_id == qualified_id
+                ),
+                None,
+            )
+            if published is not None:
+                candidates.append(published)
+        if len(candidates) != 1 or candidates[0].qualified_id is None:
+            return policy_rejection(
+                "op_id",
+                "view operation does not resolve to one canonical published tool contribution",
+                op_id=view.op_id,
+            )
+        return Ok(candidates[0])
 
     @property
     def occupancy(self) -> str:
@@ -246,136 +483,6 @@ class ProductSessionChrome:
         if "view_id" in payload or "tab_id" in payload:
             return refuse_tab_as_product_session(fields=("view_id",))
         return Ok(attached.value)
-
-    def mint_action_context(
-        self,
-        *,
-        product_session_id: object,
-        view: PackUiView,
-        loader: PluginLoader,
-        instance_id: object,
-        config_revision: object,
-        snapshot_cursor: object,
-        now: object,
-        op_version: object = 1,
-    ) -> Result[ActionContext]:
-        """Mint a fresh mount context from live pack and existing session grants."""
-        if not isinstance(instance_id, str):
-            return invalid_input("instance_id", "instance_id is a host-selected identifier")
-        plugin_id = instance_id.removeprefix("pack:")
-        loaded = loader.get(plugin_id)
-        if loaded is None or loaded.instance_id != instance_id:
-            return policy_rejection(
-                "instance_id",
-                "ActionContext requires the selected enabled pack instance",
-                instance_id=instance_id,
-            )
-        if loaded.pack_ui_request is None or view not in loaded.pack_ui_request.request.views:
-            return policy_rejection("view_id", "view is not in the recorded PackUiRequest")
-        contribution = next(
-            (
-                row
-                for row in loader.published_contributions()
-                if row.plugin_id == loaded.manifest.id
-                and row.package_version == loaded.manifest.version
-                and row.availability_revision == loaded.availability_revision
-                and row.qualified_id in {view.op_id, f"{loaded.manifest.id}:{view.op_id}"}
-            ),
-            None,
-        )
-        if contribution is None or contribution.qualified_id is None:
-            return policy_rejection(
-                "op_id",
-                "view operation has no live contribution for this enabled instance",
-                op_id=view.op_id,
-                instance_id=instance_id,
-            )
-        session = self.sessions.get(product_session_id)
-        if is_refusal(session):
-            return session
-        session_instance: object | None = (
-            session.value.app_instance_id or session.value.context.instance_id
-        )
-        if session_instance is None:
-            selected_instance_ids = tuple(
-                row.id for row in session.value.selected_refs if row.kind == "instance_id"
-            )
-            if len(selected_instance_ids) != 1:
-                return policy_rejection(
-                    "instance_id",
-                    "mount requires an app-bound instance or exactly one selected instance_id ref",
-                    selected_instance_count=len(selected_instance_ids),
-                )
-            session_instance = selected_instance_ids[0]
-        if session_instance != instance_id:
-            return policy_rejection(
-                "instance_id",
-                "ActionContext instance_id must come from the existing product session",
-                bound_instance_id=session_instance,
-                given_instance_id=instance_id,
-            )
-        if config_revision != session.value.context.config_revision:
-            return policy_rejection(
-                "config_revision",
-                "ActionContext config_revision must come from the existing product session",
-                bound_config_revision=session.value.context.config_revision,
-                given_config_revision=config_revision,
-            )
-        config_revision = session.value.context.config_revision
-        grants = self.sessions.granted_records(session.value.product_session_id)
-        if is_refusal(grants):
-            return grants
-        matching: list[GrantRecord] = []
-        for grant in grants.value:
-            if (
-                grant.audience != session.value.product_session_id
-                or grant.instance_id != instance_id
-                or grant.config_revision != config_revision
-                or grant.op_id != view.op_id
-                or grant.op_version != op_version
-                or grant.contribution.qualified_id != contribution.qualified_id
-                or grant.contribution.package_version != loaded.manifest.version
-            ):
-                continue
-            active = self.sessions.ledger.evaluate(
-                grant_id=grant.grant_id,
-                moment=GrantEvaluationMoment.ACCEPT,
-                now=now,
-            )
-            if not is_refusal(active):
-                matching.append(active.value)
-            elif active.context.get("code") != "GRANT_INACTIVE":
-                return active
-        if len(matching) > 1:
-            return TypedRefusal(
-                category=RefusalCategory.POLICY_REJECTION,
-                retryability=Retryability.AFTER_CONDITION,
-                context=MappingProxyType(
-                    {
-                        "field": "grant_id",
-                        "reason": "multiple active GrantRecords match this exact mount",
-                        "refusal": "GRANT_AMBIGUOUS",
-                        "instance_id": instance_id,
-                        "op_id": view.op_id,
-                        "product_session_id": session.value.product_session_id,
-                    }
-                ),
-                after_condition_descriptor="the operator leaves exactly one matching GrantRecord",
-            )
-        selected: GrantRecord | None = matching[0] if matching else None
-        built = ActionContext.try_create(
-            psess=session.value.product_session_id,
-            view_id=view.view_id,
-            qualified_id=contribution.qualified_id,
-            package_version=loaded.manifest.version,
-            instance_id=instance_id,
-            config_revision=config_revision,
-            grant_id=None if selected is None else selected.grant_id,
-            allowed_op_ids=() if selected is None else (view.op_id,),
-            account_scope=None if selected is None else selected.account_scope,
-            snapshot_cursor=snapshot_cursor,
-        )
-        return built
 
     def grants_for(self, chrome_id: object) -> TypedRefusal:
         """Chrome never owns grants."""

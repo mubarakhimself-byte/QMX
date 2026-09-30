@@ -91,6 +91,20 @@ def test_get_pack_ui_request_is_addable_and_exact_revision_keyed() -> None:
             {"instance_id": "pack:research-corpus", "availability_revision": 4}
         )
     )
+    parsed_http_revision = parse_pack_ui_request_args(
+        {"instance_id": "pack:research-corpus", "availability_revision": "42"}
+    )
+    assert is_ok(parsed_http_revision)
+    assert parsed_http_revision.value["availability_revision"] == 42
+    for invalid_revision in ("+1", "-1", "1.0", " 1", "\u0661"):
+        assert is_refusal(
+            parse_pack_ui_request_args(
+                {
+                    "instance_id": "pack:research-corpus",
+                    "availability_revision": invalid_revision,
+                }
+            )
+        )
     assert is_refusal(
         parse_pack_ui_request_args(
             {"instance_id": "pack:research-corpus", "availability_revision": True}
@@ -113,6 +127,8 @@ def test_action_context_ignores_renderer_authority_and_validates_action_input() 
         allowed_op_ids=(descriptor.op_id,),
         account_scope=None,
         snapshot_cursor=19,
+        operation_descriptor=descriptor,
+        parameter_allow_keys=("run_fp1",),
     )
     assert is_ok(created), created
     hostile = {
@@ -126,11 +142,16 @@ def test_action_context_ignores_renderer_authority_and_validates_action_input() 
         "account_scope": "foreign-account",
         "allowed_op_ids": ["other.op"],
         "snapshot_cursor": 999,
+        "availability_revision": 999,
+        "view_id": "view:foreign",
+        "qualified_id": "other-pack:project",
+        "package_version": "999.0.0",
+        "op_version": "999",
+        "parameter_ceiling": {"allow_keys": ["*snake_fp1"]},
     }
     result = validate_action_context_press(
         hostile,
         context=created.value,
-        descriptors={descriptor.op_id: descriptor},
     )
     assert is_ok(result), result
     assert result.value["context"] is created.value
@@ -139,14 +160,18 @@ def test_action_context_ignores_renderer_authority_and_validates_action_input() 
         validate_action_context_press(
             {"action": "other.op", "input": {}, "allowed_op_ids": ["other.op"]},
             context=created.value,
-            descriptors={descriptor.op_id: descriptor},
         )
     )
     assert is_refusal(
         validate_action_context_press(
             {"action": descriptor.op_id, "input": {"not_a_field": True}},
             context=created.value,
-            descriptors={descriptor.op_id: descriptor},
+        )
+    )
+    assert is_refusal(
+        validate_action_context_press(
+            {"action": descriptor.op_id, "input": {"run_fp1": "run-1", "other": True}},
+            context=created.value,
         )
     )
     parsed = parse_action_input({"action": descriptor.op_id, "input": {}, "grant_id": "attacker"})

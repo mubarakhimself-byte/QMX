@@ -336,6 +336,11 @@ def parse_pack_ui_request_args(value: object) -> Result[Mapping[str, object]]:
     if not isinstance(instance, Ok):
         return instance
     revision = body.get("availability_revision")
+    # HTTP query strings are text while JSON-RPC carries a number. Accept only
+    # canonical ASCII decimal text so transport coercion cannot admit signs,
+    # whitespace, booleans, or locale-specific digits.
+    if isinstance(revision, str) and revision.isascii() and revision.isdecimal():
+        revision = int(revision)
     if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
         return _refusal("availability_revision", "availability_revision must be non-negative")
     return Ok(MappingProxyType({"instance_id": instance.value, "availability_revision": revision}))

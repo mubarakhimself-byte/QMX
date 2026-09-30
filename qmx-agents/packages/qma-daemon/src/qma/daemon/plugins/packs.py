@@ -216,12 +216,18 @@ class DeskPluginRoster:
             self.loader = loader
             if sqlite is not None:
                 self.loader.pack_ui_sqlite = sqlite
+            if authoring_journal is not None:
+                self.loader.journal = authoring_journal
             if configs:
                 merged = dict(loader.plugin_load_configs)
                 merged.update(configs)
                 self.loader.plugin_load_configs = merged
         else:
-            self.loader = PluginLoader(plugin_load_configs=configs, pack_ui_sqlite=sqlite)
+            self.loader = PluginLoader(
+                plugin_load_configs=configs,
+                pack_ui_sqlite=sqlite,
+                journal=authoring_journal,
+            )
         if backtesting is not None:
             self.backtesting = backtesting
         else:

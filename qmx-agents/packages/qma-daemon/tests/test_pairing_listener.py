@@ -951,6 +951,81 @@ def test_list_mailbox_http_follows_initialize_capabilities(tmp_path: Path) -> No
     asyncio.run(_run())
 
 
+def test_pack_ui_request_http_requires_negotiated_capability_and_parses_revision(
+    tmp_path: Path,
+) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-72-pack-ui-http")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host, port = bound.value.host, bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            auth = format_pairing_authorization(proof)
+            assert is_ok(auth), auth
+            enabled = process.roster.loader.get("research-corpus")
+            assert enabled is not None
+            revision = enabled.availability_revision
+            target = (
+                "/q/get_pack_ui_request?instance_id=pack:research-corpus"
+                f"&availability_revision={revision}"
+            )
+            headers = {"Origin": _ORIGIN, "Authorization": auth.value}
+
+            uninitialized = await _exchange(host, port, _http_bytes("GET", target, headers=headers))
+            status, _response_headers, body = _split_http(uninitialized)
+            assert status in {400, 403}
+            refusal = _json_object(body)
+            refusal_obj = cast("dict[str, object]", refusal["refusal"])
+            context = cast("dict[str, object]", refusal_obj["context"])
+            assert context["reason"] == "negotiated query capability is required"
+            assert context["name"] == "get_pack_ui_request"
+
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                initialized = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={"get_pack_ui_request": True},
+                )
+                assert "error" not in initialized, initialized
+                result_obj = cast("dict[str, object]", initialized["result"])
+                negotiated = cast("dict[str, object]", result_obj["capabilities"])
+                assert negotiated["get_pack_ui_request"] is True
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+            accepted = await _exchange(host, port, _http_bytes("GET", target, headers=headers))
+            accepted_status, _accepted_headers, accepted_body = _split_http(accepted)
+            assert accepted_status == 200, accepted
+            response = _json_object(accepted_body)
+            assert response["ok"] is True
+            result = cast("dict[str, object]", response["result"])
+            assert result["instance_id"] == "pack:research-corpus"
+            assert result["availability_revision"] == revision
+            request = cast("dict[str, object]", result["pack_ui_request"])
+            assert request["views"] == []
+
+            malformed = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    target.replace(str(revision), "1.5"),
+                    headers=headers,
+                ),
+            )
+            malformed_status, _malformed_headers, malformed_body = _split_http(malformed)
+            assert malformed_status in {400, 403}
+            malformed_response = _json_object(malformed_body)
+            assert malformed_response["ok"] is False
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
 def test_pairing_ws_handle_close_closes_writer() -> None:
     class _Writer:
         def __init__(self) -> None:
