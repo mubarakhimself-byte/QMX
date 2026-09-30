@@ -37,12 +37,12 @@ def test_cancel_job_is_addable_ct40_not_a_seed_alias() -> None:
     assert CANCEL_JOB_COMMAND != "stop_run"
 
 
-def test_payload_fences_alias_and_expected_state() -> None:
-    parsed = parse_cancel_job_payload(_payload(job_id="job:cancel-73"))
+def test_payload_uses_canonical_handle_id_and_fences_expected_state() -> None:
+    parsed = parse_cancel_job_payload(_payload())
     assert is_ok(parsed), parsed
-    assert parsed.value["handle_id"] == parsed.value["job_id"]
+    assert parsed.value["handle_id"] == "job:cancel-73"
     assert parsed.value["expected_state"] == "queued"
-    assert is_refusal(parse_cancel_job_payload(_payload(job_id="job:other")))
+    assert is_refusal(parse_cancel_job_payload(_payload(job_id="job:cancel-73")))
     assert is_refusal(parse_cancel_job_payload(_payload(attempt_id=True)))
     assert is_refusal(parse_cancel_job_payload(_payload(expected_state="unknown-ish")))
     assert is_refusal(parse_cancel_job_payload(_payload(unexpected_extension=True)))
@@ -84,4 +84,5 @@ def test_cancel_job_schema_describes_the_required_payload() -> None:
     assert is_ok(validate_family_payload("cancel_job", _payload()))
     assert is_refusal(validate_family_payload("cancel_job", {"handle_id": "job:missing"}))
     assert is_refusal(validate_family_payload("cancel_job", _payload(unexpected_extension=True)))
+    assert is_refusal(validate_family_payload("cancel_job", _payload(job_id="job:cancel-73")))
     assert is_refusal(validate_instance({"family": "command", "name": "cancel_job"}, "command"))

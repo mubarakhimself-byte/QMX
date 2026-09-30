@@ -911,6 +911,7 @@ class DaemonProcess:
                 experiments=experiments,
                 task_graphs=task_graphs,
             )
+            process.backtesting.bind_product_sessions(process.product_sessions)
             process._bind_operator_logger(
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,

@@ -90,6 +90,7 @@ from qma.daemon.experiments.service import (
     RegisteredExperiment,
 )
 from qma.daemon.plugins.context import DaemonPluginContext, PluginContextError
+from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.taskgraph.records import DispatchLease
 from qma.daemon.tools.registry import ToolRegistry
 from qmf.core import Ok, Result, is_ok, is_refusal
@@ -375,6 +376,7 @@ class BacktestingService:
             transport if transport is not None else CliQmbDoorTransport()
         )
         self._experiments = experiments
+        self._product_sessions: ProductSessionService | None = None
         self._artifact_root = Path(artifact_root) if artifact_root is not None else None
         self._occupancy: dict[str, str] = {}
 
@@ -413,6 +415,34 @@ class BacktestingService:
     def bind_experiments(self, experiments: ExperimentSpecService) -> None:
         """Attach ExperimentSpec product truth for coordinated placement."""
         self._experiments = experiments
+
+    def bind_product_sessions(self, sessions: ProductSessionService) -> None:
+        """Attach the durable ProductSession projection used to validate UI origin."""
+        self._product_sessions = sessions
+
+    def _validated_operator_origin(self, origin: object | None) -> Result[str | None]:
+        if origin is None:
+            return Ok(None)
+        sessions = self._product_sessions
+        if sessions is None:
+            return invalid_input(
+                "originating_product_session_ref",
+                "UI-origin placement requires a bound ProductSession projection",
+            )
+        session = sessions.get(origin)
+        if is_refusal(session):
+            return invalid_input(
+                "originating_product_session_ref",
+                "UI-origin placement requires an existing ProductSession",
+                given=repr(origin),
+            )
+        if session.value.principal != "operator":
+            return invalid_input(
+                "originating_product_session_ref",
+                "UI-origin placement requires an operator ProductSession",
+                principal=session.value.principal,
+            )
+        return Ok(session.value.product_session_id)
 
     @property
     def scheduling_authority(self) -> None:
@@ -494,6 +524,7 @@ class BacktestingService:
         lane: object = None,
         workbench_lane: object = None,
         command: object | None = None,
+        originating_product_session_ref: object | None = None,
     ) -> Result[QmbPlacement]:
         """Agent → QMA backtest tool → Backtesting Service."""
         if tool_id != QMB_BACKTEST_TOOL_ID:
@@ -534,6 +565,7 @@ class BacktestingService:
             qmb_ledger_ref=qmb_ledger_ref,
             ct32_ref=ct32_ref,
             command=command,
+            originating_product_session_ref=originating_product_session_ref,
         )
 
     def submit(
@@ -545,8 +577,12 @@ class BacktestingService:
         qmb_ledger_ref: object = None,
         ct32_ref: object = None,
         command: object | None = None,
+        originating_product_session_ref: object | None = None,
     ) -> Result[QmbPlacement]:
         """Place one ``qmb`` run in an eligible environment through the QMB door."""
+        origin = self._validated_operator_origin(originating_product_session_ref)
+        if is_refusal(origin):
+            return origin
         if command is not None:
             classified = classify_qmb_door_occupancy(command)
             if is_refusal(classified):
@@ -587,6 +623,7 @@ class BacktestingService:
             owner=request.owner,
             task_id=request.task_id,
             job_id=job_id,
+            originating_product_session_ref=origin.value,
         )
         if is_refusal(minted):
             return minted

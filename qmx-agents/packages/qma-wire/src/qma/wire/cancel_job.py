@@ -112,7 +112,7 @@ def parse_cancel_job_payload(value: object) -> Result[Mapping[str, object]]:
         return _invalid("payload", "cancel_job payload must be an object")
     entry = cast("Mapping[str, object]", value)
     allowed = frozenset(
-        {"handle_id", "job_id", "logical_run_id", "attempt_id", "command_id", "expected_state"}
+        {"handle_id", "logical_run_id", "attempt_id", "command_id", "expected_state"}
     )
     unknown = tuple(str(key) for key in entry if key not in allowed)
     if unknown:
@@ -138,13 +138,6 @@ def parse_cancel_job_payload(value: object) -> Result[Mapping[str, object]]:
         expected_state = parse_closed(JobHandleState, raw_state)
     except VocabularyError as exc:
         return _invalid("expected_state", str(exc), given=repr(raw_state))
-    if "job_id" in entry and entry["job_id"] != handle_id:
-        return _policy(
-            "job_id",
-            "handle_id is job_id; the two identifiers must match exactly",
-            handle_id=handle_id,
-            job_id=entry["job_id"],
-        )
     parsed: dict[str, object] = {
         "handle_id": handle_id.strip(),
         "logical_run_id": logical_run_id.strip(),
@@ -152,8 +145,6 @@ def parse_cancel_job_payload(value: object) -> Result[Mapping[str, object]]:
         "command_id": command_id.strip(),
         "expected_state": expected_state.value,
     }
-    if "job_id" in entry:
-        parsed["job_id"] = handle_id.strip()
     return Ok(MappingProxyType(parsed))
 
 

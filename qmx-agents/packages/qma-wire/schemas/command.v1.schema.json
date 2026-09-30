@@ -48,11 +48,10 @@
             "additionalProperties": false,
             "required": ["handle_id", "logical_run_id", "attempt_id", "command_id", "expected_state"],
             "properties": {
-              "handle_id": { "type": "string", "minLength": 1 },
-              "job_id": {
+              "handle_id": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Optional compatibility alias; when present it must equal handle_id."
+                "description": "The exact durable JobHandle job_id."
               },
               "logical_run_id": { "type": "string", "minLength": 1 },
               "attempt_id": { "type": "integer", "minimum": 1 },

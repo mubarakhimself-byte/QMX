@@ -23,6 +23,7 @@ from qma.daemon.backtest import BacktestingService, RecordingQmbDoorTransport
 from qma.daemon.envs import ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.plugins import DaemonPluginContext
+from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.tools import ToolRegistry
 from qmf.core import is_ok, is_refusal
 
@@ -115,6 +116,61 @@ def test_route_is_agent_tool_service_door_qmb() -> None:
     assert len(transport.invocations) == 1
     assert transport.invocations[0].kind is QmbDoorKind.CLI
     assert service.jobs.router.lease_for("task-bt-1") is None
+
+
+def test_backtesting_origin_is_validated_and_absent_by_default() -> None:
+    service, _transport = _service(ExecutionEnvironmentKind.DOCKER, ExecutionEnvironmentKind.LOCAL)
+    sessions = ProductSessionService()
+    minted = sessions.mint(
+        product_session_id="psess:qmb-origin",
+        profile="authoring",
+        principal="operator",
+        contribution={"package_version": "0.1.0", "qualified_id": "analysis-backtest:qmb"},
+        instance_id=None,
+        config_revision=1,
+        as_of="2026-09-20T00:00:00Z",
+    )
+    assert is_ok(minted), minted
+    service.bind_product_sessions(sessions)
+
+    ui_placed = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="task-bt-ui-origin",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-ui-origin",
+        evidence_ref="evidence:ui-origin",
+        originating_product_session_ref="psess:qmb-origin",
+    )
+    assert is_ok(ui_placed), ui_placed
+    assert ui_placed.value.handle.originating_product_session_ref == "psess:qmb-origin"
+    assert (
+        ui_placed.value.handle.to_payload()["originating_product_session_ref"] == "psess:qmb-origin"
+    )
+
+    headless = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="task-bt-headless-origin",
+        environment_ref="env:local",
+        experiment_spec_fp1="fp1:spec-headless-origin",
+        evidence_ref="evidence:headless-origin",
+    )
+    assert is_ok(headless), headless
+    assert headless.value.handle.originating_product_session_ref is None
+    assert "originating_product_session_ref" not in headless.value.handle.to_payload()
+
+    invalid_origin = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="task-bt-invalid-origin",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-invalid-origin",
+        evidence_ref="evidence:invalid-origin",
+        originating_product_session_ref="psess:not-minted",
+    )
+    assert is_refusal(invalid_origin)
+    assert service.jobs.handle_for("qmb:env:docker:task-bt-invalid-origin") is None
 
 
 def test_one_qmb_job_per_environment_further_job_refused() -> None:
