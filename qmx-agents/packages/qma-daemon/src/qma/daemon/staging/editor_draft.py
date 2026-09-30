@@ -899,6 +899,15 @@ class EditorDraftService:
                                 "matching editor authoring contribution is malformed",
                                 contribution_id=candidate_id,
                             )
+                        if (
+                            candidate.get("enabled") is True
+                            and self.authoring_lifecycle is not None
+                            and principal_class is not PrincipalClass.OPERATOR
+                        ):
+                            return policy_rejection(
+                                "principal_class",
+                                "replacing enabled authoring requires an authenticated operator",
+                            )
                         parsed_previous = _parse_graph_template(candidate_bytes.encode("utf-8"))
                         if is_refusal(parsed_previous):
                             return parsed_previous
@@ -1005,11 +1014,6 @@ class EditorDraftService:
         if not isinstance(retired, list):
             return invalid_input("journal", "replacement identities must be a list")
         if retired and self.authoring_lifecycle is not None:
-            if principal_class is not PrincipalClass.OPERATOR:
-                return policy_rejection(
-                    "principal_class",
-                    "replacing enabled authoring requires an authenticated operator",
-                )
             for item in cast(list[object], retired):
                 if not isinstance(item, Mapping):
                     return invalid_input("journal", "replacement identity is malformed")

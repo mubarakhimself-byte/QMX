@@ -14,6 +14,7 @@ from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.taskgraph.records import GraphTemplate
 from qmf.core import Result, is_ok, is_refusal
 from qmf.core.fingerprint import fingerprint_bytes
 from qmf.data.store.refusals import policy_rejection
@@ -206,3 +207,31 @@ def test_authoring_disable_requires_operator_and_preserves_live_state_on_persist
     assert not any(
         item.startswith("research-authoring-") for item in after_disable_restart.loader.loaded_ids()
     )
+
+
+def test_repeated_disable_does_not_remove_a_later_provider_template(tmp_path: Path) -> None:
+    roster_root = tmp_path / "authoring-pack"
+    contribution = _contribution(enabled=False)
+    _write_roster(roster_root, contribution)
+    runtime = _runtime(tmp_path, roster_root)
+    contribution_id = str(contribution["contribution_id"])
+    enabled = runtime.enable_published_authoring_contribution(
+        contribution_id,
+        principal=PrincipalClass.OPERATOR,
+        correlation_id="disable-owner",
+    )
+    assert is_ok(enabled), enabled
+    disabled = runtime.disable_published_authoring_contribution(
+        contribution_id, principal=PrincipalClass.OPERATOR
+    )
+    assert is_ok(disabled), disabled
+    assert runtime.templates.get_versioned("demo:authoring", "1.0.0") is None
+
+    later_provider_template = GraphTemplate(qualified_id="demo:authoring", version="1.0.0")
+    registered = runtime.templates.register(later_provider_template)
+    assert is_ok(registered), registered
+    repeated = runtime.disable_published_authoring_contribution(
+        contribution_id, principal=PrincipalClass.OPERATOR
+    )
+    assert is_ok(repeated), repeated
+    assert runtime.templates.get_versioned("demo:authoring", "1.0.0") is later_provider_template

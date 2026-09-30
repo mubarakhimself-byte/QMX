@@ -14,7 +14,9 @@ from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL, PairingWsHandle
 from qma.daemon.plugins import research_corpus_plugin_load_config
+from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.process import DaemonProcess
+from qma.daemon.taskgraph.records import GraphTemplate
 from qma.wire.auth import format_pairing_authorization
 from qma.wire.initialize import (
     GET_EDITOR_DRAFT_HEAD_CAPABILITY,
@@ -500,6 +502,22 @@ def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path
             record_id, proof = await _pair_over_listener(process, host, port)
             auth = format_pairing_authorization(proof)
             assert is_ok(auth), auth
+            unrelated_template = GraphTemplate(qualified_id="demo:live-editor", version="0.9.0")
+            assert is_ok(process.roster.templates.register(unrelated_template))
+            roster = AtomicRoster(tmp_path / "authoring-pack")
+            initial_roster = roster.load()
+            assert is_ok(initial_roster), initial_roster
+            unrelated_provider: dict[str, object] = {
+                "contribution_id": "pack:live-unrelated",
+                "point": "graph_template",
+                "qualified_id": "demo:live-editor",
+                "version": "0.9.0",
+                "published": True,
+                "enabled": True,
+            }
+            seeded_roster = dict(initial_roster.value)
+            seeded_roster["published"] = [unrelated_provider]
+            assert is_ok(roster.publish(seeded_roster))
             reader, writer = await _upgrade_paired_ws(host, port, proof)
             try:
                 initialized = await _initialize_ws(
@@ -562,9 +580,118 @@ def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path
                 await writer.drain()
                 published = await _ws_read_json(reader)
                 assert "error" not in published, published
+                first_result = cast("dict[str, object]", published["result"])
+                first_contribution_id = first_result["contribution_id"]
+                assert isinstance(first_contribution_id, str)
             finally:
                 writer.close()
                 await writer.wait_closed()
+
+            enabled = process.roster.enable_published_authoring_contribution(
+                first_contribution_id,
+                principal=PrincipalClass.OPERATOR,
+                correlation_id="live-editor-replacement-enable",
+            )
+            assert is_ok(enabled), enabled
+            first_plugin_id = enabled.value.manifest.id
+            assert process.roster.templates.get_versioned("demo:live-editor", "1.0.0") is not None
+
+            # Reconnect through the same authenticated transport for the successor.
+            second_reader, second_writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                second_init = await _initialize_ws(
+                    second_writer,
+                    second_reader,
+                    capabilities={
+                        SAVE_EDITOR_DRAFT_CAPABILITY: True,
+                        GET_EDITOR_DRAFT_HEAD_CAPABILITY: True,
+                        PUBLISH_EDITOR_DRAFT_CAPABILITY: True,
+                    },
+                )
+                assert "error" not in second_init, second_init
+                successor = process.artifacts.stage_complete_bytes(
+                    json.dumps(
+                        {
+                            "artifact_kind": "graph_template",
+                            "qualified_id": "demo:live-editor",
+                            "version": "2.0.0",
+                            "nodes": [],
+                            "edges": [],
+                        },
+                        sort_keys=True,
+                    ).encode()
+                )
+                assert is_ok(successor), successor
+                _ws_write(
+                    second_writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": SAVE_EDITOR_DRAFT_CAPABILITY,
+                        "params": {"fp1": successor.value.fp1},
+                    },
+                )
+                await second_writer.drain()
+                second_saved = await _ws_read_json(second_reader)
+                assert "error" not in second_saved, second_saved
+                successor_draft = cast("dict[str, object]", second_saved["result"])
+                successor_draft_id = successor_draft["editor_draft_id"]
+                assert isinstance(successor_draft_id, str)
+
+                publish_request: dict[str, object] = {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": PUBLISH_EDITOR_DRAFT_CAPABILITY,
+                    "params": {
+                        "editor_draft_id": successor_draft_id,
+                        "expected_revision": successor.value.fp1,
+                    },
+                }
+                _ws_write(second_writer, publish_request)
+                await second_writer.drain()
+                first_ack = await _ws_read_json(second_reader)
+                assert "error" not in first_ack, first_ack
+                # Treat the first response as the lost acknowledgement; the
+                # same-revision retry must replay its durable predecessor receipt.
+                after_first_ack_roster = roster.load()
+                after_first_ack_events = process.journal.read_events()
+                assert is_ok(after_first_ack_roster) and is_ok(after_first_ack_events)
+                generation = after_first_ack_roster.value["roster_generation"]
+                publish_event_count = sum(
+                    event.event == "editor_draft.published"
+                    for event in after_first_ack_events.value
+                )
+
+                retry_request = dict(publish_request)
+                retry_request["id"] = 4
+                _ws_write(second_writer, retry_request)
+                await second_writer.drain()
+                retried = await _ws_read_json(second_reader)
+                assert "error" not in retried, retried
+                retried_result = cast("dict[str, object]", retried["result"])
+                assert retried_result["contribution_id"] != first_contribution_id
+                final_roster = roster.load()
+                final_events = process.journal.read_events()
+                assert is_ok(final_roster) and is_ok(final_events)
+                assert final_roster.value["roster_generation"] == generation
+                assert (
+                    sum(event.event == "editor_draft.published" for event in final_events.value)
+                    == publish_event_count
+                )
+                rows = cast(list[dict[str, object]], final_roster.value["published"])
+                assert any(row.get("contribution_id") == "pack:live-unrelated" for row in rows)
+                assert any(
+                    row.get("version") == "2.0.0" and row.get("enabled") is False for row in rows
+                )
+                assert first_plugin_id not in process.roster.loader.loaded_ids()
+                assert process.roster.templates.get_versioned("demo:live-editor", "1.0.0") is None
+                assert (
+                    process.roster.templates.get_versioned("demo:live-editor", "0.9.0")
+                    is unrelated_template
+                )
+            finally:
+                second_writer.close()
+                await second_writer.wait_closed()
 
             queried = await _exchange(
                 host,

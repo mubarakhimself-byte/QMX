@@ -347,6 +347,22 @@ class DeskPluginRoster:
     ) -> Result[PrincipalClass]:
         return self.loader.require_operator(cast(LoadCommand, command), principal)
 
+    def _authoring_uninstall_tombstoned(self, contribution_id: str) -> Result[bool]:
+        if self.authoring_journal is None:
+            return Ok(False)
+        events = self.authoring_journal.read_events()
+        if is_refusal(events):
+            return events
+        for event in events.value:
+            payload = getattr(event, "payload", None)
+            if (
+                getattr(event, "event", None) == "editor_draft.uninstalled"
+                and isinstance(payload, Mapping)
+                and cast(Mapping[str, object], payload).get("contribution_id") == contribution_id
+            ):
+                return Ok(True)
+        return Ok(False)
+
     @staticmethod
     def _authoring_plugin_id(contribution_id: str) -> str:
         digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
@@ -427,9 +443,12 @@ class DeskPluginRoster:
         version: str,
     ) -> Result[None]:
         loaded = self.loader.get(self._authoring_plugin_id(contribution_id))
-        if loaded is not None and not self._authoring_plugin_matches(
-            contribution_id, qualified_id, version
-        ):
+        if loaded is None:
+            # The exact catalog tuple may have been claimed by another provider
+            # after this generated plugin was removed. Without a live generated
+            # owner, an idempotent retry must not unregister that provider.
+            return Ok(None)
+        if not self._authoring_plugin_matches(contribution_id, qualified_id, version):
             return policy_rejection(
                 "contribution_id",
                 "generated plugin identity does not match the targeted authoring contribution",
@@ -637,6 +656,15 @@ class DeskPluginRoster:
             return invalid_input(
                 "authoring_roster_root",
                 "local authoring roster is not configured for this daemon",
+            )
+        tombstoned = self._authoring_uninstall_tombstoned(contribution_id)
+        if is_refusal(tombstoned):
+            return tombstoned
+        if tombstoned.value:
+            return policy_rejection(
+                "contribution_id",
+                "uninstalled authoring contributions cannot be re-enabled",
+                contribution_id=contribution_id,
             )
         loaded_roster = roster.load()
         if is_refusal(loaded_roster):

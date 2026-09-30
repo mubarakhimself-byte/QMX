@@ -819,6 +819,87 @@ def test_same_revision_retry_refuses_corrupted_durable_receipt(tmp_path: Path) -
         _close(substrate, journal)
 
 
+def test_uninstall_journal_refusal_keeps_roster_runtime_and_catalog_unchanged(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        runtime = DeskPluginRoster(
+            authoring_roster_root=service.authoring_roster_root,
+            authoring_journal=journal,
+        )
+        service.authoring_lifecycle = runtime
+        body = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:uninstall-refusal",
+                "version": "1.0.0",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        ).encode()
+        fp1 = _stage(artifacts, body)
+        saved = service.save_editor_draft(
+            {"fp1": fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(saved), saved
+        published = service.publish_editor_draft(
+            {"editor_draft_id": saved.value.editor_draft_id, "expected_revision": fp1},
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+            principal_class=PrincipalClass.OPERATOR,
+        )
+        assert is_ok(published), published
+        contribution_id = str(published.value["contribution_id"])
+        enabled = runtime.enable_published_authoring_contribution(
+            contribution_id,
+            principal=PrincipalClass.OPERATOR,
+            correlation_id="uninstall-refusal-enable",
+        )
+        assert is_ok(enabled), enabled
+        disabled = runtime.disable_published_authoring_contribution(
+            contribution_id, principal=PrincipalClass.OPERATOR
+        )
+        assert is_ok(disabled), disabled
+
+        roster = AtomicRoster(service.authoring_roster_root)
+        before_roster = roster.load()
+        before_events = journal.read_events()
+        assert is_ok(before_roster) and is_ok(before_events)
+        before_loaded = runtime.loader.loaded_ids()
+        before_catalog = runtime.templates.snapshot()
+        original_append = journal.append_event
+
+        def refuse_tombstone(
+            event: str,
+            *args: object,
+            **kwargs: object,
+        ) -> Result[JournalAppendReceipt]:
+            if event == "editor_draft.uninstalled":
+                return policy_rejection("journal", "simulated tombstone append refusal")
+            return original_append(event, *args, **kwargs)
+
+        monkeypatch.setattr(journal, "append_event", refuse_tombstone)
+        refused = runtime.uninstall_published_authoring_contribution(
+            contribution_id, principal=PrincipalClass.OPERATOR
+        )
+        assert is_refusal(refused)
+        after_roster = roster.load()
+        after_events = journal.read_events()
+        assert is_ok(after_roster) and is_ok(after_events)
+        assert after_roster.value == before_roster.value
+        assert [event.event for event in after_events.value] == [
+            event.event for event in before_events.value
+        ]
+        assert runtime.loader.loaded_ids() == before_loaded
+        assert runtime.templates.snapshot() == before_catalog
+        assert runtime.templates.get_versioned("demo:uninstall-refusal", "1.0.0") is None
+    finally:
+        _close(substrate, journal)
+
+
 def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path: Path) -> None:
     substrate, journal, artifacts, service = _service(tmp_path)
     try:
@@ -896,6 +977,36 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
             capabilities=_CAPS,
         )
         assert is_ok(advanced), advanced
+        head_before_refusal = substrate.sqlite.execute(
+            "SELECT contribution_id, journal_seq FROM editor_draft_head WHERE editor_draft_id = ?",
+            (saved.value.editor_draft_id,),
+        )
+        roster_before_refusal = roster.load()
+        assert is_ok(roster_before_refusal), roster_before_refusal
+        events_before_refusal = journal.read_events()
+        assert is_ok(events_before_refusal), events_before_refusal
+        second_publish = service.publish_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": second_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+            principal_class=PrincipalClass.MACHINE,
+        )
+        assert is_refusal(second_publish)
+        before_authorized_retry = roster.load()
+        assert is_ok(before_authorized_retry), before_authorized_retry
+        assert before_authorized_retry.value == roster_before_refusal.value
+        unchanged_head = substrate.sqlite.execute(
+            "SELECT contribution_id, journal_seq FROM editor_draft_head WHERE editor_draft_id = ?",
+            (saved.value.editor_draft_id,),
+        )
+        assert unchanged_head == head_before_refusal
+        events_after_refusal = journal.read_events()
+        assert is_ok(events_after_refusal), events_after_refusal
+        assert len(events_after_refusal.value) == len(events_before_refusal.value)
+
         second_publish = service.publish_editor_draft(
             {
                 "editor_draft_id": saved.value.editor_draft_id,
@@ -1093,6 +1204,116 @@ def test_compose_restart_restores_draft_bytes_head_and_enabled_template(tmp_path
             assert restored_roster.value["published"] == []
         finally:
             await third_process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_tombstone_only_uninstall_window_blocks_enable_and_repairs_on_compose(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def _run() -> None:
+        seed = tmp_path / "seed-corpus"
+        seed.mkdir()
+        composed = DaemonProcess.compose(
+            tmp_path,
+            machine="draft-tombstone-test",
+            boot_epoch_id="draft-tombstone-1",
+            bind_port=0,
+            plugin_load_configs={"research-corpus": {"root_path": str(seed)}},
+        )
+        assert is_ok(composed), composed
+        first = composed.value
+        body = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:tombstone-window",
+                "version": "1.0.0",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        ).encode()
+        staged = first.artifacts.stage_complete_bytes(body)
+        assert is_ok(staged), staged
+        saved = first._editor_drafts.save_editor_draft(  # pyright: ignore[reportPrivateUsage]
+            {"fp1": staged.value.fp1},
+            operator_principal=first._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+            capabilities=_CAPS,
+        )
+        assert is_ok(saved), saved
+        published = first._editor_drafts.publish_editor_draft(  # pyright: ignore[reportPrivateUsage]
+            {"editor_draft_id": saved.value.editor_draft_id, "expected_revision": staged.value.fp1},
+            operator_principal=first._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+            capabilities=_CAPS,
+            principal_class=PrincipalClass.OPERATOR,
+        )
+        assert is_ok(published), published
+        contribution_id = str(published.value["contribution_id"])
+        enabled = first.roster.enable_published_authoring_contribution(
+            contribution_id,
+            principal=PrincipalClass.OPERATOR,
+            correlation_id="tombstone-window-enable",
+        )
+        assert is_ok(enabled), enabled
+        disabled = first.roster.disable_published_authoring_contribution(
+            contribution_id, principal=PrincipalClass.OPERATOR
+        )
+        assert is_ok(disabled), disabled
+        stale_roster = AtomicRoster(tmp_path / "authoring-pack")
+        stale = stale_roster.load()
+        assert is_ok(stale), stale
+
+        original_publish = AtomicRoster.publish
+
+        def fail_uninstall_roster_write(
+            roster: AtomicRoster,
+            payload: Mapping[str, object],
+        ) -> Result[Path]:
+            if roster.root == tmp_path / "authoring-pack" and payload.get("published") == []:
+                return policy_rejection("roster", "simulated uninstall roster write failure")
+            return original_publish(roster, payload)
+
+        monkeypatch.setattr(AtomicRoster, "publish", fail_uninstall_roster_write)
+        uninstalled = first.roster.uninstall_published_authoring_contribution(
+            contribution_id, principal=PrincipalClass.OPERATOR
+        )
+        assert is_refusal(uninstalled)
+        assert first.roster.templates.get_versioned("demo:tombstone-window", "1.0.0") is None
+        still_stale = stale_roster.load()
+        assert is_ok(still_stale), still_stale
+        assert still_stale.value["published"] == stale.value["published"]
+        refused_enable = first.roster.enable_published_authoring_contribution(
+            contribution_id,
+            principal=PrincipalClass.OPERATOR,
+            correlation_id="tombstone-window-reenable",
+        )
+        assert is_refusal(refused_enable)
+        assert first.roster.templates.get_versioned("demo:tombstone-window", "1.0.0") is None
+        monkeypatch.setattr(AtomicRoster, "publish", original_publish)
+        await first.aclose()
+
+        recovered = DaemonProcess.compose(
+            tmp_path,
+            machine="draft-tombstone-test",
+            boot_epoch_id="draft-tombstone-2",
+            bind_port=0,
+            plugin_load_configs={"research-corpus": {"root_path": str(seed)}},
+        )
+        assert is_ok(recovered), recovered
+        second = recovered.value
+        try:
+            repaired = AtomicRoster(tmp_path / "authoring-pack").load()
+            assert is_ok(repaired), repaired
+            assert repaired.value["published"] == []
+            head = second.sqlite.execute(
+                "SELECT contribution_id FROM editor_draft_head WHERE editor_draft_id = ?",
+                (saved.value.editor_draft_id,),
+            )
+            assert head and head[0][0] is None
+            assert second.roster.templates.get_versioned("demo:tombstone-window", "1.0.0") is None
+        finally:
+            await second.aclose()
 
     asyncio.run(_run())
 
