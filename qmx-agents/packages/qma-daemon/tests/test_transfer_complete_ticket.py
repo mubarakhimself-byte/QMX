@@ -876,6 +876,7 @@ def test_live_host_dest_placement_same_daemon_admits_start_mission(tmp_path: Pat
             assert placed.value.get("ok") is True
             configured = placed.value.get("configured")
             assert isinstance(configured, dict)
+            configured = cast("dict[str, object]", configured)
             assert configured.get("same_daemon") is True
             dest = process.transfers.placements.get("inst-local")
             assert dest is not None

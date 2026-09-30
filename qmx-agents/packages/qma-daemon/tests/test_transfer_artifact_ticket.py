@@ -723,7 +723,7 @@ def test_failed_machine_ws_replacement_handshake_keeps_live_writer(tmp_path: Pat
             )
             assert is_ok(attached), attached
             try:
-                await process._serve_machine_ws(
+                await process._serve_machine_ws(  # pyright: ignore[reportPrivateUsage] -- exercise failed replacement handshake cleanup
                     asyncio.StreamReader(),
                     FailedHandshakeWriter(),  # type: ignore[arg-type]
                     {

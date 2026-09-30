@@ -209,6 +209,10 @@ class DestControlHandle:
         self.writer = None
         self._emit = None
 
+    @property
+    def has_emitter(self) -> bool:
+        return self._emit is not None
+
     def notify(self, payload: Mapping[str, object]) -> bool:
         """Emit only onto an attached live socket and record delivered notes."""
         if not self.live or self.writer is None or self._emit is None:
@@ -256,10 +260,7 @@ class DestControlRegistry:
     def is_live(self, credential_ref: str) -> bool:
         handle = self._handles.get(credential_ref)
         return (
-            handle is not None
-            and handle.live
-            and handle.writer is not None
-            and handle._emit is not None
+            handle is not None and handle.live and handle.writer is not None and handle.has_emitter
         )
 
 
@@ -1063,16 +1064,22 @@ def _reachable_hosts_from_args(args: Mapping[str, object]) -> Result[tuple[str, 
     if "reachable_hosts" not in args:
         return Ok(())
     hosts_obj = args["reachable_hosts"]
-    if not isinstance(hosts_obj, (tuple, list)) or any(
-        not isinstance(item, str) or item.strip() == "" for item in hosts_obj
-    ):
+    if not isinstance(hosts_obj, (tuple, list)):
         return invalid_input(
             "reachable_hosts",
             "reachable_hosts is a list of non-empty host strings",
-            given=repr(hosts_obj),
+            given=repr(args["reachable_hosts"]),
             local_fallback=LOCAL_INVOKE_FALLBACK,
         )
-    return Ok(tuple(item.strip() for item in hosts_obj))
+    raw_hosts = cast("tuple[object, ...] | list[object]", hosts_obj)
+    if any(not isinstance(item, str) or item.strip() == "" for item in raw_hosts):
+        return invalid_input(
+            "reachable_hosts",
+            "reachable_hosts is a list of non-empty host strings",
+            given=repr(args["reachable_hosts"]),
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+        )
+    return Ok(tuple(item.strip() for item in cast("tuple[str, ...] | list[str]", raw_hosts)))
 
 
 def _placement_identity(args: Mapping[str, object]) -> tuple[str, str, str, str] | None:
