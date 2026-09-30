@@ -9,7 +9,7 @@ from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState, 
 from qma.daemon import CompileRequest, MissionCompiler, TaskGraphDispatcher
 from qma.daemon.envs import ComputeRouter, ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService, JobHandleStore
-from qmf.core import is_ok, is_refusal
+from qmf.core import Result, is_ok, is_refusal
 
 _PRINCIPAL = "principal:local-operator"
 _ORIGIN = "psess:home-origin"
@@ -100,6 +100,25 @@ def _cancel(
         producer_id=producer_id,
         wire_id=wire_id,
     )
+
+
+class _CompletionWinsBeforeCancelCommit(JobHandleService):
+    def __init__(self) -> None:
+        super().__init__()
+        self._raced = False
+
+    def _commit(
+        self,
+        handle: JobHandle,
+        *,
+        event: str,
+        previous: JobHandle | None = None,
+    ) -> Result[JobHandle]:
+        if event == "cancel_job" and not self._raced:
+            self._raced = True
+            completed = self.complete(handle.job_id, JobHandleState.DONE)
+            assert is_ok(completed), completed
+        return super()._commit(handle, event=event, previous=previous)
 
 
 def test_cancel_job_exact_fences_and_authority() -> None:
@@ -293,6 +312,33 @@ def test_cancel_noop_on_dispatched_terminal_handle_skips_task_remap() -> None:
     assert no_op.value.state is JobHandleState.DONE
     located = dispatcher.store.find_task(task_id)
     assert located is not None and located[1].state is TaskMissionState.DONE
+
+
+def test_completion_winning_between_cancel_read_and_commit_is_preserved() -> None:
+    service = _CompletionWinsBeforeCancelCommit()
+    submitted = service.submit(
+        owner=_owner(),
+        task_id="task:terminal-race",
+        job_id="job:terminal-race",
+        logical_run_id="run:terminal-race",
+        originating_product_session_ref=_ORIGIN,
+    )
+    assert is_ok(submitted), submitted
+    assert is_ok(service.start(submitted.value.job_id))
+
+    raced = _cancel(
+        service,
+        _payload(
+            submitted.value.job_id,
+            logical_run_id=submitted.value.logical_run_id,
+            attempt_id=submitted.value.attempt_id,
+        ),
+    )
+    assert is_ok(raced), raced
+    assert raced.value.state is JobHandleState.DONE
+    assert len(raced.value.later_commands) == 1
+    assert raced.value.later_commands[0]["noop"] is True
+    assert raced.value.later_commands[0]["terminal_state"] == "done"
 
 
 def test_restore_reports_origin_immutability_conflict_as_refusal() -> None:

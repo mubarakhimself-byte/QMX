@@ -11,9 +11,12 @@ Mapping onto Task state is applied here through the dispatcher alone (DEC-0316).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from threading import RLock
 from types import MappingProxyType
+from typing import Any
 
 from qma.core.ontology import ActorId, Quant
 from qma.core.ports.cancel_authority import (
@@ -184,28 +187,51 @@ class JobHandleStore:
 
     _by_id: dict[str, JobHandle] = field(default_factory=dict[str, JobHandle])
     _by_task: dict[str, str] = field(default_factory=dict[str, str])
+    _lock: Any = field(default_factory=RLock, compare=False, repr=False)
+
+    @contextmanager
+    def atomic(self) -> Generator[None]:
+        """Hold the store lock across a read-check-write transition."""
+        with self._lock:
+            yield
 
     def get(self, job_id: str) -> JobHandle | None:
-        return self._by_id.get(job_id)
+        with self._lock:
+            return self._by_id.get(job_id)
 
     def for_task(self, task_id: str) -> JobHandle | None:
-        job_id = self._by_task.get(task_id)
-        if job_id is None:
-            return None
-        return self._by_id.get(job_id)
+        with self._lock:
+            job_id = self._by_task.get(task_id)
+            if job_id is None:
+                return None
+            return self._by_id.get(job_id)
 
     def for_correlation(self, correlation_id: str) -> JobHandle | None:
         """Join a JobHandle by correlation_id (diagnosis join key, never fp1)."""
         if not correlation_id:
             return None
-        matches = [
-            handle for handle in self._by_id.values() if handle.correlation_id == correlation_id
-        ]
-        if not matches:
-            return None
-        return matches[-1]
+        with self._lock:
+            matches = [
+                handle for handle in self._by_id.values() if handle.correlation_id == correlation_id
+            ]
+            if not matches:
+                return None
+            return matches[-1]
 
     def put(self, handle: JobHandle) -> JobHandle:
+        with self._lock:
+            self._put_unlocked(handle)
+            return handle
+
+    def compare_and_put(self, expected: JobHandle, handle: JobHandle) -> bool:
+        """Replace one handle only if its durable snapshot is still current."""
+        with self._lock:
+            if self._by_id.get(expected.job_id) is not expected:
+                return False
+            self._put_unlocked(handle)
+            return True
+
+    def _put_unlocked(self, handle: JobHandle) -> None:
         current = self._by_id.get(handle.job_id)
         if (
             current is not None
@@ -214,18 +240,20 @@ class JobHandleStore:
             raise ValueError("originating_product_session_ref is immutable for a durable JobHandle")
         self._by_id[handle.job_id] = handle
         self._by_task[handle.task_id] = handle.job_id
-        return handle
 
     def discard(self, job_id: str) -> None:
-        handle = self._by_id.pop(job_id, None)
-        if handle is not None:
-            self._by_task.pop(handle.task_id, None)
+        with self._lock:
+            handle = self._by_id.pop(job_id, None)
+            if handle is not None:
+                self._by_task.pop(handle.task_id, None)
 
     def all(self) -> tuple[JobHandle, ...]:
-        return tuple(self._by_id.values())
+        with self._lock:
+            return tuple(self._by_id.values())
 
     def snapshot(self) -> tuple[Mapping[str, object], ...]:
-        return tuple(handle.to_payload() for handle in self._by_id.values())
+        with self._lock:
+            return tuple(handle.to_payload() for handle in self._by_id.values())
 
     def restore(self, records: Sequence[Mapping[str, object]]) -> Result[int]:
         count = 0
@@ -555,6 +583,27 @@ class JobHandleService:
         return self._transition(handle, JobHandleState.CANCELLED, event="cancel")
 
     def cancel_from_product_session(
+        self,
+        payload: object,
+        *,
+        principal_class: PrincipalClass | str,
+        operator_principal: object,
+        originating_session_principal: object,
+        producer_id: object,
+        wire_id: object,
+    ) -> Result[JobHandle]:
+        """Serialize an originating-session cancel against every terminal writer."""
+        with self._store.atomic():
+            return self._cancel_from_product_session_locked(
+                payload,
+                principal_class=principal_class,
+                operator_principal=operator_principal,
+                originating_session_principal=originating_session_principal,
+                producer_id=producer_id,
+                wire_id=wire_id,
+            )
+
+    def _cancel_from_product_session_locked(
         self,
         payload: object,
         *,
@@ -1006,7 +1055,10 @@ class JobHandleService:
         )
         if is_refusal(minted):
             return minted
-        return self._commit(minted.value, event=event, previous=previous or handle)
+        committed = self._commit(minted.value, event=event, previous=previous or handle)
+        if not is_refusal(committed) or event != "cancel_job":
+            return committed
+        return self._finish_cancel_after_terminal_race(handle, nxt, committed)
 
     def _commit(
         self,
@@ -1015,7 +1067,26 @@ class JobHandleService:
         event: str,
         previous: JobHandle | None = None,
     ) -> Result[JobHandle]:
-        self._store.put(handle)
+        with self._store.atomic():
+            return self._commit_locked(handle, event=event, previous=previous)
+
+    def _commit_locked(
+        self,
+        handle: JobHandle,
+        *,
+        event: str,
+        previous: JobHandle | None = None,
+    ) -> Result[JobHandle]:
+        if previous is not None:
+            if not self._store.compare_and_put(previous, handle):
+                return policy_rejection(
+                    "job_handle",
+                    "JobHandle transition lost a compare-and-set race; durable state was preserved",
+                    job_id=handle.job_id,
+                    attempted_state=handle.state.value,
+                )
+        else:
+            self._store.put(handle)
         self._append_stream(
             handle.job_id,
             event,
@@ -1054,6 +1125,71 @@ class JobHandleService:
         if handle.is_terminal and handle.wake_armed:
             self._emit_wake(handle)
         return Ok(handle)
+
+    def _finish_cancel_after_terminal_race(
+        self,
+        candidate: JobHandle,
+        nxt: JobHandleState,
+        failure: Result[JobHandle],
+    ) -> Result[JobHandle]:
+        """Record a stale cancel as a no-op when another terminal state won."""
+        current = self._store.get(candidate.job_id)
+        if current is None or not current.is_terminal or nxt is not JobHandleState.CANCELLED:
+            return failure
+        if current.state is JobHandleState.UNKNOWN:
+            return policy_rejection(
+                "job_handle",
+                "an unknown JobHandle is not cancellable; use unknown.resolve",
+                job_id=current.job_id,
+                state=current.state.value,
+            )
+        command = next(
+            (
+                record
+                for record in reversed(candidate.later_commands)
+                if record.get("command") == "cancel_job"
+            ),
+            None,
+        )
+        if command is None:
+            return failure
+        durable_id = command.get("durable_command_id")
+        for recorded in current.later_commands:
+            if recorded.get("durable_command_id") != durable_id:
+                continue
+            if recorded.get("command_hash") != command.get("command_hash") or recorded.get(
+                "job_id"
+            ) != command.get("job_id"):
+                return policy_rejection(
+                    "command_id",
+                    "cancel_job command_id was already used for different durable identity",
+                    durable_command_id=durable_id,
+                )
+            if recorded.get("producer_id") != command.get("producer_id") or recorded.get(
+                "wire_id"
+            ) != command.get("wire_id"):
+                return policy_rejection(
+                    "wire_identity",
+                    "lost-ack retry must reuse the original producer_id and JSON-RPC id",
+                    producer_id=command.get("producer_id"),
+                    wire_id=command.get("wire_id"),
+                )
+            return Ok(current)
+        no_op = dict(command)
+        no_op.update({"terminal_state": current.state.value, "noop": True})
+        recorded_handle = current.record_later_command(no_op)
+        if not self._store.compare_and_put(current, recorded_handle):
+            return failure
+        self._append_stream(
+            current.job_id,
+            "cancel_job_noop",
+            {
+                "expected_state": command.get("expected_state"),
+                "terminal_state": current.state.value,
+                "noop": True,
+            },
+        )
+        return Ok(recorded_handle)
 
     def _apply_mapping(self, handle: JobHandle) -> Result[TaskTransitionResult]:
         """Daemon-only: JobHandle state → Task state through the dispatcher."""
