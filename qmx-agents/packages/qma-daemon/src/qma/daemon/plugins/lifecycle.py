@@ -14,11 +14,13 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, cast
+from typing import ClassVar, Final, Literal, cast
 
 from qma.core.content import content_address
 from qma.core.operations.catalog import public_operation_descriptors
@@ -403,6 +405,24 @@ class AtomicRoster:
     root: Path
     live_name: str = "roster.json"
 
+    _locks_guard: ClassVar[threading.RLock] = threading.RLock()
+    _locks: ClassVar[dict[str, threading.RLock]] = {}
+
+    def _lock(self) -> threading.RLock:
+        key = str(self.root.resolve())
+        with self._locks_guard:
+            lock = self._locks.get(key)
+            if lock is None:
+                lock = threading.RLock()
+                self._locks[key] = lock
+            return lock
+
+    @contextmanager
+    def synchronized(self) -> Generator[None]:
+        """Serialize a compound roster read/modify/write operation by root."""
+        with self._lock():
+            yield
+
     @property
     def live_path(self) -> Path:
         return self.root / self.live_name
@@ -412,6 +432,35 @@ class AtomicRoster:
         return self.root / f"{self.live_name}.stage"
 
     def publish(self, payload: Mapping[str, object]) -> Result[Path]:
+        """CAS and atomically replace the live roster."""
+        with self._lock():
+            current = self._load_unlocked()
+            if is_refusal(current):
+                return current
+            current_parsed = _require_int(
+                "roster_generation", current.value.get("roster_generation", 0), minimum=0
+            )
+            if is_refusal(current_parsed):
+                return current_parsed
+            current_generation = current_parsed.value
+            parsed = _require_int(
+                "roster_generation", payload.get("roster_generation", 0), minimum=0
+            )
+            if is_refusal(parsed):
+                return parsed
+            if parsed.value != current_generation:
+                return _policy(
+                    "roster_generation",
+                    "authoring roster CAS lost; reload before retrying",
+                    expected=parsed.value,
+                    current=current_generation,
+                    branch="E",
+                )
+            replacement = dict(payload)
+            replacement["roster_generation"] = current_generation + 1
+            return self._write_unlocked(replacement)
+
+    def _write_unlocked(self, payload: Mapping[str, object]) -> Result[Path]:
         """Write staged bytes, fsync, then replace the live roster."""
         encoded = _dump(payload)
         staged = self.stage_path
@@ -440,7 +489,44 @@ class AtomicRoster:
             pass
         return Ok(live)
 
+    def restore_snapshot(
+        self,
+        payload: Mapping[str, object],
+        *,
+        expected_generation: int,
+    ) -> Result[Path]:
+        """Compensate a failed transaction if its roster write is still current.
+
+        The caller should hold :meth:`synchronized` across the original write
+        and compensation. The expected generation prevents restoring over a
+        later mutation when used independently.
+        """
+        with self._lock():
+            current = self._load_unlocked()
+            if is_refusal(current):
+                return current
+            parsed = _require_int(
+                "roster_generation", current.value.get("roster_generation", 0), minimum=0
+            )
+            if is_refusal(parsed):
+                return parsed
+            if parsed.value != expected_generation:
+                return _policy(
+                    "roster_generation",
+                    "roster compensation refused after a newer mutation",
+                    expected=expected_generation,
+                    current=parsed.value,
+                    branch="E",
+                )
+            replacement = dict(payload)
+            replacement["roster_generation"] = parsed.value + 1
+            return self._write_unlocked(replacement)
+
     def load(self) -> Result[Mapping[str, object]]:
+        with self._lock():
+            return self._load_unlocked()
+
+    def _load_unlocked(self) -> Result[Mapping[str, object]]:
         live = self.live_path
         if not live.is_file():
             return Ok(
@@ -759,6 +845,23 @@ class PackLifecycleFixture:
         return published, revision, self.loader.loaded_ids()
 
     def _publish_roster(self) -> Result[Path]:
+        current = self.roster.load()
+        if is_refusal(current):
+            return current
+        prior_published = current.value.get("published", [])
+        if not isinstance(prior_published, list):
+            return _invalid("published", "roster published contributions must be a list")
+        contributions: dict[str, object] = {}
+        for item in cast(Sequence[object], prior_published):
+            if isinstance(item, Mapping):
+                contribution_id = cast(Mapping[str, object], item).get("contribution_id")
+                if isinstance(contribution_id, str):
+                    contributions[contribution_id] = dict(cast(Mapping[str, object], item))
+        for item in self.loader.published_contributions():
+            row = dict(item.to_payload())
+            contribution_id = row.get("contribution_id")
+            if isinstance(contribution_id, str):
+                contributions[contribution_id] = row
         packages = [
             {
                 "dependencies": list(row.dependencies),
@@ -773,10 +876,8 @@ class PackLifecycleFixture:
         payload = {
             "availability_revision": self.loader.availability_revision(),
             "packages": packages,
-            "published": [
-                dict(item.to_payload()) for item in self.loader.published_contributions()
-            ],
-            "roster_generation": self._generation,
+            "published": list(contributions.values()),
+            "roster_generation": current.value.get("roster_generation", 0),
         }
         return self.roster.publish(payload)
 

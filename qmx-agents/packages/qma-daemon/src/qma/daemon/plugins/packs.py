@@ -302,6 +302,14 @@ class DeskPluginRoster:
             for row in reversed(activated.value):
                 self.loader.unload(row.manifest.id)
             return ingested
+        restored_authoring = self._rehydrate_enabled_authoring_contributions(
+            principal=principal,
+            correlation_id=correlation_id,
+        )
+        if is_refusal(restored_authoring):
+            for row in reversed(activated.value):
+                self.loader.unload(row.manifest.id)
+            return restored_authoring
         return Ok(activated.value)
 
     def enable_published_authoring_contribution(
@@ -310,6 +318,30 @@ class DeskPluginRoster:
         *,
         principal: object = PrincipalClass.OPERATOR,
         correlation_id: object = "authoring-pack-enable",
+    ) -> Result[LoadedPlugin]:
+        if self.authoring_roster_root is None:
+            return invalid_input(
+                "authoring_roster_root",
+                "local authoring roster is not configured for this daemon",
+            )
+        roster = AtomicRoster(self.authoring_roster_root)
+        with roster.synchronized():
+            return self._enable_published_authoring_contribution_locked(
+                contribution_id,
+                principal=principal,
+                correlation_id=correlation_id,
+                roster=roster,
+                rehydrating=False,
+            )
+
+    def _enable_published_authoring_contribution_locked(
+        self,
+        contribution_id: str,
+        *,
+        principal: object,
+        correlation_id: object,
+        roster: AtomicRoster,
+        rehydrating: bool,
     ) -> Result[LoadedPlugin]:
         """Enable one daemon-published draft through the production PluginLoader.
 
@@ -323,7 +355,7 @@ class DeskPluginRoster:
                 "authoring_roster_root",
                 "local authoring roster is not configured for this daemon",
             )
-        loaded_roster = AtomicRoster(self.authoring_roster_root).load()
+        loaded_roster = roster.load()
         if is_refusal(loaded_roster):
             return loaded_roster
         published = loaded_roster.value.get("published", [])
@@ -342,12 +374,7 @@ class DeskPluginRoster:
                 "contribution_id",
                 "published authoring contribution is not present in the local roster",
             )
-        if record.get("enabled") is True:
-            return invalid_input(
-                "contribution_id",
-                "authoring contribution is already enabled",
-                contribution_id=contribution_id,
-            )
+        enabled_flag = record.get("enabled") is True
         if record.get("point") != "graph_template":
             return invalid_input("point", "authoring enable supports graph_template only")
         try:
@@ -369,6 +396,19 @@ class DeskPluginRoster:
 
         digest = hashlib.sha256(contribution_id.encode("utf-8")).hexdigest()[:16]
         plugin_id = f"research-authoring-{digest}"
+        already_loaded = self.loader.get(plugin_id)
+        if already_loaded is not None:
+            if enabled_flag:
+                return Ok(already_loaded)
+            return invalid_input(
+                "contribution_id",
+                "authoring contribution is already live in the PluginLoader",
+                contribution_id=contribution_id,
+            )
+        if enabled_flag and not rehydrating:
+            # An enabled roster row may be replayed after process restart. The
+            # ordinary enable request is idempotent and reuses that live path.
+            rehydrating = True
         local_id = "draft-template"
         contribution = dict(template)
         contribution.update(
@@ -402,6 +442,17 @@ class DeskPluginRoster:
             "peer_integration": "qma_wire_only",
             "daemon_renders": False,
         }
+        loader_snapshot = self.loader.snapshot_published_roster()
+        loaded_before = set(self.loader.loaded_ids())
+        template_snapshot = self.templates.snapshot()
+
+        def rollback() -> None:
+            for loaded_id in reversed(self.loader.loaded_ids()):
+                if loaded_id not in loaded_before:
+                    self.loader.unload(loaded_id)
+            self.loader.restore_published_roster(loader_snapshot)
+            self.templates.restore(template_snapshot)
+
         enabled = self.loader.enable(
             raw_manifest,
             activator=cast(PluginActivator, activate),
@@ -412,8 +463,11 @@ class DeskPluginRoster:
             return enabled
         ingested = self._ingest_graph_templates(enabled.value)
         if is_refusal(ingested):
-            self.loader.unload(enabled.value.manifest.id)
+            rollback()
             return ingested
+
+        if rehydrating and enabled_flag:
+            return enabled
 
         replacement = dict(loaded_roster.value)
         replacement_published: list[object] = []
@@ -428,11 +482,63 @@ class DeskPluginRoster:
                 if row.get("contribution_id") == contribution_id:
                     row["enabled"] = True
         replacement["published"] = replacement_published
-        saved = AtomicRoster(self.authoring_roster_root).publish(replacement)
+        saved = roster.publish(replacement)
         if is_refusal(saved):
-            self.loader.unload(enabled.value.manifest.id)
+            rollback()
             return saved
         return enabled
+
+    def _rehydrate_enabled_authoring_contributions(
+        self,
+        *,
+        principal: object,
+        correlation_id: object,
+    ) -> Result[None]:
+        if self.authoring_roster_root is None:
+            return Ok(None)
+        roster = AtomicRoster(self.authoring_roster_root)
+        with roster.synchronized():
+            loaded = roster.load()
+            if is_refusal(loaded):
+                return loaded
+            rows = loaded.value.get("published", [])
+            if not isinstance(rows, list):
+                return invalid_input("authoring_roster", "published roster must be a list")
+            initial_plugins = set(self.loader.loaded_ids())
+            initial_roster = self.loader.snapshot_published_roster()
+            initial_templates = self.templates.snapshot()
+
+            def rollback_rehydration() -> None:
+                for loaded_id in reversed(self.loader.loaded_ids()):
+                    if loaded_id not in initial_plugins:
+                        self.loader.unload(loaded_id)
+                self.loader.restore_published_roster(initial_roster)
+                self.templates.restore(initial_templates)
+
+            for candidate in cast(list[object], rows):
+                if not isinstance(candidate, Mapping):
+                    continue
+                entry = cast(Mapping[str, object], candidate)
+                if entry.get("enabled") is not True:
+                    continue
+                contribution_id = entry.get("contribution_id")
+                if not isinstance(contribution_id, str) or not contribution_id:
+                    rollback_rehydration()
+                    return invalid_input(
+                        "authoring_roster",
+                        "enabled contribution requires a stable contribution_id",
+                    )
+                restored = self._enable_published_authoring_contribution_locked(
+                    contribution_id,
+                    principal=principal,
+                    correlation_id=correlation_id,
+                    roster=roster,
+                    rehydrating=True,
+                )
+                if is_refusal(restored):
+                    rollback_rehydration()
+                    return restored
+        return Ok(None)
 
     def _ingest_activated(self, loaded: Sequence[LoadedPlugin]) -> Result[None]:
         for row in loaded:

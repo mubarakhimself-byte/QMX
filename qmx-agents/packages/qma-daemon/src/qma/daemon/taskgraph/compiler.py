@@ -141,6 +141,23 @@ class GraphTemplateCatalog:
     def ids(self) -> tuple[str, ...]:
         return tuple(sorted(self._order))
 
+    def snapshot(self) -> tuple[GraphTemplate, ...]:
+        """Capture the current immutable definition roster for rollback."""
+        return tuple(self._templates.values())
+
+    def restore(self, snapshot: tuple[GraphTemplate, ...]) -> None:
+        """Restore a snapshot captured by :meth:`snapshot` without validation gaps."""
+        templates: dict[tuple[str, str], GraphTemplate] = {}
+        order: dict[str, list[str]] = {}
+        for template in snapshot:
+            identity = (template.qualified_id, template.version)
+            if identity in templates:
+                raise ValueError("GraphTemplateCatalog snapshot contains duplicate identity")
+            templates[identity] = template
+            order.setdefault(template.qualified_id, []).append(template.version)
+        self._templates = templates
+        self._order = order
+
 
 def validate_approval_route(
     route: str | None,
