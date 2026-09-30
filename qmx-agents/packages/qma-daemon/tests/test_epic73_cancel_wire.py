@@ -6,13 +6,15 @@ import json
 from pathlib import Path
 from typing import cast
 
+import pytest
 from qma.core.ontology import ActorId, DeskSlug
+from qma.core.ports.qmb import QmbAbortReceipt
 from qma.core.vocabulary.enums import JobHandleState
 from qma.daemon.pairing import issue_pairing_session
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION, InitializeParams, WireConnection
-from qmf.core import is_ok
+from qmf.core import Ok, is_ok
 
 
 def _compose(tmp_path: Path) -> DaemonProcess:
@@ -51,7 +53,10 @@ def _connection(
     return conn
 
 
-def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(tmp_path: Path) -> None:
+def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     process = _compose(tmp_path)
     try:
         operator = process.local_operator
@@ -78,6 +83,13 @@ def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(tmp_path:
             originating_product_session_ref=origin,
         )
         assert is_ok(admitted), admitted
+        abort_calls: list[str] = []
+
+        def _abort(job_id: str):
+            abort_calls.append(job_id)
+            return Ok(QmbAbortReceipt(job_id=job_id, mapped_from="JobHandle.cancel"))
+
+        monkeypatch.setattr(process.backtesting.transport, "abort", _abort)
         paired = issue_pairing_session(
             journal=process.journal,
             sqlite=process.sqlite,
@@ -111,6 +123,29 @@ def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(tmp_path:
         result = cast("dict[str, object]", response["result"])
         assert result["state"] == JobHandleState.CANCELLED.value
         assert result["originating_product_session_ref"] == origin
+        assert abort_calls == [admitted.value.job_id]
+
+        replay = process._dispatch_paired_ct40(  # pyright: ignore[reportPrivateUsage]
+            conn,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "stable-wire-id",
+                    "method": "cancel_job",
+                    "params": {
+                        "handle_id": admitted.value.job_id,
+                        "logical_run_id": admitted.value.logical_run_id,
+                        "attempt_id": admitted.value.attempt_id,
+                        "command_id": "cancel:epic73-live",
+                        "expected_state": "running",
+                    },
+                }
+            ).encode(),
+            session_key=paired.value.pairing_record_id,
+            connection_token="epic73-wire-test",
+        )
+        assert replay is not None and "result" in replay, replay
+        assert abort_calls == [admitted.value.job_id]
 
         extra_field = process._dispatch_paired_ct40(  # pyright: ignore[reportPrivateUsage]
             conn,

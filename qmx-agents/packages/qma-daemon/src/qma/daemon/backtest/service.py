@@ -80,7 +80,7 @@ from qma.core.ports.qmb import (
 )
 from qma.core.ports.tools import ToolKind, ToolRecord
 from qma.core.refusals import NoEnvironment
-from qma.core.vocabulary.enums import JobHandleState
+from qma.core.vocabulary.enums import JobHandleState, PrincipalClass
 from qma.daemon.backtest.cli import CliQmbDoorTransport
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.envs.registry import ExecutionEnvironmentRegistry
@@ -718,6 +718,56 @@ class BacktestingService:
         if is_refusal(cancelled):
             return cancelled
         if mapped:
+            self._jobs.record_progress(
+                job_id,
+                "qmb_abort",
+                {
+                    "mapped_from": COORDINATED_CANCEL_AUTHORITY,
+                    "qmb_ledger_state": QMB_ABORTED_LEDGER_STATE,
+                    "qmb_ledger_writer": "qmb",
+                    "qma_writes_qmb_ledger": False,
+                    "new_event_bus": False,
+                },
+            )
+        self._release_terminal()
+        return cancelled
+
+    def cancel_from_product_session(
+        self,
+        payload: object,
+        *,
+        principal_class: PrincipalClass | str,
+        operator_principal: object,
+        originating_session_principal: object,
+        producer_id: object,
+        wire_id: object,
+    ) -> Result[JobHandle]:
+        """Abort the production QMB child before committing an authorized UI cancel."""
+        mapped_job_ids: list[str] = []
+        abort_fn = getattr(self._transport, "abort", None)
+
+        def abort_before_transition(handle: JobHandle) -> Result[None]:
+            if not self.maps_cancel_to_qmb_abort or not callable(abort_fn):
+                return Ok(None)
+            abort = cast("Callable[[str], Result[QmbAbortReceipt]]", abort_fn)
+            aborted = abort(handle.job_id)
+            if is_refusal(aborted):
+                return aborted
+            mapped_job_ids.append(handle.job_id)
+            return Ok(None)
+
+        cancelled = self._jobs.cancel_from_product_session(
+            payload,
+            principal_class=principal_class,
+            operator_principal=operator_principal,
+            originating_session_principal=originating_session_principal,
+            producer_id=producer_id,
+            wire_id=wire_id,
+            before_cancel=abort_before_transition,
+        )
+        if is_refusal(cancelled):
+            return cancelled
+        for job_id in mapped_job_ids:
             self._jobs.record_progress(
                 job_id,
                 "qmb_abort",

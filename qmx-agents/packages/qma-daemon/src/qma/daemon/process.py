@@ -2612,7 +2612,7 @@ class DaemonProcess:
                     ),
                 ),
             )
-        cancelled = self.backtesting.jobs.cancel_from_product_session(
+        cancelled = self.backtesting.cancel_from_product_session(
             params,
             principal_class=connection.principal_class or "",
             operator_principal=authenticated_operator,

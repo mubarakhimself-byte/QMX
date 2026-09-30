@@ -11,7 +11,7 @@ Mapping onto Task state is applied here through the dispatcher alone (DEC-0316).
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from threading import RLock
@@ -591,6 +591,7 @@ class JobHandleService:
         originating_session_principal: object,
         producer_id: object,
         wire_id: object,
+        before_cancel: Callable[[JobHandle], Result[None]] | None = None,
     ) -> Result[JobHandle]:
         """Serialize an originating-session cancel against every terminal writer."""
         with self._store.atomic():
@@ -601,6 +602,7 @@ class JobHandleService:
                 originating_session_principal=originating_session_principal,
                 producer_id=producer_id,
                 wire_id=wire_id,
+                before_cancel=before_cancel,
             )
 
     def _cancel_from_product_session_locked(
@@ -612,6 +614,7 @@ class JobHandleService:
         originating_session_principal: object,
         producer_id: object,
         wire_id: object,
+        before_cancel: Callable[[JobHandle], Result[None]] | None,
     ) -> Result[JobHandle]:
         """Cancel one UI-admitted handle through its immutable originating session.
 
@@ -774,6 +777,10 @@ class JobHandleService:
         authorized = authorize_coordinated_cancel(COORDINATED_CANCEL_AUTHORITY)
         if is_refusal(authorized):
             return authorized
+        if before_cancel is not None:
+            side_effect = before_cancel(handle)
+            if is_refusal(side_effect):
+                return side_effect
         candidate = handle.record_later_command(command_record)
         return self._transition(
             candidate,
