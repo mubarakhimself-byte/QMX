@@ -18,6 +18,7 @@ from qmb.doors.cli import (
     HOST_CONFIGURE_COMMANDS,
     HOST_PAIR_COMMANDS,
     command_tree,
+    invoke_host_configure_dest_placement,
     invoke_host_configure_pairing_ttl,
     invoke_host_configure_source_origin,
     invoke_host_pair,
@@ -289,7 +290,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
             "pair",
         )
     )
-    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin")
+    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin", "dest-placement")
     assert HOST_PAIR_COMMANDS == ("revoke",)
     assert "pair" in HOST_COMMANDS
     runner = CliRunner()
@@ -308,6 +309,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert configure_help.exit_code == 0, configure_help.output
     assert "pairing-ttl" in configure_help.output
     assert "source-origin" in configure_help.output
+    assert "dest-placement" in configure_help.output
     pair_help = runner.invoke(main, ["host", "pair", "--help"])
     assert pair_help.exit_code == 0, pair_help.output
     assert "revoke" in pair_help.output
@@ -720,6 +722,70 @@ def test_click_host_configure_source_origin(tmp_path: Path) -> None:
     missing = invoke_host_configure_source_origin("", root=tmp_path)
     assert is_refusal(missing)
     assert missing.context["field"] == "origin"
+
+
+def test_click_host_configure_dest_placement(tmp_path: Path) -> None:
+    _write_token(tmp_path)
+    dest_cred = "cred://compute/worker-a"
+
+    def transport(
+        verb: str,
+        token: str,
+        *,
+        root: Path,
+        extra: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        _ = root
+        assert token == _TOKEN
+        assert verb == "configure"
+        assert extra is not None
+        assert extra["target"] == "dest-placement"
+        assert extra["instance_id"] == "inst-local"
+        assert extra["same_daemon"] is True
+        assert extra["credential_ref"] == dest_cred
+        return {
+            "ok": True,
+            "configured": {
+                "instance_id": "inst-local",
+                "environment_id": "env-local",
+                "placement_revision": "rev-0",
+                "same_daemon": True,
+                "writer": "host.configure.dest-placement",
+            },
+        }
+
+    runner = CliRunner()
+    configured = runner.invoke(
+        main,
+        [
+            "host",
+            "configure",
+            "dest-placement",
+            "--instance-id",
+            "inst-local",
+            "--environment-id",
+            "env-local",
+            "--placement-revision",
+            "rev-0",
+            "--credential-ref",
+            dest_cred,
+            "--same-daemon",
+        ],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert configured.exit_code == 0, configured.output
+    payload = json.loads(configured.stdout)
+    assert payload["verb"] == "host.configure.dest-placement"
+    assert payload["same_daemon"] is True
+    missing = invoke_host_configure_dest_placement(
+        instance_id="",
+        environment_id="env-local",
+        placement_revision="rev-0",
+        credential_ref=dest_cred,
+        root=tmp_path,
+    )
+    assert is_refusal(missing)
+    assert missing.context["field"] == "dest-placement"
 
 
 def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None:

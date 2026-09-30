@@ -12,10 +12,12 @@ from typing import cast
 
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.artifacts.ticket import (
+    DEST_CONTROL_NOTIFY_METHOD,
     LOCAL_INVOKE_FALLBACK,
     DestinationPlacement,
     loopback_source_not_get_target,
 )
+from qma.daemon.host_control import host_control_call
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
@@ -316,7 +318,11 @@ def _issue_notified(process: DaemonProcess, *, command_id: str = "cmd-1") -> tup
     recorded = process.record_source_tls_origin(_TLS_ORIGIN)
     assert is_ok(recorded), recorded
     process.register_destination_placement(_remote_placement())
-    handle = process.dest_control_up(_DEST_CRED)
+    handle = process.transfers.attach_dest_control(
+        _DEST_CRED,
+        writer=object(),
+        emit=lambda _note: True,
+    )
     assert is_ok(handle), handle
     issued = process.transfer_artifact(
         {
@@ -391,9 +397,6 @@ def test_library_redeem_complete_idempotent_and_invoke_gate(tmp_path: Path) -> N
             credential_ref=_WRONG_CRED,
         )
         assert is_refusal(wrong)
-        placed = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
-        assert is_ok(placed), placed
-        dest_fp1 = placed.value.fp1
         operator = process.transfer_complete(
             {
                 "ticket_id": ticket_id,
@@ -402,15 +405,30 @@ def test_library_redeem_complete_idempotent_and_invoke_gate(tmp_path: Path) -> N
                 "command_id": "cmd-1",
             },
             principal_class=PrincipalClass.OPERATOR,
+            credential_ref=_DEST_CRED,
         )
         assert is_refusal(operator)
+        wrong_machine = process.transfer_complete(
+            {
+                "ticket_id": ticket_id,
+                "fp1": fp1,
+                "byte_count": len(body),
+                "command_id": "cmd-1",
+            },
+            credential_ref=_WRONG_CRED,
+        )
+        assert is_refusal(wrong_machine)
+        still_claimed = process.transfers.get(ticket_id)
+        assert still_claimed is not None
+        assert still_claimed.state == "claimed"
         completed = process.transfer_complete(
             {
                 "ticket_id": ticket_id,
                 "fp1": fp1,
                 "byte_count": len(body),
                 "command_id": "cmd-1",
-            }
+            },
+            credential_ref=_DEST_CRED,
         )
         assert is_ok(completed), completed
         assert completed.value.state == "complete"
@@ -422,17 +440,14 @@ def test_library_redeem_complete_idempotent_and_invoke_gate(tmp_path: Path) -> N
                 "fp1": fp1,
                 "byte_count": len(body),
                 "command_id": "cmd-1",
-            }
+            },
+            credential_ref=_DEST_CRED,
         )
         assert is_ok(replay), replay
         assert replay.value.prior_complete is True
         assert replay.value.ticket_id == ticket_id
         assert replay.value.second_ticket is False
-        reused = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
-        assert is_ok(reused)
-        assert reused.value.fp1 == dest_fp1
-        assert reused.value.reused is True
-        assert len(process.dest_artifacts.objects()) == 1
+        assert process.dest_artifacts.get(fp1) is None
         gated = process.gate_invoke_until_transfer_complete(
             fp1=fp1,
             instance_id="inst-remote",
@@ -442,6 +457,14 @@ def test_library_redeem_complete_idempotent_and_invoke_gate(tmp_path: Path) -> N
         assert gated.value.instance_granted is False
         assert gated.value.instance_enabled is False
         assert gated.value.instance_guessed is False
+        placed = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
+        assert is_ok(placed), placed
+        dest_fp1 = placed.value.fp1
+        reused = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
+        assert is_ok(reused)
+        assert reused.value.fp1 == dest_fp1
+        assert reused.value.reused is True
+        assert len(process.dest_artifacts.objects()) == 1
         source = process.artifacts.get(fp1)
         assert source is not None
         assert source.content == body
@@ -557,8 +580,43 @@ def test_live_machine_get_and_dest_authored_transfer_complete(tmp_path: Path) ->
             claimed = process.transfers.get(ticket_id)
             assert claimed is not None
             assert claimed.state == "claimed"
-            placed = process.place_dest_pulled_bytes(get_body, ticket_id=ticket_id)
-            assert is_ok(placed), placed
+            assert process.dest_artifacts.get(fp1) is None
+            wrong_reader, wrong_writer = await _upgrade_machine_ws(host, port, _WRONG_CRED)
+            try:
+                wrong_init = await _initialize_ws(
+                    wrong_writer,
+                    wrong_reader,
+                    capabilities={TRANSFER_COMPLETE_CAPABILITY: True},
+                )
+                assert "error" not in wrong_init, wrong_init
+                _ws_write(
+                    wrong_writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "transfer_complete",
+                        "params": {
+                            "ticket_id": ticket_id,
+                            "fp1": fp1,
+                            "byte_count": len(body),
+                            "command_id": "cmd-live",
+                        },
+                    },
+                )
+                await wrong_writer.drain()
+                refused = await _ws_read_json(wrong_reader)
+                assert "error" in refused, refused
+                unchanged = process.transfers.get(ticket_id)
+                assert unchanged is not None
+                assert unchanged.state == "claimed"
+                still_fenced = process.gate_invoke_until_transfer_complete(
+                    fp1=fp1,
+                    instance_id="inst-remote",
+                )
+                assert is_refusal(still_fenced)
+            finally:
+                wrong_writer.close()
+                await wrong_writer.wait_closed()
             reader, writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
             try:
                 init_resp = await _initialize_ws(
@@ -629,7 +687,7 @@ def test_live_machine_get_and_dest_authored_transfer_complete(tmp_path: Path) ->
             assert is_ok(gated), gated
             assert gated.value.transfer_gate_satisfied is True
             assert gated.value.instance_granted is False
-            assert len(process.dest_artifacts.objects()) == 1
+            assert process.dest_artifacts.get(fp1) is None
             source = process.artifacts.get(fp1)
             assert source is not None
             assert source.content == body
@@ -650,7 +708,14 @@ def test_live_start_mission_invoke_gate(tmp_path: Path) -> None:
             ticket_id, fp1, body = _issue_notified(process, command_id="cmd-invoke")
             _record_id, proof = await _pair_over_listener(process, host, port)
             reader, writer = await _upgrade_paired_ws(host, port, proof)
+            dest_reader, dest_writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
             try:
+                dest_note = await _ws_read_json(dest_reader)
+                assert dest_note.get("method") == DEST_CONTROL_NOTIFY_METHOD
+                dest_params_obj = dest_note["params"]
+                assert isinstance(dest_params_obj, dict)
+                dest_params = cast("dict[str, object]", dest_params_obj)
+                assert dest_params["ticket_id"] == ticket_id
                 init_resp = await _initialize_ws(
                     writer,
                     reader,
@@ -686,23 +751,50 @@ def test_live_start_mission_invoke_gate(tmp_path: Path) -> None:
                 assert context["local_fallback"] is False
                 assert context["silent_local_fallback"] is False
                 assert context["finish_on_local_disk"] is False
-                redeemed = process.transfers.redeem_get(
-                    ticket_id=ticket_id,
-                    fp1=fp1,
-                    credential_ref=_DEST_CRED,
+                live_get = await _exchange(
+                    host,
+                    port,
+                    _http_bytes(
+                        "GET",
+                        f"/artifacts/{fp1}",
+                        headers={
+                            "Host": f"{host}:{port}",
+                            "Authorization": f"Bearer {_DEST_CRED}",
+                            "X-QMX-Transfer-Ticket": ticket_id,
+                        },
+                    ),
                 )
-                assert is_ok(redeemed), redeemed
-                placed = process.place_dest_pulled_bytes(body, ticket_id=ticket_id)
-                assert is_ok(placed), placed
-                completed = process.transfer_complete(
+                get_status, _get_headers, get_body = _split_http(live_get)
+                assert get_status == 200, live_get
+                assert get_body == body
+                dest_init = await _initialize_ws(
+                    dest_writer,
+                    dest_reader,
+                    capabilities={TRANSFER_COMPLETE_CAPABILITY: True},
+                )
+                assert "error" not in dest_init, dest_init
+                _ws_write(
+                    dest_writer,
                     {
-                        "ticket_id": ticket_id,
-                        "fp1": fp1,
-                        "byte_count": len(body),
-                        "command_id": "cmd-invoke",
-                    }
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "transfer_complete",
+                        "params": {
+                            "ticket_id": ticket_id,
+                            "fp1": fp1,
+                            "byte_count": len(body),
+                            "command_id": "cmd-invoke",
+                        },
+                    },
                 )
-                assert is_ok(completed), completed
+                await dest_writer.drain()
+                completed = await _ws_read_json(dest_reader)
+                assert "error" not in completed, completed
+                completed_result_obj = completed["result"]
+                assert isinstance(completed_result_obj, dict)
+                completed_result = cast("dict[str, object]", completed_result_obj)
+                assert completed_result["state"] == "complete"
+                assert process.dest_artifacts.get(fp1) is None
                 _ws_write(
                     writer,
                     {
@@ -723,6 +815,163 @@ def test_live_start_mission_invoke_gate(tmp_path: Path) -> None:
                 admitted_error = cast("dict[str, object]", admitted_error_obj)
                 assert admitted_error["code"] == -32601
                 assert admitted_error["message"] == "method not found"
+            finally:
+                dest_writer.close()
+                writer.close()
+                await dest_writer.wait_closed()
+                await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_live_host_dest_placement_same_daemon_admits_start_mission(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix2-same-daemon")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            fp1 = _stage(process)
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            placed = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={
+                    "target": "dest-placement",
+                    "instance_id": "inst-local",
+                    "environment_id": "env-local",
+                    "placement_revision": "rev-0",
+                    "credential_ref": _DEST_CRED,
+                    "reachable_hosts": ["artifacts.example"],
+                    "same_daemon": True,
+                },
+            )
+            assert is_ok(placed), placed
+            assert placed.value.get("ok") is True
+            configured = placed.value.get("configured")
+            assert isinstance(configured, dict)
+            assert configured.get("same_daemon") is True
+            dest = process.transfers.placements.get("inst-local")
+            assert dest is not None
+            assert dest.same_daemon is True
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={PAIRING_CAPABILITY: True},
+                )
+                assert "error" not in init_resp, init_resp
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "start_mission",
+                        "params": {
+                            "fp1": fp1,
+                            "instance_id": "inst-unregistered",
+                        },
+                    },
+                )
+                await writer.drain()
+                refused = await _ws_read_json(reader)
+                assert "error" in refused, refused
+                error_obj = refused["error"]
+                assert isinstance(error_obj, dict)
+                error = cast("dict[str, object]", error_obj)
+                data_obj = error["data"]
+                assert isinstance(data_obj, dict)
+                data = cast("dict[str, object]", data_obj)
+                context_obj = data["context"]
+                assert isinstance(context_obj, dict)
+                context = cast("dict[str, object]", context_obj)
+                assert context["local_fallback"] is False
+                assert "registered" in str(context.get("reason", ""))
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "start_mission",
+                        "params": {
+                            "fp1": fp1,
+                            "instance_id": "inst-local",
+                        },
+                    },
+                )
+                await writer.drain()
+                admitted = await _ws_read_json(reader)
+                assert "error" in admitted, admitted
+                admitted_error_obj = admitted["error"]
+                assert isinstance(admitted_error_obj, dict)
+                admitted_error = cast("dict[str, object]", admitted_error_obj)
+                assert admitted_error["code"] == -32601
+                assert admitted_error["message"] == "method not found"
+                assert process.transfers.open_tickets() == ()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_live_start_mission_without_fp1_falls_through(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-fix2-no-fp1")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host = bound.value.host
+            port = bound.value.port
+            _record_id, proof = await _pair_over_listener(process, host, port)
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                init_resp = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={PAIRING_CAPABILITY: True},
+                )
+                assert "error" not in init_resp, init_resp
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "start_mission",
+                        "params": {"instance_id": "inst-remote"},
+                    },
+                )
+                await writer.drain()
+                skipped = await _ws_read_json(reader)
+                assert "error" in skipped, skipped
+                skipped_error_obj = skipped["error"]
+                assert isinstance(skipped_error_obj, dict)
+                skipped_error = cast("dict[str, object]", skipped_error_obj)
+                assert skipped_error["code"] == -32601
+                assert skipped_error["message"] == "method not found"
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "launch_task",
+                        "params": {"instance_id": "inst-remote"},
+                    },
+                )
+                await writer.drain()
+                launch = await _ws_read_json(reader)
+                assert "error" in launch, launch
+                launch_error_obj = launch["error"]
+                assert isinstance(launch_error_obj, dict)
+                launch_error = cast("dict[str, object]", launch_error_obj)
+                assert launch_error["code"] == -32601
             finally:
                 writer.close()
                 await writer.wait_closed()

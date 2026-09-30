@@ -67,7 +67,7 @@ from qma.daemon.artifacts import (
     handle_transfer_complete,
     parse_stage_content_length,
     place_dest_pulled_bytes,
-    placement_from_transfer_args,
+    placement_from_host_configure,
     refuse_interrupted_stage_put,
 )
 from qma.daemon.backtest.service import BacktestingService
@@ -288,6 +288,21 @@ _JSONRPC_METHOD_NOT_FOUND: Final[int] = -32601
 def _ws_accept_key(key: str) -> str:
     digest = hashlib.sha1((key.strip() + _WS_ACCEPT_GUID).encode("ascii")).digest()  # noqa: S324
     return base64.b64encode(digest).decode("ascii")
+
+
+def _emit_dest_control_note(
+    writer: asyncio.StreamWriter, note: Mapping[str, object]
+) -> bool:
+    """Write one dest-control JSON-RPC notification as a WS text frame."""
+    is_closing = getattr(writer, "is_closing", None)
+    if callable(is_closing) and is_closing():
+        return False
+    payload = json.dumps(dict(note), ensure_ascii=True).encode("utf-8")
+    try:
+        writer.write(_encode_ws_frame(payload))
+    except (ConnectionError, OSError, RuntimeError):
+        return False
+    return True
 
 
 def _encode_ws_frame(
@@ -994,11 +1009,13 @@ class DaemonProcess:
         self._transfers.register_destination(placement)
 
     def dest_control_up(self, credential_ref: object) -> Result[DestControlHandle]:
-        """Dest control reconnect: issued tickets become notified."""
+        """Dest control reconnect: issued and notified open tickets are pushed."""
         return self._transfers.dest_control_up(credential_ref)
 
-    def dest_control_down(self, credential_ref: str) -> None:
-        self._transfers.dest_control_down(credential_ref)
+    def dest_control_down(
+        self, credential_ref: str, *, writer: object | None = None
+    ) -> None:
+        self._transfers.dest_control_down(credential_ref, writer=writer)
 
     def transfer_artifact(
         self,
@@ -1047,6 +1064,7 @@ class DaemonProcess:
         *,
         capabilities: object | None = None,
         principal_class: object = PrincipalClass.MACHINE,
+        credential_ref: object,
     ) -> Result[TransferCompleteResult]:
         """Library admission of transfer_complete. Live CT-40 must call the WS path."""
         caps: object = (
@@ -1057,6 +1075,7 @@ class DaemonProcess:
             payload,
             capabilities=caps,
             principal_class=principal_class,
+            credential_ref=credential_ref,
         )
 
     def gate_invoke_until_transfer_complete(
@@ -1425,7 +1444,7 @@ class DaemonProcess:
         )
 
     def configure_dest_placement(self, payload: object) -> Result[Mapping[str, object]]:
-        """Register a remote destination placement. Payload same_daemon is ignored."""
+        """Register destination placement. Host-control may set same_daemon."""
         if not isinstance(payload, Mapping):
             return invalid_input(
                 "dest-placement",
@@ -1434,14 +1453,10 @@ class DaemonProcess:
                 local_fallback=False,
             )
         entry = cast("Mapping[str, object]", payload)
-        placement = placement_from_transfer_args(entry)
-        if placement is None:
-            return invalid_input(
-                "dest-placement",
-                "destination placement requires instance_id, environment_id, "
-                "placement_revision, credential_ref, and reachable_hosts",
-                local_fallback=False,
-            )
+        placed = placement_from_host_configure(entry)
+        if is_refusal(placed):
+            return placed
+        placement = placed.value
         self._transfers.register_destination(placement)
         return Ok(
             MappingProxyType(
@@ -1450,7 +1465,7 @@ class DaemonProcess:
                     "environment_id": placement.environment_id,
                     "placement_revision": placement.placement_revision,
                     "credential_ref": placement.credential_ref,
-                    "same_daemon": False,
+                    "same_daemon": placement.same_daemon,
                     "writer": "host.configure.dest-placement",
                 }
             )
@@ -1975,7 +1990,11 @@ class DaemonProcess:
             )
             await self._write_refusal(writer, refused, origin=origin)
             return
-        self.dest_control_up(credential_ref)
+        up = self.dest_control_up(credential_ref)
+        if is_refusal(up):
+            await self._write_refusal(writer, up, origin=origin)
+            return
+        handle = up.value
         opening = _encode_http_response(
             101,
             {
@@ -1988,16 +2007,25 @@ class DaemonProcess:
         writer.write(opening)
         await writer.drain()
         connection = WireConnection()
-        authed = connection.authenticate(
-            credential_ref,
-            principal_class=PrincipalClass.MACHINE,
-        )
-        if is_refusal(authed):
-            self.dest_control_down(credential_ref)
-            return
         connection_token = f"{credential_ref}:{id(connection)}"
         buf = b""
         try:
+            authed = connection.authenticate(
+                credential_ref,
+                principal_class=PrincipalClass.MACHINE,
+            )
+            if is_refusal(authed):
+                return
+            attached = self._transfers.attach_dest_control(
+                credential_ref,
+                writer=writer,
+                emit=lambda note: _emit_dest_control_note(writer, note),
+            )
+            if is_refusal(attached):
+                writer.close()
+                await writer.wait_closed()
+                return
+            await writer.drain()
             while not reader.at_eof() and not self._closed:
                 chunk = await reader.read(65536)
                 if not chunk:
@@ -2031,7 +2059,7 @@ class DaemonProcess:
                     writer.write(_encode_ws_frame(json.dumps(response).encode("utf-8")))
                     await writer.drain()
         finally:
-            self.dest_control_down(credential_ref)
+            self._transfers.dest_control_down(credential_ref, writer=writer)
             producer_id = connection.producer_id
             if producer_id is not None:
                 self._live_producers.release(
@@ -2248,16 +2276,15 @@ class DaemonProcess:
         request: Mapping[str, object],
         req_id: object,
     ) -> dict[str, object] | None:
-        """Refuse start_mission (and launch_task citing fp1) until transfer_complete."""
+        """Refuse start_mission / launch_task that cite fp1 until transfer_complete."""
+        _ = method
         raw_params = request.get("params")
         params: Mapping[str, object] = (
             cast("Mapping[str, object]", raw_params) if isinstance(raw_params, Mapping) else {}
         )
         fp1 = params.get("fp1")
         instance_id = params.get("instance_id")
-        if method == WireCommand.LAUNCH_TASK.value and not (
-            isinstance(fp1, str) and fp1.strip() != ""
-        ):
+        if not (isinstance(fp1, str) and fp1.strip() != ""):
             return None
         gated = gate_invoke_until_transfer_complete(
             self._transfers,
@@ -2341,6 +2368,7 @@ class DaemonProcess:
             dict(cast("Mapping[str, object]", raw_params)),
             capabilities=connection.capabilities,
             principal_class=principal,
+            credential_ref=connection.credential_ref,
         )
         if is_refusal(completed):
             return _jsonrpc_refusal(req_id, completed)

@@ -58,7 +58,7 @@ def main() -> None:
             "pair",
         )
     )
-    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin")
+    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin", "dest-placement")
     assert HOST_PAIR_COMMANDS == ("revoke",)
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False

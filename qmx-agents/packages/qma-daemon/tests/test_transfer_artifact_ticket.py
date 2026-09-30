@@ -452,12 +452,32 @@ def test_ticket_issued_until_dest_reconnect_then_notified(tmp_path: Path) -> Non
         )
         assert is_ok(replay)
         assert replay.value.ticket_id == ticket_id
-        handle = process.dest_control_up(_DEST_CRED)
+        pending = process.dest_control_up(_DEST_CRED)
+        assert is_ok(pending), pending
+        still_issued = process.transfers.get(ticket_id)
+        assert still_issued is not None
+        assert still_issued.state == "issued"
+        failed_delivery = process.transfers.attach_dest_control(
+            _DEST_CRED,
+            writer=object(),
+            emit=lambda _note: False,
+        )
+        assert is_ok(failed_delivery), failed_delivery
+        still_issued = process.transfers.get(ticket_id)
+        assert still_issued is not None
+        assert still_issued.state == "issued"
+        emitted: list[Mapping[str, object]] = []
+        handle = process.transfers.attach_dest_control(
+            _DEST_CRED,
+            writer=object(),
+            emit=lambda note: emitted.append(note) is None,
+        )
         assert is_ok(handle), handle
         notified = process.transfers.get(ticket_id)
         assert notified is not None
         assert notified.state == "notified"
         assert handle.value.notifications
+        assert emitted
         note = handle.value.notifications[0]
         assert note["method"] == DEST_CONTROL_NOTIFY_METHOD
         assert "id" not in note
@@ -466,6 +486,27 @@ def test_ticket_issued_until_dest_reconnect_then_notified(tmp_path: Path) -> Non
         params = cast("dict[str, object]", params_obj)
         assert params["ticket_id"] == ticket_id
         assert params["source_origin"] == _TLS_ORIGIN
+        process.dest_control_down(_DEST_CRED)
+        again = process.dest_control_up(_DEST_CRED)
+        assert is_ok(again), again
+        assert not again.value.notifications
+        assert not process.transfers.dest_control.is_live(_DEST_CRED)
+        replayed: list[Mapping[str, object]] = []
+        attached_again = process.transfers.attach_dest_control(
+            _DEST_CRED,
+            writer=object(),
+            emit=lambda note: replayed.append(note) is None,
+        )
+        assert is_ok(attached_again), attached_again
+        assert replayed
+        replay_note = replayed[0]
+        replay_params_obj = replay_note["params"]
+        assert isinstance(replay_params_obj, dict)
+        replay_params = cast("dict[str, object]", replay_params_obj)
+        assert replay_params["ticket_id"] == ticket_id
+        still = process.transfers.get(ticket_id)
+        assert still is not None
+        assert still.state == "notified"
         live = process.transfers.open_tickets()
         assert len(live) == 1
         assert live[0].state == "notified"
@@ -555,12 +596,9 @@ def test_live_transfer_artifact_on_bound_pairing_ws(tmp_path: Path) -> None:
                 ticket = process.transfers.get(ticket_id)
                 assert ticket is not None
                 assert ticket.source_origin == _TLS_ORIGIN
-                handle = process.dest_control_up(_DEST_CRED)
-                assert is_ok(handle), handle
                 notified = process.transfers.get(ticket_id)
                 assert notified is not None
-                assert notified.state == "notified"
-                assert handle.value.notifications
+                assert notified.state == "issued"
             finally:
                 writer.close()
                 await writer.wait_closed()
@@ -568,6 +606,15 @@ def test_live_transfer_artifact_on_bound_pairing_ws(tmp_path: Path) -> None:
             await process.aclose()
 
     asyncio.run(_run())
+
+
+async def _wait_dest_writer(process: DaemonProcess, credential_ref: str) -> None:
+    for _ in range(50):
+        handle = process.transfers.dest_control.get(credential_ref)
+        if handle is not None and handle.writer is not None and handle.live:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("dest-control writer was not attached")
 
 
 def test_live_ws_notifies_when_dest_control_is_up(tmp_path: Path) -> None:
@@ -582,18 +629,18 @@ def test_live_ws_notifies_when_dest_control_is_up(tmp_path: Path) -> None:
             fp1 = _stage(process)
             assert is_ok(process.record_source_tls_origin(_TLS_ORIGIN))
             process.register_destination_placement(_remote_placement())
-            handle = process.dest_control_up(_DEST_CRED)
-            assert is_ok(handle), handle
-            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            dest_reader, dest_writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
+            op_reader, op_writer = await _upgrade_paired_ws(host, port, proof)
             try:
+                await _wait_dest_writer(process, _DEST_CRED)
                 init_resp = await _initialize_ws(
-                    writer,
-                    reader,
+                    op_writer,
+                    op_reader,
                     capabilities={TRANSFER_ARTIFACT_CAPABILITY: True},
                 )
                 assert "error" not in init_resp, init_resp
                 _ws_write(
-                    writer,
+                    op_writer,
                     {
                         "jsonrpc": "2.0",
                         "id": 2,
@@ -605,20 +652,27 @@ def test_live_ws_notifies_when_dest_control_is_up(tmp_path: Path) -> None:
                         },
                     },
                 )
-                await writer.drain()
-                notified = await _ws_read_json(reader)
+                await op_writer.drain()
+                notified = await _ws_read_json(op_reader)
                 assert "error" not in notified, notified
                 notified_result_obj = notified["result"]
                 assert isinstance(notified_result_obj, dict)
                 notified_result = cast("dict[str, object]", notified_result_obj)
                 assert notified_result["state"] == "notified"
-                assert handle.value.notifications
-                note = handle.value.notifications[-1]
-                assert note["method"] == DEST_CONTROL_NOTIFY_METHOD
-                assert "id" not in note
+                ticket_id = notified_result["ticket_id"]
+                assert isinstance(ticket_id, str)
+                dest_note = await _ws_read_json(dest_reader)
+                assert dest_note.get("method") == DEST_CONTROL_NOTIFY_METHOD
+                assert "id" not in dest_note
+                dest_params_obj = dest_note["params"]
+                assert isinstance(dest_params_obj, dict)
+                dest_params = cast("dict[str, object]", dest_params_obj)
+                assert dest_params["ticket_id"] == ticket_id
             finally:
-                writer.close()
-                await writer.wait_closed()
+                dest_writer.close()
+                op_writer.close()
+                await dest_writer.wait_closed()
+                await op_writer.wait_closed()
         finally:
             await process.aclose()
 
@@ -707,14 +761,35 @@ def test_live_machine_ws_notifies_issued_ticket(tmp_path: Path) -> None:
             ticket = process.transfers.get(ticket_id)
             assert ticket is not None
             assert ticket.state == "issued"
-            _reader, writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
+            reader, writer = await _upgrade_machine_ws(host, port, _DEST_CRED)
             try:
+                dest_note = await _ws_read_json(reader)
+                assert dest_note.get("method") == DEST_CONTROL_NOTIFY_METHOD
+                assert "id" not in dest_note
+                dest_params_obj = dest_note["params"]
+                assert isinstance(dest_params_obj, dict)
+                dest_params = cast("dict[str, object]", dest_params_obj)
+                assert dest_params["ticket_id"] == ticket_id
                 notified = process.transfers.get(ticket_id)
                 assert notified is not None
                 assert notified.state == "notified"
             finally:
                 writer.close()
                 await writer.wait_closed()
+            reader2, writer2 = await _upgrade_machine_ws(host, port, _DEST_CRED)
+            try:
+                replay = await _ws_read_json(reader2)
+                assert replay.get("method") == DEST_CONTROL_NOTIFY_METHOD
+                replay_params_obj = replay["params"]
+                assert isinstance(replay_params_obj, dict)
+                replay_params = cast("dict[str, object]", replay_params_obj)
+                assert replay_params["ticket_id"] == ticket_id
+                still = process.transfers.get(ticket_id)
+                assert still is not None
+                assert still.state == "notified"
+            finally:
+                writer2.close()
+                await writer2.wait_closed()
         finally:
             await process.aclose()
 

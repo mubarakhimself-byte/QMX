@@ -67,6 +67,7 @@ _CLI_INVOKERS: dict[str, str] = {
     "invoke_config_compile": "config.compile",
     "invoke_config_show": "config.show",
     "invoke_data": "data",
+    "invoke_host_configure_dest_placement": "host.configure",
     "invoke_host_configure_pairing_ttl": "host.configure",
     "invoke_host_configure_source_origin": "host.configure",
     "invoke_host_pair": "host.pair",

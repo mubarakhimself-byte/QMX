@@ -75,6 +75,7 @@ from qmb.doors.cli.tree import (
     invoke_config_compile,
     invoke_config_show,
     invoke_data,
+    invoke_host_configure_dest_placement,
     invoke_host_configure_pairing_ttl,
     invoke_host_configure_source_origin,
     invoke_host_pair,
@@ -171,6 +172,7 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_configure_source_origin",
     "invoke_host_pair",
@@ -1741,6 +1743,41 @@ def host_configure_source_origin(ctx: click.Context, origin: str) -> None:
     )
 
 
+@host_configure.command("dest-placement")
+@click.option("--instance-id", "instance_id", required=True)
+@click.option("--environment-id", "environment_id", required=True)
+@click.option("--placement-revision", "placement_revision", required=True)
+@click.option("--credential-ref", "credential_ref", required=True)
+@click.option("--reachable-host", "reachable_hosts", multiple=True)
+@click.option("--same-daemon", "same_daemon", is_flag=True, default=False)
+@click.pass_context
+def host_configure_dest_placement(
+    ctx: click.Context,
+    instance_id: str,
+    environment_id: str,
+    placement_revision: str,
+    credential_ref: str,
+    reachable_hosts: tuple[str, ...],
+    same_daemon: bool,
+) -> None:
+    """Register dest placement. Host-control same-daemon is operator authority."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_configure_dest_placement(
+            instance_id=instance_id,
+            environment_id=environment_id,
+            placement_revision=placement_revision,
+            credential_ref=credential_ref,
+            reachable_hosts=reachable_hosts,
+            same_daemon=same_daemon,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
 @host_group.command("rotate-control")
 @click.pass_context
 def host_rotate_control(ctx: click.Context) -> None:
@@ -1910,6 +1947,7 @@ def _format_ok(value: object) -> str:
             "host.stop",
             "host.configure.pairing-ttl",
             "host.configure.source-origin",
+            "host.configure.dest-placement",
             "host.rotate-control",
             "host.recover-control",
             "host.pair",

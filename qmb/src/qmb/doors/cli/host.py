@@ -70,6 +70,7 @@ __all__ = [
     "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
+    "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_configure_source_origin",
     "invoke_host_pair",
@@ -93,7 +94,11 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
     "recover-control",
     "pair",
 )
-HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = ("pairing-ttl", "source-origin")
+HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = (
+    "pairing-ttl",
+    "source-origin",
+    "dest-placement",
+)
 HOST_PAIR_COMMANDS: Final[tuple[str, ...]] = ("revoke",)
 PAIRING_SESSION_TTL_REGISTRY_KEY: Final[str] = "registry:pairing.session_ttl"
 QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA: Final[bool] = False
@@ -1183,6 +1188,123 @@ def invoke_host_configure_source_origin(
         "verb": "host.configure.source-origin",
         "source_origin": fields_out.get("source_origin", origin.strip()),
         "writer": fields_out.get("writer", "host.configure.source-origin"),
+    }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_configure_dest_placement(
+    *,
+    instance_id: object,
+    environment_id: object,
+    placement_revision: object,
+    credential_ref: object,
+    reachable_hosts: object = None,
+    same_daemon: object = False,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Register dest placement over host-control. ``same_daemon`` is operator authority."""
+    identity = (instance_id, environment_id, placement_revision, credential_ref)
+    if not all(isinstance(item, str) and item.strip() != "" for item in identity):
+        return invalid(
+            "dest-placement",
+            "qmb host configure dest-placement requires instance_id, "
+            "environment_id, placement_revision, and credential_ref",
+            given=repr(
+                {
+                    "instance_id": instance_id,
+                    "environment_id": environment_id,
+                    "placement_revision": placement_revision,
+                    "credential_ref": credential_ref,
+                }
+            ),
+        )
+    hosts: list[str] = []
+    if isinstance(reachable_hosts, tuple):
+        hosts = [
+            item.strip()
+            for item in cast("tuple[object, ...]", reachable_hosts)
+            if isinstance(item, str) and item.strip() != ""
+        ]
+    elif isinstance(reachable_hosts, list):
+        hosts = [
+            item.strip()
+            for item in cast("list[object]", reachable_hosts)
+            if isinstance(item, str) and item.strip() != ""
+        ]
+    elif isinstance(reachable_hosts, str) and reachable_hosts.strip() != "":
+        hosts = [reachable_hosts.strip()]
+    local = False
+    if same_daemon is True or same_daemon is False:
+        local = bool(same_daemon)
+    elif isinstance(same_daemon, str):
+        folded = same_daemon.strip().casefold()
+        if folded in {"true", "1", "yes"}:
+            local = True
+        elif folded in {"false", "0", "no", ""}:
+            local = False
+        else:
+            return invalid(
+                "same_daemon",
+                "same_daemon is a boolean when present",
+                given=repr(same_daemon),
+            )
+    elif same_daemon is not None:
+        return invalid(
+            "same_daemon",
+            "same_daemon is a boolean when present",
+            given=repr(same_daemon),
+        )
+    if not hosts and not local:
+        return invalid(
+            "reachable_hosts",
+            "qmb host configure dest-placement requires reachable-host unless same-daemon",
+        )
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object] = {
+        "target": "dest-placement",
+        "instance_id": str(instance_id).strip(),
+        "environment_id": str(environment_id).strip(),
+        "placement_revision": str(placement_revision).strip(),
+        "credential_ref": str(credential_ref).strip(),
+        "reachable_hosts": hosts,
+        "same_daemon": local,
+    }
+    if callable(transport):
+        called = transport("configure", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("configure", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "configure", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="configure")
+    if not isinstance(refused, Ok):
+        return refused
+    configured = payload.get("configured")
+    fields_out: dict[str, object]
+    if isinstance(configured, Mapping):
+        fields_out = dict(cast("Mapping[str, object]", configured))
+    else:
+        fields_out = {}
+    report: dict[str, object] = {
+        "verb": "host.configure.dest-placement",
+        "instance_id": fields_out.get("instance_id", str(instance_id).strip()),
+        "environment_id": fields_out.get("environment_id", str(environment_id).strip()),
+        "placement_revision": fields_out.get("placement_revision", str(placement_revision).strip()),
+        "same_daemon": fields_out.get("same_daemon", local),
+        "writer": fields_out.get("writer", "host.configure.dest-placement"),
     }
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 

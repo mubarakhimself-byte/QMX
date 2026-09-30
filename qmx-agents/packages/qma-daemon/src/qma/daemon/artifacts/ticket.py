@@ -18,7 +18,7 @@ from __future__ import annotations
 import fnmatch
 import sqlite3
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final, cast
@@ -88,7 +88,9 @@ __all__ = [
     "handle_transfer_artifact",
     "handle_transfer_complete",
     "loopback_source_not_get_target",
+    "parse_host_same_daemon",
     "place_dest_pulled_bytes",
+    "placement_from_host_configure",
     "placement_from_transfer_args",
     "source_unreachable",
 ]
@@ -187,19 +189,41 @@ class DestControlHandle:
     credential_ref: str
     live: bool = True
     notifications: list[Mapping[str, object]] = field(default_factory=list[Mapping[str, object]])
+    writer: object | None = None
+    _emit: Callable[[Mapping[str, object]], bool] | None = field(
+        default=None, repr=False, compare=False
+    )
 
-    def notify(self, payload: Mapping[str, object]) -> None:
-        if not self.live:
-            return
-        self.notifications.append(
-            MappingProxyType(
-                {
-                    "jsonrpc": "2.0",
-                    "method": DEST_CONTROL_NOTIFY_METHOD,
-                    "params": dict(payload),
-                }
-            )
+    def attach_writer(
+        self,
+        writer: object,
+        *,
+        emit: Callable[[Mapping[str, object]], bool],
+    ) -> None:
+        """Bind the live machine StreamWriter so notifies leave the process."""
+        self.writer = writer
+        self._emit = emit
+        self.live = True
+
+    def detach_writer(self) -> None:
+        self.writer = None
+        self._emit = None
+
+    def notify(self, payload: Mapping[str, object]) -> bool:
+        """Emit only onto an attached live socket and record delivered notes."""
+        if not self.live or self.writer is None or self._emit is None:
+            return False
+        note = MappingProxyType(
+            {
+                "jsonrpc": "2.0",
+                "method": DEST_CONTROL_NOTIFY_METHOD,
+                "params": dict(payload),
+            }
         )
+        if not self._emit(note):
+            return False
+        self.notifications.append(note)
+        return True
 
 
 @dataclass
@@ -216,17 +240,23 @@ class DestControlRegistry:
         self._handles[handle.credential_ref] = handle
         return handle
 
-    def disconnect(self, credential_ref: str) -> None:
+    def disconnect(self, credential_ref: str, *, writer: object | None = None) -> None:
         handle = self._handles.get(credential_ref)
-        if handle is not None:
+        if handle is not None and (writer is None or handle.writer is writer):
             handle.live = False
+            handle.detach_writer()
 
     def get(self, credential_ref: str) -> DestControlHandle | None:
         return self._handles.get(credential_ref)
 
     def is_live(self, credential_ref: str) -> bool:
         handle = self._handles.get(credential_ref)
-        return handle is not None and handle.live
+        return (
+            handle is not None
+            and handle.live
+            and handle.writer is not None
+            and handle._emit is not None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -767,7 +797,7 @@ class TransferTicketStore:
         return tuple(tickets)
 
     def dest_control_up(self, credential_ref: object) -> Result[DestControlHandle]:
-        """Dest reconnect: issued tickets for this audience become notified."""
+        """Register an authenticated destination control before WS attachment."""
         if not isinstance(credential_ref, str) or credential_ref.strip() == "":
             return invalid_input(
                 "credential_ref",
@@ -783,17 +813,42 @@ class TransferTicketStore:
         handle = self.dest_control.register(
             DestControlHandle(credential_ref=credential_ref, live=True)
         )
-        for ticket in self.open_tickets():
-            if ticket.credential_ref != credential_ref or ticket.state != "issued":
-                continue
-            notified = self._journal_state(ticket, state="notified")
-            if is_refusal(notified):
-                return notified
-            handle.notify(notified.value.to_payload())
+        handle.live = True
+        handle.detach_writer()
+        handle.notifications.clear()
         return Ok(handle)
 
-    def dest_control_down(self, credential_ref: str) -> None:
-        self.dest_control.disconnect(credential_ref)
+    def attach_dest_control(
+        self,
+        credential_ref: object,
+        *,
+        writer: object,
+        emit: Callable[[Mapping[str, object]], bool],
+    ) -> Result[DestControlHandle]:
+        """Attach a live WS and deliver every open ticket for its exact audience."""
+        registered = self.dest_control_up(credential_ref)
+        if is_refusal(registered):
+            return registered
+        handle = registered.value
+        handle.attach_writer(writer, emit=emit)
+        for ticket in self.open_tickets():
+            if ticket.credential_ref != credential_ref:
+                continue
+            if ticket.state == "issued":
+                # The journal may claim notification only after a live socket
+                # accepted the JSON-RPC notification for delivery.
+                if not handle.notify(ticket.to_payload()):
+                    continue
+                notified = self._journal_state(ticket, state="notified")
+                if is_refusal(notified):
+                    return notified
+                continue
+            if ticket.state == "notified":
+                handle.notify(ticket.to_payload())
+        return Ok(handle)
+
+    def dest_control_down(self, credential_ref: str, *, writer: object | None = None) -> None:
+        self.dest_control.disconnect(credential_ref, writer=writer)
 
     def _journal_state(self, ticket: TransferTicket, *, state: str) -> Result[TransferTicket]:
         declared = _declare_fold(self.journal)
@@ -871,13 +926,12 @@ class TransferTicketStore:
             return issued
         ticket = issued.value
         if self.dest_control.is_live(dest.credential_ref):
-            notified = self._journal_state(ticket, state="notified")
-            if is_refusal(notified):
-                return notified
             handle = self.dest_control.get(dest.credential_ref)
-            if handle is not None:
-                handle.notify(notified.value.to_payload())
-            return notified
+            if handle is not None and handle.notify(ticket.to_payload()):
+                notified = self._journal_state(ticket, state="notified")
+                if is_refusal(notified):
+                    return notified
+                return notified
         return Ok(ticket)
 
     def tickets_for_placement(self, *, fp1: str, instance_id: str) -> tuple[TransferTicket, ...]:
@@ -982,8 +1036,26 @@ def _same_daemon_result(fp1: str) -> TransferArtifactResult:
     )
 
 
-def placement_from_transfer_args(args: Mapping[str, object]) -> DestinationPlacement | None:
-    """Remote placement from operator dest identity. ``same_daemon`` is never authority."""
+def _reachable_hosts_from_args(args: Mapping[str, object]) -> tuple[str, ...]:
+    hosts_obj = args.get("reachable_hosts")
+    if isinstance(hosts_obj, tuple):
+        return tuple(
+            item.strip()
+            for item in cast("tuple[object, ...]", hosts_obj)
+            if isinstance(item, str) and item.strip() != ""
+        )
+    if isinstance(hosts_obj, list):
+        return tuple(
+            item.strip()
+            for item in cast("list[object]", hosts_obj)
+            if isinstance(item, str) and item.strip() != ""
+        )
+    if isinstance(hosts_obj, str) and hosts_obj.strip() != "":
+        return (hosts_obj.strip(),)
+    return ()
+
+
+def _placement_identity(args: Mapping[str, object]) -> tuple[str, str, str, str] | None:
     instance_id = args.get("instance_id")
     environment_id = args.get("environment_id")
     placement_revision = args.get("placement_revision")
@@ -993,31 +1065,85 @@ def placement_from_transfer_args(args: Mapping[str, object]) -> DestinationPlace
         for item in (instance_id, environment_id, placement_revision, credential_ref)
     ):
         return None
-    hosts_obj = args.get("reachable_hosts")
-    hosts: tuple[str, ...] = ()
-    if isinstance(hosts_obj, tuple):
-        hosts = tuple(
-            item.strip()
-            for item in cast("tuple[object, ...]", hosts_obj)
-            if isinstance(item, str) and item.strip() != ""
-        )
-    elif isinstance(hosts_obj, list):
-        hosts = tuple(
-            item.strip()
-            for item in cast("list[object]", hosts_obj)
-            if isinstance(item, str) and item.strip() != ""
-        )
-    elif isinstance(hosts_obj, str) and hosts_obj.strip() != "":
-        hosts = (hosts_obj.strip(),)
+    return (
+        str(instance_id).strip(),
+        str(environment_id).strip(),
+        str(placement_revision).strip(),
+        str(credential_ref).strip(),
+    )
+
+
+def parse_host_same_daemon(value: object) -> Result[bool]:
+    """Host-control dest-placement may set ``same_daemon``. Absent is remote."""
+    if value is None:
+        return Ok(False)
+    if value is True or value is False:
+        return Ok(bool(value))
+    if isinstance(value, str):
+        folded = value.strip().casefold()
+        if folded in {"true", "1", "yes"}:
+            return Ok(True)
+        if folded in {"false", "0", "no", ""}:
+            return Ok(False)
+    return invalid_input(
+        "same_daemon",
+        "same_daemon is a boolean when present",
+        given=repr(value),
+        local_fallback=LOCAL_INVOKE_FALLBACK,
+    )
+
+
+def placement_from_transfer_args(args: Mapping[str, object]) -> DestinationPlacement | None:
+    """Remote placement from operator dest identity. ``same_daemon`` is never authority."""
+    identity = _placement_identity(args)
+    if identity is None:
+        return None
+    hosts = _reachable_hosts_from_args(args)
     if not hosts:
         return None
+    instance_id, environment_id, placement_revision, credential_ref = identity
     return DestinationPlacement(
-        instance_id=str(instance_id).strip(),
-        environment_id=str(environment_id).strip(),
-        placement_revision=str(placement_revision).strip(),
-        credential_ref=str(credential_ref).strip(),
+        instance_id=instance_id,
+        environment_id=environment_id,
+        placement_revision=placement_revision,
+        credential_ref=credential_ref,
         same_daemon=False,
         reachable_hosts=hosts,
+    )
+
+
+def placement_from_host_configure(args: Mapping[str, object]) -> Result[DestinationPlacement]:
+    """Operator dest-placement. Host-control ``same_daemon`` is authority; payload is not."""
+    same = parse_host_same_daemon(args.get("same_daemon") if "same_daemon" in args else None)
+    if is_refusal(same):
+        return same
+    same_daemon = same.value
+    identity = _placement_identity(args)
+    if identity is None:
+        return invalid_input(
+            "dest-placement",
+            "destination placement requires instance_id, environment_id, "
+            "placement_revision, credential_ref, and reachable_hosts",
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+        )
+    hosts = _reachable_hosts_from_args(args)
+    if not hosts and not same_daemon:
+        return invalid_input(
+            "dest-placement",
+            "destination placement requires instance_id, environment_id, "
+            "placement_revision, credential_ref, and reachable_hosts",
+            local_fallback=LOCAL_INVOKE_FALLBACK,
+        )
+    instance_id, environment_id, placement_revision, credential_ref = identity
+    return Ok(
+        DestinationPlacement(
+            instance_id=instance_id,
+            environment_id=environment_id,
+            placement_revision=placement_revision,
+            credential_ref=credential_ref,
+            same_daemon=same_daemon,
+            reachable_hosts=hosts,
+        )
     )
 
 
@@ -1204,6 +1330,7 @@ def handle_transfer_complete(
     *,
     capabilities: object,
     principal_class: object,
+    credential_ref: object,
 ) -> Result[TransferCompleteResult]:
     """Source records dest-authored complete. Does not write dest bytes."""
     gated = require_transfer_complete_capability(capabilities)
@@ -1234,6 +1361,20 @@ def handle_transfer_complete(
     ticket = store.get(ticket_id)
     if ticket is None:
         return policy_rejection("ticket_id", "unknown transfer ticket", given=ticket_id)
+    if not isinstance(credential_ref, str) or credential_ref.strip() == "":
+        return policy_rejection(
+            "credential_ref",
+            "transfer_complete requires the authenticated machine credential_ref",
+            given=repr(credential_ref),
+            audience=ticket.credential_ref,
+        )
+    if credential_ref != ticket.credential_ref:
+        return policy_rejection(
+            "credential_ref",
+            "only the ticket audience may author transfer_complete",
+            given=credential_ref,
+            audience=ticket.credential_ref,
+        )
     if ticket.command_id != str(parsed_command_id):
         return policy_rejection(
             "command_id",
@@ -1289,7 +1430,9 @@ def gate_invoke_until_transfer_complete(
     """Refuse remote invoke citing fp1 until the ticket is complete.
 
     Exactly one instance_id is required (Epic 60). This gate does not grant,
-    enable, or guess an instance. Silent local fallback is refused.
+    enable, or guess an instance. Silent local fallback is refused. A complete
+    ticket satisfies the gate; dest_artifacts are dest-only and not required
+    on the source process.
     """
     if not isinstance(instance_id, str) or instance_id.strip() == "":
         return invalid_input(
@@ -1340,18 +1483,6 @@ def gate_invoke_until_transfer_complete(
             instance_granted=False,
         )
     ticket = complete[-1]
-    dest_object = store.dest_artifacts.get(fp1.strip())
-    if dest_object is None:
-        return policy_rejection(
-            "invoke",
-            "dest has no runnable remote ref",
-            runnable_remote_ref=False,
-            local_fallback=LOCAL_INVOKE_FALLBACK,
-            finish_on_local_disk=False,
-            composer_ref_rewritten=False,
-            instance_granted=False,
-            ticket_id=ticket.ticket_id,
-        )
     return Ok(
         InvokeTransferGate(
             transfer_gate_satisfied=True,
