@@ -27,7 +27,11 @@ from qma.wire import (
     refuse_page_machine_principal,
     refuse_shared_live_producer_id,
 )
-from qma.wire.initialize import InitializeParams
+from qma.wire.initialize import (
+    GET_PACK_UI_REQUEST_CAPABILITY,
+    PACK_UI_REQUEST_CAPABILITY,
+    InitializeParams,
+)
 from qmf.core.refusal import Ok, RefusalCategory, is_ok, is_refusal
 
 _RECORD_ID = f"{PAIRING_RECORD_ID_PREFIX}{'ab' * 16}"
@@ -66,6 +70,8 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert negotiated.value.capabilities[PAIRING_CAPABILITY] is True
     assert negotiated.value.capabilities["list_mailbox"] is True
     assert negotiated.value.capabilities.get("stage_artifact") is not True
+    assert negotiated.value.capabilities.get(PACK_UI_REQUEST_CAPABILITY) is not True
+    assert negotiated.value.capabilities.get(GET_PACK_UI_REQUEST_CAPABILITY) is not True
     for name in DEFERRED_INITIALIZE_CAPABILITIES:
         assert name not in negotiated.value.capabilities
 
@@ -102,6 +108,37 @@ def test_initialize_advertises_pairing_and_strips_deferred() -> None:
     assert pairing_neg.value.capabilities["stage_artifact"] is True
     assert pairing_neg.value.capabilities["transfer_artifact"] is True
     assert pairing_neg.value.capabilities["transfer_complete"] is True
+
+    pack_requested = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        capabilities={
+            PACK_UI_REQUEST_CAPABILITY: True,
+            GET_PACK_UI_REQUEST_CAPABILITY: True,
+        },
+        client_producer_id="tab:pack-requested",
+    )
+    assert isinstance(pack_requested, Ok)
+    server_owned = negotiate_initialize(
+        pack_requested.value,
+        server_capabilities={},
+        assign_producer_id="tab:server-empty",
+        advertise_pairing=False,
+    )
+    assert isinstance(server_owned, Ok)
+    assert PACK_UI_REQUEST_CAPABILITY not in server_owned.value.capabilities
+    assert GET_PACK_UI_REQUEST_CAPABILITY not in server_owned.value.capabilities
+    supported = negotiate_initialize(
+        pack_requested.value,
+        server_capabilities={
+            PACK_UI_REQUEST_CAPABILITY: True,
+            GET_PACK_UI_REQUEST_CAPABILITY: True,
+        },
+        assign_producer_id="tab:server-pack",
+        advertise_pairing=False,
+    )
+    assert isinstance(supported, Ok)
+    assert supported.value.capabilities[PACK_UI_REQUEST_CAPABILITY] is True
+    assert supported.value.capabilities[GET_PACK_UI_REQUEST_CAPABILITY] is True
 
 
 def test_missing_pairing_is_typed_mismatch_shell_usable() -> None:

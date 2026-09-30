@@ -115,6 +115,9 @@ DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset(
         "cancel_job",
     }
 )
+_SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
+    {PACK_UI_REQUEST_CAPABILITY, GET_PACK_UI_REQUEST_CAPABILITY}
+)
 
 _SEMVER: Final[re.Pattern[str]] = re.compile(
     r"\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\Z"
@@ -454,13 +457,16 @@ def negotiate_initialize(
     if advertise_pairing:
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             caps.pop(name, None)
-    # Server capabilities win on overlap; client-only keys are retained additively.
+    # Server capabilities win on overlap; non-pack client-only keys are retained
+    # additively. Pack request/query capabilities are server-owned and cannot be
+    # minted by echoing their names from the client.
     if not params.capabilities:
         negotiated = dict(caps)
     else:
         negotiated = {key: value for key, value in caps.items() if key in params.capabilities}
         for key, value in params.capabilities.items():
-            negotiated.setdefault(key, value)
+            if key not in _SERVER_OWNED_CLIENT_ECHO_KEYS:
+                negotiated.setdefault(key, value)
     if advertise_pairing:
         negotiated[PAIRING_CAPABILITY] = True
         negotiated[LIST_MAILBOX_CAPABILITY] = True

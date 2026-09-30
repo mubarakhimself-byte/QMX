@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, cast
 from qma.core.operations import public_operation_descriptors
 from qma.core.plugins.contributes import qualify_pack_contribute
 from qma.core.plugins.manifest import PluginManifest
-from qma.core.ports.cardinality import MULTI_CONTRIBUTION_POINTS
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.wire.pack_ui_request import (
     PACK_UI_REQUEST_SCHEMA,
@@ -89,9 +88,9 @@ def _declared_ops(
     schemas: dict[str, str] = {}
     descriptors = {descriptor.op_id: descriptor for descriptor in public_operation_descriptors()}
     for contribution in manifest.contributes:
-        # PluginManifest is the validated canonical contribution source. Keep
-        # this check explicit so future schema additions cannot open a 9th point.
-        if contribution.point not in MULTI_CONTRIBUTION_POINTS:
+        # A view invokes a host operation only through a canonical published
+        # tool contribution; other closed points may reuse the same local ID.
+        if contribution.point != "tool":
             continue
         qualified = qualify_pack_contribute(manifest.id, contribution)
         identifiers = {contribution.local_id, qualified}

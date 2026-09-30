@@ -174,7 +174,7 @@ from qma.daemon.plugins.pack_ui import (
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
-from qma.daemon.sessions.product_session import ProductSessionService
+from qma.daemon.sessions.product_session import BoundSessionGrant, ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.projection import (
     TASK_GRAPH_STATE_SQLITE_TABLES,
@@ -217,6 +217,7 @@ from qma.wire.listener import (
 from qma.wire.pack_ui_request import (
     GET_PACK_UI_REQUEST_CAPABILITY,
     GET_PACK_UI_REQUEST_HTTP_PATH,
+    PACK_UI_REQUEST_CAPABILITY,
     PackUiRequestSnapshot,
     parse_pack_ui_request,
     parse_pack_ui_request_args,
@@ -1022,9 +1023,13 @@ class DaemonProcess:
 
     def press_pack_ui_action(
         self, *, mount_id: object, payload: object
-    ) -> Result[Mapping[str, object]]:
-        """Production action bridge; renderer can identify a mount, not retarget it."""
-        return self._product_session_chrome.press_pack_ui_action(mount_id, payload)
+    ) -> Result[BoundSessionGrant]:
+        """Production invocation bridge; renderer can identify a mount, not retarget it."""
+        return self._product_session_chrome.press_pack_ui_action(
+            mount_id,
+            payload,
+            loader=self._roster.loader,
+        )
 
     def unmount_pack_ui_view(self, mount_id: object) -> bool:
         return self._product_session_chrome.unmount_pack_ui_view(mount_id)
@@ -1054,10 +1059,7 @@ class DaemonProcess:
         capabilities: object | None = None,
     ) -> Result[PackUiRequestSnapshot]:
         """Read the exact durable UI request for a currently enabled pack instance."""
-        caps: object = (
-            {GET_PACK_UI_REQUEST_CAPABILITY: True} if capabilities is None else capabilities
-        )
-        gated = require_pack_ui_request_capability(caps)
+        gated = require_pack_ui_request_capability(capabilities)
         if is_refusal(gated):
             return gated
         if operator_principal is not PrincipalClass.OPERATOR:
@@ -2410,6 +2412,8 @@ class DaemonProcess:
                     or raw_caps.get(SAVE_EDITOR_DRAFT_CAPABILITY) is True
                     or raw_caps.get(GET_EDITOR_DRAFT_HEAD_CAPABILITY) is True
                     or raw_caps.get(PUBLISH_EDITOR_DRAFT_CAPABILITY) is True
+                    or PACK_UI_REQUEST_CAPABILITY in raw_caps
+                    or GET_PACK_UI_REQUEST_CAPABILITY in raw_caps
                 )
             completed = connection.complete_initialize(
                 params.value,

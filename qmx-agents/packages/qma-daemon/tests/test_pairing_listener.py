@@ -986,7 +986,7 @@ def test_pack_ui_request_http_requires_negotiated_capability_and_parses_revision
                 initialized = await _initialize_ws(
                     writer,
                     reader,
-                    capabilities={"get_pack_ui_request": True},
+                    capabilities={"get_pack_ui_request": "client-echo-must-not-authorize"},
                 )
                 assert "error" not in initialized, initialized
                 result_obj = cast("dict[str, object]", initialized["result"])
