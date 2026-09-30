@@ -901,7 +901,6 @@ class EditorDraftService:
                             )
                         if (
                             candidate.get("enabled") is True
-                            and self.authoring_lifecycle is not None
                             and principal_class is not PrincipalClass.OPERATOR
                         ):
                             return policy_rejection(

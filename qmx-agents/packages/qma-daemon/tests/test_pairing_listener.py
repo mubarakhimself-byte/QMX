@@ -10,11 +10,13 @@ import struct
 from pathlib import Path
 from typing import cast
 
+from pytest import MonkeyPatch
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL, PairingWsHandle
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.plugins.lifecycle import AtomicRoster
+from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.process import DaemonProcess
 from qma.daemon.taskgraph.records import GraphTemplate
 from qma.wire.auth import format_pairing_authorization
@@ -25,7 +27,8 @@ from qma.wire.initialize import (
     WIRE_PROTOCOL_VERSION,
     WireConnection,
 )
-from qmf.core import is_ok
+from qmf.core import Result, is_ok
+from qmf.data.store.refusals import policy_rejection
 
 _ORIGIN = "http://127.0.0.1:5173"
 _FIXTURE_TTL = "PT15M"
@@ -492,7 +495,10 @@ def test_live_send_message_on_bound_pairing_ws(tmp_path: Path) -> None:
     asyncio.run(_run())
 
 
-def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path) -> None:
+def test_live_editor_draft_commands_query_and_capability_mismatch(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
     async def _run() -> None:
         process = _compose(tmp_path, boot="boot-71-editor-live")
         try:
@@ -647,12 +653,31 @@ def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path
                         "expected_revision": successor.value.fp1,
                     },
                 }
+
+                original_retire = DeskPluginRoster.retire_replaced_authoring_contribution
+
+                def refuse_first_retirement(
+                    _roster: DeskPluginRoster,
+                    _contribution_id: str,
+                    _qualified_id: str,
+                    _version: str,
+                    *,
+                    principal: object,
+                ) -> Result[None]:
+                    _ = principal
+                    return policy_rejection("plugin.enable", "simulated lost-ack cleanup failure")
+
+                monkeypatch.setattr(
+                    DeskPluginRoster,
+                    "retire_replaced_authoring_contribution",
+                    refuse_first_retirement,
+                )
                 _ws_write(second_writer, publish_request)
                 await second_writer.drain()
                 first_ack = await _ws_read_json(second_reader)
-                assert "error" not in first_ack, first_ack
-                # Treat the first response as the lost acknowledgement; the
-                # same-revision retry must replay its durable predecessor receipt.
+                assert "error" in first_ack, first_ack
+                # The publication transaction already committed before runtime
+                # retirement refused; ignore this response as a lost ack and retry.
                 after_first_ack_roster = roster.load()
                 after_first_ack_events = process.journal.read_events()
                 assert is_ok(after_first_ack_roster) and is_ok(after_first_ack_events)
@@ -661,7 +686,24 @@ def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path
                     event.event == "editor_draft.published"
                     for event in after_first_ack_events.value
                 )
+                assert first_plugin_id in process.roster.loader.loaded_ids()
+                assert (
+                    process.roster.templates.get_versioned("demo:live-editor", "1.0.0") is not None
+                )
+                successor_row = next(
+                    row
+                    for row in cast(
+                        list[dict[str, object]], after_first_ack_roster.value["published"]
+                    )
+                    if row.get("version") == "2.0.0"
+                )
+                assert successor_row["enabled"] is False
 
+                monkeypatch.setattr(
+                    DeskPluginRoster,
+                    "retire_replaced_authoring_contribution",
+                    original_retire,
+                )
                 retry_request = dict(publish_request)
                 retry_request["id"] = 4
                 _ws_write(second_writer, retry_request)

@@ -985,6 +985,7 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
         assert is_ok(roster_before_refusal), roster_before_refusal
         events_before_refusal = journal.read_events()
         assert is_ok(events_before_refusal), events_before_refusal
+        service.authoring_lifecycle = None
         second_publish = service.publish_editor_draft(
             {
                 "editor_draft_id": saved.value.editor_draft_id,
@@ -1006,6 +1007,7 @@ def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path
         events_after_refusal = journal.read_events()
         assert is_ok(events_after_refusal), events_after_refusal
         assert len(events_after_refusal.value) == len(events_before_refusal.value)
+        service.authoring_lifecycle = runtime
 
         second_publish = service.publish_editor_draft(
             {
