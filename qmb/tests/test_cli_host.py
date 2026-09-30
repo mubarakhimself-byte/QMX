@@ -788,6 +788,63 @@ def test_click_host_configure_dest_placement(tmp_path: Path) -> None:
     assert missing.context["field"] == "dest-placement"
 
 
+def test_click_remote_dest_placement_preserves_repeated_reachable_hosts(
+    tmp_path: Path,
+) -> None:
+    _write_token(tmp_path)
+    expected_hosts = ["artifact-a.example", "artifact-b.example:8443"]
+    seen: dict[str, object] = {}
+
+    def transport(
+        verb: str,
+        token: str,
+        *,
+        root: Path,
+        extra: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        assert verb == "configure"
+        assert token == _TOKEN
+        assert root == tmp_path
+        assert extra is not None
+        seen.update(extra)
+        return {
+            "ok": True,
+            "configured": {
+                "instance_id": "inst-remote",
+                "environment_id": "env-remote",
+                "placement_revision": "rev-1",
+                "same_daemon": False,
+                "writer": "host.configure.dest-placement",
+            },
+        }
+
+    configured = CliRunner().invoke(
+        main,
+        [
+            "host",
+            "configure",
+            "dest-placement",
+            "--instance-id",
+            "inst-remote",
+            "--environment-id",
+            "env-remote",
+            "--placement-revision",
+            "rev-1",
+            "--credential-ref",
+            "cred://compute/worker-a",
+            "--reachable-host",
+            expected_hosts[0],
+            "--reachable-host",
+            expected_hosts[1],
+        ],
+        obj={"root": tmp_path, "transport": transport},
+    )
+
+    assert configured.exit_code == 0, configured.output
+    assert seen["reachable_hosts"] == expected_hosts
+    assert seen["same_daemon"] is False
+
+
 def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None:
     server = _HostControlServer(_TOKEN, root=tmp_path)
     server.start()

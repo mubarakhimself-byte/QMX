@@ -1990,11 +1990,10 @@ class DaemonProcess:
             )
             await self._write_refusal(writer, refused, origin=origin)
             return
-        up = self.dest_control_up(credential_ref)
-        if is_refusal(up):
-            await self._write_refusal(writer, up, origin=origin)
+        validated = self._transfers.validate_dest_control(credential_ref)
+        if is_refusal(validated):
+            await self._write_refusal(writer, validated, origin=origin)
             return
-        handle = up.value
         opening = _encode_http_response(
             101,
             {

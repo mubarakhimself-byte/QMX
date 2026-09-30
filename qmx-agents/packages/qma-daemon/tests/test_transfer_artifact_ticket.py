@@ -25,6 +25,8 @@ from qma.daemon.artifacts.ticket import (
     INTER_DAEMON_DISCOVERY,
     LOCAL_INVOKE_FALLBACK,
     DestinationPlacement,
+    parse_host_same_daemon,
+    placement_from_host_configure,
 )
 from qma.daemon.host_control import host_control_call
 from qma.daemon.journal import CLOSED_PROJECTIONS, DEFINITION_STORE_MEMBERS, v1_fold_contract
@@ -462,7 +464,15 @@ def test_ticket_issued_until_dest_reconnect_then_notified(tmp_path: Path) -> Non
             writer=object(),
             emit=lambda _note: False,
         )
-        assert is_ok(failed_delivery), failed_delivery
+        assert is_refusal(failed_delivery), failed_delivery
+        assert not process.transfers.dest_control.is_live(_DEST_CRED)
+        raised_delivery = process.transfers.attach_dest_control(
+            _DEST_CRED,
+            writer=object(),
+            emit=lambda _note: (_ for _ in ()).throw(RuntimeError("closed socket")),
+        )
+        assert is_refusal(raised_delivery), raised_delivery
+        assert not process.transfers.dest_control.is_live(_DEST_CRED)
         still_issued = process.transfers.get(ticket_id)
         assert still_issued is not None
         assert still_issued.state == "issued"
@@ -486,6 +496,20 @@ def test_ticket_issued_until_dest_reconnect_then_notified(tmp_path: Path) -> Non
         params = cast("dict[str, object]", params_obj)
         assert params["ticket_id"] == ticket_id
         assert params["source_origin"] == _TLS_ORIGIN
+        writer_a = handle.value.writer
+        writer_b = object()
+        received_by_b: list[Mapping[str, object]] = []
+        replacement = process.transfers.attach_dest_control(
+            _DEST_CRED,
+            writer=writer_b,
+            emit=lambda note: received_by_b.append(note) is None,
+        )
+        assert is_ok(replacement), replacement
+        assert received_by_b
+        assert replacement.value.writer is writer_b
+        process.dest_control_down(_DEST_CRED, writer=writer_a)
+        assert process.transfers.dest_control.is_live(_DEST_CRED)
+        assert replacement.value.writer is writer_b
         process.dest_control_down(_DEST_CRED)
         again = process.dest_control_up(_DEST_CRED)
         assert is_ok(again), again
@@ -679,6 +703,51 @@ def test_live_ws_notifies_when_dest_control_is_up(tmp_path: Path) -> None:
     asyncio.run(_run())
 
 
+def test_failed_machine_ws_replacement_handshake_keeps_live_writer(tmp_path: Path) -> None:
+    class FailedHandshakeWriter:
+        def write(self, _data: bytes) -> None:
+            pass
+
+        async def drain(self) -> None:
+            raise ConnectionError("replacement handshake failed")
+
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-70-failed-replacement-handshake")
+        try:
+            writer_a = object()
+            attached = process.transfers.attach_dest_control(
+                _DEST_CRED,
+                writer=writer_a,
+                emit=lambda _note: True,
+            )
+            assert is_ok(attached), attached
+            try:
+                await process._serve_machine_ws(
+                    asyncio.StreamReader(),
+                    FailedHandshakeWriter(),  # type: ignore[arg-type]
+                    {
+                        "Authorization": f"Bearer {_DEST_CRED}",
+                        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                    },
+                    None,
+                )
+            except ConnectionError:
+                pass
+            else:
+                raise AssertionError("failed replacement handshake should raise")
+            assert process.transfers.dest_control.is_live(_DEST_CRED)
+            assert process.transfers.dest_control.get(_DEST_CRED) is attached.value
+            assert attached.value.writer is writer_a
+            emitted: list[Mapping[str, object]] = []
+            assert attached.value.notify({"ticket_id": "still-live"})
+            emitted.extend(attached.value.notifications[-1:])
+            assert emitted
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
 def test_payload_same_daemon_is_not_authority(tmp_path: Path) -> None:
     process = _compose(tmp_path, boot="boot-70-fix-same-daemon")
     try:
@@ -697,6 +766,26 @@ def test_payload_same_daemon_is_not_authority(tmp_path: Path) -> None:
         assert process.transfers.open_tickets() == ()
     finally:
         process.close()
+
+
+def test_host_placement_rejects_malformed_reachable_hosts_and_string_same_daemon() -> None:
+    base: dict[str, object] = {
+        "instance_id": "inst-remote",
+        "environment_id": "env-remote",
+        "placement_revision": "rev-1",
+        "credential_ref": _DEST_CRED,
+        "reachable_hosts": ["artifacts.example", 17],
+    }
+    malformed_hosts = placement_from_host_configure(base)
+    assert is_refusal(malformed_hosts)
+    assert malformed_hosts.context["field"] == "reachable_hosts"
+
+    malformed_same_daemon = placement_from_host_configure(
+        {**base, "reachable_hosts": ["artifacts.example"], "same_daemon": "false"}
+    )
+    assert is_refusal(malformed_same_daemon)
+    assert malformed_same_daemon.context["field"] == "same_daemon"
+    assert is_refusal(parse_host_same_daemon("true"))
 
 
 def test_payload_dest_identity_registers_remote(tmp_path: Path) -> None:

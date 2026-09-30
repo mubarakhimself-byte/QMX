@@ -472,6 +472,28 @@ def test_library_redeem_complete_idempotent_and_invoke_gate(tmp_path: Path) -> N
         process.close()
 
 
+def test_transfer_complete_refuses_notified_but_unclaimed_ticket(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="boot-70-notified-not-claimed")
+    try:
+        ticket_id, fp1, body = _issue_notified(process)
+        refused = process.transfer_complete(
+            {
+                "ticket_id": ticket_id,
+                "fp1": fp1,
+                "byte_count": len(body),
+                "command_id": "cmd-1",
+            },
+            credential_ref=_DEST_CRED,
+        )
+        assert is_refusal(refused)
+        assert refused.context["field"] == "state"
+        unchanged = process.transfers.get(ticket_id)
+        assert unchanged is not None
+        assert unchanged.state == "notified"
+    finally:
+        process.close()
+
+
 def test_interrupt_and_hash_mismatch_delete_incomplete(tmp_path: Path) -> None:
     process = _compose(tmp_path, boot="boot-70-3-mismatch")
     try:
