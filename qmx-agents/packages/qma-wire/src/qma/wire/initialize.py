@@ -473,9 +473,17 @@ def negotiate_initialize(
             negotiated[TRANSFER_COMPLETE_CAPABILITY] = True
         else:
             negotiated.pop(TRANSFER_COMPLETE_CAPABILITY, None)
-        negotiated[SAVE_EDITOR_DRAFT_CAPABILITY] = True
-        negotiated[GET_EDITOR_DRAFT_HEAD_CAPABILITY] = True
-        negotiated[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
+        # Editor-draft capabilities are negotiated independently. The client
+        # must explicitly request each one before it is enabled on this session.
+        for name in (
+            SAVE_EDITOR_DRAFT_CAPABILITY,
+            GET_EDITOR_DRAFT_HEAD_CAPABILITY,
+            PUBLISH_EDITOR_DRAFT_CAPABILITY,
+        ):
+            if params.capabilities.get(name) is True:
+                negotiated[name] = True
+            else:
+                negotiated.pop(name, None)
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 

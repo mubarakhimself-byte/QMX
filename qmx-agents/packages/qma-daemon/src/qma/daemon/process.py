@@ -176,7 +176,10 @@ from qma.daemon.taskgraph.projection import (
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
-from qma.wire.editor_draft import EDITOR_DRAFT_HTTP_PATH
+from qma.wire.editor_draft import (
+    EDITOR_DRAFT_HTTP_PATH,
+    require_editor_draft_capability,
+)
 from qma.wire.initialize import (
     GET_EDITOR_DRAFT_HEAD_CAPABILITY,
     JSONRPC_VERSION,
@@ -1114,9 +1117,6 @@ class DaemonProcess:
             STAGE_ARTIFACT_CAPABILITY: True,
             TRANSFER_ARTIFACT_CAPABILITY: True,
             TRANSFER_COMPLETE_CAPABILITY: True,
-            SAVE_EDITOR_DRAFT_CAPABILITY: True,
-            GET_EDITOR_DRAFT_HEAD_CAPABILITY: True,
-            PUBLISH_EDITOR_DRAFT_CAPABILITY: True,
         }
 
     def _operator_principal(self) -> str | None:
@@ -1849,10 +1849,28 @@ class DaemonProcess:
                 )
                 return
             if request.method == "GET" and request.path == EDITOR_DRAFT_HTTP_PATH:
+                if (
+                    authed.value.principal_class is not PrincipalClass.OPERATOR
+                    or self._operator_principal() is None
+                ):
+                    refused = policy_rejection(
+                        "principal_class",
+                        "editor drafts require an authenticated operator principal",
+                    )
+                    await self._write_refusal(writer, refused, origin=origin)
+                    return
+                capabilities = self._paired_http_capabilities(authed.value.pairing_record_id)
+                capability = require_editor_draft_capability(
+                    capabilities,
+                    GET_EDITOR_DRAFT_HEAD_CAPABILITY,
+                )
+                if is_refusal(capability):
+                    await self._write_refusal(writer, capability, origin=origin)
+                    return
                 head = self._editor_drafts.get_editor_draft_head(
                     query_string_to_args(request.query),
                     operator_principal=self._operator_principal(),
-                    capabilities=self._paired_http_capabilities(authed.value.pairing_record_id),
+                    capabilities=capabilities,
                 )
                 if is_refusal(head):
                     await self._write_refusal(writer, head, origin=origin)
@@ -2275,6 +2293,17 @@ class DaemonProcess:
             gated_query = connection.require_query_capability(method)
             if is_refusal(gated_query):
                 return _jsonrpc_refusal(req_id, gated_query)
+            if (
+                connection.principal_class is not PrincipalClass.OPERATOR
+                or self._operator_principal() is None
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "principal_class",
+                        "editor drafts require an authenticated operator principal",
+                    ),
+                )
             raw_params = request.get("params")
             head = self._editor_drafts.get_editor_draft_head(
                 raw_params,
@@ -2343,6 +2372,20 @@ class DaemonProcess:
             if publish
             else WireCommand.SAVE_EDITOR_DRAFT.value
         )
+        if (
+            connection.principal_class is not PrincipalClass.OPERATOR
+            or self._operator_principal() is None
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "principal_class",
+                    "editor drafts require an authenticated operator principal",
+                ),
+            )
+        capability = require_editor_draft_capability(connection.capabilities, method)
+        if is_refusal(capability):
+            return _jsonrpc_refusal(req_id, capability)
         authorized = connection.authorize_command(method)
         if is_refusal(authorized):
             return _jsonrpc_refusal(req_id, authorized)

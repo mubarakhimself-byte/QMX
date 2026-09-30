@@ -170,6 +170,20 @@ def _as_mapping(field: str, value: object) -> Result[dict[str, object]]:
     return Ok(out)
 
 
+def _refuse_editor_draft_ref(*, field: str, **extra: object) -> TypedRefusal:
+    context: dict[str, object] = {
+        "field": field,
+        "reason": "editor draft values are not runnable selected references",
+        "refusal": "draft_not_runnable",
+    }
+    context.update(extra)
+    return TypedRefusal(
+        category=RefusalCategory.INVALID_INPUT,
+        retryability=Retryability.NO,
+        context=MappingProxyType(context),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SelectedRef:
     """Typed selected ref. Layout JSON, widgets, and positions are refused."""
@@ -188,10 +202,19 @@ class SelectedRef:
 
 
 def parse_selected_ref(value: object) -> Result[SelectedRef]:
+    if isinstance(value, SelectedRef):
+        return parse_selected_ref(value.to_payload())
     mapped = _as_mapping("selected_refs", value)
     if is_refusal(mapped):
         return mapped
     body = mapped.value
+    draft_fields = {"editor_draft_id", "editor_revision", "unsaved_buffer"}
+    draft_keys = sorted(key for key in body if key.casefold() in draft_fields)
+    if draft_keys:
+        return _refuse_editor_draft_ref(
+            field="selected_refs",
+            forbidden=draft_keys,
+        )
     stolen = sorted(key for key in body if key.casefold() in FORBIDDEN_SELECTED_REF_KEYS)
     if stolen:
         return refuse_layout_widget_json_render_ref(forbidden=stolen)
@@ -226,12 +249,8 @@ def parse_selected_ref(value: object) -> Result[SelectedRef]:
     parsed_id = _require_str("selected_refs.id", ident)
     if is_refusal(parsed_id):
         return parsed_id
-    if parsed_id.value.startswith("edraft:"):
-        return _invalid(
-            "selected_refs.id",
-            "editor draft ids are not runnable selected references",
-            refusal="draft_not_runnable",
-        )
+    if parsed_id.value.casefold().startswith("edraft:"):
+        return _refuse_editor_draft_ref(field="selected_refs.id")
     return Ok(SelectedRef(kind=kind.value, id=parsed_id.value, extra=extra))
 
 
@@ -252,7 +271,9 @@ def parse_selected_refs(value: object) -> Result[tuple[SelectedRef, ...]]:
 def parse_wire_selected_ref(value: object) -> Result[SelectedRef]:
     """Parse one CT-40 selected ref. Kind ``instance_id`` is legal after Story 60.2."""
     if isinstance(value, SelectedRef):
-        return Ok(value)
+        # A DTO can be constructed directly and must pass the same closed
+        # vocabulary and draft refusal checks as a wire mapping.
+        return parse_selected_ref(value.to_payload())
     return parse_selected_ref(value)
 
 

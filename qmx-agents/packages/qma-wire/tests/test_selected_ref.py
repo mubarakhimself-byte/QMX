@@ -99,3 +99,25 @@ def test_layout_widget_json_render_trees_remain_refused() -> None:
     allowed = refused.context["allowed"]
     assert isinstance(allowed, (list, tuple))
     assert "instance_id" in allowed
+
+
+def test_selected_ref_rejects_editor_drafts_in_mappings_and_prebuilt_dtos() -> None:
+    for payload in (
+        {"kind": "run", "id": "edraft:one"},
+        {"kind": "run", "id": "ordinary", "editor_revision": "fp1:revision"},
+        {"kind": "run", "id": "ordinary", "unsaved_buffer": {"nodes": []}},
+    ):
+        refused = parse_wire_selected_ref(payload)
+        assert is_refusal(refused)
+        assert refused.context["refusal"] == "draft_not_runnable"
+
+    for ref in (
+        SelectedRef(kind="run", id="edraft:prebuilt"),
+        SelectedRef(kind="run", id="ordinary", extra={"editor_draft_id": "edraft:1"}),
+    ):
+        refused = parse_wire_selected_ref(ref)
+        assert is_refusal(refused)
+        assert refused.context["refusal"] == "draft_not_runnable"
+        collection = parse_selected_refs([ref])
+        assert is_refusal(collection)
+        assert collection.context["refusal"] == "draft_not_runnable"

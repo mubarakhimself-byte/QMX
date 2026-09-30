@@ -16,6 +16,11 @@ from qma.wire import (
     validate_instance,
     validate_wire_envelope_dict,
 )
+from qma.wire.initialize import (
+    GET_EDITOR_DRAFT_HEAD_CAPABILITY,
+    PUBLISH_EDITOR_DRAFT_CAPABILITY,
+    SAVE_EDITOR_DRAFT_CAPABILITY,
+)
 from qmf.core.refusal import Ok, is_ok, is_refusal
 
 _TEST_CRED_REF = "cred://models/openai"
@@ -57,6 +62,48 @@ def test_initialize_negotiates_semver_and_assigns_producer_id() -> None:
     assert result["producer_id"] == "producer-stable-1"
     assert conn.initialized is True
     assert conn.producer_id == "producer-stable-1"
+
+
+def test_initialize_negotiates_editor_draft_capabilities_exactly() -> None:
+    conn = _authed_conn()
+    requested = {SAVE_EDITOR_DRAFT_CAPABILITY: True}
+    params = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        capabilities=requested,
+        client_producer_id="draft-capabilities",
+    )
+    assert is_ok(params), params
+    response = conn.complete_initialize(params.value, assign_producer_id="draft-capabilities")
+    assert is_ok(response), response
+    result = cast("dict[str, object]", response.value.to_dict()["result"])
+    negotiated = cast("dict[str, object]", result["capabilities"])
+    assert negotiated.get(SAVE_EDITOR_DRAFT_CAPABILITY) is True
+    assert GET_EDITOR_DRAFT_HEAD_CAPABILITY not in negotiated
+    assert PUBLISH_EDITOR_DRAFT_CAPABILITY not in negotiated
+    assert dict(conn.capabilities) == negotiated
+
+    no_caps_conn = _authed_conn()
+    no_caps = InitializeParams.try_create(
+        protocol_version=WIRE_PROTOCOL_VERSION,
+        capabilities={},
+        client_producer_id="draft-capabilities-none",
+    )
+    assert is_ok(no_caps), no_caps
+    no_caps_response = no_caps_conn.complete_initialize(
+        no_caps.value,
+        assign_producer_id="draft-capabilities-none",
+    )
+    assert is_ok(no_caps_response), no_caps_response
+    no_caps_result = cast("dict[str, object]", no_caps_response.value.to_dict()["result"])
+    no_caps_negotiated = cast("dict[str, object]", no_caps_result["capabilities"])
+    assert all(
+        name not in no_caps_negotiated
+        for name in (
+            SAVE_EDITOR_DRAFT_CAPABILITY,
+            GET_EDITOR_DRAFT_HEAD_CAPABILITY,
+            PUBLISH_EDITOR_DRAFT_CAPABILITY,
+        )
+    )
 
 
 def test_jsonrpc_initialize_request_round_trip() -> None:

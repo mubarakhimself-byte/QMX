@@ -11,11 +11,18 @@ from pathlib import Path
 from typing import cast
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
+from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.pairing import CT40_WS_SUBPROTOCOL, PairingWsHandle
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.wire.auth import format_pairing_authorization
-from qma.wire.initialize import WIRE_PROTOCOL_VERSION
+from qma.wire.initialize import (
+    GET_EDITOR_DRAFT_HEAD_CAPABILITY,
+    PUBLISH_EDITOR_DRAFT_CAPABILITY,
+    SAVE_EDITOR_DRAFT_CAPABILITY,
+    WIRE_PROTOCOL_VERSION,
+    WireConnection,
+)
 from qmf.core import is_ok
 
 _ORIGIN = "http://127.0.0.1:5173"
@@ -477,6 +484,199 @@ def test_live_send_message_on_bound_pairing_ws(tmp_path: Path) -> None:
             finally:
                 writer.close()
                 await writer.wait_closed()
+        finally:
+            await process.aclose()
+
+    asyncio.run(_run())
+
+
+def test_live_editor_draft_commands_query_and_capability_mismatch(tmp_path: Path) -> None:
+    async def _run() -> None:
+        process = _compose(tmp_path, boot="boot-71-editor-live")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound), bound
+            host, port = bound.value.host, bound.value.port
+            record_id, proof = await _pair_over_listener(process, host, port)
+            auth = format_pairing_authorization(proof)
+            assert is_ok(auth), auth
+            reader, writer = await _upgrade_paired_ws(host, port, proof)
+            try:
+                initialized = await _initialize_ws(
+                    writer,
+                    reader,
+                    capabilities={
+                        SAVE_EDITOR_DRAFT_CAPABILITY: True,
+                        GET_EDITOR_DRAFT_HEAD_CAPABILITY: True,
+                        PUBLISH_EDITOR_DRAFT_CAPABILITY: True,
+                    },
+                )
+                assert "error" not in initialized, initialized
+                result = cast("dict[str, object]", initialized["result"])
+                capabilities = cast("dict[str, object]", result["capabilities"])
+                assert capabilities.get(SAVE_EDITOR_DRAFT_CAPABILITY) is True
+                assert capabilities.get(GET_EDITOR_DRAFT_HEAD_CAPABILITY) is True
+                assert capabilities.get(PUBLISH_EDITOR_DRAFT_CAPABILITY) is True
+
+                staged = process.artifacts.stage_complete_bytes(
+                    json.dumps(
+                        {
+                            "artifact_kind": "graph_template",
+                            "qualified_id": "demo:live-editor",
+                            "version": "1.0.0",
+                            "nodes": [],
+                            "edges": [],
+                        },
+                        sort_keys=True,
+                    ).encode()
+                )
+                assert is_ok(staged), staged
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": SAVE_EDITOR_DRAFT_CAPABILITY,
+                        "params": {"fp1": staged.value.fp1},
+                    },
+                )
+                await writer.drain()
+                saved = await _ws_read_json(reader)
+                assert "error" not in saved, saved
+                saved_result = cast("dict[str, object]", saved["result"])
+                draft_id = saved_result["editor_draft_id"]
+                assert isinstance(draft_id, str)
+
+                _ws_write(
+                    writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": PUBLISH_EDITOR_DRAFT_CAPABILITY,
+                        "params": {
+                            "editor_draft_id": draft_id,
+                            "expected_revision": staged.value.fp1,
+                        },
+                    },
+                )
+                await writer.drain()
+                published = await _ws_read_json(reader)
+                assert "error" not in published, published
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+            queried = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    f"/q/get_editor_draft_head?editor_draft_id={draft_id}",
+                    headers={"Origin": _ORIGIN, "Authorization": auth.value},
+                ),
+            )
+            query_status, _query_headers, query_body = _split_http(queried)
+            assert query_status == 200, queried
+            assert _json_object(query_body)["result"] == {
+                "editor_draft_id": draft_id,
+                "editor_revision": staged.value.fp1,
+            }
+            machine_http = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    f"/q/get_editor_draft_head?editor_draft_id={draft_id}",
+                    headers={
+                        "Origin": _ORIGIN,
+                        "Authorization": "Bearer cred://machine/editor-test",
+                    },
+                ),
+            )
+            machine_status, _machine_headers, machine_body = _split_http(machine_http)
+            assert machine_status in {401, 403}, machine_http
+            assert _json_object(machine_body).get("ok") is False
+
+            # A paired machine connection is refused before draft service access.
+            machine = WireConnection()
+            machine._authenticated = True  # pyright: ignore[reportPrivateUsage]
+            machine._principal_class = PrincipalClass.MACHINE  # pyright: ignore[reportPrivateUsage]
+            machine._initialized = True  # pyright: ignore[reportPrivateUsage]
+            machine._producer_id = "machine-editor-test"  # pyright: ignore[reportPrivateUsage]
+            machine._capabilities = {SAVE_EDITOR_DRAFT_CAPABILITY: True}  # pyright: ignore[reportPrivateUsage]
+            refused = process._dispatch_paired_ct40(  # pyright: ignore[reportPrivateUsage]
+                machine,
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": SAVE_EDITOR_DRAFT_CAPABILITY,
+                        "params": {"fp1": staged.value.fp1},
+                    }
+                ).encode(),
+                session_key=record_id,
+                connection_token="machine-editor-test",
+            )
+            assert refused is not None and "error" in refused
+            error = cast("dict[str, object]", refused["error"])
+            data = cast("dict[str, object]", error["data"])
+            context = cast("dict[str, object]", data["context"])
+            assert context["field"] == "principal_class"
+
+            # A second operator session negotiates save only; publish and the
+            # authenticated HTTP query both report their missing capability.
+            _second_record, second_proof = await _pair_over_listener(process, host, port)
+            second_auth = format_pairing_authorization(second_proof)
+            assert is_ok(second_auth), second_auth
+            second_reader, second_writer = await _upgrade_paired_ws(host, port, second_proof)
+            try:
+                init = await _initialize_ws(
+                    second_writer,
+                    second_reader,
+                    capabilities={SAVE_EDITOR_DRAFT_CAPABILITY: True},
+                )
+                assert "error" not in init, init
+                result = cast("dict[str, object]", init["result"])
+                negotiated = cast("dict[str, object]", result["capabilities"])
+                assert negotiated.get(GET_EDITOR_DRAFT_HEAD_CAPABILITY) is not True
+                assert negotiated.get(PUBLISH_EDITOR_DRAFT_CAPABILITY) is not True
+                _ws_write(
+                    second_writer,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": PUBLISH_EDITOR_DRAFT_CAPABILITY,
+                        "params": {
+                            "editor_draft_id": draft_id,
+                            "expected_revision": staged.value.fp1,
+                        },
+                    },
+                )
+                await second_writer.drain()
+                publish_refusal = await _ws_read_json(second_reader)
+                error = cast("dict[str, object]", publish_refusal["error"])
+                data = cast("dict[str, object]", error["data"])
+                context = cast("dict[str, object]", data["context"])
+                assert context["missing"] == PUBLISH_EDITOR_DRAFT_CAPABILITY
+            finally:
+                second_writer.close()
+                await second_writer.wait_closed()
+
+            second_query = await _exchange(
+                host,
+                port,
+                _http_bytes(
+                    "GET",
+                    f"/q/get_editor_draft_head?editor_draft_id={draft_id}",
+                    headers={"Origin": _ORIGIN, "Authorization": second_auth.value},
+                ),
+            )
+            status, _headers, body = _split_http(second_query)
+            assert status in {400, 403}, second_query
+            refusal_body = _json_object(body)
+            refusal = cast("dict[str, object]", refusal_body["refusal"])
+            context = cast("dict[str, object]", refusal["context"])
+            assert context["missing"] == GET_EDITOR_DRAFT_HEAD_CAPABILITY
         finally:
             await process.aclose()
 
