@@ -41,6 +41,7 @@
         "required": ["name"]
       },
       "then": {
+        "required": ["args"],
         "properties": {
           "args": {
             "type": "object",
