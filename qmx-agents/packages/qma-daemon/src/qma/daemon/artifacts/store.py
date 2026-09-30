@@ -131,6 +131,42 @@ class ArtifactStore:
         self._after_artifact_register(copy)
         return Ok(copy)
 
+    def restore_complete_bytes(self, body: bytes, *, expected_fp1: str) -> Result[StagedArtifact]:
+        """Rehydrate daemon-held complete bytes from the authoritative journal.
+
+        Restore does not re-run the artifact-registration hook: the journal row
+        proves these immutable bytes already passed that gate before persistence.
+        """
+        held = bytes(body)
+        actual_fp1 = fingerprint_bytes(held).value
+        if actual_fp1 != expected_fp1:
+            return policy_rejection(
+                "fp1",
+                "durable staged bytes do not match the expected immutable fp1",
+                expected=expected_fp1,
+                actual=actual_fp1,
+            )
+        existing = self._artifacts.get(expected_fp1)
+        if existing is not None:
+            if (
+                existing.content != held
+                or existing.completeness != ArtifactCompleteness.COMPLETE.value
+            ):
+                return policy_rejection(
+                    "fp1",
+                    "in-memory staged bytes conflict with their durable journal copy",
+                    given=expected_fp1,
+                )
+            return Ok(existing)
+        restored = StagedArtifact(
+            fp1=expected_fp1,
+            byte_count=len(held),
+            completeness=ArtifactCompleteness.COMPLETE.value,
+            content=held,
+        )
+        self._artifacts[expected_fp1] = restored
+        return Ok(restored)
+
     def _before_artifact_register(self, copy: StagedArtifact) -> Result[HookResult]:
         if self.hooks is None:
             return Ok(build_hook_result(HookResultDecision.ALLOW, reason="no_hook_registry"))

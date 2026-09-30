@@ -431,7 +431,12 @@ class AtomicRoster:
     def stage_path(self) -> Path:
         return self.root / f"{self.live_name}.stage"
 
-    def publish(self, payload: Mapping[str, object]) -> Result[Path]:
+    def publish(
+        self,
+        payload: Mapping[str, object],
+        *,
+        new_generation: int | None = None,
+    ) -> Result[Path]:
         """CAS and atomically replace the live roster."""
         with self._lock():
             current = self._load_unlocked()
@@ -456,8 +461,19 @@ class AtomicRoster:
                     current=current_generation,
                     branch="E",
                 )
+            replacement_generation = (
+                current_generation + 1 if new_generation is None else new_generation
+            )
+            if replacement_generation <= current_generation:
+                return _policy(
+                    "roster_generation",
+                    "new roster generation must be greater than the current generation",
+                    expected=replacement_generation,
+                    current=current_generation,
+                    branch="E",
+                )
             replacement = dict(payload)
-            replacement["roster_generation"] = current_generation + 1
+            replacement["roster_generation"] = replacement_generation
             return self._write_unlocked(replacement)
 
     def _write_unlocked(self, payload: Mapping[str, object]) -> Result[Path]:
@@ -879,7 +895,7 @@ class PackLifecycleFixture:
             "published": list(contributions.values()),
             "roster_generation": current.value.get("roster_generation", 0),
         }
-        return self.roster.publish(payload)
+        return self.roster.publish(payload, new_generation=self._generation)
 
     def _parse_at(self, transitioned_at: object) -> Result[str]:
         stamped = parse_utc_iso_z("transitioned_at", transitioned_at)

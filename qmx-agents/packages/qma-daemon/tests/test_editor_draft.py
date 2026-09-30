@@ -9,17 +9,24 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
 
+from pytest import MonkeyPatch
+from qma.core.ontology import ActorId, DeskSlug, Goal, Quant, RoleName
+from qma.core.operations import public_operation_descriptors
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.artifacts.store import ArtifactStore, StagedArtifact
 from qma.daemon.discovery import FederatedDiscoveryService
 from qma.daemon.discovery.federated import ArtifactLibrarySearchPort
 from qma.daemon.hooks.registry import HookRegistry
-from qma.daemon.journal.authoritative import AuthoritativeJournal
+from qma.daemon.journal.authoritative import AuthoritativeJournal, JournalAppendReceipt
 from qma.daemon.knowledge import KnowledgeService, KnowledgeSourceRegistry, PlainFileLibrarySource
 from qma.daemon.persistence.substrate import PersistenceSubstrate
+from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.process import DaemonProcess
+from qma.daemon.sessions import ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftHead, EditorDraftService
+from qma.daemon.taskgraph.compiler import CompileRequest, MissionCompiler
+from qma.daemon.taskgraph.records import RESERVED_APPROVAL_ROUTE_OPERATOR
 from qma.wire.auth import format_pairing_authorization
 from qma.wire.initialize import (
     GET_EDITOR_DRAFT_HEAD_CAPABILITY,
@@ -27,8 +34,15 @@ from qma.wire.initialize import (
     SAVE_EDITOR_DRAFT_CAPABILITY,
     WireConnection,
 )
+from qma.wire.invocation_envelope import (
+    ContributionRecord,
+    InstanceRecord,
+    PublicCallTransport,
+    compute_input_hash,
+)
 from qma.wire.selected_ref import parse_selected_refs
 from qmf.core import DataDrivenClock, Instant, Ok, Result, is_ok, is_refusal
+from qmf.data.store.refusals import policy_rejection
 
 _CAPS = {
     SAVE_EDITOR_DRAFT_CAPABILITY: True,
@@ -112,6 +126,111 @@ def test_first_save_mints_id_and_lost_ack_retry_is_idempotent(tmp_path: Path) ->
         journal_events = cast(Result[tuple[object, ...]], journal.read_events())
         assert is_ok(journal_events)
         assert len(journal_events.value) == 1
+    finally:
+        _close(substrate, journal)
+
+
+def test_saved_bytes_and_correlation_retry_survive_restart_and_head_advance(
+    tmp_path: Path,
+) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    original_body = json.dumps(
+        {
+            "artifact_kind": "graph_template",
+            "qualified_id": "draft:durable",
+            "version": "1",
+            "nodes": [],
+            "edges": [],
+        },
+        sort_keys=True,
+    ).encode()
+    next_body = json.dumps(
+        {
+            "artifact_kind": "graph_template",
+            "qualified_id": "draft:durable",
+            "version": "2",
+            "nodes": [],
+            "edges": [],
+        },
+        sort_keys=True,
+    ).encode()
+    try:
+        first_fp1 = _stage(artifacts, original_body)
+        first = service.save_editor_draft(
+            {"fp1": first_fp1, "client_draft_correlation": "tab-retry"},
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(first), first
+        next_fp1 = _stage(artifacts, next_body)
+        advanced = service.save_editor_draft(
+            {
+                "editor_draft_id": first.value.editor_draft_id,
+                "expected_revision": first_fp1,
+                "fp1": next_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(advanced), advanced
+        current = substrate.sqlite.execute(
+            "SELECT contribution_id FROM editor_draft_head WHERE editor_draft_id = ?",
+            (first.value.editor_draft_id,),
+        )
+        assert current[0][0] is None
+        retry = service.save_editor_draft(
+            {"fp1": first_fp1, "client_draft_correlation": "tab-retry"},
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(retry), retry
+        assert retry.value.editor_draft_id == first.value.editor_draft_id
+        assert retry.value.editor_revision == next_fp1
+    finally:
+        _close(substrate, journal)
+
+    reopened, reopened_journal, reopened_artifacts, reopened_service = _service(tmp_path)
+    try:
+        reopened_artifact = reopened_artifacts.get(next_fp1)
+        assert reopened_artifact is not None
+        assert reopened_artifact.content == next_body
+        published = reopened_service.publish_editor_draft(
+            {
+                "editor_draft_id": first.value.editor_draft_id,
+                "expected_revision": next_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(published), published
+    finally:
+        _close(reopened, reopened_journal)
+
+
+def test_owner_refusal_does_not_disclose_owner_principal(tmp_path: Path) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        fp1 = _stage(artifacts, b"private draft")
+        saved = service.save_editor_draft(
+            {"fp1": fp1, "client_draft_correlation": "private-correlation"},
+            operator_principal="operator-secret",
+            capabilities=_CAPS,
+        )
+        assert is_ok(saved), saved
+        refused = service.get_editor_draft_head(
+            {"editor_draft_id": saved.value.editor_draft_id},
+            operator_principal="operator-other",
+            capabilities=_CAPS,
+        )
+        assert is_refusal(refused)
+        assert "operator-secret" not in repr(refused)
+        correlation_refusal = service.save_editor_draft(
+            {"fp1": fp1, "client_draft_correlation": "private-correlation"},
+            operator_principal="operator-other",
+            capabilities=_CAPS,
+        )
+        assert is_refusal(correlation_refusal)
+        assert "operator-secret" not in repr(correlation_refusal)
     finally:
         _close(substrate, journal)
 
@@ -331,6 +450,26 @@ def test_head_query_is_owned_capability_gated_and_projection_recovers(tmp_path: 
         _close(substrate, journal)
 
 
+def test_journal_recovery_refuses_orphan_publication_event(tmp_path: Path) -> None:
+    substrate, journal, _artifacts, service = _service(tmp_path)
+    try:
+        appended = journal.append_event(
+            "editor_draft.published",
+            payload={
+                "editor_draft_id": "edraft:orphan",
+                "editor_revision": "fp1:missing",
+                "owner_principal": "operator-1",
+                "contribution_id": "authoring-contribution:orphan",
+            },
+        )
+        assert is_ok(appended), appended
+        restored = service.restore_from_journal()
+        assert is_refusal(restored)
+        assert "orphaned" in str(restored)
+    finally:
+        _close(substrate, journal)
+
+
 def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Path) -> None:
     substrate, journal, artifacts, service = _service(tmp_path)
     try:
@@ -356,7 +495,16 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
                 "artifact_kind": "graph_template",
                 "qualified_id": "demo:authoring",
                 "version": "1.0.0",
-                "nodes": [],
+                "nodes": [
+                    {
+                        "id": "draft-task",
+                        "kind": "task",
+                        "intent": "Run from the published editor template",
+                        "inputs": {},
+                        "refs": [],
+                        "acceptance_criteria": [],
+                    }
+                ],
                 "edges": [],
             },
             sort_keys=True,
@@ -398,7 +546,8 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
         rows = roster_data["published"]
         assert len(rows) == 1
         assert rows[0]["point"] == "graph_template"
-        assert rows[0]["published"] is False
+        assert rows[0]["published"] is True
+        assert rows[0]["enabled"] is False
         assert "library" not in rows[0]
         assert published.value["contribution_id"] == rows[0]["contribution_id"]
         # The local authoring roster is not live until the ordinary operator
@@ -412,6 +561,117 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
         assert is_ok(enabled), enabled
         assert runtime.loader.get(enabled.value.manifest.id) is not None
         assert runtime.templates.get("demo:authoring") is not None
+        owner_id = ActorId.mint(DeskSlug.RESEARCH, "editor-run")
+        assert is_ok(owner_id), owner_id
+        owner = Quant(
+            actor_id=owner_id.value,
+            desk=DeskSlug.RESEARCH,
+            quant_slug="editor-run",
+            role=RoleName.RESEARCHER,
+            name="Editor Run",
+            lead=False,
+        )
+        compiled = MissionCompiler(templates=runtime.templates).compile(
+            CompileRequest(
+                goal=Goal(text="run a newly published editor template"),
+                owner=owner,
+                graph_template_ref="demo:authoring",
+                graph_template_version="1.0.0",
+                approval_route=RESERVED_APPROVAL_ROUTE_OPERATOR,
+            )
+        )
+        assert is_ok(compiled), compiled
+        assert compiled.value.mission.graph_template_ref == "demo:authoring"
+        assert compiled.value.task_graph.tasks[0].intent == "Run from the published editor template"
+
+        # Continue through the established authoring grant/instance/invoke
+        # path, carrying the enabled template as selected context. Editor
+        # drafts are never dispatched directly; this invokes the ordinary
+        # public operation boundary after publication and enablement.
+        session = ProductSessionService()
+        selected_refs: list[dict[str, str]] = [
+            {"kind": "instance_id", "id": "inst:editor-first-run"},
+            {"kind": "template", "id": "demo:authoring"},
+        ]
+        minted = session.mint(
+            product_session_id="psess:editor-first-run",
+            profile="authoring",
+            principal="operator",
+            contribution={"package_version": "0.1.0", "qualified_id": "analysis-backtest:qmb"},
+            instance_id=None,
+            config_revision=4,
+            as_of="2026-09-20T00:00:00Z",
+            granted_ops=(),
+            selected_refs=selected_refs,
+            scope_path=[{"kind": "desk", "id": "research"}],
+        )
+        assert is_ok(minted), minted
+        granted = session.host_grant(
+            "psess:editor-first-run",
+            grant_id="grant:editor-first-run",
+            op_id="qmb.analysis.project",
+            op_version=1,
+            effect_class="read",
+            parameter_ceiling={"allow_keys": ["run_fp1", "as_of"]},
+            expires_at="2026-12-31T00:00:00Z",
+            instance_id="inst:editor-first-run",
+        )
+        assert is_ok(granted), granted
+        descriptor = next(
+            item
+            for item in public_operation_descriptors()
+            if item.op_id == "qmb.analysis.project" and item.version == 1
+        )
+        payload = {"run_fp1": "run:editor-first-run"}
+        input_hash = compute_input_hash(payload, descriptor=descriptor)
+        assert is_ok(input_hash), input_hash
+        envelope = {
+            "logical_invocation_id": "inv:editor-first-run",
+            "attempt_id": 1,
+            "op_id": descriptor.op_id,
+            "op_version": descriptor.version,
+            "contribution": {
+                "qualified_id": "analysis-backtest:qmb",
+                "package_version": "0.1.0",
+            },
+            "instance_id": "inst:editor-first-run",
+            "config_revision": 4,
+            "grant_id": "grant:editor-first-run",
+            "effect_class": "read",
+            "idempotency_key": "idem:editor-first-run",
+            "reconcile_policy": "query-then-decide",
+            "input_hash": input_hash.value,
+            "call_depth": 0,
+            "caller_kind": "user",
+            "caller_session_ref": "psess:editor-first-run",
+        }
+        invoked: list[object] = []
+        dispatched = session.dispatch_public_call(
+            "psess:editor-first-run",
+            transport=PublicCallTransport.IN_PROCESS,
+            envelope=envelope,
+            payload=payload,
+            now="2026-09-20T00:00:00Z",
+            selected_refs=selected_refs,
+            contributions={
+                ("analysis-backtest:qmb", "0.1.0"): ContributionRecord(
+                    qualified_id="analysis-backtest:qmb",
+                    package_version="0.1.0",
+                    availability="enabled",
+                )
+            },
+            descriptors={(descriptor.op_id, descriptor.version): descriptor},
+            instances={
+                ("inst:editor-first-run", 4): InstanceRecord(
+                    instance_id="inst:editor-first-run", config_revision=4
+                )
+            },
+            execute=invoked.append,
+        )
+        assert is_ok(dispatched), dispatched
+        assert dispatched.value.grant.instance_id == "inst:editor-first-run"
+        assert dispatched.value.invocation is not None
+        assert len(invoked) == 1
         enabled_roster = json.loads(roster.read_text(encoding="utf-8"))
         assert enabled_roster["published"][0]["enabled"] is True
         substrate.sqlite.execute("DELETE FROM editor_draft_head")
@@ -432,6 +692,132 @@ def test_publish_revalidates_and_roster_stays_unchanged_on_failure(tmp_path: Pat
         )
         assert is_ok(repeated)
         assert len(json.loads(roster.read_text(encoding="utf-8"))["published"]) == 1
+    finally:
+        _close(substrate, journal)
+
+
+def test_publish_journal_failure_compensates_roster(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        body = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:journal-fail",
+                "version": "1.0.0",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        ).encode()
+        fp1 = _stage(artifacts, body)
+        saved = service.save_editor_draft(
+            {"fp1": fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(saved), saved
+
+        def fail_append(*_args: object, **_kwargs: object) -> Result[JournalAppendReceipt]:
+            return policy_rejection("journal", "injected append failure")
+
+        monkeypatch.setattr(journal, "append_event", fail_append)
+        refused = service.publish_editor_draft(
+            {"editor_draft_id": saved.value.editor_draft_id, "expected_revision": fp1},
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_refusal(refused)
+        roster = AtomicRoster(tmp_path / "authoring-pack")
+        loaded = roster.load()
+        assert is_ok(loaded), loaded
+        assert loaded.value["published"] == []
+        journal_events = cast(Result[tuple[object, ...]], journal.read_events())
+        assert is_ok(journal_events)
+        assert [getattr(event, "event", None) for event in journal_events.value] == [
+            "editor_draft.saved"
+        ]
+    finally:
+        _close(substrate, journal)
+
+
+def test_publish_supersedes_revision_and_replay_preserves_enabled_state(tmp_path: Path) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+
+        def graph_bytes(version: str) -> bytes:
+            return json.dumps(
+                {
+                    "artifact_kind": "graph_template",
+                    "qualified_id": "demo:supersede",
+                    "version": version,
+                    "nodes": [],
+                    "edges": [],
+                },
+                sort_keys=True,
+            ).encode()
+
+        first_fp1 = _stage(artifacts, graph_bytes("1.0.0"))
+        saved = service.save_editor_draft(
+            {"fp1": first_fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(saved), saved
+        first_publish = service.publish_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": first_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(first_publish), first_publish
+        runtime = DeskPluginRoster(authoring_roster_root=tmp_path / "authoring-pack")
+        enabled = runtime.enable_published_authoring_contribution(
+            str(first_publish.value["contribution_id"]),
+            correlation_id="supersede-enable",
+        )
+        assert is_ok(enabled), enabled
+
+        second_fp1 = _stage(artifacts, graph_bytes("2.0.0"))
+        advanced = service.save_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": first_fp1,
+                "fp1": second_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(advanced), advanced
+        second_publish = service.publish_editor_draft(
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": second_fp1,
+            },
+            operator_principal="operator-1",
+            capabilities=_CAPS,
+        )
+        assert is_ok(second_publish), second_publish
+        roster = AtomicRoster(tmp_path / "authoring-pack")
+        current = roster.load()
+        assert is_ok(current), current
+        rows = cast(list[dict[str, object]], current.value["published"])
+        assert len(rows) == 1
+        assert rows[0]["version"] == "2.0.0"
+        assert rows[0]["enabled"] is True
+        assert rows[0]["published"] is True
+
+        damaged = dict(current.value)
+        damaged["published"] = []
+        erased = roster.publish(damaged)
+        assert is_ok(erased), erased
+        restored = service.restore_from_journal()
+        assert is_ok(restored), restored
+        recovered = roster.load()
+        assert is_ok(recovered), recovered
+        recovered_rows = cast(list[dict[str, object]], recovered.value["published"])
+        assert len(recovered_rows) == 1
+        assert recovered_rows[0]["version"] == "2.0.0"
+        assert recovered_rows[0]["enabled"] is True
     finally:
         _close(substrate, journal)
 
@@ -471,6 +857,82 @@ def test_publish_roster_write_failure_preserves_existing_bytes(tmp_path: Path) -
         ]
     finally:
         _close(substrate, journal)
+
+
+def test_compose_restart_restores_draft_bytes_head_and_enabled_template(tmp_path: Path) -> None:
+    async def _run() -> None:
+        seed = tmp_path / "seed-corpus"
+        seed.mkdir()
+        composed = DaemonProcess.compose(
+            tmp_path,
+            machine="draft-restart-test",
+            boot_epoch_id="draft-restart-1",
+            bind_port=0,
+            plugin_load_configs={"research-corpus": {"root_path": str(seed)}},
+        )
+        assert is_ok(composed), composed
+        first_process = composed.value
+        body = json.dumps(
+            {
+                "artifact_kind": "graph_template",
+                "qualified_id": "demo:restartable",
+                "version": "1.0.0",
+                "nodes": [],
+                "edges": [],
+            },
+            sort_keys=True,
+        ).encode()
+        staged = first_process.artifacts.stage_complete_bytes(body)
+        assert is_ok(staged), staged
+        saved = first_process._editor_drafts.save_editor_draft(  # pyright: ignore[reportPrivateUsage]
+            {"fp1": staged.value.fp1},
+            operator_principal=first_process._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+            capabilities=_CAPS,
+        )
+        assert is_ok(saved), saved
+        published = first_process._editor_drafts.publish_editor_draft(  # pyright: ignore[reportPrivateUsage]
+            {
+                "editor_draft_id": saved.value.editor_draft_id,
+                "expected_revision": staged.value.fp1,
+            },
+            operator_principal=first_process._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+            capabilities=_CAPS,
+        )
+        assert is_ok(published), published
+        enabled = first_process.roster.enable_published_authoring_contribution(
+            str(published.value["contribution_id"]),
+            correlation_id="draft-restart-enable",
+        )
+        assert is_ok(enabled), enabled
+        await first_process.aclose()
+
+        restarted = DaemonProcess.compose(
+            tmp_path,
+            machine="draft-restart-test",
+            boot_epoch_id="draft-restart-2",
+            bind_port=0,
+            plugin_load_configs={"research-corpus": {"root_path": str(seed)}},
+        )
+        assert is_ok(restarted), restarted
+        second_process = restarted.value
+        try:
+            head = second_process._editor_drafts.get_editor_draft_head(  # pyright: ignore[reportPrivateUsage]
+                {"editor_draft_id": saved.value.editor_draft_id},
+                operator_principal=second_process._operator_principal(),  # pyright: ignore[reportPrivateUsage]
+                capabilities=_CAPS,
+            )
+            assert is_ok(head), head
+            assert head.value.editor_revision == staged.value.fp1
+            restored = second_process.artifacts.get(staged.value.fp1)
+            assert restored is not None and restored.content == body
+            assert (
+                second_process.roster.templates.get_versioned("demo:restartable", "1.0.0")
+                is not None
+            )
+        finally:
+            await second_process.aclose()
+
+    asyncio.run(_run())
 
 
 def test_authenticated_http_editor_draft_head_query(tmp_path: Path) -> None:
@@ -534,12 +996,11 @@ def test_authenticated_http_editor_draft_head_query(tmp_path: Path) -> None:
                 f"/q/get_editor_draft_head?editor_draft_id={saved.value.editor_draft_id}",
                 {"Origin": _ORIGIN, "Authorization": auth.value},
             )
-            assert response[0] == 200, response
-            result = json.loads(response[1])["result"]
-            assert result == {
-                "editor_draft_id": saved.value.editor_draft_id,
-                "editor_revision": staged.value.fp1,
-            }
+            assert response[0] == 403, response
+            refusal = json.loads(response[1])["refusal"]
+            context = refusal["context"]
+            assert context["query_unavailable"] is True
+            assert context["name"] == GET_EDITOR_DRAFT_HEAD_CAPABILITY
             unauthenticated = await _http_exchange(
                 bound.value.host,
                 bound.value.port,
@@ -599,6 +1060,32 @@ def test_draft_invoke_refuses_without_jobhandle() -> None:
         context = cast(Mapping[str, object], data["context"])
         assert context["refusal"] == "draft_not_runnable"
         assert context["minted_job_handle"] is False
+
+
+def test_saved_revision_in_ordinary_fp1_invoke_field_is_refused(tmp_path: Path) -> None:
+    substrate, journal, artifacts, service = _service(tmp_path)
+    try:
+        fp1 = _stage(artifacts, b"saved draft revision")
+        saved = service.save_editor_draft(
+            {"fp1": fp1}, operator_principal="operator-1", capabilities=_CAPS
+        )
+        assert is_ok(saved), saved
+        process = object.__new__(DaemonProcess)
+        object.__setattr__(process, "_editor_drafts", service)
+        response = DaemonProcess._gate_live_invoke(  # pyright: ignore[reportPrivateUsage]
+            process,
+            "start_mission",
+            {"params": {"fp1": fp1}},
+            "req-fp1-draft",
+        )
+        assert response is not None
+        error = cast(Mapping[str, object], cast(Mapping[str, object], response)["error"])
+        data = cast(Mapping[str, object], error["data"])
+        context = cast(Mapping[str, object], data["context"])
+        assert context["refusal"] == "draft_not_runnable"
+        assert context["minted_job_handle"] is False
+    finally:
+        _close(substrate, journal)
 
 
 def test_live_json_rpc_dispatch_refuses_draft_before_job_mint() -> None:

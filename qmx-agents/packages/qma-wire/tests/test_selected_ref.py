@@ -102,11 +102,12 @@ def test_layout_widget_json_render_trees_remain_refused() -> None:
 
 
 def test_selected_ref_rejects_editor_drafts_in_mappings_and_prebuilt_dtos() -> None:
-    for payload in (
+    payloads: tuple[dict[str, object], ...] = (
         {"kind": "run", "id": "edraft:one"},
         {"kind": "run", "id": "ordinary", "editor_revision": "fp1:revision"},
         {"kind": "run", "id": "ordinary", "unsaved_buffer": {"nodes": []}},
-    ):
+    )
+    for payload in payloads:
         refused = parse_wire_selected_ref(payload)
         assert is_refusal(refused)
         assert refused.context["refusal"] == "draft_not_runnable"

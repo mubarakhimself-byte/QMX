@@ -8,6 +8,8 @@ the machine local authoring roster.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import sqlite3
 import uuid
@@ -126,47 +128,156 @@ class EditorDraftService:
         if is_refusal(stream):
             return stream
         latest: dict[str, tuple[object, ...]] = {}
+        published_by_identity: dict[str, dict[str, object]] = {}
         for event in stream.value:
             payload = event.payload
             if event.event == EDITOR_DRAFT_PUBLISHED_EVENT:
                 draft_id = payload.get("editor_draft_id")
                 revision = payload.get("editor_revision")
                 contribution_id = payload.get("contribution_id")
+                contribution = payload.get("contribution")
                 prior = latest.get(draft_id) if isinstance(draft_id, str) else None
                 if (
-                    prior is not None
-                    and prior[2] == revision
-                    and isinstance(contribution_id, str)
-                    and contribution_id
+                    prior is None
+                    or prior[2] != revision
+                    or not isinstance(contribution_id, str)
+                    or not contribution_id
+                    or payload.get("owner_principal") != prior[1]
+                    or not isinstance(payload.get("qualified_id"), str)
+                    or not isinstance(payload.get("version"), str)
+                    or not isinstance(contribution, Mapping)
                 ):
-                    latest[cast(str, draft_id)] = (
-                        *prior[:5],
-                        contribution_id,
-                        event.journal_seq,
-                        event.recorded_at,
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.published event is malformed or orphaned",
+                        journal_seq=event.journal_seq,
                     )
+                contribution_record = dict(cast(Mapping[str, object], contribution))
+                if (
+                    contribution_record.get("contribution_id") != contribution_id
+                    or contribution_record.get("qualified_id") != payload.get("qualified_id")
+                    or contribution_record.get("version") != payload.get("version")
+                    or contribution_record.get("editor_revision") != revision
+                    or contribution_record.get("published") is not True
+                    or not isinstance(contribution_record.get("qualified_id"), str)
+                    or not cast(str, contribution_record.get("qualified_id")).strip()
+                    or not isinstance(contribution_record.get("version"), str)
+                    or not cast(str, contribution_record.get("version")).strip()
+                    or not isinstance(contribution_record.get("bytes"), str)
+                ):
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.published contribution is malformed",
+                        journal_seq=event.journal_seq,
+                    )
+                contribution_bytes = cast(str, contribution_record["bytes"]).encode("utf-8")
+                if fingerprint_bytes(contribution_bytes).value != revision:
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.published bytes do not match the recorded fp1",
+                        journal_seq=event.journal_seq,
+                    )
+                parsed_contribution = _parse_graph_template(contribution_bytes)
+                if is_refusal(parsed_contribution):
+                    return parsed_contribution
+                if (
+                    parsed_contribution.value.qualified_id != contribution_record["qualified_id"]
+                    or parsed_contribution.value.version != contribution_record["version"]
+                    or is_refusal(validate_graph_template_topology(parsed_contribution.value))
+                ):
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "journal editor_draft.published graph template is invalid",
+                        journal_seq=event.journal_seq,
+                    )
+                published_by_identity[cast(str, payload["qualified_id"])] = contribution_record
+                latest[cast(str, draft_id)] = (
+                    *prior[:5],
+                    contribution_id,
+                    event.journal_seq,
+                    event.recorded_at,
+                )
                 continue
             if event.event != EDITOR_DRAFT_HEAD_EVENT_SAVED:
                 continue
             draft_id = payload.get("editor_draft_id")
             owner = payload.get("owner_principal")
             revision = payload.get("editor_revision")
+            content_base64 = payload.get("content_base64")
             if not all(isinstance(value, str) and value for value in (draft_id, owner, revision)):
                 return invalid_input(
                     EDITOR_DRAFT_PROJECTION,
                     "journal editor_draft.saved event has an invalid head shape",
                     journal_seq=event.journal_seq,
                 )
+            if not isinstance(content_base64, str):
+                return invalid_input(
+                    EDITOR_DRAFT_PROJECTION,
+                    "journal editor_draft.saved event is missing durable complete bytes",
+                    journal_seq=event.journal_seq,
+                )
+            correlation = payload.get("client_draft_correlation")
+            correlation_fp1 = payload.get("correlation_fp1")
+            prior = latest.get(cast(str, draft_id))
+            if prior is None:
+                if correlation is not None and (
+                    not isinstance(correlation, str)
+                    or not correlation
+                    or correlation_fp1 != revision
+                ):
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "first editor_draft.saved event has invalid correlation identity",
+                        journal_seq=event.journal_seq,
+                    )
+                if correlation is None and correlation_fp1 is not None:
+                    return invalid_input(
+                        EDITOR_DRAFT_PROJECTION,
+                        "first editor_draft.saved event has an orphan correlation fp1",
+                        journal_seq=event.journal_seq,
+                    )
+            elif prior[1] != owner or prior[3] != correlation or prior[4] != correlation_fp1:
+                return invalid_input(
+                    EDITOR_DRAFT_PROJECTION,
+                    "journal editor_draft.saved event changes immutable draft "
+                    "ownership or correlation",
+                    journal_seq=event.journal_seq,
+                )
+            try:
+                content = base64.b64decode(content_base64, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                return invalid_input(
+                    EDITOR_DRAFT_PROJECTION,
+                    "journal editor_draft.saved event has malformed durable bytes",
+                    journal_seq=event.journal_seq,
+                    error=str(exc),
+                )
+            if fingerprint_bytes(content).value != revision:
+                return invalid_input(
+                    EDITOR_DRAFT_PROJECTION,
+                    "journal editor_draft.saved bytes do not match the recorded fp1",
+                    journal_seq=event.journal_seq,
+                )
+            staged = self.artifacts.restore_complete_bytes(
+                content,
+                expected_fp1=cast(str, revision),
+            )
+            if is_refusal(staged):
+                return staged
             latest[cast(str, draft_id)] = (
                 cast(str, draft_id),
                 cast(str, owner),
                 cast(str, revision),
-                payload.get("client_draft_correlation"),
-                payload.get("correlation_fp1"),
+                correlation,
+                correlation_fp1,
                 None,
                 event.journal_seq,
                 event.recorded_at,
             )
+
+        reconciled = self._reconcile_authoring_roster(published_by_identity)
+        if is_refusal(reconciled):
+            return reconciled
 
         def _replace(conn: object) -> int:
             raw = cast("sqlite3.Connection", conn)
@@ -186,6 +297,51 @@ class EditorDraftService:
             return materialized
         return Ok(restored)
 
+    def _reconcile_authoring_roster(
+        self,
+        published_by_identity: Mapping[str, dict[str, object]],
+    ) -> Result[None]:
+        roster = AtomicRoster(self.authoring_roster_root)
+        with roster.synchronized():
+            loaded = roster.load()
+            if is_refusal(loaded):
+                return loaded
+            payload = dict(loaded.value)
+            rows = payload.get("published", [])
+            if not isinstance(rows, list):
+                return invalid_input("authoring_roster", "published roster must be a list")
+            typed_rows = cast(list[object], rows)
+            existing_by_id = {
+                str(cast(Mapping[str, object], item).get("contribution_id")): cast(
+                    Mapping[str, object], item
+                )
+                for item in typed_rows
+                if isinstance(item, Mapping)
+                and isinstance(cast(Mapping[str, object], item).get("contribution_id"), str)
+            }
+            replacement: list[object] = []
+            for item in typed_rows:
+                if isinstance(item, Mapping):
+                    contribution_id = cast(Mapping[str, object], item).get("contribution_id")
+                    if isinstance(contribution_id, str) and contribution_id.startswith(
+                        "authoring-contribution:"
+                    ):
+                        continue
+                replacement.append(cast(object, item))
+            for contribution in published_by_identity.values():
+                restored = dict(contribution)
+                existing = existing_by_id.get(str(contribution["contribution_id"]))
+                if existing is not None and existing.get("enabled") is True:
+                    restored["enabled"] = True
+                replacement.append(restored)
+            if replacement == typed_rows:
+                return Ok(None)
+            payload["published"] = replacement
+            reconciled = roster.publish(payload)
+            if is_refusal(reconciled):
+                return reconciled
+            return Ok(None)
+
     def _ensure_schema(self) -> None:
         self.sqlite.run(lambda conn: conn.executescript(_SCHEMA_SQL))
 
@@ -198,6 +354,14 @@ class EditorDraftService:
             (draft_id,),
         )
         return rows[0] if rows else None
+
+    def is_editor_revision(self, fp1: str) -> bool:
+        """Whether an fp1 is named by a durable editor head."""
+        rows = self.sqlite.execute(
+            "SELECT 1 FROM editor_draft_head WHERE editor_revision = ? LIMIT 1",
+            (fp1,),
+        )
+        return bool(rows)
 
     def _artifact(self, fp1: object) -> Result[StagedArtifact]:
         token = _require_token("fp1", fp1)
@@ -279,9 +443,8 @@ class EditorDraftService:
                             return policy_rejection(
                                 "client_draft_correlation",
                                 "correlation is scoped to its original operator principal",
-                                owner=owner,
                             )
-                        if prior_fp1 != artifact.value.fp1 or revision != artifact.value.fp1:
+                        if prior_fp1 != artifact.value.fp1:
                             return policy_rejection(
                                 "client_draft_correlation",
                                 "correlation reuse with different fp1 refuses without forking",
@@ -295,6 +458,7 @@ class EditorDraftService:
                     "editor_draft_id": draft_id,
                     "editor_revision": artifact.value.fp1,
                     "owner_principal": principal.value,
+                    "content_base64": base64.b64encode(artifact.value.content).decode("ascii"),
                 }
                 if correlation.value is not None:
                     event_payload["client_draft_correlation"] = correlation.value
@@ -348,8 +512,7 @@ class EditorDraftService:
             if row[1] != principal.value:
                 return policy_rejection(
                     "editor_draft_id",
-                    "only the owner operator may save this editor draft",
-                    owner=row[1],
+                    "editor draft is unavailable to this operator",
                 )
             current = str(row[2])
             if raw_expected != current:
@@ -358,6 +521,7 @@ class EditorDraftService:
                 "editor_draft_id": draft_id,
                 "editor_revision": artifact.value.fp1,
                 "owner_principal": principal.value,
+                "content_base64": base64.b64encode(artifact.value.content).decode("ascii"),
             }
             if row[3] is not None:
                 event_payload["client_draft_correlation"] = row[3]
@@ -369,7 +533,7 @@ class EditorDraftService:
             if is_refusal(appended):
                 return appended
             updated = conn.execute(
-                "UPDATE editor_draft_head SET editor_revision = ?, "
+                "UPDATE editor_draft_head SET editor_revision = ?, contribution_id = NULL, "
                 "journal_seq = ?, recorded_at = ? WHERE editor_draft_id = ? "
                 "AND editor_revision = ?",
                 (
@@ -427,8 +591,7 @@ class EditorDraftService:
         if row[1] != principal.value:
             return policy_rejection(
                 "editor_draft_id",
-                "only the owner operator may read this editor draft head",
-                owner=row[1],
+                "editor draft is unavailable to this operator",
             )
         return Ok(EditorDraftHead(str(row[0]), str(row[2]), str(row[1])))
 
@@ -452,7 +615,7 @@ class EditorDraftService:
         if is_refusal(principal):
             return principal
 
-        def _publish(conn: sqlite3.Connection) -> Result[Mapping[str, object]]:
+        def _publish_locked(conn: sqlite3.Connection) -> Result[Mapping[str, object]]:
             row = conn.execute(
                 "SELECT editor_draft_id, owner_principal, editor_revision, "
                 "client_draft_correlation, correlation_fp1, contribution_id, "
@@ -465,8 +628,7 @@ class EditorDraftService:
             if row[1] != principal.value:
                 return policy_rejection(
                     "editor_draft_id",
-                    "only the owner operator may publish this editor draft",
-                    owner=row[1],
+                    "editor draft is unavailable to this operator",
                 )
             if values.get("expected_revision") != row[2]:
                 return _conflict(values.get("expected_revision"), str(row[2]))
@@ -489,6 +651,13 @@ class EditorDraftService:
             if not isinstance(contributions, list):
                 return invalid_input("authoring_roster", "published roster must be a list")
             updated = list(cast(list[object], contributions))
+            prior_enabled = any(
+                isinstance(item, Mapping)
+                and cast(Mapping[str, object], item).get("qualified_id")
+                == parsed.value.qualified_id
+                and cast(Mapping[str, object], item).get("enabled") is True
+                for item in updated
+            )
             record = {
                 "contribution_id": contribution_id,
                 "point": "graph_template",
@@ -496,13 +665,15 @@ class EditorDraftService:
                 "version": parsed.value.version,
                 "editor_revision": str(row[2]),
                 "bytes": artifact.value.content.decode("utf-8"),
-                "published": False,
+                "published": True,
+                "enabled": prior_enabled,
             }
             kept: list[object] = []
             for item in updated:
                 if (
                     isinstance(item, Mapping)
-                    and cast(Mapping[str, object], item).get("contribution_id") == contribution_id
+                    and cast(Mapping[str, object], item).get("qualified_id")
+                    == parsed.value.qualified_id
                 ):
                     continue
                 kept.append(cast(object, item))
@@ -512,6 +683,7 @@ class EditorDraftService:
             written = roster.publish(prior)
             if is_refusal(written):
                 return written
+            written_generation = cast(int, loaded.value.get("roster_generation", 0)) + 1
             appended = self.journal.append_event(
                 EDITOR_DRAFT_PUBLISHED_EVENT,
                 payload={
@@ -521,12 +693,16 @@ class EditorDraftService:
                     "contribution_id": contribution_id,
                     "qualified_id": parsed.value.qualified_id,
                     "version": parsed.value.version,
+                    "contribution": record,
                 },
             )
             if is_refusal(appended):
-                restored_roster = roster.publish(loaded.value)
+                restored_roster = roster.restore_snapshot(
+                    loaded.value,
+                    expected_generation=written_generation,
+                )
                 return restored_roster if is_refusal(restored_roster) else appended
-            conn.execute(
+            updated_head = conn.execute(
                 "UPDATE editor_draft_head SET contribution_id = ?, journal_seq = ?, "
                 "recorded_at = ? "
                 "WHERE editor_draft_id = ? AND editor_revision = ?",
@@ -538,6 +714,21 @@ class EditorDraftService:
                     row[2],
                 ),
             )
+            if updated_head.rowcount != 1:
+                restored_roster = roster.restore_snapshot(
+                    loaded.value,
+                    expected_generation=written_generation,
+                )
+                return (
+                    restored_roster
+                    if is_refusal(restored_roster)
+                    else policy_rejection(
+                        "editor_draft_id",
+                        "draft head changed during publication; reload and retry",
+                        refusal="conflict",
+                        expected_revision=row[2],
+                    )
+                )
             return Ok(
                 MappingProxyType(
                     {
@@ -547,10 +738,17 @@ class EditorDraftService:
                         "point": "graph_template",
                         "qualified_id": parsed.value.qualified_id,
                         "version": parsed.value.version,
-                        "published": False,
+                        "published": True,
+                        "enabled": prior_enabled,
                     }
                 )
             )
+
+        roster_lock = AtomicRoster(self.authoring_roster_root)
+
+        def _publish(conn: sqlite3.Connection) -> Result[Mapping[str, object]]:
+            with roster_lock.synchronized():
+                return _publish_locked(conn)
 
         return self.sqlite.run(_publish)
 
@@ -574,8 +772,19 @@ def _parse_graph_template(content: bytes) -> Result[GraphTemplate]:
         version = obj.get("version")
         nodes = obj.get("nodes", [])
         edges = obj.get("edges", [])
-        if not isinstance(qualified_id, str) or not isinstance(version, str):
-            return invalid_input("graph_template", "qualified_id and version are required strings")
+        if (
+            not isinstance(qualified_id, str)
+            or qualified_id.strip() != qualified_id
+            or qualified_id.count(":") != 1
+            or not all(part.strip() for part in qualified_id.split(":"))
+            or not isinstance(version, str)
+            or version.strip() != version
+            or not version
+        ):
+            return invalid_input(
+                "graph_template",
+                "qualified_id must be fully qualified and version must be non-empty",
+            )
         if not isinstance(nodes, list) or not all(
             isinstance(item, Mapping) for item in cast(list[object], nodes)
         ):

@@ -877,15 +877,6 @@ class DaemonProcess:
                 authoring_roster_root=Path(root) / "authoring-pack",
             )
             roster.backtesting.bind_experiments(experiments)
-            activated = roster.activate(
-                principal=PrincipalClass.OPERATOR,
-                correlation_id=f"daemon-process:{boot_epoch_id}",
-            )
-            if is_refusal(activated):
-                journal.close()
-                substrate.close()
-                return activated
-
             process = cls(
                 substrate=substrate,
                 roster=roster,
@@ -941,6 +932,15 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_drafts
+            activated = roster.activate(
+                principal=PrincipalClass.OPERATOR,
+                correlation_id=f"daemon-process:{boot_epoch_id}",
+            )
+            if is_refusal(activated):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return activated
             _process_gate.holder = process
             return Ok(process)
 
@@ -2441,6 +2441,16 @@ class DaemonProcess:
         instance_id = params.get("instance_id")
         if not (isinstance(fp1, str) and fp1.strip() != ""):
             return None
+        if self._editor_drafts.is_editor_revision(fp1):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "fp1",
+                    "saved editor draft revisions are not runnable; publish and enable first",
+                    refusal="draft_not_runnable",
+                    minted_job_handle=False,
+                ),
+            )
         gated = gate_invoke_until_transfer_complete(
             self._transfers,
             fp1=fp1,
