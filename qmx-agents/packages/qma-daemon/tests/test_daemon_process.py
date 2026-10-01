@@ -703,12 +703,60 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         assert first_after_restart is not None
         assert second_after_restart is not None
         assert first_after_restart.job_id == first_before_restart.job_id
-        assert first_after_restart.state.value == "unknown"
+        assert first_after_restart.state.value == "queued"
         assert second_after_restart.job_id == second_before_restart.job_id
-        assert second_after_restart.state.value == "unknown"
-        refused_cancel = restarted.jobs.cancel(job_id)
-        assert is_refusal(refused_cancel), "unknown jobs remain fail-closed against cancellation"
+        assert second_after_restart.state.value == "queued"
         assert restarted.jobs.handle_for(job_id) == first_after_restart
+        reconnect = WireConnection()
+        assert is_ok(reconnect.authenticate_pairing("prid:ct40positive"))
+        reconnect_token = "ct40-restart-connection"
+        initialized_again = restarted._dispatch_paired_ct40(
+            reconnect,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 30,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": WIRE_PROTOCOL_VERSION,
+                        "capabilities": {},
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=reconnect_token,
+        )
+        assert initialized_again is not None and "error" not in initialized_again
+        recovered_job = restarted._dispatch_paired_ct40(
+            reconnect,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 31,
+                    "method": "get_job",
+                    "params": {"handle_id": job_id, "product_session_ref": session_id},
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=reconnect_token,
+        )
+        assert recovered_job is not None and "error" not in recovered_job
+        assert recovered_job["result"]["job_id"] == job_id
+        assert recovered_job["result"]["state"] == "queued"
+        stolen_job = restarted._dispatch_paired_ct40(
+            reconnect,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 32,
+                    "method": "get_job",
+                    "params": {"handle_id": job_id, "product_session_ref": second_session},
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=reconnect_token,
+        )
+        assert stolen_job is not None and "error" in stolen_job
     finally:
         restarted.close()
 

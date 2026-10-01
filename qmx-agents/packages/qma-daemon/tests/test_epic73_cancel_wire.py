@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from qma.core.ontology import ActorId, DeskSlug
+from qma.core.ontology import ActorId, DeskSlug, Goal, Quant, RoleName
 from qma.core.ports.qmb import QmbAbortReceipt
 from qma.core.vocabulary.enums import JobHandleState
 from qma.daemon.pairing import issue_pairing_session
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
+from qma.daemon.taskgraph.compiler import CompileRequest
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION, InitializeParams, WireConnection
 from qmf.core import Ok, is_ok
 
@@ -53,6 +54,24 @@ def _connection(
     return conn
 
 
+def _persist_task(process: DaemonProcess, slug: str) -> tuple[ActorId, str]:
+    actor = ActorId.mint(DeskSlug.RESEARCH, slug)
+    assert is_ok(actor)
+    quant = Quant(
+        actor_id=actor.value,
+        desk=DeskSlug.RESEARCH,
+        quant_slug=slug,
+        role=RoleName.RESEARCHER,
+        name=f"Quant {slug}",
+    )
+    assert is_ok(process._mailboxes.open_for_quant(quant))
+    compiled = process.roster.compiler.compile(CompileRequest(goal=Goal(text=slug), owner=quant))
+    assert is_ok(compiled), compiled
+    persisted = process.task_graphs.persist(compiled.value.task_graph)
+    assert is_ok(persisted), persisted
+    return actor.value, compiled.value.task_graph.tasks[0].id
+
+
 def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -72,11 +91,10 @@ def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(
             as_of="2026-09-30T00:00:00Z",
         )
         assert is_ok(minted), minted
-        owner = ActorId.mint(DeskSlug.RESEARCH, "epic73-wire")
-        assert is_ok(owner)
+        owner, task_id = _persist_task(process, "epic73-wire")
         admitted = process.backtesting.jobs.submit(
             owner=owner.value,
-            task_id="task:epic73-live",
+            task_id=task_id,
             job_id="job:epic73-live",
             logical_run_id="run:epic73-live",
             attempt_id=4,
@@ -183,9 +201,10 @@ def test_live_cancel_job_dispatch_uses_durable_origin_and_exact_fences(
         )
         assert is_ok(different_operator), different_operator
         other_conn = _connection(different_operator.value.pairing_record_id)
+        other_owner, other_task_id = _persist_task(process, "epic73-other-operator")
         other = process.backtesting.jobs.submit(
-            owner=owner.value,
-            task_id="task:epic73-other-operator",
+            owner=other_owner,
+            task_id=other_task_id,
             job_id="job:epic73-other-operator",
             logical_run_id="run:epic73-other-operator",
             attempt_id=1,
@@ -269,11 +288,10 @@ def test_live_cancel_job_dispatch_reports_missing_capability(tmp_path: Path) -> 
             as_of="2026-09-30T00:00:00Z",
         )
         assert is_ok(minted), minted
-        owner = ActorId.mint(DeskSlug.RESEARCH, "epic73-machine")
-        assert is_ok(owner)
+        owner, task_id = _persist_task(process, "epic73-machine")
         admitted = process.backtesting.jobs.submit(
             owner=owner.value,
-            task_id="task:epic73-machine",
+            task_id=task_id,
             job_id="job:epic73-machine",
             logical_run_id="run:epic73-machine",
             attempt_id=1,

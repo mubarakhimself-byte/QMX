@@ -47,13 +47,13 @@ def main() -> None:
     assert is_ok(user)
     assert user.value.caller_kind == "user"
     assert user.value.instance_id == "inst:1"
-    assert user.value.handle.state is JobHandleState.RUNNING
+    assert user.value.handle.state is JobHandleState.QUEUED
     job_id = user.value.job_id
     disposed = fixture.dispose_widget()
     assert is_ok(disposed)
     live = fixture.host.handle_for(job_id)
     assert live is not None
-    assert live.state is JobHandleState.RUNNING
+    assert live.state is JobHandleState.QUEUED
     assert is_refusal(fixture.dispose_widget(cancel=True))
     assert is_refusal(fixture.execute_widget_contribution("widget"))
     assert is_refusal(fixture.mint_fifth_composition_mode("widget"))
@@ -66,7 +66,7 @@ def main() -> None:
     assert nested.value.spliced is False
     recovered = fixture.crash_parent()
     assert is_ok(recovered)
-    assert recovered.value.handle.state is JobHandleState.RUNNING
+    assert recovered.value.handle.state is JobHandleState.QUEUED
     assert "work-b" not in recovered.value.parent_node_ids
     assert is_refusal(fixture.splice_child_into_parent())
     assert is_refusal(fixture.start_nested(union_grants=True))

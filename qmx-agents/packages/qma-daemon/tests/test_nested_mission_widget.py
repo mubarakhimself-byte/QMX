@@ -154,7 +154,7 @@ def test_widget_press_is_enveloped_user_or_agent_start() -> None:
     assert started.envelope.instance_id == "inst:1"
     assert started.binding.widget_id == binding.widget_id
     assert started.mission.id
-    assert started.handle.state is JobHandleState.RUNNING
+    assert started.handle.state is JobHandleState.QUEUED
     assert {node.id for node in started.task_graph.nodes} == {"work-t"}
     agent = NestedMissionHost()
     _ok(agent.bind_widget_start("widget:start-t", _template_t()))
@@ -212,7 +212,7 @@ def test_dispose_does_not_cancel_the_mission() -> None:
     assert host.widget_binding("widget:start-t") is None
     live = host.handle_for(job_id)
     assert live is not None
-    assert live.state is JobHandleState.RUNNING
+    assert live.state is JobHandleState.QUEUED
     assert live.state is not JobHandleState.CANCELLED
     remembered = host.widget_start_for("widget:start-t")
     assert remembered is not None
@@ -221,7 +221,7 @@ def test_dispose_does_not_cancel_the_mission() -> None:
     assert is_refusal(cancelled_dispose)
     still = host.jobs.handle_for(job_id)
     assert still is not None
-    assert still.state is JobHandleState.RUNNING
+    assert still.state is JobHandleState.QUEUED
     cancelled = _ok(host.jobs.cancel(job_id))
     assert cancelled.state is JobHandleState.CANCELLED
 

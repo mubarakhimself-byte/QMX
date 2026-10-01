@@ -926,10 +926,10 @@ class TaskGraphStateService:
             slots_raw = occupancy.get("slots", {})
             if not isinstance(slots_raw, Mapping):
                 return _invalid("occupancy.slots", "occupancy slots are a mapping")
-            for task_id, slot_raw in slots_raw.items():
+            for task_id, slot_raw in cast("Mapping[str, object]", slots_raw).items():
                 if not isinstance(slot_raw, Mapping):
                     return _invalid("occupancy.slot", "occupancy slot is a mapping")
-                handle_raw = slot_raw.get("job_handle")
+                handle_raw = cast("Mapping[str, object]", slot_raw).get("job_handle")
                 if handle_raw is None:
                     continue
                 if not isinstance(handle_raw, Mapping):
@@ -965,7 +965,10 @@ class TaskGraphStateService:
         previous = slots.get(task_id)
         slot = dict(cast("Mapping[str, object]", previous)) if isinstance(previous, Mapping) else {}
         previous_handle = slot.get("job_handle")
-        if isinstance(previous_handle, Mapping) and previous_handle.get("job_id") != job_id:
+        if (
+            isinstance(previous_handle, Mapping)
+            and cast("Mapping[str, object]", previous_handle).get("job_id") != job_id
+        ):
             return policy_rejection(
                 "job_id",
                 "a Task cannot be rebound to a different durable JobHandle",

@@ -187,7 +187,7 @@ def test_nested_start_is_one_mission_one_graph_one_job_handle() -> None:
     assert nested.task_graph.id != parent.task_graph.id
     assert nested.mission.id != parent.mission.id
     assert nested.handle.job_id != parent.handle.job_id
-    assert nested.handle.state is JobHandleState.RUNNING
+    assert nested.handle.state is JobHandleState.QUEUED
     assert {node.id for node in nested.task_graph.nodes} == {"work-b"}
     assert {node.id for node in parent.task_graph.nodes} == {"start-b"}
     assert "work-b" not in {node.id for node in parent.task_graph.nodes}
@@ -213,7 +213,7 @@ def test_lifecycle_verbs_are_existing_start_query_cancel_await() -> None:
         )
     )
     assert isinstance(queried, NestedMissionOccupancy)
-    assert queried.handle.state is JobHandleState.RUNNING
+    assert queried.handle.state is JobHandleState.QUEUED
     assert queried.handle.job_id == nested.handle.job_id
     waited = _ok(
         host.invoke(
@@ -265,7 +265,7 @@ def test_occupancy_and_cancel_follow_the_nested_job_handle() -> None:
     assert live.state is JobHandleState.CANCELLED
     parent_live = host.jobs.handle_for(parent.handle.job_id)
     assert parent_live is not None
-    assert parent_live.state is JobHandleState.RUNNING
+    assert parent_live.state is JobHandleState.QUEUED
     occupancy = host.occupancy_for(nested.handle.job_id)
     assert occupancy is not None
     assert occupancy.handle.job_id == nested.handle.job_id
@@ -329,7 +329,7 @@ def test_crash_of_a_does_not_splice_b_nodes_into_a() -> None:
     assert host.is_live(nested.task_graph.id) is True
     child_handle = host.handle_for(nested.handle.job_id)
     assert child_handle is not None
-    assert child_handle.state is JobHandleState.RUNNING
+    assert child_handle.state is JobHandleState.QUEUED
     recovered = _ok(host.recover_parent(parent.task_graph.id))
     assert {node.id for node in recovered.nodes} == parent_nodes
     assert "work-b" not in {node.id for node in recovered.nodes}

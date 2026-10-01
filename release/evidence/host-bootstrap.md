@@ -127,7 +127,7 @@ Results before the current review fixes: ProductSession/process focused tests pa
 
 JobHandle snapshots are folded into the existing `task_graph_state` occupancy slot under the owning persisted Task Graph. The daemon writes each state transition through the existing `task.graph_materialized` journal event and SQLite projection, then loads those exact snapshots during composition. Startup validates JobHandle payloads through `JobHandleStore.restore`, verifies each handle's task identity and owner against the persisted task, and calls the existing `recover_after_restart` path. Unresolved in-flight handles become `UNKNOWN`; known queued handles remain queued. No separate SQLite table or store was added.
 
-The public CT-40 process regression submits missions through authenticated sessions and grants, closes the daemon, composes a second process over the same root, and verifies both exact job ids are recovered as `UNKNOWN`. Cancel remains refused for an unknown handle under CT-46's operator-resolution rule. This proves daemon restart recovery and fail-closed status; it does not prove worker execution or successful cancellation of an unresolved job. The current mission compiler path still lacks an accepted worker/environment execution lease, so task execution and lease-backed restart reconciliation remain incomplete.
+The public CT-40 process regression submits missions through authenticated sessions and grants, closes the daemon, composes a second process over the same root, and verifies both exact job ids are recovered as `QUEUED`. Top-level and nested mission compilation no longer marks a job `RUNNING` before an executor accepts it and the ComputeRouter grants its environment lease. The authenticated `get_job` query accepts `{handle_id, product_session_ref}` and reattaches the exact handle through its recorded originating ProductSession; a different session is refused. This proves durable queued-handle recovery, not task execution or worker completion. In-flight `UNKNOWN` reconciliation still requires dispatcher lease restoration and a real accepted worker record.
 
 Verification:
 
@@ -139,3 +139,15 @@ git diff --check
 ```
 
 Results: focused restart regression passed; daemon-process and nested-mission suites passed 16 tests; Ruff and whitespace checks passed. Commit: `8f98fa0d`.
+
+The follow-up queued-status/reconnect-query revision was verified with:
+
+```sh
+cd qmx-agents && uv run --package qma-daemon pytest packages/qma-daemon/tests -q
+cd qmx-agents && uv run --package qma-wire pytest packages/qma-wire/tests -q
+cd qmx-agents && uv run --package qma-daemon pyright packages/qma-daemon/src/qma/daemon/process.py packages/qma-daemon/src/qma/daemon/taskgraph/nested.py packages/qma-daemon/src/qma/daemon/envs/jobs.py packages/qma-daemon/src/qma/daemon/taskgraph/projection.py
+cd qmx-agents && uv run --package qma-daemon ruff check packages/qma-daemon/src/qma/daemon/process.py packages/qma-daemon/src/qma/daemon/taskgraph/nested.py packages/qma-daemon/src/qma/daemon/taskgraph/projection.py packages/qma-daemon/src/qma/daemon/envs/jobs.py packages/qma-daemon/tests/test_daemon_process.py packages/qma-daemon/tests/test_nested_mission.py packages/qma-daemon/tests/test_epic73_cancel_wire.py packages/qma-daemon/tests/test_j_kit_04_05_nested_mission.py packages/qma-daemon/tests/test_nested_mission_widget.py packages/qma-daemon/examples/j_kit_04_05_nested_mission_usage.py packages/qma-wire/src/qma/wire/vocabulary.py packages/qma-wire/tests/test_wire_families_and_vocab.py packages/qma-wire/tests/test_diagnosis.py packages/qma-wire/tests/test_federated_discovery.py packages/qma-wire/tests/test_instance_health.py packages/qma-wire/tests/test_list_mailbox.py
+git diff --check
+```
+
+Results: QMA daemon suite passed 1026 tests with 2 skips; qma-wire passed 244 tests; the four touched runtime modules passed strict Pyright; Ruff and whitespace checks passed. The public lifecycle test covers two instances sharing the same op, real ProductSession grants, daemon restart, exact `get_job` recovery, and refusal to read through the other instance's session. The running-to-queued correction is intentionally truthful until a worker bridge supplies an actual accepted execution and lease.

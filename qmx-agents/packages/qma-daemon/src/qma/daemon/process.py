@@ -2596,9 +2596,64 @@ class DaemonProcess:
             grants = self._product_sessions.granted_records(session_ref)
             if is_refusal(grants):
                 return _jsonrpc_refusal(req_id, grants)
-            payload = dict(session_result.value.to_payload())
-            payload["grant_records"] = [dict(record.to_payload()) for record in grants.value]
-            return _jsonrpc_result(req_id, payload)
+            session_payload: dict[str, object] = dict(session_result.value.to_payload())
+            session_payload["grant_records"] = [
+                dict(record.to_payload()) for record in grants.value
+            ]
+            return _jsonrpc_result(req_id, session_payload)
+        if method == WireQuery.GET_JOB.value:
+            gated_query = connection.require_query_capability(method)
+            if is_refusal(gated_query):
+                return _jsonrpc_refusal(req_id, gated_query)
+            if (
+                connection.principal_class is not PrincipalClass.OPERATOR
+                or self._operator_principal() is None
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "principal_class", "JobHandle reads require an authenticated operator"
+                    ),
+                )
+            raw_params = request.get("params")
+            if not isinstance(raw_params, Mapping):
+                return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
+            params = cast("Mapping[str, object]", raw_params)
+            unknown = sorted(set(params) - {"handle_id", "product_session_ref"})
+            if unknown:
+                return _jsonrpc_refusal(
+                    req_id, invalid_input("params", "unknown get_job fields", fields=unknown)
+                )
+            handle_id = params.get("handle_id")
+            session_ref = params.get("product_session_ref")
+            if not isinstance(handle_id, str) or not isinstance(session_ref, str):
+                return _jsonrpc_refusal(
+                    req_id,
+                    invalid_input("params", "get_job requires handle_id and product_session_ref"),
+                )
+            handle = self.jobs.handle_for(handle_id)
+            if handle is None:
+                return _jsonrpc_refusal(
+                    req_id, invalid_input("handle_id", "requires a minted JobHandle")
+                )
+            if handle.originating_product_session_ref != session_ref:
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "product_session_ref",
+                        "JobHandle may be read only through its exact originating ProductSession",
+                        handle_id=handle_id,
+                    ),
+                )
+            session = self._product_sessions.get(session_ref)
+            if is_refusal(session):
+                return _jsonrpc_refusal(req_id, session)
+            if session.value.principal != PrincipalClass.OPERATOR.value:
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection("principal", "ProductSession is not operator-owned"),
+                )
+            return _jsonrpc_result(req_id, handle.to_payload())
         if method == WireCommand.TRANSFER_ARTIFACT.value:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:
@@ -2613,7 +2668,9 @@ class DaemonProcess:
             gated = self._gate_live_invoke(method, request, req_id)
             if gated is not None:
                 return gated
-            return self._dispatch_product_session_invoke(connection, request, req_id, method)
+            return self._dispatch_product_session_invoke(
+                connection, request, req_id, cast("str", method)
+            )
         if method != WireCommand.SEND_MESSAGE.value:
             return _jsonrpc_error(
                 req_id,
@@ -2774,7 +2831,7 @@ class DaemonProcess:
         if is_refusal(timestamp):
             return _jsonrpc_refusal(req_id, timestamp)
         now = format_utc_iso_z(Instant(value_ns=timestamp.value.recorded_at))
-        execution: list[object] = []
+        execution: list[Result[object]] = []
 
         def execute(bound: BoundInvocation) -> None:
             execution.append(
@@ -2807,11 +2864,12 @@ class DaemonProcess:
         result = execution[0]
         if is_refusal(result):
             return _jsonrpc_refusal(req_id, result)
-        payload_out = (
-            result.value.to_payload()
-            if hasattr(result, "value") and hasattr(result.value, "to_payload")
-            else {}
-        )
+        payload_method = getattr(result.value, "to_payload", None)
+        payload_out: Mapping[str, object] = {}
+        if callable(payload_method):
+            serialized = cast("Callable[[], object]", payload_method)()
+            if isinstance(serialized, Mapping):
+                payload_out = cast("Mapping[str, object]", serialized)
         return _jsonrpc_result(req_id, payload_out)
 
     def _dispatch_open_product_session(
@@ -3093,15 +3151,25 @@ class DaemonProcess:
                     point=published.point,
                 ),
             )
-        if not isinstance(ceiling, Mapping) or not isinstance(ceiling.get("allow_keys"), list):
+        if not isinstance(ceiling, Mapping):
             return _jsonrpc_refusal(
                 req_id, invalid_input("parameter_ceiling", "allow_keys array required")
             )
-        allowed = ceiling.get("allow_keys")
+        allowed_raw = cast("Mapping[str, object]", ceiling).get("allow_keys")
+        if not isinstance(allowed_raw, list):
+            return _jsonrpc_refusal(
+                req_id, invalid_input("parameter_ceiling", "allow_keys array required")
+            )
+        allowed_items = cast("list[object]", allowed_raw)
+        if any(not isinstance(key, str) for key in allowed_items):
+            return _jsonrpc_refusal(
+                req_id, invalid_input("parameter_ceiling", "allow_keys array required")
+            )
+        allowed = [cast("str", key) for key in allowed_items]
         accepted_keys = set(descriptor.configuration.required_keys) | set(
             descriptor.configuration.optional_keys
         )
-        if any(not isinstance(key, str) or key not in accepted_keys for key in allowed):
+        if any(key not in accepted_keys for key in allowed):
             return _jsonrpc_refusal(
                 req_id, policy_rejection("parameter_ceiling", "ceiling exceeds operation schema")
             )
@@ -3169,11 +3237,15 @@ class DaemonProcess:
                         "procedure_id": procedure_id,
                     },
                 )
-            return self.nested_mission_host.compile_parent(
+            compiled_parent = self.nested_mission_host.compile_parent(
                 owner=owner,
                 template=template,
                 goal=procedure_id.strip(),
+                originating_product_session_ref=originating_product_session_ref,
             )
+            if is_refusal(compiled_parent):
+                return compiled_parent
+            return Ok(cast("object", compiled_parent.value))
         if op_id == "qmb.backtest.run":
             binding = backtest_binding(
                 self.root, bound.instance.instance_id, bound.instance.config_revision
@@ -3200,11 +3272,6 @@ class DaemonProcess:
             resolved = self.experiments.resolve(spec_fp1)
             if is_refusal(resolved):
                 return resolved
-            if not isinstance(resolved.value.spec.data_ref, str):
-                return invalid_input(
-                    "data_ref",
-                    "CT-47 ExperimentSpec must reference its split/source identity",
-                )
             evidence_ref = payload.get("evidence_ref")
             if not isinstance(evidence_ref, str) or not evidence_ref.strip():
                 return invalid_input(
@@ -3260,7 +3327,7 @@ class DaemonProcess:
                 "payload", "QMB owner and environment are operator-bound fields"
             )
         task_id = bound.envelope.logical_invocation_id
-        return self.backtesting.place_query(
+        placed = self.backtesting.place_query(
             "analysis.project",
             owner=quant.actor_id,
             task_id=task_id,
@@ -3269,6 +3336,9 @@ class DaemonProcess:
             persist_projection=True,
             experiment_spec_fp1=cast("str", payload.get("run_fp1")),
         )
+        if is_refusal(placed):
+            return placed
+        return Ok(cast("object", placed.value))
 
     def _dispatch_cancel_job(
         self,

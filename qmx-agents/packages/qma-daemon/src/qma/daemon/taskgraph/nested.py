@@ -711,6 +711,7 @@ class NestedMissionHost:
         template: GraphTemplate,
         goal: str,
         intent: str | None = None,
+        originating_product_session_ref: str | None = None,
     ) -> Result[ParentMissionRun]:
         """Compile Graph Template A. Does not inline callee B's nodes."""
         registered = self.templates.get_versioned(template.qualified_id, template.version)
@@ -745,17 +746,15 @@ class NestedMissionHost:
             task_id=ready[0].id,
             job_id=f"job:{graph.id}",
             logical_run_id=graph.id,
+            originating_product_session_ref=originating_product_session_ref,
         )
         if is_refusal(submitted):
             return submitted
-        started = self.jobs.start(submitted.value.job_id)
-        if is_refusal(started):
-            return started
         run = ParentMissionRun(
             owner=owner,
             mission=compiled.value.mission,
             task_graph=graph,
-            handle=started.value,
+            handle=submitted.value,
         )
         self._parents[graph.id] = run
         self._live[graph.id] = graph
@@ -1289,9 +1288,6 @@ class NestedMissionHost:
         )
         if is_refusal(submitted):
             return submitted
-        started = self.jobs.start(submitted.value.job_id)
-        if is_refusal(started):
-            return started
         occupancy = NestedMissionOccupancy(
             verb=LifecycleVerb.START,
             envelope=envelope,
@@ -1302,15 +1298,15 @@ class NestedMissionHost:
             callee_version=version,
             mission=compiled.value.mission,
             task_graph=child_graph,
-            handle=started.value,
+            handle=submitted.value,
             grant_ids=tuple(sorted(granted.value)),
         )
         child_occupancy = dict(empty_occupancy())
         child_slots: dict[str, object] = {
-            started.value.job_id: {
+            submitted.value.job_id: {
                 "follows": NESTED_MISSION_OCCUPANCY_FOLLOWS,
                 "graph_id": child_graph.id,
-                "job_id": started.value.job_id,
+                "job_id": submitted.value.job_id,
                 "kind": "nested_mission",
                 "mission_id": occupancy.mission.id,
                 "parent_graph_id": parent.task_graph.id,
@@ -1330,7 +1326,7 @@ class NestedMissionHost:
             "follows": NESTED_MISSION_OCCUPANCY_FOLLOWS,
             "kind": "nested_mission_pointer",
             "nested_graph_id": child_graph.id,
-            "nested_job_id": started.value.job_id,
+            "nested_job_id": submitted.value.job_id,
             "nested_mission_id": occupancy.mission.id,
             "spliced": False,
         }
@@ -1339,8 +1335,8 @@ class NestedMissionHost:
         if is_refusal(persisted_parent):
             return persisted_parent
         self._live[child_graph.id] = child_graph
-        self._by_job[started.value.job_id] = occupancy
-        self._by_parent_node[(parent.task_graph.id, node.value.id)] = started.value.job_id
+        self._by_job[submitted.value.job_id] = occupancy
+        self._by_parent_node[(parent.task_graph.id, node.value.id)] = submitted.value.job_id
         return Ok(occupancy)
 
     def _live_graph(self, graph_id: object) -> TaskGraph | None:

@@ -42,8 +42,8 @@ def test_seed_vocabulary_counts_and_owner() -> None:
     assert ADDABLE_COMMAND_COUNT == 7
     assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 16
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 10
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 17
+    assert ADDABLE_QUERY_COUNT == 11
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 18
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS

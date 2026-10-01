@@ -103,7 +103,7 @@ def test_widget_binds_start_user_or_agent_dispose_does_not_cancel() -> None:
     assert user.instance_id == "inst:1"
     assert user.bound_verb == "start"
     assert user.owns_invoke is False
-    assert user.handle.state is JobHandleState.RUNNING
+    assert user.handle.state is JobHandleState.QUEUED
     body = dict(user.to_payload())
     assert body["journey"] == J_KIT_04
     assert body["journeys"] == [J_KIT_04, J_KIT_05]
@@ -127,16 +127,16 @@ def test_widget_binds_start_user_or_agent_dispose_does_not_cancel() -> None:
     disposed = _ok(fixture.dispose_widget())
     assert disposed.owns_invoke is False
     assert disposed.cancelled_on_dispose is False
-    assert disposed.handle.state is JobHandleState.RUNNING
+    assert disposed.handle.state is JobHandleState.QUEUED
     assert disposed.handle.state is not JobHandleState.CANCELLED
     live = fixture.host.handle_for(job_id)
     assert live is not None
-    assert live.state is JobHandleState.RUNNING
+    assert live.state is JobHandleState.QUEUED
     cancelled_dispose = fixture.dispose_widget(cancel=True)
     assert is_refusal(cancelled_dispose)
     still = fixture.host.handle_for(job_id)
     assert still is not None
-    assert still.state is JobHandleState.RUNNING
+    assert still.state is JobHandleState.QUEUED
     assert is_refusal(refuse_widget_dispose_cancels_mission())
 
     fifth = fixture.mint_fifth_composition_mode("widget")
@@ -173,7 +173,7 @@ def test_nested_mission_has_own_job_handle_crash_does_not_splice() -> None:
     assert nested.child_job_id != nested.parent_job_id
     assert nested.child_graph_id != nested.parent_graph_id
     assert nested.child_mission_id != nested.parent_mission_id
-    assert nested.handle.state is JobHandleState.RUNNING
+    assert nested.handle.state is JobHandleState.QUEUED
     assert nested.grant_ids == ("grant:b",)
     assert "grant:a" not in nested.grant_ids
     assert nested.union is False
@@ -187,13 +187,13 @@ def test_nested_mission_has_own_job_handle_crash_does_not_splice() -> None:
 
     queried = _ok(fixture.query_nested_state())
     assert queried.child_job_id == nested.child_job_id
-    assert queried.handle.state is JobHandleState.RUNNING
+    assert queried.handle.state is JobHandleState.QUEUED
 
     recovered = _ok(fixture.crash_parent())
     assert recovered.spliced is False
     assert "work-b" not in recovered.parent_node_ids
     assert recovered.child_node_ids == ("work-b",)
-    assert recovered.handle.state is JobHandleState.RUNNING
+    assert recovered.handle.state is JobHandleState.QUEUED
     assert fixture.host.is_live(nested.child_graph_id) is True
     spliced = fixture.splice_child_into_parent()
     assert is_refusal(spliced)
@@ -218,7 +218,7 @@ def test_nested_invoke_does_not_union_grants_cancel_follows_child() -> None:
     assert cancelled.handle.state is JobHandleState.CANCELLED
     parent_live = fixture.host.jobs.handle_for(nested.parent_job_id)
     assert parent_live is not None
-    assert parent_live.state is JobHandleState.RUNNING
+    assert parent_live.state is JobHandleState.QUEUED
 
 
 def test_include_at_author_new_version_live_merge_refused() -> None:

@@ -44,8 +44,9 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # get_instance_health for pack-instance typed-report (Story 64.2; DEC-0112),
 # and list_mailbox for product-session mailbox snapshots (Story 69.2; AM-08),
 # and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03),
-# and get_pack_ui_request for recorded pack chrome (Epic 72).
-ADDABLE_QUERY_COUNT: Final[int] = 10
+# and get_pack_ui_request for recorded pack chrome (Epic 72), get_product_session
+# for exact grant recovery, and get_job for originating-session job reattachment.
+ADDABLE_QUERY_COUNT: Final[int] = 11
 # transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3),
 # save/publish_editor_draft (Story 71; AM-09), cancel_job (Epic 73; AM-09),
 # and ProductSession open/grant (DEC-0421 / DEC-0442).
@@ -103,7 +104,8 @@ class WireQuery(StrEnum):
     ``health()`` (Story 64.2; DEC-0112), and ``list_mailbox`` for the
     product-session mailbox snapshot (Story 69.2; AM-08; DEC-0500), and
     get_editor_draft_head for durable editor state (Story 71.2; AM-03), and
-    get_product_session to recover durable grant records after reconnect. Distinct
+    get_product_session to recover durable grant records after reconnect, and
+    get_job to reattach an originating-session JobHandle. Distinct
     from ``get_provider_health``. The packet seed ``get bot`` reads
     ``get_quant`` under the Bot-to-Quant rule.
     """
@@ -125,6 +127,7 @@ class WireQuery(StrEnum):
     GET_EDITOR_DRAFT_HEAD = "get_editor_draft_head"
     GET_PACK_UI_REQUEST = "get_pack_ui_request"
     GET_PRODUCT_SESSION = "get_product_session"
+    GET_JOB = "get_job"
 
 
 class WireEvent(StrEnum):
