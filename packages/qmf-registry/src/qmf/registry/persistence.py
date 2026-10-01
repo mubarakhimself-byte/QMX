@@ -594,9 +594,7 @@ class RegistryPersistence:
             intent_key = _edge_write_intent_key(edge.edge_fingerprint)
             if is_refusal(intent_key):  # pragma: no cover - generated fp1 is clean
                 return _corrupt("a supersedes edge could not be fingerprinted for recovery")
-            pending = self._ws.registry_room.get_record(
-                intent_key.value, for_world=self.world
-            )
+            pending = self._ws.registry_room.get_record(intent_key.value, for_world=self.world)
             if is_refusal(pending):
                 if pending.category is RefusalCategory.STALE_EVIDENCE:
                     resume_intent = False

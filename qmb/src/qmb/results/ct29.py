@@ -175,9 +175,7 @@ def read_ct29_closed_trades(
 
 def _sum_costs(record: ExitRecord) -> Result[Money]:
     """Sum the exact CT-29 cost components without currency conversion."""
-    total = Money.try_create(
-        0, record.realized_pnl.currency, record.realized_pnl.scale
-    )
+    total = Money.try_create(0, record.realized_pnl.currency, record.realized_pnl.scale)
     if is_refusal(total):
         return total
     for component in record.cost_components:
