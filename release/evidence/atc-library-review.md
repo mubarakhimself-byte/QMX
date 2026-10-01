@@ -9,3 +9,15 @@ Candidate: `c68cbcfca4618ddea1808e755f46bf8aafa0e250`. Status: **CHANGES REQUIRE
 Both repros use the existing clearly labeled local registered policy interpreter and actual filesystem journal/registry persistence. They prove library behavior, not provider conformance or opaque financial-example grammar completeness. Findings and exact scripts sent directly to data and root.
 
 Existing focused check: `.venv/bin/python -m pytest -q -p no:cacheprovider qmb/tests/test_alternative_execution.py` — **15 passed**. Those positives include actual measures, proposal-bound policy variation, terminal CT13/CT07 reopen and cancellation/resume after a completed terminal. They do not override the two held-out failures. Further receipt/torn-tail/objective/lineage approval remains pending corrected candidates and independent retest.
+
+## 1276a31b corrective bounded review
+
+Candidate `1276a31b0d012c67a18e2ae86660dfc8cf5b41e9`: **PASS for the corrected two-boot terminal proof and conservative no-duplicate retry boundary**. This is not completed terminal-gap recovery.
+
+Original `/tmp/review_atc_boot.py` now passes both actual boot-1 and boot-2 same-stream runs/terminal appends (boot-2 logical 0, physical 1). Source inspection confirms logical event lookup uses exact writer + sequence + event fingerprint, with independent physical-row proof.
+
+Original `/tmp/review_atc_retry.py` now performs only one generation-0/ask-0 evaluator call and one durable decision; its fresh-stepper restart typed-refuses because the durable trial intent remains unresolved. `/tmp/review_atc_write_faults.py` independently injects refusal before and after actual intent/terminal writes: before-intent retry succeeds without duplicate evaluation; after-intent retry refuses with no evaluator calls; before-terminal retry refuses with one completed evaluator; after-terminal retry reads the completed artifact and succeeds with no duplicate first-trial call. All four controls use actual filesystem append bytes and actual Study execution. Completed-generation/cancellation resume positive remains covered by the real focused fixture.
+
+`/tmp/review_atc_ack.py` independently corrupts real append acknowledgments: Ok(None), bool logical sequence, foreign correlation, nonempty edge receipts, absent StoreReceipt and bool format version each typed-refuse without AttributeError. Focused ATC suite **17 passed**. These scripts and source inspection corroborate the correction; no product edits or Git mutations.
+
+Remaining explicit limitation: an unresolved durable evaluator intent safely blocks a restart even if no action occurred, and a completed CT13 action without terminal is not reconstructed here. Root requested checked reconciliation separately. The registered interpreter is a local fixture; full CLI/QMA/node/provider execution and financial-example policy grammar remain outside this approval.
