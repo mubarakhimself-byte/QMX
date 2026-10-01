@@ -289,6 +289,16 @@ def test_quote_only_market_and_protective_stop_use_executable_side() -> None:
     assert isinstance(short_market, Fill)
     assert long_market.pre_slip_price == _price(1_10100)
     assert short_market.pre_slip_price == _price(1_09900)
+    adapter_fill = _ok(
+        DeclaredPathFillAdapter(fill_basis=FILL_BASIS_OPTIMISTIC_EXACT).decide(
+            _entry(),
+            path,
+            requested_quantity=_qty(1),
+            order=_order(OrderType.MARKET),
+        )
+    )
+    assert isinstance(adapter_fill, Fill)
+    assert adapter_fill.pre_slip_price == _price(1_10100)
     zero_slipped = _ok(ZeroSlippageAdapter().apply(long_market, path))
     assert isinstance(zero_slipped, Fill)
     assert zero_slipped.post_slip_price == _price(1_10100)

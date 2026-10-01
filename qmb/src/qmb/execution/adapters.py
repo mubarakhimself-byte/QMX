@@ -140,7 +140,12 @@ class DeclaredPathFillAdapter:
         authorized = require_authorized_intent(intent)
         if is_refusal(authorized):
             return authorized
-        if not path.prints and path.open is None:
+        if (
+            not path.prints
+            and path.open is None
+            and path.bid is None
+            and path.ask is None
+        ):
             none = NoFill.try_create("empty-path")
             if is_refusal(none):
                 return none
