@@ -107,6 +107,156 @@
   --ink: #ff8c64;
 }
 
+.dark.theme-graphite {
+  --background: #0c0e12;
+  --foreground: #e8ecf2;
+  --panel: rgba(22, 26, 33, 0.8);
+  --card: rgba(28, 32, 40, 0.82);
+  --card-foreground: #e8ecf2;
+  --popover: #1a1e26;
+  --popover-foreground: #e8ecf2;
+  --primary: #9cc4ff;
+  --primary-foreground: #0a1a33;
+  --secondary: rgba(220, 230, 255, 0.08);
+  --secondary-foreground: #e8ecf2;
+  --muted: rgba(220, 230, 255, 0.08);
+  --muted-foreground: #98a2b3;
+  --accent: rgba(220, 230, 255, 0.11);
+  --accent-foreground: #e8ecf2;
+  --border: rgba(220, 230, 255, 0.09);
+  --input: rgba(220, 230, 255, 0.16);
+  --ring: #9cc4ff;
+  --success: #6fd3a0;
+  --destructive: #f07f7f;
+  --warning: #f0c46a;
+  --info: #9cc4ff;
+  --chart-1: #9cc4ff;
+  --chart-2: #6fd3a0;
+  --chart-3: #c7b3ff;
+  --chart-4: #f0c46a;
+  --chart-5: #f07f7f;
+  --sidebar: rgba(14, 17, 22, 0.66);
+  --sidebar-border: rgba(220, 230, 255, 0.09);
+  --glow: #2b4a7a;
+  --ink: #8fb4e8;
+}
+
+.dark.theme-moss {
+  --background: #0a0f0b;
+  --foreground: #e7efe4;
+  --panel: rgba(18, 28, 20, 0.8);
+  --card: rgba(22, 34, 24, 0.82);
+  --card-foreground: #e7efe4;
+  --popover: #16231a;
+  --popover-foreground: #e7efe4;
+  --primary: #b8e05c;
+  --primary-foreground: #1a2405;
+  --secondary: rgba(200, 240, 190, 0.08);
+  --secondary-foreground: #e7efe4;
+  --muted: rgba(200, 240, 190, 0.08);
+  --muted-foreground: #9fb39a;
+  --accent: rgba(200, 240, 190, 0.11);
+  --accent-foreground: #e7efe4;
+  --border: rgba(200, 240, 190, 0.09);
+  --input: rgba(200, 240, 190, 0.16);
+  --ring: #b8e05c;
+  --success: #8fe0a0;
+  --destructive: #f08a6a;
+  --warning: #e8d26a;
+  --info: #7fd8c8;
+  --chart-1: #b8e05c;
+  --chart-2: #7fd8c8;
+  --chart-3: #e8d26a;
+  --chart-4: #8fe0a0;
+  --chart-5: #f08a6a;
+  --sidebar: rgba(10, 18, 12, 0.66);
+  --sidebar-border: rgba(200, 240, 190, 0.09);
+  --glow: #3d6b1f;
+  --ink: #9ccf5a;
+}
+
+.dark.theme-violet {
+  --background: #0e0a16;
+  --foreground: #efe9fa;
+  --panel: rgba(28, 20, 44, 0.8);
+  --card: rgba(34, 24, 54, 0.82);
+  --card-foreground: #efe9fa;
+  --popover: #1e1530;
+  --popover-foreground: #efe9fa;
+  --primary: #c9a6ff;
+  --primary-foreground: #1d0d38;
+  --secondary: rgba(225, 210, 255, 0.08);
+  --secondary-foreground: #efe9fa;
+  --muted: rgba(225, 210, 255, 0.08);
+  --muted-foreground: #ab9fc4;
+  --accent: rgba(225, 210, 255, 0.11);
+  --accent-foreground: #efe9fa;
+  --border: rgba(225, 210, 255, 0.1);
+  --input: rgba(225, 210, 255, 0.16);
+  --ring: #c9a6ff;
+  --success: #7fe0b8;
+  --destructive: #ff8aa8;
+  --warning: #ffd28a;
+  --info: #8fd0ff;
+  --chart-1: #c9a6ff;
+  --chart-2: #8fd0ff;
+  --chart-3: #ff8aa8;
+  --chart-4: #7fe0b8;
+  --chart-5: #ffd28a;
+  --sidebar: rgba(16, 11, 28, 0.66);
+  --sidebar-border: rgba(225, 210, 255, 0.1);
+  --glow: #5a2fa8;
+  --ink: #b48cff;
+}
+
+:root.theme-paper {
+  --background: #f4f1ea;
+  --foreground: #1c1b19;
+  --panel: rgba(250, 248, 243, 0.86);
+  --card: rgba(255, 253, 248, 0.9);
+  --card-foreground: #1c1b19;
+  --popover: #fbf9f4;
+  --popover-foreground: #1c1b19;
+  --primary: #1f6b45;
+  --primary-foreground: #f7f5ef;
+  --secondary: rgba(28, 27, 25, 0.06);
+  --secondary-foreground: #1c1b19;
+  --muted: rgba(28, 27, 25, 0.06);
+  --muted-foreground: #6b675f;
+  --accent: rgba(28, 27, 25, 0.08);
+  --accent-foreground: #1c1b19;
+  --border: rgba(28, 27, 25, 0.12);
+  --input: rgba(28, 27, 25, 0.16);
+  --ring: #1f6b45;
+  --success: #1f8a52;
+  --destructive: #c2412d;
+  --warning: #b7791f;
+  --info: #2b55c7;
+  --chart-1: #2b55c7;
+  --chart-2: #1f8a52;
+  --chart-3: #b7791f;
+  --chart-4: #c2412d;
+  --chart-5: #7a4fc9;
+  --sidebar: rgba(238, 234, 225, 0.8);
+  --sidebar-border: rgba(28, 27, 25, 0.1);
+  --glow: #9ec7a8;
+  --ink: #1f6b45;
+}
+
+/* Paper is light: surfaces cast softer shadows. */
+:root.theme-paper .surface {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    0 10px 28px rgb(60 50 30 / 0.12),
+    0 1px 3px rgb(60 50 30 / 0.1);
+}
+:root.theme-paper .well {
+  background: rgb(28 27 25 / 0.04);
+  box-shadow:
+    inset 1px 1px 3px rgb(60 50 30 / 0.12),
+    inset -1px -1px 2px rgb(255 255 255 / 0.8);
+}
+
 /* Glass: translucent panels blur the ink background behind them. */
 .glass .bg-panel,
 .glass .bg-sidebar,

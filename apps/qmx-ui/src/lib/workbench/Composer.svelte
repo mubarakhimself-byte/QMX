@@ -39,11 +39,11 @@
   );
   const toolCount = $derived(workbench.tools.length);
   const chip =
-    "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px]";
+    "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap";
 </script>
 
 <form
-  class="surface focus-within:border-ring/60 flex flex-col rounded-xl"
+  class="surface focus-within:border-ring/50 flex flex-col rounded-xl transition-colors"
   onsubmit={(e) => e.preventDefault()}
 >
   {#if refs.length}
@@ -70,11 +70,18 @@
   <textarea
     id="composer-input"
     bind:value={draft}
-    rows={size === "lg" ? 3 : 2}
+    rows={1}
     {placeholder}
+    onkeydown={(e) => {
+      // Enter sends, Shift+Enter adds a line (send is gated while offline).
+      if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
+    }}
     class={cn(
-      "placeholder:text-muted-foreground max-h-56 resize-none bg-transparent px-3.5 pt-3 outline-none",
-      size === "lg" ? "min-h-20 text-base" : "min-h-12 text-[15px]",
+      // Grows with its content up to a cap, then scrolls; the form owns focus styling.
+      "placeholder:text-muted-foreground field-sizing-content resize-none overflow-y-auto bg-transparent px-3.5 pt-3 outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+      size === "lg"
+        ? "max-h-80 min-h-20 text-base"
+        : "max-h-56 min-h-12 text-[15px]",
     )}></textarea>
   <div class="flex items-center gap-0.5 px-2 pb-2">
     <DropdownMenu.Root>

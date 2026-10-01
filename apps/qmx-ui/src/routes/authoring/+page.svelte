@@ -3,6 +3,8 @@
   import {
     SvelteFlow,
     Background,
+    MiniMap,
+    MarkerType,
     Controls,
     type Node,
     type Edge,
@@ -119,15 +121,24 @@
           onpaneclick={() => (selectedId = null)}
           colorMode="dark"
           fitView
+          defaultEdgeOptions={{
+            markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+          }}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={20} />
           <Controls position="bottom-left" />
+          <MiniMap
+            position="bottom-right"
+            pannable
+            zoomable
+            ariaLabel="Workflow overview"
+          />
         </SvelteFlow>
         {#if detailOpen && selected}
           <section
             aria-label={`${selected.label} code`}
-            class="bg-background absolute inset-0 z-10 flex flex-col"
+            class="bg-panel absolute inset-0 z-10 flex flex-col backdrop-blur-xl"
           >
             <div class="flex h-9 shrink-0 items-center gap-2 border-b px-2">
               <Button
@@ -165,7 +176,7 @@
       </div>
     </Resizable.Pane>
     <Resizable.Handle />
-    <Resizable.Pane defaultSize={30} minSize={20}>
+    <Resizable.Pane defaultSize={30} minSize={20} maxSize={45}>
       <Tabs.Root bind:value={side} class="bg-panel flex h-full flex-col gap-0">
         <div class="flex h-10 shrink-0 items-center border-b px-2">
           <Tabs.List variant="line">
@@ -231,5 +242,18 @@
     --xy-controls-button-background-color: var(--card);
     --xy-controls-button-color: var(--foreground);
     --xy-controls-button-border-color: var(--border);
+    --xy-edge-stroke: color-mix(in oklab, var(--foreground) 45%, transparent);
+    --xy-edge-stroke-selected: var(--primary);
+    --xy-edge-stroke-width: 1.6;
+    --xy-handle-background-color: var(--primary);
+    --xy-handle-border-color: var(--background);
+    --xy-minimap-background-color: var(--panel);
+    --xy-minimap-mask-background-color: color-mix(
+      in oklab,
+      var(--background) 60%,
+      transparent
+    );
+    --xy-minimap-node-background-color: var(--muted-foreground);
+    --xy-controls-box-shadow: 0 6px 18px rgb(0 0 0 / 0.3);
   }
 </style>

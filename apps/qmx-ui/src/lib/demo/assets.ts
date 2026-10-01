@@ -149,3 +149,77 @@ export const DEMO_ASSETS: Asset[] = [
     tags: ["library"],
   },
 ];
+
+/** DEMO ARTIFACTS: files QMX produced or stored, each with its producer and a content fingerprint. */
+export type DemoArtifact = {
+  id: string;
+  type:
+    | "Backtest report"
+    | "Dataset"
+    | "Model file"
+    | "Trade journal"
+    | "Paper results"
+    | "Chart pack";
+  name: string;
+  producedBy: string;
+  size: string;
+  date: string;
+  fp: string;
+};
+
+export const DEMO_ARTIFACTS: DemoArtifact[] = [
+  {
+    id: "r1",
+    type: "Backtest report",
+    name: "eurusd-h1-gbm · v7 walk-forward",
+    producedBy: "EURUSD H1 GBM · run 41",
+    size: "2.4 MB",
+    date: "Today 12:10",
+    fp: "fp1:9c41…e2a0",
+  },
+  {
+    id: "r2",
+    type: "Paper results",
+    name: "Gold Fade · September paper",
+    producedBy: "Paper node · book GOLD-P",
+    size: "380 KB",
+    date: "Sep 30",
+    fp: "fp1:41ab…77c3",
+  },
+  {
+    id: "r3",
+    type: "Trade journal",
+    name: "US500 Trend · live journal Q3",
+    producedBy: "Live node · book IDX-L",
+    size: "1.1 MB",
+    date: "Sep 30",
+    fp: "fp1:0d9e…b151",
+  },
+  {
+    id: "r4",
+    type: "Model file",
+    name: "eurusd-h1-gbm.lgbm · v7",
+    producedBy: "Nightly backtest workflow",
+    size: "18.7 MB",
+    date: "Today 12:08",
+    fp: "fp1:77f0…aa19",
+  },
+  {
+    id: "r5",
+    type: "Dataset",
+    name: "fx-majors H1 2019–2026",
+    producedBy: "data.refresh",
+    size: "214 MB",
+    date: "Today 14:05",
+    fp: "fp1:c3d2…0f8e",
+  },
+  {
+    id: "r6",
+    type: "Chart pack",
+    name: "Crypto majors correlation",
+    producedBy: "Copilot session · Sep 27",
+    size: "640 KB",
+    date: "Sep 27",
+    fp: "fp1:5e1a…3c47",
+  },
+];

@@ -14,11 +14,13 @@
     const root = document.documentElement;
     for (const t of THEMES) root.classList.remove(`theme-${t}`);
     root.classList.add(`theme-${workbench.theme}`);
-    root.classList.toggle("glass", workbench.theme !== "plain");
+    root.classList.add("glass");
+    // Paper is the one light theme.
+    root.classList.toggle("dark", workbench.theme !== "paper");
   });
   // Trading surfaces never get the decorative background.
   const showInk = $derived(
-    workbench.theme !== "plain" && !page.url.pathname.startsWith("/trade"),
+    workbench.inkEnabled && !page.url.pathname.startsWith("/trade"),
   );
 </script>
 

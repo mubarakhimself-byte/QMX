@@ -51,8 +51,25 @@ export const TOOLS = [
   { id: "build_app", note: "Compose a mini app from the component catalog" },
 ];
 
-export const THEMES = ["ink", "cobalt", "ember", "plain"] as const;
+export const THEMES = [
+  "ink",
+  "cobalt",
+  "ember",
+  "graphite",
+  "moss",
+  "violet",
+  "paper",
+] as const;
 export type Theme = (typeof THEMES)[number];
+
+function storedFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === "1";
+  } catch {
+    return fallback;
+  }
+}
 
 function storedTheme(): Theme {
   try {
@@ -69,6 +86,23 @@ class Workbench {
   /** Visual theme: a per-machine preference, never a daemon setting. */
   theme = $state<Theme>(storedTheme());
   model = $state("opus");
+  /** Default model per copilot profile; the daemon owns the real setting. */
+  modelDefaults = $state<Record<string, string>>({
+    copilot: "opus",
+    app: "sonnet",
+    agent: "haiku",
+  });
+  /** Decorative ink background on/off (per machine). */
+  inkEnabled = $state(storedFlag("qmx.ink", true));
+
+  setInk(on: boolean) {
+    this.inkEnabled = on;
+    try {
+      localStorage.setItem("qmx.ink", on ? "1" : "0");
+    } catch {
+      /* storage unavailable */
+    }
+  }
   tools = $state<string[]>(["get_candles", "run_backtest", "library.search"]);
 
   toggleTool(id: string) {

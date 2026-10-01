@@ -9,6 +9,7 @@
   import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import X from "@lucide/svelte/icons/x";
+  import FileBox from "@lucide/svelte/icons/file-box";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
@@ -16,7 +17,7 @@
   import EmptyState from "$lib/workbench/EmptyState.svelte";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import AssetCard, { type Asset } from "$lib/qmx/AssetCard.svelte";
-  import { DEMO_ASSETS } from "$lib/demo/assets";
+  import { DEMO_ASSETS, DEMO_ARTIFACTS } from "$lib/demo/assets";
   import { cn } from "$lib/utils";
 
   type Article = {
@@ -33,6 +34,7 @@
   // Hit kinds stay separate; each keeps its own actions (UI LIBRARY §5).
   const KINDS = [
     { id: "knowledge", label: "Knowledge", icon: BookOpen },
+    { id: "files", label: "Artifacts", icon: FileBox },
     { id: "artifact", label: "Bots & models", icon: Package },
     { id: "contribution", label: "Apps & workflows", icon: Blocks },
   ] as const;
@@ -234,6 +236,42 @@
                 </li>
               {/each}
             </ul>
+          {:else if kind === "files"}
+            <div class="surface overflow-hidden rounded-lg">
+              <table class="w-full text-sm">
+                <thead class="text-muted-foreground text-left text-xs">
+                  <tr>
+                    <th class="px-4 py-2.5 font-medium">Artifact</th>
+                    <th class="font-medium">Type</th>
+                    <th class="font-medium">Produced by</th>
+                    <th class="font-medium">Fingerprint</th>
+                    <th class="px-4 text-right font-medium">Size</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each DEMO_ARTIFACTS.filter((a) => !q || a.name
+                        .toLowerCase()
+                        .includes(q)) as a (a.id)}
+                    <tr class="hover:bg-muted/50 border-t">
+                      <td class="px-4 py-3">
+                        <span class="block font-medium">{a.name}</span>
+                        <span class="text-muted-foreground text-xs"
+                          >{a.date}</span
+                        >
+                      </td>
+                      <td
+                        ><span class="bg-muted rounded-sm px-2 py-0.5 text-xs"
+                          >{a.type}</span
+                        ></td
+                      >
+                      <td class="text-muted-foreground">{a.producedBy}</td>
+                      <td class="num text-muted-foreground text-xs">{a.fp}</td>
+                      <td class="num px-4 text-right">{a.size}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
           {:else}
             <ul
               class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
