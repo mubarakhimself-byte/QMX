@@ -23,8 +23,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Literal, Protocol, cast
+from uuid import uuid4
 
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core import Instant, Ok, Result, World, WriterId, is_refusal
+from qmf.data import JournalWriter
+from qmf.data.store import EvidenceStore, JournalStore
 
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
 
@@ -308,9 +311,18 @@ def main() -> int:
     except OSError as exc:
         print(f"qmn supervisor could not bind evidence status door: {exc}", file=sys.stderr)
         return 2
+    journal_store = _open_process_journal(Path(os.environ["QMX_STATE"]))
+    if is_refusal(journal_store):
+        server.server_close()
+        print(
+            f"qmn supervisor could not persist boot attempt: {dict(journal_store.context)}",
+            file=sys.stderr,
+        )
+        return 2
     ready = notify_ready()
     if is_refusal(ready):
         server.server_close()
+        journal_store.value.close()
         print(f"qmn supervisor sd_notify READY failed: {dict(ready.context)}", file=sys.stderr)
         return 2
     last_watchdog = time.monotonic()
@@ -330,6 +342,7 @@ def main() -> int:
     finally:
         server.server_close()
         sd_notify("STOPPING=1")
+        journal_store.value.close()
     return 0
 
 
@@ -373,6 +386,43 @@ def _watchdog_interval_usec() -> int | None:
     if raw is None or not raw.isdecimal() or int(raw) <= 0:
         return None
     return int(raw)
+
+
+def _open_process_journal(state: Path) -> Result[JournalStore]:
+    """Persist a process-start control event before the systemd READY notice."""
+    evidence = EvidenceStore(state / "evidence")
+    world_store = evidence.for_world(World.LIVE)
+    if is_refusal(world_store):
+        return world_store
+    boot_epoch = uuid4().hex
+    writer_id = WriterId.try_create(
+        socket.gethostname(), "supervisor", "node-supervision", boot_epoch
+    )
+    if is_refusal(writer_id):
+        return writer_id
+    resumed = JournalWriter.resume(
+        world_store.value.journal,
+        writer_id.value,
+        stream_name="node-supervision",
+    )
+    if is_refusal(resumed):
+        return resumed
+    stamp = Instant.try_create(time.time_ns())
+    if is_refusal(stamp):
+        return stamp
+    recorded = resumed.value.record_control_action(
+        "qmn-supervisor-process-start",
+        instant=stamp.value,
+        payload={
+            "boot_epoch_id": boot_epoch,
+            "process_state": "stand-down-alive",
+            "trading_readiness": "unavailable",
+        },
+    )
+    if is_refusal(recorded):
+        world_store.value.journal.close()
+        return recorded
+    return Ok(world_store.value.journal)
 
 
 if __name__ == "__main__":

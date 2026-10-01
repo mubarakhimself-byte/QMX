@@ -12,6 +12,10 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+from qmf.core import World, is_ok
+from qmf.data import JournalReader
+from qmf.data.store import EvidenceStore
+
 
 def _port() -> int:
     with socket.socket() as sock:
@@ -75,6 +79,16 @@ def test_supervisor_module_runs_stand_down_and_survives_restart(tmp_path: Path) 
         finally:
             process.terminate()
             assert process.wait(timeout=5) == 0
+
+    evidence = EvidenceStore(state / "evidence")
+    live = evidence.for_world(World.LIVE)
+    assert is_ok(live)
+    events = JournalReader(live.value.journal).read_checked(
+        "node-supervision", for_world=World.LIVE
+    )
+    assert is_ok(events)
+    assert len(events.value) == 2
+    assert all(event.payload["process_state"] == "stand-down-alive" for event in events.value)
 
 
 def test_supervisor_fails_actionably_without_configured_directories(tmp_path: Path) -> None:
