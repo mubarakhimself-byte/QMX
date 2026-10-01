@@ -24,3 +24,12 @@ Independent scoped adapter pytest passes; genuine positive uses CT10/CT12, regis
 This closes the two recorded false-admission blockers at the adapter result boundary. It does not prove a successful operator descriptor-loader chain, full CLI/QMA terminal observer, clean combined HEAD or final installed candidate. Runtime dependencies must be frozen and reviewed separately.
 
 Root's combined adapter/active-loader diagnostic rerun: **6 PASS in 1.12 seconds**, `/workspace/qmx-atc-operator-identity-correction-root.log`. Exact adapter/test hashes match independent held approval. These files require the active QmaBacktestContext discriminator addition; they are held for the coupled source integration rather than committed against an incompatible older context. Root does not upgrade active loader/CLI approval from this suite.
+
+
+## Verify-only materialization extension — residual occurrence rebinding FAIL
+
+New held adapter SHA256 `cd111ff537213e0402f8acf88b0c50a41dc66ca0638f842fc7308c5462340fdb`; test `0bd77f7f61633ee3eb635a82fe1620d9cd819c1fac4ad2438d7ca53bfc693c0a`. This extension is not covered by the preceding bounded approval.
+
+Actual genuine persisted fixture `test_operator_result_validator_rejects_book_or_context_substitution` was run while capturing successful inputs, without replacing execution. `validate_operator_alternative_result(None, inputs=replace(original, runtime_descriptor_fp1=foreign_valid_fp))` returns Ok and regenerates a new descriptor binding around the old terminal. Replacing context job_id with foreign-job and attempt_id with 9 likewise materializes the old terminal as the new delegated occurrence. The durable terminal does not store these operator/delegated occurrence pins; reconstructing them from current trusted inputs does not prove they governed the original execution. Existing non-None descriptor/context negative controls only reject an old echo mismatch, and do not close this None path. Owner/root notified.
+
+Current materializer requires unique matching source/Pair/seed/trial/interpreter/writers and routes back through the strict validator; missing and two genuine matching run terminals have existing negative tests. That is useful but incomplete occurrence authority. It needs an actual durable operator-occurrence join for descriptor/delegated IDs, or typed refusal where historical execution cannot be bound, preserving no interpreter rerun. No new public CT is proposed by this finding. Loader/CLI remain active and excluded.
