@@ -11,7 +11,11 @@ from qmf.core import Fingerprint, Ok, Result, World
 
 from qmb._refuse import invalid, policy
 
-__all__ = ["QmaBacktestContext", "decode_qma_backtest_context"]
+__all__ = [
+    "QmaBacktestContext",
+    "decode_qma_backtest_context",
+    "validate_qma_backtest_context",
+]
 
 _OWNED_CONCERNS = ("artifact_contract", "intra_node_parallelism", "run_ledger")
 _ROUTE = ("agent", "qma_backtest_tool", "backtesting_service", "qmb_door", "qmb")
@@ -37,6 +41,7 @@ _REQUIRED_PAYLOAD_KEYS = frozenset(
         "children_are_qma_jobs",
         "opens_daemon_sqlite",
         "split_manifest_fp1",
+        "operator_descriptor_fp1",
     }
 )
 
@@ -52,6 +57,54 @@ class QmaBacktestContext:
     split_manifest_fp1: Fingerprint
     environment_ref: str
     occupancy_key: str
+    mints_ct32: bool = True
+    operator_descriptor_fp1: Fingerprint | None = None
+
+
+def validate_qma_backtest_context(context: object) -> Result[QmaBacktestContext]:
+    """Revalidate the decoded CT-47 value at every public runtime boundary.
+
+    Frozen dataclasses can still be constructed directly or altered with
+    ``dataclasses.replace``. A nominal instance therefore carries no validation
+    authority by itself.
+    """
+
+    if type(context) is not QmaBacktestContext:
+        return invalid("qma_context", "the QMB runtime receives a decoded CT-47 context")
+    value = context
+    for field, item in (
+        ("job_id", value.job_id),
+        ("environment_ref", value.environment_ref),
+        ("occupancy_key", value.occupancy_key),
+    ):
+        if type(item) is not str or not item.strip():
+            return invalid(
+                field,
+                "delegated job, environment, and occupancy IDs are non-empty text",
+            )
+    if type(value.attempt_id) is not int or value.attempt_id < 1:
+        return invalid("attempt_id", "the delegated QMA attempt is a positive integer")
+    if type(value.mints_ct32) is not bool:
+        return invalid("mints_ct32", "the delegated result mode is an exact boolean")
+    for field in ("experiment_spec_fp1", "evidence_ref", "split_manifest_fp1"):
+        item = getattr(value, field)
+        if type(item) is not Fingerprint:
+            return invalid(field, "the delegated registered reference is an fp1 Fingerprint")
+        parsed = Fingerprint.try_create(item.value)
+        if not isinstance(parsed, Ok) or parsed.value != item:
+            return invalid(field, "the delegated registered reference is a valid fp1 Fingerprint")
+    descriptor = value.operator_descriptor_fp1
+    if descriptor is not None:
+        if type(descriptor) is not Fingerprint:
+            return invalid(
+                "operator_descriptor_fp1", "the operator runtime pin is an fp1 Fingerprint"
+            )
+        parsed_descriptor = Fingerprint.try_create(descriptor.value)
+        if not isinstance(parsed_descriptor, Ok) or parsed_descriptor.value != descriptor:
+            return invalid(
+                "operator_descriptor_fp1", "the operator runtime pin is a valid fp1 Fingerprint"
+            )
+    return Ok(value)
 
 
 def decode_qma_backtest_context(
@@ -89,7 +142,6 @@ def decode_qma_backtest_context(
         "route": list(_ROUTE),
         "command": "backtest.run",
         "occupancy": "run",
-        "mints_ct32": True,
         "mints_experiment_spec": False,
         "children_are_qma_jobs": False,
         "opens_daemon_sqlite": False,
@@ -97,6 +149,9 @@ def decode_qma_backtest_context(
     for key, expected in expected_literals.items():
         if type(body.get(key)) is not type(expected) or body.get(key) != expected:
             return policy("qma_payload", "delegated QMB command semantics are fixed", key=key)
+    mints_ct32 = body.get("mints_ct32")
+    if type(mints_ct32) is not bool:
+        return invalid("mints_ct32", "the QMB result mode is an exact boolean")
     text_fields = ("job_id", "environment_ref", "occupancy_key")
     values: dict[str, str] = {}
     for key in text_fields:
@@ -108,7 +163,14 @@ def decode_qma_backtest_context(
     if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
         return invalid("attempt_id", "the delegated QMA attempt is a positive integer")
     parsed: dict[str, Fingerprint] = {}
-    for key in ("experiment_spec_fp1", "evidence_ref", "split_manifest_fp1"):
+    for key in (
+        "experiment_spec_fp1",
+        "evidence_ref",
+        "split_manifest_fp1",
+        "operator_descriptor_fp1",
+    ):
+        if key == "operator_descriptor_fp1" and body.get(key) is None:
+            continue
         result = Fingerprint.try_create(body.get(key))
         if isinstance(result, Ok):
             parsed[key] = result.value
@@ -141,6 +203,8 @@ def decode_qma_backtest_context(
             split_manifest_fp1=parsed["split_manifest_fp1"],
             environment_ref=values["environment_ref"],
             occupancy_key=values["occupancy_key"],
+            mints_ct32=mints_ct32,
+            operator_descriptor_fp1=parsed.get("operator_descriptor_fp1"),
         )
     )
 

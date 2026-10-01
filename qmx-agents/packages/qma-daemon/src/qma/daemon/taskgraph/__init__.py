@@ -109,6 +109,7 @@ from qma.daemon.taskgraph.nested import (
 )
 from qma.daemon.taskgraph.outbox import (
     DEFAULT_PARTITION_ID,
+    INITIAL_ROOT_PARTITION_ID,
     OUTBOX_PROVES_EXACTLY_ONCE_EFFECT,
     OUTBOX_UNIQUE_KEY_FIELDS,
     OUTBOXES_MERGED,
@@ -124,6 +125,7 @@ from qma.daemon.taskgraph.outbox import (
     ReceiverAcceptance,
     SuccessorEligibility,
     TaskGraphOutboxRow,
+    build_initial_outbox_row,
     refuse_merge_remote_worker_outbox,
 )
 from qma.daemon.taskgraph.procedures import (
@@ -188,6 +190,7 @@ __all__ = [
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_KEY",
     "HOST_NESTED_MISSION_CALL_DEPTH_CEILING_REGISTRY_KEY",
     "INCLUDE_AT_AUTHOR_IMPLEMENTED",
+    "INITIAL_ROOT_PARTITION_ID",
     "JOIN_GUESSED_FROM_JSON_SHAPE",
     "JOIN_LATE_EVENT_TABLE",
     "JOIN_PARTITION_TABLE",
@@ -282,6 +285,7 @@ __all__ = [
     "apply_retry_result",
     "assert_template_not_interchanged",
     "bind_call_depth_ceiling_key",
+    "build_initial_outbox_row",
     "claim_durable_edges_at_inspect_sha",
     "claim_nested_connect_surface_absent_at_inspect_sha",
     "claim_nested_mission_occupancy_at_inspect_sha",

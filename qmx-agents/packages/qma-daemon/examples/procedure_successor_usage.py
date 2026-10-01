@@ -75,6 +75,7 @@ def main() -> None:
     registered = experiments.register(
         spec.value,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -107,6 +108,7 @@ def main() -> None:
         evidence_ref="evidence:recorded-bars",
         resolved_config_ref=_fp("cfg-b"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(changed)
@@ -129,6 +131,7 @@ def main() -> None:
             resolved_config_ref=_fp("cfg-c"),
             edge_type="supersedes",
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:analyst-v1",
         )
     )

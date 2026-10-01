@@ -8,7 +8,7 @@ correction is a new entry.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Final
 
@@ -179,6 +179,45 @@ class ExperimentLedgerStore:
         self._leases[ledger.experiment_id] = lease
         self._entry_seq[ledger.experiment_id] = entry_seq
         return ledger
+
+    def authorize_current_lease(
+        self, *, spec_fp1: object, dispatch_lease: DispatchLease
+    ) -> Result[ExperimentLedger]:
+        """Rebind append authority to the current holder of the registering Task.
+
+        The ExperimentSpec registration lease remains historical provenance. CT-47
+        append authority belongs to the live holder of that same Task, so a valid
+        reacquisition can update the author projection without changing spec identity.
+        """
+        if not isinstance(spec_fp1, str) or not spec_fp1.strip():
+            return invalid_input("spec_fp1", "current author binding requires a spec fp1")
+        kind = named_lease_kind(dispatch_lease)
+        if is_refusal(kind):
+            return kind
+        if kind.value is not LeaseKind.DISPATCH_LEASE:
+            return self._refuse_wrong_lease(kind.value)
+        key = spec_fp1.strip()
+        ledger = self._ledgers.get(key)
+        previous = self._leases.get(key)
+        if ledger is None or previous is None:
+            return invalid_input("experiment_ledger_ref", "registered ledger is required")
+        if (
+            dispatch_lease.task_id != ledger.registering_task_id
+            or dispatch_lease.task_id != previous.task_id
+            or dispatch_lease.mission_id != previous.mission_id
+            or dispatch_lease.owner != ledger.owner
+            or not dispatch_lease.holder_agent_id.strip()
+        ):
+            return policy_rejection(
+                "dispatch_lease",
+                "current writer is the live holder of the same registering Task and mission",
+                registering_task_id=ledger.registering_task_id,
+                given_task_id=dispatch_lease.task_id,
+            )
+        updated = replace(ledger, author_agent_id=dispatch_lease.holder_agent_id)
+        self._ledgers[key] = updated
+        self._leases[key] = dispatch_lease
+        return Ok(updated)
 
     def open_for_experiment(
         self,

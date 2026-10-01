@@ -50,6 +50,7 @@ def main() -> None:
     first = service.register(
         spec.value,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(first)
@@ -61,6 +62,7 @@ def main() -> None:
             mission_id="mission-exp",
             owner=minted.value,
         ),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:other",
     )
     assert is_ok(again)
@@ -69,6 +71,7 @@ def main() -> None:
         predecessor_fp1=first.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_CODE,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
         code_ref=GIT_COMMIT_REF_PREFIX + ("d" * 40),
     )
@@ -79,6 +82,7 @@ def main() -> None:
         predecessor_fp1=first.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
         resolved_config_ref=_fp("cfg-b"),
     )
@@ -122,6 +126,7 @@ def _restart_restores_sqlite(
             registered = process.experiments.register(
                 spec,
                 dispatch_lease=lease,
+                registering_attempt_no=0,  # explicit fixture attempt
                 model_deployment_ref="deploy:analyst-v1",
             )
             assert is_ok(registered)
@@ -146,7 +151,7 @@ def _restart_restores_sqlite(
         try:
             restored = restored_process.experiments.resolve(spec_fp1)
             assert is_ok(restored)
-            ct32_ref = restored.value.ledger.entries[0].body["ct32_ref"]
+            ct32_ref = restored.value.ledger.entries[-1].body["ct32_ref"]
             assert isinstance(ct32_ref, str) and ct32_ref.startswith("fp1:")
             assert restored_process.experiments.product_truth == "sqlite"
         finally:

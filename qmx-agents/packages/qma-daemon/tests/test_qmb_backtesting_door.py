@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import runpy
+from collections.abc import Mapping
 from pathlib import Path
 
 from qma.core.ontology import ActorId, DeskSlug
@@ -26,7 +27,7 @@ from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.plugins import DaemonPluginContext
 from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.tools import ToolRegistry
-from qmf.core import Result, is_ok, is_refusal
+from qmf.core import Ok, Result, is_ok, is_refusal
 from qmf.data.store.refusals import invalid_input
 
 
@@ -207,9 +208,12 @@ def test_one_qmb_job_per_environment_further_job_refused() -> None:
         evidence_ref="evidence:recorded-3",
     )
     assert is_ok(other)
-    completed = service.observe_outcome(first.value.handle.job_id, JobHandleState.DONE)
+    completed = service.observe_outcome(first.value.handle.job_id, JobHandleState.UNKNOWN)
     assert is_ok(completed)
-    assert service.occupying_job("docker") is None
+    assert completed.value.state is JobHandleState.UNKNOWN
+    # UNKNOWN remains unresolved and therefore continues to occupy its
+    # execution environment until durable reconciliation resolves it.
+    assert service.occupying_job("docker") == first.value.handle.job_id
     retry = service.invoke(
         QMB_BACKTEST_TOOL_ID,
         owner=owner,
@@ -218,10 +222,11 @@ def test_one_qmb_job_per_environment_further_job_refused() -> None:
         experiment_spec_fp1="fp1:spec-4",
         evidence_ref="evidence:recorded-4",
     )
-    assert is_ok(retry)
+    assert is_refusal(retry)
+    assert retry.context["field"] == "qmb_job"
 
 
-def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> None:
+def test_exit_zero_without_durable_qmb_result_becomes_unknown() -> None:
     class ExitingTransport(RecordingQmbDoorTransport):
         def __init__(self, exit_code: object) -> None:
             super().__init__()
@@ -257,7 +262,7 @@ def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> 
     assert service.wait_for_observers(timeout=2.0)
     completed = service.jobs.handle_for(job_id)
     assert completed is not None
-    assert completed.state is JobHandleState.DONE
+    assert completed.state is JobHandleState.UNKNOWN
     assert service.observer_failure_for(job_id) is None
 
     class FailOnceUnknownJobs(JobHandleService):
@@ -329,6 +334,23 @@ def test_real_exit_observer_retries_transient_terminal_projection_refusal() -> N
                 raise RuntimeError("known child exit must not be waited a second time")
             return 0
 
+        def terminal_result(self, job_id: str) -> Result[Mapping[str, object]]:
+            invocation = next(row for row in self.invocations if row.payload["job_id"] == job_id)
+            payload = invocation.payload
+            return Ok(
+                {
+                    "class": "qmb-recorded-replay-result-v1",
+                    "job_id": job_id,
+                    "attempt_id": payload["attempt_id"],
+                    "experiment_spec_fp1": payload["experiment_spec_fp1"],
+                    "evidence_ref": payload["evidence_ref"],
+                    "split_manifest_fp1": payload.get("split_manifest_fp1"),
+                    "ct32_fp1": "fp1:sha256:" + ("a" * 64),
+                    "run_fp1": "fp1:sha256:" + ("b" * 64),
+                    "terminal_line_fp1": "fp1:sha256:" + ("c" * 64),
+                }
+            )
+
     jobs = FailOnceJobs()
     transport = ExitingTransport()
     service = BacktestingService(
@@ -355,6 +377,51 @@ def test_real_exit_observer_retries_transient_terminal_projection_refusal() -> N
     assert jobs.completion_calls >= 2
     assert transport.wait_calls == 1
     assert service.observer_failure_for(job_id) is None
+
+
+def test_exit_zero_with_foreign_qmb_result_stays_unknown() -> None:
+    class ForeignResultTransport(RecordingQmbDoorTransport):
+        def wait(self, job_id: str, *, timeout: float = 10.0) -> int:
+            del job_id, timeout
+            return 0
+
+        def terminal_result(self, job_id: str) -> Result[Mapping[str, object]]:
+            invocation = next(row for row in self.invocations if row.payload["job_id"] == job_id)
+            payload = invocation.payload
+            return Ok(
+                {
+                    "class": "qmb-recorded-replay-result-v1",
+                    "job_id": job_id,
+                    "attempt_id": payload["attempt_id"],
+                    "experiment_spec_fp1": payload["experiment_spec_fp1"],
+                    "evidence_ref": "fp1:sha256:" + ("f" * 64),
+                    "split_manifest_fp1": payload.get("split_manifest_fp1"),
+                    "ct32_fp1": "fp1:sha256:" + ("a" * 64),
+                    "run_fp1": "fp1:sha256:" + ("b" * 64),
+                    "terminal_line_fp1": "fp1:sha256:" + ("c" * 64),
+                }
+            )
+
+    transport = ForeignResultTransport()
+    service = BacktestingService(
+        tools=ToolRegistry(),
+        jobs=JobHandleService(),
+        environments=_envs(ExecutionEnvironmentKind.DOCKER),
+        transport=transport,
+    )
+    assert is_ok(service.install())
+    placed = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="observer-foreign-terminal-result",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-foreign-terminal",
+        evidence_ref="evidence:expected-terminal",
+    )
+    assert is_ok(placed)
+    assert service.wait_for_observers(timeout=3.0)
+    handle = service.jobs.handle_for(placed.value.handle.job_id)
+    assert handle is not None and handle.state is JobHandleState.UNKNOWN
 
 
 def test_unbound_environment_and_wrong_tool_are_refused() -> None:

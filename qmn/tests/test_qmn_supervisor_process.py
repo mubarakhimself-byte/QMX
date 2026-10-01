@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -15,6 +16,8 @@ from urllib.request import urlopen
 from qmf.core import World, is_ok
 from qmf.data import JournalReader
 from qmf.data.store import EvidenceStore
+from qmn.host.configured_runtime import assess_configured_runtime
+from test_qmn_configured_composition import offline_profile, valid_deployment, write_v2_deployment
 
 
 def _port() -> int:
@@ -147,3 +150,48 @@ def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
         _stdout, stderr = process.communicate(timeout=5)
         assert process.returncode == 0
         assert stderr is not None and b"RuntimeWarning" not in stderr
+
+
+def test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    initial = assess_configured_runtime(valid_deployment(tmp_path), qmx_root=tmp_path)
+    assert is_ok(initial)
+    deployment = write_v2_deployment(tmp_path, offline_profile(initial.value, tmp_path))
+    port = _port()
+    process = _launch(tmp_path, state, port, deployment_file=deployment)
+    try:
+        _wait_status(port, process)
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                raise AssertionError(
+                    f"replay-only profile unexpectedly returned {response.status}"
+                )
+        except HTTPError as response:
+            assert response.code == 503
+            readiness = json.loads(response.read())
+            assert readiness["trading"] == "unavailable"
+            assert "QMB replay evidence" in readiness["reason"]
+    finally:
+        process.terminate()
+        _stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 0
+        assert stderr is not None and b"RuntimeWarning" not in stderr
+
+    evidence = EvidenceStore(state / "evidence")
+    live = evidence.for_world(World.LIVE)
+    assert is_ok(live)
+    attempts = JournalReader(live.value.journal).read_checked(
+        "boot-lifecycle", for_world=World.LIVE
+    )
+    assert is_ok(attempts)
+    last_payload = attempts.value[-1].payload
+    assert isinstance(last_payload, Mapping)
+    attempt = last_payload.get("attempt")
+    assert isinstance(attempt, Mapping)
+    assert attempt["stage"] == "preflight"
+    assert attempt["failure_id"] == (
+        "configured_runtime.hosted_resources_missing"
+    )

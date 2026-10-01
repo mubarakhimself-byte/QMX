@@ -37,9 +37,14 @@ from qmb.config.compiler import ResolvedRunConfig
 from qmb.config.fragments import ConfigFragment
 from qmb.execution.binder import BoundExecution
 from qmb.host.book_handler import BookAdmissionContext
-from qmb.host.qma_cli import QmaBacktestContext
+from qmb.host.operator_occurrence import (
+    OperatorOccurrenceIdentity,
+    read_operator_occurrence,
+    record_operator_occurrence,
+)
+from qmb.host.qma_cli import QmaBacktestContext, validate_qma_backtest_context
 from qmb.host.replay_request import ResolvedReplayRequest
-from qmb.orchestrator.ledger import LedgerSink
+from qmb.orchestrator.ledger import ROLE_CONFIRMATION, LedgerSink, read_merge_view
 from qmb.registryread import AsOfSet, PassiveHub, RegistryReadPort
 
 __all__ = [
@@ -49,6 +54,7 @@ __all__ = [
     "OperatorReplayBinding",
     "execute_operator_replay",
     "read_operator_replay_binding",
+    "verify_operator_replay_result",
 ]
 
 OPERATOR_BINDING_KIND = "qmb-operator-replay-binding"
@@ -104,8 +110,12 @@ def read_operator_replay_binding(
     *, runtime_root: object, context: object
 ) -> Result[OperatorReplayBinding]:
     """Read the one operator descriptor for this registered run and request."""
-    if not isinstance(context, QmaBacktestContext):
-        return invalid("qma_context", "operator binding selection consumes decoded CT-47 refs")
+    checked_context = validate_qma_backtest_context(context)
+    if is_refusal(checked_context):
+        return checked_context
+    context = checked_context.value
+    if context.mints_ct32 is not True:
+        return policy("mints_ct32", "Book replay requires the registered CT-32 result mode")
     root = _absolute_directory(runtime_root, "runtime_root")
     if is_refusal(root):
         return root
@@ -115,7 +125,18 @@ def read_operator_replay_binding(
     raw = _read_json(descriptor_path)
     if is_refusal(raw):
         return raw
-    return _decode_binding(raw.value, context)
+    decoded = _decode_binding(raw.value, context)
+    if is_refusal(decoded):
+        return decoded
+    if (
+        context.operator_descriptor_fp1 is not None
+        and context.operator_descriptor_fp1 != decoded.value.descriptor_fp1
+    ):
+        return policy(
+            "operator_descriptor_fp1",
+            "the QMA placement pins this exact trusted Book runtime descriptor",
+        )
+    return decoded
 
 
 def execute_operator_replay(
@@ -131,69 +152,222 @@ def execute_operator_replay(
     binding = read_operator_replay_binding(runtime_root=runtime_root, context=context)
     if is_refusal(binding):
         return binding
-    selected_context = cast(QmaBacktestContext, context)
-    registry = _canonical_registry(binding.value)
+    if not isinstance(context, QmaBacktestContext) or context.operator_descriptor_fp1 is None:
+        return invalid("operator_descriptor_fp1", "execution is pinned to a completed preflight")
+    inputs = _load_operator_inputs(binding.value, context)
+    if is_refusal(inputs):
+        return inputs
+    from qmb.host.replay_execution import execute_recorded_replay_request  # noqa: PLC0415
+
+    result = execute_recorded_replay_request(
+        **inputs.value,
+        expected_request_ref=context.evidence_ref,
+        request_root=binding.value.roots["requests"],
+        raw_store_root=binding.value.roots["raw"],
+        holdout_months=binding.value.holdout_months,
+        expected_split_fp1=context.split_manifest_fp1,
+        role="confirmation",
+    )
+    if is_refusal(result):
+        return result
+    ct32 = result.value.performance_result.fingerprint()
+    if is_refusal(ct32):
+        return ct32
+    terminal_stamp = fingerprint(result.value.terminal_line.fp1_identity())
+    if is_refusal(terminal_stamp):
+        return terminal_stamp
+    # Reopen the actual terminal row before writing the private occurrence
+    # witness that attributes it to this delegated invocation.
+    checked = verify_operator_replay_result(
+        runtime_root=runtime_root,
+        context=context,
+        claimed_result=None,
+        _require_occurrence=False,
+    )
+    if is_refusal(checked):
+        return checked
+    if (
+        checked.value.get("ct32_fp1") != ct32.value.value
+        or checked.value.get("terminal_line_fp1") != terminal_stamp.value.value
+        or checked.value.get("run_fp1") != result.value.run_fp1.value
+    ):
+        return policy(
+            "terminal_readback",
+            "reopened Book terminal exactly matches this execution's CT-32 and run",
+        )
+    occurrence = _book_occurrence_identity(
+        binding.value,
+        context,
+        inputs.value,
+        terminal_fp1=terminal_stamp.value,
+        domain_result_fp1=ct32.value,
+    )
+    if is_refusal(occurrence):
+        return occurrence
+    reader = cast(JournalReader, inputs.value["journal_reader"])
+    writer = cast(BookAdmissionContext, inputs.value["admission"]).journal_writer
+    appended = record_operator_occurrence(
+        identity=occurrence.value,
+        journal_writer=writer,
+        journal_store=reader.journal,
+        at=occurrence.value.at,
+    )
+    if is_refusal(appended):
+        return appended
+    return checked
+
+
+def verify_operator_replay_result(
+    *,
+    runtime_root: object,
+    context: object,
+    claimed_result: object | None,
+    _require_occurrence: bool = True,
+) -> Result[Mapping[str, object]]:
+    """Reopen the pinned terminal ledger and verify a prior run response."""
+    binding = read_operator_replay_binding(runtime_root=runtime_root, context=context)
+    if is_refusal(binding):
+        return binding
+    if not isinstance(context, QmaBacktestContext) or context.operator_descriptor_fp1 is None:
+        return invalid("operator_descriptor_fp1", "verification is pinned to a completed preflight")
+    if claimed_result is not None and not isinstance(claimed_result, Mapping):
+        return invalid("claimed_result", "verification consumes the prior QMB result object")
+    inputs = _load_operator_inputs(binding.value, context)
+    if is_refusal(inputs):
+        return inputs
+    config = cast(ResolvedRunConfig, inputs.value["config"])
+    request = cast(ResolvedReplayRequest, inputs.value["request"])
+    ledger_root = binding.value.roots["terminal_ledger"]
+    merged = read_merge_view(ledger_root, world=config.world, role=ROLE_CONFIRMATION)
+    if is_refusal(merged):
+        return merged
+    matching = tuple(line for line in merged.value if line.run_id == config.fingerprint)
+    if len(matching) != 1:
+        return policy(
+            "terminal_line",
+            "durable Book verification finds exactly one completed confirmation row",
+            matches=len(matching),
+        )
+    line = matching[0]
+    if line.ct32_fingerprint is None:
+        return policy("ct32_fp1", "durable Book confirmation carries a CT-32 fingerprint")
+    inputs_raw = line.result_label.get("input_fingerprints")
+    if (
+        line.role != ROLE_CONFIRMATION
+        or line.world is not config.world
+        or line.result_label.get("world") != config.world.value
+        or not isinstance(inputs_raw, (tuple, list))
+        or not inputs_raw
+        or inputs_raw[0] != config.fingerprint.value
+    ):
+        return policy(
+            "result_label",
+            "persisted CT-32 label binds the resolved run config, world, and confirmation role",
+        )
+    line_stamp = fingerprint(line.fp1_identity())
+    if is_refusal(line_stamp):
+        return line_stamp
+    actual: dict[str, object] = {
+        "class": "qmb-recorded-replay-result-v1",
+        "ct32_fp1": line.ct32_fingerprint.value,
+        "evidence_ref": request.request_ref.value,
+        "run_fp1": config.fingerprint.value,
+        "job_id": context.job_id,
+        "attempt_id": context.attempt_id,
+        "experiment_spec_fp1": context.experiment_spec_fp1.value,
+        "split_manifest_fp1": context.split_manifest_fp1.value,
+        "operator_descriptor_fp1": binding.value.descriptor_fp1.value,
+        "terminal_line_fp1": line_stamp.value.value,
+    }
+    if claimed_result is not None and dict(cast(Mapping[str, object], claimed_result)) != actual:
+        return policy(
+            "terminal_result",
+            "the prior subprocess response exactly matches the reopened persisted ledger row",
+        )
+    if _require_occurrence:
+        occurrence = _book_occurrence_identity(
+            binding.value,
+            context,
+            inputs.value,
+            terminal_fp1=line_stamp.value,
+            domain_result_fp1=line.ct32_fingerprint,
+        )
+        if is_refusal(occurrence):
+            return occurrence
+        reader = cast(JournalReader, inputs.value["journal_reader"])
+        witnessed = read_operator_occurrence(
+            identity=occurrence.value,
+            journal_reader=reader,
+        )
+        if is_refusal(witnessed):
+            return witnessed
+    return Ok(actual)
+
+
+def _book_occurrence_identity(
+    binding: OperatorReplayBinding,
+    context: QmaBacktestContext,
+    inputs: Mapping[str, object],
+    *,
+    terminal_fp1: Fingerprint,
+    domain_result_fp1: Fingerprint,
+) -> Result[OperatorOccurrenceIdentity]:
+    admission = inputs.get("admission")
+    request = inputs.get("request")
+    if not isinstance(admission, BookAdmissionContext) or not isinstance(
+        request, ResolvedReplayRequest
+    ):
+        return invalid("operator_runtime", "Book occurrence resolves typed admission and request")
+    if not request.source.slices or not request.source.slices[-1].observations:
+        return invalid("terminal_frontier", "Book occurrence has a final recorded CT-10 frontier")
+    final_observation = request.source.slices[-1].observations[-1]
+    at = getattr(final_observation, "instant", None)
+    if not isinstance(at, Instant):
+        return invalid("terminal_frontier", "final CT-10 observation carries its typed instant")
+    return OperatorOccurrenceIdentity.try_create(
+        context=context,
+        composition_class="book",
+        runtime_descriptor_fp1=binding.descriptor_fp1,
+        operator_binding_fp1=binding.descriptor_fp1,
+        terminal_fp1=terminal_fp1,
+        domain_result_fp1=domain_result_fp1,
+        terminal_root=binding.roots["terminal_ledger"],
+        journal_root=binding.roots["journal"],
+        terminal_writer=None,
+        journal_writer=admission.journal_writer.writer,
+        journal_stream=admission.journal_writer.stream_name,
+        binding_epoch_fp1=admission.binding.fingerprint,
+        at=at,
+    )
+
+
+def _load_operator_inputs(
+    binding: OperatorReplayBinding, context: QmaBacktestContext
+) -> Result[Mapping[str, object]]:
+    registry = _canonical_registry(binding)
     if is_refusal(registry):
         return registry
     with tempfile.TemporaryDirectory(prefix="qmb-operator-replay-") as raw_root:
         builder_root = Path(raw_root)
-        written = _materialize_builder(binding.value.builder_files, builder_root)
+        written = _materialize_builder(binding.builder_files, builder_root)
         if is_refusal(written):
             return written
-        module = _load_builder(
-            builder_root,
-            binding.value.builder_files,
-            binding.value.entrypoint,
-        )
+        module = _load_builder(builder_root, binding.builder_files, binding.entrypoint)
         if is_refusal(module):
             return module
         try:
-            entry = _entrypoint(module.value, binding.value.entrypoint)
+            entry = _entrypoint(module.value, binding.entrypoint)
             if is_refusal(entry):
                 return entry
-            built = entry.value(selected_context, binding.value, *registry.value)
+            built = entry.value(context, binding, *registry.value)
             if is_refusal(built):
                 return built
-            inputs = _runtime_inputs(built.value, binding.value, registry.value)
-            if is_refusal(inputs):
-                return inputs
+            return _runtime_inputs(built.value, binding, registry.value)
         finally:
-            # Source lookup for pinned policy classes depends on their module
-            # remaining registered through _runtime_inputs. Remove only modules
-            # loaded from this temporary tree so repeated requests cannot reuse
-            # stale sibling imports.
             for name, loaded_module in tuple(sys.modules.items()):
                 source_path = getattr(loaded_module, "__file__", None)
                 if isinstance(source_path, str) and Path(source_path).is_relative_to(builder_root):
                     sys.modules.pop(name, None)
-        from qmb.host.replay_execution import execute_recorded_replay_request  # noqa: PLC0415
-
-        result = execute_recorded_replay_request(
-            **inputs.value,
-            expected_request_ref=selected_context.evidence_ref,
-            request_root=binding.value.roots["requests"],
-            raw_store_root=binding.value.roots["raw"],
-            holdout_months=binding.value.holdout_months,
-            expected_split_fp1=selected_context.split_manifest_fp1,
-            role="confirmation",
-        )
-        if is_refusal(result):
-            return result
-        ct32 = result.value.performance_result.fingerprint()
-        if is_refusal(ct32):
-            return ct32
-        terminal_stamp = fingerprint(result.value.terminal_line.fp1_identity())
-        if is_refusal(terminal_stamp):
-            return terminal_stamp
-        return Ok(
-            {
-                "class": "qmb-recorded-replay-result-v1",
-                "ct32_fp1": ct32.value.value,
-                "evidence_ref": result.value.request_ref.value,
-                "run_fp1": result.value.run_fp1.value,
-                "terminal_line_fp1": terminal_stamp.value.value,
-            }
-        )
 
 
 def _decode_binding(raw: object, context: QmaBacktestContext) -> Result[OperatorReplayBinding]:

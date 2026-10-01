@@ -15,6 +15,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from qma.core.ontology import ActorId
+from qma.core.operations import public_operation_descriptors
 from qma.core.ports.compute import ComputeRequirement
 from qma.core.refusals import NoEnvironment
 from qma.core.vocabulary.enums import (
@@ -26,7 +27,13 @@ from qma.core.vocabulary.enums import (
 )
 from qma.daemon.envs.registry import EnvironmentLease, ExecutionEnvironmentRegistry
 from qma.daemon.envs.router import ComputeRouter, PlacementDecision, QueuedPlacement
-from qma.daemon.taskgraph.outbox import apply_successor_eligibility, newly_ready_successors
+from qma.daemon.taskgraph.outbox import (
+    OutboxTransportState,
+    ReceiverAcceptance,
+    TaskGraphOutboxRow,
+    apply_successor_eligibility,
+    newly_ready_successors,
+)
 from qma.daemon.taskgraph.projection import TaskGraphStateService
 from qma.daemon.taskgraph.records import (
     MISSION_DIRECTOR_ROLE,
@@ -34,6 +41,7 @@ from qma.daemon.taskgraph.records import (
     MissionRecord,
     ProposedTransition,
     TaskGraph,
+    TaskLedger,
     TaskRecord,
 )
 from qma.daemon.taskgraph.state import (
@@ -42,6 +50,7 @@ from qma.daemon.taskgraph.state import (
     validate_never_dispatched_cancel,
     validate_terminal_evidence,
 )
+from qma.wire import compute_input_hash
 from qmf.core import Ok, Result, is_ok, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
@@ -55,6 +64,139 @@ __all__ = [
     "TaskTransitionResult",
     "validate_proposed_transition",
 ]
+
+
+def _worker_acceptance_payload(
+    task: TaskRecord,
+    lease: DispatchLease,
+    row: TaskGraphOutboxRow,
+    ledger: TaskLedger | None,
+) -> Result[Mapping[str, object]]:
+    """Construct/validate the exact task-bound worker acceptance receipt."""
+    inputs = task.inputs
+    required = (
+        "op_id",
+        "op_version",
+        "instance_id",
+        "config_revision",
+        "run_fp1",
+        "evidence_ref",
+        "model_deployment_ref",
+    )
+
+    if any(key not in inputs for key in required):
+        return invalid_input(
+            "task.inputs",
+            "accepted worker Task pins operation, instance, run, evidence, and deployment",
+            task_id=task.id,
+        )
+    op_id = inputs.get("op_id")
+    op_version = inputs.get("op_version")
+    instance_id = inputs.get("instance_id")
+    config_revision = inputs.get("config_revision")
+    run_fp1 = inputs.get("run_fp1")
+    evidence_ref = inputs.get("evidence_ref")
+    deployment_ref = inputs.get("model_deployment_ref")
+    if (
+        not isinstance(op_id, str)
+        or not op_id
+        or isinstance(op_version, bool)
+        or not isinstance(op_version, int)
+        or op_version <= 0
+        or not isinstance(instance_id, str)
+        or not instance_id
+        or isinstance(config_revision, bool)
+        or not isinstance(config_revision, int)
+        or config_revision < 0
+        or not isinstance(run_fp1, str)
+        or not run_fp1
+        or not isinstance(evidence_ref, str)
+        or not evidence_ref
+        or not isinstance(deployment_ref, str)
+        or not deployment_ref
+        or ledger is None
+        or ledger.task_id != task.id
+        or isinstance(ledger.attempt_no, bool)
+        or ledger.attempt_no < 0
+    ):
+        return invalid_input(
+            "task.inputs",
+            "accepted worker Task pins typed operation refs and a current TaskLedger attempt",
+            task_id=task.id,
+        )
+    operation_input_hash = _task_operation_input_hash(task)
+    if is_refusal(operation_input_hash):
+        return operation_input_hash
+    expected_target = {
+        "op_id": op_id,
+        "op_version": op_version,
+        "instance_id": instance_id,
+        "config_revision": config_revision,
+    }
+    if row.partition_id == "initial-root":
+        expected_target["operation_input_hash"] = operation_input_hash.value
+    if dict(row.target) != expected_target:
+        return policy_rejection(
+            "outbox_target",
+            "outbox target exactly matches the accepted Task operation and instance",
+            task_id=task.id,
+        )
+    return Ok(
+        MappingProxyType(
+            {
+                "class": "qma-task-worker-acceptance-v1",
+                "logical_invocation_id": row.logical_invocation_id,
+                "task_id": task.id,
+                "mission_id": task.mission_id,
+                "owner_actor_id": task.owner.value,
+                "dispatch_lease": dict(lease.to_payload()),
+                "attempt_no": ledger.attempt_no,
+                "model_deployment_ref": deployment_ref,
+                "operation_input_hash": operation_input_hash.value,
+                "op_id": op_id,
+                "op_version": op_version,
+                "instance_id": instance_id,
+                "run_fp1": run_fp1,
+                "evidence_ref": evidence_ref,
+                "target": dict(row.target),
+                "envelope_hash": row.envelope_hash,
+            }
+        )
+    )
+
+
+def _task_operation_input_hash(task: TaskRecord) -> Result[str]:
+    """Hash only schema-approved operation inputs from the trusted Task body."""
+    op_id = task.inputs.get("op_id")
+    op_version = task.inputs.get("op_version")
+    if (
+        not isinstance(op_id, str)
+        or isinstance(op_version, bool)
+        or not isinstance(op_version, int)
+    ):
+        return invalid_input("task.inputs", "Task pins a typed public operation descriptor")
+    descriptors = tuple(
+        descriptor
+        for descriptor in public_operation_descriptors()
+        if descriptor.op_id == op_id and descriptor.version == op_version
+    )
+    if len(descriptors) != 1:
+        return invalid_input("task.inputs", "Task operation resolves to one public descriptor")
+    descriptor = descriptors[0]
+    keys = tuple(descriptor.configuration.required_keys) + tuple(
+        descriptor.configuration.optional_keys
+    )
+    inputs = task.inputs
+    missing = tuple(key for key in descriptor.configuration.required_keys if key not in inputs)
+    if missing:
+        return invalid_input(
+            "task.inputs",
+            "accepted Task pins every required operation input",
+            task_id=task.id,
+            missing=missing,
+        )
+    payload = {key: inputs[key] for key in keys if key in inputs}
+    return compute_input_hash(payload, descriptor=descriptor)
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +488,151 @@ class TaskGraphDispatcher:
         located = self._store.find_task(task_id)
         return None if located is None else located[1]
 
+    def expected_operation_input_hash(self, task_id: object) -> Result[str]:
+        """Compute the public payload identity from the currently accepted Task inputs."""
+        if not isinstance(task_id, str) or not task_id:
+            return invalid_input("task_id", "operation input identity requires a task id")
+        task = self.task_for(task_id)
+        if task is None:
+            return invalid_input("task_id", "operation input identity resolves to a live Task")
+        return _task_operation_input_hash(task)
+
+    def accepted_task_for_invocation(
+        self, logical_invocation_id: object
+    ) -> Result[tuple[TaskRecord, DispatchLease, TaskGraphOutboxRow, ReceiverAcceptance]]:
+        """Resolve and revalidate an accepted worker invocation against live authority."""
+        durable = self._store.durable
+        if durable is None:
+            return policy_rejection(
+                "task_graph_outbox",
+                "worker acceptance requires the durable Task Graph outbox projection",
+            )
+        accepted = durable.accepted_invocation(logical_invocation_id)
+        if is_refusal(accepted):
+            return accepted
+        row, receiver = accepted.value
+        graph = self._store.get(row.graph_run_id)
+        if graph is None:
+            return invalid_input(
+                "graph_run_id", "accepted outbox row resolves to a live Task Graph"
+            )
+        task = graph.task_for_node(row.successor_node_id)
+        if task is None:
+            return invalid_input(
+                "successor_node_id",
+                "accepted outbox successor still resolves to its exact Task",
+                node_id=row.successor_node_id,
+            )
+        lease = self._store.lease_for(task.id)
+        if lease is None or lease.task_id != task.id:
+            return policy_rejection(
+                "dispatch_lease",
+                "accepted worker task still has its current retained dispatch lease",
+                task_id=task.id,
+            )
+        ledger = self._ledgers.get(task.id)
+        expected = _worker_acceptance_payload(task, lease, row, ledger)
+        if is_refusal(expected):
+            return expected
+        if dict(receiver.result) != dict(expected.value):
+            return policy_rejection(
+                "receiver_acceptance",
+                "receiver receipt binds exact accepted task inputs, current lease, "
+                "attempt, and deployment",
+                task_id=task.id,
+            )
+        return Ok((task, lease, row, receiver))
+
+    def dispatched_task_for_invocation(
+        self, logical_invocation_id: object
+    ) -> Result[tuple[TaskRecord, DispatchLease, TaskGraphOutboxRow]]:
+        """Resolve a dispatched successor before its receiver acceptance is recorded.
+
+        The authenticated operation adapter calls this at the point it accepts the
+        exact dispatched work. It is deliberately weaker than
+        ``accepted_task_for_invocation``: callers must still compare the incoming
+        operation payload with ``task.inputs`` before recording acceptance.
+        """
+        if not isinstance(logical_invocation_id, str) or not logical_invocation_id:
+            return invalid_input("logical_invocation_id", "worker acceptance requires an id")
+        durable = self._store.durable
+        if durable is None:
+            return policy_rejection(
+                "task_graph_outbox",
+                "worker acceptance requires the durable Task Graph outbox projection",
+            )
+        row_result = durable.accepted_outbox_row(logical_invocation_id)
+        if is_refusal(row_result):
+            return row_result
+        row = row_result.value
+        if row.transport_state is not OutboxTransportState.DISPATCHED:
+            return policy_rejection(
+                "outbox_transport",
+                "worker accepts only an outbox row already dispatched to its receiver",
+                logical_invocation_id=logical_invocation_id,
+            )
+        graph = self._store.get(row.graph_run_id)
+        if graph is None:
+            return invalid_input("graph_run_id", "outbox row resolves to a current Task Graph")
+        task = graph.task_for_node(row.successor_node_id)
+        if task is None or task.state is not TaskMissionState.RUNNING:
+            return policy_rejection(
+                "task_state", "worker acceptance requires its current running successor Task"
+            )
+        lease = self._store.lease_for(task.id)
+        if lease is None or lease.task_id != task.id or lease.owner != task.owner:
+            return policy_rejection(
+                "dispatch_lease", "worker acceptance requires the current Task lease"
+            )
+        if lease.mission_id != task.mission_id:
+            return policy_rejection(
+                "dispatch_lease", "current Task lease is bound to the task mission"
+            )
+        return Ok((task, lease, row))
+
+    def accept_worker_invocation(self, logical_invocation_id: object) -> Result[ReceiverAcceptance]:
+        """Persist the daemon's worker-acceptance receipt for the current successor Task.
+
+        Call only after the TaskExecutor has accepted the exact dispatched Task. The
+        resulting row binds the independent logical invocation to current Task
+        inputs, retained lease, attempt, and deployment provenance.
+        """
+        if not isinstance(logical_invocation_id, str) or not logical_invocation_id:
+            return invalid_input("logical_invocation_id", "worker acceptance requires an id")
+        durable = self._store.durable
+        if durable is None:
+            return policy_rejection(
+                "task_graph_outbox",
+                "worker acceptance requires the durable Task Graph outbox projection",
+            )
+        row_result = durable.accepted_outbox_row(logical_invocation_id)
+        if is_refusal(row_result):
+            return row_result
+        row = row_result.value
+        if row.transport_state is not OutboxTransportState.DISPATCHED:
+            return policy_rejection(
+                "outbox_transport",
+                "a worker accepts only an outbox row already dispatched to its receiver",
+                logical_invocation_id=logical_invocation_id,
+            )
+        graph = self._store.get(row.graph_run_id)
+        if graph is None:
+            return invalid_input("graph_run_id", "outbox row resolves to a current Task Graph")
+        task = graph.task_for_node(row.successor_node_id)
+        if task is None or task.state is not TaskMissionState.RUNNING:
+            return policy_rejection(
+                "task_state", "worker acceptance requires its current running successor Task"
+            )
+        lease = self._store.lease_for(task.id)
+        if lease is None or lease.owner != task.owner or lease.mission_id != task.mission_id:
+            return policy_rejection(
+                "dispatch_lease", "worker acceptance requires the current Task lease"
+            )
+        payload = _worker_acceptance_payload(task, lease, row, self._ledgers.get(task.id))
+        if is_refusal(payload):
+            return payload
+        return durable.accept_logical(logical_invocation_id, result=payload.value)
+
     def materialize(
         self,
         graph: TaskGraph,
@@ -406,6 +693,9 @@ class TaskGraphDispatcher:
                 task_id=task_id,
                 state=task.state.value,
             )
+        initial_outbox = self._publish_initial_operation(graph, task)
+        if is_refusal(initial_outbox):
+            return initial_outbox
         if not holder_agent_id:
             return invalid_input(
                 "holder_agent_id",
@@ -469,6 +759,134 @@ class TaskGraphDispatcher:
                 queued_placement=queued,
             )
         )
+
+    def _publish_initial_operation(
+        self,
+        graph: TaskGraph,
+        task: TaskRecord,
+    ) -> Result[None]:
+        """Ensure a compiled root operation has its durable outbox before dispatch."""
+        operation_fields = frozenset(
+            {
+                "op_id",
+                "op_version",
+                "instance_id",
+                "config_revision",
+                "run_fp1",
+                "evidence_ref",
+                "model_deployment_ref",
+            }
+        )
+        if not operation_fields.intersection(task.inputs):
+            return Ok(None)
+        if "op_id" not in task.inputs:
+            return invalid_input(
+                "task.inputs", "operation root candidate includes its operation identifier"
+            )
+        if task.node_id is None:
+            return invalid_input(
+                "task.node_id", "an operation root is attached to an emitting node"
+            )
+        if task.mission_id != graph.mission_id:
+            return policy_rejection(
+                "mission_id", "initial operation Task and graph have the same Mission"
+            )
+        mission = self._store.mission(graph.mission_id)
+        if (
+            mission is None
+            or mission.id != graph.mission_id
+            or mission.task_graph_id != graph.id
+            or mission.owner != task.owner
+            or graph.graph_template_ref != mission.graph_template_ref
+        ):
+            return policy_rejection(
+                "mission",
+                "initial operation graph and Tasks match the actual materialized Mission",
+                graph_id=graph.id,
+                mission_id=graph.mission_id,
+            )
+        task_ids = tuple(candidate.id for candidate in graph.tasks)
+        node_ids = tuple(node.id for node in graph.nodes)
+        emitting_nodes = {node.id for node in graph.nodes if node.emits_task}
+        if (
+            len(set(task_ids)) != len(task_ids)
+            or len(set(node_ids)) != len(node_ids)
+            or any(
+                candidate.mission_id != mission.id
+                or candidate.owner != mission.owner
+                or candidate.node_id is None
+                or candidate.node_id not in emitting_nodes
+                for candidate in graph.tasks
+            )
+        ):
+            return policy_rejection(
+                "task_graph",
+                "operation publication requires one coherent Mission-owned Task and node set",
+            )
+        op_id = task.inputs.get("op_id")
+        op_version = task.inputs.get("op_version")
+        if (
+            not isinstance(op_id, str)
+            or not op_id.strip()
+            or isinstance(op_version, bool)
+            or not isinstance(op_version, int)
+            or op_version < 1
+        ):
+            return invalid_input(
+                "task.inputs", "initial operation root pins a valid operation id and version"
+            )
+        descriptors = tuple(
+            descriptor
+            for descriptor in public_operation_descriptors()
+            if descriptor.op_id == op_id
+            and type(descriptor.version) is int
+            and descriptor.version == op_version
+        )
+        if len(descriptors) != 1:
+            return policy_rejection(
+                "operation", "initial root operation resolves to one registered descriptor"
+            )
+        input_hash = _task_operation_input_hash(task)
+        if is_refusal(input_hash):
+            return input_hash
+        durable = self._store.durable
+        if durable is None:
+            return policy_rejection(
+                "task_graph_outbox",
+                "public operation dispatch requires durable Task Graph publication",
+                task_id=task.id,
+            )
+        existing = tuple(
+            row for row in durable.outbox_rows(graph.id) if row.successor_node_id == task.node_id
+        )
+        if existing:
+            if len(existing) != 1:
+                return policy_rejection(
+                    "task_graph_outbox",
+                    "operation Task resolves to exactly one outbox publication",
+                    task_id=task.id,
+                )
+            return Ok(None)
+        if any(edge.to_node == task.node_id for edge in graph.edges):
+            return policy_rejection(
+                "task_graph_outbox",
+                "a non-root operation Task requires its real predecessor publication",
+                task_id=task.id,
+            )
+        revision = task.inputs.get("config_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+            return invalid_input(
+                "config_revision", "initial operation publication requires a pinned revision"
+            )
+        published = durable.publish_initial_task(
+            graph,
+            task,
+            config_revision=revision,
+            operation_input_hash=input_hash.value,
+        )
+        if is_refusal(published):
+            return published
+        return Ok(None)
 
     def reassign(
         self,

@@ -18,6 +18,7 @@ from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.nested import NestedMissionHost
 from qma.daemon.taskgraph.projection import TaskGraphStateService
 from qma.daemon.tools.registry import ToolRegistry
+from qmf.data.store import AppendStore
 
 
 @dataclass(slots=True)
@@ -44,6 +45,7 @@ class DaemonRuntimeComposition:
         variables: GovernedVariableRegistry,
         compiler: MissionCompiler,
         product_sessions: ProductSessionService | None = None,
+        artifact_store: AppendStore | None = None,
     ) -> DaemonRuntimeComposition:
         """Wire existing services around shared durable graph and routing state."""
         environments = ExecutionEnvironmentRegistry()
@@ -61,6 +63,7 @@ class DaemonRuntimeComposition:
             tools=tools,
             jobs=jobs,
             environments=environments,
+            artifact_store=artifact_store,
         )
         runtime_service = RuntimeService(
             jobs=jobs,

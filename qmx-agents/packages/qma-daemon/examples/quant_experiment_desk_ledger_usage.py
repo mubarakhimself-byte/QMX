@@ -97,6 +97,7 @@ def main() -> None:
     registered = service.register(
         spec.value,
         dispatch_lease=dispatch,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:workhorse",
     )
     assert is_ok(registered)

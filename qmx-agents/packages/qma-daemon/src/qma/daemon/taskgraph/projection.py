@@ -69,6 +69,7 @@ from qma.daemon.taskgraph.outbox import (
     TaskGraphOutboxRow,
     ack_outbox_dispatch,
     apply_successor_eligibility,
+    build_initial_outbox_row,
     build_outbox_row,
     load_eligibility_rows,
     load_outbox_rows,
@@ -153,6 +154,7 @@ TASK_GRAPH_STATE_SQLITE_TABLES: Final[frozenset[str]] = frozenset(
 )
 _MATERIALIZED_EVENT: Final[str] = "task.graph_materialized"
 _PREDECESSOR_COMPLETED_EVENT: Final[str] = "task.predecessor_completed"
+_INITIAL_ROOT_PUBLISHED_EVENT: Final[str] = "task.initial_root_published"
 _OCCUPANCY_EVENT: Final[str] = "task.occupancy_recorded"
 _JOIN_EVENT: Final[str] = "task.join_state_recorded"
 _OCCUPANCY_TABLE_NAMES: Final[frozenset[str]] = frozenset(
@@ -187,6 +189,33 @@ CREATE INDEX IF NOT EXISTS task_graph_state_edge_from
     + OUTBOX_SCHEMA_SQL
     + JOIN_SCHEMA_SQL
 )
+
+_OUTBOX_SCHEMA_MARKER_TABLE: Final[str] = "task_graph_outbox_schema"
+_OUTBOX_SCHEMA_VERSION: Final[int] = 2
+_OUTBOX_COLUMNS: Final[tuple[str, ...]] = (
+    "graph_run_id",
+    "successor_node_id",
+    "predecessor_revision",
+    "partition_id",
+    "outbox_id",
+    "predecessor_node_id",
+    "logical_invocation_id",
+    "target",
+    "envelope_hash",
+    "transport_state",
+    "acceptance_state",
+    "effect_state",
+    "receiver_acceptance_id",
+)
+
+
+class TaskGraphOutboxSchemaError(RuntimeError):
+    """Existing Task Graph outbox needs an explicit backed-up migration."""
+
+    def __init__(self, *, found: object, reason: str) -> None:
+        self.found = found
+        self.reason = reason
+        super().__init__(reason)
 
 
 def empty_occupancy() -> dict[str, object]:
@@ -559,15 +588,74 @@ class TaskGraphStateSqliteStore:
         self._sqlite = sqlite
         self._ensured = False
         self._crash_after: str | None = None
+        self._initial_crash = False
 
     def ensure_schema(self) -> None:
         if self._ensured:
             return
 
-        def _ddl(conn: sqlite3.Connection) -> None:
-            conn.executescript(_SCHEMA_SQL)
+        table_names = {
+            str(row[0])
+            for row in self._sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        outbox_exists = TASK_GRAPH_OUTBOX_TABLE in table_names
+        if outbox_exists:
+            if _OUTBOX_SCHEMA_MARKER_TABLE not in table_names:
+                raise TaskGraphOutboxSchemaError(
+                    found="unmarked-existing-layout",
+                    reason=(
+                        "existing task_graph_outbox has no layout version; run the explicit "
+                        "backup-and-copy migration before opening this database"
+                    ),
+                )
+            markers = self._sqlite.execute(
+                "SELECT schema_version FROM task_graph_outbox_schema WHERE singleton = 1"
+            )
+            if len(markers) != 1 or markers[0][0] != _OUTBOX_SCHEMA_VERSION:
+                raise TaskGraphOutboxSchemaError(
+                    found=tuple(markers),
+                    reason=(
+                        "task_graph_outbox layout version is not the supported version 2; "
+                        "run its explicit backed-up migration"
+                    ),
+                )
+            columns = self._sqlite.execute("PRAGMA table_info(task_graph_outbox)")
+            if tuple(str(row[1]) for row in columns) != _OUTBOX_COLUMNS:
+                raise TaskGraphOutboxSchemaError(
+                    found=tuple(str(row[1]) for row in columns),
+                    reason="task_graph_outbox version marker has an unknown column layout",
+                )
+            predecessor = next((row for row in columns if row[1] == "predecessor_node_id"), None)
+            indexes = self._sqlite.execute("PRAGMA index_list(task_graph_outbox)")
+            if (
+                predecessor is None
+                or bool(predecessor[3])
+                or not any(
+                    row[1] == "task_graph_outbox_logical" and bool(row[2]) for row in indexes
+                )
+            ):
+                raise TaskGraphOutboxSchemaError(
+                    found="version-2-marker-with-incompatible-columns",
+                    reason="task_graph_outbox version marker disagrees with its physical layout",
+                )
 
-        self._sqlite.run(_ddl)
+            self._sqlite.run(lambda conn: conn.executescript(_SCHEMA_SQL))
+        else:
+
+            def _create_fresh(conn: sqlite3.Connection) -> None:
+                conn.executescript(_SCHEMA_SQL)
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS task_graph_outbox_schema ("
+                    "singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
+                    "schema_version INTEGER NOT NULL)"
+                )
+                conn.execute(
+                    "INSERT INTO task_graph_outbox_schema "
+                    "(singleton, schema_version) VALUES (1, ?)",
+                    (_OUTBOX_SCHEMA_VERSION,),
+                )
+
+            self._sqlite.run(_create_fresh)
         self._ensured = True
 
     def table_names(self) -> frozenset[str]:
@@ -641,6 +729,41 @@ class TaskGraphStateSqliteStore:
             self._sqlite.run(_write)
         finally:
             self._crash_after = None
+
+    def put_initial_publication(
+        self,
+        graph: TaskGraph,
+        *,
+        occupancy: Mapping[str, object],
+        journal_seq: int,
+        recorded_at: int,
+        outbox: TaskGraphOutboxRow,
+    ) -> None:
+        """Commit root graph state and its explicit predecessor-free outbox row."""
+        self.ensure_schema()
+        occupancy_json = _dump(occupancy)
+        payload = _dump(graph.to_payload())
+        crash = self._initial_crash
+        self._initial_crash = False
+
+        def _write(conn: sqlite3.Connection) -> None:
+            _write_graph_rows(
+                conn,
+                graph,
+                occupancy_json=occupancy_json,
+                payload=payload,
+                journal_seq=journal_seq,
+                recorded_at=recorded_at,
+            )
+            if crash:
+                maybe_crash("initial_outbox", "initial_outbox")
+            write_outbox_rows(conn, (outbox,))
+
+        self._sqlite.run(_write)
+
+    def arm_initial_crash(self) -> None:
+        """Test seam: raise before root outbox insertion to prove rollback."""
+        self._initial_crash = True
 
     def load_edges(self, graph_id: str) -> Result[tuple[TaskGraphEdge, ...]]:
         self.ensure_schema()
@@ -805,7 +928,19 @@ class TaskGraphStateService:
         self._sqlite_store = TaskGraphStateSqliteStore(sqlite)
         if journal is not None:
             self.journal = journal
-        self._sqlite_store.ensure_schema()
+        try:
+            self._sqlite_store.ensure_schema()
+        except TaskGraphOutboxSchemaError as exc:
+            return policy_rejection(
+                "task_graph_outbox_schema",
+                exc.reason,
+                supported_version=_OUTBOX_SCHEMA_VERSION,
+                found=exc.found,
+                migration_command=(
+                    "python -m qma.daemon.persistence.task_graph_outbox_migration "
+                    "SOURCE.sqlite BACKUP.sqlite DESTINATION.sqlite"
+                ),
+            )
         return self.reload()
 
     def drop_memory_cache(self) -> None:
@@ -963,9 +1098,7 @@ class TaskGraphStateService:
         occupancy = dict(self._occupancy.get(graph.id, empty_occupancy()))
         slots_raw = occupancy.get("slots", {})
         slots = (
-            dict(cast("Mapping[str, object]", slots_raw))
-            if isinstance(slots_raw, Mapping)
-            else {}
+            dict(cast("Mapping[str, object]", slots_raw)) if isinstance(slots_raw, Mapping) else {}
         )
         previous = slots.get(task_id)
         slot = dict(cast("Mapping[str, object]", previous)) if isinstance(previous, Mapping) else {}
@@ -1074,6 +1207,91 @@ class TaskGraphStateService:
         self._occupancy[graph.id] = occupancy_body
         return Ok(graph)
 
+    def publish_initial_task(
+        self,
+        graph: TaskGraph,
+        task: TaskRecord,
+        *,
+        config_revision: int,
+        operation_input_hash: str,
+        occupancy: Mapping[str, object] | None = None,
+        scope_path: object = (),
+    ) -> Result[TaskGraphOutboxRow]:
+        """Durably publish a compiled root READY Task through the existing outbox.
+
+        Initial work has no predecessor; the row's null predecessor plus the
+        reserved initial-root partition represents that source explicitly.
+        The graph projection and root row are committed together.
+        """
+        store = self._sqlite_store
+        if store is None:
+            return policy_rejection(
+                "task_graph_outbox",
+                "initial root publication requires the durable Task Graph projection",
+            )
+        built = build_initial_outbox_row(
+            graph=graph,
+            task=task,
+            config_revision=config_revision,
+            operation_input_hash=operation_input_hash,
+        )
+        if is_refusal(built):
+            return built
+        row = built.value
+        existing_rows = self.outbox_rows(graph.id)
+        prior = tuple(
+            candidate for candidate in existing_rows if candidate.unique_key() == row.unique_key()
+        )
+        if prior:
+            current = prior[0]
+            if (
+                len(prior) == 1
+                and current.logical_invocation_id == row.logical_invocation_id
+                and dict(current.target) == dict(row.target)
+                and current.envelope_hash == row.envelope_hash
+                and current.predecessor_node_id is None
+            ):
+                return Ok(prior[0])
+            return policy_rejection(
+                "task_graph_outbox",
+                "initial root publication is immutable for this graph/task key",
+                task_id=task.id,
+            )
+        declared = self._ensure_declared()
+        if is_refusal(declared):
+            return declared
+        occupancy_body = self._occupancy_body(graph, occupancy)
+        journal_seq = 0
+        recorded_at = 0
+        if self.journal is not None:
+            appended = self.journal.append_event(
+                _INITIAL_ROOT_PUBLISHED_EVENT,
+                scope_path=scope_path,
+                payload={
+                    "graph_id": graph.id,
+                    "root_task_id": task.id,
+                    "root_node_id": task.node_id,
+                    "logical_invocation_id": row.logical_invocation_id,
+                    "outbox_key": list(row.unique_key()),
+                    "outbox": dict(row.to_payload()),
+                },
+            )
+            if is_refusal(appended):
+                return appended
+            journal_seq = appended.value.record.journal_seq
+            recorded_at = appended.value.record.recorded_at
+        store.put_initial_publication(
+            graph,
+            occupancy=occupancy_body,
+            journal_seq=journal_seq,
+            recorded_at=recorded_at,
+            outbox=row,
+        )
+        self._rows[graph.id] = graph
+        self._occupancy[graph.id] = occupancy_body
+        self._outbox[row.unique_key()] = row
+        return Ok(row)
+
     def arm_completion_crash(self, after: str) -> Result[None]:
         """Arm an in-transaction crash so tests can prove rollback (FR-WF-46)."""
         if self._sqlite_store is None:
@@ -1082,6 +1300,15 @@ class TaskGraphStateService:
                 "completion-crash injection requires daemon sqlite",
             )
         self._sqlite_store.arm_completion_crash(after)
+        return Ok(None)
+
+    def arm_initial_publication_crash(self) -> Result[None]:
+        """Test seam for the atomic root-graph/outbox publication boundary."""
+        if self._sqlite_store is None:
+            return policy_rejection(
+                "outbox", "initial-publication crash injection requires daemon sqlite"
+            )
+        self._sqlite_store.arm_initial_crash()
         return Ok(None)
 
     def _occupancy_body(
@@ -1218,6 +1445,57 @@ class TaskGraphStateService:
         if graph_run_id is None:
             return rows
         return tuple(row for row in rows if row.graph_run_id == graph_run_id)
+
+    def accepted_invocation(
+        self, logical_invocation_id: object
+    ) -> Result[tuple[TaskGraphOutboxRow, ReceiverAcceptance]]:
+        """Resolve the one durably accepted outbox invocation and its receipt."""
+        if not isinstance(logical_invocation_id, str) or not logical_invocation_id.strip():
+            return _invalid("logical_invocation_id", "accepted invocation lookup requires an id")
+        rows = tuple(
+            row
+            for row in self._outbox.values()
+            if row.logical_invocation_id == logical_invocation_id
+        )
+        if len(rows) != 1:
+            return _invalid(
+                "logical_invocation_id",
+                "an accepted operation resolves to exactly one durable outbox row",
+                given=logical_invocation_id,
+                matches=len(rows),
+            )
+        row = rows[0]
+        receipt = self._receiver.get(logical_invocation_id)
+        if (
+            row.acceptance_state is not OutboxAcceptanceState.ACCEPTED
+            or receipt is None
+            or receipt.receiver_acceptance_id != row.receiver_acceptance_id
+            or receipt.logical_invocation_id != row.logical_invocation_id
+        ):
+            return policy_rejection(
+                "receiver_acceptance",
+                "outbox acceptance and receiver receipt are one durable association",
+                logical_invocation_id=logical_invocation_id,
+            )
+        return Ok((row, receipt))
+
+    def accepted_outbox_row(self, logical_invocation_id: object) -> Result[TaskGraphOutboxRow]:
+        """Resolve a uniquely persisted outbox row before worker acceptance."""
+        if not isinstance(logical_invocation_id, str) or not logical_invocation_id.strip():
+            return _invalid("logical_invocation_id", "outbox lookup requires an id")
+        rows = tuple(
+            row
+            for row in self._outbox.values()
+            if row.logical_invocation_id == logical_invocation_id
+        )
+        if len(rows) != 1:
+            return _invalid(
+                "logical_invocation_id",
+                "an invocation resolves to exactly one persisted outbox row",
+                given=logical_invocation_id,
+                matches=len(rows),
+            )
+        return Ok(rows[0])
 
     def eligibility_rows(self, graph_run_id: str | None = None) -> tuple[SuccessorEligibility, ...]:
         rows = tuple(self._eligibility.values())

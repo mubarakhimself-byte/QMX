@@ -8,6 +8,7 @@ import runpy
 import shutil
 from pathlib import Path
 
+from pytest import MonkeyPatch
 from qma.core.barriers import assert_no_qmb_import, scan_qmb_imports, validate_worker_image
 from qma.core.content import content_address
 from qma.core.ontology import ActorId, DeskSlug
@@ -146,7 +147,7 @@ def test_cli_transport_spawns_documented_double_not_recording(tmp_path: Path) ->
 
 
 def test_registered_ct12_and_attempt_reach_spawned_cli_environment(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     data_ref = "fp1:sha256:" + ("d" * 64)
     evidence_ref = "fp1:sha256:" + ("e" * 64)
@@ -171,6 +172,7 @@ def test_registered_ct12_and_attempt_reach_spawned_cli_environment(
     registered = experiments.register(
         spec.value,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:cli-test",
     )
     assert is_ok(registered)
@@ -192,6 +194,8 @@ def test_registered_ct12_and_attempt_reach_spawned_cli_environment(
             environment_ref="env:docker",
             experiment_spec_fp1=registered.value.spec.spec_fp1,
             evidence_ref=evidence_ref,
+            dispatch_lease=lease,
+            model_deployment_ref="deploy:cli-test",
         )
         assert is_ok(placed)
         assert transport.wait(placed.value.handle.job_id, timeout=10.0) == 0
@@ -243,8 +247,9 @@ def test_second_qmb_run_in_occupied_environment_is_refused(tmp_path: Path) -> No
         )
         assert is_ok(other)
         assert len(transport.spawned) == 2
-        completed = service.observe_outcome(first.value.handle.job_id, JobHandleState.DONE)
+        completed = service.wait_and_observe(first.value.handle.job_id, timeout=10.0)
         assert is_ok(completed)
+        assert completed.value.state is JobHandleState.UNKNOWN
         retry = service.invoke(
             QMB_BACKTEST_TOOL_ID,
             owner=owner,
@@ -253,7 +258,8 @@ def test_second_qmb_run_in_occupied_environment_is_refused(tmp_path: Path) -> No
             experiment_spec_fp1="fp1:spec-4",
             evidence_ref="evidence:recorded-4",
         )
-        assert is_ok(retry)
+        assert is_refusal(retry)
+        assert retry.context["field"] == "qmb_job"
         assert is_refusal(service.set_parallelism(8))
         assert is_refusal(service.append_run_ledger({"line": 1}))
         assert is_refusal(service.store_artifact({"ct32": True}))
@@ -375,7 +381,7 @@ def test_composed_process_default_door_is_cli(tmp_path: Path) -> None:
         process.close()
 
 
-def test_real_qmb_binary_is_spawned_when_on_path(tmp_path: Path) -> None:
+def test_real_qmb_binary_preflights_operator_binding_before_spawn(tmp_path: Path) -> None:
     found = shutil.which("qmb")
     argv0 = (found,) if found is not None else cli_qmb_test_double_argv0(tmp_path / "qmb_double.py")
     transport = CliQmbDoorTransport(argv0=argv0, receipt_path=str(tmp_path / "receipt.json"))
@@ -394,11 +400,15 @@ def test_real_qmb_binary_is_spawned_when_on_path(tmp_path: Path) -> None:
             experiment_spec_fp1="fp1:spec",
             evidence_ref="evidence:recorded",
         )
-        assert is_ok(placed)
-        assert len(transport.spawned) == 1
-        assert transport.spawned[0].pid > 0
-        assert transport.spawned[0].command[0] == argv0[0]
-        assert transport.spawned[0].argv == QMB_CLI_ARGV
+        if found is not None:
+            assert not is_ok(placed)
+            assert transport.spawned == ()
+        else:
+            assert is_ok(placed)
+            assert len(transport.spawned) == 1
+            assert transport.spawned[0].pid > 0
+            assert transport.spawned[0].command[0] == argv0[0]
+            assert transport.spawned[0].argv == QMB_CLI_ARGV
     finally:
         transport.close()
 

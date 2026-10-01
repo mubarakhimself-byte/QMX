@@ -64,6 +64,7 @@ def test_register_resolves_ledger_authored_by_dispatch_lease_holder() -> None:
     registered = service.register(
         _spec(),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -82,8 +83,59 @@ def test_register_resolves_ledger_authored_by_dispatch_lease_holder() -> None:
         body={"note": "baseline recorded"},
     )
     assert is_ok(appended)
-    assert appended.value.entries[0].authored_by == "agent-analyst-1"
-    assert appended.value.entries[0].model_deployment_ref == "deploy:analyst-v1"
+    assert appended.value.entries[-1].authored_by == "agent-analyst-1"
+    assert appended.value.entries[-1].model_deployment_ref == "deploy:analyst-v1"
+
+
+def test_same_registering_task_reacquisition_can_author_current_deployment() -> None:
+    service = ExperimentSpecService()
+    original = _lease(holder="agent-registration-holder")
+    registered = service.register(
+        _spec(config="reacquired"),
+        dispatch_lease=original,
+        registering_attempt_no=3,
+        model_deployment_ref="deploy:registration",
+    )
+    assert is_ok(registered)
+    current = _lease(holder="agent-current-holder")
+    # This direct service-layer control supplies the typed receipt that the
+    # production dispatcher persists only after checking the current Task,
+    # outbox, lease, and TaskLedger attempt.
+    worker_acceptance = {
+        "class": "qma-task-worker-acceptance-v1",
+        "task_id": current.task_id,
+        "mission_id": current.mission_id,
+        "owner_actor_id": current.owner.value,
+        "dispatch_lease": dict(current.to_payload()),
+        "attempt_no": 4,
+        "model_deployment_ref": "deploy:current-attempt",
+        "run_fp1": registered.value.spec.spec_fp1,
+        "evidence_ref": "fp1:sha256:" + ("a" * 64),
+    }
+    authorized = service.validate_coordinated_run(
+        spec_fp1=registered.value.spec.spec_fp1,
+        dispatch_lease=current,
+        model_deployment_ref="deploy:current-attempt",
+        evidence_ref=worker_acceptance["evidence_ref"],
+        worker_acceptance=worker_acceptance,
+    )
+    assert is_ok(authorized)
+    before_append = service.resolve(registered.value.spec.spec_fp1)
+    assert is_ok(before_append)
+    assert before_append.value.ledger.author_agent_id == "agent-registration-holder"
+    appended = service.record_coordinated_run(
+        spec_fp1=registered.value.spec.spec_fp1,
+        dispatch_lease=current,
+        model_deployment_ref="deploy:current-attempt",
+    )
+    assert is_ok(appended)
+    assert appended.value.author_agent_id == "agent-current-holder"
+    assert appended.value.entries[-1].authored_by == "agent-current-holder"
+    assert appended.value.entries[-1].model_deployment_ref == "deploy:current-attempt"
+    resolved = service.resolve(registered.value.spec.spec_fp1)
+    assert is_ok(resolved)
+    assert resolved.value.registering_attempt_no == 3
+    assert resolved.value.registering_deployment_ref == "deploy:registration"
 
 
 def test_equivalent_specs_deduplicate_and_keep_one_author() -> None:
@@ -91,12 +143,14 @@ def test_equivalent_specs_deduplicate_and_keep_one_author() -> None:
     first = service.register(
         _spec(config="dup"),
         dispatch_lease=_lease(),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
     )
     assert is_ok(first)
     second = service.register(
         _spec(config="dup"),
         dispatch_lease=_lease(task_id="task-exp-2", holder="agent-other"),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:b",
     )
     assert is_ok(second)
@@ -119,6 +173,7 @@ def test_code_and_config_successors_write_append_only_ct07_edges() -> None:
     base = service.register(
         _spec(),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
     )
     assert is_ok(base)
@@ -127,6 +182,7 @@ def test_code_and_config_successors_write_append_only_ct07_edges() -> None:
         predecessor_fp1=base.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_CODE,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
         code_ref=_COMMIT,
     )
@@ -141,6 +197,7 @@ def test_code_and_config_successors_write_append_only_ct07_edges() -> None:
         predecessor_fp1=base.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
         resolved_config_ref=_fp("cfg-sweep"),
     )
@@ -164,6 +221,7 @@ def test_in_place_mutation_and_branch_per_parameter_are_refused() -> None:
     registered = service.register(
         _spec(),
         dispatch_lease=_lease(),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
     )
     assert is_ok(registered)
@@ -176,6 +234,7 @@ def test_in_place_mutation_and_branch_per_parameter_are_refused() -> None:
         predecessor_fp1=registered.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
         dispatch_lease=_lease(),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
         resolved_config_ref="git:branch:params",
     )
@@ -189,6 +248,7 @@ def test_gap_0085_remains_excluded_on_daemon_successor() -> None:
     registered = service.register(
         _spec(),
         dispatch_lease=_lease(),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
     )
     assert is_ok(registered)
@@ -196,6 +256,7 @@ def test_gap_0085_remains_excluded_on_daemon_successor() -> None:
         predecessor_fp1=registered.value.spec.spec_fp1,
         change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
         dispatch_lease=_lease(),
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:a",
         resolved_config_ref=_fp("cfg-gap"),
         extra={"Filter": {"name": "session"}},

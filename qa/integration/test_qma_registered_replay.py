@@ -29,7 +29,7 @@ from qma.daemon.experiments import ExperimentSpecService
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.daemon.taskgraph.compiler import CompileRequest
-from qma.daemon.taskgraph.records import DispatchLease
+from qma.daemon.taskgraph.records import DispatchLease, GraphTemplate
 from qma.daemon.tools import ToolRegistry
 from qma.wire.invocation_envelope import compute_input_hash
 from qma.wire.vocabulary import WireCommand, WireQuery
@@ -105,15 +105,8 @@ def test_registered_spec_runs_through_backtesting_service_and_real_qmb_child(
             experiments.register(
                 spec,
                 dispatch_lease=lease,
+                registering_attempt_no=0,
                 model_deployment_ref="deploy:local-replay-test",
-            )
-        )
-        _ok(
-            experiments.append_evidence(
-                spec_fp1=registered.spec.spec_fp1,
-                dispatch_lease=lease,
-                model_deployment_ref="deploy:local-replay-test",
-                body={"note": "local registered deployment provenance"},
             )
         )
         registered_rows.append(registered)
@@ -147,6 +140,7 @@ def test_registered_spec_runs_through_backtesting_service_and_real_qmb_child(
         environments=environments,
         transport=transport,
         experiments=experiments,
+        artifact_root=tmp_path / "qma-artifacts",
     )
     try:
         _ok(service.install())
@@ -168,7 +162,7 @@ def test_registered_spec_runs_through_backtesting_service_and_real_qmb_child(
         assert len(transport.spawned) == 1
         assert transport.spawned[0].pid > 0
         assert transport.wait(placement.handle.job_id, timeout=60.0) == 0
-        completed = _ok(service.observe_outcome(placement.handle.job_id, JobHandleState.DONE))
+        completed = _ok(service.wait_and_observe(placement.handle.job_id, timeout=60.0))
         assert completed.state is JobHandleState.DONE
 
         ledger_files = tuple(roots["terminal_ledger"].rglob("ledger.jsonl"))
@@ -185,8 +179,13 @@ def test_registered_spec_runs_through_backtesting_service_and_real_qmb_child(
         transport.close()
 
 
+@pytest.mark.parametrize("pinned_as_of", [None, "2026-09-30T00:00:00Z"])
+@pytest.mark.parametrize("release_after_preflight", [False, True])
 def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pinned_as_of: str | None,
+    release_after_preflight: bool,
 ) -> None:
     daemon_root = tmp_path / "daemon"
     seed = tmp_path / "seed"
@@ -209,14 +208,69 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
         role=RoleName.RESEARCHER,
         name="Registered replay test",
     )
-    _ok(process._mailboxes.open_for_quant(quant))
-    compiled = _ok(
-        process.roster.compiler.compile(
-            CompileRequest(goal=Goal(text="run a recorded QMB replay"), owner=quant)
+    # The registered Quant fixture is seeded at the process ownership boundary.
+    _ok(process._mailboxes.open_for_quant(quant))  # pyright: ignore[reportPrivateUsage]
+    loaded = process.roster.loader.get("analysis-backtest")
+    assert loaded is not None
+    tool = next(
+        row
+        for row in loaded.published
+        if row.point == "tool" and row.qualified_id == QMB_BACKTEST_TOOL_ID
+    )
+    preflight_env, _preflight_roots, preflight_request_ref = _prepare_runtime_builder()(
+        tmp_path / "qmb-runtime-preflight",
+        experiment_spec_fp1=_ok(Fingerprint.try_create("fp1:sha256:" + ("0" * 64))),
+    )
+    split_fp1 = _ok(Fingerprint.try_create(preflight_env["QMA_QMB_SPLIT_MANIFEST_FP1"]))
+    config_ref = _ok(content_address({"class": "qma-ct40-replay-runtime-v1"}))
+    candidate_spec = _ok(
+        ExperimentSpec.try_create(
+            data_ref=split_fp1.value,
+            environment_ref="env:local",
+            seed=3,
+            model_and_harness_version={"model": "local-replay-test", "harness": "qmb"},
+            cost_assumptions={"spread_usd_cents": 0},
+            resolved_config_ref=config_ref.value,
         )
     )
-    graph = process.task_dispatcher.materialize(compiled.task_graph, mission=compiled.mission)
-    task_id = graph.tasks[0].id
+    template = GraphTemplate(
+        qualified_id="qma-test:registered-qmb-replay",
+        version="1",
+        nodes=(
+            {
+                "id": "run",
+                "kind": "task",
+                "intent": "execute registered replay",
+                "inputs": {
+                    "op_id": "qmb.backtest.run",
+                    "op_version": 1,
+                    "instance_id": loaded.instance_id,
+                    "config_revision": 2,
+                    "run_fp1": candidate_spec.spec_fp1,
+                    "evidence_ref": preflight_request_ref.value,
+                    "model_deployment_ref": "deploy:local-replay-test",
+                    **({"as_of": pinned_as_of} if pinned_as_of is not None else {}),
+                },
+            },
+        ),
+    )
+    _ok(process.roster.templates.register(template))
+    compiled = _ok(
+        process.roster.compiler.compile(
+            CompileRequest(
+                goal=Goal(text="run a recorded QMB replay"),
+                owner=quant,
+                graph_template_ref=template.qualified_id,
+                graph_template_version=template.version,
+                require_decomposition_reasoning=False,
+            )
+        )
+    )
+    graph = compiled.task_graph
+    root_task = graph.task_for_node("run")
+    assert root_task is not None
+    task_id = root_task.id
+    process.task_dispatcher.materialize(graph, mission=compiled.mission)
     accepted = _ok(
         process.task_dispatcher.dispatch_task(
             task_id=task_id,
@@ -224,8 +278,9 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
             environment_kind="qmb-operator-replay",
         )
     )
-    # QMB receives the actual registered Task dispatch lease; QMA does not
-    # claim a compute-environment lease for QMB's separately owned runner.
+    outbox_rows = process.task_graphs.outbox_rows(graph.id)
+    assert len(outbox_rows) == 1
+    outbox_row = outbox_rows[0]
     assert accepted.dispatch_lease.task_id == task_id
     assert accepted.environment_lease is None
     lease = accepted.dispatch_lease
@@ -236,13 +291,6 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 provider_ref="local-ct40-recorded-replay",
             )
         )
-    )
-    loaded = process.roster.loader.get("analysis-backtest")
-    assert loaded is not None
-    tool = next(
-        row
-        for row in loaded.published
-        if row.point == "tool" and row.qualified_id == QMB_BACKTEST_TOOL_ID
     )
     (daemon_root / "operator-config.json").write_text(
         json.dumps(
@@ -273,19 +321,14 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 resolved_config_ref=config_ref.value,
             )
         )
+        registration_ledger = process.task_dispatcher.ledgers.get(lease.task_id)
+        assert registration_ledger is not None
         registered = _ok(
             process.experiments.register(
                 spec,
                 dispatch_lease=lease,
+                registering_attempt_no=registration_ledger.attempt_no,
                 model_deployment_ref="deploy:local-replay-test",
-            )
-        )
-        _ok(
-            process.experiments.append_evidence(
-                spec_fp1=registered.spec.spec_fp1,
-                dispatch_lease=lease,
-                model_deployment_ref="deploy:local-replay-test",
-                body={"note": "recorded local replay model deployment"},
             )
         )
         registered_rows.append(registered)
@@ -294,12 +337,30 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
     runtime_env, roots, request_ref = _prepare_runtime_builder()(
         tmp_path / "qmb-runtime", register_experiment=register_spec
     )
+    assert request_ref == preflight_request_ref
     monkeypatch.setenv("QMB_REPLAY_RUNTIME_ROOT", runtime_env["QMB_REPLAY_RUNTIME_ROOT"])
     executable = os.environ.get("QMB_EXECUTABLE")
     if executable:
         monkeypatch.setenv("PATH", f"{Path(executable).parent}{os.pathsep}{os.environ['PATH']}")
     registered_spec = cast(Any, registered_rows[0]).spec
+    assert registered_spec.spec_fp1 == candidate_spec.spec_fp1
+    registered_ledger = process.experiments.resolve(registered_spec.spec_fp1)
+    assert is_ok(registered_ledger)
+    original_ledger_entry_count = len(registered_ledger.value.ledger.entries)
+    if release_after_preflight:
+        original_preflight = process.backtesting.preflight_registered_run
 
+        def preflight_then_release(**kwargs: Any) -> object:
+            prepared = original_preflight(**kwargs)
+            if is_ok(prepared):
+                process.task_dispatcher.store.release_leases(task_id)
+            return prepared
+
+        monkeypatch.setattr(
+            process.backtesting,
+            "preflight_registered_run",
+            preflight_then_release,
+        )
     descriptor = next(
         row
         for row in public_operation_descriptors()
@@ -308,6 +369,7 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
     payload = {
         "run_fp1": registered_spec.spec_fp1,
         "evidence_ref": request_ref.value,
+        **({"as_of": pinned_as_of} if pinned_as_of is not None else {}),
     }
     input_hash = _ok(compute_input_hash(payload, descriptor=descriptor))
     listener_tests = (
@@ -356,14 +418,14 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                     "expected_revision": 0,
                     "op_id": descriptor.op_id,
                     "op_version": descriptor.version,
-                    "parameter_ceiling": {"allow_keys": ["run_fp1", "evidence_ref"]},
+                    "parameter_ceiling": {"allow_keys": ["run_fp1", "evidence_ref", "as_of"]},
                     "expires_at": "2099-01-01T00:00:00Z",
                 },
             )
             assert "error" not in granted, granted
             grant_result = cast(dict[str, object], granted["result"])
             envelope = {
-                "logical_invocation_id": task_id,
+                "logical_invocation_id": outbox_row.logical_invocation_id,
                 "attempt_id": 1,
                 "op_id": descriptor.op_id,
                 "op_version": descriptor.version,
@@ -382,8 +444,53 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 "caller_kind": "user",
                 "caller_session_ref": session_ref,
             }
-            invoked = await request(
+            unaccepted_envelope = dict(envelope)
+            unaccepted_envelope["logical_invocation_id"] = "inv:qmb-unaccepted-task-control"
+            unaccepted_envelope["idempotency_key"] = "idem:qmb-unaccepted-task-control"
+            unaccepted = await request(
                 4,
+                WireCommand.START_MISSION.value,
+                {
+                    "product_session_ref": session_ref,
+                    "envelope": unaccepted_envelope,
+                    "payload": payload,
+                },
+            )
+            assert "error" in unaccepted, unaccepted
+            assert isinstance(process.backtesting.transport, CliQmbDoorTransport)
+            assert not process.backtesting.transport.spawned
+            unaccepted_receipt = process.task_dispatcher.accepted_task_for_invocation(
+                "inv:qmb-unaccepted-task-control"
+            )
+            assert not is_ok(unaccepted_receipt)
+
+            # The public grant permits as_of, but this accepted Task did not pin
+            # that optional input. Recomputing a caller-controlled envelope hash
+            # must not expand the dispatched Task's authorized payload.
+            altered_payload = {
+                **payload,
+                "as_of": "2026-10-01T00:00:00Z",
+            }
+            altered_hash = _ok(compute_input_hash(altered_payload, descriptor=descriptor))
+            altered_envelope = {**envelope, "input_hash": altered_hash}
+            altered_envelope["idempotency_key"] = "idem:qma-ct40-altered-as-of"
+            altered = await request(
+                5,
+                WireCommand.START_MISSION.value,
+                {
+                    "product_session_ref": session_ref,
+                    "envelope": altered_envelope,
+                    "payload": altered_payload,
+                },
+            )
+            assert "error" in altered, altered
+            assert not process.backtesting.transport.spawned
+            altered_receipt = process.task_dispatcher.accepted_task_for_invocation(
+                outbox_row.logical_invocation_id
+            )
+            assert not is_ok(altered_receipt)
+            invoked = await request(
+                6,
                 WireCommand.START_MISSION.value,
                 {
                     "product_session_ref": session_ref,
@@ -391,18 +498,38 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                     "payload": payload,
                 },
             )
+            if pinned_as_of is not None:
+                assert "error" in invoked, invoked
+                assert not process.backtesting.transport.spawned
+                refused_receipt = process.task_dispatcher.accepted_task_for_invocation(
+                    outbox_row.logical_invocation_id
+                )
+                assert not is_ok(refused_receipt)
+                assert process.backtesting.occupying_job("env:local") is None
+                return "", "", ""
+            if release_after_preflight:
+                assert "error" in invoked, invoked
+                assert not process.backtesting.transport.spawned
+                stale_receipt = process.task_dispatcher.accepted_task_for_invocation(
+                    outbox_row.logical_invocation_id
+                )
+                assert not is_ok(stale_receipt)
+                assert process.jobs.handle_for("qmb:local:" + task_id) is None
+                assert process.backtesting.occupying_job("env:local") is None
+                current = process.experiments.resolve(registered_spec.spec_fp1)
+                assert is_ok(current)
+                assert len(current.value.ledger.entries) == original_ledger_entry_count
+                return "", "", ""
             assert "error" not in invoked, invoked
             invoke_result = cast(dict[str, object], invoked["result"])
             job_id = cast(str, invoke_result["job_id"])
             assert process.jobs.handle_for(job_id) is not None
             assert process.backtesting.occupying_job("env:local") == job_id
             assert isinstance(process.backtesting.transport, CliQmbDoorTransport)
-            exit_code = process.backtesting.transport.wait(job_id, timeout=60.0)
-            assert exit_code == 0
             terminal_result: dict[str, object] = {}
-            for _ in range(100):
+            for _ in range(1200):
                 terminal = await request(
-                    5,
+                    7,
                     WireQuery.GET_JOB.value,
                     {"product_session_ref": session_ref, "handle_id": job_id},
                 )
@@ -411,9 +538,10 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 if terminal_result["state"] in {
                     JobHandleState.DONE.value,
                     JobHandleState.FAILED.value,
+                    JobHandleState.UNKNOWN.value,
                 }:
                     break
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.05)
             assert terminal_result["state"] == JobHandleState.DONE.value
 
             # Revoking the retained dispatch authority prevents a second child
@@ -433,7 +561,7 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
             )
             assert "error" in refused_replay, refused_replay
             assert process.jobs.handle_for(job_id) is not None
-            assert len(cast(CliQmbDoorTransport, process.backtesting.transport).spawned) == 1
+            assert len(process.backtesting.transport.spawned) == 1
 
             reconnect_reader, reconnect_writer = await listener_helpers._upgrade_paired_ws(
                 bound.host, bound.port, pairing_proof
@@ -489,6 +617,9 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
 
     try:
         session_ref, job_id, pairing_proof = asyncio.run(run_over_authenticated_listener())
+        if pinned_as_of is not None or release_after_preflight:
+            process.close()
+            return
         process.close()
         process = _ok(
             DaemonProcess.compose(
@@ -566,15 +697,8 @@ def test_coordinated_lease_and_deployment_refusal_happen_before_spawn(tmp_path: 
             experiments.register(
                 spec,
                 dispatch_lease=lease,
+                registering_attempt_no=0,
                 model_deployment_ref="deploy:preflight",
-            )
-        )
-        _ok(
-            experiments.append_evidence(
-                spec_fp1=registered.spec.spec_fp1,
-                dispatch_lease=lease,
-                model_deployment_ref="deploy:preflight",
-                body={"note": "registered deployment provenance"},
             )
         )
         registered_rows.append(registered)

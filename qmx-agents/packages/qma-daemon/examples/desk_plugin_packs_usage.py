@@ -74,9 +74,9 @@ def _run(plugins_root: Path, double_root: Path) -> None:
         evidence_ref="evidence:recorded-2",
     )
     assert is_refusal(again)
-    assert is_ok(
-        roster.backtesting.observe_outcome(placed.value.handle.job_id, JobHandleState.DONE)
-    )
+    unknown = roster.backtesting.observe_outcome(placed.value.handle.job_id, JobHandleState.UNKNOWN)
+    assert is_ok(unknown)
+    assert unknown.value.state is JobHandleState.UNKNOWN
     transport.close()
 
 

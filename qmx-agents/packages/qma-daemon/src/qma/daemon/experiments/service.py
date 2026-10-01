@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, cast
 
 from qma.core.content import content_address
 from qma.core.ports.experiments import (
@@ -66,6 +66,8 @@ class RegisteredExperiment:
     spec: ExperimentSpec
     ledger: ExperimentLedger
     dispatch_lease: DispatchLease
+    registering_attempt_no: int
+    registering_deployment_ref: str
     lineage_edge: LineageEdge | None = None
 
     def to_payload(self) -> Mapping[str, object]:
@@ -73,6 +75,8 @@ class RegisteredExperiment:
             "spec": dict(self.spec.to_payload()),
             "ledger": dict(self.ledger.to_payload()),
             "dispatch_lease": dict(self.dispatch_lease.to_payload()),
+            "registering_attempt_no": self.registering_attempt_no,
+            "registering_deployment_ref": self.registering_deployment_ref,
         }
         if self.lineage_edge is not None:
             payload["lineage_edge"] = {
@@ -136,6 +140,8 @@ class ExperimentSpecService:
         self._specs: dict[str, ExperimentSpec] = {}
         self._ledger_store = ledgers if ledgers is not None else ExperimentLedgerStore()
         self._leases: dict[str, DispatchLease] = {}
+        self._registering_attempts: dict[str, int] = {}
+        self._registering_deployments: dict[str, str] = {}
         self._lineage: dict[str, LineageEdge] = {}
         self._edge_rows: list[LineageEdge] = []
         self._durable: ExperimentSqliteStore | None = None
@@ -176,6 +182,8 @@ class ExperimentSpecService:
         """Drop in-memory maps. Sqlite remains product truth."""
         self._specs.clear()
         self._leases.clear()
+        self._registering_attempts.clear()
+        self._registering_deployments.clear()
         self._lineage.clear()
         self._edge_rows.clear()
 
@@ -189,11 +197,17 @@ class ExperimentSpecService:
             return loaded
         self._specs = {}
         self._leases = {}
+        self._registering_attempts = {}
+        self._registering_deployments = {}
         self._lineage = {}
         self._edge_rows = []
         for snapshot in loaded.value:
             self._specs[snapshot.spec.spec_fp1] = snapshot.spec
             self._leases[snapshot.spec.spec_fp1] = snapshot.lease
+            self._registering_attempts[snapshot.spec.spec_fp1] = snapshot.registering_attempt_no
+            self._registering_deployments[snapshot.spec.spec_fp1] = (
+                snapshot.registering_deployment_ref
+            )
             self._ledger_store.install_restored(
                 snapshot.ledger,
                 snapshot.lease,
@@ -298,6 +312,7 @@ class ExperimentSpecService:
         spec: ExperimentSpec,
         *,
         dispatch_lease: DispatchLease,
+        registering_attempt_no: object,
         model_deployment_ref: object,
         continuity_kind: object = COORDINATED_CONTINUITY_KIND,
     ) -> Result[RegisteredExperiment]:
@@ -309,6 +324,11 @@ class ExperimentSpecService:
             return invalid_input(
                 "model_deployment_ref",
                 "Experiment Ledger entries carry the model deployment used",
+            )
+        if type(registering_attempt_no) is not int or registering_attempt_no < 0:
+            return invalid_input(
+                "registering_attempt_no",
+                "registration pins the observed nonnegative TaskLedger attempt",
             )
         if not dispatch_lease.holder_agent_id.strip():
             return invalid_input(
@@ -330,6 +350,8 @@ class ExperimentSpecService:
                     spec=existing,
                     ledger=existing_ledger,
                     dispatch_lease=self._leases[spec.spec_fp1],
+                    registering_attempt_no=self._registering_attempts[spec.spec_fp1],
+                    registering_deployment_ref=self._registering_deployments[spec.spec_fp1],
                     lineage_edge=self._lineage.get(spec.spec_fp1),
                 )
             )
@@ -346,9 +368,29 @@ class ExperimentSpecService:
             registering_lease=dispatch_lease,
             ledger_ref=ledger_ref,
         )
+        registration_record = self._ledger_store.append_evidence(
+            spec_fp1=stored.spec_fp1,
+            dispatch_lease=dispatch_lease,
+            model_deployment_ref=model_deployment_ref,
+            body={
+                "kind": "registered_model_deployment",
+                "note": "deployment captured with ExperimentSpec registration",
+            },
+        )
+        if is_refusal(registration_record):
+            return registration_record
+        ledger = registration_record.value
         self._specs[stored.spec_fp1] = stored
         self._leases[stored.spec_fp1] = dispatch_lease
-        persisted = self._persist_registration(stored, dispatch_lease, ledger)
+        self._registering_attempts[stored.spec_fp1] = registering_attempt_no
+        self._registering_deployments[stored.spec_fp1] = model_deployment_ref.strip()
+        persisted = self._persist_registration(
+            stored,
+            dispatch_lease,
+            ledger,
+            registering_attempt_no=registering_attempt_no,
+            registering_deployment_ref=model_deployment_ref.strip(),
+        )
         if is_refusal(persisted):
             return persisted
         announced = self._journal_event(
@@ -366,6 +408,8 @@ class ExperimentSpecService:
                 spec=stored,
                 ledger=ledger,
                 dispatch_lease=dispatch_lease,
+                registering_attempt_no=registering_attempt_no,
+                registering_deployment_ref=model_deployment_ref.strip(),
             )
         )
 
@@ -375,6 +419,7 @@ class ExperimentSpecService:
         predecessor_fp1: object,
         change: object,
         dispatch_lease: DispatchLease,
+        registering_attempt_no: int,
         model_deployment_ref: object,
         resolved_config_ref: object = None,
         code_ref: object = None,
@@ -423,6 +468,7 @@ class ExperimentSpecService:
         registered = self.register(
             created.value,
             dispatch_lease=dispatch_lease,
+            registering_attempt_no=registering_attempt_no,
             model_deployment_ref=model_deployment_ref,
         )
         if is_refusal(registered):
@@ -463,6 +509,8 @@ class ExperimentSpecService:
                 spec=record.spec,
                 ledger=record.ledger,
                 dispatch_lease=record.dispatch_lease,
+                registering_attempt_no=record.registering_attempt_no,
+                registering_deployment_ref=record.registering_deployment_ref,
                 lineage_edge=edge,
             )
         )
@@ -473,31 +521,57 @@ class ExperimentSpecService:
         spec_fp1: object,
         dispatch_lease: DispatchLease,
         model_deployment_ref: object,
+        evidence_ref: object = None,
+        worker_acceptance: Mapping[str, object] | None = None,
     ) -> Result[None]:
         """Validate run author and deployment provenance before QMB is spawned."""
         resolved = self.resolve(spec_fp1)
         if is_refusal(resolved):
             return resolved
-        if dispatch_lease != resolved.value.dispatch_lease:
+        registering_lease = resolved.value.dispatch_lease
+        if (
+            dispatch_lease.task_id != registering_lease.task_id
+            or dispatch_lease.mission_id != registering_lease.mission_id
+            or dispatch_lease.owner != registering_lease.owner
+            or not dispatch_lease.holder_agent_id.strip()
+        ):
             return policy_rejection(
                 "dispatch_lease",
-                "coordinated execution requires the Experiment's registering Task lease",
+                "coordinated execution requires the current lease for the Experiment's "
+                "registering Task, mission, and owner",
                 spec_fp1=resolved.value.spec.spec_fp1,
                 task_id=dispatch_lease.task_id,
+            )
+        if worker_acceptance is not None:
+            if (
+                worker_acceptance.get("class") != "qma-task-worker-acceptance-v1"
+                or worker_acceptance.get("task_id") != dispatch_lease.task_id
+                or worker_acceptance.get("mission_id") != dispatch_lease.mission_id
+                or worker_acceptance.get("owner_actor_id") != dispatch_lease.owner.value
+                or worker_acceptance.get("dispatch_lease") != dict(dispatch_lease.to_payload())
+                or worker_acceptance.get("run_fp1") != resolved.value.spec.spec_fp1
+                or worker_acceptance.get("evidence_ref") != evidence_ref
+                or worker_acceptance.get("model_deployment_ref") != model_deployment_ref
+                or isinstance(worker_acceptance.get("attempt_no"), bool)
+                or not isinstance(worker_acceptance.get("attempt_no"), int)
+                or cast(int, worker_acceptance.get("attempt_no")) < 0
+            ):
+                return policy_rejection(
+                    "worker_acceptance",
+                    "current accepted worker receipt binds the registered task, attempt, "
+                    "refs, and deployment",
+                    spec_fp1=resolved.value.spec.spec_fp1,
+                )
+        elif dispatch_lease != registering_lease:
+            return policy_rejection(
+                "dispatch_lease",
+                "a lease reacquisition requires the receiver's current worker receipt",
+                spec_fp1=resolved.value.spec.spec_fp1,
             )
         if not isinstance(model_deployment_ref, str) or not model_deployment_ref.strip():
             return invalid_input(
                 "model_deployment_ref",
                 "coordinated execution uses a deployment recorded on the Experiment Ledger",
-            )
-        if not any(
-            entry.model_deployment_ref == model_deployment_ref.strip()
-            for entry in resolved.value.ledger.entries
-        ):
-            return policy_rejection(
-                "model_deployment_ref",
-                "deployment must be present in the registered Experiment Ledger",
-                spec_fp1=resolved.value.spec.spec_fp1,
             )
         admitted = admit_experiment_evidence_body(
             {"workbench_lane": EXPERIMENT_LEDGER_WORKBENCH_LANE}
@@ -533,6 +607,17 @@ class ExperimentSpecService:
         )
         if declared is not None:
             return declared
+        # Rebind append authority only at the effectful append boundary. The
+        # preceding validation/preflight path is intentionally read-only.
+        rebound = self._ledger_store.authorize_current_lease(
+            spec_fp1=spec_fp1,
+            dispatch_lease=dispatch_lease,
+        )
+        if is_refusal(rebound):
+            return rebound
+        persisted = self._persist_ledger(rebound.value)
+        if is_refusal(persisted):
+            return persisted
         body: dict[str, object] = {"workbench_lane": EXPERIMENT_LEDGER_WORKBENCH_LANE}
         if isinstance(qmb_ledger_ref, str) and qmb_ledger_ref.strip():
             body["qmb_ledger_ref"] = qmb_ledger_ref.strip()
@@ -685,6 +770,8 @@ class ExperimentSpecService:
                 spec=spec,
                 ledger=ledger,
                 dispatch_lease=lease,
+                registering_attempt_no=self._registering_attempts[key],
+                registering_deployment_ref=self._registering_deployments[key],
                 lineage_edge=self._lineage.get(key),
             )
         )
@@ -725,11 +812,19 @@ class ExperimentSpecService:
         spec: ExperimentSpec,
         lease: DispatchLease,
         ledger: ExperimentLedger,
+        *,
+        registering_attempt_no: int,
+        registering_deployment_ref: str,
     ) -> Result[None]:
         store = self._durable
         if store is None:
             return Ok(None)
-        store.put_spec(spec, lease)
+        store.put_spec(
+            spec,
+            lease,
+            registering_attempt_no=registering_attempt_no,
+            registering_deployment_ref=registering_deployment_ref,
+        )
         store.put_ledger(ledger)
         return Ok(None)
 

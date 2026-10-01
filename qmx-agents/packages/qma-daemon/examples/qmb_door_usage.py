@@ -85,7 +85,9 @@ def main() -> None:
                 evidence_ref="evidence:recorded-bars",
             )
             assert is_ok(other)
-            assert is_ok(service.observe_outcome(first.value.handle.job_id, JobHandleState.DONE))
+            unknown = service.observe_outcome(first.value.handle.job_id, JobHandleState.UNKNOWN)
+            assert is_ok(unknown)
+            assert unknown.value.state is JobHandleState.UNKNOWN
             retry = service.invoke(
                 QMB_BACKTEST_TOOL_ID,
                 owner=minted.value,
@@ -94,7 +96,7 @@ def main() -> None:
                 experiment_spec_fp1="fp1:sha256:" + ("d" * 64),
                 evidence_ref="evidence:recorded-bars",
             )
-            assert is_ok(retry)
+            assert is_refusal(retry)
             assert is_refusal(service.set_parallelism(4))
             assert is_refusal(service.import_qmb_package())
             paper = service.invoke(

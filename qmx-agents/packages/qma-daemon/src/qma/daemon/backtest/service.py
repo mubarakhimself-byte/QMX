@@ -15,7 +15,7 @@ import json
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -47,7 +47,7 @@ from qma.core.ports.experiments import (
     coordinated_run_labels,
     refuse_caller_declared_lane_fields,
 )
-from qma.core.ports.jobs import JobHandle
+from qma.core.ports.jobs import JobArtifact, JobHandle
 from qma.core.ports.qmb import (
     ANALYSIS_BACKTEST_PLUGIN_ID,
     QMB_ABORTED_LEDGER_STATE,
@@ -83,8 +83,14 @@ from qma.core.ports.qmb import (
 )
 from qma.core.ports.tools import ToolKind, ToolRecord
 from qma.core.refusals import NoEnvironment
-from qma.core.vocabulary.enums import JobHandleState, PrincipalClass
+from qma.core.vocabulary.enums import ArtifactCompleteness, JobHandleState, PrincipalClass
 from qma.daemon.backtest.cli import CliQmbDoorTransport
+from qma.daemon.backtest.expected import (
+    read_expected_context,
+    read_verified_context,
+    write_expected_context,
+    write_verified_context,
+)
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.envs.registry import ExecutionEnvironmentRegistry
 from qma.daemon.experiments.service import (
@@ -96,7 +102,8 @@ from qma.daemon.plugins.context import DaemonPluginContext, PluginContextError
 from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.taskgraph.records import DispatchLease
 from qma.daemon.tools.registry import ToolRegistry
-from qmf.core import Ok, Result, is_ok, is_refusal
+from qmf.core import Ok, Result, World, is_ok, is_refusal
+from qmf.data.store import AppendStore, EvidenceStore
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
@@ -111,6 +118,39 @@ __all__ = [
 
 def _job_id_for(request: QmbBacktestRequest) -> str:
     return f"qmb:{request.occupancy_key}:{request.task_id}"
+
+
+def _invocation_from_payload(value: object) -> Result[QmbDoorInvocation]:
+    if not isinstance(value, Mapping):
+        return invalid_input("invocation", "durable expected context includes an invocation")
+    row = cast(Mapping[str, object], value)
+    if set(row) != {"program", "kind", "argv", "payload", "import_edge"}:
+        return invalid_input("invocation", "stored invocation has the exact QMB wire fields")
+    program, kind, argv, payload, import_edge = (
+        row[key] for key in ("program", "kind", "argv", "payload", "import_edge")
+    )
+    if program != QMB_CLI_PROGRAM or not isinstance(kind, str):
+        return invalid_input("invocation", "stored invocation is a trusted QMB CLI call")
+    if not isinstance(argv, (list, tuple)):
+        return invalid_input("invocation.argv", "stored CLI arguments are a sequence")
+    argv_values = cast(Sequence[object], argv)
+    if any(not isinstance(item, str) for item in argv_values):
+        return invalid_input("invocation.argv", "stored CLI arguments are strings")
+    if not isinstance(payload, Mapping) or type(import_edge) is not bool or import_edge:
+        return invalid_input("invocation", "stored invocation is a trusted QMB CLI call")
+    try:
+        door_kind = QmbDoorKind(kind)
+    except ValueError:
+        return invalid_input("invocation.kind", "stored invocation uses a supported door")
+    return Ok(
+        QmbDoorInvocation(
+            program=QMB_CLI_PROGRAM,
+            kind=door_kind,
+            argv=tuple(cast(str, item) for item in argv_values),
+            payload=cast(Mapping[str, object], payload),
+            import_edge=False,
+        )
+    )
 
 
 def _projection_view_from_stdout(
@@ -369,6 +409,7 @@ class BacktestingService:
         transport: QmbDoorTransport | None = None,
         experiments: ExperimentSpecService | None = None,
         artifact_root: Path | str | None = None,
+        artifact_store: AppendStore | None = None,
     ) -> None:
         self._jobs = jobs if jobs is not None else JobHandleService()
         self._tools = tools if tools is not None else ToolRegistry()
@@ -381,10 +422,14 @@ class BacktestingService:
         self._experiments = experiments
         self._product_sessions: ProductSessionService | None = None
         self._artifact_root = Path(artifact_root) if artifact_root is not None else None
+        self._artifact_store = artifact_store
+        self._artifact_store_owner: EvidenceStore | None = None
         self._occupancy: dict[str, str] = {}
         self._observers: list[threading.Thread] = []
         self._observer_lock = threading.RLock()
         self._observer_failures: dict[str, object] = {}
+        self._expected_terminal_results: dict[str, Mapping[str, object]] = {}
+        self._expected_context_hashes: dict[str, str] = {}
 
     @property
     def plugin_id(self) -> str:
@@ -524,6 +569,7 @@ class BacktestingService:
         extra: Mapping[str, object] | None = None,
         dispatch_lease: DispatchLease | None = None,
         model_deployment_ref: object = None,
+        worker_acceptance: Mapping[str, object] | None = None,
         qmb_ledger_ref: object = None,
         ct32_ref: object = None,
         analysis_method: object = None,
@@ -568,11 +614,64 @@ class BacktestingService:
             parsed.value,
             dispatch_lease=dispatch_lease,
             model_deployment_ref=model_deployment_ref,
+            worker_acceptance=worker_acceptance,
             qmb_ledger_ref=qmb_ledger_ref,
             ct32_ref=ct32_ref,
             command=command,
             originating_product_session_ref=originating_product_session_ref,
         )
+
+    def preflight_registered_run(
+        self,
+        *,
+        owner: ActorId | str,
+        task_id: str,
+        environment_ref: str,
+        experiment_spec_fp1: str,
+        evidence_ref: str,
+    ) -> Result[Mapping[str, object] | None]:
+        """Resolve the operator runtime before acceptance or job-side effects."""
+        if self._experiments is None:
+            return Ok(None)
+        resolved = self._experiments.resolve(experiment_spec_fp1)
+        if is_refusal(resolved):
+            return invalid_input(
+                "experiment_spec_fp1",
+                "runtime preflight requires a registered ExperimentSpec",
+                spec_fp1=experiment_spec_fp1,
+            )
+        if resolved.value.spec.environment_ref != environment_ref:
+            return policy_rejection(
+                "environment_ref", "runtime preflight matches the registered ExperimentSpec"
+            )
+        request = parse_qmb_backtest_request(
+            owner=owner,
+            task_id=task_id,
+            environment_ref=environment_ref,
+            experiment_spec_fp1=experiment_spec_fp1,
+            evidence_ref=evidence_ref,
+        )
+        if is_refusal(request):
+            return request
+        existing = self._jobs.handle_for_task(task_id)
+        attempt_id = existing.attempt_id if existing is not None else 1
+        invocation = build_qmb_door_invocation(
+            request.value,
+            job_id=_job_id_for(request.value),
+            split_manifest_fp1=resolved.value.spec.data_ref,
+            attempt_id=attempt_id,
+        )
+        if is_refusal(invocation):
+            return invocation
+        preflight = getattr(self._transport, "preflight", None)
+        if not callable(preflight):
+            return Ok(None)
+        checked = cast("Callable[[QmbDoorInvocation], Result[Mapping[str, object]]]", preflight)(
+            invocation.value
+        )
+        if is_refusal(checked):
+            return checked
+        return Ok(checked.value)
 
     def submit(
         self,
@@ -580,6 +679,7 @@ class BacktestingService:
         *,
         dispatch_lease: DispatchLease | None = None,
         model_deployment_ref: object = None,
+        worker_acceptance: Mapping[str, object] | None = None,
         qmb_ledger_ref: object = None,
         ct32_ref: object = None,
         command: object | None = None,
@@ -600,6 +700,7 @@ class BacktestingService:
                     command=classified.value.command,
                     occupancy=classified.value.occupancy,
                 )
+        prepared_runtime: Mapping[str, object] | None = None
         split_manifest_fp1: str | None = None
         if self._experiments is not None:
             resolved = self._experiments.resolve(request.experiment_spec_fp1)
@@ -615,13 +716,43 @@ class BacktestingService:
                     "dispatch_lease",
                     "coordinated QMB placement requires the registered Experiment lease",
                 )
+            if worker_acceptance is None and (
+                dispatch_lease != resolved.value.dispatch_lease
+                or model_deployment_ref
+                not in {entry.model_deployment_ref for entry in resolved.value.ledger.entries}
+            ):
+                return policy_rejection(
+                    "worker_acceptance",
+                    "a changed lease or deployment requires the current receiver acceptance",
+                )
+            runtime_preflight = self.preflight_registered_run(
+                owner=request.owner,
+                task_id=request.task_id,
+                environment_ref=request.environment_ref,
+                experiment_spec_fp1=request.experiment_spec_fp1,
+                evidence_ref=request.evidence_ref,
+            )
+            if is_refusal(runtime_preflight):
+                return runtime_preflight
+            prepared_runtime = runtime_preflight.value
             validated = self._experiments.validate_coordinated_run(
                 spec_fp1=request.experiment_spec_fp1,
                 dispatch_lease=dispatch_lease,
                 model_deployment_ref=model_deployment_ref,
+                evidence_ref=request.evidence_ref,
+                worker_acceptance=worker_acceptance,
             )
             if is_refusal(validated):
                 return validated
+            recorded = self._experiments.record_coordinated_run(
+                spec_fp1=request.experiment_spec_fp1,
+                dispatch_lease=dispatch_lease,
+                model_deployment_ref=model_deployment_ref,
+                qmb_ledger_ref=qmb_ledger_ref,
+                ct32_ref=ct32_ref,
+            )
+            if is_refusal(recorded):
+                return recorded
         if self._tools.get(QMB_BACKTEST_TOOL_ID) is None:
             installed = self.install()
             if is_refusal(installed):
@@ -668,6 +799,76 @@ class BacktestingService:
                 job_id=job_id,
             )
             return invocation
+        expected_result: dict[str, object] = {
+            "job_id": minted.value.job_id,
+            "attempt_id": minted.value.attempt_id,
+            "experiment_spec_fp1": request.experiment_spec_fp1,
+            "evidence_ref": request.evidence_ref,
+            "split_manifest_fp1": split_manifest_fp1,
+            "mints_ct32": (
+                prepared_runtime.get("mints_ct32")
+                if prepared_runtime is not None
+                else invocation.value.payload.get("mints_ct32", True)
+            ),
+        }
+        if prepared_runtime is not None:
+            expected_result["operator_descriptor_fp1"] = prepared_runtime.get(
+                "operator_descriptor_fp1"
+            )
+            expected_result["class"] = (
+                "qmb-recorded-replay-result-v1"
+                if prepared_runtime.get("mints_ct32") is True
+                else "qmb-alternative-result-v1"
+            )
+        placed_handle = minted.value
+        self._expected_terminal_results[minted.value.job_id] = MappingProxyType(expected_result)
+        if prepared_runtime is not None and self._experiments is not None:
+            context_store = self._expected_context_store()
+            if is_refusal(context_store):
+                return context_store
+            durable_payload = dict(invocation.value.payload)
+            durable_payload["mints_ct32"] = expected_result["mints_ct32"]
+            durable_payload["operator_descriptor_fp1"] = expected_result.get(
+                "operator_descriptor_fp1"
+            )
+            saved = write_expected_context(
+                store=context_store.value,
+                job_id=minted.value.job_id,
+                payload={
+                    "job_id": minted.value.job_id,
+                    "attempt_id": minted.value.attempt_id,
+                    "task_id": request.task_id,
+                    "owner": request.owner.value,
+                    "request": dict(request.to_payload()),
+                    "invocation": {
+                        "program": invocation.value.program,
+                        "kind": invocation.value.kind.value,
+                        "argv": list(invocation.value.argv),
+                        "payload": durable_payload,
+                        "import_edge": invocation.value.import_edge,
+                    },
+                    "expected_result": dict(expected_result),
+                },
+            )
+            if is_refusal(saved):
+                return saved
+            expected_ref = saved.value.get("fp1")
+            expected_hash = saved.value.get("sha256")
+            if not isinstance(expected_ref, str) or not isinstance(expected_hash, str):
+                return invalid_input(
+                    "expected_context", "CT-11 write returns its immutable fp1 and content digest"
+                )
+            self._expected_context_hashes[minted.value.job_id] = expected_hash
+            expected_artifact = self._jobs.attach_artifact(
+                minted.value.job_id,
+                JobArtifact(
+                    fp1=expected_ref,
+                    completeness=ArtifactCompleteness.PARTIAL,
+                ),
+            )
+            if is_refusal(expected_artifact):
+                return expected_artifact
+            placed_handle = expected_artifact.value
         receipt = self._transport.submit(invocation.value)
         if is_refusal(receipt):
             self._occupancy = release_qmb_job(
@@ -677,21 +878,10 @@ class BacktestingService:
             )
             return receipt
         self._occupancy = admitted.value
-        if self._experiments is not None and dispatch_lease is not None:
-            recorded = self._experiments.record_coordinated_run(
-                spec_fp1=request.experiment_spec_fp1,
-                dispatch_lease=dispatch_lease,
-                model_deployment_ref=model_deployment_ref,
-                qmb_ledger_ref=qmb_ledger_ref,
-                ct32_ref=ct32_ref,
-            )
-            if is_refusal(recorded):
-                self._start_exit_observer(minted.value.job_id)
-                return recorded
         self._start_exit_observer(minted.value.job_id)
         return Ok(
             QmbPlacement(
-                handle=minted.value,
+                handle=placed_handle,
                 request=request,
                 invocation=invocation.value,
                 receipt=receipt.value,
@@ -709,7 +899,32 @@ class BacktestingService:
         job_id: str,
         state: JobHandleState | str,
     ) -> Result[JobHandle]:
-        """Record a known QMB-owned outcome onto the QMA JobHandle and free occupancy."""
+        """Refuse caller-authored completion states; process observation owns outcomes."""
+        requested_state = state.value if isinstance(state, JobHandleState) else state
+        if requested_state == JobHandleState.DONE.value:
+            return policy_rejection(
+                "job_state",
+                "DONE requires a waited child exit plus exact durable QMB terminal readback",
+                job_id=job_id,
+            )
+        if requested_state == JobHandleState.UNKNOWN.value:
+            self._record_lost_certainty(
+                job_id,
+                invalid_input(
+                    "job_state",
+                    "QMB outcome is unknown because durable child completion was not observed",
+                ),
+            )
+            handle = self._jobs.handle_for(job_id)
+            if handle is None:
+                return invalid_input("job_id", "unknown qmb job", given=job_id)
+            if handle.state is JobHandleState.UNKNOWN:
+                return Ok(handle)
+            return policy_rejection("job_state", "lost QMB certainty persists UNKNOWN")
+        return self._record_observed_state(job_id, state)
+
+    def _record_observed_state(self, job_id: str, state: JobHandleState | str) -> Result[JobHandle]:
+        """Persist an outcome already derived from the owned process boundary."""
         with self._observer_lock:
             handle = self._jobs.handle_for(job_id)
             if handle is None:
@@ -735,6 +950,304 @@ class BacktestingService:
             self._release_terminal()
             return completed
 
+    def _verify_terminal_result(self, job_id: str) -> Result[Mapping[str, object]]:
+        expected = self._expected_terminal_results.get(job_id)
+        if expected is None:
+            restored = self._restore_expected_context(job_id)
+            if is_refusal(restored):
+                return restored
+            expected = restored.value["expected_result"]
+        reader = getattr(self._transport, "terminal_result", None)
+        if not callable(reader):
+            return invalid_input(
+                "qmb_terminal_result",
+                "successful QMB exit requires the transport's durable-result readback",
+                job_id=job_id,
+            )
+        read_result = cast(Callable[[str], Result[Mapping[str, object]]], reader)
+        result = read_result(job_id)
+        if is_refusal(result):
+            return result
+        return self._validate_terminal_payload(result.value, cast(Mapping[str, object], expected))
+
+    def _validate_terminal_payload(
+        self, payload: Mapping[str, object], expected: Mapping[str, object]
+    ) -> Result[Mapping[str, object]]:
+        for field_name, field_value in expected.items():
+            if field_name in {"mints_ct32", "operator_descriptor_fp1"}:
+                continue
+            actual = payload.get(field_name)
+            if type(actual) is not type(field_value) or actual != field_value:
+                return policy_rejection(
+                    "qmb_terminal_result",
+                    "durable QMB result matches this job, attempt, spec, evidence, and split",
+                    mismatch_field=field_name,
+                )
+        expected_mode = expected.get("mints_ct32")
+        expected_class = (
+            "qmb-recorded-replay-result-v1"
+            if expected_mode is True
+            else "qmb-alternative-result-v1"
+            if expected_mode is False
+            else None
+        )
+        if payload.get("class") != expected_class:
+            return policy_rejection(
+                "qmb_terminal_result", "durable result class matches the trusted preflight mode"
+            )
+        descriptor_fp = expected.get("operator_descriptor_fp1")
+        if isinstance(descriptor_fp, str):
+            result_binding = payload.get("operator_binding")
+            result_descriptor = (
+                cast(Mapping[str, object], result_binding).get("runtime_descriptor_fp1")
+                if isinstance(result_binding, Mapping)
+                else payload.get("operator_descriptor_fp1")
+            )
+            if result_descriptor != descriptor_fp:
+                return policy_rejection(
+                    "qmb_terminal_result",
+                    "durable result is pinned to the prepared operator descriptor",
+                )
+        fingerprint_fields = (
+            (
+                "operator_binding_fp1",
+                "composition_fp1",
+                "source_fp1",
+                "split_fp1",
+                "registry_fp1",
+                "interpreter_registration_fp1",
+                "run_receipt_fp1",
+                "terminal_artifact_fp1",
+                "final_accounting_state_fp1",
+            )
+            if expected_class == "qmb-alternative-result-v1"
+            else ("ct32_fp1", "run_fp1", "terminal_line_fp1")
+        )
+        for field_name in fingerprint_fields:
+            value = payload.get(field_name)
+            if (
+                not isinstance(value, str)
+                or len(value) != 75
+                or not value.startswith("fp1:sha256:")
+                or any(char not in "0123456789abcdef" for char in value[11:])
+            ):
+                return invalid_input(
+                    field_name,
+                    "durable QMB completion carries canonical CT-32, run, and terminal "
+                    "fingerprints",
+                )
+        return Ok(payload)
+
+    def _expected_context_store(self) -> Result[AppendStore]:
+        if self._artifact_store is not None:
+            if self._artifact_store.world is not World.LIVE:
+                return invalid_input(
+                    "artifact_store", "QMA expected-result metadata uses the live artifact room"
+                )
+            return Ok(self._artifact_store)
+        if self._artifact_root is not None:
+            try:
+                if not self._artifact_root.is_absolute() or self._artifact_root.is_symlink():
+                    return invalid_input(
+                        "artifact_root", "configured CT-11 root is absolute and not a symlink"
+                    )
+                self._artifact_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+                owner = EvidenceStore(self._artifact_root)
+                live = owner.for_world(World.LIVE)
+                if is_refusal(live):
+                    return live
+                self._artifact_store_owner = owner
+                self._artifact_store = live.value.append_store
+                return Ok(self._artifact_store)
+            except OSError as exc:
+                return invalid_input(
+                    "artifact_root", "configured CT-11 store opens", error=str(exc)
+                )
+        return invalid_input(
+            "artifact_store",
+            "restart-verifiable QMB placement requires the daemon's declared CT-11 store",
+        )
+
+    def _restore_expected_context(self, job_id: str) -> Result[Mapping[str, object]]:
+        store = self._expected_context_store()
+        if is_refusal(store):
+            return store
+        handle = self._jobs.handle_for(job_id)
+        if handle is None:
+            return invalid_input("job_id", "expected context belongs to a durable JobHandle")
+        candidates = tuple(
+            artifact
+            for artifact in handle.artifacts
+            if artifact.completeness is ArtifactCompleteness.PARTIAL
+        )
+        if not candidates:
+            return invalid_input(
+                "expected_context", "JobHandle references the immutable expected-context artifact"
+            )
+        valid: list[tuple[Mapping[str, object], str]] = []
+        for artifact in candidates:
+            candidate = read_expected_context(
+                store=store.value,
+                reference_fp1=artifact.fp1,
+                job_id=job_id,
+            )
+            if not is_refusal(candidate):
+                valid.append((candidate.value, artifact.fp1))
+        if len(valid) != 1:
+            return invalid_input(
+                "expected_context", "JobHandle resolves exactly one checked expected-context row"
+            )
+        saved = Ok(valid[0][0])
+        expected_ref = valid[0][1]
+        if is_refusal(saved):
+            return saved
+        expected = saved.value.get("expected_result")
+        if not isinstance(expected, Mapping):
+            return invalid_input("expected_result", "durable context contains expected result")
+        expected_row = cast(Mapping[str, object], expected)
+        handle = self._jobs.handle_for(job_id)
+        if (
+            expected_row.get("job_id") != job_id
+            or handle is None
+            or saved.value.get("attempt_id") != handle.attempt_id
+            or saved.value.get("task_id") != handle.task_id
+        ):
+            return invalid_input("expected_result", "durable context binds this JobHandle")
+        expected_map = cast(Mapping[str, object], expected)
+        digest = saved.value.get("sha256")
+        if not isinstance(digest, str):
+            return invalid_input("expected_context", "durable context has its verified digest")
+        self._expected_terminal_results[job_id] = MappingProxyType(dict(expected_map))
+        self._expected_context_hashes[job_id] = digest
+        restored_context: dict[str, object] = {
+            "expected_result": expected_map,
+            "context": saved.value,
+            "context_artifact_fp1": expected_ref,
+        }
+        return Ok(restored_context)
+
+    def reconcile_restored_jobs(self) -> Result[tuple[str, ...]]:
+        """Reopen persisted QMB terminals for UNKNOWN jobs without resolving them.
+
+        CT-46 requires restart uncertainty to remain behind the operator gate.
+        This method never infers process state from a PID or changes JobHandle
+        state; it records only an independently reopened domain result.
+        """
+        verified_jobs: list[str] = []
+        reader = getattr(self._transport, "verify_persisted_result", None)
+        if not callable(reader):
+            return Ok(())
+        for handle in self._jobs.store.all():
+            if handle.state is not JobHandleState.UNKNOWN:
+                continue
+            restored = self._restore_expected_context(handle.job_id)
+            if is_refusal(restored):
+                continue
+            context = restored.value.get("context")
+            if not isinstance(context, Mapping):
+                continue
+            context_map = cast(Mapping[str, object], context)
+            invocation_raw = context_map.get("invocation")
+            invocation = _invocation_from_payload(cast(object, invocation_raw))
+            if is_refusal(invocation):
+                continue
+            try:
+                checked = cast(
+                    "Callable[[str, QmbDoorInvocation], Result[Mapping[str, object]]]", reader
+                )(handle.job_id, invocation.value)
+            except Exception as exc:
+                with self._observer_lock:
+                    self._observer_failures[handle.job_id] = invalid_input(
+                        "qmb_restart_verification",
+                        "verify-only child failed; JobHandle remains UNKNOWN",
+                        error=str(exc),
+                    )
+                continue
+            if is_refusal(checked):
+                continue
+            expected_result = restored.value.get("expected_result")
+            if not isinstance(expected_result, Mapping):
+                continue
+            compared = self._validate_terminal_payload(
+                checked.value, cast(Mapping[str, object], expected_result)
+            )
+            if is_refusal(compared):
+                continue
+            proof = self._persist_verified_result(handle.job_id, compared.value)
+            if not is_refusal(proof):
+                verified_jobs.append(handle.job_id)
+        return Ok(tuple(verified_jobs))
+
+    def resolve_verified_unknown(
+        self, job_id: str, *, principal: PrincipalClass | str
+    ) -> Result[JobHandle]:
+        """Resolve UNKNOWN only after operator action cites reopened durable proof."""
+        expected = self._restore_expected_context(job_id)
+        if is_refusal(expected):
+            return policy_rejection(
+                "verified_context", "unknown resolution requires persisted QMB readback"
+            )
+        context = expected.value.get("context")
+        if not isinstance(context, Mapping):
+            return policy_rejection("verified_context", "expected artifact contains its context")
+        context_map = cast(Mapping[str, object], context)
+        expected_sha = context_map.get("sha256")
+        if not isinstance(expected_sha, str):
+            return policy_rejection("verified_context", "verification matches expected context")
+        store = self._expected_context_store()
+        if is_refusal(store):
+            return store
+        handle_before = self._jobs.handle_for(job_id)
+        if handle_before is None:
+            return invalid_input("job_id", "operator resolution requires its durable JobHandle")
+        proofs: list[tuple[Mapping[str, object], str]] = []
+        for artifact in handle_before.artifacts:
+            if artifact.completeness is not ArtifactCompleteness.COMPLETE:
+                continue
+            candidate = read_verified_context(
+                store=store.value,
+                reference_fp1=artifact.fp1,
+                job_id=job_id,
+                expected_reference_fp1=expected.value["context_artifact_fp1"],
+                expected_sha256=expected_sha,
+            )
+            if not is_refusal(candidate):
+                proofs.append((candidate.value, artifact.fp1))
+        if len(proofs) != 1:
+            return policy_rejection(
+                "verified_context", "operator resolution finds exactly one checked proof artifact"
+            )
+        proof, proof_ref = proofs[0]
+        result = proof.get("result")
+        if not isinstance(result, Mapping):
+            return policy_rejection("verified_context", "verification contains QMB readback")
+        expected_result = expected.value.get("expected_result")
+        if not isinstance(expected_result, Mapping):
+            return policy_rejection("expected_result", "expected context has a result binding")
+        compared = self._validate_terminal_payload(
+            cast(Mapping[str, object], result), cast(Mapping[str, object], expected_result)
+        )
+        if is_refusal(compared):
+            return compared
+        proof_fp = proof.get("sha256")
+        if not isinstance(proof_fp, str):
+            return invalid_input("verified_context", "proof fingerprint is present")
+        handle = self._jobs.handle_for(job_id)
+        if handle is None or not any(
+            artifact.fp1 == proof_ref and artifact.completeness is ArtifactCompleteness.COMPLETE
+            for artifact in handle.artifacts
+        ):
+            return policy_rejection(
+                "verified_context", "operator resolution cites the complete proof artifact"
+            )
+        return self._jobs.resolve_unknown(
+            job_id,
+            principal=principal,
+            recorded=True,
+            to_state=JobHandleState.DONE,
+            correlation_id=proof_fp,
+        )
+
     def wait_and_observe(self, job_id: str, *, timeout: float = 10.0) -> Result[JobHandle]:
         """Observe the actual QMB child exit instead of accepting a caller state."""
         waiter = getattr(self._transport, "wait", None)
@@ -748,8 +1261,82 @@ class BacktestingService:
             return invalid_input("job_id", "QMB process exit is not available", given=job_id)
         if isinstance(exit_code, bool) or not isinstance(exit_code, int):
             return invalid_input("exit_code", "QMB process wait returns an integer exit code")
-        terminal = JobHandleState.DONE if exit_code == 0 else JobHandleState.FAILED
-        return self.observe_outcome(job_id, terminal)
+        return self._record_process_exit(job_id, exit_code)
+
+    def _record_process_exit(self, job_id: str, exit_code: int) -> Result[JobHandle]:
+        with self._observer_lock:
+            current = self._jobs.handle_for(job_id)
+            if current is None:
+                return invalid_input("job_id", "QMB process exit resolves a durable JobHandle")
+            if current.is_terminal:
+                return Ok(current)
+            return self._record_process_exit_locked(job_id, exit_code)
+
+    def _record_process_exit_locked(self, job_id: str, exit_code: int) -> Result[JobHandle]:
+        if exit_code != 0:
+            return self._record_observed_state(job_id, JobHandleState.FAILED)
+        verified = self._verify_terminal_result(job_id)
+        if is_refusal(verified):
+            self._record_lost_certainty(job_id, verified)
+            uncertain_handle = self._jobs.handle_for(job_id)
+            if uncertain_handle is None:
+                return invalid_input("job_id", "QMB job remains resolvable after lost certainty")
+            return Ok(uncertain_handle)
+        persisted_proof = self._persist_verified_result(job_id, verified.value)
+        if is_refusal(persisted_proof):
+            self._record_lost_certainty(job_id, persisted_proof)
+            uncertain_handle = self._jobs.handle_for(job_id)
+            if uncertain_handle is None:
+                return invalid_input(
+                    "job_id", "QMB job remains resolvable after proof persistence refusal"
+                )
+            return Ok(uncertain_handle)
+        return self._record_observed_state(job_id, JobHandleState.DONE)
+
+    def _persist_verified_result(self, job_id: str, result: Mapping[str, object]) -> Result[None]:
+        expected_sha = self._expected_context_hashes.get(job_id)
+        if expected_sha is None:
+            # Explicit test doubles and non-registered diagnostic paths do not
+            # claim restart-verifiable coordinated completion.
+            return Ok(None)
+        expected = self._restore_expected_context(job_id)
+        if is_refusal(expected):
+            return expected
+        context = expected.value.get("context")
+        if not isinstance(context, Mapping):
+            return invalid_input("expected_context", "checked artifact contains its context")
+        context_map = cast(Mapping[str, object], context)
+        expected_sha = context_map.get("sha256")
+        if not isinstance(expected_sha, str):
+            return invalid_input("expected_context", "proof links to the checked expected artifact")
+        expected_ref = expected.value.get("context_artifact_fp1")
+        if not isinstance(expected_ref, str):
+            return invalid_input("expected_context", "JobHandle pins the expected artifact fp1")
+        store = self._expected_context_store()
+        if is_refusal(store):
+            return store
+        stored = write_verified_context(
+            store=store.value,
+            job_id=job_id,
+            expected_reference_fp1=expected_ref,
+            expected_sha256=expected_sha,
+            result=result,
+        )
+        if is_refusal(stored):
+            return stored
+        reference = stored.value.get("fp1")
+        if not isinstance(reference, str):
+            return invalid_input("verified_context", "CT-11 proof returns its durable fp1")
+        attached = self._jobs.attach_artifact(
+            job_id,
+            JobArtifact(
+                fp1=reference,
+                completeness=ArtifactCompleteness.COMPLETE,
+            ),
+        )
+        if is_refusal(attached):
+            return attached
+        return Ok(None)
 
     def _start_exit_observer(self, job_id: str) -> None:
         """Observe a real CLI child exit without accepting caller-authored status."""
@@ -784,8 +1371,7 @@ class BacktestingService:
                         )
                         return
                     known_exit_code = exit_code
-                terminal = JobHandleState.DONE if known_exit_code == 0 else JobHandleState.FAILED
-                observed = self.observe_outcome(job_id, terminal)
+                observed = self._record_process_exit(job_id, known_exit_code)
                 if is_ok(observed):
                     with self._observer_lock:
                         self._observer_failures.pop(job_id, None)
@@ -1109,6 +1695,7 @@ class BacktestingService:
         evidence_ref: str | None = None,
         extra: Mapping[str, object] | None = None,
         dispatch_lease: DispatchLease | None = None,
+        registering_attempt_no: int | None = None,
         model_deployment_ref: object = None,
         persist_projection: bool = False,
         mint_ct32: object = None,
@@ -1211,6 +1798,7 @@ class BacktestingService:
                 predecessor_fp1=spec_fp1,
                 resolved_config_ref=next_config,
                 dispatch_lease=dispatch_lease,
+                registering_attempt_no=registering_attempt_no,
                 model_deployment_ref=model_deployment_ref,
             )
             if is_refusal(minted):
@@ -1265,6 +1853,7 @@ class BacktestingService:
         predecessor_fp1: str,
         resolved_config_ref: object,
         dispatch_lease: DispatchLease | None,
+        registering_attempt_no: int | None,
         model_deployment_ref: object,
     ) -> Result[RegisteredExperiment]:
         """Mint an ExperimentSpec successor via ``create_successor`` (FR-W34)."""
@@ -1281,10 +1870,20 @@ class BacktestingService:
                 "a config-changing procedure door step requires the Agent holding "
                 "dispatch_lease (FR-W34; DEC-0308)",
             )
+        if (
+            isinstance(registering_attempt_no, bool)
+            or not isinstance(registering_attempt_no, int)
+            or registering_attempt_no < 0
+        ):
+            return invalid_input(
+                "registering_attempt_no",
+                "a config successor requires the observed current TaskLedger attempt",
+            )
         return self._experiments.create_successor(
             predecessor_fp1=predecessor_fp1,
             change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
             dispatch_lease=dispatch_lease,
+            registering_attempt_no=registering_attempt_no,
             model_deployment_ref=model_deployment_ref,
             resolved_config_ref=resolved_config_ref,
             source="qma-daemon",

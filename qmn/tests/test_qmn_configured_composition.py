@@ -226,6 +226,23 @@ def _write_v2_deployment(root: Path, profile: dict[str, object]) -> Path:
     return deployment
 
 
+def valid_deployment(root: Path) -> Path:
+    """Public shared fixture builder for configured-runtime integration tests."""
+    return _valid_deployment(root)
+
+
+def offline_profile(
+    assessment: ConfiguredRuntimeAssessment, root: Path
+) -> dict[str, object]:
+    """Public shared fixture builder for the registered replay-only profile."""
+    return _offline_profile(assessment, root)
+
+
+def write_v2_deployment(root: Path, profile: dict[str, object]) -> Path:
+    """Write a pinned v2 fixture using the canonical profile helper."""
+    return _write_v2_deployment(root, profile)
+
+
 def test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity(
     tmp_path: Path,
 ) -> None:

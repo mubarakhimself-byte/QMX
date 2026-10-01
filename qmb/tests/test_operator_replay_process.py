@@ -205,6 +205,7 @@ def _context_payload(
         "children_are_qma_jobs": False,
         "opens_daemon_sqlite": False,
         "split_manifest_fp1": split_fp.value,
+        "operator_descriptor_fp1": None,
     }
 
 
@@ -370,6 +371,25 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     cli = Path(sys.executable).with_name("qmb")
     environment = os.environ.copy()
     environment.update(env)
+    preflight_environment = {**environment, "QMA_QMB_PREFLIGHT": "1"}
+    preflight = subprocess.run(
+        [str(cli), "backtest", "run"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=preflight_environment,
+        timeout=15,
+    )
+    assert preflight.returncode == 0, preflight.stderr
+    preflight_body = json.loads(preflight.stdout)
+    assert preflight_body["class"] == "qmb-runtime-preflight-v1"
+    assert preflight_body["mints_ct32"] is True
+    assert preflight_body["environment_ref"] == "env:local-recorded-fixture"
+    assert preflight_body["occupancy_key"] == "qmb:job-cli-replay"
+    delegated_payload = json.loads(environment["QMA_QMB_DOOR_PAYLOAD"])
+    delegated_payload["mints_ct32"] = preflight_body["mints_ct32"]
+    delegated_payload["operator_descriptor_fp1"] = preflight_body["operator_descriptor_fp1"]
+    environment["QMA_QMB_DOOR_PAYLOAD"] = json.dumps(delegated_payload, separators=(",", ":"))
     execution = subprocess.run(
         [str(cli), "backtest", "run"],
         check=False,
@@ -384,6 +404,35 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     assert response["evidence_ref"] == request_ref.value
     assert response["ct32_fp1"].startswith("fp1:sha256:")
     assert response["terminal_line_fp1"].startswith("fp1:sha256:")
+    with tempfile.TemporaryDirectory(prefix="qmb-terminal-verify-test-") as raw:
+        claim_path = Path(raw) / "claim.json"
+        claim_path.write_text(json.dumps(response), encoding="utf-8")
+        verification_environment = {
+            **environment,
+            "QMA_QMB_VERIFY": "1",
+            "QMA_QMB_VERIFY_CLAIM_FILE": str(claim_path),
+        }
+        verified = subprocess.run(
+            [str(cli), "backtest", "run"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=verification_environment,
+            timeout=60,
+        )
+        assert verified.returncode == 0, verified.stderr
+        assert json.loads(verified.stdout) == response
+        forged = {**response, "ct32_fp1": "fp1:sha256:" + ("0" * 64)}
+        claim_path.write_text(json.dumps(forged), encoding="utf-8")
+        refused = subprocess.run(
+            [str(cli), "backtest", "run"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=verification_environment,
+            timeout=60,
+        )
+        assert refused.returncode != 0
     terminal_lines = _ok(
         read_merge_view(roots["terminal_ledger"], world=World.REPLAY, role="confirmation")
     )

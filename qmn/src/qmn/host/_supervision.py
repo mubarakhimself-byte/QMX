@@ -34,6 +34,7 @@ from qmn.host.configured_hosted import (
     invoke_configured_hosted_runtime,
     persist_configured_standdown,
 )
+from qmn.host.configured_live_resources import resolve_configured_live_resources
 from qmn.host.configured_runtime import assess_configured_runtime
 from qmn.time.clock import VpsClock
 
@@ -352,36 +353,28 @@ def main(
                     assessment.context.get("field", "configured runtime preflight refused"),
                 )
             )
-        elif hosted_resources_for is None:
-            configured_runtime_reason = (
-                "registered deployment is valid; hosted seat, KSA, Book, "
-                "reservation, and OrderPath resources are unavailable"
-            )
-            stand_down = persist_configured_standdown(
-                journal_store=journal_store.value,
-                machine=assessment.value.machine,
-                boot_epoch_id=boot_epoch_id,
-                instant=clock.value.wall_now,
-                reason=configured_runtime_reason,
-            )
-            if is_refusal(stand_down):
-                configured_runtime_reason = (
-                    "configured runtime stand-down could not be durably recorded: "
-                    f"{dict(stand_down.context)}"
-                )
         else:
-            offered = hosted_resources_for(assessment.value)
+            offered = (
+                resolve_configured_live_resources(assessment.value)
+                if hosted_resources_for is None
+                else hosted_resources_for(assessment.value)
+            )
             if is_refusal(offered):
                 configured_runtime_reason = str(
                     offered.context.get("reason", "hosted runtime resources refused")
                 )
+                failure_id = offered.context.get(
+                    "failure_id", "configured_runtime.resources_refused"
+                )
+                if not isinstance(failure_id, str) or not failure_id.strip():
+                    failure_id = "configured_runtime.resources_refused"
                 stand_down = persist_configured_standdown(
                     journal_store=journal_store.value,
                     machine=assessment.value.machine,
                     boot_epoch_id=boot_epoch_id,
                     instant=clock.value.wall_now,
                     reason=configured_runtime_reason,
-                    failure_id="configured_runtime.resources_refused",
+                    failure_id=failure_id,
                 )
                 if is_refusal(stand_down):
                     configured_runtime_reason += "; durable stand-down write refused"

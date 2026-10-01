@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
 from click.testing import CliRunner
 from qmb.doors.cli import main
-from qmb.host.qma_cli import decode_qma_backtest_context
-from qmf.core import fingerprint, is_ok
+from qmb.host.qma_cli import decode_qma_backtest_context, validate_qma_backtest_context
+from qmf.core import Fingerprint, fingerprint, is_ok, is_refusal
 
 
 def _fp(label: str) -> str:
@@ -39,6 +41,7 @@ def _payload() -> dict[str, object]:
         "children_are_qma_jobs": False,
         "opens_daemon_sqlite": False,
         "split_manifest_fp1": _fp("split"),
+        "operator_descriptor_fp1": None,
     }
 
 
@@ -84,6 +87,46 @@ def test_delegated_envelope_rejects_duplicate_keys_and_bool_integer_aliases() ->
     )
 
 
+def test_delegated_envelope_requires_exact_result_mode_and_descriptor_slot() -> None:
+    payload = _payload()
+    malformed_mode = {**payload, "mints_ct32": 1}
+    assert not is_ok(
+        decode_qma_backtest_context(
+            payload_text=json.dumps(malformed_mode), environ=_environ(payload)
+        )
+    )
+    missing_descriptor = dict(payload)
+    del missing_descriptor["operator_descriptor_fp1"]
+    assert not is_ok(
+        decode_qma_backtest_context(
+            payload_text=json.dumps(missing_descriptor), environ=_environ(payload)
+        )
+    )
+
+
+def test_nominal_context_is_revalidated_after_direct_construction() -> None:
+    payload = _payload()
+    decoded = decode_qma_backtest_context(
+        payload_text=json.dumps(payload), environ=_environ(payload)
+    )
+    assert is_ok(decoded), decoded
+    malformed: tuple[tuple[str, object], ...] = (
+        ("job_id", []),
+        ("attempt_id", True),
+        ("experiment_spec_fp1", None),
+        ("evidence_ref", Fingerprint("invalid")),
+        ("split_manifest_fp1", None),
+        ("environment_ref", None),
+        ("occupancy_key", []),
+        ("mints_ct32", 1),
+        ("operator_descriptor_fp1", Fingerprint("invalid")),
+    )
+    for field, value in malformed:
+        candidate = replace(cast(Any, decoded.value), **{field: value})
+        result = validate_qma_backtest_context(candidate)
+        assert is_refusal(result), (field, result)
+
+
 def test_actual_cli_entry_dispatches_to_operator_binding_without_legacy_fallback(
     tmp_path: Path,
 ) -> None:
@@ -95,6 +138,7 @@ def test_actual_cli_entry_dispatches_to_operator_binding_without_legacy_fallback
     (binding_dir / "operator-binding.json").write_text("{}", encoding="utf-8")
     env = _environ(payload)
     env["QMB_REPLAY_RUNTIME_ROOT"] = str(runtime_root)
+    env["QMA_QMB_PREFLIGHT"] = "1"
     result = CliRunner().invoke(
         main,
         ["backtest", "run"],

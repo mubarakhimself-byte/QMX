@@ -165,6 +165,7 @@ def test_experiment_owns_one_ledger_authored_only_by_registering_task_holder() -
     registered = service.register(
         _spec(),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -228,6 +229,7 @@ def test_desk_views_fold_three_stores_and_create_no_fourth() -> None:
     registered = service.register(
         _spec(),
         dispatch_lease=dispatch,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:workhorse",
     )
     assert is_ok(registered)

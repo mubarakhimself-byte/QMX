@@ -181,6 +181,8 @@ class ExperimentSqliteSnapshot:
 
     spec: ExperimentSpec
     lease: DispatchLease
+    registering_attempt_no: int
+    registering_deployment_ref: str
     ledger: ExperimentLedger
     entry_seq: int
     lineage_edge: LineageEdge | None
@@ -200,14 +202,32 @@ class ExperimentSqliteStore:
 
         self._sqlite.run(_ddl)
 
-    def put_spec(self, spec: ExperimentSpec, lease: DispatchLease) -> None:
+    def put_spec(
+        self,
+        spec: ExperimentSpec,
+        lease: DispatchLease,
+        *,
+        registering_attempt_no: int,
+        registering_deployment_ref: str,
+    ) -> None:
         ledger_ref = spec.experiment_ledger_ref
         if ledger_ref is None:
             ledger_ref = f"experiment-ledger:{spec.spec_fp1}"
         self._sqlite.execute(
             "INSERT OR REPLACE INTO experiment_spec "
             "(spec_fp1, payload, ledger_ref, lease_payload) VALUES (?, ?, ?, ?)",
-            (spec.spec_fp1, _dump(spec.to_payload()), ledger_ref, _dump(lease.to_payload())),
+            (
+                spec.spec_fp1,
+                _dump(spec.to_payload()),
+                ledger_ref,
+                _dump(
+                    {
+                        "dispatch_lease": dict(lease.to_payload()),
+                        "registering_attempt_no": registering_attempt_no,
+                        "registering_deployment_ref": registering_deployment_ref,
+                    }
+                ),
+            ),
         )
 
     def put_ledger(self, ledger: ExperimentLedger) -> None:
@@ -315,7 +335,35 @@ class ExperimentSqliteStore:
             lease_payload = _load_object(row[3], field="experiment_spec.lease_payload")
             if is_refusal(lease_payload):
                 return lease_payload
-            lease = _parse_lease(lease_payload.value)
+            lease_body = lease_payload.value
+            if set(lease_body) != {
+                "dispatch_lease",
+                "registering_attempt_no",
+                "registering_deployment_ref",
+            }:
+                return invalid_input(
+                    "experiment_spec.lease_payload",
+                    "registration occurrence requires pinned lease, observed attempt, "
+                    "and deployment",
+                    spec_fp1=spec.value.spec_fp1,
+                )
+            lease_raw = lease_body.get("dispatch_lease")
+            attempt_raw = lease_body.get("registering_attempt_no")
+            deployment_raw = lease_body.get("registering_deployment_ref")
+            if (
+                not isinstance(lease_raw, Mapping)
+                or isinstance(attempt_raw, bool)
+                or not isinstance(attempt_raw, int)
+                or attempt_raw < 0
+                or not isinstance(deployment_raw, str)
+                or not deployment_raw.strip()
+            ):
+                return invalid_input(
+                    "experiment_spec.lease_payload",
+                    "registration occurrence pins typed actual attempt and deployment",
+                    spec_fp1=spec.value.spec_fp1,
+                )
+            lease = _parse_lease(cast("Mapping[str, object]", lease_raw))
             if is_refusal(lease):
                 return lease
             header = ledgers.get(spec.value.spec_fp1)
@@ -354,6 +402,8 @@ class ExperimentSqliteStore:
                 ExperimentSqliteSnapshot(
                     spec=spec.value,
                     lease=lease.value,
+                    registering_attempt_no=attempt_raw,
+                    registering_deployment_ref=deployment_raw,
                     ledger=ledger,
                     entry_seq=_entry_seq(spec.value.spec_fp1, owned_entries),
                     lineage_edge=edges_by_from.get(spec.value.spec_fp1),

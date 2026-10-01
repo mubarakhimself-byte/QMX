@@ -1,0 +1,286 @@
+aeccd2fd9dc2898cc42490b92445952b8ce21291 Assemble pinned published backend, governing docs and reserved UI baseline
+a400f334bb9e86c9dd1ad4ac14afd1045af934af fix causal numeric support contracts
+f0392c787072a3aef17aaf05ae953ebf8e942b19 fix(qma): package mandatory packs and diagnose bootstrap refusals
+24511efbb103163b6526fc2a6d30628956072013 fix momentum dependency support
+a982cf09dadf1e42b6c7871c520284a037a8b57d fix(qmn): bind admitted risk and execution identity
+f6e2119f3c2690586b58a0d64d8a414b02381a48 Enforce source and same-candidate product release evidence
+4c706d1a3025d72237524dd62c3cd08ef1f0158f Repair data recovery and immutable references
+724c3910ec220d1e1abb4fc369a85186857ae03c feat(qma): compose shared mission and task runtime
+eff8dfa31f5612dade994f6e7951dfde449a1e5f Add hash-pinned clean bundle installation and retain MCP transport boundary
+f9e91362f955298356c853670e8f9a6ef2026979 Add ATC policy handoff and study generation barrier
+83970a030e8c7c6941fe6cee2de932bc9ef9765f fix(qmb): bind conformance and terminal ledger evidence
+c3821ea018641032adb7e10aa99c365664498807 Bind product builds to immutable source and enforce QMA coverage
+3f34884c24c49047c273ea90c4245e9df09c307a fix(qmn): bind pending risk to CT-28 identity
+3fc8044713620124d2dd9d9375e50759f8f0a39e fix(qmb): preserve daemon startup diagnostics
+cbec39d6ea306b3384a886f40da8a7746e0642c0 feat(qma): dispatch CT-40 invokes through session grants
+ad24e8eb42ea0e44669d9ef67683ec8a086c1026 Preflight complete release bundle before installation
+86ec0e79fab84d3358f1261e9d82c316c8ca9ab2 Move QML filesystem persistence into application host adapter
+f2b6d4c388a942aae8ca33aacae02332b0bc2788 Add precise types to recovery and study test ports
+ee15c7bf694d4ca4119ccdd27d5790dcb8e2b675 Test declared mechanism schemas without flagging governance denials
+8764602e9dc02528fb3781131484cd1524306764 fix(qmb): report stopped daemon after clean shutdown
+480d3bf87e8502feac4d0a2393a9f4c119c583e0 test(qma): exercise grant-bound CT-40 mission start
+24666a29c76c2dc7a25c520cc6fca07e8f80f7a9 fix(qmb): refuse unknown daemon lock state
+ebd338feb2202851c97a860d11413d3012258b8f Add durable CT-29 closed-trade reader
+e8b9b95b05e89c04d71ca1a712a30dbd93939048 Reject duplicate CT-29 position closes
+51895530c0b977b13115dd399e57b8b7be308060 fix(qmn): persist hosted entry reservations
+7f2cc4d924563e92a07bf3e8afa27f7a52d19b8d docs(qmn): qualify reservation recovery evidence
+d43f7dc695d3180fa0df2105ce5522c74885c746 Record CT-29 projection evidence
+85212ad621de175171eb113a05d12e0cb1119535 feat(qmb): materialize immutable recorded replay surfaces
+bc1465f4bdc72742f93149a91c892a2ec64ffa47 Use canonical run identities in executable examples and regressions
+6bd8fcb931b62de89f873cfc3ee80b4edda4a0c6 feat(qmn): adapt reservations to checked QMF journal
+a14c121351bff8b379b6bb068fca2f05c976010d Align complete governing architecture corpus to published main
+875d77ab99afe126904df960b19c51910a2ae243 feat(qmn): run provider-free stand-down supervisor
+6ed716bb8ff15f04340c620c6d82e117f7b7f85a docs(qmn): record QMF adapter and supervisor evidence
+d000e0bd5d62905d14b6b569c90f58ffb46a3466 feat(qmn): journal supervised process starts before ready
+2a1226be97e292259f8a0488d8c874768d08fd99 fix(qmb): preserve quote sides without inventing current price
+acfad645e492090deb8b84457b0bb1be30fc613c docs(qmn): record durable supervisor lifecycle evidence
+6559095541a242c9ef9ce7c2cf24278ded9ba44b Repair archived research probe without accessing personal state
+8a9fa6e9ffde4be9f07dfe0090859acfad587a90 Apply canonical formatting to reviewed persistence and CT29 reader
+8974387dbf22cd658b386e3795df73410c9c118d Record actual locked install and recovered host lifecycle evidence
+ba1faa83ff1f1dee56c4cbce1084c61897e30a4d Ignore coverage subprocess data fragments alongside aggregate data
+ad36bb6b698085f541989b6ca19dd2459d775500 Canonicalize governor log and path regression configuration identities
+f1831e04c5cc507112c9f5c0981a2bc4cd93a61e fix(qmn): harden reservation acknowledgments and recovery
+34aa8a0af1df5fad684b72cd3a02349c83c2888d feat(qmb): enforce CT12 admission on recorded source replay
+86dc5a27a855d3d5f2d10b5747ecf40995b04fc7 Use manifest-bound factory and canonical identities in independent QA fixtures
+575fe89ba463a0740360a856039709d4eebed715 Preserve independent review evidence and explicit remaining acceptance gaps
+8dd5fd588fe8ca85c09c616388b6d442e6661208 Record whole-source failures coverage gaps and corrected QA controls
+6e7d57b41e7ecf05283a18afe792ec4076e689c7 feat(qma): expose grant-bound session lifecycle on CT-40
+8410a11191f02e4e67c637dccf7826e545498fab fix(qma): reject unknown CT-40 session command fields
+311c88dfcaa8ab8887ac680de5ef79ff50ce5921 Include reproducible build install and recovery instructions in candidate bundle
+62edb28c699ebe14ee042dd1ec24efa6207e445c fix(qmb): use manifest-bound factories in examples
+02a958071fc9cd4003c7d9de77d9c1a6d9235339 Record passing factory and tool coverage checks separately from product acceptance
+36b57acc0b30ba7336c666166e02509bdb8b9932 Keep unresolved ATC financial policy semantics visible in candidate manifest
+830dfda3e09e4dae6c4f5f0ccf6ee787f9418da2 Add registered ATC replay execution runtime
+a2a3d8622ff98503e07aeac89b5181a7cf653655 feat(qma-wire): recover session grants after lost replies
+9509a361ba2fcf9f6627520ca15f0b2a34b17913 fix(qma): keep replay request reference separate from CT-47 data
+16afbfde05e4345fc859fd4ec9c2a02d6265af3c Package validated node deployment assets with the full installable candidate
+1219cd642d67b1f37b694362ccf2e7fee88c6d39 fix(data): make CT-15 intake authority durable
+986ddedb8c2be641bceeed59599d861d0e1b66e3 test(qmb): type host diagnostic subprocess fixture
+3e598bbe37fce6bac1aff393340e9c5683ed174a feat(qmb): resolve durable selected-source replay requests
+f13d607c45dc4f9191ca9608480dcf06d7c16c27 Validate complete ATC journal acknowledgments
+99863c9f4c1f7bc7b743a4f1bb51f723d00425b2 Refuse malformed ATC event acknowledgments
+8752a064e3d437bb337f41ff1cf1a6f22d24fcca feat(qmn): compose checked hosted decision root
+3f964d1c758df035af6a66bd2e9ed26f0823d363 fix(qmb): freeze replay request identity deeply
+88fa98073263e9a4569129c7572bb47a6182381a Install exclusively from a private verified artifact snapshot
+aa9d595a37b9524c3e47320a6123781f79364e17 fix(qmb): retain pinned replay price metadata identity
+cc3278b641bd64b32f891584245c4a68168c6bb8 docs: record durable QMB replay request evidence
+8f98fa0d5a14e325272b41af2a22a0f409bcee06 feat(qma): persist job handles in task graph projection
+fa4960497c2eab47e742060abfa3d9a10ed2440d docs: record durable job recovery evidence
+9ff7ec78fc94240566be549749f38a136c5f52a3 Add Book replay execution and CT29 recovery handler
+a8d0034543045fa8311b9fd9f6ebaae08a12a2a4 Harden durable CT15 intake authority
+5ceb4fb421e856b6be2a4aa9e83e3036ffddfd97 docs: record reproducible expanded bundle installation
+97ee5d391cb9b9cb23e8b84c6ec6e17a34685f86 docs: bind bounded ATC and installer independent reviews
+6c6abda0e45583e09af309ca8ef70e1d6835aec2 Type-check ATC runtime trust boundaries
+ee670d80a2f41b9be69ecfc99d1c188fa4023d83 docs: record installed node stand-down recovery and checked journal
+8d06dba9ab1e5bd27fb7d7cccd718dd5e3b8c471 fix(qma): keep mission jobs queued until worker acceptance
+555e404155694a73d2704ba87e2c7e5479874980 docs: resolve QML scope authority and retain host stamp boundary
+2e8b1a07d71c2e3a3438595a7b1bc8b43b975fd5 docs: record refreshed pins and resolved QML scope authority
+a2fb30537fdc2ba29458d35308ddb14a69c9fd13 docs: record independent host restart and identity findings
+c6bf88895296057cdc2d4a4af9a2239f9edd79f8 docs: define native exit repair against existing authority
+1fc900cc329bdc7542a4732c8dfe056baa4e4369 fix(qmn): validate hosted evidence and recovery
+82f32b7feb59a10d73bbfca3cf2664f77b1e07bf docs: map canonical replay builder composition requirements
+be314578d3d106722b50c39862a254d550c4a633 fix(qmf): serialize CT-15 recovery across processes
+de4636ac92ca347f8b56f4ed4c4227fc18e96ae6 docs: bind ATC typing and rich replay metadata review
+3553a029b9fddd1f8d3d733433c3bd28d3a2bfb3 docs: record node receipt defects and declared Book exit path
+17bfb62944df7b57dbf8f38c744545981fd8e460 docs: bind independent concurrent and rotated intake recovery approval
+dc47fe46b5bed753b1fd378b34734d1fd0fa1297 docs: record broader data regressions after intake repair
+3fa9282cf6e7efe50813fe0b29ef2c5dfb3e64c9 fix(qmb): persist realized CT-32 measures in terminal ledger
+fa73afbef14bf053c6ee5cdd267d156b36329a60 docs: record independent terminal economic receipt findings
+26475f2cbdd8d30da4daf409606602cc5eb207f2 fix(qmn): verify physical journal receipts
+c930bc5d51740e991e916d057f8c252727db60f5 feat(qmb): preserve partial fill orders until terminal
+c2d8b4ec3f4d6daa3b77b5e30a667d2f3cd42114 docs: record cross-boot physical receipt positive control failure
+ab201d014888daf1ef5b0bb378c63078f000602a fix(qml): move CT-06 receipt stamping to QMB
+a13ea5917865e3e4f44cae6ed435606eb0a4ad1c fix(qmn): verify physical journal stream position
+d1ab6a40b8a11f86887a4abe87bee3ff3020c991 fix(qmb): validate handler fill dispositions at boundary
+855ee8da92612e9e9b4686edc9c6c3dfc76a4b52 test: migrate family registration gate to host stamp owner
+d9298a1aaabe21e5fa254d5188c219530cd3ef87 feat(qmb): complete replay position stop and partial lifecycle
+0b40df75bb177a47324a4be91ef3af4fb0b13865 fix(qmb): verify partial risk rebase on recovery
+3fd056c5639c9f17cdebbf1197be2594b3eea341 docs: record Book partial failures and bounded node loop approvals
+8ce7c48336a612542361e3cc075721a288731ba8 Add governed recorded replay execution service
+1d1adff8b1cdef9a6e5ac0ae074c8ddb4e3088e8 docs: record independent host and QML corrective reviews
+50ebd45489dc936a13fe49578244c0f533d18262 docs: resolve independently verified QML registration scope
+3bbf73f8b54bf4a13a1540d58af19cc744a614f1 fix(qmn): include configured reservation journal identity guard
+44ddcc3a390fa5395856719dad2326636882a380 test: distinguish guarded QMF receipt fields from QMB vocabulary
+7ab8e20c06a98d52e9803886a39e02c4f36b3b58 docs: record configured node loader brief and intermediate scans
+620c2f887700a62032abbdccb05fd05d6e523504 docs: distinguish UI shell fixtures from connected acceptance
+fe3b6b8b7774a80c4e5057b3f43c345c2aaa86b1 docs: retain independent Book physical receipt findings
+ccf68dc67ffb187ef92a36c46f2a25b925ab9b20 fix(qmb): verify book journal receipts and stable position state
+27f2415cea6fb5c82c3aec87a6a5f6dd6e69f8aa docs: retain strict Book metadata and hostile event findings
+613c6a748bc3d6a7de897e7b3e129f4e7b55f4c8 Validate delegated QMB replay CLI envelope
+3d134cfd7ee610b788cf6ce6516cd2c0d85350be Support quote-only market and stop fills
+5e93abf43d8d11fac76fcaed421cb529cbdfd83c docs: record independent recorded-quote fill review
+d355fb4c52d0d7ddf629b762597240d090f78115 docs: record actual persisted replay blockers without zero-trade acceptance
+b32df4756305fe47696ac89e19dc276dba2ebe36 Carry registered split and QMA attempt to QMB CLI
+c01d9ca575f300c167c3719aa01bd4d534b18feb Exercise persisted quote-based replay economics
+6205a21dc9140b7c361884a2af736c4823fad95e docs: record actual delegated CLI transport review failure
+189705ed0983d408f87a59d80b5eec0c2b854b8c Add verified terminal outcomes for stopped replay entries
+3e566cbd4b6dfb1e5f60022a273a4891f062ebcb fix(qmb): verify partial-stop terminal evidence and retire residual orders
+2a5a4686c906619c8d60510b5bbdea2c18cfc2ad fix(qma): serialize the exact QMB attempt at process launch
+990beeb28dcb2324fb4b81ab911e8a43f9bc9a62 docs: record independent partial-stop and terminal proof approval
+ec06394f395f95b8d59126f3c95455f547af4006 Verify registered replay identities and actual economic terminal results
+5f176ba30a3180b785b007063c6abf627dcaaae7 Record independent approval of delegated CLI attempt transport
+56fade4d0418a8e8a1b0344a5efef6bd25ad1903 Refuse unverified configured node runtime after durable boot recording
+784c75c7f2a3c9f64335e5c40088ee62c538dd19 Preserve partial-position financing rollover markers through close and recovery
+414ebd24871036bf28235f6afa61699053bf016f Record independent source-integrity failures in economic execution review
+e89e58ed554eaa833e9da3de0789388f884b5903 Format intake concurrency regression for required static gate
+b989ff5889dbe0d435ec0d20a4d2afdda5391110 Record financing sign failure and bounded configured-node preflight approval
+c8bea704ac1d4f5f626ccf9a65b8d8ec52011815 Record independent mutable callback evidence and typed-sample bypass findings
+a34b9f0b88e05acf5c800467630f7ae9c315b6d5 Keep vocabulary proof checks strictly typed without changing gate behavior
+80647b977f6e2fe40923ca9279295f60d3a3d53b Convert signed financing cash to subtractive Book costs before write and recovery
+7b14bbf3fea59d2b629dbfb8c08dd316edc90907 Record independent signed-financing and unchanged vocabulary gate approval
+3fd4278312e33631e022f6bdf06d7f290726464e Record failed full integration gates without lowering release acceptance
+745f7b7b752f76b0d1752a028292dbcffd24afd2 Re-resolve persisted replay inputs and refuse substituted execution surfaces
+9a7cb567eef72a88e43b4805276e3834b43de038 Record replay integrity corrections and remaining malformed-input review failures
+bd0a7d28d0d9471d59d2dadac82c96b9b89162b6 Keep provider refusals free of partial intake and preserve journal protocol delegates
+2fd9fc2bf4f16c468b2911fb9abd3c52907524f9 Record independent no-partial-intake and durable delegate approval
+c67428b7ac84aec65ecaa5e439df8564ca54f866 Return typed refusals for malformed recorded execution source graphs
+4daa0d04da31512b01a48af303eb9d63d31d83fd Freeze governed callback evidence and revalidate typed sample boundaries
+4a483215ea0d671c64f2d88899668c05a8ea1353 Load content-pinned operator replay composition for delegated QMB CLI runs
+47efda0e1c2bdea0c974f73a0a477537ad293dbd Record replay integrity approval and remaining custom callback evidence mutation
+b725c0d78b3ee97a852ee21a1dc45304b9b54659 Share typed replay fixtures and retain canonical stored split reconstruction controls
+2fb595142f82990d8df243ddbcbfc301816c0c10 Record additional anonymous Ubuntu setup failures with exact commands
+999f77d7eed0d8acb61098c56828f9aeaaffa30e Make purity regression submodule imports explicit for strict type checking
+fb1d2384e35c6aeceeb1485c0701b340c8782fe1 Keep explicit white-box serialization checks and normalize intake test imports
+069bf82a7d58de9c87e081718548ad45b7792546 Reject mutable custom identity providers in governed callback evidence
+3dfb103aac736cfc9315eaad3d27c8d03f46b73d Record actual replay ingress status and full alternative integration requirements
+9e705c9ef046ae163732b972c33e339caabefce8 Resolve registered node definitions and durable activation evidence within sanctioned boundaries
+3d7b1b11e5372f06e4664bc6a6e722eb28d88f15 Execute trusted operator replay through the actual QMB CLI
+56ae319c6306115b117f74a6bf546e62462f517f Freeze nested official QMF nouns in callback evidence
+d71cc1c3f30805c3d9b04e618e67507137d10301 Persist and reconcile multi-fill virtual ledger state across boots
+1c4c73b1e51e9194464601830e7543ecd1108b6d Record independent nested evidence mutation reproduction
+7e95cae4f9de71862369ca1493bd880a8ba2916f Record reproducible non-editable selected-bot economic execution
+69e3c010ecf04ebaad5fe3bb0f3664e164ff2500 Validate frozen QMF evidence nouns through typed constructors
+43bc79f858d8c757fc47a0acb9d609ab46f2609c Apply required source formatting without behavior changes
+cd2e19877209d1fba435423431e50eb1a3b50d94 Update execution evidence with verified journeys and remaining scope
+2101d5ba65734825de901e3f75c4751e9b268aca Record independent node, economic CLI and integrity review findings
+bb03c5b7f6bdac553736ce88d3d6eca814506f33 Require existing canonical identity at evidence sample admission
+690614c9fca7de1c705d7886f40818e684760fe8 Reject forged virtual-ledger event metadata and receipt bodies
+2d8a088313bd3780278020179c3b1601de50f29a Record immutable source pass results and unchanged coverage failures
+a582b300c41e929461b68eadd5939c3c5487a44d Require canonical identity before admitting structure-fold geometry
+10f3686a1d9bf2d0f511c1a0fe1a4d029e9bdfee Refuse explicit model evaluation backend and artifact mismatches
+de890305d5f1620d6639a4e6484118bf318552a9 Record virtual-ledger reapproval and remaining evidence identity checks
+14633c110d786dcc80b1ff6b5ce3c763d3f1939d Keep deployment, native resources and topology verification gaps visible
+1176fb959c5c836967df1a0879a3454ae2087441 Characterize Book close uncertainty, short stops and financing recovery
+e24ea82537d66b733b9ce48174975eb5d9e144c7 Persist fresh node boot seals and compose checked hosted resources
+26a539dfdb972cd5f96bf994699794b6f0fc020b Compare Book quantities by exact amount and unit across recovery
+bcb8fe7fab2aebd3c8aa68fac4c2ba6370fd063c Record independent fold, model backend and Book recovery findings
+e72b97f0840c493105b1864447d190819f87b30d Prove registered QMA service transport into actual QMB replay child
+a21479db3b7f03082f1696340b2b221ed2d8e148 Snapshot canonical footprint metadata before minting identity
+2eb8734a4150065feb04cfe0a4ffd938919ede11 Record Book reapproval and boot durability review blockers
+ae64c477ee0dfce449823b683c88a21c26d9887c Record registered QMA transport and installed executable evidence
+850ffecf6692cabde1cfc17e6990488f10630b64 Verify complete physical boot receipts before publishing lifecycle state
+f2fdd1e9c113a92b7948529770d1fa5e0a74aa14 Validate and snapshot remaining footprint identity inputs
+c67ce22effa9d5d3ae6e2ab27da923ef9f6b6a1f Record boot approval and QMA worker authority findings
+c24a35186470e86ffbd66292ad6880b786b4b982 Record independent footprint identity approval
+5c36f0b9bb220ac24ca9cabc0debbaf67a003012 Reproduce substituted CT29 projection source admission
+aa72ede98f5d80530aff1ebb43a93b624a721ead Record generation source and identity admission defects
+f51435f5c447c95fe36c0c737f99981bf8947fa1 Record installed dependency audit and UI advisory handoff
+c68cbcfca4618ddea1808e755f46bf8aafa0e250 Persist registered ATC outcomes and resume exact policy studies
+22cc7e6e950788a63c5960032918ade7b9fcd8a7 Record ATC second-boot and uncertain-terminal review failures
+e8f2a03e6a6eaa6d0f8a39f1aef482d3c27dc74b Preserve generated source bytes and validate typed QML identities
+ee78de5a6d10cc8c5818d40ea6a644f1b9f55c78 Connect paired QMA backtest dispatch with lease and exit observation
+dd3fbc913f60d3da91b94ce5db1853d6436d3c21 Record bounded paired dispatch and observation evidence
+7f9d9ae03d4fb3d3f249935259b6d7e67179d1f3 Record remaining worker linkage and nested QML review blockers
+1276a31b0d012c67a18e2ae86660dfc8cf5b41e9 Resolve ATC boot references and block uncertain trial replay
+5410147882acdb63e8669f4968a6167c29d38f46 Record bounded ATC recovery and hostile receipt approval
+6ae3495434a81de5200b0c6c0b9dbeec4b47fab4 Validate typed child Confluence before generation identity
+b9f5f561641ffbc4997519540e1683bce377237b Record independent generation source integrity approval
+7cd1c4636f5e740ab5ffc180d4bdc2d433e8aac4 Record governed receiver acceptance and registration provenance repair seam
+0104b612a6c556dad9eb01cf73c4443ae64fdd35 Resolve durable native position identity for guarded node exits
+ebd935b309a9676dfc3bbd979961958502122934 Record source-only mandatory QA coverage diagnosis
+a93c42b531492ee002cc369f8f3c75dde64065f0 Record native target authority and connected exit review failures
+9bd4f5371b2f0d2287c4d4e1bf7717ef1206c312 Correct ATC reuse boundary and distinguish current worker authority
+83e05a03a8c0c5a62eaaed82667bdbe981e9fe31 Observe QMB child exits and preserve query attempt identity
+4c9e9b04fd3b415023517ddffb3cf1fdcab77375 Record native Book and family delegation review failures
+7de89439c82c9962637d330b6f281c4515ed756f Record automatic observer durability and exit-status failures
+57c99cb9157bdad6a58397d8ec488e7c6263d831 Authenticate projection rows through durable CT29 readback
+7afedf5eac49008a187e585f2ea438dd26eb18d7 Record remaining projection run-config lineage failure
+ab4f4a5598e57d84d5221dc305e194ac8b25c1e3 Record current QML behavioral pass and coverage failure
+f68d7f7ba64a4a0b235843e449f63b9a5d7249b1 Recover completed ATC trials from checked durable decision chains
+1d0f5e79592c90d1c07bc1f4efd9edc5c6f9b9c8 Retain child exit certainty and serialize durable job observation
+915d225b46737bce636f817310d30c4d45064b21 Require admitted Book exit authority before native close effects
+ad899c32e5076fd9c8e3ce386fd3a3ebf1689eea Record independent ATC reconstruction ambiguity failure
+e78cc59303bd8fbd4f3bb54514b81ac6978151a7 Record bounded native authority approval and complete candidate status
+0fac48d6a361b558f40dd59ea11a210f9aefa28d Reject all conflicting ATC decisions for a recovered trial label
+5a17a610412306d6659097bc5de4dd9baa2cdc1b Record remaining child observation uncertainty persistence failure
+23522a0dd9f7eeba460c68dd9588cf134b32ba5e Characterize offline MIS restart and disjoint scoring results
+ac8a915a3bf1ec6ec5f9591d0bf82ff324537657 Keep remaining observation failure and recovery review status explicit
+443c4d5b284fca35ff928369a38fc15186575c78 Record independent ATC durable reconciliation approval
+017b8546d966db0c8a941c700555aa33001ac376 Record production acceptance hook and payload binding gaps
+1fc1d5de0a11fba0e3a1dc63047e1269cfe2d429 Document published UI transport boundary for connected acceptance
+ebaf295d98c44c7dce5ffe3e0d23999de3821bcf Record lawful native protection amendment integration seam
+8fb4f3e30c84ba26d1f5d17284f48173474a471b Characterize public QML frontier binding and runtime risk evidence
+626b6cbcb7447b1a895105195cd2c682d9a571ca Retry durable job uncertainty without repeating child wait
+14b33ce343e001a8420564941c1be60dea4f22d0 Align generic ATC entrypoints with governing shared contracts
+4c5c03f0f0ae93243590e1ca2c3fed9e37b7450d Record independent durable observer retry approval and limits
+0e87c49682485c4858b9e5622691cf7c4238bc85 Characterize QML identity budget lifecycle and confluence contracts
+45367b23610e11ea1681276ef68ddddcd6ff207f Record expanded QML behavior evidence and remaining coverage failure
+7a3565c7b030bdf73e1aa536b5faace46124131a Characterize research search generation and typed graduation lineage
+b62459ea03a4f1c3e5eba9935e087a07ea539754 Preserve exact independent probe evidence and dirty dependency provenance
+020276026b23d0bc6ef513139e3952c886af6af2 Prove host research save reopen and promoted-from lineage readback
+deec530b7d945e5dd06bb143f8e17fe8e8170619 Record installed research reopen and independently reproduced store defects
+1e00de092972406013e91182d7ae48294f8a5499 Bind analysis projection lineage to actual config source and terminal readback
+59ed42684041087fdbf79adce7f9b350c9eb240a Record remaining projection provenance and research security failures
+79df6963b053ce6dbfc3608b902b04fa35ed4377 Retain independent research-store hostile publication failures
+454d6c3ecb17639a7e549525f1037cdd5dac342d Record truthful current packaging and factory controls
+0b99f7ddc07129e0ff01827fcfc0fcc9c6716eb2 Clarify current task authority for UI worker handoff
+70fe7249cff450873b3d32c58c70f36f5698de90 Prove installed manifest-bound source loader with refusal controls
+cbe86273a82e044b4bb7570e89c0931c1ecebb69 Verify canonical research content and descriptor-pinned publication
+56643d9b4c11cedcb103a1c7f99caf94473b008e Bind independent research security approval to exact repair commit
+5d89ada3a97548ce4d3d444c2fdddfd8a03006d1 Diagnose installed node resource and frontier producer gaps
+13cd32f54b00e81249bf555baf60254ea988e45b Record full factory correction without scanner waiver
+b3b21169a48ff841463ef12b9d19fe709fedad09 Record expanded QML recovery coverage failure without waiver
+b484d6f7e3704692386060e1d76c645d77c7cbd7 Bind replay projections to durable producer source provenance
+931e2a89302f211d878551040f39f2298d132de8 Bind source provenance review and retain node execution gaps
+064c2ed83940173b8d62aa46404d9c95e11519e9 Record real-route QMA accepted payload authorization failure
+6726f8a553ce95402928c21fb86bde5475dfb570 Record actual node config containment race before repair approval
+517faea2757cf2a8e431a8f787de44dc56d1496e Record unavailable documentation-specific factory tooling
+91cbb13384fb837b4ca2f49054b5284b2e9b12e9 Repair pinned node configuration I/O and installed preflight
+f4236c3e7d6d8355140ae63017bfdc0da6e0cc30 Bind node preflight review and preserve full ATC scope
+d51f313326cdcf24cc3b1e38c27d87a7b6532690 Preserve QML malformed-template diagnostics on the actual declaration path
+4c76dd637c7f8b2dd99fce7c19bdedbcdc0d7eea Characterize public footprint identity and retain truthful coverage evidence
+845b7de696ba3cce224cf75b81a039810d23b727 Characterize nested confluence identity and declared schema
+665653ac398c02e15cc9a8f84e230df92d0f56ec Characterize governed recorded frontiers through the actual hosted Book root
+724f62b57cc90d1be491c4c0a7c21971aa574f7d Revalidate nominal evidence times before delivering QML callbacks
+bdf49ca22ef1aba9cdb0855a19938587ddb9d02c Record reviewed input guards and remaining strict coverage failures
+b70c435decb1ab9654aa1b5bd356022c0290f0c2 Retain independent preflight and registration persistence findings
+76515bc9fd385fbe9224af10971f2b304c22a336 Check QML catalog content and registration identities independently
+7c08a9d970b3ee916d6822a2c0f67d2dc659d9c1 Record current terminal integration and strict QML coverage results
+cad497c1d65b78f74274823140f290b696e52568 Record independent ATC and configured profile blockers
+663cfa47558e3e4a00a7a1f81624330189dc3f95 Bind bounded QMA preflight review to exact source hashes
+6482f0152436d3b0db0d6794cc4fa4889de9a24a Record independent Alternative result identity correction approval
+a70c9d731fc7adcc27d6e4525e3de815077bbb5e Reject malformed matching LogicIdentity registrations in either order
+0fe6e758bdb1e20e07c7879043b5a111ffc2a061 Resolve immutable source-validation host profiles without activation
+6580abfa1bb5c7120f7a4c292357e489a2436fa2 Keep strict QML coverage failure visible after nominal identity repair
+3d3e4e01637188d86d8f2af89dda9567a6fc24be Characterize unsupported native tighten with effect-free refusal
+6353601ce46f112eb9ca93c921c68d87c883ed8b Retain actual restart occurrence attribution failure evidence
+45aa5b30e8d3cfbb624e2ead542a82d4e9fcf2cd Record actual nominal Bot declaration construction bypass
+9ed14c79c01585addd30eccf05c70969dc174573 Retain nominal constructor and protection decoder regression findings
+443701a440316e7c6710168c4857bb365b95e531 Decode declared native protection prices after nominal validation
+580eed0650d178333fff592f61a6eea15b197d67 Record actual offline Ubuntu container installation and lifecycle
+ba8cc1a0418685b4b9835a9f20938087b6e937ad Record independent invocation witness approval and remaining schema bypasses
+e56e42b141ea8cfde2920317e00cb3f609d1d82a Validate nominal Bot declarations before factory effects
+ea16e9493bdeb76569bd6d80bb48a399c8b0d38e Record QML strict coverage and QMN producer review failures
+b4614e168eb5ac35da5637bde273dbe40fde4ca8 Keep candidate QML coverage status current
+7b610505b1bc27251f6e85005c375c5348e9f658 Record ordinary initial worker dispatch gap and retry authority
+2b1a0d4363110ebc7fa1450ad32e8e70f107a665 Record current declared artifact-store integration rerun
+c14c27f3a68e3ec552ec801c7e44edc64d57dbf5 Record mutable snapshot and nominal restore validation defects
+28cef53bc17a1e29f2dea49f1a9f61c1b4bd7a03 Record actual persisted protection provenance false admission
+b14204d8f1b08941fe89b955050a7f88b96e64a1 Record active strict typing checks and protection source rerun
+8d78f3fa474cf76ed42fa668176d72078c92c7d5 Retain and verify actual protection observation provenance
+124c9c45c0e2943b77162d8f2d68888f37f74ba9 Track reviewed protection provenance and active typing status
+2e73ea108e581308d15db3846760255f6e5917d4 Freeze Bot state identity and validate nominal restoration
+810b2ffbe19d5c492777fb30ea828eeb48b5aa6d Record reviewed snapshot coverage without rounding success
+e542497e7598314d1e44216f2e90ed2b063cb016 Record initial publication authority and migration failures
+4cb5530446db96e5bd9d08afca5e20dfead9c7ab Track current state coverage and actual ATC CLI characterization
+5d06ac2993c3a17d80cbcd762ce4e040344372d9 Record independent ratchet and runtime closure validation findings
+b7d94dafdd19bf325e61fb491b65f4b93195197f Keep held ratchet and closure review failures visible
+b61b8ad83ec384934f6068215501323b5af7a8ce Record actual offline bundled-runtime installation and lifecycle
+05b4e6c17daba6adf282c20ae15ba1b56c3b2473 Record remaining initial publication and migration consistency failures
+d30cfdc8a88fafd653b5a0091cd80c25a080161a Record corrected closure helper offline installation repeat
+5a5bbc77f75e589d41cd77facc1d0f9ce4cc6fa1 Bundle and verify exact offline runtime wheel closure
+cba76c50940099d105e7ad9b0acee14fe51a673a Track reviewed offline closure and bounded installed evidence
+7e011f973c7d20114c0e58bc8d4bf4b2679c040d Bind protective ratchets to checked sources and signed native levels
+c32877548f7c91ebe0bb8d4196c557862163a763 Record reviewed ratchet integration with protection and KSA controls
+485e61bda467508abce1b7aed71590b5d000d8f4 Record reviewed initial outbox and explicit migration corrections
+ab94506a5b4380a40e7064fbbba7ef8a40a61873 Keep strict QML coverage failure visible after recovery journey

@@ -13,12 +13,13 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import TypeVar, cast
 
 import click
 from click.shell_completion import CompletionItem
-from qmf.core.refusal import Result, is_ok, is_refusal
+from qmf.core.refusal import Ok, Result, is_ok, is_refusal
 
 from qmb._display import __version__
 from qmb.analysis import CompareReadout, ProjectionView, RerunOutcome
@@ -324,6 +325,161 @@ def backtest_run(
                 unavailable(
                     "operator_runtime",
                     "the QMB process has no operator-owned replay runtime root",
+                ),
+            )
+            return
+        from qmb.host.operator_alternative_replay import (  # noqa: PLC0415
+            execute_operator_alternative_replay,
+            operator_alternative_binding_present,
+            read_operator_alternative_binding,
+        )
+
+        alternative = operator_alternative_binding_present(
+            runtime_root=runtime_root,
+            context=delegated.value,
+        )
+        if is_refusal(alternative):
+            _transport(ctx, alternative)
+            return
+        if os.environ.get("QMA_QMB_PREFLIGHT") == "1":
+            if os.environ.get("QMA_QMB_VERIFY") == "1":
+                from qmb._refuse import policy  # noqa: PLC0415
+
+                _transport(
+                    ctx,
+                    policy("qmb_cli_mode", "preflight and verification are distinct invocations"),
+                )
+                return
+            if delegated.value.operator_descriptor_fp1 is not None:
+                from qmb._refuse import policy  # noqa: PLC0415
+
+                _transport(
+                    ctx,
+                    policy("operator_descriptor_fp1", "preflight does not accept a caller pin"),
+                )
+                return
+            if alternative.value:
+                selected = replace(delegated.value, mints_ct32=False)
+                resolved = read_operator_alternative_binding(
+                    runtime_root=runtime_root,
+                    context=selected,
+                )
+                if is_refusal(resolved):
+                    _transport(ctx, resolved)
+                    return
+                descriptor_fp1 = resolved.value.descriptor_fp1.value
+                mints_ct32 = False
+                composition = "alternative"
+            else:
+                from qmb.host.operator_replay import read_operator_replay_binding  # noqa: PLC0415
+
+                selected = replace(delegated.value, mints_ct32=True)
+                resolved = read_operator_replay_binding(
+                    runtime_root=runtime_root,
+                    context=selected,
+                )
+                if is_refusal(resolved):
+                    _transport(ctx, resolved)
+                    return
+                descriptor_fp1 = resolved.value.descriptor_fp1.value
+                mints_ct32 = True
+                composition = "book"
+            _transport(
+                ctx,
+                Ok(
+                    {
+                        "class": "qmb-runtime-preflight-v1",
+                        "format_version": 1,
+                        "job_id": delegated.value.job_id,
+                        "attempt_id": delegated.value.attempt_id,
+                        "environment_ref": delegated.value.environment_ref,
+                        "occupancy_key": delegated.value.occupancy_key,
+                        "experiment_spec_fp1": delegated.value.experiment_spec_fp1.value,
+                        "evidence_ref": delegated.value.evidence_ref.value,
+                        "split_manifest_fp1": delegated.value.split_manifest_fp1.value,
+                        "composition_class": composition,
+                        "mints_ct32": mints_ct32,
+                        "operator_descriptor_fp1": descriptor_fp1,
+                    }
+                ),
+            )
+            return
+        if os.environ.get("QMA_QMB_VERIFY") == "1":
+            claim_path = os.environ.get("QMA_QMB_VERIFY_CLAIM_FILE")
+            durable_recovery = os.environ.get("QMA_QMB_VERIFY_DURABLE") == "1"
+            if not durable_recovery and (
+                not isinstance(claim_path, str) or not os.path.isabs(claim_path)
+            ):
+                from qmb._refuse import invalid  # noqa: PLC0415
+
+                _transport(ctx, invalid("claimed_result", "QMA verification supplies a claim file"))
+                return
+            claimed: object = None
+            if not durable_recovery:
+                try:
+                    if not isinstance(claim_path, str):
+                        raise ValueError("claim file path is required")
+                    if os.path.islink(claim_path) or os.path.getsize(claim_path) > 262_144:
+                        raise ValueError("claim file is symlinked or exceeds the size limit")
+                    with open(claim_path, encoding="utf-8") as handle:
+                        claimed = json.load(handle, object_pairs_hook=_strict_json_object)
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    from qmb._refuse import invalid  # noqa: PLC0415
+
+                    _transport(
+                        ctx,
+                        invalid(
+                            "claimed_result",
+                            "QMA result claim is strict JSON",
+                            error=str(exc),
+                        ),
+                    )
+                    return
+            if delegated.value.operator_descriptor_fp1 is None:
+                from qmb._refuse import policy  # noqa: PLC0415
+
+                _transport(
+                    ctx,
+                    policy("operator_descriptor_fp1", "verification requires the preflight pin"),
+                )
+                return
+            if alternative.value:
+                from qmb.host.operator_alternative_replay import (  # noqa: PLC0415
+                    verify_operator_alternative_result,
+                )
+
+                checked = verify_operator_alternative_result(
+                    runtime_root=runtime_root,
+                    context=delegated.value,
+                    claimed_result=claimed,
+                )
+            else:
+                from qmb.host.operator_replay import verify_operator_replay_result  # noqa: PLC0415
+
+                checked = verify_operator_replay_result(
+                    runtime_root=runtime_root,
+                    context=delegated.value,
+                    claimed_result=claimed,
+                )
+            _transport(ctx, checked)
+            return
+        if delegated.value.operator_descriptor_fp1 is None:
+            from qmb._refuse import policy  # noqa: PLC0415
+
+            _transport(
+                ctx,
+                policy(
+                    "operator_descriptor_fp1",
+                    "the QMA placement includes the descriptor selected by read-only preflight",
+                ),
+            )
+            return
+        if alternative.value:
+            _transport(
+                ctx,
+                execute_operator_alternative_replay(
+                    runtime_root=runtime_root,
+                    context=delegated.value,
                 ),
             )
             return
@@ -1965,6 +2121,16 @@ def _transport(ctx: click.Context, result: Result[_T]) -> None:
         click.echo(_format_ok(result.value))
 
 
+def _strict_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject duplicate names in the internal terminal-verification claim."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _format_ok(value: object) -> str:
     if isinstance(value, bool):
         return str(value)
@@ -1980,7 +2146,11 @@ def _format_ok(value: object) -> str:
         return json.dumps(_jsonable_payload(value.fp1_identity()), ensure_ascii=False)
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
-        if mapping.get("class") == "qmb-recorded-replay-result-v1":
+        if mapping.get("class") in {
+            "qmb-recorded-replay-result-v1",
+            "qmb-runtime-preflight-v1",
+            "qmb-alternative-result-v1",
+        }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         verb = mapping.get("verb")
         if verb in {

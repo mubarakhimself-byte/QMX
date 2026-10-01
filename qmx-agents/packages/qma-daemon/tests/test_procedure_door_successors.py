@@ -110,6 +110,7 @@ def test_config_changing_door_step_mints_successor_via_create_successor() -> Non
     registered = experiments.register(
         _spec(),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -126,6 +127,7 @@ def test_config_changing_door_step_mints_successor_via_create_successor() -> Non
         evidence_ref=EVIDENCE_REF,
         resolved_config_ref=nxt,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(placed), placed
@@ -165,6 +167,7 @@ def test_same_resolved_config_does_not_mint_successor() -> None:
     registered = experiments.register(
         _spec(config="same"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -178,6 +181,7 @@ def test_same_resolved_config_does_not_mint_successor() -> None:
         evidence_ref=EVIDENCE_REF,
         resolved_config_ref=registered.value.spec.resolved_config_ref,
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(placed)
@@ -224,6 +228,7 @@ def test_query_step_cannot_change_resolved_config() -> None:
     registered = experiments.register(
         _spec(config="query"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -260,6 +265,7 @@ def test_config_changing_step_requires_experiments_and_lease() -> None:
     registered = experiments.register(
         _spec(config="lease"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -283,6 +289,7 @@ def test_bot_supersedes_and_new_edge_kinds_are_refused() -> None:
     registered = experiments.register(
         _spec(config="edge"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -297,6 +304,7 @@ def test_bot_supersedes_and_new_edge_kinds_are_refused() -> None:
         resolved_config_ref=_fp("cfg-sup"),
         edge_type="supersedes",
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_refusal(supersedes)
@@ -311,6 +319,7 @@ def test_bot_supersedes_and_new_edge_kinds_are_refused() -> None:
         resolved_config_ref=_fp("cfg-new-edge"),
         edge_type="experiment-predecessor",
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_refusal(minted)
@@ -342,6 +351,7 @@ def test_procedure_record_is_not_the_continuity_object() -> None:
     registered = experiments.register(
         _spec(config="node"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
@@ -356,6 +366,7 @@ def test_procedure_record_is_not_the_continuity_object() -> None:
         evidence_ref=EVIDENCE_REF,
         resolved_config_ref=_fp("cfg-node-next"),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
         task_id="task-node",
     )

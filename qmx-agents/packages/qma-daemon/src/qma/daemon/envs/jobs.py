@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from threading import RLock
 from types import MappingProxyType
 from typing import Any
@@ -313,6 +313,24 @@ class JobHandleService:
 
     def handle_for(self, job_id: str) -> JobHandle | None:
         return self._store.get(job_id)
+
+    def attach_artifact(self, job_id: str, artifact: JobArtifact) -> Result[JobHandle]:
+        """Persist one content-addressed artifact ref on its existing JobHandle."""
+        handle = self._store.get(job_id)
+        if handle is None:
+            return invalid_input("job_id", "artifact attachment requires a durable JobHandle")
+        prior = next((item for item in handle.artifacts if item.fp1 == artifact.fp1), None)
+        if prior is not None:
+            if prior == artifact:
+                return Ok(handle)
+            return policy_rejection(
+                "artifact",
+                "a JobHandle artifact fingerprint has immutable completeness",
+                job_id=job_id,
+                fp1=artifact.fp1,
+            )
+        candidate = replace(handle, artifacts=(*handle.artifacts, artifact))
+        return self._commit(candidate, event="artifact_attached", previous=handle)
 
     def handle_for_task(self, task_id: str) -> JobHandle | None:
         return self._store.for_task(task_id)

@@ -218,6 +218,7 @@ from qma.wire.invocation_envelope import (
     ContributionRecord,
     InstanceRecord,
     PublicCallTransport,
+    compute_input_hash,
     format_utc_iso_z,
     parse_invocation_envelope,
 )
@@ -931,6 +932,7 @@ class DaemonProcess:
                 task_graphs=task_graphs,
                 variables=variables,
                 compiler=roster.compiler,
+                artifact_store=substrate.artifact_store,
             )
             roster.backtesting = runtime_composition.backtesting
             roster.backtesting.bind_experiments(experiments)
@@ -952,6 +954,12 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_jobs
+            reconciled_qmb = process.backtesting.reconcile_restored_jobs()
+            if is_refusal(reconciled_qmb):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return reconciled_qmb
             process._bind_operator_logger(
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,
@@ -3278,44 +3286,188 @@ class DaemonProcess:
             environment_kind = environment_ref.removeprefix("env:")
             if self._runtime_composition.environments.declaration(environment_kind) is None:
                 return NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
-            invocation_task_id = bound.envelope.logical_invocation_id
-            accepted_lease = self.task_dispatcher.dispatch_lease_for(invocation_task_id)
-            accepted_task = self.task_dispatcher.task_for(invocation_task_id)
+            dispatched = self.task_dispatcher.dispatched_task_for_invocation(
+                bound.envelope.logical_invocation_id
+            )
+            if is_refusal(dispatched):
+                return dispatched
+            accepted_task, accepted_lease, accepted_row = dispatched.value
+            current_ledger = self.task_dispatcher.ledgers.get(accepted_task.id)
+            pinned_deployment = accepted_task.inputs.get("model_deployment_ref")
+            expected_input_hash = self.task_dispatcher.expected_operation_input_hash(
+                accepted_task.id
+            )
+            if is_refusal(expected_input_hash):
+                return expected_input_hash
+            received_input_hash = compute_input_hash(
+                bound.validated_payload,
+                descriptor=bound.descriptor,
+            )
+            if is_refusal(received_input_hash):
+                return received_input_hash
+            acceptance_checks = {
+                "task_running": accepted_task.state is TaskMissionState.RUNNING,
+                "lease_owner": accepted_lease.owner == owner.actor_id,
+                "task_owner": accepted_task.owner == owner.actor_id,
+                "lease_task": accepted_lease.task_id == resolved.value.dispatch_lease.task_id,
+                "lease_mission": accepted_lease.mission_id
+                == resolved.value.dispatch_lease.mission_id,
+                "environment": resolved.value.spec.environment_ref == environment_ref,
+                "ledger_present": current_ledger is not None,
+                "deployment_pinned": isinstance(pinned_deployment, str)
+                and bool(pinned_deployment.strip()),
+                "run_fp1": accepted_task.inputs.get("run_fp1") == resolved.value.spec.spec_fp1,
+                "evidence_ref": accepted_task.inputs.get("evidence_ref") == evidence_ref,
+                "input_op": accepted_task.inputs.get("op_id") == bound.envelope.op_id,
+                "input_version": accepted_task.inputs.get("op_version")
+                == bound.envelope.op_version,
+                "input_instance": accepted_task.inputs.get("instance_id")
+                == bound.envelope.instance_id,
+                "input_revision": accepted_task.inputs.get("config_revision")
+                == bound.envelope.config_revision,
+                "target_op": accepted_row.target.get("op_id") == bound.envelope.op_id,
+                "target_version": accepted_row.target.get("op_version")
+                == bound.envelope.op_version,
+                "target_instance": accepted_row.target.get("instance_id")
+                == bound.envelope.instance_id,
+                "target_revision": accepted_row.target.get("config_revision")
+                == bound.envelope.config_revision,
+                "task_input_hash": expected_input_hash.value == bound.envelope.input_hash,
+                "received_input_hash": received_input_hash.value == bound.envelope.input_hash,
+            }
             if (
-                accepted_lease is None
-                or accepted_task is None
-                or accepted_task.state is not TaskMissionState.RUNNING
+                accepted_task.state is not TaskMissionState.RUNNING
                 or accepted_lease.owner != owner.actor_id
                 or accepted_task.owner != owner.actor_id
-                or accepted_lease != resolved.value.dispatch_lease
+                or accepted_lease.task_id != resolved.value.dispatch_lease.task_id
+                or accepted_lease.mission_id != resolved.value.dispatch_lease.mission_id
                 or resolved.value.spec.environment_ref != environment_ref
+                or current_ledger is None
+                or isinstance(current_ledger.attempt_no, bool)
+                or current_ledger.attempt_no < 0
+                or not isinstance(pinned_deployment, str)
+                or not pinned_deployment.strip()
+                or accepted_task.inputs.get("run_fp1") != resolved.value.spec.spec_fp1
+                or accepted_task.inputs.get("evidence_ref") != evidence_ref
+                or accepted_task.inputs.get("op_id") != bound.envelope.op_id
+                or accepted_task.inputs.get("op_version") != bound.envelope.op_version
+                or accepted_task.inputs.get("instance_id") != bound.envelope.instance_id
+                or accepted_task.inputs.get("config_revision") != bound.envelope.config_revision
+                or accepted_row.target.get("op_id") != bound.envelope.op_id
+                or accepted_row.target.get("op_version") != bound.envelope.op_version
+                or accepted_row.target.get("instance_id") != bound.envelope.instance_id
+                or accepted_row.target.get("config_revision") != bound.envelope.config_revision
+                or expected_input_hash.value != bound.envelope.input_hash
+                or received_input_hash.value != bound.envelope.input_hash
             ):
                 return policy_rejection(
                     "dispatch_lease",
-                    "QMB execution requires the current accepted Task dispatch lease",
-                    task_id=invocation_task_id,
+                    "QMB execution requires a current dispatched outbox Task bound to this "
+                    "operation, complete payload, spec, evidence, deployment, and attempt",
+                    task_id=accepted_task.id,
+                    failed_checks=tuple(key for key, okay in acceptance_checks.items() if not okay),
+                    dispatched_config_revision=accepted_row.target.get("config_revision"),
+                    request_config_revision=bound.envelope.config_revision,
                 )
-            ledger_entries = resolved.value.ledger.entries
-            if not ledger_entries:
+            if "as_of" in bound.validated_payload:
                 return TypedRefusal(
                     category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
                     retryability=Retryability.AFTER_CONDITION,
                     context={
                         "reason": (
-                            "registered ExperimentSpec has no deployment-authored ledger entry"
+                            "the current QMB runtime transport cannot preserve "
+                            "the CT-40 as_of input"
                         ),
-                        "experiment_spec_fp1": cast("str", spec_fp1),
+                        "op_id": bound.envelope.op_id,
+                        "field": "as_of",
                     },
+                )
+            runtime_preflight = self.backtesting.preflight_registered_run(
+                owner=owner.actor_id,
+                task_id=accepted_task.id,
+                environment_ref=environment_ref,
+                experiment_spec_fp1=resolved.value.spec.spec_fp1,
+                evidence_ref=evidence_ref,
+            )
+            if is_refusal(runtime_preflight):
+                return runtime_preflight
+            # The read-only QMB preparation is a subprocess and can take long
+            # enough for the dispatched Task or lease to change. Re-resolve the
+            # authoritative outbox/Task/lease/attempt/deployment immediately
+            # before recording receiver acceptance or placing a QMB job.
+            refreshed = self.task_dispatcher.dispatched_task_for_invocation(
+                bound.envelope.logical_invocation_id
+            )
+            if is_refusal(refreshed):
+                return refreshed
+            fresh_task, fresh_lease, fresh_row = refreshed.value
+            fresh_ledger = self.task_dispatcher.ledgers.get(fresh_task.id)
+            fresh_input_hash = self.task_dispatcher.expected_operation_input_hash(fresh_task.id)
+            if is_refusal(fresh_input_hash):
+                return fresh_input_hash
+            if (
+                fresh_task.id != accepted_task.id
+                or fresh_task.state is not TaskMissionState.RUNNING
+                or fresh_task.owner != owner.actor_id
+                or fresh_lease != accepted_lease
+                or fresh_row.graph_run_id != accepted_row.graph_run_id
+                or fresh_row.successor_node_id != accepted_row.successor_node_id
+                or fresh_row.envelope_hash != accepted_row.envelope_hash
+                or fresh_ledger is None
+                or fresh_ledger.attempt_no != current_ledger.attempt_no
+                or fresh_task.inputs.get("model_deployment_ref") != pinned_deployment
+                or fresh_task.inputs.get("run_fp1") != resolved.value.spec.spec_fp1
+                or fresh_task.inputs.get("evidence_ref") != evidence_ref
+                or fresh_input_hash.value != bound.envelope.input_hash
+            ):
+                return policy_rejection(
+                    "dispatch_lease",
+                    "QMB preparation completed for a Task authority that is no longer current",
+                    task_id=accepted_task.id,
+                )
+            # The authenticated worker route is the acceptance point. Persist its
+            # exact current Task/lease/attempt receipt only after the incoming
+            # operation and registered spec match the dispatched Task inputs.
+            accepted_receipt = self.task_dispatcher.accept_worker_invocation(
+                bound.envelope.logical_invocation_id
+            )
+            if is_refusal(accepted_receipt):
+                return accepted_receipt
+            if (
+                accepted_receipt.value.result.get("operation_input_hash")
+                != expected_input_hash.value
+            ):
+                return policy_rejection(
+                    "receiver_acceptance",
+                    "accepted worker receipt binds the full compiled public input",
+                    task_id=accepted_task.id,
+                )
+            accepted = self.task_dispatcher.accepted_task_for_invocation(
+                bound.envelope.logical_invocation_id
+            )
+            if is_refusal(accepted):
+                return accepted
+            accepted_task, accepted_lease, accepted_row, receiver = accepted.value
+            worker_acceptance = receiver.result
+            if (
+                worker_acceptance.get("attempt_no") != current_ledger.attempt_no
+                or worker_acceptance.get("model_deployment_ref") != pinned_deployment
+            ):
+                return policy_rejection(
+                    "receiver_acceptance",
+                    "worker receipt retains this current Task attempt and deployment",
+                    task_id=accepted_task.id,
                 )
             placement = self.backtesting.invoke(
                 QMB_BACKTEST_TOOL_ID,
                 owner=owner.actor_id,
-                task_id=invocation_task_id,
+                task_id=accepted_task.id,
                 environment_ref=environment_ref,
                 experiment_spec_fp1=resolved.value.spec.spec_fp1,
                 evidence_ref=evidence_ref,
-                dispatch_lease=resolved.value.dispatch_lease,
-                model_deployment_ref=ledger_entries[-1].model_deployment_ref,
+                dispatch_lease=accepted_lease,
+                model_deployment_ref=pinned_deployment,
+                worker_acceptance=worker_acceptance,
                 originating_product_session_ref=originating_product_session_ref,
             )
             if is_refusal(placement):

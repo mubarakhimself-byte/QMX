@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 from qmb.host.operator_replay import (
     OPERATOR_BINDING_FORMAT_VERSION,
@@ -12,7 +13,7 @@ from qmb.host.operator_replay import (
     read_operator_replay_binding,
 )
 from qmb.host.qma_cli import QmaBacktestContext
-from qmf.core import Fingerprint, Result, fingerprint, is_ok
+from qmf.core import Fingerprint, Result, fingerprint, is_ok, is_refusal
 
 T = TypeVar("T")
 
@@ -88,9 +89,7 @@ def test_operator_binding_requires_exact_ct47_refs_and_pinned_policy(tmp_path: P
     _write(tmp_path / "runtime", context, body)
 
     loaded = _ok(
-        read_operator_replay_binding(
-            runtime_root=str(tmp_path / "runtime"), context=context
-        )
+        read_operator_replay_binding(runtime_root=str(tmp_path / "runtime"), context=context)
     )
 
     assert loaded.experiment_spec_fp1 == context.experiment_spec_fp1
@@ -123,3 +122,22 @@ def test_operator_binding_refuses_unregistered_ct47_request(tmp_path: Path) -> N
     result = read_operator_replay_binding(runtime_root=str(tmp_path / "runtime"), context=context)
 
     assert not is_ok(result)
+
+
+def test_nominal_malformed_qma_context_refuses_before_binding_lookup(tmp_path: Path) -> None:
+    context = _context()
+    malformed: tuple[tuple[str, object], ...] = (
+        ("experiment_spec_fp1", None),
+        ("evidence_ref", Fingerprint("not-fp1")),
+        ("split_manifest_fp1", None),
+        ("attempt_id", True),
+        ("job_id", []),
+        ("occupancy_key", None),
+    )
+    for field, value in malformed:
+        candidate = replace(cast(Any, context), **{field: value})
+        result = read_operator_replay_binding(
+            runtime_root=tmp_path / "absent-runtime", context=candidate
+        )
+        assert is_refusal(result), (field, result)
+        assert result.context.get("field") == field

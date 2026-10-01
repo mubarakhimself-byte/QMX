@@ -23,10 +23,11 @@ from qma.core.vocabulary.enums import TaskMissionState
 from qma.daemon.taskgraph.records import TaskGraph, TaskRecord
 from qmf.core import Ok, Result, fingerprint, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
-from qmf.data.store.refusals import invalid_input
+from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
     "DEFAULT_PARTITION_ID",
+    "INITIAL_ROOT_PARTITION_ID",
     "OUTBOXES_MERGED",
     "OUTBOX_PROVES_EXACTLY_ONCE_EFFECT",
     "OUTBOX_SCHEMA_SQL",
@@ -46,6 +47,7 @@ __all__ = [
     "TaskGraphOutboxRow",
     "ack_outbox_dispatch",
     "apply_successor_eligibility",
+    "build_initial_outbox_row",
     "build_outbox_row",
     "derive_logical_invocation_id",
     "derive_outbox_id",
@@ -71,6 +73,7 @@ REMOTE_WORKER_OUTBOX_NOUN: Final[str] = "remote_worker_outbox"
 OUTBOXES_MERGED: Final[bool] = False
 OUTBOX_PROVES_EXACTLY_ONCE_EFFECT: Final[bool] = False
 DEFAULT_PARTITION_ID: Final[str] = "default"
+INITIAL_ROOT_PARTITION_ID: Final[str] = "initial-root"
 TASK_GRAPH_OUTBOX_TABLE: Final[str] = "task_graph_outbox"
 TASK_GRAPH_ELIGIBILITY_TABLE: Final[str] = "task_graph_successor_eligibility"
 TASK_GRAPH_RECEIVER_TABLE: Final[str] = "task_graph_outbox_receiver"
@@ -84,7 +87,7 @@ OUTBOX_SCHEMA_SQL: Final[str] = """
 CREATE TABLE IF NOT EXISTS task_graph_successor_eligibility (
     graph_run_id TEXT NOT NULL,
     successor_node_id TEXT NOT NULL,
-    predecessor_node_id TEXT NOT NULL,
+    predecessor_node_id TEXT,
     predecessor_revision INTEGER NOT NULL,
     partition_id TEXT NOT NULL,
     PRIMARY KEY (
@@ -97,7 +100,7 @@ CREATE TABLE IF NOT EXISTS task_graph_outbox (
     predecessor_revision INTEGER NOT NULL,
     partition_id TEXT NOT NULL,
     outbox_id TEXT NOT NULL,
-    predecessor_node_id TEXT NOT NULL,
+    predecessor_node_id TEXT,
     logical_invocation_id TEXT NOT NULL,
     target TEXT NOT NULL,
     envelope_hash TEXT NOT NULL,
@@ -118,7 +121,7 @@ CREATE TABLE IF NOT EXISTS task_graph_outbox_receiver (
 );
 """
 
-_CrashAfter = Literal["terminal", "eligibility", "outbox"]
+_CrashAfter = Literal["terminal", "eligibility", "outbox", "initial_outbox"]
 
 
 class CompletionCrash(RuntimeError):
@@ -217,11 +220,17 @@ def successor_target(
     instance_id = (
         instance_raw if isinstance(instance_raw, str) and instance_raw else f"inst:{task.id}"
     )
+    pinned_revision = task.inputs.get("config_revision")
+    revision = (
+        pinned_revision
+        if isinstance(pinned_revision, int) and not isinstance(pinned_revision, bool)
+        else config_revision
+    )
     return {
         "op_id": op_id,
         "op_version": op_version,
         "instance_id": instance_id,
-        "config_revision": config_revision,
+        "config_revision": revision,
     }
 
 
@@ -331,7 +340,7 @@ class TaskGraphOutboxRow:
     predecessor_revision: int
     partition_id: str
     outbox_id: str
-    predecessor_node_id: str
+    predecessor_node_id: str | None
     logical_invocation_id: str
     target: Mapping[str, object]
     envelope_hash: str
@@ -407,27 +416,28 @@ class TaskGraphOutboxRow:
         )
 
     def to_payload(self) -> Mapping[str, object]:
-        return MappingProxyType(
-            {
-                "outbox_id": self.outbox_id,
-                "graph_run_id": self.graph_run_id,
-                "successor_node_id": self.successor_node_id,
-                "predecessor_node_id": self.predecessor_node_id,
-                "predecessor_revision": self.predecessor_revision,
-                "partition_id": self.partition_id,
-                "logical_invocation_id": self.logical_invocation_id,
-                "target": dict(self.target),
-                "envelope_hash": self.envelope_hash,
-                "transport_state": self.transport_state.value,
-                "acceptance_state": (
-                    None if self.acceptance_state is None else self.acceptance_state.value
-                ),
-                "effect_state": None if self.effect_state is None else self.effect_state.value,
-                "receiver_acceptance_id": self.receiver_acceptance_id,
-                "outbox_proves_exactly_once_effect": OUTBOX_PROVES_EXACTLY_ONCE_EFFECT,
-                "noun": TASK_GRAPH_OUTBOX_NOUN,
-            }
-        )
+        body: dict[str, object] = {
+            "outbox_id": self.outbox_id,
+            "graph_run_id": self.graph_run_id,
+            "successor_node_id": self.successor_node_id,
+            "predecessor_revision": self.predecessor_revision,
+            "partition_id": self.partition_id,
+            "logical_invocation_id": self.logical_invocation_id,
+            "target": dict(self.target),
+            "envelope_hash": self.envelope_hash,
+            "transport_state": self.transport_state.value,
+            "outbox_proves_exactly_once_effect": OUTBOX_PROVES_EXACTLY_ONCE_EFFECT,
+            "noun": TASK_GRAPH_OUTBOX_NOUN,
+        }
+        if self.predecessor_node_id is not None:
+            body["predecessor_node_id"] = self.predecessor_node_id
+        if self.acceptance_state is not None:
+            body["acceptance_state"] = self.acceptance_state.value
+        if self.effect_state is not None:
+            body["effect_state"] = self.effect_state.value
+        if self.receiver_acceptance_id is not None:
+            body["receiver_acceptance_id"] = self.receiver_acceptance_id
+        return MappingProxyType(body)
 
 
 @dataclass(frozen=True, slots=True)
@@ -510,6 +520,102 @@ def build_outbox_row(
     )
 
 
+def build_initial_outbox_row(
+    *,
+    graph: TaskGraph,
+    task: TaskRecord,
+    config_revision: int,
+    operation_input_hash: str,
+) -> Result[TaskGraphOutboxRow]:
+    """Publish one actual root READY Task through the existing outbox projection.
+
+    Root publication has no predecessor. It uses a distinct reserved partition
+    and an explicit null predecessor; it never fabricates a completed node.
+    """
+    if task.node_id is None or graph.task_by_id(task.id) != task:
+        return _invalid("task", "root publication names an exact Task in its graph")
+    if task.mission_id != graph.mission_id:
+        return policy_rejection(
+            "mission_id", "root Task and Task Graph share the same Mission identity"
+        )
+    if task.state is not TaskMissionState.READY:
+        return policy_rejection(
+            "task_state", "initial root publication requires an actual READY Task"
+        )
+    if any(edge.to_node == task.node_id for edge in graph.edges):
+        return policy_rejection(
+            "predecessor_node_id", "root publication applies only to a graph root Task"
+        )
+    if (
+        isinstance(config_revision, bool)
+        or not isinstance(config_revision, int)
+        or config_revision < 0
+    ):
+        return _invalid("config_revision", "initial outbox target has a nonnegative revision")
+    op_id = task.inputs.get("op_id")
+    op_version = task.inputs.get("op_version")
+    instance_id = task.inputs.get("instance_id")
+    task_revision = task.inputs.get("config_revision")
+    if (
+        not isinstance(op_id, str)
+        or not op_id.strip()
+        or isinstance(op_version, bool)
+        or not isinstance(op_version, int)
+        or op_version < 1
+        or not isinstance(instance_id, str)
+        or not instance_id.strip()
+        or isinstance(task_revision, bool)
+        or not isinstance(task_revision, int)
+        or task_revision != config_revision
+    ):
+        return invalid_input(
+            "task.inputs",
+            "initial operation root pins exact operation, instance, and config revision",
+        )
+    if (
+        not isinstance(operation_input_hash, str)
+        or not operation_input_hash.startswith("fp1:sha256:")
+        or len(operation_input_hash) != len("fp1:sha256:") + 64
+    ):
+        return _invalid("operation_input_hash", "root outbox pins the full payload hash")
+    target = successor_target(task, config_revision=config_revision)
+    target["operation_input_hash"] = operation_input_hash
+    if target.get("config_revision") != config_revision:
+        return policy_rejection(
+            "config_revision",
+            "initial root outbox target agrees with the caller's resolved revision",
+        )
+    revision = 0
+    partition = INITIAL_ROOT_PARTITION_ID
+    logical_id = derive_logical_invocation_id(
+        graph_run_id=graph.id,
+        successor_node_id=task.node_id,
+        predecessor_revision=revision,
+        partition_id=partition,
+    )
+    hashed = envelope_hash_for(logical_invocation_id=logical_id, target=target)
+    if is_refusal(hashed):
+        return hashed
+    return Ok(
+        TaskGraphOutboxRow(
+            graph_run_id=graph.id,
+            successor_node_id=task.node_id,
+            predecessor_revision=revision,
+            partition_id=partition,
+            outbox_id=derive_outbox_id(
+                graph_run_id=graph.id,
+                successor_node_id=task.node_id,
+                predecessor_revision=revision,
+                partition_id=partition,
+            ),
+            predecessor_node_id=None,
+            logical_invocation_id=logical_id,
+            target=target,
+            envelope_hash=hashed.value,
+        )
+    )
+
+
 def replayable_outbox(rows: Sequence[TaskGraphOutboxRow]) -> tuple[TaskGraphOutboxRow, ...]:
     """Unacked or dispatched-not-accepted rows (at-least-once dispatch)."""
     return tuple(row for row in rows if row.replayable)
@@ -552,12 +658,18 @@ def parse_outbox_row(value: object) -> Result[TaskGraphOutboxRow]:
         return _invalid("graph_run_id", "outbox requires graph_run_id")
     if not isinstance(successor_node_id, str) or not successor_node_id:
         return _invalid("successor_node_id", "outbox requires successor_node_id")
-    if not isinstance(predecessor_node_id, str) or not predecessor_node_id:
-        return _invalid("predecessor_node_id", "outbox requires predecessor_node_id")
     if not isinstance(partition_id, str) or not partition_id:
         return _invalid("partition_id", "outbox requires partition_id")
     if not isinstance(revision_raw, int) or isinstance(revision_raw, bool):
         return _invalid("predecessor_revision", "predecessor_revision is an int")
+    if predecessor_node_id is None:
+        if partition_id != INITIAL_ROOT_PARTITION_ID or revision_raw != 0:
+            return _invalid(
+                "predecessor_node_id",
+                "a missing predecessor is reserved for the initial root publication",
+            )
+    elif not isinstance(predecessor_node_id, str) or not predecessor_node_id:
+        return _invalid("predecessor_node_id", "outbox predecessor is text or initial-root null")
     target_raw = body.get("target")
     if isinstance(target_raw, str):
         try:

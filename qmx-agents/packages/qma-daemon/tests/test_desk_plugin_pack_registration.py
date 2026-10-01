@@ -126,8 +126,11 @@ def test_analysis_backtest_is_existing_qmb_door_adapter(tmp_path: Path) -> None:
         )
         assert is_refusal(second)
         assert second.context["field"] == "qmb_job"
-        done = service.observe_outcome(first.value.handle.job_id, JobHandleState.DONE)
+        done = service.jobs.observe_lost_certainty(
+            first.value.handle.job_id, trigger="lost_supervisor"
+        )
         assert is_ok(done)
+        assert done.value.state is JobHandleState.UNKNOWN
     finally:
         transport.close()
 

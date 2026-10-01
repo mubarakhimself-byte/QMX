@@ -79,6 +79,22 @@ def _compose(tmp_path: Path, *, boot: str) -> DaemonProcess:
     return result.value
 
 
+def test_registration_refuses_non_integer_attempt_without_retaining() -> None:
+    service = ExperimentSpecService()
+    for attempt in ("bad", None, 1.5, True, -1):
+        spec = _spec(config=f"invalid-attempt-{attempt!r}")
+        registered = service.register(
+            spec,
+            dispatch_lease=_lease(),
+            registering_attempt_no=cast("int", attempt),
+            model_deployment_ref="deploy:analyst-v1",
+        )
+        assert is_refusal(registered)
+        assert is_refusal(service.resolve(spec.spec_fp1))
+
+
+
+
 def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path) -> None:
     process = _compose(tmp_path, boot="boot-36-3-a")
     try:
@@ -89,6 +105,7 @@ def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path)
         registered = process.experiments.register(
             _spec(),
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:analyst-v1",
         )
         assert is_ok(registered)
@@ -97,6 +114,7 @@ def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path)
             predecessor_fp1=base_fp1,
             change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:analyst-v1",
             resolved_config_ref=_fp("cfg-sweep"),
         )
@@ -116,7 +134,7 @@ def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path)
             },
         )
         assert is_ok(evidence)
-        assert evidence.value.entries[0].body["ct32_ref"] == _fp("ct32-run")
+        assert evidence.value.entries[-1].body["ct32_ref"] == _fp("ct32-run")
         events = process.journal.read_all()
         assert is_ok(events)
         names = [row["event"] for row in events.value]
@@ -133,9 +151,9 @@ def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path)
         assert is_ok(restored)
         assert restored.value.spec.spec_fp1 == base_fp1
         assert restored.value.ledger.author_agent_id == "agent-analyst-1"
-        assert restored.value.ledger.entries[0].body["qmb_ledger_ref"] == "qmb-ledger:run-1"
-        assert "jsonl" not in restored.value.ledger.entries[0].body
-        assert "ct32" not in restored.value.ledger.entries[0].body
+        assert restored.value.ledger.entries[-1].body["qmb_ledger_ref"] == "qmb-ledger:run-1"
+        assert "jsonl" not in restored.value.ledger.entries[-1].body
+        assert "ct32" not in restored.value.ledger.entries[-1].body
         succ = restarted.experiments.resolve(succ_fp1)
         assert is_ok(succ)
         assert succ.value.spec.resolved_config_ref == _fp("cfg-sweep")
@@ -163,6 +181,7 @@ def test_in_memory_maps_are_not_product_truth(tmp_path: Path) -> None:
         registered = process.experiments.register(
             _spec(config="cache"),
             dispatch_lease=_lease(),
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
         )
         assert is_ok(registered)
@@ -187,6 +206,7 @@ def test_qma_stores_refs_only_and_qmb_does_not_write_edges(tmp_path: Path) -> No
         registered = service.register(
             _spec(config="refs"),
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
         )
         assert is_ok(registered)
@@ -206,6 +226,7 @@ def test_qma_stores_refs_only_and_qmb_does_not_write_edges(tmp_path: Path) -> No
             predecessor_fp1=registered.value.spec.spec_fp1,
             change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
             resolved_config_ref=_fp("from-qmb"),
             source="qmb",
@@ -236,6 +257,7 @@ def test_project_workspace_and_git_branch_parameter_are_refused(tmp_path: Path) 
         registered = service.register(
             _spec(config="identity"),
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
             continuity_kind="workspace",
         )
@@ -243,6 +265,7 @@ def test_project_workspace_and_git_branch_parameter_are_refused(tmp_path: Path) 
         ok = service.register(
             _spec(config="identity"),
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
         )
         assert is_ok(ok)
@@ -250,6 +273,7 @@ def test_project_workspace_and_git_branch_parameter_are_refused(tmp_path: Path) 
             predecessor_fp1=ok.value.spec.spec_fp1,
             change=EXPERIMENT_CHANGE_RESOLVED_CONFIG,
             dispatch_lease=lease,
+            registering_attempt_no=0,  # explicit fixture attempt
             model_deployment_ref="deploy:a",
             resolved_config_ref="git:branch:params",
         )

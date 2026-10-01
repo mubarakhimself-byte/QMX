@@ -129,6 +129,7 @@ def test_registered_spec_records_coordinated_ledger_and_governed_qmb_label(
     registered = experiments.register(
         _spec(),
         dispatch_lease=lease,
+        registering_attempt_no=0,  # explicit fixture attempt
         model_deployment_ref="deploy:analyst-v1",
     )
     assert is_ok(registered)
