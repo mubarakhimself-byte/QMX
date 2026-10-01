@@ -11,6 +11,7 @@ in the registry and the distribution manifest, never restated here.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import TypeVar, cast
@@ -102,6 +103,7 @@ from qmb.doors.cli.tree import (
     invoke_sweep_rank,
     require_prerequisites,
 )
+from qmb.host.qma_cli import decode_qma_backtest_context
 from qmb.optimize import CostEstimate
 from qmb.registryread import LibraryKindRoster, RegistryReadPort
 from qmb.registryread.candidates import CandidateSet, SavedCandidateView
@@ -294,6 +296,38 @@ def backtest_run(
     output_root: str | None,
 ) -> None:
     """Compile via qmb.config.compile_run_config and submit to qmb.orchestrator."""
+    if os.environ.get("QMA_QMB_DOOR") == "cli":
+        delegated = decode_qma_backtest_context(
+            payload_text=os.environ.get("QMA_QMB_DOOR_PAYLOAD"),
+            environ=os.environ,
+        )
+        if is_refusal(delegated):
+            _transport(ctx, delegated)
+            return
+        if any(value is not None for value in (bot, book, bms, output_root)):
+            from qmb._refuse import policy  # noqa: PLC0415
+
+            _transport(
+                ctx,
+                policy(
+                    "qma_payload",
+                    "QMA delegated execution receives no caller-selected QMB runtime values",
+                ),
+            )
+            return
+        from qmb._refuse import unavailable  # noqa: PLC0415
+
+        _transport(
+            ctx,
+            unavailable(
+                "operator_runtime",
+                "the validated QMA placement has no resolved operator replay binding",
+                experiment_spec_fp1=delegated.value.experiment_spec_fp1.value,
+                evidence_ref=delegated.value.evidence_ref.value,
+                split_manifest_fp1=delegated.value.split_manifest_fp1.value,
+            ),
+        )
+        return
     payload = _payload(ctx, output_root=output_root)
     _apply_run_spec(payload, bot=bot)
     _transport(
