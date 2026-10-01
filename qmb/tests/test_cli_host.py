@@ -30,6 +30,7 @@ from qmb.doors.cli import (
     invoke_host_stop,
     main,
 )
+from qmb.doors.cli import host as host_module
 from qmb.doors.cli.host import (
     BROWSER_SPAWNS_PYTHON,
     CT40_BIND_PORT,
@@ -338,6 +339,39 @@ def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
     assert report["browser_spawns_python"] is BROWSER_SPAWNS_PYTHON is False
     assert seen and seen[0][1] == str(tmp_path)
     assert _TOKEN not in json.dumps(dict(report))
+
+
+def test_start_failure_points_to_persistent_daemon_diagnostics(tmp_path: Path) -> None:
+    refused = invoke_host_start(
+        root=tmp_path,
+        spawn=lambda *_args, **_kwargs: 123456,
+        wait_attempts=1,
+        sleeper=_no_sleep,
+    )
+    assert is_refusal(refused)
+    diagnostic = tmp_path / "logs" / "qma-daemon-startup.log"
+    assert str(diagnostic) in str(refused.context)
+    assert diagnostic.is_file()
+
+
+def test_default_spawn_keeps_child_stderr_in_persistent_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeProcess:
+        pid = 321
+
+    def fake_popen(argv: tuple[str, ...], **kwargs: object) -> FakeProcess:
+        _ = argv
+        captured.update(kwargs)
+        return FakeProcess()
+
+    monkeypatch.setattr(host_module.subprocess, "Popen", fake_popen)
+    host_module._default_spawn(("python", "-m", "qma.daemon"), env={}, root=tmp_path)
+    stream = captured.get("stderr")
+    assert stream is not None and stream is not host_module.subprocess.DEVNULL
+    assert getattr(stream, "name", None) == str(tmp_path / "logs" / "qma-daemon-startup.log")
 
 
 def test_start_already_running_does_not_spawn_or_remint(tmp_path: Path) -> None:

@@ -658,32 +658,43 @@ def _spawn_argv(python: str | None, *, recover: bool = False) -> tuple[str, ...]
     return (exe, "-m", DAEMON_SPAWN_MODULE)
 
 
+def _startup_diagnostic_path(root: Path) -> Path:
+    """Return the persistent stderr log for QMA startup and recovery diagnostics."""
+    directory = root / "logs"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "qma-daemon-startup.log"
+    path.touch(exist_ok=True)
+    return path
+
+
 def _default_spawn(
     argv: tuple[str, ...],
     *,
     env: Mapping[str, str],
     root: Path | None = None,
 ) -> int:
-    _ = root
+    target = root or product_daemon_root()
+    diagnostic = _startup_diagnostic_path(target)
     copied = dict(env)
-    if os.name == "nt":
-        proc = subprocess.Popen(
-            argv,
-            env=copied,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-    else:
-        proc = subprocess.Popen(
-            argv,
-            env=copied,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+    with diagnostic.open("ab") as errors:
+        if os.name == "nt":
+            proc = subprocess.Popen(
+                argv,
+                env=copied,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=errors,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        else:
+            proc = subprocess.Popen(
+                argv,
+                env=copied,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=errors,
+                start_new_session=True,
+            )
     return int(proc.pid)
 
 
@@ -693,29 +704,31 @@ def _default_recover_spawn(
     env: Mapping[str, str],
     root: Path | None = None,
 ) -> int:
-    _ = root
+    target = root or product_daemon_root()
+    diagnostic = _startup_diagnostic_path(target)
     copied = dict(env)
-    if os.name == "nt":
-        proc = subprocess.Popen(
-            argv,
-            env=copied,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-    else:
-        proc = subprocess.Popen(
-            argv,
-            env=copied,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    returncode = proc.wait(timeout=60)
+    with diagnostic.open("ab") as errors:
+        if os.name == "nt":
+            proc = subprocess.Popen(
+                argv,
+                env=copied,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=errors,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        else:
+            proc = subprocess.Popen(
+                argv,
+                env=copied,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=errors,
+                start_new_session=True,
+            )
+        returncode = proc.wait(timeout=60)
     if returncode != 0:
-        raise OSError(f"recover-control daemon exited {returncode}")
+        raise OSError(f"recover-control daemon exited {returncode}; diagnostics: {diagnostic}")
     return int(proc.pid)
 
 
@@ -884,7 +897,8 @@ def invoke_host_start(
             _pause(sleeper)
     return unavailable(
         "daemon",
-        "spawned python -m qma.daemon did not acquire .daemon_writer",
+        "spawned python -m qma.daemon did not acquire .daemon_writer; "
+        f"see startup diagnostics at {_startup_diagnostic_path(target)}",
         root=str(target),
         pid=pid,
     )
@@ -1561,6 +1575,7 @@ def invoke_host_recover_control(
             _pause(sleeper)
     return unavailable(
         "recover-control",
-        "one-shot recover-control daemon did not mint host_control and release .daemon_writer",
+        "one-shot recover-control daemon did not mint host_control and release "
+        f".daemon_writer; see startup diagnostics at {_startup_diagnostic_path(target)}",
         root=str(target),
     )
