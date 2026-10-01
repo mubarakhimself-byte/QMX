@@ -166,13 +166,192 @@ def test_library_has_no_module_global_mutable_state() -> None:
     assert violations == []
 
 
+def _same_scope_nodes(node: ast.AST):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+        return
+    yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _same_scope_nodes(child)
+
+
+def _vocabulary_violations(source: str) -> list[str]:
+    """Keep QMB vocabulary separate from narrowed external receipt members."""
+    tree = ast.parse(source)
+    receipt_imported = any(
+        isinstance(node, ast.ImportFrom)
+        and node.level == 0
+        and node.module in {"qmf.data.store", "qmf.data.store.receipts"}
+        and any(alias.name == "StoreReceipt" and alias.asname is None for alias in node.names)
+        for node in tree.body
+    )
+    allowed: set[tuple[int, int]] = set()
+    # Proof names must retain their imported/builtin meanings in every scope.
+    import_bindings = {
+        (alias.asname or alias.name.split(".")[0])
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+        if not (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module in {"qmf.data.store", "qmf.data.store.receipts"}
+            and alias.name == "StoreReceipt"
+            and alias.asname is None
+        )
+    }
+    proof_names_shadowed = bool(import_bindings & {"StoreReceipt", "isinstance"}) or any(
+        (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, (ast.Store, ast.Del))
+            and node.id in {"StoreReceipt", "isinstance"}
+        )
+        or (isinstance(node, ast.arg) and node.arg in {"StoreReceipt", "isinstance"})
+        or (
+            isinstance(node, (ast.FunctionDef, ast.ClassDef))
+            and node.name in {"StoreReceipt", "isinstance"}
+        )
+        or (
+            isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
+            and node.name in {"StoreReceipt", "isinstance"}
+        )
+        or (isinstance(node, ast.MatchMapping) and node.rest in {"StoreReceipt", "isinstance"})
+        for node in ast.walk(tree)
+    )
+    if receipt_imported and not proof_names_shadowed:
+        for function in ast.walk(tree):
+            if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            narrowed: set[str] = set()
+            for statement in function.body:
+                # Only refusal guards in this function's straight-line body qualify.
+                if (
+                    isinstance(statement, ast.If)
+                    and any(isinstance(node, (ast.Return, ast.Raise)) for node in statement.body)
+                    and not statement.orelse
+                ):
+                    guards = (
+                        statement.test.values
+                        if isinstance(statement.test, ast.BoolOp)
+                        and isinstance(statement.test.op, ast.Or)
+                        else [statement.test]
+                    )
+                    found_proof = False
+                    for guard in guards:
+                        if not (isinstance(guard, ast.UnaryOp) and isinstance(guard.op, ast.Not)):
+                            continue
+                        call = guard.operand
+                        if (
+                            isinstance(call, ast.Call)
+                            and isinstance(call.func, ast.Name)
+                            and call.func.id == "isinstance"
+                            and len(call.args) == 2
+                            and isinstance(call.args[0], ast.Name)
+                            and isinstance(call.args[1], ast.Name)
+                            and call.args[1].id == "StoreReceipt"
+                        ):
+                            narrowed.add(call.args[0].id)
+                            found_proof = True
+                    # The failed-guard body has no narrowed type proof.
+                    if found_proof:
+                        continue
+                # Any possible assignment in a branch invalidates a prior proof.
+                assigned = {
+                    node.id
+                    for node in ast.walk(statement)
+                    if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
+                }
+                for node in ast.walk(statement):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        assigned.update(
+                            alias.asname or alias.name.split(".")[0] for alias in node.names
+                        )
+                    elif (
+                        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                        or (isinstance(node, ast.ExceptHandler) and node.name is not None)
+                        or (
+                            isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name is not None
+                        )
+                    ):
+                        assigned.add(node.name)
+                    elif isinstance(node, ast.MatchMapping) and node.rest is not None:
+                        assigned.add(node.rest)
+                old_narrowed = narrowed.copy()
+                narrowed.difference_update(assigned)
+                if isinstance(statement, ast.Assign):
+                    for target in statement.targets:
+                        if isinstance(target, ast.Name):
+                            if (
+                                isinstance(statement.value, ast.Name)
+                                and statement.value.id in old_narrowed
+                            ):
+                                narrowed.add(target.id)
+                            else:
+                                narrowed.discard(target.id)
+                for node in _same_scope_nodes(statement):
+                    if (
+                        isinstance(node, ast.Attribute)
+                        and node.attr == "engine"
+                        and isinstance(node.value, ast.Name)
+                        and node.value.id in narrowed
+                        and node.end_lineno is not None
+                        and node.end_col_offset is not None
+                    ):
+                        allowed.add((node.end_lineno, node.end_col_offset - len(node.attr)))
+    violations: list[str] = []
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        for match in _BANNED_WORDS.finditer(line):
+            if (line_number, match.start()) not in allowed:
+                violations.append(match.group())
+    return violations
+
+
 def test_source_avoids_banned_vocabulary() -> None:
     offenders: list[str] = []
     for path in sorted(_SRC.rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
-        if _BANNED_WORDS.search(text):
+        if _vocabulary_violations(path.read_text(encoding="utf-8")):
             offenders.append(str(path.relative_to(_SRC)))
     assert offenders == []
+
+
+def test_vocabulary_guard_retains_negative_controls() -> None:
+    prefix = "from qmf.data.store.receipts import StoreReceipt\n"
+    guarded = (
+        "def check(value):\n"
+        "    if not isinstance(value, StoreReceipt):\n"
+        "        return False\n"
+        "    receipt = value\n"
+        "    return receipt.engine == 'jsonl'\n"
+    )
+    assert _vocabulary_violations(prefix + guarded) == []
+    assert _vocabulary_violations(guarded) == ["engine"]
+    assert _vocabulary_violations(prefix + "def check(receipt):\n    return receipt.engine\n") == [
+        "engine"
+    ]
+    assert _vocabulary_violations(
+        prefix + guarded.replace("receipt = value", "receipt = object()")
+    ) == ["engine"]
+    assert _vocabulary_violations(prefix + guarded.replace("return False", "pass")) == ["engine"]
+    assert _vocabulary_violations(prefix + guarded.replace("StoreReceipt):", "object):")) == [
+        "engine"
+    ]
+    for word in ("engine", "kernel", "exam", "plugin", "snapshot"):
+        assert _vocabulary_violations(f"class {word.title()}: pass")
+        assert _vocabulary_violations(f"label = '{word}'")
+        assert _vocabulary_violations(f"# {word}")
+
+
+def test_receipt_proof_rejects_import_and_definition_rebinding() -> None:
+    prefix = "from qmf.data.store.receipts import StoreReceipt\n"
+    guard = "def f(value):\n    if not isinstance(value, StoreReceipt):\n        return False\n"
+    bodies = (
+        "import foreign as StoreReceipt\n" + guard + "    return value.engine\n",
+        "from foreign import isinstance\n" + guard + "    return value.engine\n",
+        guard + "    else:\n        value = object()\n    return value.engine\n",
+        guard + "    def value():\n        pass\n    return value.engine\n",
+        guard + "    import foreign as value\n    return value.engine\n",
+    )
+    for body in bodies:
+        assert _vocabulary_violations(prefix + body) == ["engine"]
 
 
 def _is_mutable_literal(value: ast.expr) -> bool:
@@ -183,3 +362,68 @@ def _is_mutable_literal(value: ast.expr) -> bool:
         and isinstance(value.func, ast.Name)
         and value.func.id in {"list", "dict", "set"}
     )
+
+
+def test_vocabulary_guard_rejects_shadowing_and_scope_bypasses() -> None:
+    prefix = "from qmf.data.store.receipts import StoreReceipt\n"
+    cases = {
+        "parameter shadow": (
+            "def f(value, StoreReceipt):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    return value.engine\n"
+        ),
+        "global shadow": (
+            "StoreReceipt = object\n"
+            "def f(value):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    return value.engine\n"
+        ),
+        "ann reassignment": (
+            "def f(value):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    value: object = object()\n"
+            "    return value.engine\n"
+        ),
+        "branch reassignment": (
+            "def f(value, flag):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    if flag:\n"
+            "        value = object()\n"
+            "    return value.engine\n"
+        ),
+        "guard failure access": (
+            "def f(value):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return value.engine\n"
+            "    return False\n"
+        ),
+        "nested scope shadow": (
+            "def f(value):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    def g(value):\n"
+            "        return value.engine\n"
+            "    return g\n"
+        ),
+        "isinstance shadow": (
+            "def f(value, isinstance):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        return False\n"
+            "    return value.engine\n"
+        ),
+        "guard conditionalreturn": (
+            "def f(value,flag):\n"
+            "    if not isinstance(value, StoreReceipt):\n"
+            "        if flag:\n"
+            "            pass\n"
+            "        return False\n"
+            "    return value.engine\n"
+        ),
+    }
+    for name, source in cases.items():
+        if name != "guard conditionalreturn":
+            assert _vocabulary_violations(prefix + source) == ["engine"], name

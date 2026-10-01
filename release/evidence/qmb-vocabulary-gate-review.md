@@ -1,0 +1,12 @@
+# Independent Sol review — external StoreReceipt member exception
+
+Reviewed active uncommitted `qmb/tests/test_qmb_scaffold.py`. **Changes required.** The official external `StoreReceipt.engine` exception is justified; its current AST proof is insufficient.
+
+Seven independent synthetic source controls incorrectly return no vocabulary violations: shadow `StoreReceipt` with a function parameter; reassign it at module scope; annotated reassignment of the narrowed value; conditional reassignment of that value; access `.engine` inside the failed isinstance guard itself; nested function parameter shadowing the outer narrowed value; and shadowing builtin `isinstance` with a parameter. Each should retain the engine violation. Normal guarded official receipt access remains the positive.
+
+The helper narrows before scanning the guard's failure body, walks nested scopes using outer facts and does not invalidate all potential writes or establish imported/builtin binding identity. Limit exemption to direct expressions after proved fallthrough, exclude failed-guard contents and nested definitions, refuse shadowed type/builtin bindings and invalidate names conservatively for annotated/conditional/augmented/deleted/other assignments. Keep lexical negatives outside this small proven external-member case; do not remove production receipt checks or obscure their member names.
+
+Exact heldout sources were sent to root in `/tmp/review_gate.py`. Reviewer made no product/test-helper edits; source remains root-owned. Stable correction needs rerun before approval.
+# Corrective gate review
+
+**APPROVED for this bounded lexical-gate exception after correction.** Root's first correction closes the seven controls above; reviewer additionally found and, under explicit root authorization, patched import alias/type-builtin shadowing, guard else reassignment and function/import rebinding of receipt names. The helper now invalidates imported/defined/exception/pattern bindings and requires absolute official imports; regressions retain all five additional concrete controls. It conservatively refuses unsupported provenance rather than obscuring product member access. Only this test helper was edited, no product source. Official narrowed receipt access and conditional failed-guard return positives remain accepted; both heldout scripts refuse all negative controls. Scoped Ruff passes; gate suite passed 10 tests.
