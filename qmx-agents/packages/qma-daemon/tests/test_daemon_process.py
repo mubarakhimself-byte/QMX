@@ -68,6 +68,20 @@ def test_compose_is_listener_sqlite_writer_and_pack_roster(tmp_path: Path) -> No
             assert process.backtesting.tool_id == QMB_BACKTEST_TOOL_ID
             assert isinstance(process.backtesting, BacktestingService)
             assert isinstance(process.backtesting.transport, CliQmbDoorTransport)
+            assert process.task_dispatcher.store.durable is process.task_graphs
+            assert process.task_dispatcher.environments is process.execution_environments
+            assert process.task_dispatcher.router is process.compute_router
+            assert process.jobs.router is process.compute_router
+            assert process.jobs.dispatcher is process.task_dispatcher
+            assert process.backtesting.jobs is process.jobs
+            assert process.backtesting.environments is process.execution_environments
+            assert process.backtesting.tools is process.tool_registry
+            assert process.nested_mission_host.compiler is process.roster.compiler
+            assert process.nested_mission_host.jobs is process.jobs
+            assert process.nested_mission_host.graphs is process.task_graphs
+            assert process.runtime_service.jobs is process.jobs
+            assert process.runtime_service.tools is process.tool_registry
+            assert process.runtime_service.environments is process.execution_environments
             assert process.snapshot()["qmb_door_transport"] == "CliQmbDoorTransport"
             assert process.backtesting.scheduling_authority is None
             assert process.backtesting.parallelism is None

@@ -77,6 +77,7 @@ from qma.daemon.bus.mailbox_query import (
     handle_list_mailbox_query,
     query_string_to_args,
 )
+from qma.daemon.composition import DaemonRuntimeComposition
 from qma.daemon.diagnosis import (
     DIAGNOSIS_EXISTED_AT_INSPECT_SHA,
     DIAGNOSIS_SQLITE_CLASS_MINTED,
@@ -87,6 +88,10 @@ from qma.daemon.diagnosis import (
     refuse_diagnosis_fourth_store,
     refuse_qmn_alert_failure_class,
 )
+from qma.daemon.envs.jobs import JobHandleService
+from qma.daemon.envs.registry import ExecutionEnvironmentRegistry
+from qma.daemon.envs.router import ComputeRouter
+from qma.daemon.envs.runtime import RuntimeService
 from qma.daemon.experiments import EXPERIMENT_SQLITE_TABLES, ExperimentSpecService
 from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.host_control import (
@@ -177,11 +182,14 @@ from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
 from qma.daemon.sessions.product_session import BoundSessionGrant, ProductSessionService
 from qma.daemon.staging.editor_draft import EditorDraftService
+from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
+from qma.daemon.taskgraph.nested import NestedMissionHost
 from qma.daemon.taskgraph.projection import (
     TASK_GRAPH_STATE_SQLITE_TABLES,
     TaskGraphStateService,
 )
 from qma.daemon.telemetry.store import TelemetryStore
+from qma.daemon.tools.registry import ToolRegistry
 from qma.wire.cancel_job import require_cancel_job_capability
 from qma.wire.editor_draft import (
     EDITOR_DRAFT_HTTP_PATH,
@@ -741,6 +749,8 @@ class DaemonProcess:
         journal: AuthoritativeJournal,
         experiments: ExperimentSpecService,
         task_graphs: TaskGraphStateService,
+        runtime_composition: DaemonRuntimeComposition,
+        variables: GovernedVariableRegistry,
     ) -> None:
         self._substrate = substrate
         self._roster = roster
@@ -749,6 +759,7 @@ class DaemonProcess:
         self._journal = journal
         self._experiments = experiments
         self._task_graphs = task_graphs
+        self._runtime_composition = runtime_composition
         self._server: asyncio.Server | None = None
         self._bound: BoundListener | None = None
         self._accepted = 0
@@ -756,7 +767,7 @@ class DaemonProcess:
         self._operator_logger = configure_daemon_logging()
         self._diagnosis = DiagnosisQueryService()
         self._host_control: HostControlChannel | None = None
-        self._variables = GovernedVariableRegistry.with_builtins()
+        self._variables = variables
         self._local_operator: LocalOperatorLive | None = None
         self._pairing_ws = PairingWsRegistry()
         self._product_sessions = ProductSessionService(
@@ -901,6 +912,14 @@ class DaemonProcess:
                 authoring_journal=journal,
                 sqlite=substrate.sqlite,
             )
+            variables = GovernedVariableRegistry.with_builtins()
+            runtime_composition = DaemonRuntimeComposition.create(
+                journal=journal,
+                task_graphs=task_graphs,
+                variables=variables,
+                compiler=roster.compiler,
+            )
+            roster.backtesting = runtime_composition.backtesting
             roster.backtesting.bind_experiments(experiments)
             process = cls(
                 substrate=substrate,
@@ -910,6 +929,8 @@ class DaemonProcess:
                 journal=journal,
                 experiments=experiments,
                 task_graphs=task_graphs,
+                runtime_composition=runtime_composition,
+                variables=variables,
             )
             process.backtesting.bind_product_sessions(process.product_sessions)
             process._bind_operator_logger(
@@ -1276,6 +1297,41 @@ class DaemonProcess:
     @property
     def roster(self) -> DeskPluginRoster:
         return self._roster
+
+    @property
+    def execution_environments(self) -> ExecutionEnvironmentRegistry:
+        """The process-shared ExecutionEnvironment registry."""
+        return self._runtime_composition.environments
+
+    @property
+    def compute_router(self) -> ComputeRouter:
+        """The process-shared ComputeRouter used by task and job services."""
+        return self._runtime_composition.router
+
+    @property
+    def task_dispatcher(self) -> TaskGraphDispatcher:
+        """The durable TaskGraph dispatcher composed for this process."""
+        return self._runtime_composition.dispatcher
+
+    @property
+    def jobs(self) -> JobHandleService:
+        """The shared daemon-owned JobHandle service."""
+        return self._runtime_composition.jobs
+
+    @property
+    def nested_mission_host(self) -> NestedMissionHost:
+        """The nested Mission host mapped to the active roster compiler."""
+        return self._runtime_composition.nested_missions
+
+    @property
+    def runtime_service(self) -> RuntimeService:
+        """The Dialogue/RLM façade sharing this process's jobs and tools."""
+        return self._runtime_composition.runtime_service
+
+    @property
+    def tool_registry(self) -> ToolRegistry:
+        """The process-wide governed QMA Tool Registry."""
+        return self._runtime_composition.tools
 
     @property
     def backtesting(self) -> BacktestingService:

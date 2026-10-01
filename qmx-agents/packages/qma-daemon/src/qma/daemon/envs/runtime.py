@@ -231,6 +231,14 @@ class RuntimeService:
         return self._jobs
 
     @property
+    def environments(self) -> ExecutionEnvironmentRegistry:
+        return self._environments
+
+    @property
+    def router(self) -> ComputeRouter:
+        return self._router
+
+    @property
     def tools(self) -> ToolRegistry:
         return self._tools
 

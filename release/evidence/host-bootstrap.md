@@ -57,3 +57,15 @@ The daemon import came from `/tmp/qma-external-venv/lib/python3.14/site-packages
 ## Boundaries
 
 This verifies startup/config refusal, wheel-carried mandatory pack resources, and fail-closed default provider composition. It does not establish live OpenCodex transport, a completed daemon serving process, mission/task worker execution, durable result rediscovery after restart, Windows installation, browser behavior, provider entitlement, or release readiness.
+
+## Shared process runtime wiring
+
+`DaemonProcess.compose` now creates one `ExecutionEnvironmentRegistry`, `ComputeRouter`, journal-bound `TaskLedgerStore`, and `TaskGraphDispatcher` over the process's durable `TaskGraphStateService`. `JobHandleService`, `RuntimeService`, and the existing `BacktestingService` use those same job/tool/environment/router objects. `NestedMissionHost` uses the active `roster.compiler`, `process.task_graphs`, shared jobs, and governed variables. Public process properties expose these shared services for the CT-40 serving layer; ProductSessionService remains the grant-binding authority.
+
+Command:
+
+```sh
+qmx-agents/.venv/bin/python -m pytest -q -p no:cacheprovider qmx-agents/packages/qma-daemon/tests/test_daemon_process.py qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py qmx-agents/packages/qma-daemon/tests/test_durable_job_handle.py qmx-agents/packages/qma-daemon/tests/test_qmb_backtesting_door.py
+```
+
+Result: 38 passed. `test_daemon_process.py` asserts object identity across the composed dispatcher, durable Task Graph service, JobHandle service, QMB BacktestingService, ToolRegistry, RuntimeService, NestedMissionHost, and roster compiler. This establishes shared wiring only. A production CT-40 handler, actual selected-template worker execution, QMB CLI round trip, and restart result discovery are still open; no deterministic fake worker was introduced to claim those outcomes.
