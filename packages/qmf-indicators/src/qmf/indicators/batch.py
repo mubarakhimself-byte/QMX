@@ -608,8 +608,8 @@ def _build_channel(
             presence.append(resolved[0])
             values.append(resolved[1])
             if dense_position is not None:
-                start = _support_start(formula_id, period, dense_position)
-                dependencies = layout.dense_knowable_at[start : dense_position + 1]
+                support = _support_positions(formula_id, period, dense_position)
+                dependencies = tuple(layout.dense_knowable_at[index] for index in support)
                 knowable_at[position] = max(dependencies, key=lambda instant: instant.value_ns)
     encoded = encode_int64_values(values)
     if isinstance(encoded, TypedRefusal):
@@ -617,20 +617,23 @@ def _build_channel(
     return IndicatorSeries.try_create(encoded.value, output_scale, presence, knowable_at)
 
 
-def _support_start(formula_id: str, period: int, dense_position: int) -> int:
-    """Return the first dense input that can affect this formula sample.
+def _support_positions(formula_id: str, period: int, dense_position: int) -> tuple[int, ...]:
+    """Return dense input positions that can affect this formula sample.
 
     Rolling formulas have finite support. EMA and RSI retain recursive state, so every
-    prior dense input remains causally relevant. Unknown kernel implementations are
-    treated conservatively as recursive.
+    prior dense input remains causally relevant. MOM and ROC use only the current and
+    period-back values. Unknown kernel implementations are treated conservatively as
+    recursive.
     """
     if period < 1:
-        return 0
+        return tuple(range(dense_position + 1))
     if formula_id in {"sma", "wma"}:
-        return max(0, dense_position - period + 1)
+        return tuple(range(max(0, dense_position - period + 1), dense_position + 1))
     if formula_id in {"mom", "roc"}:
-        return max(0, dense_position - period)
-    return 0
+        if dense_position >= period:
+            return (dense_position - period, dense_position)
+        return tuple(range(dense_position + 1))
+    return tuple(range(dense_position + 1))
 
 
 def _resolve_complete(
@@ -650,8 +653,8 @@ def _resolve_complete(
     value = dense_output[dense_position]
     if value is None:
         return PresenceState.NOT_READY, 0
-    support_start = _support_start(formula_id, period, dense_position)
-    if in_progress or any(layout.provisional[support_start : dense_position + 1]):
+    support = _support_positions(formula_id, period, dense_position)
+    if in_progress or any(layout.provisional[index] for index in support):
         return PresenceState.PROVISIONAL, value
     return PresenceState.PRESENT, value
 

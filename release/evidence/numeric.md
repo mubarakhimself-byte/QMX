@@ -25,8 +25,8 @@ and ordered same-instrument confirmation.
 
 - **NF01:** Dense provisional flags now follow the compacted input positions, and
   output evidence taint follows the formula's support. SMA/WMA use their finite
-  period window; MOM/ROC include the current and period-back samples; EMA/RSI and
-  unknown kernel formulas conservatively retain the full prior prefix. A finite
+  period window; MOM/ROC depend only on the current and period-back endpoints;
+  EMA/RSI and unknown kernel formulas conservatively retain the full prior prefix. A finite
   input's provisional status expires after it leaves support. Arithmetic and
   schedule/gap/not-ready output states are unchanged.
 - **NF02:** Accepted non-monotonic input knowledge times remain accepted for
@@ -53,14 +53,19 @@ After edits, the external desired-contract reproduction passed **15/15**. The
 targeted foundation/indicator/structure command (CT-01, CT-02, CT-05, exact/time/
 fingerprint examples, all indicator tests, all structure tests) passed **717/717**
 before adding these in-package regressions. The combined run including the new
-in-package regressions passed **741/741**. This count overlaps the 717-test
-targeted run and the external reproduction and must not be added to either count.
+in-package regressions passed **743/743** after the MOM/ROC support correction. This
+count overlaps the other runs and must not be added to them.
 An initial combined run found an incorrect expectation in the new finite-window
 test; the final passing rerun verifies that taint expires after the provisional
-sample leaves the SMA support. Scoped Ruff check passed for all modified Python
-source and test files.
+sample leaves the SMA support. Independent review then found that MOM/ROC depend
+only on the current and period-back endpoints, not every intervening sample. Support
+metadata now uses explicit dense dependency positions, with held-out actual-kernel
+regressions for both formulas. The focused MOM/ROC tests passed **2/2**, and the
+independent held-out probe confirmed presence [present, provisional, present] and
+knowable-at [3, 100, 5] at output indices 2–4. Scoped Ruff check passed for all
+modified Python source and test files.
 
 Environment: release checkout's existing `.venv`, CPython from the locked root
 environment. System Python does not have pytest installed. The shared environment
 was not modified. No full workspace lint/type/release gate, provider path, Windows
-run, or deployed consumer validation is claimed. Independent review is pending.
+run, or deployed consumer validation is claimed. The independent reviewer is updating the evidence verdict for corrective commit review.

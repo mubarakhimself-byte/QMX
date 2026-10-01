@@ -535,6 +535,43 @@ def test_reference_ema_retains_recursive_provisional_support() -> None:
     assert out.presence[1:] == (PresenceState.PROVISIONAL,) * 3
 
 
+@pytest.mark.parametrize("formula_id", ["mom", "roc"])
+def test_reference_mom_roc_use_only_period_endpoints(formula_id: str) -> None:
+    _require_reference()
+    config = _config(
+        formula_id=formula_id,
+        parameters={"period": _period(2)},
+        warm_up=2,
+        output_schema=[_output_channel(formula_id)],
+    )
+    series = _unwrap(
+        InputSeries.from_values(
+            [100, 200, 300, 400, 500],
+            0,
+            [
+                PresenceState.PRESENT,
+                PresenceState.PROVISIONAL,
+                PresenceState.PRESENT,
+                PresenceState.PRESENT,
+                PresenceState.PRESENT,
+            ],
+            [Instant(value_ns=value) for value in (1, 100, 3, 4, 5)],
+        )
+    )
+    result = _unwrap(
+        compute_batch(config, {"close": series}, kernel=ReferenceKernel(), world=World.REPLAY)
+    )
+    out = result.outputs[formula_id]
+    assert out.presence[2:] == (
+        PresenceState.PRESENT,
+        PresenceState.PROVISIONAL,
+        PresenceState.PRESENT,
+    )
+    assert [instant.value_ns for instant in out.knowable_at] == [1, 100, 3, 100, 5]
+    assert result.label.evidence_class is EvidenceClass.PROVISIONAL
+    assert is_refusal(require_governed(result))
+
+
 # --- result label -----------------------------------------------------------
 
 
