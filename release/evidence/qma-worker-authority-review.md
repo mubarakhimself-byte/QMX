@@ -1,0 +1,13 @@
+# QMA public backtest worker authority diagnosis
+
+Status: CHANGES REQUIRED on the active source inspected 2026-10-01. Read-only source diagnosis; no runtime listener, socket, installed full-QMA, or current-worker execution approval.
+
+CT-47 (`docs/contracts/ct-47-qma-experiment-spec.yaml:37`, `:57`) gives Experiment Ledger authorship to the Agent holding the registering Task's dispatch lease. CT-51 (`docs/contracts/ct-51-qma-task-ledger-entry.yaml:32`, `:35`) requires current leaseholder checks and treats reassignment or reacquisition as a new attempt. These rights differ from an environment lease. QMB owns its compute leg; requiring a second QMA compute lease would contradict the existing delegated-owned boundary.
+
+The active `qmx-agents/packages/qma-daemon/src/qma/daemon/process.py:3298` uses the public logical invocation ID as job task ID while `:3302` supplies the ExperimentSpec's saved registration lease. `experiments/service.py:628` resolves that saved lease without consulting current TaskGraph authority. `ledgers/experiment.py:243` and `:252` compare the registering task and historical author, not current release/reassignment state. `taskgraph/dispatcher.py:180` provides the actual current lease lookup; `:214` removes it on release. Thus a saved artifact is not a current dispatch-authority proof.
+
+`backtest/service.py:632` correctly excludes QMA Compute Router placement. However, transport submission precedes `record_coordinated_run`, so an eventual ledger refusal cannot prevent a child launch. Validate current registering-task authority and the authenticated operation's connection to that accepted task before job creation, occupancy, transport, or ledger effects. Preserve logical invocation identity separately from task authority and obtain deployment provenance from that current accepted execution rather than an unrelated latest artifact entry.
+
+The active `qa/integration/test_qma_registered_replay.py:211` manually dispatches a Task and retains its lease; the later public envelope does not establish that Task as the operation's current worker. The test manually calls `observe_outcome(DONE)` at `:394`. This supports a registered transport fixture, not source-connected current-worker acceptance or authoritative completion observation.
+
+Required held-outs: released registering lease, reassigned holder/attempt, wrong task, wrong owner/mission, and an unrelated public invocation must refuse before transport/job/ledger effects. A positive must connect an actual registered accepted Task and its retained dispatch authority to the public operation, while its QMA environment lease remains absent for QMB-owned execution. Findings sent directly to root and execution owner; active product/test files untouched.
