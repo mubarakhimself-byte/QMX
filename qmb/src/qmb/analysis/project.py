@@ -27,11 +27,13 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core.chrono import Instant
+from qmf.core.chrono import Instant, WriterId
+from qmf.core.exact import Money
 from qmf.core.fingerprint import (
     Fingerprint,
     OccurrenceRecord,
@@ -39,7 +41,8 @@ from qmf.core.fingerprint import (
     fingerprint,
 )
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_ok, is_refusal
-from qmf.risk.exit_record import ExitRecord, ExitRecordStream
+from qmf.data.journal_producer import JournalReader
+from qmf.risk.exit_record import ExitRecord, ExitRecordStream, ExitResultLabel
 from qmf.risk.performance import PerformanceResult
 
 from qmb._refuse import clean_token, invalid, policy
@@ -59,6 +62,7 @@ __all__ = [
     "PERMITTED_PREDICATE_KEYS",
     "PROJECTION_HOMES",
     "PROJECTION_SIDECAR_FILENAME",
+    "CT29ProjectionSource",
     "ProjectionView",
     "analysis_project_identity",
     "apply_projection_predicate",
@@ -218,6 +222,46 @@ _SPEC_FIELDS: Final[tuple[str, ...]] = (
 _SQLITE_FIELDS: Final[tuple[str, ...]] = ("daemon_sqlite", "database", "sqlite")
 _TRADE_LIST_FIELDS: Final[tuple[str, ...]] = _TRADE_LIST_KEYS
 _OCCUPANCY_RUN_TOKENS: Final[frozenset[str]] = frozenset({"job", "run"})
+
+
+@dataclass(frozen=True, slots=True)
+class CT29ProjectionSource:
+    """Operator-bound QMF reader coordinates for resolving one CT-29 close stream.
+
+    This is only a locator bundle. ``project`` reopens CT-13 and hydrates every
+    close from its validated journal body; caller-supplied rows are never trusted.
+    """
+
+    journal_reader: JournalReader
+    stream_name: str
+    writer: WriterId
+    binding_epoch: Fingerprint
+    result_label: ExitResultLabel
+
+    @classmethod
+    def try_create(
+        cls,
+        *,
+        journal_reader: object,
+        stream_name: object,
+        writer: object,
+        binding_epoch: object,
+        result_label: object,
+    ) -> Result[CT29ProjectionSource]:
+        if not isinstance(journal_reader, JournalReader):
+            return invalid(
+                "journal_reader", "projection resolves CT-29 through a configured QMF reader"
+            )
+        name = clean_token(stream_name)
+        if name is None:
+            return invalid("stream_name", "projection pins the exact CT-13 stream name")
+        if not isinstance(writer, WriterId):
+            return invalid("writer", "projection pins the writer-scoped CT-13 stream")
+        if not isinstance(binding_epoch, Fingerprint):
+            return invalid("binding_epoch", "projection pins the CT-28 replay binding fingerprint")
+        if not isinstance(result_label, ExitResultLabel):
+            return invalid("result_label", "projection pins the CT-29 replay result label")
+        return Ok(cls(journal_reader, name, writer, binding_epoch, result_label))
 
 
 @dataclass(frozen=True, slots=True)
@@ -433,7 +477,11 @@ def project(
     )
     if is_refusal(as_of_identity):
         return as_of_identity
-    ct29 = _resolve_source_ct29(source_ct29, trade_refs=trade_refs)
+    ct29 = _resolve_source_ct29(
+        source_ct29,
+        trade_refs=trade_refs,
+        source_identity=identity,
+    )
     if is_refusal(ct29):
         return ct29
     cite_token, records = ct29.value
@@ -892,70 +940,178 @@ def _resolve_source_ct29(
     source: object,
     *,
     trade_refs: tuple[str, ...],
+    source_identity: dict[str, object] | None,
 ) -> Result[tuple[str, tuple[object, ...]]]:
-    if source is None:
-        if trade_refs:
-            return Ok((trade_refs[0], ()))
+    if not trade_refs or len(trade_refs) != 1:
         return invalid(
             "source_ct29",
-            "analysis.project cites the paired CT-29 stream of the source CT-32",
+            "source CT-32 carries exactly one CT-13/CT-29 binding reference",
         )
-    if isinstance(source, Fingerprint):
-        return Ok((source.value, ()))
-    token = clean_token(source)
-    if token is not None and not token.startswith("{") and not token.startswith("["):
-        return Ok((token, ()))
-    if isinstance(source, ExitRecordStream):
-        records = source.records()
-        cite = _stream_cite(records, trade_refs=trade_refs)
-        if is_refusal(cite):
-            return cite
-        return Ok((cite.value, records))
-    if isinstance(source, Mapping) and not isinstance(source, (str, bytes)):
-        mapping = cast("Mapping[str, object]", source)
-        if "trades" in mapping and mapping.get("method") is None:
-            return _refuse_copied_trade_list("trades")
-        cite_token = clean_token(
-            mapping.get("source_ct29", mapping.get("cite", mapping.get("fp1")))
+    cite_token = trade_refs[0]
+    if not isinstance(source, CT29ProjectionSource):
+        return invalid(
+            "source_ct29",
+            "projection rows must be reopened from an operator-bound CT-13 reader; "
+            "a cite or in-memory row list is not durable provenance",
+            given=repr(type(source).__name__),
         )
-        records_raw = mapping.get("records", mapping.get("stream"))
-        if records_raw is None:
-            if cite_token is None:
-                return invalid(
-                    "source_ct29",
-                    "a CT-29 cite is an fp1, a ct-13:ct-29: reference, or a record stream",
-                )
-            return Ok((cite_token, ()))
-        rows = _records_only(records_raw)
-        if is_refusal(rows):
-            return rows
-        if cite_token is None:
-            cited = _stream_cite(rows.value, trade_refs=trade_refs)
-            if is_refusal(cited):
-                return cited
-            cite_token = cited.value
-        elif trade_refs and cite_token not in trade_refs:
-            return invalid(
-                "source_ct29",
-                "the CT-29 cite must pair with the source CT-32 trade-event reference",
-                given=cite_token,
-                paired=list(trade_refs),
-            )
-        return Ok((cite_token, rows.value))
-    if isinstance(source, Sequence) and not isinstance(source, (str, bytes)):
-        rows = _records_only(cast("Sequence[object]", source))
-        if is_refusal(rows):
-            return rows
-        cited = _stream_cite(rows.value, trade_refs=trade_refs)
-        if is_refusal(cited):
-            return cited
-        return Ok((cited.value, rows.value))
-    return invalid(
-        "source_ct29",
-        "analysis.project cites the paired CT-29 stream (records, ExitRecordStream, "
-        "or a ct-13:ct-29: / fp1 cite)",
-        given=repr(type(source).__name__),
+    if (
+        not isinstance(cast(object, source.journal_reader), JournalReader)
+        or not isinstance(cast(object, source.stream_name), str)
+        or not source.stream_name.strip()
+        or not isinstance(cast(object, source.writer), WriterId)
+        or not isinstance(cast(object, source.binding_epoch), Fingerprint)
+        or not isinstance(cast(object, source.result_label), ExitResultLabel)
+    ):
+        return invalid(
+            "source_ct29", "the CT-29 projection descriptor carries exact typed QMF coordinates"
+        )
+    expected_cite = f"ct-13:ct-29:{source.binding_epoch.value}"
+    if cite_token != expected_cite:
+        return policy(
+            "source_ct29",
+            "the durable CT-13 reader binding matches the CT-32 CT-29 locator",
+            expected=cite_token,
+            given=expected_cite,
+        )
+    if source_identity is None:
+        return invalid(
+            "source_ct32", "durable CT-29 resolution requires the stored CT-32 identity"
+        )
+    raw_result_label = source_identity.get("result_label")
+    result_label_body = (
+        cast("Mapping[str, object]", raw_result_label)
+        if isinstance(raw_result_label, Mapping)
+        else None
     )
+    if (
+        result_label_body is None
+        or result_label_body.get("world") != source.result_label.world.value
+        or source_identity.get("account_binding_role") != source.result_label.account_role.value
+    ):
+        return policy(
+            "result_label",
+            "the CT-29 reader result label matches the CT-32 world and account role",
+        )
+    from qmb.host.book_handler import read_replay_positions  # noqa: PLC0415
+    from qmb.results.measures import ClosedTrade, TradeSide  # noqa: PLC0415
+
+    recovery = read_replay_positions(
+        journal_reader=source.journal_reader,
+        stream_name=source.stream_name,
+        writer=source.writer,
+        binding_epoch=source.binding_epoch,
+        result_label=source.result_label,
+    )
+    if is_refusal(recovery):
+        return recovery
+    projected: list[ClosedTrade] = []
+    for record in recovery.value.exit_records:
+        side = recovery.value.position_sides.get(record.virtual_position_ref.value)
+        if not isinstance(side, TradeSide):
+            return invalid(
+                "position_side", "durable CT-13 open witness supplies the original trade side"
+            )
+        net = record.net_realized_pnl()
+        if is_refusal(net):
+            return net
+        total_fees = Money.try_create(
+            0, record.realized_pnl.currency, record.realized_pnl.scale
+        )
+        if is_refusal(total_fees):
+            return total_fees
+        for component in record.cost_components:
+            added = total_fees.value.add(component.amount)
+            if is_refusal(added):
+                return added
+            total_fees = added
+        trade = ClosedTrade.try_create(net.value, total_fees.value, side, record.recorded_at)
+        if is_refusal(trade):
+            return trade
+        projected.append(trade.value)
+    expected_count = _ct32_trade_count(source_identity)
+    if is_refusal(expected_count):
+        return expected_count
+    if expected_count.value != len(projected):
+        return policy(
+            "source_ct29",
+            "the reopened CT-29 close count matches CT-32 total_trades",
+            expected=expected_count.value,
+            actual=len(projected),
+        )
+    expected_net = _ct32_money_measure(source_identity, "net_profit")
+    if is_refusal(expected_net):
+        return expected_net
+    expected_fees = _ct32_money_measure(source_identity, "fees")
+    if is_refusal(expected_fees):
+        return expected_fees
+    actual_net = sum((trade.realized_pnl.as_fraction() for trade in projected), Fraction(0))
+    actual_fees = sum((trade.fees.as_fraction() for trade in projected), Fraction(0))
+    if actual_net != expected_net.value or actual_fees != expected_fees.value:
+        return policy(
+            "source_ct29",
+            "reopened CT-29 net profit and fees match the cited CT-32 measures",
+            net_profit_matches=actual_net == expected_net.value,
+            fees_match=actual_fees == expected_fees.value,
+        )
+    return Ok((cite_token, tuple(projected)))
+
+
+def _ct32_trade_count(identity: Mapping[str, object]) -> Result[int]:
+    raw_measures = identity.get("measure_set")
+    if not isinstance(raw_measures, Sequence) or isinstance(raw_measures, (str, bytes)):
+        return invalid("measure_set", "CT-32 identity carries its ordered performance measures")
+    for raw_measure in cast("Sequence[object]", raw_measures):
+        if not isinstance(raw_measure, Mapping):
+            return invalid("measure_set", "CT-32 performance measures are canonical mappings")
+        measure = cast("Mapping[str, object]", raw_measure)
+        if measure.get("measure_identity") != "total_trades":
+            continue
+        quantity = measure.get("quantity")
+        if not isinstance(quantity, Mapping):
+            break
+        exact = cast("Mapping[str, object]", quantity)
+        if exact.get("unit_kind") != "count":
+            break
+        numerator, denominator = exact.get("num"), exact.get("den")
+        if (
+            type(numerator) is not int
+            or type(denominator) is not int
+            or denominator <= 0
+        ):
+            break
+        count = Fraction(numerator, denominator)
+        if count.denominator != 1 or count < 0:
+            break
+        return Ok(count.numerator)
+    return invalid("total_trades", "CT-32 carries an exact defined total_trades measure")
+
+
+def _ct32_money_measure(identity: Mapping[str, object], name: str) -> Result[Fraction]:
+    raw_measures = identity.get("measure_set")
+    if not isinstance(raw_measures, Sequence) or isinstance(raw_measures, (str, bytes)):
+        return invalid("measure_set", "CT-32 identity carries its ordered performance measures")
+    for raw_measure in cast("Sequence[object]", raw_measures):
+        if not isinstance(raw_measure, Mapping):
+            return invalid("measure_set", "CT-32 performance measures are canonical mappings")
+        measure = cast("Mapping[str, object]", raw_measure)
+        if measure.get("measure_identity") != name:
+            continue
+        quantity = measure.get("quantity")
+        if not isinstance(quantity, Mapping):
+            break
+        exact = cast("Mapping[str, object]", quantity)
+        numerator, denominator = exact.get("num"), exact.get("den")
+        if (
+            exact.get("unit_kind") != "money(currency)"
+            or not isinstance(exact.get("currency"), str)
+            or type(numerator) is not int
+            or type(denominator) is not int
+            or denominator <= 0
+        ):
+            break
+        return Ok(Fraction(numerator, denominator))
+    return invalid(name, "CT-32 carries an exact defined money measure for the CT-29 fold")
 
 
 def _resolve_as_of(
@@ -1114,25 +1270,6 @@ def _as_tokens(value: object) -> tuple[str, ...]:
         if token is not None:
             out.append(token)
     return tuple(out)
-
-
-def _stream_cite(
-    records: tuple[object, ...],
-    *,
-    trade_refs: tuple[str, ...],
-) -> Result[str]:
-    if trade_refs:
-        return Ok(trade_refs[0])
-    cites: list[str] = []
-    for record in records:
-        row = _as_stream_row(record)
-        if is_refusal(row):
-            return row
-        cites.append(row.value.cite)
-    stamped = fingerprint({"class": _STREAM_CLASS, "records": cites})
-    if is_refusal(stamped):
-        return stamped
-    return Ok(stamped.value.value)
 
 
 def _records_only(value: object) -> Result[tuple[object, ...]]:

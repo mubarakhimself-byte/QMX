@@ -24,6 +24,12 @@ from qmf.core.chrono import Instant
 from qmf.core.exact import Money
 from qmf.core.fingerprint import World, fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
+from test_analysis_project import (
+    _durable_ct29 as _durable_source,  # pyright: ignore[reportPrivateUsage]
+)
+from test_analysis_project import (
+    _paired_result,  # pyright: ignore[reportPrivateUsage]
+)
 
 import qmb
 
@@ -113,7 +119,7 @@ def _result(*, registry_as_of: Instant, trades: tuple[ClosedTrade, ...]) -> obje
 
 
 def _project_args(
-    artifact: object, trades: tuple[ClosedTrade, ...], as_of: Instant
+    artifact: object, trades: object, as_of: Instant
 ) -> dict[str, object]:
     return {
         "source_ct32": artifact,
@@ -193,9 +199,9 @@ def test_mixed_permitted_and_forbidden_predicate_still_refuses() -> None:
 
 def test_ungoverned_home_is_a_return_value_only(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    trades = (_trade(hour=10),)
-    artifact = _result(registry_as_of=as_of, trades=trades)
-    view = _ok(project(**_project_args(artifact, trades, as_of)))
+    source, trades = _durable_source(tmp_path, (_at(hour=10),))
+    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    view = _ok(project(**_project_args(artifact, source, as_of)))
     assert view.home == "ungoverned"
     assert view.durable is False
     assert view.is_library_object is False
@@ -204,13 +210,13 @@ def test_ungoverned_home_is_a_return_value_only(tmp_path: Path) -> None:
     assert view.spawns_orchestrator is False
     assert view.appends_ledger is False
     assert view.mints_ct32 is False
-    assert list(tmp_path.iterdir()) == []
+    assert not (tmp_path / PROJECTION_SIDECAR_FILENAME).exists()
     explicit = _ok(
-        project(**_project_args(artifact, trades, as_of), home="ungoverned", run_dir=tmp_path)
+        project(**_project_args(artifact, source, as_of), home="ungoverned", run_dir=tmp_path)
     )
     assert explicit.durable is False
     assert explicit.path is None
-    assert list(tmp_path.iterdir()) == []
+    assert not (tmp_path / PROJECTION_SIDECAR_FILENAME).exists()
     identity = qmb.analysis_project_identity()
     assert identity["homes"] == list(PROJECTION_HOMES)
     assert identity["forbidden_axes"] == list(FORBIDDEN_PROJECTION_AXES)
@@ -222,19 +228,19 @@ def test_ungoverned_home_is_a_return_value_only(tmp_path: Path) -> None:
 
 def test_governed_home_writes_json_sidecar_in_source_run_dir(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    trades = (_trade(hour=10),)
-    artifact = _result(registry_as_of=as_of, trades=trades)
-    source = tmp_path / "source-run"
-    source.mkdir()
+    trusted_source, trades = _durable_source(tmp_path, (_at(hour=10),))
+    artifact = _paired_result(registry_as_of=as_of, source=trusted_source, trades=trades)
+    run_dir = tmp_path / "source-run"
+    run_dir.mkdir()
     other = tmp_path / "new-run"
     view = _ok(
         project(
-            **_project_args(artifact, trades, as_of),
+            **_project_args(artifact, trusted_source, as_of),
             home="governed-without-qma",
-            run_dir=source,
+            run_dir=run_dir,
         )
     )
-    sidecar = source / PROJECTION_SIDECAR_FILENAME
+    sidecar = run_dir / PROJECTION_SIDECAR_FILENAME
     assert view.home == "governed"
     assert view.durable is True
     assert view.is_library_object is False
@@ -245,12 +251,12 @@ def test_governed_home_writes_json_sidecar_in_source_run_dir(tmp_path: Path) -> 
     assert view.opens_sqlite is False
     assert sidecar.is_file()
     assert not other.exists()
-    assert [path.name for path in source.iterdir()] == [PROJECTION_SIDECAR_FILENAME]
+    assert [path.name for path in run_dir.iterdir()] == [PROJECTION_SIDECAR_FILENAME]
     payload = json.loads(sidecar.read_text(encoding="utf-8"))
     assert payload == view.body()
     assert set(payload) == {"method", "source_ct32", "source_ct29", "predicate", "as_of"}
     assert payload["method"] == "projection"
-    missing = project(**_project_args(artifact, trades, as_of), home="governed")
+    missing = project(**_project_args(artifact, trusted_source, as_of), home="governed")
     assert is_refusal(missing)
     assert missing.context["field"] == "run_dir"
     assert missing.context["spawns_orchestrator"] is False
@@ -258,10 +264,10 @@ def test_governed_home_writes_json_sidecar_in_source_run_dir(tmp_path: Path) -> 
 
 def test_coordinated_home_and_sqlite_are_epic_36(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    trades = (_trade(hour=10),)
-    artifact = _result(registry_as_of=as_of, trades=trades)
+    source, trades = _durable_source(tmp_path, (_at(hour=10),))
+    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
     refused = project(
-        **_project_args(artifact, trades, as_of),
+            **_project_args(artifact, source, as_of),
         home="coordinated",
         run_dir=tmp_path,
     )
@@ -271,11 +277,11 @@ def test_coordinated_home_and_sqlite_are_epic_36(tmp_path: Path) -> None:
     assert refused.context["opens_sqlite"] is False
     assert refused.context["mints_ct32"] is False
     assert refused.context["spawns_orchestrator"] is False
-    assert list(tmp_path.iterdir()) == []
-    sqlite = project(**_project_args(artifact, trades, as_of), sqlite=True)
+    assert not (tmp_path / PROJECTION_SIDECAR_FILENAME).exists()
+    sqlite = project(**_project_args(artifact, source, as_of), sqlite=True)
     assert is_refusal(sqlite)
     assert sqlite.context["opens_sqlite"] is False
-    spawned = project(**_project_args(artifact, trades, as_of), spawn_run=True)
+    spawned = project(**_project_args(artifact, source, as_of), spawn_run=True)
     assert is_refusal(spawned)
     assert spawned.context["spawns_orchestrator"] is False
     assert spawned.context["implements_rerun"] is False
@@ -283,11 +289,11 @@ def test_coordinated_home_and_sqlite_are_epic_36(tmp_path: Path) -> None:
 
 def test_door_and_cli_forward_homes_and_forbidden_axes(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    trades = (_trade(hour=10),)
-    artifact = _result(registry_as_of=as_of, trades=trades)
-    library = project(**_project_args(artifact, trades, as_of), home="ungoverned")
+    source, trades = _durable_source(tmp_path, (_at(hour=10),))
+    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    library = project(**_project_args(artifact, source, as_of), home="ungoverned")
     door = invoke_analysis_project(
-        **_project_args(artifact, trades, as_of),
+        **_project_args(artifact, source, as_of),
         home="ungoverned",
     )
     assert is_ok(library) and is_ok(door)
@@ -303,7 +309,7 @@ def test_door_and_cli_forward_homes_and_forbidden_axes(tmp_path: Path) -> None:
     clicked = runner.invoke(
         main,
         ["analysis", "project", "--home", "governed-without-qma", "--run-dir", str(tmp_path)],
-        obj=_project_args(artifact, trades, as_of),
+        obj=_project_args(artifact, source, as_of),
     )
     assert clicked.exit_code == 0, clicked.output
     payload = json.loads(clicked.stdout)
@@ -314,7 +320,7 @@ def test_door_and_cli_forward_homes_and_forbidden_axes(tmp_path: Path) -> None:
     forbidden = runner.invoke(
         main,
         ["analysis", "project"],
-        obj={**_project_args(artifact, trades, as_of), "size": 2},
+        obj={**_project_args(artifact, source, as_of), "size": 2},
     )
     assert forbidden.exit_code != 0
     assert "path-dependent" in forbidden.output
