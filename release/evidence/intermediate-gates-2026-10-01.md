@@ -40,3 +40,9 @@ mutable callback evidence remain open in their dedicated review records. Passing
 local economic fixtures do not supersede those failures or establish provider
 connectivity. Native Windows, the separately owned reviewed UI contribution,
 external integrations, and incomplete security verification remain pending.
+
+## Active receipt and CLI typing diagnostics
+
+Root ran `uv run --no-sync poe types` during active receipt integration. First trace `/workspace/qmx-current-receipt-integration-types.log`: **FAIL, 15 errors**, including necessary malformed nominal-field guards typed too narrowly and an untyped test JournalWriter wrapper. Numeric corrected those boundaries without removing runtime validation. Second trace `/workspace/qmx-corrected-receipt-integration-types.log`: **FAIL, 18 errors**, all in the newly active `qmb/tests/test_operator_alternative_cli_journey.py`; the earlier QMN diagnostics are absent. The CLI test owner is correcting imports, optional narrowing and path typing while establishing its actual product-child positive. These are mutable intermediate checks, not final source-gate results. No ignore or configuration waiver was applied by root.
+
+Root's corrected protection-source/plan behavior selection `uv run --no-sync pytest -q qmn/tests/test_qmn_protection_state.py qmn/tests/test_qmn_live.py qmn/tests/test_qmn_data.py qmn/tests/test_qmn_loop.py qmn/tests/test_qmn_protection_plan.py` produced **36 PASS, 1 SKIP in 1.06 seconds**, trace `/workspace/qmx-qmn-protection-source-corrected-root.log`. The skip explicitly requires a Spotware sandbox token and does not prove provider connectivity. Subsequent independent persisted-join review still fails as recorded in `qmn-protection-source-review.md`; these passing tests do not approve that source snapshot. Archived independent probes and their SHA256 inventory are at `/workspace/qmx-independent-review-archive/qmn-protection-source-diagnostics/manifest.json`.
