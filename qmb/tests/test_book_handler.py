@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import TypeVar
 
 import pytest
@@ -21,6 +23,7 @@ from qmb.execution import (
     FILL_ADAPTER_DECLARED_PATH,
     FILL_ADAPTER_KEY,
     FILL_BASIS_KEY,
+    FINANCING_CALIBRATION_KEY,
     FINANCING_SCHEDULE_KEY,
     SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
     SLIPPAGE_ADAPTER_KEY,
@@ -30,19 +33,24 @@ from qmb.execution import (
     bind_execution_ports,
 )
 from qmb.execution.fill import FILL_BASIS_OPTIMISTIC_EXACT, OrderType
+from qmb.execution.financing import SwapCalibration, SwapRate
 from qmb.execution.ports import CostedFill, SlicePath
 from qmb.host.book_handler import (
     BOOK_POSITION_CLASS,
     BookAdmissionContext,
     BookExecutionSliceHandler,
     BookOrderPolicy,
+    EntryTerminalReason,
     ReplayPosition,
     derive_replay_quantity,
     read_replay_positions,
 )
 from qmb.results.measures import TradeSide
+from qmb.runloop.loop import ExecutionDisposition, SliceObservation, run
 from qmf.core import (
     AccountRole,
+    CalendarIdentity,
+    CivilDate,
     ExactRational,
     Fingerprint,
     Instant,
@@ -53,6 +61,7 @@ from qmf.core import (
     PriceDelta,
     Quantity,
     Result,
+    TradingDate,
     UnitKind,
     ValueFactor,
     VenueId,
@@ -86,7 +95,7 @@ def _fp(label: str) -> Fingerprint:
     return _ok(fingerprint({"label": label}))
 
 
-def _resolved() -> ResolvedRunConfig:
+def _resolved(financing_calibration: SwapCalibration | None = None) -> ResolvedRunConfig:
     commission = _ok(
         CommissionCalibration.try_create(
             COST_ADAPTER_PER_LOT,
@@ -111,6 +120,8 @@ def _resolved() -> ResolvedRunConfig:
         SLIPPAGE_ADAPTER_KEY: SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
         SLIPPAGE_CALIBRATION_KEY: slippage,
     }
+    if financing_calibration is not None:
+        keys[FINANCING_CALIBRATION_KEY] = financing_calibration
     book, bms, bot = _fp("book"), _fp("bms"), _fp("bot")
     seed = _ok(Money.try_create(1_000_000, "USD", 2))
     binding = _ok(
@@ -166,10 +177,55 @@ class _OffsetStop:
 class _ScriptedHostedBot(HostedBot):
     def __init__(self) -> None:
         self.proposals: tuple[EntryIntent | ExitIntent, ...] = ()
+        self.responses: tuple[tuple[EntryIntent | ExitIntent, ...], ...] | None = None
+        self.calls = 0
 
     def on_instant(self, instant: object, /) -> Result[tuple[EntryIntent | ExitIntent, ...]]:
         del instant
+        if self.responses is not None:
+            response = self.responses[min(self.calls, len(self.responses) - 1)]
+            self.calls += 1
+            return Ok(response)
         return Ok(self.proposals)
+
+
+class _NeverRolloverCalendar:
+    def is_rollover_instant(self, instant: Instant) -> Result[bool]:
+        del instant
+        return Ok(False)
+
+    def trading_date_of(self, instant: Instant) -> Result[TradingDate]:
+        del instant
+        return storage("calendar", "unexpected trading-date lookup in non-rollover fixture")
+
+    def weekday_of(self, trading_date: TradingDate) -> Result[str]:
+        del trading_date
+        return storage("calendar", "unexpected weekday lookup in non-rollover fixture")
+
+    def is_weekend_or_holiday(self, trading_date: TradingDate) -> Result[bool]:
+        del trading_date
+        return storage("calendar", "unexpected holiday lookup in non-rollover fixture")
+
+
+@dataclass(frozen=True, slots=True)
+class _RecordedRolloverCalendar:
+    rollover_ns: int
+    trading_date: TradingDate
+
+    def is_rollover_instant(self, instant: Instant) -> Result[bool]:
+        return Ok(instant.value_ns == self.rollover_ns)
+
+    def trading_date_of(self, instant: Instant) -> Result[TradingDate]:
+        del instant
+        return Ok(self.trading_date)
+
+    def weekday_of(self, trading_date: TradingDate) -> Result[str]:
+        del trading_date
+        return Ok("monday")
+
+    def is_weekend_or_holiday(self, trading_date: TradingDate) -> Result[bool]:
+        del trading_date
+        return Ok(False)
 
 
 def _price(value: int) -> Price:
@@ -180,10 +236,24 @@ def _path(*values: int) -> SlicePath:
     return _ok(SlicePath.try_create("eurusd", tuple(_price(value) for value in values)))
 
 
+def _quote_path(*values: int, bid: int, ask: int) -> SlicePath:
+    return _ok(
+        SlicePath.try_create(
+            "eurusd",
+            tuple(_price(value) for value in values),
+            bid=_price(bid),
+            ask=_price(ask),
+        )
+    )
+
+
 def _handler(
     tmp_path: Path,
+    *,
+    financing_calibration: SwapCalibration | None = None,
+    rollover_calendar: object | None = None,
 ) -> tuple[BookExecutionSliceHandler, _ScriptedHostedBot, JournalReader, WriterId]:
-    config = _resolved()
+    config = _resolved(financing_calibration)
     bound = _ok(bind_execution_ports(config))
     binding = config.replay_binding
     assert binding is not None
@@ -207,6 +277,7 @@ def _handler(
     policy_by_code = {
         "entry:family:breakout": BookOrderPolicy(OrderType.MARKET),
         "exit:family:target": BookOrderPolicy(OrderType.MARKET),
+        "exit:family:protective_stop": BookOrderPolicy(OrderType.STOP, stop_price=_price(109_500)),
     }
     admission = _ok(
         BookAdmissionContext.try_create(
@@ -222,9 +293,14 @@ def _handler(
             execution_target=target,
             result_label=result_label,
             opening_bot_id="bot-1",
-            close_reason_by_code={"exit:family:target": CloseReason.TARGET_FILL},
+            close_reason_by_code={
+                "exit:family:target": CloseReason.TARGET_FILL,
+                "exit:family:protective_stop": CloseReason.PROTECTIVE_STOP_FILL,
+            },
             order_policy_by_code=policy_by_code,
             journal_writer=journal_writer,
+            rollover_calendar=rollover_calendar or _NeverRolloverCalendar(),
+            protective_stop_reason=_ok(ReasonCode.try_create("protective_stop", "family")),
         )
     )
     bot = _ScriptedHostedBot()
@@ -331,6 +407,7 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
         "entry_costs": [],
         "entry_fill_ref": fill_ref.value,
         "entry_price": entry_price.fp1_identity(),
+        "protective_stop": _price(105_000).fp1_identity(),
         "faces": faces.fp1_identity(),
         "instrument": instrument.symbol,
         "opened_at": instant.fp1_identity(),
@@ -376,6 +453,7 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
         direction=Direction.LONG,
         opened_at=instant,
         entry_price=entry_price,
+        protective_stop=_price(105_000),
         quantity=quantity,
         faces=faces,
         entry_fill_ref=fill_ref,
@@ -414,6 +492,7 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
 def test_book_fill_close_and_ct13_reopen_use_actual_economics(tmp_path: Path) -> None:
     handler, bot, reader, writer = _handler(tmp_path)
     instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    close_at = _ok(Instant.try_create(instant.value_ns + 1_000_000_000))
     target = _ok(ExecutionTarget.try_create("demo", VenueId("replay-venue"), "account-1"))
     entry = _ok(
         EntryIntent.try_create(
@@ -424,10 +503,19 @@ def test_book_fill_close_and_ct13_reopen_use_actual_economics(tmp_path: Path) ->
         )
     )
     bot.proposals = (entry,)
-    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    _ok(
+        handler.bind_paths(
+            (
+                (instant, _path(110_000, 110_100, 109_900)),
+                (close_at, _path(110_000, 110_100, 109_800)),
+            )
+        )
+    )
     resting_entry = _ok(handler.mint_intents("eurusd", instant))
     entry_outcome = _ok(handler.execute_resting(resting_entry[0], None, instant))
-    assert entry_outcome is True, handler.receipts[-1].fill
+    assert entry_outcome == ExecutionDisposition(filled=True, terminal=True), handler.receipts[
+        -1
+    ].fill
     entry_receipt = handler.receipts[-1]
     assert isinstance(entry_receipt.fill, CostedFill)
     assert entry_receipt.position is not None
@@ -448,8 +536,6 @@ def test_book_fill_close_and_ct13_reopen_use_actual_economics(tmp_path: Path) ->
         )
     )
     bot.proposals = (exit_intent,)
-    close_at = _ok(Instant.try_create(instant.value_ns + 1_000_000_000))
-    _ok(handler.bind_path(_path(110_000, 110_100, 109_800)))
     resting_exit = _ok(handler.mint_intents("eurusd", close_at))
     assert _ok(handler.execute_resting(resting_exit[0], None, close_at)) is True
     close_receipt = handler.receipts[-1]
@@ -521,6 +607,214 @@ def test_book_fill_close_and_ct13_reopen_use_actual_economics(tmp_path: Path) ->
     assert is_refusal(handler.execute_resting(duplicate[0], None, close_at))
 
 
+def test_partial_entry_no_fill_later_fill_rebases_once_and_reopens(tmp_path: Path) -> None:
+    handler, bot, reader, writer = _handler(tmp_path)
+    rules = dict(handler.admission.order_policy_by_code)
+    rules["entry:family:breakout"] = BookOrderPolicy(
+        OrderType.MARKET, liquidity=_ok(Quantity.try_create(2, "lot", 0))
+    )
+    handler.admission = replace(
+        handler.admission,
+        requested_r=_ok(ExactRational.try_create(5, 1, UnitKind.R_MULTIPLE)),
+        order_policy_by_code=MappingProxyType(rules),
+    )
+    target = handler.admission.execution_target
+    proposal = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            target,
+        )
+    )
+    t0 = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    t1 = _ok(Instant.try_create(t0.value_ns + 1_000_000_000))
+    t2 = _ok(Instant.try_create(t0.value_ns + 2_000_000_000))
+    bot.proposals = (proposal,)
+
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    first = _ok(handler.mint_intents("eurusd", t0))[0]
+    assert _ok(handler.execute_resting(first, None, t0)) == ExecutionDisposition(True, False)
+    assert len(handler.pending_entry_tickets) == 1
+    ticket = handler.pending_entry_tickets[0]
+    assert is_refusal(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=handler.admission.binding.fingerprint,
+            result_label=handler.admission.result_label,
+        )
+    )
+
+    closed_path = _ok(SlicePath.try_create("eurusd", (_price(110_000),), market_closed=True))
+    _ok(handler.bind_path(closed_path))
+    no_fill = _ok(handler.mint_intents("eurusd", t1))[0]
+    assert _ok(handler.execute_resting(no_fill, None, t1)) == ExecutionDisposition(False, False)
+    assert handler.pending_entry_tickets == (ticket,)
+
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    later = _ok(handler.mint_intents("eurusd", t2))[0]
+    assert _ok(handler.execute_resting(later, None, t2)) == ExecutionDisposition(True, False)
+    assert handler.positions == ()
+    finalized = _ok(
+        handler.finalize_entry(ticket, at=t2, terminal_reason=EntryTerminalReason.REPLAY_COMPLETE)
+    )
+    assert finalized.quantity == _ok(Quantity.try_create(4, "lot", 0))
+    assert finalized.declared_plan_quantity == _ok(Quantity.try_create(5, "lot", 0))
+    assert finalized.declared_plan_risk_amount == _ok(Money.try_create(50_000, "USD", 2))
+    assert finalized.faces.original_risk_amount == _ok(Money.try_create(400, "USD", 0))
+    assert finalized.risk_rebased is True
+    assert finalized.risk_rebase_lineage is not None
+    assert len(finalized.entry_fills) == 2
+    assert handler.pending_entry_tickets == ()
+
+    recovered = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=finalized.binding_epoch,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert recovered.positions[0].fp1_identity() == finalized.fp1_identity()
+    assert recovered.positions[0].risk_rebased is True
+
+
+def test_cancelled_partial_entry_rebases_and_reopens_once(tmp_path: Path) -> None:
+    handler, bot, reader, writer = _handler(tmp_path)
+    rules = dict(handler.admission.order_policy_by_code)
+    rules["entry:family:breakout"] = BookOrderPolicy(
+        OrderType.MARKET, liquidity=_ok(Quantity.try_create(2, "lot", 0))
+    )
+    handler.admission = replace(
+        handler.admission,
+        requested_r=_ok(ExactRational.try_create(5, 1, UnitKind.R_MULTIPLE)),
+        order_policy_by_code=MappingProxyType(rules),
+    )
+    proposal = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.proposals = (proposal,)
+    instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    resting = _ok(handler.mint_intents("eurusd", instant))[0]
+    assert _ok(handler.execute_resting(resting, None, instant)) == ExecutionDisposition(True, False)
+
+    position = _ok(handler.cancel_pending_entries(at=instant))[0]
+    assert position.quantity == _ok(Quantity.try_create(2, "lot", 0))
+    assert position.faces.original_risk_amount == _ok(Money.try_create(200, "USD", 0))
+    assert position.risk_rebased is True
+    reopened = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=position.binding_epoch,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert reopened.positions[0].fp1_identity() == position.fp1_identity()
+    sequence = handler.admission.journal_writer.next_sequence
+    assert _ok(handler.cancel_pending_entries(at=instant)) == ()
+    assert handler.admission.journal_writer.next_sequence == sequence
+    assert handler.finalized_resting_intent_ids == (resting.intent_id,)
+
+
+def test_recorded_rollover_financing_is_journaled_and_netted_at_close(tmp_path: Path) -> None:
+    rollover = _ok(Instant.try_create(1_700_000_000_001_000_000))
+    trading_date = _ok(
+        TradingDate.try_create(
+            _ok(CalendarIdentity.try_create("broker-hours", "v1", "2026a")),
+            _ok(CivilDate.try_create(2026, 10, 5)),
+        )
+    )
+    calendar = _RecordedRolloverCalendar(rollover.value_ns, trading_date)
+    rate = _ok(SwapRate.try_create("eurusd", Direction.LONG, _ok(Money.try_create(-100, "USD", 2))))
+    calibration = _ok(
+        SwapCalibration.try_create(
+            "replay-broker",
+            rates=(rate,),
+            weekend_holiday_handling="skip",
+            calendar_identity=calendar.trading_date.calendar.fp1_identity(),
+        )
+    )
+    handler, bot, reader, writer = _handler(
+        tmp_path,
+        financing_calibration=calibration,
+        rollover_calendar=calendar,
+    )
+    target = handler.admission.execution_target
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            target,
+        )
+    )
+    opened_at = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    bot.proposals = (entry,)
+    _ok(
+        handler.bind_paths(
+            (
+                (opened_at, _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001)),
+                (rollover, _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001)),
+            )
+        )
+    )
+    resting = _ok(handler.mint_intents("eurusd", opened_at))[0]
+    assert _ok(handler.execute_resting(resting, None, opened_at)) == ExecutionDisposition(
+        True, True
+    )
+    position = handler.positions[0]
+
+    _ok(handler.scheduled_position_event("eurusd", opened_at))
+    assert handler.admission.journal_writer.next_sequence == 1
+    _ok(handler.scheduled_position_event("eurusd", rollover))
+    assert handler.admission.journal_writer.next_sequence == 2
+    assert len(handler.positions[0].financing_costs) == 1
+    assert handler.positions[0].financing_costs[0].name == "financing"
+
+    close_at = _ok(Instant.try_create(rollover.value_ns + 1_000_000_000))
+    exit_intent = _ok(
+        ExitIntent.try_create(
+            ExitKind.CLOSE_FULL,
+            _ok(ReasonCode.try_create("target", "family")),
+            position.position_ref,
+        )
+    )
+    bot.proposals = (exit_intent,)
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_800)))
+    closing = _ok(handler.mint_intents("eurusd", close_at))[0]
+    assert _ok(handler.execute_resting(closing, None, close_at)) is True
+    record = handler.receipts[-1].exit_record
+    assert record is not None
+    finance = [component for component in record.cost_components if component.name == "financing"]
+    assert len(finance) == 1
+    assert finance[0].amount == _ok(Money.try_create(-100, "USD", 2))
+    expected_net = record.realized_pnl
+    for component in record.cost_components:
+        expected_net = _ok(expected_net.subtract(component.amount))
+    assert _ok(record.net_realized_pnl()) == expected_net
+    recovered = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=position.binding_epoch,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert len(recovered.positions[0].financing_costs) == 1
+
+
 def test_unpersistable_open_does_not_advance_memory_and_recovers_from_ct13(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -587,3 +881,131 @@ def test_unpersistable_open_does_not_advance_memory_and_recovers_from_ct13(
     )
     assert len(recovered.positions) == 1
     assert recovered.positions[0].closed is False
+
+
+def test_run_loop_selected_bot_entry_fills_then_recorded_bid_stops_and_closes(
+    tmp_path: Path,
+) -> None:
+    handler, bot, reader, writer = _handler(tmp_path)
+    entry_at = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    fill_at = _ok(Instant.try_create(entry_at.value_ns + 1_000_000_000))
+    stop_at = _ok(Instant.try_create(entry_at.value_ns + 2_000_000_000))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.responses = ((entry,), (), ())
+    _ok(
+        handler.bind_paths(
+            (
+                (
+                    entry_at,
+                    _quote_path(110_000, 110_050, 109_950, bid=109_999, ask=110_001),
+                ),
+                (
+                    fill_at,
+                    _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
+                ),
+                (
+                    stop_at,
+                    _quote_path(110_000, 109_500, 109_400, bid=109_400, ask=109_402),
+                ),
+            )
+        )
+    )
+    outcome = _ok(
+        run(
+            slices=(
+                (_ok(SliceObservation.try_create("eurusd", entry_at, True)),),
+                (_ok(SliceObservation.try_create("eurusd", fill_at, True)),),
+                (_ok(SliceObservation.try_create("eurusd", stop_at, True)),),
+            ),
+            stream_set=("eurusd",),
+            handler=handler,
+        )
+    )
+    assert len(outcome.filled) == 1
+    assert outcome.resting == ()
+    assert len(handler.receipts) == 2
+    opened, closed = handler.receipts
+    assert opened.position is not None
+    assert closed.exit_record is not None
+    assert closed.exit_record.close_reason is CloseReason.PROTECTIVE_STOP_FILL
+    assert closed.exit_record.realized_pnl.value < 0
+    assert _ok(closed.exit_record.net_realized_pnl()).value < 0
+    recovered = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=opened.position.binding_epoch,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert len(recovered.positions) == 1
+    assert recovered.positions[0].closed is True
+
+
+def test_run_loop_keeps_partial_entry_across_nofill_and_rebases_at_terminal(
+    tmp_path: Path,
+) -> None:
+    handler, bot, reader, writer = _handler(tmp_path)
+    rules = dict(handler.admission.order_policy_by_code)
+    rules["entry:family:breakout"] = BookOrderPolicy(
+        OrderType.MARKET, liquidity=_ok(Quantity.try_create(2, "lot", 0))
+    )
+    handler.admission = replace(
+        handler.admission,
+        requested_r=_ok(ExactRational.try_create(5, 1, UnitKind.R_MULTIPLE)),
+        order_policy_by_code=MappingProxyType(rules),
+    )
+    start = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    instants = tuple(_ok(Instant.try_create(start.value_ns + i * 1_000_000_000)) for i in range(4))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.responses = ((entry,), (), (), ())
+    paths = (
+        _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
+        _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
+        _ok(SlicePath.try_create("eurusd", (_price(110_000),), market_closed=True)),
+        _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
+    )
+    _ok(handler.bind_paths(tuple(zip(instants, paths, strict=True))))
+    outcome = _ok(
+        run(
+            slices=tuple(
+                (_ok(SliceObservation.try_create("eurusd", instant, True)),) for instant in instants
+            ),
+            stream_set=("eurusd",),
+            handler=handler,
+        )
+    )
+    assert len(outcome.filled) == 1
+    assert len(outcome.resting) == 1
+    assert len(handler.pending_entry_tickets) == 1
+    assert len(handler.receipts) == 3
+    terminal = _ok(handler.finalize_pending_entries(at=instants[-1]))
+    assert len(terminal) == 1
+    assert terminal[0].quantity == _ok(Quantity.try_create(4, "lot", 0))
+    assert terminal[0].faces.original_risk_amount == _ok(Money.try_create(400, "USD", 0))
+    assert handler.finalized_resting_intent_ids == (outcome.resting[0].intent_id,)
+    reopened = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=terminal[0].binding_epoch,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert reopened.positions[0].fp1_identity() == terminal[0].fp1_identity()
