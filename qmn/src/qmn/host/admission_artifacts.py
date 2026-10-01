@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final, cast
 
 from qmf.core import (
@@ -29,11 +30,11 @@ from qmf.core import (
 )
 from qmf.data.observation import SourceObservation
 from qmf.data.source_boundary import SourceObservationBoundary
-from qmf.data.store import EvidenceStore, StoreReceipt
+from qmf.data.store import EvidenceStore, StoreReceipt, WorldStore
 from qmf.data.store.rooms import RoomRole
 
 from qmn.host._refuse import invalid, policy, unavailable
-from qmn.host.shakedown import ShakedownSignaturePage
+from qmn.host.shakedown import ShakedownEvidence, ShakedownSignaturePage
 from qmn.mis.catalog import SqsBaselineArtifact
 from qmn.mis.signal_snapshot import SqsBaselineKey, sqs_baseline_key
 
@@ -66,10 +67,11 @@ class AdmissionArtifactRef:
 
 @dataclass(frozen=True, slots=True)
 class PersistedSqsBaseline:
-    """Reopened typed SQS input plus verified source-observation lineage."""
+    """Reopened SQS value and checked source lineage, without a fit attestation."""
 
     artifact: SqsBaselineArtifact
     reference: AdmissionArtifactRef
+    derivation_verified: bool = False
 
 
 def persist_shakedown_signature_page(
@@ -85,6 +87,8 @@ def persist_shakedown_signature_page(
     if type(page) is not ShakedownSignaturePage:
         return invalid("page", "AD-32 evidence is a typed ShakedownSignaturePage")
     shakedown = page.shakedown
+    if type(shakedown) is not ShakedownEvidence:
+        return invalid("page.shakedown", "signature page carries the exact shakedown evidence type")
     if not isinstance(getattr(shakedown, "bms_fingerprint", None), Fingerprint):
         return unavailable(
             "bms_fingerprint",
@@ -116,6 +120,10 @@ def persist_sqs_baseline(
     """
     if type(artifact) is not SqsBaselineArtifact:
         return invalid("artifact", "SQS baseline input is a typed SqsBaselineArtifact")
+    checked_artifact = _revalidate_sqs_baseline(artifact)
+    if is_refusal(checked_artifact):
+        return checked_artifact
+    artifact = checked_artifact.value
     if type(calendar_identity) is not CalendarIdentity:
         return invalid(
             "calendar_identity",
@@ -135,7 +143,10 @@ def persist_sqs_baseline(
     if not isinstance(source_archive_fp1s, Sequence) or isinstance(
         source_archive_fp1s, (str, bytes)
     ):
-        return invalid("source_archive_fp1s", "baseline lineage is a sequence of CT-10 archive refs")
+        return invalid(
+            "source_archive_fp1s",
+            "baseline lineage is a sequence of CT-10 archive refs",
+        )
     refs: list[Fingerprint] = []
     for raw_ref in cast(Sequence[object], source_archive_fp1s):
         parsed = _coerce_fp(raw_ref, "source_archive_fp1s")
@@ -150,13 +161,17 @@ def persist_sqs_baseline(
     observations = _read_quote_sources(store, refs, artifact.key)
     if is_refusal(observations):
         return observations
+    artifact_fp = _artifact_fingerprint(artifact.fp1_identity())
+    if is_refusal(artifact_fp):
+        return artifact_fp
     body = {
         "class": "qmn-sqs-baseline-envelope-v1",
         "format_version": ADMISSION_ARTIFACT_FORMAT_VERSION,
         "artifact": artifact.fp1_identity(),
-        "artifact_fp1": _artifact_fingerprint(artifact.fp1_identity()).value.value,
+        "artifact_fp1": artifact_fp.value.value,
         "source_archive_fp1s": [ref.value for ref in refs],
         "calendar_identity": rebuilt_calendar.value.fp1_identity(),
+        "derivation_status": "unverified-input-artifact",
         "conditioning": {
             "session_window_id": artifact.session_window_id,
             "statistic": artifact.statistic,
@@ -178,8 +193,10 @@ def read_admission_artifact(
     reference: object,
 ) -> Result[Mapping[str, object]]:
     """Reopen and verify the exact immutable CT-11 row and its inner body."""
-    if type(reference) is not AdmissionArtifactRef:
-        return invalid("reference", "artifact reader consumes its typed CT-11 receipt")
+    checked_reference = _revalidate_reference(reference)
+    if is_refusal(checked_reference):
+        return checked_reference
+    reference = checked_reference.value
     if reference.artifact_class not in _ARTIFACT_CLASSES:
         return invalid("artifact_class", "private admission artifact kind is registered")
     world_store = _live_world_store(store)
@@ -188,9 +205,10 @@ def read_admission_artifact(
     rows = world_store.value.append_store.read_raw(reference.archive_fp1, for_world=World.LIVE)
     if is_refusal(rows):
         return rows
-    if len(rows.value) != 1 or not isinstance(rows.value[0], Mapping):
+    reopened_row: object = rows.value[0] if len(rows.value) == 1 else None
+    if not isinstance(reopened_row, Mapping):
         return policy("artifact_row", "admission artifact reopens as one canonical row")
-    row = cast(Mapping[str, object], rows.value[0])
+    row = cast(Mapping[str, object], reopened_row)
     decoded = _decode_row(row)
     if is_refusal(decoded):
         return decoded
@@ -213,6 +231,40 @@ def read_admission_artifact(
             return baseline
         if baseline.value.fp1_identity() != row_body.get("artifact"):
             return policy("artifact", "typed SQS baseline matches its persisted identity body")
+        nested_fp = _coerce_fp(row_body.get("artifact_fp1"), "artifact_fp1")
+        if is_refusal(nested_fp):
+            return nested_fp
+        typed_fp = fingerprint(baseline.value.fp1_identity())
+        if is_refusal(typed_fp):
+            return typed_fp
+        nested_sources = row_body.get("source_archive_fp1s")
+        if not isinstance(nested_sources, list):
+            return invalid("source_archive_fp1s", "SQS envelope cites its checked CT-10 inputs")
+        parsed_sources: list[Fingerprint] = []
+        for item in cast(list[object], nested_sources):
+            parsed = _coerce_fp(item, "source_archive_fp1s")
+            if is_refusal(parsed):
+                return parsed
+            parsed_sources.append(parsed.value)
+        nested_calendar = row_body.get("calendar_identity")
+        if (
+            nested_fp.value != typed_fp.value
+            or tuple(parsed_sources) != reference.source_archive_fp1s
+            or nested_calendar != reference.calendar_identity
+            or row_body.get("derivation_status") != "unverified-input-artifact"
+            or row_body.get("conditioning")
+            != {
+                "session_window_id": baseline.value.session_window_id,
+                "statistic": baseline.value.statistic,
+                "refit_series_id": baseline.value.refit_series_id,
+                "refit_policy_fp1": baseline.value.refit_policy_fp.value,
+            }
+        ):
+            return policy(
+                "sqs_lineage",
+                "SQS body binds the typed baseline, calendar, source refs, "
+                "and declared conditioning",
+            )
     return Ok(row_body)
 
 
@@ -221,7 +273,11 @@ def read_sqs_baseline(
     reference: object,
 ) -> Result[PersistedSqsBaseline]:
     """Reopen a typed SQS baseline and recheck every cited LIVE CT-10 source."""
-    if type(reference) is not AdmissionArtifactRef or reference.artifact_class != "sqs-baseline-artifact":
+    checked_reference = _revalidate_reference(reference)
+    if is_refusal(checked_reference):
+        return checked_reference
+    reference = checked_reference.value
+    if reference.artifact_class != "sqs-baseline-artifact":
         return invalid("reference", "SQS reader receives a typed SQS baseline reference")
     body = read_admission_artifact(store, reference)
     if is_refusal(body):
@@ -232,7 +288,13 @@ def read_sqs_baseline(
     lineage = _read_quote_sources(store, list(reference.source_archive_fp1s), artifact.value.key)
     if is_refusal(lineage):
         return lineage
-    return Ok(PersistedSqsBaseline(artifact=artifact.value, reference=reference))
+    return Ok(
+        PersistedSqsBaseline(
+            artifact=artifact.value,
+            reference=reference,
+            derivation_verified=False,
+        )
+    )
 
 
 def _persist_body(
@@ -305,9 +367,16 @@ def _persist_body(
     )
 
 
-def _decode_row(
-    row: Mapping[str, object],
-) -> Result[tuple[Mapping[str, object], str, Fingerprint, tuple[Fingerprint, ...], Mapping[str, object] | None]]:
+_DecodedRow = tuple[
+    Mapping[str, object],
+    str,
+    Fingerprint,
+    tuple[Fingerprint, ...],
+    Mapping[str, object] | None,
+]
+
+
+def _decode_row(row: Mapping[str, object]) -> Result[_DecodedRow]:
     required = {
         "class",
         "format_version",
@@ -355,7 +424,7 @@ def _decode_row(
     if not isinstance(raw_refs, list):
         return invalid("source_archive_fp1s", "CT-10 lineage refs are a persisted sequence")
     refs: list[Fingerprint] = []
-    for raw_ref in raw_refs:
+    for raw_ref in cast(list[object], raw_refs):
         parsed = _coerce_fp(raw_ref, "source_archive_fp1s")
         if is_refusal(parsed):
             return parsed
@@ -403,7 +472,8 @@ def _read_quote_sources(
         ):
             return policy(
                 "source_observation",
-                "baseline lineage contains actual LIVE CT-10 bid/ask facts for its venue and instrument",
+                "baseline lineage contains actual LIVE CT-10 bid/ask facts for "
+                "its venue and instrument",
             )
         observations.append(source)
     sides = {item.market_data.side for item in observations if item.market_data is not None}
@@ -417,6 +487,17 @@ def _decode_sqs_baseline(body: Mapping[str, object]) -> Result[SqsBaselineArtifa
         body.get("class") != "qmn-sqs-baseline-envelope-v1"
         or type(body.get("format_version")) is not int
         or body.get("format_version") != ADMISSION_ARTIFACT_FORMAT_VERSION
+        or set(body)
+        != {
+            "class",
+            "format_version",
+            "artifact",
+            "artifact_fp1",
+            "source_archive_fp1s",
+            "calendar_identity",
+            "derivation_status",
+            "conditioning",
+        }
     ):
         return invalid("artifact", "SQS private envelope has its exact class and format version")
     raw_artifact = body.get("artifact")
@@ -471,11 +552,14 @@ def _decode_sqs_baseline(body: Mapping[str, object]) -> Result[SqsBaselineArtifa
     statistic = payload.get("statistic")
     series = payload.get("refit_series_id")
     if any(not isinstance(item, str) or not item.strip() for item in (session, statistic, series)):
-        return invalid("conditioning", "session, statistic, and refit-series declarations are nonblank")
+        return invalid(
+            "conditioning",
+            "session, statistic, and refit-series declarations are nonblank",
+        )
     refit = _coerce_fp(payload.get("refit_policy_fp"), "refit_policy_fp")
     if is_refusal(refit):
         return refit
-    return Ok(
+    return _revalidate_sqs_baseline(
         SqsBaselineArtifact(
             key=key.value,
             average_spread=average.value,
@@ -507,7 +591,7 @@ def _decode_price_delta(value: object, instrument: Instrument) -> Result[PriceDe
     return invalid("price_delta", "price-delta magnitude has a representable exact decimal scale")
 
 
-def _live_world_store(store: object) -> Result[object]:
+def _live_world_store(store: object) -> Result[WorldStore]:
     if type(store) is not EvidenceStore:
         return invalid("store", "admission artifacts use the exact QMF EvidenceStore")
     world_store = store.for_world(World.LIVE)
@@ -527,12 +611,173 @@ def _valid_store_receipt(receipt: object, expected_fp: Fingerprint) -> bool:
         and receipt.engine == "parquet"
         and receipt.is_evidence_bearing is True
         and receipt.retained_forever is True
+        and type(receipt.format_version) is int
+        and receipt.format_version == 1
         and type(receipt.outcome) is WriteOutcome
+        and receipt.sequence is None
+        and receipt.engine_major is None
+        and receipt.rebuild_calendar_identity is None
+        and receipt.rebuild_tzdata_version is None
     )
 
 
 def _artifact_fingerprint(body: Mapping[str, object]) -> Result[Fingerprint]:
     return fingerprint(dict(body))
+
+
+def _revalidate_reference(value: object) -> Result[AdmissionArtifactRef]:
+    if type(value) is not AdmissionArtifactRef:
+        return invalid("reference", "artifact reader consumes its typed CT-11 receipt")
+    ref = value
+    if type(ref.artifact_class) is not str or ref.artifact_class not in _ARTIFACT_CLASSES:
+        return invalid("artifact_class", "private admission artifact kind is registered")
+    artifact_fp = _coerce_fp(ref.artifact_fp1, "artifact_fp1")
+    archive_fp = _coerce_fp(ref.archive_fp1, "archive_fp1")
+    if is_refusal(artifact_fp):
+        return artifact_fp
+    if is_refusal(archive_fp):
+        return archive_fp
+    if type(ref.source_archive_fp1s) is not tuple:
+        return invalid("source_archive_fp1s", "receipt lineage is an immutable tuple")
+    source_refs: list[Fingerprint] = []
+    for raw_ref in cast(tuple[object, ...], ref.source_archive_fp1s):
+        parsed = _coerce_fp(raw_ref, "source_archive_fp1s")
+        if is_refusal(parsed):
+            return parsed
+        source_refs.append(parsed.value)
+    if len({item.value for item in source_refs}) != len(source_refs):
+        return invalid("source_archive_fp1s", "receipt lineage refs are unique")
+    calendar: Mapping[str, object] | None = None
+    if ref.calendar_identity is not None:
+        checked_calendar = _revalidate_calendar(ref.calendar_identity)
+        if is_refusal(checked_calendar):
+            return checked_calendar
+        calendar = checked_calendar.value
+    if ref.artifact_class == "sqs-baseline-artifact":
+        if not source_refs or calendar is None:
+            return invalid("reference", "SQS receipt carries quote-source and calendar lineage")
+    elif source_refs or calendar is not None:
+        return invalid("reference", "signature-page receipt has no unbound SQS lineage")
+    return Ok(
+        AdmissionArtifactRef(
+            artifact_class=ref.artifact_class,
+            artifact_fp1=artifact_fp.value,
+            archive_fp1=archive_fp.value,
+            source_archive_fp1s=tuple(source_refs),
+            calendar_identity=calendar,
+        )
+    )
+
+
+def _revalidate_sqs_baseline(value: object) -> Result[SqsBaselineArtifact]:
+    if type(value) is not SqsBaselineArtifact:
+        return invalid("artifact", "SQS baseline input is the exact typed artifact")
+    artifact = value
+    if type(artifact.key) is not SqsBaselineKey:
+        return invalid("key", "SQS artifact carries the exact typed SqsBaselineKey")
+    key = artifact.key
+    if (
+        type(key.venue) is not VenueId
+        or type(key.instrument) is not Instrument
+        or type(key.instrument.venue) is not VenueId
+    ):
+        return invalid("key", "SQS key identities are official VenueId and Instrument values")
+    venue = VenueId.try_create(key.venue.value)
+    instrument_venue = VenueId.try_create(key.instrument.venue.value)
+    if is_refusal(venue):
+        return venue
+    if is_refusal(instrument_venue):
+        return instrument_venue
+    if venue.value != instrument_venue.value:
+        return policy("key", "SQS key instrument and venue identities match")
+    instrument = Instrument.try_create(venue.value, key.instrument.symbol)
+    if is_refusal(instrument):
+        return instrument
+    checked_key = sqs_baseline_key(venue.value, key.environment, instrument.value)
+    if is_refusal(checked_key):
+        return checked_key
+    if key.environment != "live":
+        return policy("environment", "LIVE baseline uses the live conditioning key")
+    if type(artifact.average_spread) is not PriceDelta:
+        return invalid("average_spread", "SQS average is a typed PriceDelta")
+    average_instrument = _revalidate_instrument(artifact.average_spread.instrument)
+    if is_refusal(average_instrument):
+        return average_instrument
+    if average_instrument.value != instrument.value:
+        return policy("average_spread", "average spread is tagged by the baseline instrument")
+    average = PriceDelta.try_create(
+        artifact.average_spread.value,
+        instrument.value,
+        artifact.average_spread.scale,
+    )
+    if is_refusal(average):
+        return average
+    dispersion: PriceDelta | None = None
+    if artifact.dispersion is not None:
+        if type(artifact.dispersion) is not PriceDelta:
+            return invalid("dispersion", "SQS dispersion is absent or a typed PriceDelta")
+        dispersion_instrument = _revalidate_instrument(artifact.dispersion.instrument)
+        if is_refusal(dispersion_instrument):
+            return dispersion_instrument
+        if dispersion_instrument.value != instrument.value:
+            return policy("dispersion", "dispersion is tagged by the baseline instrument")
+        checked_dispersion = PriceDelta.try_create(
+            artifact.dispersion.value,
+            instrument.value,
+            artifact.dispersion.scale,
+        )
+        if is_refusal(checked_dispersion):
+            return checked_dispersion
+        dispersion = checked_dispersion.value
+    for field, token in (
+        ("session_window_id", artifact.session_window_id),
+        ("statistic", artifact.statistic),
+        ("refit_series_id", artifact.refit_series_id),
+    ):
+        if type(token) is not str or not token.strip():
+            return invalid(field, "SQS conditioning declaration is a nonblank string")
+    if type(artifact.refit_policy_fp) is not Fingerprint:
+        return invalid("refit_policy_fp", "SQS refit policy is a typed fingerprint")
+    refit_fp = _coerce_fp(artifact.refit_policy_fp, "refit_policy_fp")
+    if is_refusal(refit_fp):
+        return refit_fp
+    return Ok(
+        SqsBaselineArtifact(
+            key=checked_key.value,
+            average_spread=average.value,
+            session_window_id=artifact.session_window_id,
+            statistic=artifact.statistic,
+            refit_series_id=artifact.refit_series_id,
+            refit_policy_fp=refit_fp.value,
+            dispersion=dispersion,
+        )
+    )
+
+
+def _revalidate_calendar(value: object) -> Result[Mapping[str, object]]:
+    if not isinstance(value, Mapping):
+        return invalid("calendar_identity", "receipt calendar is a canonical identity mapping")
+    raw_calendar = cast(Mapping[str, object], value)
+    checked_calendar = CalendarIdentity.try_create(
+        raw_calendar.get("rule_set"),
+        raw_calendar.get("rule_set_version"),
+        raw_calendar.get("tzdata_version"),
+    )
+    if is_refusal(checked_calendar):
+        return checked_calendar
+    identity = checked_calendar.value.fp1_identity()
+    if dict(raw_calendar) != identity:
+        return invalid("calendar_identity", "receipt cites the official CalendarIdentity body")
+    return Ok(MappingProxyType(identity))
+
+
+def _revalidate_instrument(value: object) -> Result[Instrument]:
+    if type(value) is not Instrument or type(value.venue) is not VenueId:
+        return invalid("instrument", "price data carries an official Instrument identity")
+    venue = VenueId.try_create(value.venue.value)
+    if is_refusal(venue):
+        return venue
+    return Instrument.try_create(venue.value, value.symbol)
 
 
 def _coerce_fp(value: object, field: str) -> Result[Fingerprint]:
