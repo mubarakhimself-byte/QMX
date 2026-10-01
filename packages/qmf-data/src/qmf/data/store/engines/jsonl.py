@@ -144,6 +144,9 @@ class JsonlAppendStream:
         self._current_ordinal = 0
         self._current_size = 0
         self._held = False
+        # A failed write can leave physical bytes beyond this handle's index. The
+        # next identity lookup must reconcile from the stream before it answers.
+        self._uncertain = False
 
     # --- one-writer hold ----------------------------------------------------
 
@@ -240,6 +243,10 @@ class JsonlAppendStream:
                 retryable=False,
                 detail={"stream": str(self._dir)},
             )
+        if self._uncertain:
+            # Keep the low-level engine safe for callers that retry append directly,
+            # without first performing an identity lookup through a room boundary.
+            self.rebuild_index()
         line = canonical + b"\n"
         digest = fingerprint_bytes(canonical).digest
         try:
@@ -256,6 +263,7 @@ class JsonlAppendStream:
             # file (AC4).
             _guard_stream_file(self._dir, path, must_exist=False)
             offset = self._current_size
+            self._uncertain = True
             with path.open("ab") as handle:
                 handle.write(line)
                 handle.flush()
@@ -275,6 +283,7 @@ class JsonlAppendStream:
         self._current_size += len(line)
         self._index[digest] = location
         self._order.append(digest)
+        self._uncertain = False
         return location
 
     # --- reads (unlimited readers) ------------------------------------------
@@ -286,6 +295,11 @@ class JsonlAppendStream:
         was truncated under the recorded length — raises :class:`StoreEngineError`
         (a corrupt/truncated store, AC4), never a silent wrong answer.
         """
+        if self._uncertain:
+            # Append/fsync may have failed after writing zero, some, or all bytes.
+            # Rebuild before idempotency lookup so the physical committed prefix is
+            # the authority and a torn tail is quarantined by the normal recovery path.
+            self.rebuild_index()
         location = self._index.get(digest)
         if location is None:
             return None
@@ -364,6 +378,7 @@ class JsonlAppendStream:
                 self._current_size = (
                     (self._dir / _ordinal_filename(self._current_ordinal)).stat().st_size
                 )
+            self._uncertain = False
         except OSError as exc:
             raise StoreEngineError(
                 "could not rebuild the JSONL index",

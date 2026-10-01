@@ -205,6 +205,9 @@ def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:
 _EDGE_WITNESS_KIND: Final[str] = "ct07-lineage-edge-integrity-witness"
 _EDGE_WITNESS_FORMAT_VERSION: Final[int] = 1
 _EDGE_WITNESS_FP_KEY: Final[str] = "witnessed_edge_fp1"
+_EDGE_WRITE_INTENT_KIND: Final[str] = "ct07-lineage-edge-write-intent"
+_EDGE_WRITE_INTENT_FORMAT_VERSION: Final[int] = 1
+_EDGE_WRITE_INTENT_FP_KEY: Final[str] = "edge_fp1"
 
 
 def _edge_witness_body(edge_fingerprint: Fingerprint) -> dict[str, object]:
@@ -225,6 +228,24 @@ def _edge_witness_key(edge_fingerprint: Fingerprint) -> Result[Fingerprint]:
         "body": _edge_witness_body(edge_fingerprint),
     }
     return fingerprint(envelope)
+
+
+def _edge_write_intent_body(edge_fingerprint: Fingerprint) -> dict[str, object]:
+    """Durable marker proving this exact edge passed the supersedes guard."""
+    return {_EDGE_WRITE_INTENT_FP_KEY: edge_fingerprint.value}
+
+
+def _edge_write_intent_envelope(edge_fingerprint: Fingerprint) -> dict[str, object]:
+    return {
+        "kind": _EDGE_WRITE_INTENT_KIND,
+        "format_version": _EDGE_WRITE_INTENT_FORMAT_VERSION,
+        "body": _edge_write_intent_body(edge_fingerprint),
+    }
+
+
+def _edge_write_intent_key(edge_fingerprint: Fingerprint) -> Result[Fingerprint]:
+    """Content address for a pending edge write; it has no read-side effect."""
+    return fingerprint(_edge_write_intent_envelope(edge_fingerprint))
 
 
 # --- the persisted record identity view -------------------------------------
@@ -565,10 +586,44 @@ class RegistryPersistence:
                 "persistence appends a LineageEdge (the CT-07 typed lineage edge)",
                 given=repr(edge),
             )
+        resume_intent = False
         if edge.edge_type is EdgeType.SUPERSEDES:
-            guard = self._guard_durable_supersedes(edge)
+            # Persist a content-addressed intent only after the room-wide linearity
+            # guard passes. On retry it distinguishes this exact interrupted operation
+            # from an arbitrary witnessless line; readers ignore intents entirely.
+            intent_key = _edge_write_intent_key(edge.edge_fingerprint)
+            if is_refusal(intent_key):  # pragma: no cover - generated fp1 is clean
+                return _corrupt("a supersedes edge could not be fingerprinted for recovery")
+            pending = self._ws.registry_room.get_record(
+                intent_key.value, for_world=self.world
+            )
+            if is_refusal(pending):
+                if pending.category is RefusalCategory.STALE_EVIDENCE:
+                    resume_intent = False
+                else:
+                    return pending
+            else:
+                try:
+                    decoded: object = json.loads(pending.value)
+                except ValueError:
+                    return _corrupt("a persisted lineage write intent is corrupt")
+                if decoded != _edge_write_intent_envelope(edge.edge_fingerprint):
+                    return _corrupt("a persisted lineage write intent does not match its key")
+                resume_intent = True
+            guard = self._guard_durable_supersedes(
+                edge, allow_pending_edge=edge if resume_intent else None
+            )
             if is_refusal(guard):
                 return guard
+            if not resume_intent:
+                intent = self._ws.registry_room.put_record(
+                    _edge_write_intent_body(edge.edge_fingerprint),
+                    kind=_EDGE_WRITE_INTENT_KIND,
+                    format_version=_EDGE_WRITE_INTENT_FORMAT_VERSION,
+                    presented_fingerprint=intent_key.value,
+                )
+                if is_refusal(intent):
+                    return intent
         appended = self._ws.registry_room.append_lineage_edge(
             edge_stream,
             edge.writer,
@@ -615,7 +670,13 @@ class RegistryPersistence:
             edges.append(rebuilt.value)
         return Ok(tuple(edges))
 
-    def _verify_edge_witness(self, edge: LineageEdge, *, for_world: object) -> Result[None]:
+    def _verify_edge_witness(
+        self,
+        edge: LineageEdge,
+        *,
+        for_world: object,
+        allow_missing: bool = False,
+    ) -> Result[None]:
         """Assert a reconstructed edge resolves to its tamper-evident integrity witness.
 
         Recomputes the witness store key from the edge's ``fp1`` fingerprint and reads it
@@ -631,6 +692,8 @@ class RegistryPersistence:
         witness = self._ws.registry_room.get_record(key.value, for_world=for_world)
         if is_refusal(witness):
             if witness.category is RefusalCategory.STALE_EVIDENCE:
+                if allow_missing:
+                    return Ok(None)
                 return _corrupt(
                     "a persisted lineage edge has no integrity witness; the stored line was "
                     "altered or forged, so the edge is not served (AC6; FM-8)",
@@ -639,7 +702,9 @@ class RegistryPersistence:
             return witness
         return Ok(None)
 
-    def _guard_durable_supersedes(self, edge: LineageEdge) -> Result[None]:
+    def _guard_durable_supersedes(
+        self, edge: LineageEdge, *, allow_pending_edge: LineageEdge | None = None
+    ) -> Result[None]:
         """Refuse a new ``supersedes`` edge that would fork the durable chain (M1; CT-07).
 
         Consults the **persisted** ``supersedes`` edges **across every edge stream in this
@@ -653,12 +718,14 @@ class RegistryPersistence:
         A read failure (corrupt/tampered stream, cross-world) propagates as itself, so nothing
         is appended over an unreadable chain.
         """
-        existing = self._read_all_supersedes_edges()
+        existing = self._read_all_supersedes_edges(allow_pending_edge=allow_pending_edge)
         if is_refusal(existing):
             return existing
         return _durable_supersedes_violation(edge, existing.value)
 
-    def _read_all_supersedes_edges(self) -> Result[tuple[LineageEdge, ...]]:
+    def _read_all_supersedes_edges(
+        self, *, allow_pending_edge: LineageEdge | None = None
+    ) -> Result[tuple[LineageEdge, ...]]:
         """Every persisted ``supersedes`` edge across all edge streams in this room (M1).
 
         Enumerates the room's edge streams
@@ -673,11 +740,39 @@ class RegistryPersistence:
             return names
         collected: list[LineageEdge] = []
         for name in names.value:
-            edges = self.read_edges(name, for_world=self.world)
+            if allow_pending_edge is None:
+                edges = self.read_edges(name, for_world=self.world)
+            else:
+                edges = self._read_edges_for_supersedes_guard(name, allow_pending_edge)
             if is_refusal(edges):
                 return edges
             collected.extend(edge for edge in edges.value if edge.edge_type is EdgeType.SUPERSEDES)
         return Ok(tuple(collected))
+
+    def _read_edges_for_supersedes_guard(
+        self, edge_stream: str, allow_pending_edge: LineageEdge
+    ) -> Result[tuple[LineageEdge, ...]]:
+        """Read a room stream, allowing only this intent's exact unwitnessed edge."""
+        raw = self._ws.registry_room.read_lineage(edge_stream, for_world=self.world)
+        if is_refusal(raw):
+            return raw
+        edges: list[LineageEdge] = []
+        for line in raw.value:
+            rebuilt = _reconstruct_edge(line)
+            if is_refusal(rebuilt):
+                return rebuilt
+            candidate = rebuilt.value
+            same_pending_identity = (
+                candidate.edge_fingerprint == allow_pending_edge.edge_fingerprint
+                and candidate.fp1_identity() == allow_pending_edge.fp1_identity()
+            )
+            witnessed = self._verify_edge_witness(
+                candidate, for_world=self.world, allow_missing=same_pending_identity
+            )
+            if is_refusal(witnessed):
+                return witnessed
+            edges.append(candidate)
+        return Ok(tuple(edges))
 
 
 # --- record / edge reconstruction (the read round trip) ---------------------

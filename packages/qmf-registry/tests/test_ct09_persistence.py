@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar, cast
+from unittest.mock import patch
 
 import pytest
 from qmf.core import (
@@ -734,6 +735,123 @@ def test_durable_supersedes_idempotent_reappend_is_not_a_fork(tmp_path: Path) ->
     again = persistence.persist_edge(edge, edge_stream="s")
     assert is_ok(again)
     assert again.value.outcome.value == "idempotent"
+
+
+def test_supersedes_witness_failure_is_reconciled_after_reopen(tmp_path: Path) -> None:
+    persistence = _live(tmp_path)
+    edge = _sup("retry-new", "retry-old")
+    room = persistence._ws.registry_room
+    real_put = room.put_record
+    calls = 0
+
+    def fail_witness_once(record, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            return unpersistable("injected witness write failure")
+        return real_put(record, **kwargs)
+
+    with patch.object(room, "put_record", side_effect=fail_witness_once):
+        failed = persistence.persist_edge(edge, edge_stream="retry")
+    assert is_refusal(failed)
+    assert is_refusal(persistence.read_edges("retry", for_world=World.LIVE))
+    persistence.close()
+
+    resumed = _live(tmp_path)
+    retried = resumed.persist_edge(edge, edge_stream="retry")
+    assert is_ok(retried)
+    assert retried.value.outcome.value == "idempotent"
+    rows = _unwrap(resumed.read_edges("retry", for_world=World.LIVE), "read recovered edge")
+    assert len(rows) == 1
+    assert rows[0].edge_fingerprint == edge.edge_fingerprint
+    resumed.close()
+
+
+def test_supersedes_torn_append_retry_after_reopen_uses_durable_intent(
+    tmp_path: Path,
+) -> None:
+    persistence = _live(tmp_path)
+    edge = _sup("torn-new", "torn-old")
+    real_open = Path.open
+
+    class Partial:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.wrapped.close()
+
+        def write(self, data):
+            self.wrapped.write(data[: max(1, len(data) // 2)])
+            self.wrapped.flush()
+            raise OSError("injected torn lineage append")
+
+    def fail_edge_append(path, mode="r", *args, **kwargs):
+        wrapped = real_open(path, mode, *args, **kwargs)
+        return Partial(wrapped) if mode == "ab" and path.suffix == ".jsonl" else wrapped
+
+    with patch.object(Path, "open", fail_edge_append):
+        refused = persistence.persist_edge(edge, edge_stream="torn")
+    assert is_refusal(refused)
+    # No complete JSONL line landed, so the read exposes no edge while the durable
+    # intent remains pending. Reopen recovery quarantines the tail before retry.
+    assert _unwrap(persistence.read_edges("torn", for_world=World.LIVE), "pending read") == ()
+    persistence.close()
+
+    resumed = _live(tmp_path)
+    assert is_ok(resumed.persist_edge(edge, edge_stream="torn"))
+    rows = _unwrap(resumed.read_edges("torn", for_world=World.LIVE), "read torn retry")
+    assert len(rows) == 1
+    assert rows[0].edge_fingerprint == edge.edge_fingerprint
+    resumed.close()
+
+
+def test_unwitnessed_matching_supersedes_line_does_not_get_blessed(tmp_path: Path) -> None:
+    persistence = _live(tmp_path)
+    edge = _sup("unwitnessed-new", "unwitnessed-old")
+    room = persistence._ws.registry_room
+    raw = room.append_lineage_edge(
+        "manual",
+        edge.writer,
+        edge.fp1_identity(),
+        presented_fingerprint=edge.edge_fingerprint,
+    )
+    assert is_ok(raw)
+    with patch.object(room, "put_record", side_effect=AssertionError("must not write a witness")):
+        refused = persistence.persist_edge(edge, edge_stream="manual")
+    assert is_refusal(refused)
+    assert is_refusal(persistence.read_edges("manual", for_world=World.LIVE))
+    persistence.close()
+
+
+def test_pending_supersedes_retry_rechecks_room_wide_linearity(tmp_path: Path) -> None:
+    persistence = _live(tmp_path)
+    room = persistence._ws.registry_room
+    first = _sup("pending-b", "pending-a")
+    competing = _sup("pending-c", "pending-a")
+    real_append = room.append_lineage_edge
+    calls = 0
+
+    def refuse_first_append(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return unpersistable("injected lineage append failure")
+        return real_append(*args, **kwargs)
+
+    with patch.object(room, "append_lineage_edge", side_effect=refuse_first_append):
+        assert is_refusal(persistence.persist_edge(first, edge_stream="first"))
+    # The first edge has a durable intent but no JSONL edge, so a different valid edge
+    # can become canonical before its retry. That retry must re-run the room-wide guard.
+    assert is_ok(persistence.persist_edge(competing, edge_stream="second"))
+    retry = persistence.persist_edge(first, edge_stream="first")
+    assert is_refusal(retry)
+    assert retry.context["field"] == "supersedes"
+    assert _unwrap(persistence.read_edges("second", for_world=World.LIVE), "competitor")
+    persistence.close()
 
 
 def test_durable_supersedes_refuses_a_cross_stream_fork(tmp_path: Path) -> None:
