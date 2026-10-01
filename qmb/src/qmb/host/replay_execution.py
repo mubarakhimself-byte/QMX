@@ -11,8 +11,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import cast
 
-from qmf.core import Fingerprint, Instant, Money, Ok, Result, World, fingerprint, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Instant,
+    Money,
+    Ok,
+    Result,
+    World,
+    WriterId,
+    fingerprint,
+    is_refusal,
+)
 from qmf.data.journal_producer import JournalReader
+from qmf.registry import RegistrationRecord
 from qmf.risk.performance import PerformanceResult
 
 from qmb._refuse import invalid, policy
@@ -58,6 +69,7 @@ def execute_recorded_replay_request(
     admission: object,
     journal_reader: object,
     terminal_ledger: object,
+    expected_split_fp1: object,
     role: object = "confirmation",
     initial_resting: object = (),
     cancel: object = None,
@@ -139,12 +151,48 @@ def execute_recorded_replay_request(
     declared_bot = BotDefinition.try_from_mapping(request.hosted.declaration)
     if is_refusal(declared_bot):
         return declared_bot
-    bot_stamp = fingerprint(declared_bot.value.fp1_identity())
+    bot_identity = declared_bot.value.identity_payload()
+    bot_kind = bot_identity.get("kind")
+    bot_contract_version = bot_identity.get("contract_format_version")
+    bot_body = bot_identity.get("body")
+    bot_parents = bot_identity.get("at_birth_parent_refs", [])
+    raw_parent_refs = cast(list[object], bot_parents) if isinstance(bot_parents, list) else []
+    if (
+        not isinstance(bot_kind, str)
+        or isinstance(bot_contract_version, bool)
+        or not isinstance(bot_contract_version, int)
+        or not isinstance(bot_body, Mapping)
+        or not isinstance(bot_parents, list)
+        or any(not isinstance(parent, str) for parent in raw_parent_refs)
+    ):
+        return invalid("bot_identity", "selected CT-33 definition has a canonical CT-06 identity")
+    parent_refs = [cast(str, parent) for parent in raw_parent_refs]
+    body_mapping = cast(Mapping[str, object], bot_body)
+    identity_writer = WriterId.try_create("qmb-runtime", "identity-check", "bot", "ephemeral")
+    if is_refusal(identity_writer):
+        return identity_writer
+    identity_instant = Instant.try_create(0)
+    if is_refusal(identity_instant):
+        return identity_instant
+    registered_bot = RegistrationRecord.try_create(
+        bot_kind,
+        bot_contract_version,
+        parent_refs,
+        body_mapping,
+        identity_writer.value,
+        0,
+        identity_instant.value,
+    )
+    if is_refusal(registered_bot):
+        return registered_bot
+    bot_stamp = Ok(registered_bot.value.stable_id)
     if is_refusal(bot_stamp):
         return bot_stamp
     if bot_stamp.value != config.bot_fp1:
         return policy("bot_fp1", "selected hosted source is the Bot pinned by run-config")
     assignment = config.keys.get(ASSIGNMENT_KEY)
+    if assignment is None and not request.hosted.assignment:
+        assignment = {}
     if not isinstance(assignment, Mapping) or dict(cast(Mapping[str, object], assignment)) != dict(
         request.hosted.assignment
     ):
@@ -175,6 +223,21 @@ def execute_recorded_replay_request(
         return policy("source_fp1", "materialized source content matches its pinned identity")
     if request.source.split_fp1 is None or request.source.split_role is None:
         return policy("split", "the governed execution request carries its CT-12 split and role")
+    expected_split = (
+        Ok(expected_split_fp1)
+        if isinstance(expected_split_fp1, Fingerprint)
+        else Fingerprint.try_create(expected_split_fp1)
+    )
+    if is_refusal(expected_split):
+        return expected_split
+    if (
+        request.split_fp1 != expected_split.value
+        or request.source.split_fp1 != expected_split.value
+    ):
+        return policy(
+            "split_fp1",
+            "the request's CT-12 source identity equals the trusted registered data_ref",
+        )
     if (
         config.book_fp1 != binding.record.book_definition_fingerprint
         or config.bms_fp1 != binding.record.bms_definition_fingerprint
