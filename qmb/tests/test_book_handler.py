@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import pytest
 from qmb._refuse import storage
@@ -252,6 +252,8 @@ def _handler(
     *,
     financing_calibration: SwapCalibration | None = None,
     rollover_calendar: object | None = None,
+    writer_boot: str = "boot-1",
+    writer_start: int = 0,
 ) -> tuple[BookExecutionSliceHandler, _ScriptedHostedBot, JournalReader, WriterId]:
     config = _resolved(financing_calibration)
     bound = _ok(bind_execution_ports(config))
@@ -259,8 +261,10 @@ def _handler(
     assert binding is not None
     store = EvidenceStore(tmp_path)
     world_store = _ok(store.for_world(World.REPLAY))
-    writer = _ok(WriterId.try_create("qmb", "replay", "positions", "boot-1"))
-    journal_writer = JournalWriter(world_store.journal, writer, stream_name="positions")
+    writer = _ok(WriterId.try_create("qmb", "replay", "positions", writer_boot))
+    journal_writer = JournalWriter(
+        world_store.journal, writer, stream_name="positions", start=writer_start
+    )
     reader = JournalReader(world_store.journal)
     result_label = _ok(ExitResultLabel.try_create(AccountRole.DEMO, World.REPLAY))
     recovery = _ok(
@@ -299,6 +303,7 @@ def _handler(
             },
             order_policy_by_code=policy_by_code,
             journal_writer=journal_writer,
+            journal_reader=reader,
             rollover_calendar=rollover_calendar or _NeverRolloverCalendar(),
             protective_stop_reason=_ok(ReasonCode.try_create("protective_stop", "family")),
         )
@@ -417,8 +422,19 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
         "opening_bot_id": "bot-1",
         "quantity": quantity.fp1_identity(),
     }
-    position_ref = _ok(fingerprint(body))
+    # The immutable virtual-position reference comes from admission command + binding
+    # epoch, so terminal quantity/risk rebases do not mint a second position identity.
+    position_ref = _ok(
+        fingerprint(
+            {
+                "binding_epoch": epoch.value,
+                "class": "qmb-replay-position-ref",
+                "command_identity": command.value,
+            }
+        )
+    )
     position_identity = {**body, "position_ref": position_ref.value}
+    position_state_fp = _ok(fingerprint(body))
 
     store = EvidenceStore(tmp_path)
     world_store = _ok(store.for_world(World.REPLAY))
@@ -430,6 +446,7 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
             {
                 "binding_epoch": epoch.value,
                 "replay_position": position_identity,
+                "replay_position_fingerprint": position_state_fp.value,
                 "replay_position_ref": position_ref.value,
             },
             instant=instant,
@@ -478,6 +495,7 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
             {
                 "binding_epoch": epoch.value,
                 "replay_position": tampered_position,
+                "replay_position_fingerprint": position_state_fp.value,
                 "replay_position_ref": position_ref.value,
             },
             instant=instant,
@@ -611,6 +629,108 @@ def test_book_fill_close_and_ct13_reopen_use_actual_economics(tmp_path: Path) ->
     bot.proposals = (exit_intent,)
     duplicate = _ok(handler.mint_intents("eurusd", close_at))
     assert is_refusal(handler.execute_resting(duplicate[0], None, close_at))
+
+
+def test_ct13_receipt_separates_new_boot_logical_seq_from_physical_row(
+    tmp_path: Path,
+) -> None:
+    instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    handler, _bot, _reader, _writer = _handler(tmp_path, writer_boot="boot-new", writer_start=7)
+    receipt = _ok(
+        handler.admission.journal_writer.record(
+            "risk transition",
+            {"binding_epoch": handler.admission.binding.fingerprint.value, "control": "resume"},
+            instant=instant,
+        )
+    )
+    assert receipt.event.sequence == 7
+    assert receipt.store_receipt.sequence == 0
+
+
+def test_unwitnessed_ct13_ack_does_not_advance_entry_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    handler, bot, reader, _writer = _handler(tmp_path)
+    instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.proposals = (entry,)
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    resting = _ok(handler.mint_intents("eurusd", instant))[0]
+
+    def no_ack(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        **kwargs: object,
+    ) -> Result[JournalAppendReceipt]:
+        del event_type, payload, instant, kwargs
+        return cast(Result[JournalAppendReceipt], Ok(None))
+
+    monkeypatch.setattr(handler.admission.journal_writer, "record", no_ack)
+    assert is_refusal(handler.execute_resting(resting, None, instant))
+    assert handler.positions == ()
+    assert handler.pending_entry_tickets == ()
+    assert _ok(reader.read_checked("positions", for_world=World.REPLAY)) == []
+
+
+@pytest.mark.parametrize("receipt_field", ("engine", "format_version", "fingerprint"))
+def test_forged_store_receipt_does_not_advance_memory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    receipt_field: str,
+) -> None:
+    handler, bot, reader, _writer = _handler(tmp_path)
+    instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.proposals = (entry,)
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    resting = _ok(handler.mint_intents("eurusd", instant))[0]
+    writer = handler.admission.journal_writer
+    original_record = writer.record
+
+    def forged_record(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        **kwargs: object,
+    ) -> Result[JournalAppendReceipt]:
+        appended = original_record(event_type, payload, instant=instant, **kwargs)
+        if is_refusal(appended):
+            return appended
+        receipt = appended.value
+        forged_store = replace(receipt.store_receipt, **_forged_receipt_field(receipt_field))
+        return Ok(replace(receipt, store_receipt=forged_store))
+
+    monkeypatch.setattr(writer, "record", forged_record)
+    assert is_refusal(handler.execute_resting(resting, None, instant))
+    assert handler.positions == ()
+    assert handler.pending_entry_tickets == ()
+    persisted = _ok(reader.read_checked("positions", for_world=World.REPLAY))
+    assert len(persisted) == 1
+
+
+def _forged_receipt_field(field_name: str) -> dict[str, object]:
+    if field_name == "engine":
+        return {"engine": "untrusted-engine"}
+    if field_name == "format_version":
+        return {"format_version": 999}
+    return {"fingerprint": _fp("forged-row-digest")}
 
 
 def test_partial_entry_no_fill_later_fill_rebases_once_and_reopens(tmp_path: Path) -> None:

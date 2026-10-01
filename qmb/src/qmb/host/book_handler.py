@@ -8,7 +8,7 @@ It never creates venue positions or maps an opaque reason code by guesswork.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from fractions import Fraction
@@ -33,8 +33,9 @@ from qmf.core import (
     fingerprint,
     is_refusal,
 )
-from qmf.data.journal import JournalEventType
+from qmf.data.journal import JournalEvent, JournalEventType
 from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
+from qmf.data.store import RoomRole, StoreReceipt, WriteOutcome
 from qmf.risk.door import (
     AdmittedEntry,
     EntryIntent,
@@ -63,6 +64,7 @@ from qmb.config.replay import ReplayBinding
 from qmb.execution.binder import BoundExecution
 from qmb.execution.fill import FillOrder, OrderType, path_ohlc, split_path_at
 from qmb.execution.financing import (
+    FinancingCashEvent,
     OpenPosition,
     RolloverCalendar,
     apply_financing_rollover,
@@ -117,6 +119,7 @@ class BookAdmissionContext:
     close_reason_by_code: Mapping[str, CloseReason]
     order_policy_by_code: Mapping[str, BookOrderPolicy]
     journal_writer: JournalWriter
+    journal_reader: JournalReader
     rollover_calendar: RolloverCalendar
     protective_stop_reason: ReasonCode
 
@@ -139,6 +142,7 @@ class BookAdmissionContext:
         close_reason_by_code: object,
         order_policy_by_code: object,
         journal_writer: object,
+        journal_reader: object,
         rollover_calendar: object,
         protective_stop_reason: object,
     ) -> Result[BookAdmissionContext]:
@@ -207,6 +211,10 @@ class BookAdmissionContext:
             order_map[key] = order_rule
         if not isinstance(journal_writer, JournalWriter):
             return invalid("journal_writer", "CT-13 close evidence uses a JournalWriter")
+        if not isinstance(journal_reader, JournalReader):
+            return invalid(
+                "journal_reader", "CT-13 memory advances require physical JournalReader readback"
+            )
         if not isinstance(rollover_calendar, RolloverCalendar):
             return invalid(
                 "rollover_calendar",
@@ -249,6 +257,7 @@ class BookAdmissionContext:
                 close_reason_by_code=MappingProxyType(reason_map),
                 order_policy_by_code=MappingProxyType(order_map),
                 journal_writer=journal_writer,
+                journal_reader=journal_reader,
                 rollover_calendar=rollover_calendar,
                 protective_stop_reason=protective_stop_reason,
             )
@@ -281,6 +290,7 @@ class ReplayPosition:
     risk_rebased: bool = False
     risk_rebase_lineage: Fingerprint | None = None
     financing_costs: tuple[CostComponent, ...] = ()
+    financing_rollovers: tuple[Fingerprint, ...] = ()
 
     @property
     def entry_fill_refs(self) -> tuple[Fingerprint, ...]:
@@ -476,6 +486,7 @@ class ReplayPositionRecovery:
                 {
                     "closed": position.closed,
                     "financing_costs": [item.fp1_identity() for item in position.financing_costs],
+                    "financing_rollovers": [item.value for item in position.financing_rollovers],
                     "position": position.fp1_identity(),
                 }
                 for position in self.positions
@@ -511,8 +522,15 @@ def read_replay_positions(
     pending_entry_refs: dict[str, list[str]] = {}
     transitions: set[tuple[str, str]] = set()
     for event in events.value:
-        if event.writer != writer:
-            return policy("writer", "all replay-position evidence belongs to its declared writer")
+        if (
+            event.writer.machine != writer.machine
+            or event.writer.role != writer.role
+            or event.writer.stream != writer.stream
+        ):
+            return policy(
+                "writer",
+                "replay-position evidence belongs to the declared writer-scoped stream",
+            )
         if event.event_type is not JournalEventType.RISK_TRANSITION:
             continue
         if event.payload.get("binding_epoch") != binding_epoch.value:
@@ -534,15 +552,24 @@ def read_replay_positions(
             financing_body = cast(Mapping[object, object], raw_financing)
             component = _parse_cost(financing_body.get("component"))
             amount = _parse_money(financing_body.get("amount"))
+            raw_trading_date = financing_body.get("trading_date")
+            if not isinstance(raw_trading_date, Mapping):
+                return invalid("trading_date", "financing witness carries its calendar date")
+            rollover_ref = fingerprint(dict(cast(Mapping[object, object], raw_trading_date)))
+            if is_refusal(rollover_ref):
+                return rollover_ref
             if is_refusal(component):
                 return component
             if is_refusal(amount):
                 return amount
             if component.value.amount != amount.value:
                 return policy("financing_event", "cost component amount matches cash amount")
+            if rollover_ref.value in position.financing_rollovers:
+                return invalid("financing_event", "one position is charged once per trading date")
             positions[raw_position] = replace(
                 position,
                 financing_costs=(*position.financing_costs, component.value),
+                financing_rollovers=(*position.financing_rollovers, rollover_ref.value),
             )
             continue
         raw_entry_ref = event.payload.get("replay_entry_fill_ref")
@@ -567,7 +594,26 @@ def read_replay_positions(
         raw_position_ref = event.payload.get("replay_position_ref")
         if raw_position_ref is not None:
             raw_body = event.payload.get("replay_position")
-            parsed_position = _restore_replay_position(raw_body)
+            raw_state_fp = event.payload.get("replay_position_fingerprint")
+            if not isinstance(raw_body, Mapping):
+                return invalid(
+                    "replay_position", "open witness carries a canonical position mapping"
+                )
+            state_identity = cast(
+                dict[object, object], _canonical_plain(cast(Mapping[object, object], raw_body))
+            )
+            state_identity.pop("position_ref", None)
+            state_fp = fingerprint(state_identity)
+            if is_refusal(state_fp):
+                return state_fp
+            if raw_state_fp != state_fp.value.value:
+                return policy(
+                    "replay_position_fingerprint",
+                    "open witness preserves the exact terminal position state under its stable ref",
+                    expected=raw_state_fp,
+                    actual=state_fp.value.value,
+                )
+            parsed_position = _restore_replay_position(cast(Mapping[object, object], raw_body))
             if is_refusal(parsed_position):
                 return parsed_position
             position = parsed_position.value
@@ -853,20 +899,25 @@ def _restore_replay_position(raw: object) -> Result[ReplayPosition]:
         )
     except (TypeError, ValueError):
         return invalid("replay_position", "position identity fields are well-formed typed values")
-    identity = position.fp1_identity()
-    without_ref = {key: value for key, value in identity.items() if key != "position_ref"}
-    expected = fingerprint(without_ref)
+    expected = _replay_position_ref(position.command_identity, position.binding_epoch)
     if is_refusal(expected):
         return expected
     if expected.value != position.position_ref:
-        return policy("position_ref", "recovered position identity hashes to its declared ref")
+        return policy("position_ref", "recovered stable command-derived position ref matches")
+    identity = position.fp1_identity()
+    without_ref = {key: value for key, value in identity.items() if key != "position_ref"}
+    expected_body = fingerprint(without_ref)
+    if is_refusal(expected_body):
+        return expected_body
     recorded_body = dict(cast(Mapping[object, object], raw))
     recorded_body.pop("position_ref", None)
     recorded_identity = fingerprint(recorded_body)
     if is_refusal(recorded_identity):
         return recorded_identity
-    if recorded_identity.value != expected.value:
+    if recorded_identity.value != expected_body.value:
         return policy("replay_position", "recovered fields reproduce the canonical identity")
+    if body.get("direction") != position.direction.value:
+        return policy("replay_position", "recorded direction matches restored typed direction")
     return Ok(position)
 
 
@@ -1280,6 +1331,7 @@ class BookExecutionSliceHandler:
     _stream_update_seen: bool = False
     _current_observation: SliceObservation | None = None
     _last_processed_frontier: Instant | None = None
+    _journal_uncertain: bool = False
 
     @classmethod
     def try_create(
@@ -1357,6 +1409,109 @@ class BookExecutionSliceHandler:
     def last_processed_frontier(self) -> Instant | None:
         """Last validated runloop frontier delivered to this stream's update hook."""
         return self._last_processed_frontier
+
+    def _record_transition(
+        self, payload: Mapping[str, object], *, instant: Instant
+    ) -> Result[JournalAppendReceipt]:
+        """Append one CT-13 transition and prove its exact physical readback."""
+        if self._journal_uncertain:
+            return policy(
+                "journal_uncertain",
+                "no later Book state advances until uncertain CT-13 state is reopened",
+            )
+        writer = self.admission.journal_writer
+        sequence = writer.next_sequence
+        appended = writer.record(
+            JournalEventType.RISK_TRANSITION,
+            payload,
+            instant=instant,
+        )
+        if is_refusal(appended):
+            return appended
+        append_value: object = getattr(appended, "value", None)
+        if not isinstance(append_value, JournalAppendReceipt):
+            self._journal_uncertain = True
+            return invalid(
+                "journal_receipt",
+                "CT-13 append returns a complete physical JournalAppendReceipt",
+            )
+        receipt = append_value
+        event_value: object = getattr(receipt, "event", None)
+        stored_value: object = getattr(receipt, "store_receipt", None)
+        edge_receipts: object = getattr(receipt, "edge_receipts", None)
+        if not isinstance(event_value, JournalEvent) or not isinstance(stored_value, StoreReceipt):
+            self._journal_uncertain = True
+            return invalid(
+                "journal_receipt",
+                "physical receipt carries typed JournalEvent and StoreReceipt values",
+            )
+        event = event_value
+        stored = stored_value
+        event_fp = fingerprint(event.fp1_identity())
+        raw_row_fp = fingerprint(event.to_row())
+        if is_refusal(event_fp):
+            self._journal_uncertain = True
+            return event_fp
+        if is_refusal(raw_row_fp):
+            self._journal_uncertain = True
+            return raw_row_fp
+        expected_payload_fp = fingerprint(dict(payload))
+        actual_payload_fp = fingerprint(dict(event.payload))
+        if is_refusal(expected_payload_fp):
+            return expected_payload_fp
+        if is_refusal(actual_payload_fp):
+            self._journal_uncertain = True
+            return actual_payload_fp
+        if (
+            event.writer != writer.writer
+            or event.sequence != sequence
+            or event.instant != instant
+            or event.world is not World.REPLAY
+            or event.event_type is not JournalEventType.RISK_TRANSITION
+            or actual_payload_fp.value != expected_payload_fp.value
+            or event.fingerprint != event_fp.value
+            or stored.world is not World.REPLAY
+            or stored.room_role is not RoomRole.JOURNAL
+            or stored.engine != "jsonl"
+            or type(stored.format_version) is not int
+            or stored.format_version != 1
+            or stored.fingerprint != raw_row_fp.value
+            or stored.outcome not in {WriteOutcome.STORED, WriteOutcome.IDEMPOTENT}
+            or not stored.is_evidence_bearing
+            or not stored.retained_forever
+            or not isinstance(edge_receipts, tuple)
+            or edge_receipts
+        ):
+            self._journal_uncertain = True
+            return invalid(
+                "journal_receipt",
+                "CT-13 receipt exactly witnesses the typed event and durable journal-room write",
+            )
+        readback = self.admission.journal_reader.read_checked(
+            writer.stream_name,
+            for_world=World.REPLAY,
+        )
+        if is_refusal(readback):
+            self._journal_uncertain = True
+            return readback
+        matches = tuple(
+            (physical_index, item)
+            for physical_index, item in enumerate(readback.value)
+            if item.writer == writer.writer and item.sequence == sequence
+        )
+        if len(matches) != 1 or matches[0][1] != event or stored.sequence != matches[0][0]:
+            self._journal_uncertain = True
+            return invalid(
+                "journal_readback",
+                "physical CT-13 readback contains this exact event once at its sequence",
+                details={
+                    "matches": len(matches),
+                    "event_equal": bool(matches and matches[0][1] == event),
+                    "stored_sequence": stored.sequence,
+                    "physical_sequence": matches[0][0] if matches else None,
+                },
+            )
+        return Ok(receipt)
 
     def finalize_pending_entries(self, *, at: Instant) -> Result[tuple[ReplayPosition, ...]]:
         """Seal all filled entries only at a successful end-of-input boundary."""
@@ -1446,39 +1601,11 @@ class BookExecutionSliceHandler:
         if is_refusal(aggregate_costs):
             return aggregate_costs
         first_fill = pending.fills[0]
-        position_identity: dict[str, object] = {
-            "admission_identity": pending.admission_identity.value,
-            "binding_epoch": self.admission.binding.fingerprint.value,
-            "class": BOOK_POSITION_CLASS,
-            "command_identity": ticket.value,
-            "direction": pending.intent.direction.value,
-            "entry_costs": [component.fp1_identity() for component in aggregate_costs.value],
-            "entry_fill_ref": first_fill.fill_ref.value,
-            "entry_fills": [fill.fp1_identity() for fill in pending.fills],
-            "entry_price": first_fill.price.fp1_identity(),
-            "protective_stop": pending.admission.declared_full_loss_price.fp1_identity(),
-            "entry_terminal_reason": terminal_reason.value,
-            "faces": faces.value.fp1_identity(),
-            "instrument": pending.intent.instrument.symbol,
-            "opened_at": first_fill.instant.fp1_identity(),
-            "opening_bot_id": self.admission.opening_bot_id,
-            "position_ref": "",
-            "quantity": total_quantity.value.fp1_identity(),
-            "declared_plan_quantity": pending.planned_quantity.fp1_identity(),
-            "declared_plan_risk_amount": pending.planned_faces.original_risk_amount.fp1_identity(),
-        }
-        if risk_rebased:
-            if lineage_ref is None:
-                return invalid(
-                    "risk_rebase_lineage", "partial admission carries a lineage fingerprint"
-                )
-            position_identity["risk_rebased"] = True
-            position_identity["risk_rebase_lineage"] = lineage_ref.value
-        position_identity.pop("position_ref")
-        position_ref = fingerprint(position_identity)
+        if risk_rebased and lineage_ref is None:
+            return invalid("risk_rebase_lineage", "partial admission carries a lineage fingerprint")
+        position_ref = _replay_position_ref(ticket, self.admission.binding.fingerprint)
         if is_refusal(position_ref):
             return position_ref
-        position_identity["position_ref"] = position_ref.value.value
         position = ReplayPosition(
             position_ref=position_ref.value,
             binding_epoch=self.admission.binding.fingerprint,
@@ -1611,24 +1738,49 @@ class BookExecutionSliceHandler:
                     "recorded quote side and admitted stop name the same instrument",
                 )
         open_positions: list[OpenPosition] = []
-        for position in self._positions.values():
+        rollover = self.admission.rollover_calendar.is_rollover_instant(frontier)
+        if is_refusal(rollover):
+            return rollover
+        rollover_ref: Fingerprint | None = None
+        if rollover.value:
+            trading_date = self.admission.rollover_calendar.trading_date_of(frontier)
+            if is_refusal(trading_date):
+                return trading_date
+            date_fp = fingerprint(trading_date.value.fp1_identity())
+            if is_refusal(date_fp):
+                return date_fp
+            rollover_ref = date_fp.value
+        eligible = tuple(
+            position
+            for position in self._positions.values()
+            if rollover_ref is None or rollover_ref not in position.financing_rollovers
+        )
+        for position in eligible:
             opened = OpenPosition.try_create(self.stream_id, position.direction, position.quantity)
             if is_refusal(opened):
                 return opened
             open_positions.append(opened.value)
-        applied = apply_financing_rollover(
-            self.bound_execution.ports.financing,
-            tuple(open_positions),
-            frontier=frontier,
-            calendar=self.admission.rollover_calendar,
-            writer=self.admission.journal_writer.writer,
-            world=World.REPLAY,
-            start_sequence=self.admission.journal_writer.next_sequence,
-            stream_id=self.stream_id,
-        )
-        if is_refusal(applied):
-            return applied
-        for cash in applied.value.events:
+        events: tuple[FinancingCashEvent, ...] = ()
+        if open_positions:
+            applied = apply_financing_rollover(
+                self.bound_execution.ports.financing,
+                tuple(open_positions),
+                frontier=frontier,
+                calendar=self.admission.rollover_calendar,
+                writer=self.admission.journal_writer.writer,
+                world=World.REPLAY,
+                start_sequence=self.admission.journal_writer.next_sequence,
+                stream_id=self.stream_id,
+            )
+            if is_refusal(applied):
+                return applied
+            events = applied.value.events
+        for cash in events:
+            if rollover_ref is None:
+                return policy(
+                    "financing_rollover",
+                    "a cash event is emitted only for its fingerprinted calendar date",
+                )
             candidates = [
                 position
                 for position in self._positions.values()
@@ -1641,8 +1793,7 @@ class BookExecutionSliceHandler:
                     "cash event maps to exactly one QMB virtual position",
                 )
             position = candidates[0]
-            journaled = self.admission.journal_writer.record(
-                JournalEventType.RISK_TRANSITION,
+            journaled = self._record_transition(
                 {
                     "binding_epoch": self.admission.binding.fingerprint.value,
                     "financing_event": cash.fp1_identity(),
@@ -1654,7 +1805,12 @@ class BookExecutionSliceHandler:
             if is_refusal(journaled):
                 return journaled
             self._positions[position.position_ref.value] = replace(
-                position, financing_costs=(*position.financing_costs, cash.component)
+                position,
+                financing_costs=(*position.financing_costs, cash.component),
+                financing_rollovers=(
+                    *position.financing_rollovers,
+                    rollover_ref,
+                ),
             )
         stopped = self._evaluate_protective_stops(frontier)
         if is_refusal(stopped):
@@ -1983,8 +2139,7 @@ class BookExecutionSliceHandler:
         if total.value.as_fraction() > pending.planned_quantity.as_fraction():
             return policy("entry_quantity", "actual cumulative fill stays within the admitted plan")
         if isinstance(fill.value.fill, PartialFill):
-            persisted = context.journal_writer.record(
-                JournalEventType.RISK_TRANSITION,
+            persisted = self._record_transition(
                 {
                     "binding_epoch": context.binding.fingerprint.value,
                     "replay_entry_fill": entry_fill.fp1_identity(),
@@ -2007,8 +2162,7 @@ class BookExecutionSliceHandler:
         if fill.value.fill.quantity != remaining_quantity.value:
             return policy("fill_quantity", "a full replay fill equals the exact remaining quantity")
         if pending.fills:
-            persisted = context.journal_writer.record(
-                JournalEventType.RISK_TRANSITION,
+            persisted = self._record_transition(
                 {
                     "binding_epoch": context.binding.fingerprint.value,
                     "replay_entry_fill": entry_fill.fp1_identity(),
@@ -2019,11 +2173,13 @@ class BookExecutionSliceHandler:
             )
             if is_refusal(persisted):
                 return persisted
+        previous_pending = self._pending_entries[pending.ticket.value]
         self._pending_entries[pending.ticket.value] = next_pending
         position = self.finalize_entry(
             pending.ticket, at=at, terminal_reason=EntryTerminalReason.REPLAY_COMPLETE
         )
         if is_refusal(position):
+            self._pending_entries[pending.ticket.value] = previous_pending
             return position
         return Ok(
             BookExecutionReceipt(
@@ -2166,8 +2322,7 @@ class BookExecutionSliceHandler:
         fp = record.value.fingerprint()
         if is_refusal(fp):
             return fp
-        journaled = context.journal_writer.record(
-            JournalEventType.RISK_TRANSITION,
+        journaled = self._record_transition(
             {
                 "binding_epoch": context.binding.fingerprint.value,
                 _CLOSE_BODY_KEY: record.value.fp1_identity(),
@@ -2223,15 +2378,18 @@ class BookExecutionSliceHandler:
     ) -> Result[JournalAppendReceipt]:
         """Write the opening virtual-position witness before later close interpretation."""
         # The caller adds this position to memory only after the witness append succeeds.
+        state_fp = _position_state_fingerprint(position)
+        if is_refusal(state_fp):
+            return state_fp
         payload: dict[str, object] = {
             "binding_epoch": position.binding_epoch.value,
             "replay_position": position.fp1_identity(),
+            "replay_position_fingerprint": state_fp.value.value,
             "replay_position_ref": position.position_ref.value,
         }
         if entry_ticket is not None:
             payload["replay_entry_ticket"] = entry_ticket.value
-        return self.admission.journal_writer.record(
-            JournalEventType.RISK_TRANSITION,
+        return self._record_transition(
             payload,
             instant=at,
         )
@@ -2323,6 +2481,41 @@ def _fill_price(fill: Fill | PartialFill) -> Result[Price]:
 def _policy_key(intent_kind: str, intent: EntryIntent | ExitIntent) -> str:
     """Book order policy is pinned by intent class plus its Book-owned reason."""
     return _reason_policy_key(intent_kind, intent.reason_code)
+
+
+def _replay_position_ref(
+    command_identity: Fingerprint, binding_epoch: Fingerprint
+) -> Result[Fingerprint]:
+    """Stable virtual-position identity, independent of terminal quantity rebasing."""
+    return fingerprint(
+        {
+            "binding_epoch": binding_epoch.value,
+            "class": "qmb-replay-position-ref",
+            "command_identity": command_identity.value,
+        }
+    )
+
+
+def _position_state_fingerprint(position: ReplayPosition) -> Result[Fingerprint]:
+    """Bind mutable terminal fields to the stable command-derived position reference."""
+    identity = position.fp1_identity()
+    identity.pop("position_ref", None)
+    stamped = fingerprint(identity)
+    return stamped
+
+
+def _canonical_plain(value: object) -> object:
+    """Normalize frozen journal mappings and tuples to the original fp1 JSON shape."""
+    if isinstance(value, Mapping):
+        mapped: Mapping[object, object] = cast(Mapping[object, object], value)
+        normalized: dict[object, object] = {}
+        for key, child in mapped.items():
+            normalized[key] = _canonical_plain(child)
+        return normalized
+    if isinstance(value, (tuple, list)):
+        values = cast(Sequence[object], value)
+        return [_canonical_plain(child) for child in values]
+    return value
 
 
 def _reason_policy_key(intent_kind: str, reason_code: ReasonCode) -> str:
