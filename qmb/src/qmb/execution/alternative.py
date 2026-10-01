@@ -14,16 +14,20 @@ from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
 from qmf.core import (
+    ExactRational,
     Fingerprint,
     Instant,
+    Money,
     Ok,
     Result,
     TypedRefusal,
+    UnitKind,
     World,
     WriteOutcome,
     fingerprint,
     is_refusal,
 )
+from qmf.core.chrono import WriterId
 from qmf.data.journal import DecisionOutcome, JournalEvent, JournalEventType
 from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.observation import SourceObservation
@@ -42,12 +46,15 @@ from qmb.config.alternative import (
     validate_alternative_run_config,
 )
 from qmb.host.replay import RecordedReplaySource
+from qmb.optimize.sampler import validate_trial_label
 from qmb.runloop.loop import EventSlice, SliceObservation
 
 __all__ = [
     "ATCJournalReference",
     "AlternativeEvaluationRequest",
     "AlternativeInterpreterRegistry",
+    "AlternativeMeasure",
+    "AlternativeMeasureDeclaration",
     "AlternativePolicyEvaluation",
     "AlternativePolicyInterpreter",
     "AlternativeRunReceipt",
@@ -131,6 +138,89 @@ def _plain(value: object) -> object:
 
 
 @dataclass(frozen=True, slots=True)
+class AlternativeMeasure:
+    """One policy-owned exact ATC measure with its explicit CT-01 unit-kind.
+
+    This is QMB ATC evidence and carries no CT-32/Book performance contract.
+    The registered PolicyPair/interpreter identity pins the measure's semantics.
+    """
+
+    measure_identity: str
+    quantity: ExactRational | Money
+
+    @classmethod
+    def try_create(cls, measure_identity: object, quantity: object) -> Result[AlternativeMeasure]:
+        if not isinstance(measure_identity, str) or not measure_identity.strip():
+            return invalid("measure_identity", "an ATC measure has a named identity")
+        if not isinstance(quantity, (ExactRational, Money)):
+            return invalid(
+                "quantity",
+                "an ATC measure carries exact Money or ExactRational with a unit-kind",
+            )
+        return Ok(cls(measure_identity.strip(), quantity))
+
+    @property
+    def unit_kind(self) -> str:
+        """The unit-kind carried by the exact QMF quantity."""
+        return self.quantity.unit_kind.value
+
+    @property
+    def currency(self) -> str | None:
+        """The declared currency for money-valued policy measures."""
+        return self.quantity.currency if isinstance(self.quantity, Money) else None
+
+    def fp1_identity(self) -> dict[str, object]:
+        """Canonical ATC measure identity; intentionally independent of CT-32."""
+        body: dict[str, object] = {
+            "class": "qmb-alternative-measure-v1",
+            "measure_identity": self.measure_identity,
+            "quantity": self.quantity.fp1_identity(),
+            "unit_kind": self.unit_kind,
+        }
+        if self.currency is not None:
+            body["currency"] = self.currency
+        return body
+
+
+@dataclass(frozen=True, slots=True)
+class AlternativeMeasureDeclaration:
+    """A registered interpreter's declared measure identity and CT-01 units."""
+
+    measure_identity: str
+    unit_kind: str
+    currency: str | None = None
+
+    @classmethod
+    def try_create(
+        cls, measure_identity: object, unit_kind: object, currency: object = None
+    ) -> Result[AlternativeMeasureDeclaration]:
+        if not isinstance(measure_identity, str) or not measure_identity.strip():
+            return invalid("measure_identity", "a declared ATC measure has a stable identity")
+        if not isinstance(unit_kind, str) or unit_kind not in {item.value for item in UnitKind}:
+            return invalid("unit_kind", "a declared ATC measure uses an explicit CT-01 unit-kind")
+        parsed_currency: str | None = None
+        if currency is not None:
+            if not isinstance(currency, str) or not currency.strip():
+                return invalid("currency", "a declared ATC measure currency is named")
+            parsed_currency = currency.strip()
+        if unit_kind == UnitKind.MONEY.value and parsed_currency is None:
+            return invalid("currency", "money-valued ATC measures declare their currency")
+        if unit_kind != UnitKind.MONEY.value and parsed_currency is not None:
+            return invalid("currency", "non-money ATC measures carry no currency")
+        return Ok(cls(measure_identity.strip(), unit_kind, parsed_currency))
+
+    def fp1_identity(self) -> dict[str, object]:
+        body: dict[str, object] = {
+            "class": "qmb-alternative-measure-declaration-v1",
+            "measure_identity": self.measure_identity,
+            "unit_kind": self.unit_kind,
+        }
+        if self.currency is not None:
+            body["currency"] = self.currency
+        return body
+
+
+@dataclass(frozen=True, slots=True)
 class InternalSimulatedAction:
     """A policy's internal replay action; it can never carry a venue command."""
 
@@ -175,6 +265,7 @@ class AlternativePolicyEvaluation:
     risk_verdict: str
     risk_accepted: bool
     actions: tuple[InternalSimulatedAction, ...]
+    measures: tuple[AlternativeMeasure, ...] = ()
 
     @classmethod
     def try_create(
@@ -184,6 +275,7 @@ class AlternativePolicyEvaluation:
         risk_verdict: object,
         risk_accepted: object,
         actions: object,
+        measures: object = (),
     ) -> Result[AlternativePolicyEvaluation]:
         state = _freeze_mapping(accounting_state, "accounting_state")
         if isinstance(state, TypedRefusal):
@@ -212,12 +304,31 @@ class AlternativePolicyEvaluation:
             return invalid("actions", "simulated action ids are unique within a frontier")
         if not risk_accepted and action_list:
             return policy("actions", "a risk-refused frontier cannot accept simulated actions")
-        return Ok(cls(state, risk_verdict, risk_accepted, action_list))
+        if isinstance(measures, (str, bytes)) or not isinstance(measures, Sequence):
+            return invalid("measures", "policy measures are an ordered sequence of exact metrics")
+        normalized_measures: list[AlternativeMeasure] = []
+        for index, value in enumerate(cast("Sequence[object]", measures)):
+            if not isinstance(value, AlternativeMeasure):
+                return invalid(
+                    "measures",
+                    "policy outputs are typed exact AlternativeMeasure values",
+                    index=index,
+                )
+            normalized = AlternativeMeasure.try_create(value.measure_identity, value.quantity)
+            if is_refusal(normalized):
+                return normalized
+            normalized_measures.append(normalized.value)
+        if len({measure.measure_identity for measure in normalized_measures}) != len(
+            normalized_measures
+        ):
+            return invalid("measures", "each policy measure identity occurs once per frontier")
+        return Ok(cls(state, risk_verdict, risk_accepted, action_list, tuple(normalized_measures)))
 
     def identity(self) -> dict[str, object]:
         return {
             "accounting_state": _plain(self.accounting_state),
             "actions": [action.identity() for action in self.actions],
+            "measures": [measure.fp1_identity() for measure in self.measures],
             "risk_accepted": self.risk_accepted,
             "risk_verdict": self.risk_verdict,
         }
@@ -265,6 +376,7 @@ class PolicyInterpreterRegistration:
     interpreter_version: int
     interpreter_fp1: Fingerprint
     interpreter: AlternativePolicyInterpreter
+    declared_measures: tuple[AlternativeMeasureDeclaration, ...]
     fingerprint: Fingerprint
 
     @classmethod
@@ -278,6 +390,7 @@ class PolicyInterpreterRegistration:
         interpreter_version: object,
         interpreter_fp1: object,
         interpreter: object,
+        declared_measures: object = (),
     ) -> Result[PolicyInterpreterRegistration]:
         if not isinstance(policy_pair_id, str) or not policy_pair_id.strip():
             return invalid("policy_pair_id", "an interpreter registration pins a PolicyPair id")
@@ -297,6 +410,22 @@ class PolicyInterpreterRegistration:
             return invalid("interpreter_id", "a trusted interpreter has a stable id")
         if not callable(getattr(interpreter, "evaluate", None)):
             return invalid("interpreter", "a registered policy interpreter implements evaluate")
+        if isinstance(declared_measures, (str, bytes)) or not isinstance(
+            declared_measures, Sequence
+        ):
+            return invalid("declared_measures", "interpreter measures are an ordered sequence")
+        declarations: list[AlternativeMeasureDeclaration] = []
+        for index, value in enumerate(cast("Sequence[object]", declared_measures)):
+            if not isinstance(value, AlternativeMeasureDeclaration):
+                return invalid("declared_measures", "each declared output is typed", index=index)
+            checked_declaration = AlternativeMeasureDeclaration.try_create(
+                value.measure_identity, value.unit_kind, value.currency
+            )
+            if is_refusal(checked_declaration):
+                return checked_declaration
+            declarations.append(checked_declaration.value)
+        if len({item.measure_identity for item in declarations}) != len(declarations):
+            return invalid("declared_measures", "declared ATC measure identities are unique")
         pair_version = cast(int, policy_pair_version)
         implementation_version = cast(int, interpreter_version)
         identity = {
@@ -304,6 +433,7 @@ class PolicyInterpreterRegistration:
             "interpreter_fp1": impl_fp.value,
             "interpreter_id": interpreter_id,
             "interpreter_version": implementation_version,
+            "declared_measures": [item.fp1_identity() for item in declarations],
             "policy_pair_hash": pair_hash.value,
             "policy_pair_id": policy_pair_id,
             "policy_pair_version": pair_version,
@@ -320,6 +450,7 @@ class PolicyInterpreterRegistration:
                 implementation_version,
                 impl_fp,
                 cast("AlternativePolicyInterpreter", interpreter),
+                tuple(declarations),
                 stamped.value,
             )
         )
@@ -330,6 +461,7 @@ class PolicyInterpreterRegistration:
             "interpreter_fp1": self.interpreter_fp1.value,
             "interpreter_id": self.interpreter_id,
             "interpreter_version": self.interpreter_version,
+            "declared_measures": [item.fp1_identity() for item in self.declared_measures],
             "policy_pair_hash": self.policy_pair_hash.value,
             "policy_pair_id": self.policy_pair_id,
             "policy_pair_version": self.policy_pair_version,
@@ -370,6 +502,7 @@ class AlternativeInterpreterRegistry:
                 interpreter_version=registration.interpreter_version,
                 interpreter_fp1=registration.interpreter_fp1,
                 interpreter=registration.interpreter,
+                declared_measures=registration.declared_measures,
             )
             if is_refusal(checked) or checked.value.fingerprint != registration.fingerprint:
                 return policy(
@@ -416,6 +549,7 @@ class ATCJournalReference:
     frontier: Instant
     event_fingerprint: Fingerprint
     store_fingerprint: Fingerprint
+    store_sequence: int
     sequence: int
     output_fingerprint: Fingerprint
 
@@ -426,6 +560,7 @@ class ATCJournalReference:
             "output_fp1": self.output_fingerprint.value,
             "sequence": self.sequence,
             "store_receipt_fp1": self.store_fingerprint.value,
+            "store_sequence": self.store_sequence,
         }
 
 
@@ -440,26 +575,41 @@ class AlternativeRunReceipt:
     split_role: SegmentRole
     registry_fingerprint: Fingerprint
     interpreter_registration: PolicyInterpreterRegistration
+    journal_writer: WriterId
+    journal_stream: str
     initial_accounting_state_fingerprint: Fingerprint
     final_accounting_state: Mapping[str, object]
     final_accounting_state_fingerprint: Fingerprint
+    final_measures: tuple[AlternativeMeasure, ...]
     journal_references: tuple[ATCJournalReference, ...]
+    trial_label: Mapping[str, object] | None
     fingerprint: Fingerprint
 
     def fp1_identity(self) -> dict[str, object]:
-        return {
+        identity: dict[str, object] = {
             "class": "qmb-alternative-run-result-v1",
             "composition_fp1": self.config.composition_fp.value,
             "final_accounting_state_fp1": self.final_accounting_state_fingerprint.value,
             "initial_accounting_state_fp1": self.initial_accounting_state_fingerprint.value,
             "interpreter_registration_fp1": self.interpreter_registration.fingerprint.value,
             "journal_refs": [reference.identity() for reference in self.journal_references],
+            "journal_stream": self.journal_stream,
+            "journal_writer": {
+                "boot_epoch_id": self.journal_writer.boot_epoch_id,
+                "machine": self.journal_writer.machine,
+                "role": self.journal_writer.role,
+                "stream": self.journal_writer.stream,
+            },
+            "final_measures": [measure.fp1_identity() for measure in self.final_measures],
             "policy_pair_identity": self.config.policy_pair.identity(),
             "registry_fp1": self.registry_fingerprint.value,
             "source_fp1": self.source_fingerprint.value,
             "split_fp1": self.split_fingerprint.value,
             "split_role": self.split_role.value,
         }
+        if self.trial_label is not None:
+            identity["trial_label"] = _plain(self.trial_label)
+        return identity
 
 
 def _validate_source(source: object) -> dict[int, list[SourceObservation]] | TypedRefusal:
@@ -638,6 +788,7 @@ def execute_alternative_run(
     expected_command_owner_epoch: object,
     journal_writer: object,
     journal_store: object,
+    trial_label: object = None,
 ) -> Result[AlternativeRunReceipt]:
     """Evaluate a selected ATC on recorded CT-10 data and durably journal each transition.
 
@@ -649,6 +800,12 @@ def execute_alternative_run(
     if is_refusal(validated):
         return validated
     config = validated.value
+    normalized_trial_label: Mapping[str, object] | None = None
+    if trial_label is not None:
+        checked_label = validate_trial_label(trial_label)
+        if is_refusal(checked_label):
+            return checked_label
+        normalized_trial_label = checked_label.value
     if (
         config.command.adapter_capability != ADAPTER_INTERNAL_SIMULATE
         or config.command.venue_kind is not None
@@ -713,6 +870,7 @@ def execute_alternative_run(
     simulate = simulated.value
     working_state: Mapping[str, object] = state
     working_fp = initial_fp.value
+    working_measures: tuple[AlternativeMeasure, ...] = ()
     references: list[ATCJournalReference] = []
     expected_events: dict[int, Fingerprint] = {}
     frontiers = source_data
@@ -759,9 +917,23 @@ def execute_alternative_run(
             risk_verdict=evaluated.risk_verdict,
             risk_accepted=evaluated.risk_accepted,
             actions=evaluated.actions,
+            measures=evaluated.measures,
         )
         if is_refusal(checked):
             return checked
+        declarations = {item.measure_identity: item for item in registration.declared_measures}
+        for measure in checked.value.measures:
+            declared = declarations.get(measure.measure_identity)
+            if (
+                declared is None
+                or declared.unit_kind != measure.unit_kind
+                or declared.currency != measure.currency
+            ):
+                return policy(
+                    "measure_contract",
+                    "interpreter output matches its registered measure identity and CT-01 units",
+                    measure_identity=measure.measure_identity,
+                )
         state_after_fp = fingerprint(
             {
                 "class": "qmb-atc-accounting-state-v1",
@@ -787,6 +959,7 @@ def execute_alternative_run(
             "accounting_state_after_fp1": state_after_fp.value.value,
             "accounting_state_before_fp1": working_fp.value,
             "actions": [action.identity() for action in checked.value.actions],
+            "measures": [measure.fp1_identity() for measure in checked.value.measures],
             "composition_class": "alternative",
             "composition_fp1": config.composition_fp.value,
             "frontier_input_fp1": input_fp.value.value,
@@ -801,6 +974,8 @@ def execute_alternative_run(
             "risk_accepted": checked.value.risk_accepted,
             "risk_verdict": checked.value.risk_verdict,
         }
+        if normalized_trial_label is not None:
+            payload["trial_label"] = _plain(normalized_trial_label)
         if not checked.value.risk_accepted:
             payload["refusing_door"] = f"atc-policy:{config.policy_pair.policy_pair_id}"
         expected_sequence = journal_writer.next_sequence
@@ -834,11 +1009,14 @@ def execute_alternative_run(
         if is_refusal(validated_append):
             return validated_append
         event, store_receipt = validated_append.value
+        if type(store_receipt.sequence) is not int or store_receipt.sequence < 0:
+            return policy("journal_receipt", "physical CT-13 sequence is an exact non-negative int")
         references.append(
             ATCJournalReference(
                 frontier=instant,
                 event_fingerprint=event.fingerprint,
                 store_fingerprint=store_receipt.fingerprint,
+                store_sequence=store_receipt.sequence,
                 sequence=event.sequence,
                 output_fingerprint=output_fp.value,
             )
@@ -846,6 +1024,7 @@ def execute_alternative_run(
         expected_events[event.sequence] = event.fingerprint
         working_state = checked.value.accounting_state
         working_fp = state_after_fp.value
+        working_measures = checked.value.measures
 
     reopened = JournalReader(journal_store).read_checked(
         journal_writer.stream_name, for_world=World.REPLAY
@@ -861,19 +1040,29 @@ def execute_alternative_run(
         readback[sequence].fingerprint != expected for sequence, expected in expected_events.items()
     ):
         return policy("journal_readback", "every accepted ATC decision reopens byte-identically")
-    identity = {
+    identity: dict[str, object] = {
         "class": "qmb-alternative-run-result-v1",
         "composition_fp1": config.composition_fp.value,
         "final_accounting_state_fp1": working_fp.value,
         "initial_accounting_state_fp1": initial_fp.value.value,
         "interpreter_registration_fp1": registration.fingerprint.value,
         "journal_refs": [reference.identity() for reference in references],
+        "journal_stream": journal_writer.stream_name,
+        "journal_writer": {
+            "boot_epoch_id": journal_writer.writer.boot_epoch_id,
+            "machine": journal_writer.writer.machine,
+            "role": journal_writer.writer.role,
+            "stream": journal_writer.writer.stream,
+        },
+        "final_measures": [measure.fp1_identity() for measure in working_measures],
         "policy_pair_identity": config.policy_pair.identity(),
         "registry_fp1": registry.fingerprint.value,
         "source_fp1": source.fingerprint.value,
         "split_fp1": split_fingerprint.value,
         "split_role": split_role.value,
     }
+    if normalized_trial_label is not None:
+        identity["trial_label"] = _plain(normalized_trial_label)
     result_fp = fingerprint(identity)
     if is_refusal(result_fp):
         return result_fp
@@ -886,10 +1075,14 @@ def execute_alternative_run(
             split_role=split_role,
             registry_fingerprint=registry.fingerprint,
             interpreter_registration=registration,
+            journal_writer=journal_writer.writer,
+            journal_stream=journal_writer.stream_name,
             initial_accounting_state_fingerprint=initial_fp.value,
             final_accounting_state=working_state,
             final_accounting_state_fingerprint=working_fp,
+            final_measures=working_measures,
             journal_references=tuple(references),
+            trial_label=normalized_trial_label,
             fingerprint=result_fp.value,
         )
     )

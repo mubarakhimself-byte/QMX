@@ -16,6 +16,11 @@ from qmf.core.refusal import Ok, Result, is_refusal
 from qml.declaration.bot import BotDefinition
 from qml.declaration.parameters import ParameterSpec
 
+from qmb.optimize.alternative_study import (
+    AlternativeParameterBinding,
+    AlternativeStudyObjective,
+    run_alternative_study,
+)
 from qmb.optimize.objective import (
     DIRECTION_MAX,
     DIRECTION_MIN,
@@ -324,6 +329,8 @@ __all__ = [
     "WINNER_STABILITIES",
     "WINNER_VERDICT_DEFERRED_TO",
     "AdmittedStudy",
+    "AlternativeParameterBinding",
+    "AlternativeStudyObjective",
     "ConvertedValue",
     "CostEstimate",
     "ExcludedTrial",
@@ -380,6 +387,7 @@ __all__ = [
     "refuse_search_quality_verdict",
     "refuse_split_edge_or_budget",
     "resume_stepper",
+    "run_alternative_study",
     "run_recorded_study_generations",
     "run_study_generations",
     "sampler_identity",

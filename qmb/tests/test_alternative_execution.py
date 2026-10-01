@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -17,23 +18,40 @@ from qmb._refuse import invalid
 from qmb.config.alternative import (
     ADAPTER_INTERNAL_SIMULATE,
     ALTERNATIVE_CONFIG_CLASS,
+    AlternativeRunConfig,
     validate_alternative_run_config,
 )
 from qmb.execution.alternative import (
     AlternativeEvaluationRequest,
     AlternativeInterpreterRegistry,
+    AlternativeMeasure,
+    AlternativeMeasureDeclaration,
     AlternativePolicyEvaluation,
     ATCJournalReference,
     InternalSimulatedAction,
     PolicyInterpreterRegistration,
     execute_alternative_run,
 )
-from qmb.host.replay import read_recorded_replay_source
+from qmb.execution.alternative_terminal import (
+    AlternativeTerminalArtifact,
+    AlternativeTerminalStore,
+)
+from qmb.host.replay import RecordedReplaySource, read_recorded_replay_source
+from qmb.optimize.alternative_study import (
+    AlternativeParameterBinding,
+    AlternativeStudyObjective,
+    run_alternative_study,
+)
+from qmb.optimize.sampler import ProposedTrial, StudyStepper
+from qmb.optimize.space import coerce_study_space
 from qmf.core import (
     CalendarIdentity,
+    ExactRational,
     Instant,
+    Money,
     Ok,
     Result,
+    UnitKind,
     World,
     fingerprint,
     is_ok,
@@ -47,6 +65,7 @@ from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
 from qmf.data.store import EvidenceStore, JournalStore, jsonl_opener
+from qmf.registry import RegistryPersistence
 
 T = TypeVar("T")
 _NS = 1_700_000_000_000_000_000
@@ -225,6 +244,19 @@ class _TestExactInterpreter:
             "cash_units": prior_cash - ask.verbatim if accepted else prior_cash,
             "position_units": prior_position + 1 if accepted else prior_position,
         }
+        ending_equity = next_state["cash_units"] + next_state["position_units"] * ask.verbatim
+        measure = AlternativeMeasure.try_create(
+            "end_equity",
+            _ok(Money.try_create(ending_equity, "USD", 0)),
+        )
+        if is_refusal(measure):
+            return measure
+        accepted_measure = AlternativeMeasure.try_create(
+            "accepted_entry",
+            _ok(ExactRational.try_create(int(accepted), 1, UnitKind.COUNT)),
+        )
+        if is_refusal(accepted_measure):
+            return accepted_measure
         actions: tuple[InternalSimulatedAction, ...] = ()
         if accepted:
             action = InternalSimulatedAction.try_create(
@@ -246,6 +278,7 @@ class _TestExactInterpreter:
                 risk_verdict="within-gross-cap" if accepted else "gross-cap-refused",
                 risk_accepted=accepted,
                 actions=actions,
+                measures=(measure.value, accepted_measure.value),
             )
         )
 
@@ -262,6 +295,16 @@ def _registry() -> AlternativeInterpreterRegistry:
             interpreter_version=1,
             interpreter_fp1=impl_fp,
             interpreter=_TestExactInterpreter(),
+            declared_measures=(
+                _ok(
+                    AlternativeMeasureDeclaration.try_create(
+                        "end_equity", UnitKind.MONEY.value, "USD"
+                    )
+                ),
+                _ok(
+                    AlternativeMeasureDeclaration.try_create("accepted_entry", UnitKind.COUNT.value)
+                ),
+            ),
         )
     )
     return _ok(AlternativeInterpreterRegistry.try_create((registration,)))
@@ -294,6 +337,11 @@ def test_registered_exact_atc_runs_on_persisted_ct10_and_reopens_ct13(
     )
     assert receipt.split_role is SegmentRole.TRAIN
     assert receipt.final_accounting_state == {"cash_units": 765_480, "position_units": 1}
+    assert len(receipt.final_measures) == 2
+    assert receipt.final_measures[0].measure_identity == "end_equity"
+    assert receipt.final_measures[0].quantity == _ok(Money.try_create(2_000_000, "USD", 0))
+    assert receipt.final_measures[1].measure_identity == "accepted_entry"
+    assert receipt.final_measures[1].quantity == _ok(ExactRational.try_create(1, 1, UnitKind.COUNT))
     assert len(receipt.journal_references) == 1
     reference = receipt.journal_references[0]
     assert isinstance(reference, ATCJournalReference)
@@ -305,8 +353,290 @@ def test_registered_exact_atc_runs_on_persisted_ct10_and_reopens_ct13(
     assert event.fingerprint == reference.event_fingerprint
     assert event.payload["composition_class"] == "alternative"
     assert event.payload["recorded_source_fp1"] == source.fingerprint.value
+    stored_measures = cast("tuple[object, ...]", event.payload["measures"])
+    assert len(stored_measures) == 2
+    assert stored_measures[0] == receipt.final_measures[0].fp1_identity()
     assert "ct32" not in str(event.payload).lower()
     assert receipt.fp1_identity()["source_fp1"] == source.fingerprint.value
+
+
+def test_atc_terminal_artifact_reopens_ct13_and_ct07_lineage(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    receipt = _ok(
+        execute_alternative_run(
+            _config_payload(),
+            source,
+            _registry(),
+            initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+            expected_command_owner_epoch=18,
+            journal_writer=writer,
+            journal_store=journal,
+        )
+    )
+    persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal_writer = _ok(WriterId.try_create("test-host", "qmb", "atc-terminal-lineage", "boot-1"))
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+    stored = _ok(
+        terminal.append(
+            receipt,
+            journal_store=journal,
+            registry=persistence,
+            lineage_writer=terminal_writer,
+        )
+    )
+    assert stored.body["composition_class"] == "alternative"
+    assert stored.identity()["final_measures"] == [
+        measure.fp1_identity() for measure in receipt.final_measures
+    ]
+    assert "ct32" not in str(stored.identity()).lower()
+
+    persistence.close()
+    reopened_registry = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    reopened = _ok(terminal.read(journal_store=journal, registry=reopened_registry))
+    assert len(reopened) == 1
+    assert reopened[0].fingerprint == stored.fingerprint
+    assert reopened[0].run_receipt_fingerprint == receipt.fingerprint
+    assert (
+        _ok(
+            terminal.append(
+                receipt,
+                journal_store=journal,
+                registry=reopened_registry,
+                lineage_writer=terminal_writer,
+            )
+        ).fingerprint
+        == stored.fingerprint
+    )
+
+
+def test_atc_terminal_read_refuses_tampered_ct13_reference_and_missing_ct07_edge(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    receipt = _ok(
+        execute_alternative_run(
+            _config_payload(),
+            source,
+            _registry(),
+            initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+            expected_command_owner_epoch=18,
+            journal_writer=writer,
+            journal_store=journal,
+        )
+    )
+    persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+    no_edge = terminal.read(journal_store=journal, registry=persistence)
+    assert is_ok(no_edge)
+    assert no_edge.value == ()
+    changed_ref = replace(
+        receipt.journal_references[0],
+        store_fingerprint=_ok(fingerprint({"forged": "physical-row"})),
+    )
+    forged_receipt = replace(receipt, journal_references=(changed_ref,))
+    refused = terminal.append(
+        forged_receipt,
+        journal_store=journal,
+        registry=persistence,
+        lineage_writer=_ok(
+            WriterId.try_create("test-host", "qmb", "atc-terminal-lineage", "boot-1")
+        ),
+    )
+    assert is_refusal(refused)
+    assert _ok(terminal.read(journal_store=journal, registry=persistence)) == ()
+
+
+def _alternative_study_stepper() -> StudyStepper:
+    space = _ok(
+        coerce_study_space(
+            [
+                {
+                    "name": "max_gross",
+                    "type": "exact integer",
+                    "bounds": {"min": 1_000_000, "max": 1_500_000},
+                    "step": 100_000,
+                    "default": 1_300_000,
+                    "unit_kind": UnitKind.COUNT,
+                    "ui": "ui-editable",
+                }
+            ]
+        )
+    )
+    return StudyStepper(
+        space=space,
+        seed=17,
+        direction="max",
+        study_fp=_ok(fingerprint({"class": "atc-study-test", "version": 1})),
+        batch_size=2,
+    )
+
+
+def test_alternative_study_applies_candidate_reopens_units_and_resumes_partial_generation(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    journal, _ = _journal(tmp_path)
+    base_config = _ok(validate_alternative_run_config(_config_payload()))
+    registry = _registry()
+    registry_persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal_writer = _ok(WriterId.try_create("test-host", "qmb", "atc-terminal-ledger", "boot-1"))
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=terminal_writer)
+    )
+    lineage_writer = _ok(WriterId.try_create("test-host", "qmb", "atc-terminal-lineage", "boot-1"))
+    bindings = (_ok(AlternativeParameterBinding.try_create("max_gross", "risk", "max_gross")),)
+    objective = _ok(
+        AlternativeStudyObjective.try_create("accepted_entry", "max", UnitKind.COUNT.value)
+    )
+    executed_coordinates: list[tuple[int, int]] = []
+
+    def execute_trial(
+        generation: int,
+        proposal: ProposedTrial,
+        label: Mapping[str, object],
+        candidate_config: AlternativeRunConfig,
+        candidate_registry: AlternativeInterpreterRegistry,
+        replay_source: RecordedReplaySource,
+    ) -> Result[object]:
+        assert replay_source is source
+        assignment = proposal.assignment
+        ask_index = proposal.ask_index
+        assert candidate_config.policy_pair.risk["max_gross"] == assignment["max_gross"]
+        assert label["generation_index"] == generation
+        stream_writer = _ok(
+            WriterId.try_create("test-host", "qmb", f"atc-study-{generation}-{ask_index}", "boot-1")
+        )
+        stream = _ok(JournalWriter.resume(journal, stream_writer))
+        executed_coordinates.append((generation, ask_index))
+        return cast(
+            "Result[object]",
+            execute_alternative_run(
+                candidate_config,
+                replay_source,
+                candidate_registry,
+                initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+                expected_command_owner_epoch=18,
+                journal_writer=stream,
+                journal_store=journal,
+                trial_label=label,
+            ),
+        )
+
+    def cancelled() -> bool:
+        return len(executed_coordinates) == 1
+
+    partial = run_alternative_study(
+        _alternative_study_stepper(),
+        generation_count=1,
+        base_config=base_config,
+        registry=registry,
+        source=source,
+        objective=objective,
+        bindings=bindings,
+        terminal_store=terminal,
+        journal_store=journal,
+        registry_persistence=registry_persistence,
+        lineage_writer=lineage_writer,
+        execute_trial=execute_trial,
+        cancelled=cancelled,
+    )
+    assert is_refusal(partial)
+    assert len(executed_coordinates) == 1
+    assert len(_ok(terminal.read(journal_store=journal, registry=registry_persistence))) == 1
+
+    completed = _ok(
+        run_alternative_study(
+            _alternative_study_stepper(),
+            generation_count=1,
+            base_config=base_config,
+            registry=registry,
+            source=source,
+            objective=objective,
+            bindings=bindings,
+            terminal_store=terminal,
+            journal_store=journal,
+            registry_persistence=registry_persistence,
+            lineage_writer=lineage_writer,
+            execute_trial=execute_trial,
+        )
+    )
+    assert len(completed.completed_trials) == 2
+    assert len(executed_coordinates) == 2
+    assert {trial.objective for trial in completed.completed_trials} == {Fraction(0), Fraction(1)}
+    artifacts = _ok(terminal.read(journal_store=journal, registry=registry_persistence))
+    assert len(artifacts) == 2
+    assert source.split_fp1 is not None
+    assert all(item.body["split_fp1"] == source.split_fp1.value for item in artifacts)
+    assert all(item.body["source_fp1"] == source.fingerprint.value for item in artifacts)
+    for generation, ask_index in executed_coordinates:
+        stream = f"atc-study-{generation}-{ask_index}"
+        events = _ok(JournalReader(journal).read_checked(stream, for_world=World.REPLAY))
+        matching: list[AlternativeTerminalArtifact] = []
+        for item in artifacts:
+            label = cast("Mapping[str, object]", item.body["trial_label"])
+            if label["generation_index"] == generation and label["ask_index"] == ask_index:
+                matching.append(item)
+        assert len(matching) == 1
+        artifact = matching[0]
+        assert events
+        artifact_label_fp = _ok(fingerprint(artifact.body["trial_label"]))
+        assert all(
+            _ok(fingerprint(event.payload["trial_label"])) == artifact_label_fp for event in events
+        )
+    assert "ct32" not in str([item.identity() for item in artifacts]).lower()
+
+
+def test_alternative_study_refuses_objective_unit_mismatch_before_trial(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    journal, _ = _journal(tmp_path)
+    base_config = _ok(validate_alternative_run_config(_config_payload()))
+    registry = _registry()
+    registry_persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+
+    def must_not_execute(*_args: object) -> Result[object]:
+        pytest.fail("unit mismatch must refuse before execution")
+
+    result = run_alternative_study(
+        _alternative_study_stepper(),
+        generation_count=1,
+        base_config=base_config,
+        registry=registry,
+        source=source,
+        objective=_ok(
+            AlternativeStudyObjective.try_create(
+                "accepted_entry", "max", UnitKind.DIMENSIONLESS_RATIO.value
+            )
+        ),
+        bindings=(_ok(AlternativeParameterBinding.try_create("max_gross", "risk", "max_gross")),),
+        terminal_store=terminal,
+        journal_store=journal,
+        registry_persistence=registry_persistence,
+        lineage_writer=_writer(),
+        execute_trial=must_not_execute,
+    )
+    assert is_refusal(result)
+    assert _ok(terminal.read(journal_store=journal, registry=registry_persistence)) == ()
 
 
 def test_atc_requires_exact_interpreter_key_before_writing(tmp_path: Path) -> None:
@@ -326,6 +656,23 @@ def test_atc_requires_exact_interpreter_key_before_writing(tmp_path: Path) -> No
     assert (
         _ok(JournalReader(journal).read_checked(writer.stream_name, for_world=World.REPLAY)) == []
     )
+
+
+def test_atc_study_label_is_validated_before_any_ct13_write(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    refused = execute_alternative_run(
+        _config_payload(),
+        source,
+        _registry(),
+        initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+        expected_command_owner_epoch=18,
+        journal_writer=writer,
+        journal_store=journal,
+        trial_label={"study_fp": "not-a-v2-trial-label"},
+    )
+    assert is_refusal(refused)
+    assert writer.next_sequence == 0
 
 
 def test_atc_refuses_stale_admission_and_old_command_owner_before_effects(
