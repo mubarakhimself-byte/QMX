@@ -123,6 +123,7 @@ from qmn.venue.port import (
     VenueClientSelection,
     select_venue_client,
 )
+from qmn.venue.proto_runtime import PINNED_PROTO_RUNTIME_SURFACE, compile_pinned_descriptor
 from qmn.venue.reconnect import (
     ReceiveFrontier,
     ReconnectGapRecovery,
@@ -158,6 +159,7 @@ __all__ = [
     "DEEP_HISTORY_NODE_SOURCE",
     "FTR04_DISPOSITION",
     "INJECTED_COMMAND_FAULTS",
+    "PINNED_PROTO_RUNTIME_SURFACE",
     "PORT_CONTRACT_CAPABILITY_KEYS",
     "READBACK_WIRE_KINDS",
     "REPLAY_SUBMIT_REFUSAL_CATEGORY",
@@ -231,6 +233,7 @@ __all__ = [
     "agree_live_and_double_fault_contract",
     "companion_source_implementation_allowed",
     "compare_port_contract_shapes",
+    "compile_pinned_descriptor",
     "compound_command_acceptance_blocked",
     "conformance_measured_facts",
     "ct13_journal_event_type",

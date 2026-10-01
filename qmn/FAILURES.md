@@ -1396,3 +1396,33 @@ designed failure; every typed refusal the node can emit belongs here.
 - **Product-user affordance:** The honest FX paper claim was refused. Inspect
   `read_failure_detail` on the evidence channel. Do not treat profit as
   evidence and do not start the unattended week from this story.
+
+### FR-79: Configured runtime reference or protocol pin refused
+
+- **Failure class:** unavailable dependency / invalid input / policy rejection
+- **Detection:** configured QMN preflight refuses missing pinned vendor descriptor
+  bytes (`configured_runtime.proto_missing`), a changed descriptor digest
+  (`configured_runtime.proto_digest_mismatch`), a missing or wrong-kind registered
+  CT-28/22/27/33 record (`configured_runtime.record_kind_mismatch`), a registry
+  as-of set that differs from its exact loaded references
+  (`configured_runtime.registry_as_of_mismatch`), or a CT-28 record whose world
+  or CT-22/27 citations do not match the resolved definitions
+  (`configured_runtime.binding_mismatch`), a checked CT-13 activation event is
+  absent or its world/stream/writer/sequence pins differ
+  (`configured_runtime.activation_event_missing`,
+  `configured_runtime.activation_event_mismatch`), or the referenced CT-24
+  transition does not match the exact binding epoch, seat, operator and active
+  transition facts (`configured_runtime.activation_binding_mismatch`,
+  `configured_runtime.activation_transition_mismatch`).
+- **Auto-recovery / retry:** none — correct the operator-pinned reference or
+  protocol artifact through its authoritative registration path, then restart
+  and let the configured preflight reread the exact pins. No descriptor is
+  downloaded or substituted automatically.
+- **Visible degraded state:** the supervisor remains alive in stand-down; the
+  readiness door returns unavailable; activation, sequencer, venue connection,
+  and provider readiness remain closed.
+- **Notification tier:** operator-visible (journaled).
+- **Product-user affordance:** The configured runtime preflight refused its
+  pinned inputs. Inspect `read_failure_detail` on the evidence channel, correct
+  the registered reference or protocol pin, then restart. Do not treat the
+  stand-down supervisor as a loaded or active trading composition.

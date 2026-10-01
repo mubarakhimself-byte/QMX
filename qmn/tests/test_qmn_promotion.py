@@ -649,7 +649,15 @@ def test_activation_requested_refused_successful_use_ct24_risk_transition() -> N
     assert requested.transition.enforced_state is GovernedSeatState.ADMITTED
     req_row = _as_map(journal.appended[-1])
     assert req_row["event_type"] == "risk transition"
-    assert set(_as_map(req_row["payload"])) == set(ACTIVATION_PAYLOAD_KEYS) == {"transition_fp1"}
+    assert (
+        set(_as_map(req_row["payload"]))
+        == set(ACTIVATION_PAYLOAD_KEYS)
+        == {
+            "transition_fp1",
+            "transition_record_version",
+            "transition_record",
+        }
+    )
 
     refused = _ok(
         commit_activation(
@@ -733,7 +741,7 @@ def test_requested_vs_enforced_reconstructed_from_ct24_not_payload() -> None:
     raw_payload = row["payload"]
     assert isinstance(raw_payload, dict)
     payload = dict(cast("Mapping[str, object]", raw_payload))
-    assert set(payload) == {"transition_fp1"}
+    assert set(payload) == set(ACTIVATION_PAYLOAD_KEYS)
     assert "requested_state" not in payload
     assert "enforced_state" not in payload
     assert "operator_signature" not in payload
@@ -745,6 +753,18 @@ def test_requested_vs_enforced_reconstructed_from_ct24_not_payload() -> None:
     assert rebuilt.principal == "sig-operator-activate"
     assert rebuilt.phase is ActivationPhase.REQUESTED
     assert rebuilt.transition_fp1 == fp
+    assert _ok(reconstruct_activation(row, None)).transition == committed.transition
+
+    legacy_row = dict(row)
+    legacy_row["payload"] = {"transition_fp1": fp.value}
+    assert is_refusal(reconstruct_activation(legacy_row, None))
+    tampered_row = dict(row)
+    tampered_payload = dict(payload)
+    transition_record = dict(cast("Mapping[str, object]", payload["transition_record"]))
+    transition_record["operator_signature"] = "sig-different-operator"
+    tampered_payload["transition_record"] = transition_record
+    tampered_row["payload"] = tampered_payload
+    assert is_refusal(reconstruct_activation(tampered_row, None))
 
 
 def test_journal_sink_refusal_blocks_promotion_and_activation_state() -> None:

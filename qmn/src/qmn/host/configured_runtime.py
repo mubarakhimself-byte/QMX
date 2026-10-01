@@ -15,17 +15,40 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core import Fingerprint, Ok, Result, is_refusal
-from qmf.venue.proto import compile_descriptor_set
+from qmf.core import Fingerprint, Ok, Result, VenueId, World, fingerprint, is_refusal
+from qmf.core.chrono import Instant, WriterId
+from qmf.data.journal_producer import JournalReader
+from qmf.data.store import EvidenceStore, JournalStore, jsonl_opener
+from qmf.registry import LoadedRecord, RegistryPersistence
+from qmf.risk.binding import (
+    BindingLineageEdgeKind,
+    BmsInstanceId,
+    BookBindingRecord,
+    BookInstanceId,
+    CapabilityCheckResult,
+    ContinuesPerformanceEdge,
+    PairingRecord,
+    PositionModel,
+    SignedLedgerEdge,
+    StateCarry,
+)
+from qmf.risk.templates import BmsDefinition, BookDefinition
+from qml.declaration import BotDefinition, mint_bot_definition
 
 from qmn.config.compiler import ResolvedNodeConfig, compile_node_config
 from qmn.config.roster import RosterRuntimeComposition, compose_roster_runtime
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
+from qmn.promotion.journal import ActivationReconstruction, reconstruct_activation
+from qmn.seats.state import OPERATOR_PRINCIPAL, GovernedSeatState
+from qmn.venue.proto_runtime import compile_pinned_descriptor
 
 __all__ = [
+    "CONFIGURED_REGISTRY_REFERENCE_KINDS",
     "CONFIGURED_RUNTIME_FORMAT_VERSION",
     "ConfiguredRuntimeAssessment",
     "assess_configured_runtime",
+    "configured_registry_as_of_fingerprint",
+    "resolve_registered_binding",
 ]
 
 CONFIGURED_RUNTIME_FORMAT_VERSION: Final[int] = 1
@@ -50,6 +73,27 @@ _ROSTER_KEYS: Final[frozenset[str]] = frozenset(
 _PROTO_KEYS: Final[frozenset[str]] = frozenset(
     {"package_name", "release_tag", "descriptor_digest", "descriptor_path"}
 )
+_ACTIVATION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "journal_root",
+        "stream_name",
+        "event_fp1",
+        "sequence",
+        "writer",
+        "world",
+        "binding_id",
+        "binding_epoch_fp1",
+        "seat_id",
+    }
+)
+CONFIGURED_REGISTRY_REFERENCE_KINDS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "ct28_fp1": "book-binding",
+        "ct22_fp1": "book-definition",
+        "ct27_fp1": "bms-definition",
+        "ct33_fp1": "bot-definition",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +104,14 @@ class ConfiguredRuntimeAssessment:
     registry_as_of: Fingerprint
     node_config: ResolvedNodeConfig
     roster: RosterRuntimeComposition
+    registered_records: Mapping[str, LoadedRecord]
+    book_definition: BookDefinition
+    bms_definition: BmsDefinition
+    bot_definition: BotDefinition
+    binding_fingerprint: Fingerprint
+    binding_record: BookBindingRecord
+    activation_evidence_ref: str
+    activation: ActivationReconstruction
     descriptor_digest: str
     stand_down_reason: str | None
     activation_authorized: bool = False
@@ -68,6 +120,32 @@ class ConfiguredRuntimeAssessment:
     @property
     def stand_down(self) -> bool:
         return self.stand_down_reason is not None
+
+
+def configured_registry_as_of_fingerprint(records: object) -> Result[Fingerprint]:
+    """Fingerprint the exact four registration references in a deployment file."""
+    if not isinstance(records, Mapping):
+        return invalid("registered_records", "registered records are keyed by configured CT")
+    body = cast("Mapping[str, object]", records)
+    if set(body) != set(CONFIGURED_REGISTRY_REFERENCE_KINDS):
+        return invalid(
+            "registered_records",
+            "the pinned set has exact CT-28, CT-22, CT-27 and CT-33 references",
+        )
+    identities: dict[str, str] = {}
+    for name in sorted(CONFIGURED_REGISTRY_REFERENCE_KINDS):
+        record = body[name]
+        if not isinstance(record, LoadedRecord):
+            return invalid("registered_records", "each reference resolves to a LoadedRecord")
+        if record.kind != CONFIGURED_REGISTRY_REFERENCE_KINDS[name]:
+            return policy(
+                name,
+                "the fingerprint-addressed record kind matches the exact configured CT",
+                expected_kind=CONFIGURED_REGISTRY_REFERENCE_KINDS[name],
+                actual_kind=record.kind,
+            )
+        identities[name] = record.persisted_fingerprint.value
+    return fingerprint({"class": "qmn-configured-registry-as-of-v1", "records": identities})
 
 
 def assess_configured_runtime(
@@ -163,17 +241,56 @@ def assess_configured_runtime(
         return roster
 
     references = body.get("required_references")
-    if not isinstance(references, Mapping) or not references:
+    if not isinstance(references, Mapping):
         return invalid(
             "required_references",
-            "deployment references name exact registered CT-28 and activation evidence",
+            "deployment references name exact CT-28/22/27/33 and checked activation evidence",
         )
-    reference_body = cast("Mapping[object, object]", references)
-    for key, value in reference_body.items():
-        if clean_token(key) is None or clean_token(value) is None:
+    reference_body = cast("Mapping[str, object]", references)
+    expected_reference_keys = set(CONFIGURED_REGISTRY_REFERENCE_KINDS) | {"activation_evidence"}
+    if set(reference_body) != expected_reference_keys:
+        return invalid(
+            "required_references",
+            "required references contain exact CT-28/22/27/33 records and activation boundary",
+            missing=sorted(expected_reference_keys - set(reference_body)),
+            unknown=sorted(set(reference_body) - expected_reference_keys),
+        )
+    activation_ref = _mapping(
+        reference_body.get("activation_evidence"), "activation_evidence", _ACTIVATION_KEYS
+    )
+    if is_refusal(activation_ref):
+        return activation_ref
+    if frozenset(activation_ref.value) != _ACTIVATION_KEYS:
+        return invalid("activation_evidence", "activation pins the exact CT13/24 boundary fields")
+    loaded = _load_registered_records(registry_root, reference_body)
+    if is_refusal(loaded):
+        return loaded
+    actual_as_of = configured_registry_as_of_fingerprint(loaded.value)
+    if is_refusal(actual_as_of):
+        return actual_as_of
+    if as_of.value != actual_as_of.value:
+        return policy(
+            "registry_as_of_fp1",
+            "the operator pin exactly matches the loaded CT-28/22/27/33 registrations",
+            failure_id="configured_runtime.registry_as_of_mismatch",
+            expected=actual_as_of.value.value,
+            offered=as_of.value.value,
+        )
+    artifacts = _decode_registered_artifacts(loaded.value)
+    if is_refusal(artifacts):
+        return artifacts
+    activation = _load_activation_evidence(
+        activation_ref.value,
+        qmx_root=resolved_root,
+        expected_binding=artifacts.value[4],
+    )
+    if is_refusal(activation):
+        return activation
+    for key in reference_body:
+        if clean_token(key) is None:
             return invalid(
                 "required_references",
-                "each required artifact and activation cite is a non-blank reference",
+                "each reference key is a nonblank token",
             )
 
     proto = _mapping(body.get("proto"), "proto", _PROTO_KEYS)
@@ -204,20 +321,14 @@ def assess_configured_runtime(
             "pinned protocol descriptor bytes are absent; configured runtime remains stand-down",
             failure_id="configured_runtime.proto_missing",
         )
-    compiled_proto = compile_descriptor_set(
+    compiled_proto = compile_pinned_descriptor(
         descriptor_bytes,
         package_name=package_name,
         release_tag=release_tag,
+        expected_digest=digest,
     )
     if is_refusal(compiled_proto):
         return compiled_proto
-    if compiled_proto.value.artifact.descriptor_set_digest != digest:
-        return policy(
-            "proto_descriptor_digest",
-            "descriptor bytes match the operator-pinned digest; no demonstration digest "
-            "is accepted",
-            failure_id="configured_runtime.proto_digest_mismatch",
-        )
 
     # Local config + descriptor validity cannot substitute for CT-28 admission,
     # an activation boundary or the rest of the sealed host composition.
@@ -227,6 +338,14 @@ def assess_configured_runtime(
             registry_as_of=as_of.value,
             node_config=compiled.value,
             roster=roster.value,
+            registered_records=loaded.value,
+            book_definition=artifacts.value[0],
+            bms_definition=artifacts.value[1],
+            bot_definition=artifacts.value[2],
+            binding_fingerprint=artifacts.value[3],
+            binding_record=artifacts.value[4],
+            activation_evidence_ref=activation.value[0],
+            activation=activation.value[1],
             descriptor_digest=digest,
             stand_down_reason=(
                 "configured deployment declarations validated; authoritative registered "
@@ -234,6 +353,486 @@ def assess_configured_runtime(
             ),
         )
     )
+
+
+def _load_registered_records(
+    registry_root: Path,
+    references: Mapping[str, object],
+) -> Result[Mapping[str, LoadedRecord]]:
+    persistence = RegistryPersistence.open(EvidenceStore(registry_root), World.LIVE)
+    if is_refusal(persistence):
+        return persistence
+    loaded: dict[str, LoadedRecord] = {}
+    try:
+        for name, expected_kind in CONFIGURED_REGISTRY_REFERENCE_KINDS.items():
+            ref = Fingerprint.try_create(references.get(name))
+            if is_refusal(ref):
+                return ref
+            record = persistence.value.load_record(ref.value, for_world=World.LIVE)
+            if is_refusal(record):
+                return record
+            if record.value.kind != expected_kind:
+                return policy(
+                    name,
+                    "the fingerprint-addressed record kind matches its CT reference",
+                    expected_kind=expected_kind,
+                    actual_kind=record.value.kind,
+                    failure_id="configured_runtime.record_kind_mismatch",
+                )
+            loaded[name] = record.value
+    finally:
+        persistence.value.close()
+    return Ok(MappingProxyType(loaded))
+
+
+def _load_activation_evidence(
+    reference: Mapping[str, object],
+    *,
+    qmx_root: Path,
+    expected_binding: BookBindingRecord,
+) -> Result[tuple[str, ActivationReconstruction]]:
+    """Hydrate one exact committed CT-24 transition from its checked CT-13 event."""
+    if reference.get("world") != World.LIVE.value:
+        return policy("activation_evidence.world", "activation evidence is from the live world")
+    stream_name = clean_token(reference.get("stream_name"))
+    binding_id = clean_token(reference.get("binding_id"))
+    seat_id = clean_token(reference.get("seat_id"))
+    if stream_name is None or binding_id is None or seat_id is None:
+        return invalid("activation_evidence", "stream, seat and binding ids are nonblank")
+    if binding_id != expected_binding.book_instance_id.value:
+        return policy(
+            "activation_evidence.binding_id",
+            "the activation names this exact CT-28 Book instance",
+            failure_id="configured_runtime.activation_binding_mismatch",
+        )
+    expected_epoch = Fingerprint.try_create(reference.get("binding_epoch_fp1"))
+    if is_refusal(expected_epoch):
+        return expected_epoch
+    actual_epoch = expected_binding.fingerprint()
+    if is_refusal(actual_epoch):
+        return actual_epoch
+    if expected_epoch.value != actual_epoch.value:
+        return policy(
+            "activation_evidence.binding_epoch_fp1",
+            "activation evidence pins the exact typed CT-28 binding epoch",
+            failure_id="configured_runtime.activation_binding_mismatch",
+        )
+    writer_raw = reference.get("writer")
+    if not isinstance(writer_raw, Mapping):
+        return invalid("activation_evidence.writer", "the exact QMF WriterId family is pinned")
+    writer_body = cast("Mapping[str, object]", writer_raw)
+    if frozenset(writer_body) != frozenset(
+        {
+            "machine",
+            "role",
+            "stream",
+            "boot_epoch_id",
+        }
+    ):
+        return invalid("activation_evidence.writer", "the exact QMF WriterId family is pinned")
+    writer_values = writer_body
+    writer = WriterId.try_create(
+        writer_values.get("machine"),
+        writer_values.get("role"),
+        writer_values.get("stream"),
+        writer_values.get("boot_epoch_id"),
+    )
+    if is_refusal(writer):
+        return writer
+    sequence = reference.get("sequence")
+    if type(sequence) is not int or sequence < 0:
+        return invalid("activation_evidence.sequence", "event sequence is a nonnegative integer")
+    event_fp = Fingerprint.try_create(reference.get("event_fp1"))
+    if is_refusal(event_fp):
+        return event_fp
+    root = _path_beneath_root(reference.get("journal_root"), qmx_root, "activation_journal_root")
+    if is_refusal(root):
+        return root
+    opened = JournalStore(World.LIVE, journal_dir=root.value, open_stream=jsonl_opener())
+    reader = JournalReader(opened)
+    try:
+        events = reader.read_checked(stream_name, for_world=World.LIVE)
+    finally:
+        opened.close()
+    if is_refusal(events):
+        return events
+    matched = tuple(event for event in events.value if event.fingerprint == event_fp.value)
+    if len(matched) != 1:
+        return unavailable(
+            "activation_event",
+            "the pinned CT-13 event fingerprint resolves exactly once in the checked stream",
+            failure_id="configured_runtime.activation_event_missing",
+        )
+    event = matched[0]
+    if (
+        event.world is not World.LIVE
+        or event.event_type.value != "risk transition"
+        or event.writer != writer.value
+        or event.sequence != sequence
+    ):
+        return policy(
+            "activation_event",
+            "event world, CT-13 type, writer family and logical sequence match the operator pin",
+            failure_id="configured_runtime.activation_event_mismatch",
+        )
+    rebuilt = reconstruct_activation(
+        {"event_type": event.event_type.value, "payload": event.payload}, None
+    )
+    if is_refusal(rebuilt):
+        return rebuilt
+    transition = rebuilt.value.transition
+    if (
+        transition.binding_id != binding_id
+        or transition.seat_id != seat_id
+        or transition.operator_signature != OPERATOR_PRINCIPAL
+        or transition.phase.value != "successful"
+        or transition.requested_state is not GovernedSeatState.ACTIVE
+        or transition.enforced_state is not GovernedSeatState.ACTIVE
+        or transition.transition_instant.value_ns > event.instant.value_ns
+        or (
+            transition.effective_at is not None
+            and transition.effective_at.value_ns > event.instant.value_ns
+        )
+    ):
+        return policy(
+            "activation_transition",
+            "CT-24 transition is operator-signed successful activation for this seat and binding",
+            failure_id="configured_runtime.activation_transition_mismatch",
+        )
+    return Ok((event_fp.value.value, rebuilt.value))
+
+
+def _path_beneath_root(value: object, root: Path, field: str) -> Result[Path]:
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        return invalid(field, "evidence path is an absolute operator-pinned path")
+    try:
+        path = Path(value).resolve(strict=True)
+        path.relative_to(root)
+        if not path.is_dir():
+            return invalid(field, "journal root is a directory beneath QMX_ROOT")
+    except (OSError, ValueError):
+        return unavailable(field, "evidence directory exists beneath QMX_ROOT")
+    return Ok(path)
+
+
+def _decode_registered_artifacts(
+    records: Mapping[str, LoadedRecord],
+) -> Result[tuple[BookDefinition, BmsDefinition, BotDefinition, Fingerprint, BookBindingRecord]]:
+    book_record = records["ct22_fp1"]
+    book = BookDefinition.try_create(
+        book_record.contract_format_version,
+        book_record.body.get("accounting_currency"),
+        book_record.body.get("sections"),
+    )
+    if is_refusal(book):
+        return book
+    book_fp = book.value.fingerprint()
+    if is_refusal(book_fp):
+        return book_fp
+
+    bms_record = records["ct27_fp1"]
+    bms = BmsDefinition.try_create(
+        bms_record.contract_format_version,
+        bms_record.body.get("sections"),
+    )
+    if is_refusal(bms):
+        return bms
+    bms_fp = bms.value.fingerprint()
+    if is_refusal(bms_fp):
+        return bms_fp
+
+    bot_record = records["ct33_fp1"]
+    bot = mint_bot_definition(
+        bot_record.body,
+        format_version=bot_record.contract_format_version,
+        at_birth_parent_refs=bot_record.at_birth_parent_refs,
+    )
+    if is_refusal(bot):
+        return bot
+
+    typed_binding = resolve_registered_binding(
+        records["ct28_fp1"].body,
+        expected_book_fp=book_fp.value,
+        expected_bms_fp=bms_fp.value,
+    )
+    if is_refusal(typed_binding):
+        return typed_binding
+    binding_fp = typed_binding.value.fingerprint()
+    if is_refusal(binding_fp):
+        return binding_fp
+    return Ok((book.value, bms.value, bot.value, binding_fp.value, typed_binding.value))
+
+
+def resolve_registered_binding(
+    value: object,
+    *,
+    expected_book_fp: object,
+    expected_bms_fp: object,
+) -> Result[BookBindingRecord]:
+    """Decode a persisted CT-28 identity into its canonical QMF binding type."""
+    if not isinstance(value, Mapping):
+        return invalid("ct28_fp1", "the registered CT-28 body is a mapping")
+    body = cast("Mapping[str, object]", value)
+    book_fp = (
+        Ok(expected_book_fp)
+        if isinstance(expected_book_fp, Fingerprint)
+        else Fingerprint.try_create(expected_book_fp)
+    )
+    bms_fp = (
+        Ok(expected_bms_fp)
+        if isinstance(expected_bms_fp, Fingerprint)
+        else Fingerprint.try_create(expected_bms_fp)
+    )
+    if is_refusal(book_fp):
+        return book_fp
+    if is_refusal(bms_fp):
+        return bms_fp
+    venue = VenueId.try_create(body.get("venue_id"))
+    if is_refusal(venue):
+        return venue
+    account = clean_token(body.get("account_id"))
+    world = body.get("world")
+    if account is None or world != World.LIVE.value:
+        return policy(
+            "ct28_fp1",
+            "the persisted binding names a nonblank account and live world",
+            failure_id="configured_runtime.binding_mismatch",
+        )
+    if body.get("class") != "book-binding-record":
+        return policy(
+            "ct28_fp1",
+            "the persisted record carries the canonical BookBindingRecord class",
+            failure_id="configured_runtime.binding_mismatch",
+        )
+    if (
+        body.get("book_definition_fingerprint") != book_fp.value.value
+        or body.get("bms_definition_fingerprint") != bms_fp.value.value
+    ):
+        return policy(
+            "ct28_fp1",
+            "the binding cites the exactly decoded CT-22 and CT-27 versions",
+            failure_id="configured_runtime.binding_mismatch",
+        )
+    book_instance = BookInstanceId.try_create(body.get("book_instance_id"))
+    if is_refusal(book_instance):
+        return book_instance
+    bms_instance = BmsInstanceId.derive(bms_fp.value, account, venue.value, World.LIVE)
+    if is_refusal(bms_instance):
+        return bms_instance
+    if body.get("bms_instance_id") != bms_instance.value.value:
+        return policy(
+            "ct28_fp1.bms_instance_id",
+            "the BMS instance id is derived from exact BMS, account, venue and world",
+            failure_id="configured_runtime.binding_mismatch",
+        )
+    raw_state = body.get("state_carry")
+    if not isinstance(raw_state, Mapping):
+        return invalid("ct28_fp1.state_carry", "the binding carries typed StateCarry identity")
+    state_body = cast("Mapping[str, object]", raw_state)
+    if state_body.get("class") != "state-carry":
+        return invalid("ct28_fp1.state_carry", "the binding carries typed StateCarry identity")
+    state_carry = StateCarry.try_create(state_body.get("per_counter"))
+    if is_refusal(state_carry):
+        return state_carry
+    capability = _decode_capability_result(body.get("capability_check_result"))
+    if is_refusal(capability):
+        return capability
+    optional_edges = _decode_binding_edges(body)
+    if is_refusal(optional_edges):
+        return optional_edges
+    created = BookBindingRecord.try_create(
+        book_instance.value,
+        bms_instance.value,
+        venue.value,
+        account,
+        World.LIVE,
+        book_fp.value,
+        bms_fp.value,
+        state_carry.value,
+        capability.value,
+        carries_ledger_edge=optional_edges.value[0],
+        continues_performance_edge=optional_edges.value[1],
+        pairing_record=optional_edges.value[2],
+        supersedes=optional_edges.value[3],
+    )
+    if is_refusal(created):
+        return created
+    canonical = created.value.fp1_identity()
+    offered_fp = fingerprint(dict(body))
+    if is_refusal(offered_fp):
+        return offered_fp
+    canonical_fp = fingerprint(canonical)
+    if is_refusal(canonical_fp):
+        return canonical_fp
+    if offered_fp.value != canonical_fp.value:
+        return policy(
+            "ct28_fp1",
+            "the registry CT-28 body contains only canonical typed binding identity fields",
+            failure_id="configured_runtime.binding_mismatch",
+        )
+    return created
+
+
+def _decode_capability_result(value: object) -> Result[CapabilityCheckResult]:
+    if not isinstance(value, Mapping):
+        return invalid("capability_check_result", "CT-28 capability evidence is a mapping")
+    body = cast("Mapping[str, object]", value)
+    if body.get("class") != "capability-check-result":
+        return invalid(
+            "capability_check_result", "CT-28 cites the canonical capability-check result"
+        )
+    try:
+        position_model = PositionModel(body.get("position_model"))
+    except (TypeError, ValueError):
+        return invalid("capability_check_result.position_model", "position model is recognized")
+    settlement = clean_token(body.get("settlement_currency"))
+    capabilities = _string_set(body.get("satisfied_capabilities"), "satisfied_capabilities")
+    baselines = _string_set(body.get("satisfied_sensor_baselines"), "satisfied_sensor_baselines")
+    if is_refusal(capabilities):
+        return capabilities
+    if is_refusal(baselines):
+        return baselines
+    signature = body.get("shared_flatten_signature")
+    if signature is not None and clean_token(signature) is None:
+        return invalid("shared_flatten_signature", "signature is absent or a nonblank string")
+    live_rung = body.get("live_path_rung_baseline_present")
+    rank = body.get("rank_table_non_contradicted")
+    if settlement is None or type(live_rung) is not bool or type(rank) is not bool:
+        return invalid(
+            "capability_check_result",
+            "settlement and both bind-time check results have their exact types",
+        )
+    if body.get("format_version") != 1:
+        return invalid("capability_check_result.format_version", "format version is 1")
+    return Ok(
+        CapabilityCheckResult(
+            position_model=position_model,
+            settlement_currency=settlement,
+            satisfied_capabilities=capabilities.value,
+            shared_flatten_signature=cast("str | None", signature),
+            satisfied_sensor_baselines=baselines.value,
+            live_path_rung_baseline_present=live_rung,
+            rank_table_non_contradicted=rank,
+        )
+    )
+
+
+def _decode_binding_edges(
+    body: Mapping[str, object],
+) -> Result[
+    tuple[
+        SignedLedgerEdge | None,
+        ContinuesPerformanceEdge | None,
+        PairingRecord | None,
+        Fingerprint | None,
+    ]
+]:
+    carries: SignedLedgerEdge | None = None
+    continues: ContinuesPerformanceEdge | None = None
+    pairing: PairingRecord | None = None
+    supersedes: Fingerprint | None = None
+    if "carries_ledger_edge" in body:
+        edge = body["carries_ledger_edge"]
+        if not isinstance(edge, Mapping):
+            return invalid("carries_ledger_edge", "lineage edge is a mapping")
+        edge_body = cast("Mapping[str, object]", edge)
+        instant_raw = edge_body.get("signed_at")
+        if (
+            edge_body.get("class") != "binding-lineage-edge"
+            or edge_body.get("kind") != BindingLineageEdgeKind.CARRIES_LEDGER.value
+            or not isinstance(instant_raw, Mapping)
+            or edge_body.get("format_version") != 1
+        ):
+            return invalid("carries_ledger_edge", "edge carries canonical signed-edge identity")
+        instant_body = cast("Mapping[str, object]", instant_raw)
+        if (
+            instant_body.get("class") != "instant"
+            or type(instant_body.get("value_ns")) is not int
+            or instant_body.get("format_version") != 1
+        ):
+            return invalid("carries_ledger_edge.signed_at", "signed_at is a canonical Instant")
+        instant = Instant.try_create(instant_body.get("value_ns"))
+        if is_refusal(instant):
+            return instant
+        previous = Fingerprint.try_create(edge_body.get("from_binding_fingerprint"))
+        if is_refusal(previous):
+            return previous
+        parsed = SignedLedgerEdge.try_create(
+            edge_body.get("signer_identity"), instant.value, previous.value
+        )
+        if is_refusal(parsed):
+            return parsed
+        carries = parsed.value
+    if "continues_performance_edge" in body:
+        edge = body["continues_performance_edge"]
+        if not isinstance(edge, Mapping):
+            return invalid("continues_performance_edge", "lineage edge is a mapping")
+        edge_body = cast("Mapping[str, object]", edge)
+        if (
+            edge_body.get("class") != "binding-lineage-edge"
+            or edge_body.get("kind") != BindingLineageEdgeKind.CONTINUES_PERFORMANCE.value
+            or edge_body.get("format_version") != 1
+        ):
+            return invalid(
+                "continues_performance_edge", "edge carries canonical continuation identity"
+            )
+        previous = Fingerprint.try_create(edge_body.get("from_binding_fingerprint"))
+        if is_refusal(previous):
+            return previous
+        parsed = ContinuesPerformanceEdge.try_create(previous.value)
+        if is_refusal(parsed):
+            return parsed
+        continues = parsed.value
+    if "pairing_record" in body:
+        pair = body["pairing_record"]
+        if not isinstance(pair, Mapping):
+            return invalid("pairing_record", "pairing evidence is a mapping")
+        pair_body = cast("Mapping[str, object]", pair)
+        if (
+            pair_body.get("class") != "binding-pairing-record"
+            or pair_body.get("format_version") != 1
+        ):
+            return invalid("pairing_record", "pairing evidence has canonical identity")
+        live = _bms_id(pair_body.get("live_bms_instance_id"))
+        paired = _bms_id(pair_body.get("paired_bms_instance_id"))
+        if is_refusal(live):
+            return live
+        if is_refusal(paired):
+            return paired
+        parsed_pair = PairingRecord.try_create(
+            live.value, paired.value, pair_body.get("paired_account_id")
+        )
+        if is_refusal(parsed_pair):
+            return parsed_pair
+        pairing = parsed_pair.value
+    if "supersedes" in body:
+        prior = Fingerprint.try_create(body["supersedes"])
+        if is_refusal(prior):
+            return prior
+        supersedes = prior.value
+    return Ok((carries, continues, pairing, supersedes))
+
+
+def _bms_id(value: object) -> Result[BmsInstanceId]:
+    token = clean_token(value)
+    if token is None:
+        return invalid("bms_instance_id", "BMS instance reference is nonblank")
+    return Ok(BmsInstanceId(token))
+
+
+def _string_set(value: object, field: str) -> Result[frozenset[str]]:
+    if not isinstance(value, (list, tuple)):
+        return invalid(field, "identity set is a sequence of tokens")
+    items = cast("list[object] | tuple[object, ...]", value)
+    output: set[str] = set()
+    for item in items:
+        token = clean_token(item)
+        if token is None:
+            return invalid(field, "identity set contains only nonblank tokens")
+        output.add(token)
+    if len(output) != len(items):
+        return invalid(field, "identity set contains no duplicate tokens")
+    return Ok(frozenset(output))
 
 
 def _absolute_path(value: object, field: str) -> Result[Path]:

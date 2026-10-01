@@ -94,7 +94,10 @@ PROMOTION_EVENT_TYPE: Final[str] = "promotion"
 ACTIVATION_CT13_EVENT_TYPE: Final[str] = "risk transition"
 ACTIVATION_TRIGGER: Final[str] = "activation"
 PROMOTION_PAYLOAD_KEYS: Final[frozenset[str]] = frozenset({"promotion_card_fp1"})
-ACTIVATION_PAYLOAD_KEYS: Final[frozenset[str]] = frozenset({"transition_fp1"})
+ACTIVATION_PAYLOAD_KEYS: Final[frozenset[str]] = frozenset(
+    {"transition_fp1", "transition_record_version", "transition_record"}
+)
+ACTIVATION_TRANSITION_RECORD_VERSION: Final[int] = 1
 LOG_LINE_SUBSTITUTES_FOR_JOURNAL: Final[bool] = False
 _ACTIVATION_FORMAT_VERSION: Final[int] = 1
 _RowT = TypeVar("_RowT")
@@ -369,6 +372,7 @@ class ActivationReconstruction:
     principal: str
     phase: ActivationPhase
     transition_fp1: Fingerprint
+    transition: ActivationBindingTransition
 
     def as_mapping(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -462,12 +466,14 @@ def persist_activation(
     fp = transition.fingerprint()
     if is_refusal(fp):
         return fp
-    payload = MappingProxyType({"transition_fp1": fp.value.value})
-    if frozenset(payload) != ACTIVATION_PAYLOAD_KEYS:
+    payload = _activation_payload(transition, fp.value)
+    if is_refusal(payload):
+        return payload
+    if frozenset(payload.value) != ACTIVATION_PAYLOAD_KEYS:
         return policy(
             "payload",
-            "the activation journal payload is only the CT-24 transition fp1",
-            payload_keys=sorted(payload),
+            "the activation payload carries the CT-24 fp1 and versioned canonical identity",
+            payload_keys=sorted(payload.value),
             allowed=sorted(ACTIVATION_PAYLOAD_KEYS),
         )
     correlation = _optional_correlation(correlation_id)
@@ -480,7 +486,7 @@ def persist_activation(
         event_type=mapped.value,
         transition_fp1=fp.value,
         correlation_id=correlation.value,
-        payload=payload,
+        payload=payload.value,
     )
     return _append_row(sink.value, row.as_mapping(), row)
 
@@ -578,12 +584,14 @@ def commit_activation(
     fp = built.value.fingerprint()
     if is_refusal(fp):
         return fp
-    payload = MappingProxyType({"transition_fp1": fp.value.value})
-    if frozenset(payload) != ACTIVATION_PAYLOAD_KEYS:
+    payload = _activation_payload(built.value, fp.value)
+    if is_refusal(payload):
+        return payload
+    if frozenset(payload.value) != ACTIVATION_PAYLOAD_KEYS:
         return policy(
             "payload",
-            "the activation journal payload is only the CT-24 transition fp1",
-            payload_keys=sorted(payload),
+            "the activation payload carries the CT-24 fp1 and versioned canonical identity",
+            payload_keys=sorted(payload.value),
             allowed=sorted(ACTIVATION_PAYLOAD_KEYS),
         )
     correlation = _optional_correlation(correlation_id)
@@ -597,7 +605,7 @@ def commit_activation(
         event_type=mapped.value,
         transition_fp1=fp.value,
         correlation_id=correlation.value,
-        payload=payload,
+        payload=payload.value,
     )
     apply = (
         dispatcher
@@ -653,8 +661,7 @@ def reconstruct_activation(
     if frozenset(payload_map) != ACTIVATION_PAYLOAD_KEYS:
         return policy(
             "payload",
-            "requested versus enforced state is reconstructed from the "
-            "referenced CT-24 record, never by widening the journal payload",
+            "activation reads a versioned CT-24 identity committed with its CT-13 pointer",
             payload_keys=sorted(payload_map),
             allowed=sorted(ACTIVATION_PAYLOAD_KEYS),
         )
@@ -666,31 +673,124 @@ def reconstruct_activation(
             "the activation journal payload points at the CT-24 transition fp1",
             given=repr(pointer),
         )
-    if not isinstance(transitions, Mapping):
-        return invalid(
-            "transitions",
-            "reconstruction looks up CT-24 records by fingerprint",
-            given=repr(type(transitions).__name__),
-        )
-    record = cast("Mapping[str, object]", transitions).get(token)
-    if not isinstance(record, ActivationBindingTransition):
-        return invalid(
-            "transition_fp1",
-            "the referenced CT-24 activation transition is not present",
-            transition_fp1=token,
-        )
-    fp = record.fingerprint()
+    if payload_map.get("transition_record_version") != ACTIVATION_TRANSITION_RECORD_VERSION:
+        return invalid("transition_record_version", "CT-24 identity format version is 1")
+    record = _activation_transition_from_mapping(payload_map.get("transition_record"))
+    if is_refusal(record):
+        return record
+    fp = record.value.fingerprint()
     if is_refusal(fp):
         return fp
+    if fp.value.value != token:
+        return policy(
+            "transition_fp1",
+            "the CT-13 pointer equals the canonical CT-24 transition identity fingerprint",
+        )
+    if transitions is not None:
+        if not isinstance(transitions, Mapping):
+            return invalid("transitions", "optional CT-24 cache is keyed by transition fp1")
+        cached = cast("Mapping[str, object]", transitions).get(token)
+        if not isinstance(cached, ActivationBindingTransition):
+            return invalid(
+                "transition_fp1", "the optional CT-24 cache has the referenced typed row"
+            )
+        cached_fp = cached.fingerprint()
+        if is_refusal(cached_fp):
+            return cached_fp
+        if cached_fp.value != fp.value:
+            return policy("transition_fp1", "the optional typed CT-24 cache agrees with CT-13")
     return Ok(
         ActivationReconstruction(
-            requested_state=record.requested_state,
-            enforced_state=record.enforced_state,
-            principal=record.operator_signature,
-            phase=record.phase,
+            requested_state=record.value.requested_state,
+            enforced_state=record.value.enforced_state,
+            principal=record.value.operator_signature,
+            phase=record.value.phase,
             transition_fp1=fp.value,
+            transition=record.value,
         )
     )
+
+
+def _activation_payload(
+    transition: ActivationBindingTransition, transition_fp1: Fingerprint
+) -> Result[Mapping[str, object]]:
+    identity = transition.fp1_identity()
+    recomputed = fingerprint(identity)
+    if is_refusal(recomputed):
+        return recomputed
+    if recomputed.value != transition_fp1:
+        return policy("transition_fp1", "payload identity is the exact referenced CT-24 row")
+    return Ok(
+        MappingProxyType(
+            {
+                "transition_fp1": transition_fp1.value,
+                "transition_record_version": ACTIVATION_TRANSITION_RECORD_VERSION,
+                "transition_record": identity,
+            }
+        )
+    )
+
+
+def _activation_transition_from_mapping(value: object) -> Result[ActivationBindingTransition]:
+    if not isinstance(value, Mapping):
+        return invalid("transition_record", "the CT-13 row carries a CT-24 identity mapping")
+    body = cast("Mapping[str, object]", value)
+    required = {
+        "class",
+        "format_version",
+        "trigger_kind",
+        "phase",
+        "seat_id",
+        "binding_id",
+        "requested_state",
+        "enforced_state",
+        "operator_signature",
+        "transition_instant",
+    }
+    optional = {"effective_at", "refusing_check"}
+    if (
+        required - set(body)
+        or set(body) - required - optional
+        or body.get("class") != "binding-transition-record"
+        or body.get("format_version") != 1
+        or body.get("trigger_kind") != ACTIVATION_TRIGGER
+    ):
+        return invalid(
+            "transition_record", "CT-24 transition identity has the exact activation schema"
+        )
+    transition_instant = _identity_instant(body.get("transition_instant"), "transition_instant")
+    if is_refusal(transition_instant):
+        return transition_instant
+    effective_at: Instant | None = None
+    if "effective_at" in body:
+        parsed_effective = _identity_instant(body.get("effective_at"), "effective_at")
+        if is_refusal(parsed_effective):
+            return parsed_effective
+        effective_at = parsed_effective.value
+    return ActivationBindingTransition.try_create(
+        phase=body.get("phase"),
+        seat_id=body.get("seat_id"),
+        binding_id=body.get("binding_id"),
+        requested_state=body.get("requested_state"),
+        enforced_state=body.get("enforced_state"),
+        operator_signature=body.get("operator_signature"),
+        transition_instant=transition_instant.value,
+        effective_at=effective_at,
+        refusing_check=body.get("refusing_check"),
+    )
+
+
+def _identity_instant(value: object, field: str) -> Result[Instant]:
+    if not isinstance(value, Mapping):
+        return invalid(field, "transition instant is a canonical Instant identity")
+    body = cast("Mapping[str, object]", value)
+    if (
+        frozenset(body) != frozenset({"class", "value_ns", "format_version"})
+        or body.get("class") != "instant"
+        or body.get("format_version") != 1
+    ):
+        return invalid(field, "transition instant has the canonical exact identity fields")
+    return Instant.try_create(body.get("value_ns"))
 
 
 def _transition_for_phase(

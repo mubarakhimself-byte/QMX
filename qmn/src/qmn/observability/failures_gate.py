@@ -56,6 +56,15 @@ FAILURES_GATE_SURFACE: Final[str] = "qmn.observability.failures_gate"
 # Dotted typed-failure ids the node may emit, including dormant/invariant rows.
 DESIGNED_TYPED_FAILURE_IDS: Final[frozenset[str]] = frozenset(
     {
+        "configured_runtime.binding_mismatch",
+        "configured_runtime.activation_binding_mismatch",
+        "configured_runtime.activation_event_mismatch",
+        "configured_runtime.activation_event_missing",
+        "configured_runtime.activation_transition_mismatch",
+        "configured_runtime.proto_digest_mismatch",
+        "configured_runtime.proto_missing",
+        "configured_runtime.record_kind_mismatch",
+        "configured_runtime.registry_as_of_mismatch",
         "boot.attempt.amend",
         "boot.attempt.write",
         "clock.band.halt",
