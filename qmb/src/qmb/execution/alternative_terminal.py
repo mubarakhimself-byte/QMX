@@ -288,11 +288,20 @@ class AlternativeTerminalStore:
         )
         if is_refusal(edge):
             return edge
-        persisted_edge = registry.persist_edge(
-            edge.value, edge_stream=ALTERNATIVE_TERMINAL_EDGE_STREAM
+        prior_edges = registry.read_edges(
+            ALTERNATIVE_TERMINAL_EDGE_STREAM,
+            for_world=World.REPLAY,
         )
-        if is_refusal(persisted_edge):
-            return persisted_edge
+        if is_refusal(prior_edges):
+            return prior_edges
+        if not any(
+            item.edge_fingerprint == edge.value.edge_fingerprint for item in prior_edges.value
+        ):
+            persisted_edge = registry.persist_edge(
+                edge.value, edge_stream=ALTERNATIVE_TERMINAL_EDGE_STREAM
+            )
+            if is_refusal(persisted_edge):
+                return persisted_edge
         row_count = self._row_count()
         if is_refusal(row_count):
             return row_count
@@ -330,6 +339,7 @@ class AlternativeTerminalStore:
         candidate_fp: object,
         source_fp: object,
         split_fp: object,
+        journal_writer: object,
     ) -> Result[None]:
         """Durably record evaluator invocation before allowing external effects.
 
@@ -357,6 +367,8 @@ class AlternativeTerminalStore:
             return parsed_source
         if is_refusal(parsed_split):
             return parsed_split
+        if not isinstance(journal_writer, WriterId):
+            return invalid("journal_writer", "trial intent pins the CT-13 WriterId")
         label_fp = fingerprint(label.value)
         if is_refusal(label_fp):
             return label_fp
@@ -380,6 +392,7 @@ class AlternativeTerminalStore:
             "class": _INTENT_CLASS,
             "format_version": 1,
             "intent_fp1": key,
+            "journal_writer": _writer_identity(journal_writer),
             "sequence": len(rows.value) + 1,
             "source_fp1": parsed_source.value.value,
             "split_fp1": parsed_split.value.value,
@@ -494,6 +507,22 @@ class AlternativeTerminalStore:
                     parsed_fp = _fp(row.get(field), field)
                     if is_refusal(parsed_fp):
                         return parsed_fp
+                writer_body = row.get("journal_writer")
+                if not isinstance(writer_body, Mapping):
+                    return storage("trial_intent", "intent pins its CT-13 writer", index=index)
+                writer = cast("Mapping[str, object]", writer_body)
+                parsed_writer = WriterId.try_create(
+                    writer.get("machine"),
+                    writer.get("role"),
+                    writer.get("stream"),
+                    writer.get("boot_epoch_id"),
+                )
+                if is_refusal(parsed_writer) or _writer_identity(parsed_writer.value) != dict(
+                    writer
+                ):
+                    return storage(
+                        "trial_intent", "intent writer identity is canonical", index=index
+                    )
             elif row_class != _ROW_CLASS:
                 return storage(
                     "alternative_ledger", "terminal row uses a recognized class", index=index

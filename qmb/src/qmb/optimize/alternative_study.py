@@ -23,6 +23,7 @@ from qmf.core import (
 )
 from qmf.core.chrono import WriterId
 from qmf.core.exact import MONEY_STORAGE_SCALE, Money
+from qmf.data.journal_producer import JournalWriter
 from qmf.data.store import JournalStore
 from qmf.registry import RegistryPersistence
 
@@ -35,6 +36,7 @@ from qmb.execution.alternative import (
     AlternativeInterpreterRegistry,
     AlternativeRunReceipt,
     PolicyInterpreterRegistration,
+    recover_alternative_run_receipt,
 )
 from qmb.execution.alternative_terminal import AlternativeTerminalArtifact, AlternativeTerminalStore
 from qmb.host.replay import RecordedReplaySource
@@ -62,6 +64,7 @@ _ExecuteTrial = Callable[
         AlternativeRunConfig,
         AlternativeInterpreterRegistry,
         RecordedReplaySource,
+        JournalWriter,
     ],
     Result[object],
 ]
@@ -436,12 +439,16 @@ def run_alternative_study(
     registry_persistence: object,
     lineage_writer: object,
     execute_trial: object,
+    initial_accounting_state: object,
+    journal_writer: object,
     cancelled: object = None,
 ) -> Result[StudyGenerationRun]:
     """Run bounded ATC generations with exact candidate binding and durable readback.
 
     ``execute_trial`` receives ``(generation, proposal, label, candidate_config,
-    candidate_registry, source)`` and must return the actual ``AlternativeRunReceipt``.
+    candidate_registry, source, journal_writer)`` and must return the actual
+    ``AlternativeRunReceipt``. The operator supplies the exact accounting seed and
+    a writer resumed from its pinned CT-13 identity.
     Existing terminal labels are read before execution, so a restarted driver never
     reruns a trial already durably completed. Cancellation leaves any partial
     generation in the terminal ledger; a later invocation reconstructs it.
@@ -475,11 +482,16 @@ def run_alternative_study(
         return invalid(
             "execute_trial", "ATC study delegates each candidate to the registered evaluator"
         )
+    if not isinstance(journal_writer, JournalWriter):
+        return invalid("journal_writer", "ATC study pins one replay CT-13 writer for all asks")
+    if journal_writer.world is not World.REPLAY:
+        return policy("journal_writer", "ATC study uses replay-world CT-13")
     if cancelled is not None and not callable(cancelled):
         return invalid("cancelled", "ATC cancellation is a typed polling callback")
     registration = registry.resolve(base_config)
     if is_refusal(registration):
         return registration
+    source_split_fp = source.split_fp1
     checked_bindings = _validate_bindings(stepper, registration.value, objective, bindings)
     if is_refusal(checked_bindings):
         return checked_bindings
@@ -565,10 +577,65 @@ def run_alternative_study(
             trial_label=label,
             candidate_fp=candidate.value.fingerprint,
             source_fp=source.fingerprint,
-            split_fp=source.split_fp1,
+            split_fp=source_split_fp,
+            journal_writer=journal_writer.writer,
         )
         if is_refusal(reserved):
-            return reserved
+            pending = terminal_store.pending_trials()
+            if is_refusal(pending):
+                return pending
+            label_fp = fingerprint(label)
+            if is_refusal(label_fp):
+                return label_fp
+            prior_intent = pending.value.get(label_fp.value.value)
+            if prior_intent is None:
+                return reserved
+            prior_writer_body = prior_intent.get("journal_writer")
+            if not isinstance(prior_writer_body, Mapping):
+                return policy("trial_intent", "retry intent pins its original CT-13 writer")
+            prior_writer_map = cast("Mapping[str, object]", prior_writer_body)
+            prior_writer = WriterId.try_create(
+                prior_writer_map.get("machine"),
+                prior_writer_map.get("role"),
+                prior_writer_map.get("stream"),
+                prior_writer_map.get("boot_epoch_id"),
+            )
+            if is_refusal(prior_writer):
+                return prior_writer
+            if (
+                prior_intent.get("candidate_fp1") != candidate.value.fingerprint.value
+                or prior_intent.get("source_fp1") != source.fingerprint.value
+                or prior_intent.get("split_fp1") != source_split_fp.value
+                or prior_writer.value.machine != journal_writer.writer.machine
+                or prior_writer.value.role != journal_writer.writer.role
+                or prior_writer.value.stream != journal_writer.writer.stream
+            ):
+                return policy("trial_intent", "retry context matches its pinned durable intent")
+            prior_journal_writer = JournalWriter.resume(journal_store, prior_writer.value)
+            if is_refusal(prior_journal_writer):
+                return prior_journal_writer
+            recovered = recover_alternative_run_receipt(
+                candidate.value,
+                source,
+                candidate_registry.value,
+                initial_accounting_state=initial_accounting_state,
+                expected_command_owner_epoch=candidate.value.command.command_owner_epoch,
+                journal_writer=prior_journal_writer.value,
+                journal_store=journal_store,
+                trial_label=label,
+            )
+            if is_refusal(recovered):
+                return recovered
+            return cast(
+                "Result[object]",
+                terminal_store.append(
+                    recovered.value,
+                    journal_store=journal_store,
+                    registry=registry_persistence,
+                    lineage_writer=lineage_writer,
+                    trial_label=label,
+                ),
+            )
         try:
             executed = cast(_ExecuteTrial, execute_trial)(
                 generation,
@@ -577,6 +644,7 @@ def run_alternative_study(
                 candidate.value,
                 candidate_registry.value,
                 source,
+                journal_writer,
             )
         except Exception as exc:
             return unavailable(

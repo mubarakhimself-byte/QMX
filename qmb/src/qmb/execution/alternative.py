@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
@@ -28,6 +29,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.chrono import WriterId
+from qmf.core.exact import MONEY_STORAGE_SCALE
 from qmf.data.journal import DecisionOutcome, JournalEvent, JournalEventType
 from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.observation import SourceObservation
@@ -61,6 +63,7 @@ __all__ = [
     "InternalSimulatedAction",
     "PolicyInterpreterRegistration",
     "execute_alternative_run",
+    "recover_alternative_run_receipt",
 ]
 
 
@@ -1085,4 +1088,328 @@ def execute_alternative_run(
             trial_label=normalized_trial_label,
             fingerprint=result_fp.value,
         )
+    )
+
+
+def recover_alternative_run_receipt(
+    config_payload: object,
+    recorded_source: object,
+    registry: object,
+    *,
+    initial_accounting_state: object,
+    expected_command_owner_epoch: object,
+    journal_writer: object,
+    journal_store: object,
+    trial_label: object,
+) -> Result[AlternativeRunReceipt]:
+    """Reconstruct a completed ATC receipt from its exact durable CT-13 chain.
+
+    This path never calls the registered interpreter. It succeeds only when every
+    source frontier has exactly one checked decision event for the pinned writer,
+    config, source, registration and trial label, and each event's physical raw row
+    is independently identified. Partial or ambiguous chains remain unresolved.
+    """
+    validated = validate_alternative_run_config(config_payload)
+    if is_refusal(validated):
+        return validated
+    config = validated.value
+    if (
+        isinstance(expected_command_owner_epoch, bool)
+        or not isinstance(expected_command_owner_epoch, int)
+        or expected_command_owner_epoch != config.command.command_owner_epoch
+    ):
+        return policy("command_owner_epoch", "recovered trial matches the pinned owner epoch")
+    checked_label = validate_trial_label(trial_label)
+    if is_refusal(checked_label):
+        return checked_label
+    if not isinstance(recorded_source, RecordedReplaySource):
+        return invalid("recorded_source", "trial recovery uses a validated replay source")
+    source_data = _validate_source(recorded_source)
+    if isinstance(source_data, TypedRefusal):
+        return source_data
+    source = recorded_source
+    if source.split_fp1 is None or source.split_role is None:
+        return policy("split", "recovered ATC trial pins its source split")
+    if not isinstance(registry, AlternativeInterpreterRegistry):
+        return invalid("registry", "trial recovery resolves the registered interpreter")
+    registration_result = registry.resolve(config)
+    if is_refusal(registration_result):
+        return registration_result
+    registration = registration_result.value
+    if not isinstance(journal_writer, JournalWriter) or not isinstance(journal_store, JournalStore):
+        return invalid("journal", "trial recovery uses the operator-pinned CT-13 writer/store")
+    if (
+        journal_writer.world is not World.REPLAY
+        or journal_store.world is not World.REPLAY
+        or journal_writer.writer.stream != journal_writer.stream_name
+    ):
+        return policy("journal", "trial recovery is pinned to the replay CT-13 stream")
+    state = _freeze_mapping(initial_accounting_state, "initial_accounting_state")
+    if isinstance(state, TypedRefusal):
+        return state
+    initial_fp = fingerprint({"class": "qmb-atc-accounting-state-v1", "state": _plain(state)})
+    if is_refusal(initial_fp):
+        return initial_fp
+    split_fingerprint = source.split_fp1
+    split_role = source.split_role
+    simulate_result = simulate_alternative_run(config, writer=journal_writer.writer)
+    if is_refusal(simulate_result):
+        return simulate_result
+    checked_events = JournalReader(journal_store).read_checked(
+        journal_writer.stream_name, for_world=World.REPLAY
+    )
+    if is_refusal(checked_events):
+        return checked_events
+    raw_rows = journal_store.read_stream(journal_writer.stream_name, for_world=World.REPLAY)
+    if is_refusal(raw_rows):
+        return raw_rows
+
+    label = _plain(checked_label.value)
+    label_fp = fingerprint(checked_label.value)
+    if is_refusal(label_fp):
+        return label_fp
+    references: list[ATCJournalReference] = []
+    expected_events: list[JournalEvent] = []
+    working_state: Mapping[str, object] = state
+    working_fp = initial_fp.value
+    working_measures: tuple[AlternativeMeasure, ...] = ()
+    expected_input_fps: set[str] = set()
+    for frontier_ns in sorted(source_data):
+        instant = Instant(value_ns=frontier_ns)
+        observations = tuple(source_data[frontier_ns])
+        input_fp = fingerprint(
+            {
+                "class": "qmb-atc-frontier-input-v1",
+                "frontier_ns": frontier_ns,
+                "observations": [item.fingerprint.value for item in observations],
+                "source_fp1": source.fingerprint.value,
+            }
+        )
+        if is_refusal(input_fp):
+            return input_fp
+        expected_input_fps.add(input_fp.value.value)
+        matches = [
+            event
+            for event in checked_events.value
+            if event.writer == journal_writer.writer
+            and event.event_type is JournalEventType.DECISION
+            and event.payload.get("frontier_input_fp1") == input_fp.value.value
+            and (event_label_fp := fingerprint(event.payload.get("trial_label")))
+            and not is_refusal(event_label_fp)
+            and event_label_fp.value == label_fp.value
+        ]
+        if len(matches) != 1:
+            return policy(
+                "trial_recovery",
+                "each expected ATC frontier has exactly one durable labeled decision",
+                frontier_ns=frontier_ns,
+            )
+        event = matches[0]
+        payload = event.payload
+        if (
+            event.instant != instant
+            or event.correlation_id != config.composition_fp.value
+            or payload.get("composition_class") != "alternative"
+            or payload.get("composition_fp1") != config.composition_fp.value
+            or payload.get("policy_pair_identity") != config.policy_pair.identity()
+            or payload.get("interpreter_registration_fp1") != registration.fingerprint.value
+            or payload.get("recorded_source_fp1") != source.fingerprint.value
+            or payload.get("split_fp1") != split_fingerprint.value
+            or payload.get("split_role") != split_role.value
+            or payload.get("command_owner_epoch") != config.command.command_owner_epoch
+            or payload.get("accounting_state_before_fp1") != working_fp.value
+        ):
+            return policy("trial_recovery", "CT-13 frontier is bound to the exact pinned trial")
+        evaluation = _rebuild_evaluation(payload)
+        if is_refusal(evaluation):
+            return evaluation
+        state_after_fp = fingerprint(
+            {
+                "class": "qmb-atc-accounting-state-v1",
+                "state": _plain(evaluation.value.accounting_state),
+            }
+        )
+        if (
+            is_refusal(state_after_fp)
+            or state_after_fp.value.value != payload.get("accounting_state_after_fp1")
+        ):
+            return policy("trial_recovery", "durable accounting state reproduces its fp1")
+        output_fp = fingerprint(
+            {
+                "class": "qmb-atc-frontier-output-v1",
+                "input_fp1": input_fp.value.value,
+                "interpreter_registration_fp1": registration.fingerprint.value,
+                "policy_pair_identity": config.policy_pair.identity(),
+                "prior_accounting_state_fp1": working_fp.value,
+                "result": evaluation.value.identity(),
+            }
+        )
+        if is_refusal(output_fp) or output_fp.value.value != payload.get("output_fp1"):
+            return policy("trial_recovery", "durable decision output reproduces its fp1")
+        expected_outcome = (
+            DecisionOutcome.AUTHORIZED
+            if evaluation.value.risk_accepted
+            else DecisionOutcome.REFUSED_BY_DOOR
+        )
+        if event.outcome is not expected_outcome:
+            return policy("trial_recovery", "CT-13 outcome agrees with its risk verdict")
+        physical_matches = [
+            (index, raw)
+            for index, raw in enumerate(raw_rows.value)
+            if raw.get("fingerprint") == event.fingerprint.value
+        ]
+        if len(physical_matches) != 1:
+            return policy("trial_recovery", "durable CT-13 event has one physical store row")
+        physical, raw = physical_matches[0]
+        raw_fp = fingerprint(raw)
+        if is_refusal(raw_fp) or raw.get("fingerprint") != event.fingerprint.value:
+            return policy("trial_recovery", "physical CT-13 row is independently fingerprinted")
+        references.append(
+            ATCJournalReference(
+                frontier=event.instant,
+                event_fingerprint=event.fingerprint,
+                store_fingerprint=raw_fp.value,
+                store_sequence=physical,
+                sequence=event.sequence,
+                output_fingerprint=output_fp.value,
+            )
+        )
+        expected_events.append(event)
+        working_state = evaluation.value.accounting_state
+        working_fp = state_after_fp.value
+        working_measures = evaluation.value.measures
+
+    labeled_events = [
+        event
+        for event in checked_events.value
+        if event.writer == journal_writer.writer
+        and event.event_type is JournalEventType.DECISION
+        and (event_label_fp := fingerprint(event.payload.get("trial_label")))
+        and not is_refusal(event_label_fp)
+        and event_label_fp.value == label_fp.value
+        and event.payload.get("composition_fp1") == config.composition_fp.value
+    ]
+    if len(labeled_events) != len(expected_events) or {
+        cast(str, event.payload.get("frontier_input_fp1")) for event in labeled_events
+    } != expected_input_fps:
+        return policy("trial_recovery", "trial chain has no missing or extra labeled decisions")
+    if len({event.sequence for event in expected_events}) != len(expected_events):
+        return policy("trial_recovery", "recovered decision chain has unique logical sequences")
+    recovered_sequences = [event.sequence for event in expected_events]
+    if recovered_sequences != sorted(recovered_sequences):
+        return policy("trial_recovery", "recovered decisions follow CT-13 logical order")
+    identity: dict[str, object] = {
+        "class": "qmb-alternative-run-result-v1",
+        "composition_fp1": config.composition_fp.value,
+        "final_accounting_state_fp1": working_fp.value,
+        "initial_accounting_state_fp1": initial_fp.value.value,
+        "interpreter_registration_fp1": registration.fingerprint.value,
+        "journal_refs": [reference.identity() for reference in references],
+        "journal_stream": journal_writer.stream_name,
+        "journal_writer": {
+            "boot_epoch_id": journal_writer.writer.boot_epoch_id,
+            "machine": journal_writer.writer.machine,
+            "role": journal_writer.writer.role,
+            "stream": journal_writer.writer.stream,
+        },
+        "final_measures": [measure.fp1_identity() for measure in working_measures],
+        "policy_pair_identity": config.policy_pair.identity(),
+        "registry_fp1": registry.fingerprint.value,
+        "source_fp1": source.fingerprint.value,
+        "split_fp1": split_fingerprint.value,
+        "split_role": split_role.value,
+        "trial_label": label,
+    }
+    result_fp = fingerprint(identity)
+    if is_refusal(result_fp):
+        return result_fp
+    return Ok(
+        AlternativeRunReceipt(
+            config=config,
+            simulate=simulate_result.value,
+            source_fingerprint=source.fingerprint,
+            split_fingerprint=split_fingerprint,
+            split_role=split_role,
+            registry_fingerprint=registry.fingerprint,
+            interpreter_registration=registration,
+            journal_writer=journal_writer.writer,
+            journal_stream=journal_writer.stream_name,
+            initial_accounting_state_fingerprint=initial_fp.value,
+            final_accounting_state=working_state,
+            final_accounting_state_fingerprint=working_fp,
+            final_measures=working_measures,
+            journal_references=tuple(references),
+            trial_label=cast("Mapping[str, object]", label),
+            fingerprint=result_fp.value,
+        )
+    )
+
+
+def _rebuild_evaluation(payload: Mapping[str, object]) -> Result[AlternativePolicyEvaluation]:
+    state = payload.get("accounting_state_after")
+    actions_value = payload.get("actions")
+    measures_value = payload.get("measures")
+    if not isinstance(actions_value, (tuple, list)) or not isinstance(
+        measures_value, (tuple, list)
+    ):
+        return invalid("trial_recovery", "CT-13 carries typed actions and measures")
+    actions: list[InternalSimulatedAction] = []
+    for item in cast("Sequence[object]", actions_value):
+        if not isinstance(item, Mapping):
+            return invalid("trial_recovery", "persisted action is an identity mapping")
+        action = cast("Mapping[str, object]", item)
+        rebuilt = InternalSimulatedAction.try_create(
+            action_id=action.get("action_id"),
+            action_type=action.get("action_type"),
+            body=action.get("body"),
+        )
+        if is_refusal(rebuilt):
+            return rebuilt
+        actions.append(rebuilt.value)
+    measures: list[AlternativeMeasure] = []
+    for item in cast("Sequence[object]", measures_value):
+        if not isinstance(item, Mapping):
+            return invalid("trial_recovery", "persisted measure is an identity mapping")
+        measure = cast("Mapping[str, object]", item)
+        quantity = measure.get("quantity")
+        if not isinstance(quantity, Mapping):
+            return invalid("trial_recovery", "persisted measure contains an exact quantity")
+        body = cast("Mapping[str, object]", quantity)
+        if body.get("class") == "money":
+            numerator = body.get("num")
+            denominator = body.get("den")
+            currency = body.get("currency")
+            if type(numerator) is not int or type(denominator) is not int or denominator <= 0:
+                return invalid("trial_recovery", "persisted money amount is exact")
+            scaled = Fraction(numerator, denominator) * 10**MONEY_STORAGE_SCALE
+            if scaled.denominator != 1:
+                return invalid(
+                    "trial_recovery", "persisted money is representable at storage scale"
+                )
+            exact: object = Money.try_create(scaled.numerator, currency, MONEY_STORAGE_SCALE)
+        elif body.get("class") == "exact-rational":
+            exact = ExactRational.try_create(
+                body.get("num"), body.get("den"), body.get("unit_kind")
+            )
+        else:
+            return invalid("trial_recovery", "persisted measure uses a known exact quantity")
+        if is_refusal(cast(Result[object], exact)):
+            return cast(Result[AlternativePolicyEvaluation], exact)
+        quantity_value = cast("Ok[object]", exact).value
+        if not isinstance(quantity_value, (Money, ExactRational)):
+            return invalid("trial_recovery", "persisted quantity reconstructs as exact QMF value")
+        rebuilt_measure = AlternativeMeasure.try_create(
+            measure.get("measure_identity"), quantity_value
+        )
+        if is_refusal(rebuilt_measure):
+            return rebuilt_measure
+        if rebuilt_measure.value.fp1_identity() != dict(measure):
+            return policy("trial_recovery", "persisted measure identity is canonical")
+        measures.append(rebuilt_measure.value)
+    return AlternativePolicyEvaluation.try_create(
+        accounting_state=state,
+        risk_verdict=payload.get("risk_verdict"),
+        risk_accepted=payload.get("risk_accepted"),
+        actions=actions,
+        measures=measures,
     )
