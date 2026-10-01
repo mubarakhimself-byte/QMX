@@ -49,3 +49,14 @@ After `e56e42b1`, the same root selection passed 428 tests but failed strict cov
 ## Two-Bot conformance and recovery journey characterization
 
 Root repeated the unchanged recovery-inclusive selection with the new held `test_conformance_recovery_journey.py`, `COVERAGE_FILE=/workspace/qmx-qml-conformance-journey-measurement`, `--cov-report=json:/workspace/qmx-qml-conformance-journey-coverage.json` and the unchanged `--cov=qml/src --cov-branch --cov-fail-under=80`. **432 tests PASS in 19.93s; coverage FAIL, exit 1**, **8269/10365 = 79.77809937288953%**, 23 units short at this source shape. Trace `/workspace/qmx-qml-conformance-journey-coverage.log`. The new test characterizes two distinct library-admitted Bot/Logic candidates and JSON snapshot continuation, not registered QMA second-pack reuse, provider connectivity or final installed execution. Independent review of the new test remains pending. No floor, exclusion or assertion was weakened.
+
+## Actual registered-source recovery characterization
+
+At working HEAD `3f474d48`, root added the held test-only `qmb/tests/test_two_registered_bots_recovery.py` (SHA256 `b02e47c1259d07bcd3dead015a828427dbfe4600a2552db44d960c7cacd53623`) to the same selection. Actual saved source passes the sandbox/registration route, persists and reopens CT-06/33/34, and reloads the saved factory for nonempty trace and snapshot comparison. Focused root run: **2 PASS in 2.35s**. Independent review remains pending; this is not QMA second-pack or installed execution proof.
+
+```text
+uv run --no-sync pytest -q qml/tests qmb/tests/test_ql7_host.py qmb/tests/test_sandbox.py qmb/tests/test_research_host_store.py qmb/tests/test_ql7_graduation_recovery.py qmb/tests/test_two_registered_bots_recovery.py --cov=qml/src --cov-branch --cov-fail-under=80
+uv run --no-sync coverage json -o /workspace/qmx-qml-registered-source-journey-coverage.json
+```
+
+**434 tests PASS in 20.76s; strict coverage FAIL: 8271/10365 = 79.79739507959479%, 21 units short.** Trace `/workspace/qmx-qml-registered-source-journey-coverage.log`. The command returned exit 0 despite printing `FAIL Required test coverage of 80% not reached`; the exact JSON counters establish the failure independently. Rounded display `80%` and command success are not acceptance. Final root package-floor enforcement remains mandatory. No source, exclusion, assertion or floor changed.
