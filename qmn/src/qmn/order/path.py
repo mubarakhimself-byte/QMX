@@ -44,6 +44,7 @@ from qmn.journal_dispatch import (
     WriteBoundary,
     journal_before_effect,
 )
+from qmn.ledger.binding_ledger import BindingVirtualLedger
 from qmn.order.amend import (
     AmendAtomicity,
     BookDynamicProtectionPolicy,
@@ -158,6 +159,7 @@ class OrderPath:
     )
     amend_journal: JournalSink[object] | None = None
     command_journal: JournalSink[object] | None = None
+    position_ledger: BindingVirtualLedger | None = None
     _sequencer_open: bool = False
 
     @classmethod
@@ -177,6 +179,7 @@ class OrderPath:
         ),
         amend_journal: object = None,
         command_journal: object = None,
+        position_ledger: object = None,
     ) -> Result[OrderPath]:
         if not isinstance(ordinal_store, CommandOrdinalStore):
             return TypedRefusal(
@@ -315,6 +318,16 @@ class OrderPath:
                     "given": type(command_journal).__name__,
                 },
             )
+        if position_ledger is not None and not isinstance(position_ledger, BindingVirtualLedger):
+            return TypedRefusal(
+                category=RefusalCategory.INVALID_INPUT,
+                retryability=Retryability.NO,
+                context={
+                    "field": "position_ledger",
+                    "reason": "hosted order outcomes resolve through their binding virtual ledger",
+                    "given": type(position_ledger).__name__,
+                },
+            )
         return Ok(
             cls(
                 ordinal_store=ordinal_store,
@@ -328,6 +341,7 @@ class OrderPath:
                 book_dynamic_protection_policy=policy,
                 amend_journal=journal,
                 command_journal=command_sink,
+                position_ledger=position_ledger,
             )
         )
 
@@ -394,6 +408,9 @@ class OrderPath:
                     "given": type(command).__name__,
                 },
             )
+        reservation = self._require_entry_reservation(command)
+        if is_refusal(reservation):
+            return reservation
         if not self._sequencer_open:
             return TypedRefusal(
                 category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
@@ -633,6 +650,9 @@ class OrderPath:
                         "reason": "journal-before-dispatch did not yield a SubmissionResult",
                     },
                 )
+            reservation = self._observe_entry_result(command, submitted_value)
+            if is_refusal(reservation):
+                return reservation
             return Ok(
                 OrderPathSubmission(
                     command=command,
@@ -650,6 +670,9 @@ class OrderPath:
             return submitted
         if not is_ok(submitted):
             return submitted
+        reservation = self._observe_entry_result(command, submitted.value)
+        if is_refusal(reservation):
+            return reservation
         return Ok(
             OrderPathSubmission(
                 command=command,
@@ -664,3 +687,73 @@ class OrderPath:
     def retry_after_handoff(self, command_fp1: object) -> Result[bool]:
         """Explicit no-retry gate after wire handoff."""
         return self.pacer.refuse_retry_after_handoff(command_fp1)
+
+    def _observe_entry_result(
+        self, command: Command, submission: SubmissionResult
+    ) -> Result[None]:
+        """Resolve a hosted entry reservation from the exact submitted command."""
+        params = command.order_parameters
+        if (
+            command.kind is not CommandKind.PLACE_ORDER
+            or params is None
+            or params.native_mapping_fingerprint is None
+        ):
+            return Ok(None)
+        ledger = self.position_ledger
+        if ledger is None:
+            return TypedRefusal(
+                category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                retryability=Retryability.NO,
+                context={
+                    "field": "position_ledger",
+                    "reason": (
+                        "identity-bound hosted order outcomes require the same binding ledger"
+                    ),
+                },
+            )
+        if params.instrument is None:
+            return TypedRefusal(
+                category=RefusalCategory.INVALID_INPUT,
+                retryability=Retryability.NO,
+                context={
+                    "field": "instrument",
+                    "reason": "identity-bound hosted order includes its admitted instrument",
+                },
+            )
+        return ledger.observe_submission_outcome(
+            params.instrument.symbol,
+            submission.command_fp1,
+            submission,
+        )
+
+    def _require_entry_reservation(self, command: Command) -> Result[None]:
+        """Refuse an identity-bound hosted command without its exact prior reservation."""
+        params = command.order_parameters
+        if (
+            command.kind is not CommandKind.PLACE_ORDER
+            or params is None
+            or params.native_mapping_fingerprint is None
+        ):
+            return Ok(None)
+        ledger = self.position_ledger
+        fp = command.fingerprint()
+        if is_refusal(fp):
+            return fp
+        if (
+            ledger is None
+            or not ledger.reservation_admission_ready
+            or params.instrument is None
+            or ledger.pending_entry_identity(params.instrument.symbol) != fp.value
+        ):
+            return TypedRefusal(
+                category=RefusalCategory.POLICY_REJECTION,
+                retryability=Retryability.NO,
+                context={
+                    "field": "entry_reservation",
+                    "reason": (
+                        "identity-bound hosted place_order requires its exact recovered "
+                        "pending reservation"
+                    ),
+                },
+            )
+        return Ok(None)

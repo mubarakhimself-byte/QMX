@@ -20,6 +20,8 @@ from qmn.ledger.attribution import (
 from qmn.ledger.binding_ledger import (
     LEDGER_RECORD_KINDS,
     BindingVirtualLedger,
+    EntryReservationEvent,
+    EntryReservationRecovery,
     FoldFillResult,
     LedgerRecord,
     LedgerRecordKind,
@@ -77,6 +79,8 @@ __all__ = [
     "AttributionDeclaration",
     "AttributionPartition",
     "BindingVirtualLedger",
+    "EntryReservationEvent",
+    "EntryReservationRecovery",
     "EpochStateCarry",
     "ExecutionQualityEvidence",
     "FoldFillResult",

@@ -14,11 +14,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qmf.core import (
     Fingerprint,
     Instant,
+    JournalSink,
     Money,
     Ok,
     Quantity,
@@ -26,7 +27,6 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.risk.r_faces import RFaces
-from qmf.venue.commands import SubmissionOutcome, SubmissionResult
 
 from qmn.ledger._refuse import clean_token, invalid, policy
 from qmn.ledger.virtual import (
@@ -37,10 +37,13 @@ from qmn.ledger.virtual import (
     mint_virtual_position,
     rebase_partial_entry,
 )
+from qmn.venue import SubmissionOutcome, SubmissionResult
 
 __all__ = [
     "LEDGER_RECORD_KINDS",
     "BindingVirtualLedger",
+    "EntryReservationEvent",
+    "EntryReservationRecovery",
     "FoldFillResult",
     "LedgerRecord",
     "LedgerRecordKind",
@@ -106,6 +109,86 @@ class FoldFillResult:
     scale_in_refused: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class EntryReservationEvent:
+    """One committed entry reservation transition for restart recovery."""
+
+    binding_epoch: Fingerprint
+    sequence: int
+    instrument: str
+    command_identity: Fingerprint
+    event: str
+    outcome: str | None = None
+
+    @classmethod
+    def from_mapping(cls, payload: object) -> Result[EntryReservationEvent]:
+        if not isinstance(payload, Mapping):
+            return invalid("reservation_event", "persisted event is a mapping")
+        source = cast("Mapping[object, object]", payload)
+        if source.get("class") != "qmn-entry-reservation-event":
+            return invalid(
+                "reservation_event", "persisted event has the reservation event class"
+            )
+        binding = Fingerprint.try_create(source.get("binding_epoch"))
+        identity = Fingerprint.try_create(source.get("command_identity"))
+        if is_refusal(binding):
+            return binding
+        if is_refusal(identity):
+            return identity
+        sequence = source.get("sequence")
+        instrument = clean_token(source.get("instrument"))
+        event = clean_token(source.get("event"))
+        outcome = source.get("outcome")
+        format_version = source.get("format_version")
+        if type(format_version) is not int or format_version != 1:
+            return invalid("reservation_event", "persisted event format version 1 is required")
+        if type(sequence) is not int or sequence < 1 or instrument is None or event is None:
+            return invalid(
+                "reservation_event", "persisted event has sequence, instrument, and kind"
+            )
+        if outcome is not None and not isinstance(outcome, str):
+            return invalid("reservation_event", "optional outcome is a string")
+        return Ok(
+            cls(
+                binding_epoch=binding.value,
+                sequence=sequence,
+                instrument=instrument,
+                command_identity=identity.value,
+                event=event,
+                outcome=outcome,
+            )
+        )
+
+    def as_mapping(self) -> Mapping[str, object]:
+        payload: dict[str, object] = {
+            "binding_epoch": self.binding_epoch.value,
+            "class": "qmn-entry-reservation-event",
+            "command_identity": self.command_identity.value,
+            "event": self.event,
+            "instrument": self.instrument,
+            "sequence": self.sequence,
+            "format_version": 1,
+        }
+        if self.outcome is not None:
+            payload["outcome"] = self.outcome
+        return MappingProxyType(payload)
+
+
+@dataclass(frozen=True, slots=True)
+class EntryReservationRecovery:
+    """Complete committed prefix supplied by the journal's recovery reader.
+
+    The composition adapter sets ``complete`` only when the underlying journal
+    confirms no earlier/later segment is missing and its committed high-water
+    equals the event count. This record does not itself discover journal state.
+    """
+
+    binding_epoch: Fingerprint
+    events: tuple[EntryReservationEvent, ...]
+    committed_high_water: int
+    complete: bool
+
+
 @dataclass
 class BindingVirtualLedger:
     """Binding-scoped exact-integer virtual ledger plus virtual-position fold.
@@ -123,6 +206,10 @@ class BindingVirtualLedger:
     _positions: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
     _by_ref: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
     _pending_entries: dict[str, Fingerprint] = field(default_factory=dict[str, Fingerprint])
+    _reservation_journal: JournalSink[object] | None = None
+    _reservation_sequence: int = 0
+    _reservation_recovered: bool = False
+    _reservation_uncertain: bool = False
     _sequence: int = 0
 
     @property
@@ -164,11 +251,109 @@ class BindingVirtualLedger:
         token = clean_token(instrument)
         return token is not None and token in self._pending_entries
 
-    def abandon_unsubmitted_entry(
-        self, instrument: object, command_identity: object
+    def pending_entry_identity(self, instrument: object) -> Fingerprint | None:
+        token = clean_token(instrument)
+        return None if token is None else self._pending_entries.get(token)
+
+    @property
+    def reservation_admission_ready(self) -> bool:
+        """True only after complete recovery with a clean durable append path."""
+        return (
+            self._reservation_journal is not None
+            and self._reservation_recovered
+            and not self._reservation_uncertain
+        )
+
+    def recover_entry_reservations(self, recovery: object) -> Result[None]:
+        """Rebuild pending occupancy from a complete ordered journal projection."""
+        if not isinstance(recovery, EntryReservationRecovery):
+            return invalid(
+                "reservation_recovery",
+                "recovery requires the typed committed journal prefix from the composition adapter",
+            )
+        if (
+            recovery.binding_epoch != self.binding_epoch
+            or not recovery.complete
+            or recovery.committed_high_water != len(recovery.events)
+        ):
+            return policy(
+                "reservation_recovery",
+                "recovery is complete through the exact committed high-water for this binding",
+            )
+        pending: dict[str, Fingerprint] = {}
+        last_sequence = 0
+        for event in recovery.events:
+            if event.binding_epoch != self.binding_epoch or event.sequence != last_sequence + 1:
+                return policy(
+                    "reservation_events",
+                    "recovery events are contiguous and belong to this exact binding epoch",
+                    sequence=event.sequence,
+                )
+            if event.event == "reserved":
+                if event.instrument in pending:
+                    return policy(
+                        "reservation_events", "recovery cannot reserve an occupied instrument"
+                    )
+                pending[event.instrument] = event.command_identity
+            elif event.event in {"accepted", "unknown"}:
+                if pending.get(event.instrument) != event.command_identity:
+                    return policy(
+                        "reservation_events",
+                        "submission outcome matches a pending reservation",
+                    )
+            elif event.event in {"released", "filled"}:
+                if pending.get(event.instrument) != event.command_identity:
+                    return policy(
+                        "reservation_events", "terminal event matches a pending reservation"
+                    )
+                del pending[event.instrument]
+            else:
+                return invalid(
+                    "reservation_events",
+                    "event kind is reserved, accepted, unknown, released, or filled",
+                )
+            last_sequence = event.sequence
+        self._pending_entries = pending
+        self._reservation_sequence = last_sequence
+        self._reservation_recovered = True
+        self._reservation_uncertain = False
+        return Ok(None)
+
+    def _append_reservation_event(
+        self,
+        instrument: str,
+        command_identity: Fingerprint,
+        event: str,
+        *,
+        outcome: str | None = None,
     ) -> Result[None]:
-        """Undo a reservation when batch construction fails before handoff."""
-        return self._release_entry(instrument, command_identity, terminal=False)
+        sink = self._reservation_journal
+        if sink is None or not self._reservation_recovered or self._reservation_uncertain:
+            return policy(
+                "reservation_journal",
+                "hosted reservations require complete recovery and a clean durable journal",
+            )
+        next_sequence = self._reservation_sequence + 1
+        record = EntryReservationEvent(
+            binding_epoch=self.binding_epoch,
+            sequence=next_sequence,
+            instrument=instrument,
+            command_identity=command_identity,
+            event=event,
+            outcome=outcome,
+        )
+        appended = sink.append(record.as_mapping())
+        if is_refusal(appended):
+            self._reservation_uncertain = True
+            return appended
+        if appended.value.detail.get("complete") is False:
+            self._reservation_uncertain = True
+            return policy(
+                "reservation_journal",
+                "reservation journal did not confirm a complete durable append",
+            )
+        self._reservation_sequence = next_sequence
+        return Ok(None)
 
     def reserve_entry(self, instrument: object, command_identity: object) -> Result[None]:
         """Reserve one entry until its fill or a definitive no-fill terminal."""
@@ -183,14 +368,48 @@ class BindingVirtualLedger:
                 "an open position or unresolved entry already occupies this binding/instrument",
                 instrument=token,
             )
+        appended = self._append_reservation_event(token, command_identity, "reserved")
+        if is_refusal(appended):
+            return appended
         self._pending_entries[token] = command_identity
         return Ok(None)
 
-    def release_terminal_no_fill(
-        self, instrument: object, command_identity: object
-    ) -> Result[None]:
-        """Release only the exact reservation after a definitive no-fill terminal."""
-        return self._release_entry(instrument, command_identity, terminal=True)
+    def reserve_entries(self, entries: object) -> Result[None]:
+        """Reserve a fully built batch after validating it without side effects."""
+        if isinstance(entries, (str, bytes)) or not isinstance(entries, Sequence):
+            return invalid("entries", "batch reservations are an ordered sequence")
+        parsed: list[tuple[str, Fingerprint]] = []
+        seen: set[str] = set()
+        for raw in cast("Sequence[object]", entries):
+            pair = cast("tuple[object, ...]", raw) if isinstance(raw, tuple) else ()
+            if (
+                len(pair) != 2
+                or not isinstance(pair[1], Fingerprint)
+            ):
+                return invalid(
+                    "entries", "each reservation is an instrument and command fingerprint"
+                )
+            token = clean_token(pair[0])
+            identity = pair[1]
+            if (
+                token is None
+                or token in seen
+                or self.has_open_virtual(token)
+                or token in self._pending_entries
+            ):
+                return policy(
+                    "entries",
+                    "the binding ledger admits at most one open or pending entry per instrument",
+                    instrument=token,
+                )
+            parsed.append((token, identity))
+            seen.add(token)
+        for token, identity in parsed:
+            appended = self._append_reservation_event(token, identity, "reserved")
+            if is_refusal(appended):
+                return appended
+            self._pending_entries[token] = identity
+        return Ok(None)
 
     def observe_submission_outcome(
         self, instrument: object, command_identity: object, submission: object
@@ -224,10 +443,27 @@ class BindingVirtualLedger:
             SubmissionOutcome.REJECTED_BY_VENUE,
             SubmissionOutcome.DENIED_LOCALLY,
         }:
-            return self.release_terminal_no_fill(instrument, command_identity)
+            return self._release_entry(instrument, command_identity, terminal=True)
         token = clean_token(instrument)
-        if token is None or self._pending_entries.get(token) != command_identity:
+        if (
+            token is None
+            or not isinstance(command_identity, Fingerprint)
+            or self._pending_entries.get(token) != command_identity
+        ):
             return policy("entry_reservation", "submission outcome must match the pending command")
+        event_kind = (
+            "accepted"
+            if submission.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE
+            else "unknown"
+        )
+        appended = self._append_reservation_event(
+            token,
+            command_identity,
+            event_kind,
+            outcome=submission.outcome.value,
+        )
+        if is_refusal(appended):
+            return appended
         return Ok(None)
 
     def _release_entry(
@@ -244,6 +480,14 @@ class BindingVirtualLedger:
                 "outcome does not match the pending command",
                 terminal=terminal,
             )
+        appended = self._append_reservation_event(
+            token,
+            command_identity,
+            "released",
+            outcome="unsubmitted" if not terminal else "definitive-no-fill",
+        )
+        if is_refusal(appended):
+            return appended
         del self._pending_entries[token]
         return Ok(None)
 
@@ -371,6 +615,11 @@ class BindingVirtualLedger:
         self._positions[position.instrument] = position
         self._by_ref[position.position_ref.value] = position
         if pending == fill.command_identity:
+            appended = self._append_reservation_event(
+                fill.instrument, fill.command_identity, "filled", outcome="attributed-fill"
+            )
+            if is_refusal(appended):
+                return appended
             self._pending_entries.pop(fill.instrument, None)
         return Ok(
             FoldFillResult(
@@ -531,6 +780,8 @@ def seed_binding_ledger(
     recorded_at: object,
     currency: object = "USD",
     money_scale: object | None = None,
+    reservation_journal: object = None,
+    reservation_recovery: object = None,
 ) -> Result[BindingVirtualLedger]:
     """Open a binding virtual ledger at an exact scaled-integer seed (TN-25)."""
     if not isinstance(binding_epoch, Fingerprint):
@@ -591,17 +842,37 @@ def seed_binding_ledger(
         money_scale=scale,
         note="seed",
     )
-    return Ok(
-        BindingVirtualLedger(
+    journal: JournalSink[object] | None
+    if reservation_journal is None:
+        journal = None
+    elif isinstance(reservation_journal, JournalSink):
+        journal = cast("JournalSink[object]", reservation_journal)
+    else:
+        return invalid(
+            "reservation_journal",
+            "entry reservations append through the injected JournalSink",
+            given=type(reservation_journal).__name__,
+        )
+    ledger = BindingVirtualLedger(
             binding_epoch=binding_epoch,
             currency=cur,
             money_scale=scale,
             seed=seed,
             realized_cash=seed,
             _records=[seed_record],
+            _reservation_journal=journal,
             _sequence=1,
         )
-    )
+    if reservation_recovery is not None:
+        recovered = ledger.recover_entry_reservations(reservation_recovery)
+        if is_refusal(recovered):
+            return recovered
+    elif journal is not None:
+        return invalid(
+            "reservation_recovery",
+            "a durable reservation journal opens only with its complete committed prefix",
+        )
+    return Ok(ledger)
 
 
 def sum_virtual_quantities(

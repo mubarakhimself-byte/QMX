@@ -75,7 +75,8 @@ from qml.protocol import (
     construct_bot,
     mint_state_scope,
 )
-from qmn.ledger import seed_binding_ledger
+from qmn.journal_dispatch import RecordingJournalSink
+from qmn.ledger import EntryReservationEvent, EntryReservationRecovery, seed_binding_ledger
 from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
@@ -406,9 +407,17 @@ def _path(
     bms: str | None = None,
     binding_record: BookBindingRecord | None = None,
     ledger_epoch: object = None,
+    reservation_recovery: object = None,
 ) -> BookPathContext:
     binding = binding_record if binding_record is not None else _book_binding_record()
     epoch = _ok(binding.fingerprint())
+    position_epoch = ledger_epoch if ledger_epoch is not None else epoch
+    reservation_journal = RecordingJournalSink()
+    recovery = (
+        EntryReservationRecovery(position_epoch, (), 0, True)
+        if reservation_recovery is None
+        else reservation_recovery
+    )
     return BookPathContext(
         entry_price=_price(110_000),
         exit_logic_ref=_ok(
@@ -427,9 +436,11 @@ def _path(
         protective_stop_forms={"market": ENTRY_RELATIVE_FORM},
         position_ledger=_ok(
             seed_binding_ledger(
-                binding_epoch=ledger_epoch if ledger_epoch is not None else epoch,
+                binding_epoch=position_epoch,
                 seed=_ok(Money.try_create(100_000, "USD", 2)),
                 recorded_at=_instant(),
+                reservation_journal=reservation_journal,
+                reservation_recovery=recovery,
             )
         ),
         native_execution_map=_ok(
@@ -681,6 +692,48 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
         )
     )
     _ok(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+
+
+def test_pending_entry_recovers_from_committed_journal_events_after_restart() -> None:
+    admitted = _ok(_propose())
+    path = _path()
+    _ok(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+    journal = path.position_ledger._reservation_journal
+    assert isinstance(journal, RecordingJournalSink)
+    parsed_events = tuple(
+        _ok(EntryReservationEvent.from_mapping(event)) for event in journal.appended
+    )
+    recovery = EntryReservationRecovery(
+        _ok(path.binding_record.fingerprint()),
+        parsed_events,
+        len(parsed_events),
+        True,
+    )
+    recovered_path = _path(
+        binding_record=path.binding_record,
+        reservation_recovery=recovery,
+    )
+    refused = _refusal(
+        dispatch_hosted_intents(admitted, (_entry(),), path=recovered_path)
+    )
+    assert refused.context["field"] == "has_open_virtual_position"
+
+
+def test_uncertain_reservation_append_latches_entry_admission_closed() -> None:
+    path = _path()
+    journal = path.position_ledger._reservation_journal
+    assert isinstance(journal, RecordingJournalSink)
+    journal.partial = True
+    identity = _ok(fingerprint({"command": "uncertain-reservation-test"}))
+    refused = _refusal(path.position_ledger.reserve_entry("EURUSD", identity))
+    assert refused.context["field"] == "reservation_journal"
+    retry = _refusal(path.position_ledger.reserve_entry("EURUSD", identity))
+    assert retry.context["field"] == "reservation_journal"
+    incomplete = EntryReservationRecovery(
+        _ok(path.binding_record.fingerprint()), (), 0, False
+    )
+    not_recovered = _refusal(path.position_ledger.recover_entry_reservations(incomplete))
+    assert not_recovered.context["field"] == "reservation_recovery"
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:

@@ -123,6 +123,16 @@ def dispatch_hosted_intents(
             "hosted order admission requires its binding-scoped virtual position ledger",
             given=type(door.position_ledger).__name__,
         )
+    if not door.position_ledger.reservation_admission_ready:
+        return policy(
+            "reservation_journal",
+            "hosted entries wait for complete reservation recovery and a clean durable journal",
+        )
+    if not door.position_ledger.reservation_admission_ready:
+        return policy(
+            "reservation_journal",
+            "hosted entries wait for complete reservation recovery and a clean durable journal",
+        )
     if not isinstance(door.native_execution_map, NativeExecutionMap):
         return invalid(
             "native_execution_map",
@@ -244,25 +254,17 @@ def dispatch_hosted_intents(
         authorized.append(frozen.value)
         commands.append(command.value)
         pending_in_batch.add(instrument_key)
-    reserved: list[tuple[str, Fingerprint]] = []
+    reservations: list[tuple[str, Fingerprint]] = []
     for item, command in zip(items.value, commands, strict=True):
         if not isinstance(item, EntryIntent):
-            for token, identity in reserved:
-                door.position_ledger.abandon_unsubmitted_entry(token, identity)
             return invalid("intents", "entry reservation retains typed EntryIntent identity")
         command_identity = command.fingerprint()
         if is_refusal(command_identity):
-            for token, identity in reserved:
-                door.position_ledger.abandon_unsubmitted_entry(token, identity)
             return command_identity
-        reservation = door.position_ledger.reserve_entry(
-            item.instrument.symbol, command_identity.value
-        )
-        if is_refusal(reservation):
-            for token, identity in reserved:
-                door.position_ledger.abandon_unsubmitted_entry(token, identity)
-            return reservation
-        reserved.append((item.instrument.symbol, command_identity.value))
+        reservations.append((item.instrument.symbol, command_identity.value))
+    reserved = door.position_ledger.reserve_entries(tuple(reservations))
+    if is_refusal(reserved):
+        return reserved
     return Ok(
         SeatDispatchReceipt(
             authorized=tuple(authorized),
