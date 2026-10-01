@@ -195,6 +195,12 @@ from qmb.optimize.splits import (
     study_warmup_from_config,
     trading_evidence_range,
 )
+from qmb.optimize.study import (
+    STUDY_GENERATION_DRIVER_CLASS,
+    STUDY_GENERATION_DRIVER_WRITES_EVIDENCE,
+    StudyGenerationRun,
+    run_study_generations,
+)
 
 __all__ = [
     "ALIASES_ARE_DISPLAY_ONLY",
@@ -272,6 +278,8 @@ __all__ = [
     "STUDY_CRITERIA_CLASS",
     "STUDY_CRITERIA_FORMAT_VERSION",
     "STUDY_CRITERIA_KEY",
+    "STUDY_GENERATION_DRIVER_CLASS",
+    "STUDY_GENERATION_DRIVER_WRITES_EVIDENCE",
     "STUDY_LABEL_CLASS",
     "STUDY_OBJECTIVE_CLASS",
     "STUDY_RESUME_PLAN_CLASS",
@@ -319,6 +327,7 @@ __all__ = [
     "StudyArtifact",
     "StudyConstraint",
     "StudyCriteria",
+    "StudyGenerationRun",
     "StudyLabel",
     "StudyObjective",
     "StudyParameterSpace",
@@ -353,6 +362,7 @@ __all__ = [
     "refuse_search_quality_verdict",
     "refuse_split_edge_or_budget",
     "resume_stepper",
+    "run_study_generations",
     "sampler_identity",
     "sensitivity_identity",
     "serve_split_read",

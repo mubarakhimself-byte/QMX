@@ -545,7 +545,10 @@ def evaluate_admission(
 def validate_alternative_run_config(payload: object) -> Result[AlternativeRunConfig]:
     """Validate an AlternativeRunConfig. Book keys absent; PolicyPair complete."""
     if isinstance(payload, AlternativeRunConfig):
-        return Ok(payload)
+        # Dataclasses are a convenience representation, not a trust boundary.
+        # Reparse their canonical payload so a directly-constructed/replaced
+        # instance cannot smuggle bodies whose PolicyPair hash no longer matches.
+        payload = payload.payload()
     if not isinstance(payload, Mapping):
         return invalid(
             "payload",

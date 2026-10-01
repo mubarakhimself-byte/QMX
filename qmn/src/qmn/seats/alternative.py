@@ -26,6 +26,7 @@ from qmb.config.alternative import (
     VERDICT_NOT_PROMOTED,
     AlternativeRunConfig,
     AtcSimulateReceipt,
+    PolicyPair,
     adopt_selected_composition,
     validate_alternative_run_config,
 )
@@ -50,11 +51,17 @@ _EMPTY_REMAINING: Final[Mapping[str, object]] = MappingProxyType({})
 
 @dataclass(frozen=True, slots=True)
 class AtcSeatAdoption:
-    """Node binding to a selected ATC. Simulate uses the QMB token."""
+    """Node binding to a selected ATC. Simulate uses the QMB token.
+
+    ``policy_pair`` is the immutable, hash-verified accounting+risk body handed
+    to the guarded node replay root. It is carried as data; this seat adapter
+    does not reinterpret policy token semantics or mint Book/BMS records.
+    """
 
     config_class: str
     composition_fp: Fingerprint
     policy_pair_hash: Fingerprint
+    policy_pair: PolicyPair
     verdict: str
     simulate_token: Fingerprint | None
     venue_importer: str
@@ -109,10 +116,16 @@ def adopt_atc_seat(
     config: AlternativeRunConfig
     simulate_token: Fingerprint | None = None
     if isinstance(selected, AtcSimulateReceipt):
-        config = selected.config
+        checked_config = validate_alternative_run_config(selected.config)
+        if is_refusal(checked_config):
+            return checked_config
+        config = checked_config.value
         simulate_token = selected.simulate_token
     elif isinstance(selected, AlternativeRunConfig):
-        config = selected
+        checked_config = validate_alternative_run_config(selected)
+        if is_refusal(checked_config):
+            return checked_config
+        config = checked_config.value
     else:
         parsed = validate_alternative_run_config(selected)
         if is_refusal(parsed):
@@ -152,6 +165,7 @@ def adopt_atc_seat(
                 config_class=ALTERNATIVE_CONFIG_CLASS,
                 composition_fp=config.composition_fp,
                 policy_pair_hash=config.policy_pair.policy_pair_hash,
+                policy_pair=config.policy_pair,
                 verdict=VERDICT_ADMITTED_SIMULATE,
                 simulate_token=simulate_token,
                 venue_importer=VENUE_IMPORTER,
@@ -164,6 +178,7 @@ def adopt_atc_seat(
                 config_class=ALTERNATIVE_CONFIG_CLASS,
                 composition_fp=config.composition_fp,
                 policy_pair_hash=config.policy_pair.policy_pair_hash,
+                policy_pair=config.policy_pair,
                 verdict=VERDICT_NOT_PROMOTED,
                 simulate_token=None,
                 venue_importer=VENUE_IMPORTER,
@@ -179,6 +194,7 @@ def adopt_atc_seat(
                 config_class=ALTERNATIVE_CONFIG_CLASS,
                 composition_fp=config.composition_fp,
                 policy_pair_hash=config.policy_pair.policy_pair_hash,
+                policy_pair=config.policy_pair,
                 verdict=VERDICT_NOT_PROMOTED,
                 simulate_token=None,
                 venue_importer=VENUE_IMPORTER,
@@ -190,6 +206,7 @@ def adopt_atc_seat(
             config_class=ALTERNATIVE_CONFIG_CLASS,
             composition_fp=config.composition_fp,
             policy_pair_hash=config.policy_pair.policy_pair_hash,
+            policy_pair=config.policy_pair,
             verdict=config.admission.verdict,
             simulate_token=None,
             venue_importer=VENUE_IMPORTER,

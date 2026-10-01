@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TypeVar, cast
 
 from qmb.config import (
@@ -168,6 +169,16 @@ def test_complete_policy_pair_validates_and_hashes_accounting_plus_risk() -> Non
     assert schema["risk_policy_fields"] == RISK_POLICY_FIELDS
     assert schema["venue_importer"] == VENUE_IMPORTER
     assert schema["e2e_adoption_closed"] is False
+
+
+def test_dataclass_input_revalidates_the_policy_body_hash() -> None:
+    validated = _ok(validate_alternative_run_config(_payload()))
+    altered_accounting = dict(validated.policy_pair.accounting)
+    altered_accounting["valuation"] = "unreviewed-valuation"
+    forged_pair = replace(validated.policy_pair, accounting=altered_accounting)
+    forged_config = replace(validated, policy_pair=forged_pair)
+
+    _assert_invalid(validate_alternative_run_config(forged_config), field="policy_pair_hash")
 
 
 def test_dummy_policy_pair_is_invalid_input() -> None:

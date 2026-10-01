@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TypeVar
 
 from qmb.config.alternative import (
@@ -90,6 +91,10 @@ def test_adopt_atc_simulate_uses_qmb_token_and_does_not_issue_venue_token() -> N
     receipt = _ok(simulate_alternative_run(_payload(), writer=writer))
     adopted = _ok(adopt_atc_seat(receipt, requested_role="simulate"))
     assert adopted.config_class == ALTERNATIVE_CONFIG_CLASS
+    assert adopted.policy_pair == receipt.config.policy_pair
+    assert adopted.policy_pair.policy_pair_hash == adopted.policy_pair_hash
+    assert adopted.policy_pair.accounting["fill_application"] == "fifo"
+    assert adopted.policy_pair.risk["max_gross"] == "100000"
     assert adopted.simulate_token == receipt.simulate_token
     assert adopted.verdict == VERDICT_ADMITTED_SIMULATE
     assert adopted.venue_importer == VENUE_IMPORTER
@@ -103,6 +108,15 @@ def test_adopt_atc_simulate_uses_qmb_token_and_does_not_issue_venue_token() -> N
     )
     config_only = _ok(validate_alternative_run_config(_payload()))
     _assert_invalid(adopt_atc_seat(config_only, requested_role="simulate"), field="simulate_token")
+
+
+def test_node_revalidates_the_policy_body_before_handoff() -> None:
+    config = _ok(validate_alternative_run_config(_payload()))
+    accounting = dict(config.policy_pair.accounting)
+    accounting["valuation"] = "unreviewed-valuation"
+    forged_pair = replace(config.policy_pair, accounting=accounting)
+    forged_config = replace(config, policy_pair=forged_pair)
+    _assert_invalid(adopt_atc_seat(forged_config, requested_role="paper"), field="policy_pair_hash")
 
 
 def test_live_atc_without_paper_and_l17_is_not_promoted() -> None:
