@@ -56,13 +56,16 @@ the first CT-13 decision, after a full CT-13 chain but before terminal persisten
 after the CT-07 edge but before terminal JSONL, and after terminal JSONL with the
 caller-visible acknowledgment lost. They check retry under a fresh writer boot,
 reopened terminal and registry state, and no duplicated CT-13 decisions, terminal
-artifacts, or evaluator calls.
+artifacts, or evaluator calls. A valid checked extra decision carrying the same
+trial label but a foreign composition/unexpected frontier is rejected before
+reconciliation; the labeled-event census includes foreign composition and writer
+events in the pinned CT-13 stream instead of filtering them out.
 
 Verification for this corrective slice:
 
 - `uv run ruff check qmb/src/qmb/execution/alternative.py qmb/src/qmb/execution/alternative_terminal.py qmb/src/qmb/optimize/alternative_study.py qmb/tests/test_alternative_execution.py` — passed.
 - `uv run pyright qmb/src/qmb/execution/alternative.py qmb/src/qmb/execution/alternative_terminal.py qmb/src/qmb/optimize/alternative_study.py qmb/tests/test_alternative_execution.py` — 0 errors.
-- `uv run pytest -q qmb/tests/test_alternative_execution.py --no-cov` — 20 passed.
+- `uv run pytest -q qmb/tests/test_alternative_execution.py --no-cov` — 21 passed.
 
 This library recovery contract is ready for the execution-owned operator
 descriptor to supply the pinned replay stream and resume the stored WriterId.

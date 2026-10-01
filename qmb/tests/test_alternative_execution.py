@@ -918,6 +918,94 @@ def test_terminal_row_written_before_error_is_read_back_without_reexecution(
     assert len(_ok(terminal.read(journal_store=journal, registry=registry_persistence))) == 2
 
 
+def test_trial_recovery_refuses_extra_same_label_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    config = _ok(validate_alternative_run_config(_config_payload()))
+    registry = _registry()
+    registry_persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+    calls: list[int] = []
+
+    def execute_trial(
+        generation: int,
+        proposal: ProposedTrial,
+        label: Mapping[str, object],
+        candidate: AlternativeRunConfig,
+        candidate_registry: AlternativeInterpreterRegistry,
+        replay_source: RecordedReplaySource,
+        trial_writer: JournalWriter,
+    ) -> Result[object]:
+        calls.append(proposal.ask_index)
+        return cast(
+            "Result[object]",
+            execute_alternative_run(
+                candidate,
+                replay_source,
+                candidate_registry,
+                initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+                expected_command_owner_epoch=18,
+                journal_writer=trial_writer,
+                journal_store=journal,
+                trial_label=label,
+            ),
+        )
+
+    kwargs: dict[str, object] = {
+        "generation_count": 1,
+        "base_config": config,
+        "registry": registry,
+        "source": source,
+        "objective": _ok(AlternativeStudyObjective.try_create("accepted_entry", "max", "count")),
+        "bindings": (
+            _ok(AlternativeParameterBinding.try_create("max_gross", "risk", "max_gross")),
+        ),
+        "terminal_store": terminal,
+        "journal_store": journal,
+        "registry_persistence": registry_persistence,
+        "lineage_writer": _writer(),
+        "execute_trial": execute_trial,
+        "initial_accounting_state": {"cash_units": 2_000_000, "position_units": 0},
+        "journal_writer": writer,
+    }
+    original_append = AlternativeTerminalStore.append
+
+    def fail_terminal(*_args: object, **_kwargs: object) -> Result[object]:
+        return invalid("injected", "leave a complete CT-13 chain without a terminal")
+
+    monkeypatch.setattr(AlternativeTerminalStore, "append", fail_terminal)
+    assert is_refusal(run_alternative_study(_alternative_study_stepper(), **kwargs))
+    assert calls == [0]
+    pending = _ok(terminal.pending_trials())
+    intent = next(iter(pending.values()))
+    label = cast("Mapping[str, object]", intent["trial_label"])
+
+    extra = writer.record(
+        JournalEventType.DECISION,
+        {
+            "composition_class": "alternative",
+            "composition_fp1": "fp1:sha256:" + "0" * 64,
+            "frontier_input_fp1": "fp1:sha256:" + "1" * 64,
+            "trial_label": label,
+        },
+        instant=Instant(value_ns=_NS + 1),
+        outcome=DecisionOutcome.AUTHORIZED,
+        correlation_id="foreign-composition",
+    )
+    assert is_ok(extra)
+    monkeypatch.setattr(AlternativeTerminalStore, "append", original_append)
+    assert is_refusal(run_alternative_study(_alternative_study_stepper(), **kwargs))
+    assert calls == [0]
+    assert len(_ok(terminal.pending_trials())) == 1
+    assert _ok(terminal.read(journal_store=journal, registry=registry_persistence)) == ()
+
+
 def test_terminal_chain_uses_physical_row_after_fresh_writer_boot(tmp_path: Path) -> None:
     source = _source(tmp_path)
     journal, _ = _journal(tmp_path)

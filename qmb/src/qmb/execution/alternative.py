@@ -1282,16 +1282,29 @@ def recover_alternative_run_receipt(
     labeled_events = [
         event
         for event in checked_events.value
-        if event.writer == journal_writer.writer
-        and event.event_type is JournalEventType.DECISION
+        if event.event_type is JournalEventType.DECISION
         and (event_label_fp := fingerprint(event.payload.get("trial_label")))
         and not is_refusal(event_label_fp)
         and event_label_fp.value == label_fp.value
-        and event.payload.get("composition_fp1") == config.composition_fp.value
     ]
-    if len(labeled_events) != len(expected_events) or {
-        cast(str, event.payload.get("frontier_input_fp1")) for event in labeled_events
-    } != expected_input_fps:
+    if (
+        len(labeled_events) != len(expected_events)
+        or any(
+            event.writer != journal_writer.writer
+            or event.payload.get("composition_fp1") != config.composition_fp.value
+            or event.payload.get("policy_pair_identity") != config.policy_pair.identity()
+            or event.payload.get("interpreter_registration_fp1") != registration.fingerprint.value
+            or event.payload.get("recorded_source_fp1") != source.fingerprint.value
+            or event.payload.get("split_fp1") != split_fingerprint.value
+            or event.payload.get("split_role") != split_role.value
+            or event.payload.get("command_owner_epoch") != config.command.command_owner_epoch
+            for event in labeled_events
+        )
+        or {
+            cast(str, event.payload.get("frontier_input_fp1")) for event in labeled_events
+        }
+        != expected_input_fps
+    ):
         return policy("trial_recovery", "trial chain has no missing or extra labeled decisions")
     if len({event.sequence for event in expected_events}) != len(expected_events):
         return policy("trial_recovery", "recovered decision chain has unique logical sequences")
