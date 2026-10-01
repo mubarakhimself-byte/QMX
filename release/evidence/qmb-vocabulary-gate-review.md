@@ -10,3 +10,5 @@ Exact heldout sources were sent to root in `/tmp/review_gate.py`. Reviewer made 
 # Corrective gate review
 
 **APPROVED for this bounded lexical-gate exception after correction.** Root's first correction closes the seven controls above; reviewer additionally found and, under explicit root authorization, patched import alias/type-builtin shadowing, guard else reassignment and function/import rebinding of receipt names. The helper now invalidates imported/defined/exception/pattern bindings and requires absolute official imports; regressions retain all five additional concrete controls. It conservatively refuses unsupported provenance rather than obscuring product member access. Only this test helper was edited, no product source. Official narrowed receipt access and conditional failed-guard return positives remain accepted; both heldout scripts refuse all negative controls. Scoped Ruff passes; gate suite passed 10 tests.
+
+Typed-only follow-up `a34b9f0b88e05acf5c800467630f7ae9c315b6d5` inspected: Iterator annotation and optional AST binding-name guard preserve prior scanner semantics. Independent scaffold suite passes10.
