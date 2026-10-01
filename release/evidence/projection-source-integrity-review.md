@@ -1,0 +1,11 @@
+# Projection source integrity diagnosis
+
+Status: FAIL on current source inspected 2026-10-01; independent regression `qmb/tests/test_analysis_source_integrity.py` reproduces substituted source admission. Product source unchanged; root-only Git.
+
+A genuine CT32 local recorded-result fixture with one hour-10 trade projects one match for hours 8–16. Replacing its supplied CT29 stream with an hour-18 trade of PnL 999999 is accepted and projects zero matches while inheriting the original CT29 citation and canonical saved-view identity. Public API regression: `.venv/bin/python -m pytest -q -p no:cacheprovider qmb/tests/test_analysis_source_integrity.py` — **1 failed**, genuine positive passed before the assertion.
+
+`qmb/src/qmb/analysis/project.py:1124` returns the artifact's first trade reference without checking supplied rows. `_resolve_source_ct29` also accepts bare Fingerprint/string references without checking pairing; explicitly cited mappings check reference membership but do not authenticate their rows.
+
+The citation has precise existing semantics: `qmb/src/qmb/results/ct32.py:415` documents `ct-13:ct-29:<binding fingerprint>` as a run's stream locator, and `:430` emits it. It is not a content digest of supplied ClosedTrade rows. Individual actual CT29 ExitRecords are content-fingerprinted, and `qmb/src/qmb/results/ct29.py` already verifies exact journal exit-record references against resolved records. CT29 contract (`docs/contracts/ct-29-exit-record.yaml:18`, `:28`, `:35`) requires projection over the cited stream, binding-epoch and knowledge-time boundaries, and immutable persisted records.
+
+Repair needs a trusted durable resolver/readback boundary for that binding and as-of, or verified record/journal provenance before using supplied rows. Merely hashing untrusted rows and comparing to the binding locator would invent incorrect semantics. Canonical saved views must remain reference-only. Refuse foreign references and unverified substituted records; retain actual durable matching-source positive and genuine read-only predicate filtering. Fixture helper is explicitly local evidence, not provider proof. Finding and exact regression sent data owner for its next source slot; no source repairs or commits performed.
