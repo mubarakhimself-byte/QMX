@@ -47,8 +47,11 @@ deployed incident, a production composition path, or live trading exposure.
 The shipped `python -m qmn.host.supervise` entrypoint now validates configured
 root/state directories and a loopback evidence bind, serves `/healthz` while
 alive, and reports `/readiness` as unavailable with `stand-down-alive` while no
-venue adapter is composed. It supports systemd notify/watchdog and OS stop. This
-establishes a provider-free supervised process lifecycle, not trading readiness
+venue adapter is composed. Before `READY=1`, it appends a process-start control
+event to a local QMF CT-13 journal; startup refuses on storage failure. A
+subprocess restart test reads back both starts from that checked journal. It
+supports systemd notify/watchdog and OS stop. This establishes a provider-free
+supervised process lifecycle, not a completed boot ceremony, trading readiness,
 or the full QMN decision composition.
 
 The integrated proof is still open: no production Book/KSA caller of
