@@ -21,3 +21,13 @@ Original `/tmp/review_atc_retry.py` now performs only one generation-0/ask-0 eva
 `/tmp/review_atc_ack.py` independently corrupts real append acknowledgments: Ok(None), bool logical sequence, foreign correlation, nonempty edge receipts, absent StoreReceipt and bool format version each typed-refuse without AttributeError. Focused ATC suite **17 passed**. These scripts and source inspection corroborate the correction; no product edits or Git mutations.
 
 Remaining explicit limitation: an unresolved durable evaluator intent safely blocks a restart even if no action occurred, and a completed CT13 action without terminal is not reconstructed here. Root requested checked reconciliation separately. The registered interpreter is a local fixture; full CLI/QMA/node/provider execution and financial-example policy grammar remain outside this approval.
+
+## f68d7f7b checked reconstruction review
+
+Candidate `f68d7f7ba64a4a0b235843e449f63b9a5d7249b1`: genuine complete CT13 trial reconstruction works without a second interpreter call, but **CHANGES REQUIRED** for same-label ambiguity.
+
+Adapted original `/tmp/review_atc_retry_v2.py` to the explicit initial-state/writer and seven-argument callback API: after terminal failure, restart reconstructs trial 0 and executes only new ask 1; calls remain [(0,0),(0,1)]. This positive does not approve ambiguous recovery.
+
+`/tmp/review_atc_extra.py` adds an actual durable second decision for the same writer and trial label, changing composition fingerprint and frontier input. Restart still reconstructs/tells trial 0 and evaluates ask 1, despite the extra conflicting trial evidence (three total durable decisions). `alternative.py:1282` filters labeled-event completeness by expected composition, hiding the same-label foreign event before checking extras. Census every decision owned by the pinned writer/trial label before filtering config/frontier; reject conflicting or extra lineage. Exact actual-store repro sent data/root; product untouched. Further fault/readback approval remains pending this correction.
+
+Reviewer focused ATC/Study-driver/resume suite: **37 passed**. The independent conflicting-label recovery failure above remains blocking despite these green tests.
