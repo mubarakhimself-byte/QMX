@@ -80,6 +80,8 @@ def evaluate(manifest: object, *, evidence_root: Path | None = None) -> list[str
         errors.append(f"{name}: required wheel is missing")
     for suffix in (
         "ui.tar.gz",
+        "qmn-deploy.tar.gz",
+        "README.md",
         "launcher.py",
         "install.py",
         "requirements.lock",
@@ -162,6 +164,17 @@ def _artifact_errors(path: Path) -> list[str]:
             with tarfile.open(path) as packed:
                 if "index.html" not in packed.getnames():
                     return [f"{path.name}: missing UI entrypoint"]
+        elif path.name == "qmn-deploy.tar.gz":
+            with tarfile.open(path) as packed:
+                names = {member.name for member in packed if member.isfile()}
+                required = {
+                    "install.py",
+                    "safe_io.py",
+                    "systemd/templates/qmn.service.in",
+                    "justfile-recipes/node.just",
+                }
+                if required - names:
+                    return [f"{path.name}: missing node deployment assets"]
         elif path.name.endswith("pack-resources.json"):
             resources: object = json.loads(path.read_text())
             if not isinstance(resources, dict) or len(cast("dict[str, object]", resources)) < 5:

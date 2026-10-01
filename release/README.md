@@ -20,7 +20,7 @@ python3.14 tools/build_release.py /absolute/path/qmx-bundle
 ```
 
 The bundle includes all 14 product wheels and source distributions, the UI
-archive, hash-pinned third-party runtime requirements, installed pack resource
+archive, node deployment assets, hash-pinned third-party runtime requirements, pack resource
 inventory, installer and launcher. Factory tooling is not a runtime dependency.
 Build a second empty destination from the same commit and compare the hashes
 in the two `acceptance.json` artifact inventories to test reproducibility.
@@ -64,6 +64,9 @@ must not be placed in this configuration or evidence.
 ```
 
 Start failures name diagnostic logs. Restart reuses the configured data root.
+The installed `qmn/deploy` directory contains node operations scripts and
+service templates; on Linux `.venv` aliases the private `venv` for their
+declared interpreter path. Installation does not apply those services.
 The launcher starts the local QMA host; it does not create authority grants,
 start a trading node, or certify job execution. QMN has its separate
 `python -m qmn.host.supervise` entrypoint and explicit configuration/readiness

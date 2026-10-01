@@ -21,6 +21,8 @@ def evidence() -> Evidence:
         dict.fromkeys(
             (
                 "ui.tar.gz",
+                "qmn-deploy.tar.gz",
+                "README.md",
                 "launcher.py",
                 "install.py",
                 "requirements.lock",

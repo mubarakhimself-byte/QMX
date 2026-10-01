@@ -47,6 +47,8 @@ REQUIRED_ARTIFACTS = frozenset(
         "launcher.py",
         "install.py",
         "ui.tar.gz",
+        "qmn-deploy.tar.gz",
+        "README.md",
         "pack-resources.json",
     }
 )
@@ -95,6 +97,7 @@ def _manifest(bundle: Path) -> tuple[dict[str, object], dict[str, str]]:
     _validate_pack_inventory(bundle / "pack-resources.json")
     _validate_lock(bundle / "requirements.lock")
     _validate_ui_archive(bundle / "ui.tar.gz")
+    _validate_qmn_archive(bundle / "qmn-deploy.tar.gz")
     return record, artifacts
 
 
@@ -154,9 +157,7 @@ def _validate_lock(path: Path) -> None:
         if line.startswith(("--index-url ", "--extra-index-url ", "--trusted-host ")):
             finish()
             continue
-        requirement_line = re.match(
-            r"^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+(?:\s*;.*)?$", line
-        )
+        requirement_line = re.match(r"^[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+(?:\s*;.*)?$", line)
         if line.startswith("-") or requirement_line is None:
             raise RuntimeError("The product requirements lock contains an unsupported line")
         finish()
@@ -186,8 +187,7 @@ def _validate_wheels(bundle: Path, artifacts: Mapping[str, str]) -> None:
                     if (
                         member.filename.startswith("/")
                         or "\\" in member.filename
-                        or PurePosixPath(member.filename).as_posix()
-                        != member.filename.rstrip("/")
+                        or PurePosixPath(member.filename).as_posix() != member.filename.rstrip("/")
                         or any(
                             part in {"", ".", ".."}
                             for part in member.filename.rstrip("/").split("/")
@@ -204,9 +204,7 @@ def _validate_wheels(bundle: Path, artifacts: Mapping[str, str]) -> None:
                     raise RuntimeError(f"Product wheel metadata is missing or ambiguous: {name}")
                 root = next(iter(dist_info))
                 metadata_path = f"{root}/METADATA"
-                if not {metadata_path, f"{root}/WHEEL", f"{root}/RECORD"}.issubset(
-                    member_names
-                ):
+                if not {metadata_path, f"{root}/WHEEL", f"{root}/RECORD"}.issubset(member_names):
                     raise RuntimeError(f"Product wheel metadata is incomplete: {name}")
                 metadata = wheel.read(metadata_path).decode("utf-8")
         except (OSError, UnicodeError, zipfile.BadZipFile, RuntimeError) as error:
@@ -259,13 +257,30 @@ def _validate_pack_inventory(path: Path) -> None:
 
 
 def _validate_ui_archive(path: Path) -> None:
+    _validate_archive(path, label="UI", required_files={"index.html"})
+
+
+def _validate_qmn_archive(path: Path) -> None:
+    _validate_archive(
+        path,
+        label="QMN deployment",
+        required_files={
+            "install.py",
+            "safe_io.py",
+            "systemd/templates/qmn.service.in",
+            "justfile-recipes/node.just",
+        },
+    )
+
+
+def _validate_archive(path: Path, *, label: str, required_files: set[str]) -> None:
     try:
         with tarfile.open(path, mode="r:gz") as assets:
             members = assets.getmembers()
     except (OSError, tarfile.TarError) as error:
-        raise RuntimeError("The UI archive is malformed") from error
+        raise RuntimeError(f"The {label} archive is malformed") from error
     seen: dict[str, bool] = {}
-    has_index = False
+    present: set[str] = set()
     for member in members:
         name = member.name
         parts = Path(name).parts
@@ -277,26 +292,27 @@ def _validate_ui_archive(path: Path) -> None:
             or any(part in {"..", "."} for part in parts)
             or (parts and ":" in parts[0])
         ):
-            raise RuntimeError(f"UI archive contains an unsafe path: {name!r}")
+            raise RuntimeError(f"{label} archive contains an unsafe path: {name!r}")
         if name in seen:
-            raise RuntimeError(f"UI archive contains a duplicate path: {name!r}")
+            raise RuntimeError(f"{label} archive contains a duplicate path: {name!r}")
         if not (member.isdir() or member.isfile()):
-            raise RuntimeError(f"UI archive contains a link or special file: {name!r}")
+            raise RuntimeError(f"{label} archive contains a link or special file: {name!r}")
         if member.isfile() and any(item.startswith(name.rstrip("/") + "/") for item in seen):
-            raise RuntimeError(f"UI archive file is also used as a directory: {name!r}")
+            raise RuntimeError(f"{label} archive file is also used as a directory: {name!r}")
         seen[name] = member.isdir()
         parent = Path(name).parent
         while parent != Path("."):
             parent_name = parent.as_posix()
             if seen.get(parent_name) is False:
                 raise RuntimeError(
-                    f"UI archive file is also used as a directory: {parent_name!r}"
+                    f"{label} archive file is also used as a directory: {parent_name!r}"
                 )
             parent = parent.parent
-        if member.isfile() and name == "index.html":
-            has_index = True
-    if not has_index:
-        raise RuntimeError("The UI archive has no root index.html")
+        if member.isfile():
+            present.add(name)
+    missing = sorted(required_files - present)
+    if missing:
+        raise RuntimeError(f"The {label} archive has no required file {missing[0]}")
 
 
 def install(bundle: Path, destination: Path) -> None:
@@ -330,6 +346,13 @@ def install(bundle: Path, destination: Path) -> None:
     subprocess.run([str(python), "-m", "pip", "check"], check=True)
     with tarfile.open(fileobj=io.BytesIO(ui_bytes), mode="r:gz") as assets:
         assets.extractall(destination / "ui", filter="data")
+    with tarfile.open(bundle / "qmn-deploy.tar.gz", mode="r:gz") as assets:
+        assets.extractall(destination / "qmn/deploy", filter="data")
+    if os.name != "nt":
+        # Ubuntu node templates retain their declared .venv entrypoint. This
+        # local alias does not install services, change system paths or trade.
+        (destination / ".venv").symlink_to("venv", target_is_directory=True)
+    shutil.copyfile(bundle / "README.md", destination / "README.md")
     shutil.copyfile(bundle / "launcher.py", destination / "launcher.py")
     shutil.copyfile(bundle / "acceptance.json", destination / "installed-artifacts.json")
     print(f"Installed candidate {record.get('candidate')} in {destination}")

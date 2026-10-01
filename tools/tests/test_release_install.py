@@ -77,12 +77,24 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
         else {"index.html": b"<html></html>", "assets/app.js": b"ok"}
     )
     (path / "ui.tar.gz").write_bytes(ui)
+    (path / "README.md").write_text("Candidate install instructions\n")
+    node = _archive(
+        {
+            "install.py": b"pass\n",
+            "safe_io.py": b"pass\n",
+            "systemd/templates/qmn.service.in": b"[Service]\n",
+            "justfile-recipes/node.just": b"# fixture\n",
+        }
+    )
+    (path / "qmn-deploy.tar.gz").write_bytes(node)
     required = (
         "requirements.lock",
         "launcher.py",
         "install.py",
         "pack-resources.json",
         "ui.tar.gz",
+        "qmn-deploy.tar.gz",
+        "README.md",
     )
     for name in required:
         artifacts[name] = hashlib.sha256((path / name).read_bytes()).hexdigest()
@@ -255,3 +267,50 @@ def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
     assert (destination / "ui" / "index.html").read_bytes() == b"<html></html>"
     assert (destination / "launcher.py").is_file()
     assert (destination / "installed-artifacts.json").is_file()
+
+
+@pytest.mark.parametrize("unsafe_name", ["../escape.py", "/escape.py", "C:/escape.py"])
+def test_node_archive_unsafe_paths_refuse_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, unsafe_name: str
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    node = bundle / "qmn-deploy.tar.gz"
+    node.write_bytes(_archive({unsafe_name: b"bad"}))
+    record = json.loads((bundle / "acceptance.json").read_text())
+    record["artifacts"][node.name] = hashlib.sha256(node.read_bytes()).hexdigest()
+    (bundle / "acceptance.json").write_text(json.dumps(record))
+    _, environments = _mock_environment(monkeypatch)
+    with pytest.raises(RuntimeError, match="unsafe path"):
+        installer.install(bundle, tmp_path / "installed")
+    assert environments == []
+    assert not (tmp_path / "installed").exists()
+
+
+def test_node_assets_and_template_interpreter_alias_are_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    _mock_environment(monkeypatch)
+    destination = tmp_path / "installed"
+    installer.install(bundle, destination)
+    assert (destination / "qmn/deploy/systemd/templates/qmn.service.in").is_file()
+    assert (destination / "README.md").is_file()
+    if installer.os.name != "nt":
+        assert (destination / ".venv").is_symlink()
+        assert (destination / ".venv").resolve() == (destination / "venv").resolve()
+
+
+def test_node_archive_missing_mandatory_template_refuses_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    node = bundle / "qmn-deploy.tar.gz"
+    node.write_bytes(_archive({"install.py": b"pass\n", "safe_io.py": b"pass\n"}))
+    record = json.loads((bundle / "acceptance.json").read_text())
+    record["artifacts"][node.name] = hashlib.sha256(node.read_bytes()).hexdigest()
+    (bundle / "acceptance.json").write_text(json.dumps(record))
+    _, environments = _mock_environment(monkeypatch)
+    with pytest.raises(RuntimeError, match="no required file"):
+        installer.install(bundle, tmp_path / "installed")
+    assert environments == []
+    assert not (tmp_path / "installed").exists()
