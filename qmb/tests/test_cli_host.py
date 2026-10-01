@@ -342,9 +342,15 @@ def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
 
 
 def test_start_failure_points_to_persistent_daemon_diagnostics(tmp_path: Path) -> None:
+    def failed_spawn(
+        _argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
+    ) -> int:
+        _ = env, root
+        return 123456
+
     refused = invoke_host_start(
         root=tmp_path,
-        spawn=lambda *_args, **_kwargs: 123456,
+        spawn=failed_spawn,
         wait_attempts=1,
         sleeper=_no_sleep,
     )
@@ -368,7 +374,10 @@ def test_default_spawn_keeps_child_stderr_in_persistent_log(
         return FakeProcess()
 
     monkeypatch.setattr(host_module.subprocess, "Popen", fake_popen)
-    host_module._default_spawn(("python", "-m", "qma.daemon"), env={}, root=tmp_path)
+    # Exercise the private process boundary directly to prove stderr is persisted.
+    host_module._default_spawn(  # pyright: ignore[reportPrivateUsage]
+        ("python", "-m", "qma.daemon"), env={}, root=tmp_path
+    )
     stream = captured.get("stderr")
     assert stream is not None and stream is not host_module.subprocess.DEVNULL
     assert getattr(stream, "name", None) == str(tmp_path / "logs" / "qma-daemon-startup.log")
