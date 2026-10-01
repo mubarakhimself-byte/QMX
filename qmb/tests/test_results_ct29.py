@@ -174,3 +174,36 @@ def test_mismatched_ct29_fingerprint_refuses_tampered_resolution(tmp_path: Path)
     )
 
     assert is_refusal(projected)
+
+
+def test_conflicting_records_for_same_virtual_position_refuse(tmp_path: Path) -> None:
+    epoch = _fp("epoch-1")
+    at = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    first, label = _context(epoch=epoch, at=at)
+    second = _record(epoch=epoch, at=at, pnl=501)
+    first_fp = _ok(first.fingerprint())
+    second_fp = _ok(second.fingerprint())
+    store = EvidenceStore(tmp_path)
+    world_store = _ok(store.for_world(World.REPLAY))
+    writer = _ok(WriterId.try_create("qmb", "replay", "closes", "boot-1"))
+    journal_writer = JournalWriter(world_store.journal, writer, stream_name="closes")
+    for record_fp in (first_fp, second_fp):
+        _ok(
+            journal_writer.record(
+                "risk transition",
+                {"exit_record_ref": record_fp.value, "binding_epoch": epoch.value},
+                instant=at,
+            )
+        )
+
+    projected = read_ct29_closed_trades(
+        journal_reader=JournalReader(world_store.journal),
+        stream_name="closes",
+        writer=writer,
+        record_resolver={first_fp.value: first, second_fp.value: second},
+        position_sides={first.virtual_position_ref.value: TradeSide.LONG},
+        binding_epoch=epoch,
+        result_label=label,
+    )
+
+    assert is_refusal(projected)

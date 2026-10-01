@@ -65,6 +65,7 @@ def read_ct29_closed_trades(
         return events
     closes: list[CT29ClosedTrade] = []
     seen_records: set[str] = set()
+    seen_positions: set[str] = set()
     for event in events.value:
         if event.writer != writer:
             return policy(
@@ -122,6 +123,13 @@ def read_ct29_closed_trades(
                 "one CT-29 record is consumed once per stream projection",
                 reference=record_fp.value.value,
             )
+        position_ref = record.virtual_position_ref.value
+        if position_ref in seen_positions:
+            return invalid(
+                "virtual_position_ref",
+                "a virtual position contributes exactly one immutable CT-29 close",
+                virtual_position_ref=position_ref,
+            )
         if record.binding_epoch != binding_epoch:
             return policy("binding_epoch", "the CT-29 record belongs to another epoch")
         if record.result_label != result_label or event.world is not result_label.world:
@@ -136,12 +144,12 @@ def read_ct29_closed_trades(
                 "the CT-13 transition instant matches the immutable CT-29 close instant",
                 sequence=event.sequence,
             )
-        raw_side = position_sides.get(record.virtual_position_ref.value)
+        raw_side = position_sides.get(position_ref)
         if not isinstance(raw_side, TradeSide):
             return invalid(
                 "position_side",
                 "the opening-position ledger supplies an explicit long/short side for each close",
-                virtual_position_ref=record.virtual_position_ref.value,
+                virtual_position_ref=position_ref,
             )
         net = record.net_realized_pnl()
         if is_refusal(net):
@@ -161,6 +169,7 @@ def read_ct29_closed_trades(
             )
         )
         seen_records.add(record_fp.value.value)
+        seen_positions.add(position_ref)
     return _ok(tuple(closes))
 
 
