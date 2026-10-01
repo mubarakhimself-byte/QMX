@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import is_dataclass
 from types import MappingProxyType
 from typing import cast
 
@@ -44,6 +45,7 @@ __all__ = [
     "fp1_clean",
     "nonneg_int",
     "positive_int",
+    "snapshot_identity_content",
 ]
 
 
@@ -56,6 +58,49 @@ def deep_freeze(value: object) -> object:
         sequence = cast("Sequence[object]", value)
         return tuple(deep_freeze(item) for item in sequence)
     return value
+
+
+def snapshot_identity_content(value: object, field: str) -> Result[object]:
+    """Snapshot canonical containers and only frozen QMF identity providers."""
+    if isinstance(value, Mapping):
+        mapping = cast("Mapping[object, object]", value)
+        out: dict[object, object] = {}
+        for key, item in mapping.items():
+            frozen = snapshot_identity_content(item, field)
+            if is_refusal(frozen):
+                return frozen
+            out[key] = frozen.value
+        return Ok(out)
+    if isinstance(value, (list, tuple)):
+        frozen_items: list[object] = []
+        for item in cast("Sequence[object]", value):
+            frozen = snapshot_identity_content(item, field)
+            if is_refusal(frozen):
+                return frozen
+            frozen_items.append(frozen.value)
+        return Ok(tuple(frozen_items))
+    identity_method = getattr(value, "fp1_identity", None)
+    if callable(identity_method):
+        params = getattr(type(value), "__dataclass_params__", None)
+        if (
+            not type(value).__module__.startswith("qmf.")
+            or not is_dataclass(value)
+            or params is None
+            or getattr(params, "frozen", False) is not True
+        ):
+            return invalid(
+                field,
+                "nested fp1 providers must be frozen QMF identity values or canonical containers",
+                provider=type(value).__name__,
+            )
+        try:
+            identity = identity_method()
+        except Exception:
+            return invalid(field, "nested QMF identity provider returns stable identity content")
+        if not isinstance(identity, Mapping):
+            return invalid(field, "nested QMF identity provider returns a mapping")
+        return snapshot_identity_content(cast("Mapping[object, object]", identity), field)
+    return Ok(value)
 
 
 def fp1_clean(content: object, field: str) -> TypedRefusal | None:
@@ -222,7 +267,10 @@ def coerce_bar_spec(value: object) -> Result[dict[str, object]]:
             given=repr(value),
         )
     if isinstance(value, Mapping):
-        mapping = cast("Mapping[str, object]", value)
+        snapshotted = snapshot_identity_content(cast("Mapping[object, object]", value), "bar_spec")
+        if is_refusal(snapshotted):
+            return snapshotted
+        mapping = cast("Mapping[str, object]", snapshotted.value)
         if mapping.get("kind") == "fingerprint-ref" and isinstance(mapping.get("ref"), str):
             refusal = fp1_clean(dict(mapping), "bar_spec")
             if refusal is not None:

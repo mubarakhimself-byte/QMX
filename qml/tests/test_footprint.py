@@ -436,6 +436,49 @@ def test_hosts_receive_only_the_declared_footprint_manifest() -> None:
     assert "stream_set" not in {"family_id", "confluence_set", "parameter_space"}
 
 
+class _MutableFootprintIdentity:
+    def __init__(self, amount: int) -> None:
+        self.amount = amount
+
+    def fp1_identity(self) -> dict[str, object]:
+        return {"amount": self.amount}
+
+
+def test_nested_mutable_custom_identity_provider_is_refused_on_mapping_and_typed_routes() -> None:
+    provider = _MutableFootprintIdentity(1)
+    spec = {
+        "kind": "time-interval",
+        "seconds": 60,
+        "metadata": {"provider": provider},
+    }
+    mapping_stream = _stream()
+    mapping_stream["bar_specs"] = [spec]
+    assert is_refusal(mint_footprint([mapping_stream], [_calendar()], [_pinned("mutable")]))
+
+    typed_member = StreamMember(
+        "primary",
+        (spec,),
+        StreamRole.TRADING,
+    )
+    assert is_refusal(mint_footprint([typed_member], [_calendar()], [_pinned("typed-mutable")]))
+    provider.amount = 99
+
+
+def test_nested_canonical_footprint_content_is_snapshotted_without_identity_drift() -> None:
+    nested = {"values": [{"name": "stable", "period": _period(3)}]}
+    spec = {"kind": "time-interval", "seconds": 60, "metadata": nested}
+    stream = _stream()
+    stream["bar_specs"] = [spec]
+    footprint = _ok(mint_footprint([stream], [_calendar()], [_pinned("nested")]))
+    before = _ok(footprint.fingerprint_content())
+
+    nested["values"][0]["name"] = "changed"
+    nested["values"].append({"name": "added", "period": _period(9)})
+    spec["seconds"] = 300
+
+    assert _ok(footprint.fingerprint_content()) == before
+
+
 def test_stream_set_refuses_unknown_role_and_empty_barspecs() -> None:
     assert is_refusal(
         StreamMember.try_create("primary", [{"kind": "time-interval", "seconds": 60}], "htf")

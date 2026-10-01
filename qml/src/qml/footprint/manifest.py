@@ -24,6 +24,7 @@ from qml.footprint._coerce import (
     coerce_fingerprint,
     deep_freeze,
     fp1_clean,
+    snapshot_identity_content,
 )
 from qml.footprint.template import ProducerTemplate
 from qml.footprint.vocab import (
@@ -105,7 +106,10 @@ class StreamMember:
                 mapping = cast("Mapping[str, object]", item)
                 kind = mapping.get("kind")
                 if kind in BARSPEC_KINDS:
-                    content = dict(mapping)
+                    snapshotted = snapshot_identity_content(dict(mapping), "bar_specs")
+                    if is_refusal(snapshotted):
+                        return snapshotted
+                    content = cast("dict[str, object]", snapshotted.value)
                     refusal = fp1_clean(content, "bar_specs")
                     if refusal is not None:
                         return refusal
@@ -367,7 +371,13 @@ def _coerce_stream_set(value: object) -> Result[tuple[StreamMember, ...]]:
     for index, item in enumerate(items.value):
         member: Result[StreamMember]
         if isinstance(item, StreamMember):
-            member = Ok(item)
+            # A typed StreamMember can be directly constructed around mutable
+            # nested providers; re-enter the same validator as mapping inputs.
+            member = StreamMember.try_create(
+                item.instrument_role,
+                item.bar_specs,
+                item.stream_role,
+            )
         elif isinstance(item, Mapping):
             mapping = cast("Mapping[str, object]", item)
             member = StreamMember.try_create(
