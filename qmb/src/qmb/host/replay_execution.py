@@ -23,8 +23,10 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.data.journal_producer import JournalReader
+from qmf.data.observation import SourceObservation
 from qmf.registry import RegistrationRecord
 from qmf.risk.performance import PerformanceResult
+from qml.protocol.evidence import MappingReadSurface
 
 from qmb._refuse import invalid, policy
 from qmb.config.compiler import ASSIGNMENT_KEY, STUDY_TRIAL_LABEL_KEY, ResolvedRunConfig
@@ -42,7 +44,7 @@ from qmb.ledger.line import LedgerLine
 from qmb.results.ct29 import CT29ClosedTrade, read_ct29_closed_trades
 from qmb.results.ct32 import mint_run_performance_result
 from qmb.results.measures import ClosedTrade, EquityPoint
-from qmb.runloop.loop import LoopOutcome, run
+from qmb.runloop.loop import EventSlice, LoopOutcome, run
 
 __all__ = ["RecordedExecutionResult", "execute_recorded_replay_request"]
 
@@ -550,10 +552,53 @@ def _realized_equity_curve(
 
 
 def _same_materialized_source(
+    supplied: object,
+    authoritative: object,
+) -> bool:
+    """Compare derived runtime surfaces against a fresh canonical CT-10 materialization."""
+    if not isinstance(supplied, RecordedReplaySource) or not isinstance(
+        authoritative, RecordedReplaySource
+    ):
+        return False
+    if not _source_graph_is_typed(supplied) or not _source_graph_is_typed(authoritative):
+        return False
+    try:
+        return _compare_materialized_source(supplied, authoritative)
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _source_graph_is_typed(source: object) -> bool:
+    observations: object = getattr(source, "observations", None)
+    slices: object = getattr(source, "slices", None)
+    paths: object = getattr(source, "execution_paths", None)
+    surfaces: object = getattr(source, "read_surfaces", None)
+    observation_items = (
+        cast(tuple[object, ...], observations) if isinstance(observations, tuple) else ()
+    )
+    slice_items = cast(tuple[object, ...], slices) if isinstance(slices, tuple) else ()
+    path_items = cast(tuple[object, ...], paths) if isinstance(paths, tuple) else ()
+    surface_items: Mapping[object, object] = (
+        cast(Mapping[object, object], surfaces)
+        if isinstance(surfaces, Mapping)
+        else cast(Mapping[object, object], {})
+    )
+    return not (
+        not isinstance(observations, tuple)
+        or any(not isinstance(item, SourceObservation) for item in observation_items)
+        or not isinstance(slices, tuple)
+        or any(not isinstance(item, EventSlice) for item in slice_items)
+        or not isinstance(paths, tuple)
+        or any(not isinstance(item, SlicePath) for item in path_items)
+        or not isinstance(surfaces, Mapping)
+        or any(not isinstance(item, MappingReadSurface) for item in surface_items.values())
+    )
+
+
+def _compare_materialized_source(
     supplied: RecordedReplaySource,
     authoritative: RecordedReplaySource,
 ) -> bool:
-    """Compare derived runtime surfaces against a fresh canonical CT-10 materialization."""
     if supplied.fp1_identity() != authoritative.fp1_identity():
         return False
     if tuple(item.fingerprint for item in supplied.observations) != tuple(

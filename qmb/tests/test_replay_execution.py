@@ -158,6 +158,33 @@ def test_persisted_request_runs_through_economic_terminal_path(tmp_path: Path) -
         terminal_ledger=ledger,
     )
     assert not is_ok(altered_result)
+    malformed_sources = (
+        replace(resolved.source, observations=(object(),)),  # pyright: ignore[reportArgumentType]
+        replace(resolved.source, slices=(object(),)),  # pyright: ignore[reportArgumentType]
+        replace(
+            resolved.source,
+            execution_paths=(object(),),  # pyright: ignore[reportArgumentType]
+        ),
+        replace(
+            resolved.source,
+            read_surfaces={"primary": object()},  # pyright: ignore[reportArgumentType]
+        ),
+    )
+    for malformed_source in malformed_sources:
+        malformed_result = execute_recorded_replay_request(
+            request=replace(resolved, source=malformed_source),
+            expected_request_ref=request_ref,
+            request_root=fixture.request_root,
+            raw_store_root=fixture.raw_store_root,
+            holdout_months=18,
+            expected_split_fp1=fixture.expected_split_fp1,
+            config=config,
+            bound_execution=bound,
+            admission=admission,
+            journal_reader=reader,
+            terminal_ledger=ledger,
+        )
+        assert not is_ok(malformed_result)
     foreign_ref = _ok(fingerprint({"foreign": True}))
     forged_reference_result = execute_recorded_replay_request(
         request=replace(resolved, request_ref=foreign_ref),
