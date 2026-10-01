@@ -594,6 +594,7 @@ class BacktestingService:
                     command=classified.value.command,
                     occupancy=classified.value.occupancy,
                 )
+        split_manifest_fp1: str | None = None
         if self._experiments is not None:
             resolved = self._experiments.resolve(request.experiment_spec_fp1)
             if is_refusal(resolved):
@@ -602,6 +603,7 @@ class BacktestingService:
                     "coordinated placement requires a registered ExperimentSpec (FR-W06; DEC-0270)",
                     spec_fp1=request.experiment_spec_fp1,
                 )
+            split_manifest_fp1 = resolved.value.spec.data_ref
         if self._tools.get(QMB_BACKTEST_TOOL_ID) is None:
             installed = self.install()
             if is_refusal(installed):
@@ -638,6 +640,8 @@ class BacktestingService:
             request,
             job_id=minted.value.job_id,
             command=command,
+            split_manifest_fp1=split_manifest_fp1,
+            attempt_id=minted.value.attempt_id,
         )
         if is_refusal(invocation):
             self._occupancy = release_qmb_job(

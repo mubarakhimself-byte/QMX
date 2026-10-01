@@ -115,6 +115,7 @@ def test_run_invocation_builder_refuses_query_commands() -> None:
         created.value,
         job_id="qmb:docker:t1",
         command="optimize.run",
+        split_manifest_fp1="fp1:sha256:" + ("b" * 64),
     )
     assert is_ok(run)
     assert run.value.argv == ("optimize", "run")

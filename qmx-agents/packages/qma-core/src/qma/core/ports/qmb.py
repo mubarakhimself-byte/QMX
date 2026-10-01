@@ -805,10 +805,14 @@ def build_qmb_door_invocation(
     *,
     job_id: str,
     command: object | None = None,
+    split_manifest_fp1: object = None,
+    attempt_id: object = 1,
 ) -> Result[QmbDoorInvocation]:
     """Build a CLI/MCP run invocation. Payload carries refs; QMA does not re-specify QMB."""
     if not job_id.strip():
         return _invalid("job_id", "QMB door invocation requires a job id")
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
+        return _invalid("attempt_id", "the QMA job attempt is a positive integer")
     occupancy: QmbDoorOccupancy | None
     if command is None:
         argv = QMB_CLI_ARGV if request.door is QmbDoorKind.CLI else (QMB_MCP_METHOD,)
@@ -836,6 +840,7 @@ def build_qmb_door_invocation(
             argv = (f"qmb.{row.command}",)
     payload: dict[str, object] = {
         "job_id": job_id,
+        "attempt_id": attempt_id,
         "experiment_spec_fp1": request.experiment_spec_fp1,
         "evidence_ref": request.evidence_ref,
         "environment_ref": request.environment_ref,
@@ -854,6 +859,8 @@ def build_qmb_door_invocation(
         "children_are_qma_jobs": False,
         "opens_daemon_sqlite": False,
     }
+    if isinstance(split_manifest_fp1, str):
+        payload["split_manifest_fp1"] = split_manifest_fp1.strip()
     if request.door is QmbDoorKind.MCP:
         method = argv[0] if argv else QMB_MCP_METHOD
         payload["method"] = method

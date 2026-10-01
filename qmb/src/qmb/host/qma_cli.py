@@ -18,6 +18,7 @@ _ROUTE = ("agent", "qma_backtest_tool", "backtesting_service", "qmb_door", "qmb"
 _REQUIRED_PAYLOAD_KEYS = frozenset(
     {
         "job_id",
+        "attempt_id",
         "experiment_spec_fp1",
         "evidence_ref",
         "environment_ref",
@@ -45,6 +46,7 @@ class QmaBacktestContext:
     """Validated identifiers QMA may carry to the existing QMB backtest door."""
 
     job_id: str
+    attempt_id: int
     experiment_spec_fp1: Fingerprint
     evidence_ref: Fingerprint
     split_manifest_fp1: Fingerprint
@@ -64,7 +66,7 @@ def decode_qma_backtest_context(
     if not isinstance(payload_text, str) or not isinstance(environ, Mapping):
         return invalid("qma_payload", "the delegated QMB door receives JSON and process env")
     try:
-        payload = json.loads(payload_text)
+        payload = json.loads(payload_text, object_pairs_hook=_unique_object)
     except (ValueError, TypeError):
         return invalid("qma_payload", "the delegated QMB door payload is valid JSON")
     if not isinstance(payload, Mapping):
@@ -93,7 +95,7 @@ def decode_qma_backtest_context(
         "opens_daemon_sqlite": False,
     }
     for key, expected in expected_literals.items():
-        if body.get(key) != expected:
+        if type(body.get(key)) is not type(expected) or body.get(key) != expected:
             return policy("qma_payload", "delegated QMB command semantics are fixed", key=key)
     text_fields = ("job_id", "environment_ref", "occupancy_key")
     values: dict[str, str] = {}
@@ -102,6 +104,9 @@ def decode_qma_backtest_context(
         if not isinstance(value, str) or not value.strip():
             return invalid(key, "delegated QMB identifiers are non-empty text")
         values[key] = value
+    attempt_id = body.get("attempt_id")
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
+        return invalid("attempt_id", "the delegated QMA attempt is a positive integer")
     parsed: dict[str, Fingerprint] = {}
     for key in ("experiment_spec_fp1", "evidence_ref", "split_manifest_fp1"):
         result = Fingerprint.try_create(body.get(key))
@@ -111,14 +116,17 @@ def decode_qma_backtest_context(
             return result
     for field, env_key in (
         ("job_id", "QMA_QMB_JOB_ID"),
+        ("attempt_id", "QMA_QMB_ATTEMPT_ID"),
         ("experiment_spec_fp1", "QMA_QMB_EXPERIMENT_SPEC_FP1"),
         ("evidence_ref", "QMA_QMB_EVIDENCE_REF"),
+        ("split_manifest_fp1", "QMA_QMB_SPLIT_MANIFEST_FP1"),
         ("environment_ref", "QMA_QMB_ENVIRONMENT_REF"),
         ("occupancy_key", "QMA_QMB_OCCUPANCY_KEY"),
     ):
         env_value = cast(Mapping[object, object], environ).get(env_key)
         body_value = body.get(field)
-        if not isinstance(env_value, str) or env_value != body_value:
+        expected_env_value = str(body_value) if field == "attempt_id" else body_value
+        if not isinstance(env_value, str) or env_value != expected_env_value:
             return policy(
                 field,
                 "JSON and dedicated process fields identify the same QMA placement",
@@ -127,6 +135,7 @@ def decode_qma_backtest_context(
     return Ok(
         QmaBacktestContext(
             job_id=values["job_id"],
+            attempt_id=attempt_id,
             experiment_spec_fp1=parsed["experiment_spec_fp1"],
             evidence_ref=parsed["evidence_ref"],
             split_manifest_fp1=parsed["split_manifest_fp1"],
@@ -134,3 +143,12 @@ def decode_qma_backtest_context(
             occupancy_key=values["occupancy_key"],
         )
     )
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON object key")
+        value[key] = item
+    return value

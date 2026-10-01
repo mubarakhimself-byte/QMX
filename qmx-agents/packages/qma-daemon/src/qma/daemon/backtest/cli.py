@@ -178,8 +178,10 @@ def _door_env(
     env["QMA_QMB_DOOR_PAYLOAD"] = json.dumps(payload, separators=(",", ":"))
     for key, env_key in (
         ("job_id", "QMA_QMB_JOB_ID"),
+        ("attempt_id", "QMA_QMB_ATTEMPT_ID"),
         ("experiment_spec_fp1", "QMA_QMB_EXPERIMENT_SPEC_FP1"),
         ("evidence_ref", "QMA_QMB_EVIDENCE_REF"),
+        ("split_manifest_fp1", "QMA_QMB_SPLIT_MANIFEST_FP1"),
         ("environment_ref", "QMA_QMB_ENVIRONMENT_REF"),
         ("occupancy_key", "QMA_QMB_OCCUPANCY_KEY"),
         ("source_ct32", "QMA_QMB_SOURCE_CT32"),

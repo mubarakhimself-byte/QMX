@@ -134,7 +134,11 @@ def test_one_qmb_job_per_environment_occupancy() -> None:
 def test_door_invocation_is_runtime_not_import() -> None:
     created = _request()
     assert is_ok(created)
-    invocation = build_qmb_door_invocation(created.value, job_id="qmb:docker:t1")
+    invocation = build_qmb_door_invocation(
+        created.value,
+        job_id="qmb:docker:t1",
+        split_manifest_fp1="fp1:sha256:" + ("b" * 64),
+    )
     assert is_ok(invocation)
     assert invocation.value.program == QMB_CLI_PROGRAM
     assert invocation.value.argv == QMB_CLI_ARGV
@@ -143,7 +147,11 @@ def test_door_invocation_is_runtime_not_import() -> None:
     assert invocation.value.payload["qma_re_specifies"] is False
     mcp = _request(door=QmbDoorKind.MCP)
     assert is_ok(mcp)
-    mcp_inv = build_qmb_door_invocation(mcp.value, job_id="qmb:docker:t1")
+    mcp_inv = build_qmb_door_invocation(
+        mcp.value,
+        job_id="qmb:docker:t1",
+        split_manifest_fp1="fp1:sha256:" + ("b" * 64),
+    )
     assert is_ok(mcp_inv)
     assert mcp_inv.value.kind is QmbDoorKind.MCP
     assert mcp_inv.value.program == QMB_CLI_PROGRAM
