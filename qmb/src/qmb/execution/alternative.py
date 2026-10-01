@@ -64,20 +64,22 @@ def _exact_value(value: object, field: str) -> object | TypedRefusal:
     if isinstance(value, Fingerprint):
         return value.value
     if isinstance(value, Mapping):
+        entries = cast("Mapping[object, object]", value)
         result: dict[str, object] = {}
-        for key, item in value.items():
+        for key, item in entries.items():
             if not isinstance(key, str) or not key.strip():
                 return invalid(field, "exact state and action mappings use named string keys")
             normalized = _exact_value(item, field)
-            if is_refusal(normalized):
+            if isinstance(normalized, TypedRefusal):
                 return normalized
             result[key] = normalized
         return result
     if isinstance(value, (tuple, list)):
+        items = cast("Sequence[object]", value)
         result_list: list[object] = []
-        for item in value:
+        for item in items:
             normalized = _exact_value(item, field)
-            if is_refusal(normalized):
+            if isinstance(normalized, TypedRefusal):
                 return normalized
             result_list.append(normalized)
         return result_list
@@ -95,30 +97,36 @@ def _exact_value(value: object, field: str) -> object | TypedRefusal:
     )
 
 
-def _freeze_mapping(value: object, field: str) -> Mapping[str, object] | object:
+def _freeze_mapping(value: object, field: str) -> Mapping[str, object] | TypedRefusal:
     if not isinstance(value, Mapping):
         return invalid(field, "an ATC state/action body is a mapping")
-    normalized = _exact_value(value, field)
-    if is_refusal(normalized):
+    normalized = _exact_value(cast("Mapping[object, object]", value), field)
+    if isinstance(normalized, TypedRefusal):
         return normalized
     if not isinstance(normalized, dict):
-        return normalized
+        return invalid(field, "an ATC state/action body is a named exact mapping")
+    normalized_mapping = cast("dict[str, object]", normalized)
 
     def freeze(item: object) -> object:
         if isinstance(item, dict):
-            return MappingProxyType({key: freeze(child) for key, child in item.items()})
+            entries = cast("dict[str, object]", item)
+            frozen_entries = {key: freeze(child) for key, child in entries.items()}
+            return MappingProxyType(frozen_entries)
         if isinstance(item, list):
-            return tuple(freeze(child) for child in item)
+            children = cast("list[object]", item)
+            return tuple(freeze(child) for child in children)
         return item
 
-    return cast("Mapping[str, object]", freeze(normalized))
+    return cast("Mapping[str, object]", freeze(normalized_mapping))
 
 
 def _plain(value: object) -> object:
     if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
+        entries = cast("Mapping[str, object]", value)
+        return {key: _plain(item) for key, item in entries.items()}
     if isinstance(value, tuple):
-        return [_plain(item) for item in value]
+        items = cast("tuple[object, ...]", value)
+        return [_plain(item) for item in items]
     return value
 
 
@@ -147,7 +155,7 @@ class InternalSimulatedAction:
         }:
             return policy("action_type", "QMB ATC simulation does not issue venue commands")
         frozen = _freeze_mapping(body, "action_body")
-        if not isinstance(frozen, Mapping):
+        if isinstance(frozen, TypedRefusal):
             return frozen
         return Ok(cls(action_id=action_id, action_type=action_type, body=frozen))
 
@@ -178,7 +186,7 @@ class AlternativePolicyEvaluation:
         actions: object,
     ) -> Result[AlternativePolicyEvaluation]:
         state = _freeze_mapping(accounting_state, "accounting_state")
-        if not isinstance(state, Mapping):
+        if isinstance(state, TypedRefusal):
             return state
         if not isinstance(risk_verdict, str) or not risk_verdict.strip():
             return invalid("risk_verdict", "an evaluator returns its explicit risk verdict")
@@ -186,7 +194,7 @@ class AlternativePolicyEvaluation:
             return invalid("risk_accepted", "risk acceptance is an explicit bool")
         if isinstance(actions, (str, bytes)) or not isinstance(actions, Sequence):
             return invalid("actions", "internal simulated actions are an ordered sequence")
-        action_list = tuple(actions)
+        action_list = tuple(cast("Sequence[object]", actions))
         normalized_actions: list[InternalSimulatedAction] = []
         for action in action_list:
             if not isinstance(action, InternalSimulatedAction):
@@ -280,23 +288,25 @@ class PolicyInterpreterRegistration:
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 return invalid(field, "identity versions are positive integers")
         pair_hash = _fingerprint(policy_pair_hash, "policy_pair_hash")
-        if is_refusal(pair_hash):
+        if isinstance(pair_hash, TypedRefusal):
             return pair_hash
         impl_fp = _fingerprint(interpreter_fp1, "interpreter_fp1")
-        if is_refusal(impl_fp):
+        if isinstance(impl_fp, TypedRefusal):
             return impl_fp
         if not isinstance(interpreter_id, str) or not interpreter_id.strip():
             return invalid("interpreter_id", "a trusted interpreter has a stable id")
         if not callable(getattr(interpreter, "evaluate", None)):
             return invalid("interpreter", "a registered policy interpreter implements evaluate")
+        pair_version = cast(int, policy_pair_version)
+        implementation_version = cast(int, interpreter_version)
         identity = {
             "class": "qmb-atc-policy-interpreter-registration-v1",
             "interpreter_fp1": impl_fp.value,
             "interpreter_id": interpreter_id,
-            "interpreter_version": interpreter_version,
+            "interpreter_version": implementation_version,
             "policy_pair_hash": pair_hash.value,
             "policy_pair_id": policy_pair_id,
-            "policy_pair_version": policy_pair_version,
+            "policy_pair_version": pair_version,
         }
         stamped = fingerprint(identity)
         if is_refusal(stamped):
@@ -304,10 +314,10 @@ class PolicyInterpreterRegistration:
         return Ok(
             cls(
                 policy_pair_id,
-                policy_pair_version,
+                pair_version,
                 pair_hash,
                 interpreter_id,
-                interpreter_version,
+                implementation_version,
                 impl_fp,
                 cast("AlternativePolicyInterpreter", interpreter),
                 stamped.value,
@@ -452,7 +462,7 @@ class AlternativeRunReceipt:
         }
 
 
-def _validate_source(source: object) -> object:
+def _validate_source(source: object) -> dict[int, list[SourceObservation]] | TypedRefusal:
     if not isinstance(source, RecordedReplaySource):
         return invalid("recorded_source", "ATC execution consumes a validated RecordedReplaySource")
     if source.world is not World.REPLAY:
@@ -463,7 +473,9 @@ def _validate_source(source: object) -> object:
         return policy("split_role", "sealed-test data is not admitted to ordinary ATC execution")
     if not source.observations or not source.slices:
         return invalid("recorded_source", "a recorded ATC source has observations and frontiers")
-    for index, observation in enumerate(source.observations):
+    observations = cast("tuple[object, ...]", source.observations)
+    for index, observation_value in enumerate(observations):
+        observation: object = observation_value
         if not isinstance(observation, SourceObservation):
             return invalid(
                 "observations", "recorded replay observations are CT-10 values", index=index
@@ -477,23 +489,28 @@ def _validate_source(source: object) -> object:
     if is_refusal(stamped_source) or stamped_source.value != source.fingerprint:
         return policy("recorded_source", "recorded source identity matches its fingerprint")
     expected: dict[int, list[SourceObservation]] = {}
-    for observation in source.observations:
+    for observation_value in observations:
+        observation = cast(SourceObservation, observation_value)
         frontier = max(observation.event_time.value_ns, observation.known_at.value_ns)
         expected.setdefault(frontier, []).append(observation)
     frontiers = sorted(expected)
     if len(frontiers) != len(source.slices):
         return policy("slices", "every recorded CT-10 frontier has exactly one replay slice")
     for index, (frontier_ns, event_slice) in enumerate(zip(frontiers, source.slices, strict=True)):
-        if not isinstance(event_slice, EventSlice) or len(event_slice.observations) != 1:
+        event_slice_value: object = cast(object, event_slice)
+        if (
+            not isinstance(event_slice_value, EventSlice)
+            or len(event_slice_value.observations) != 1
+        ):
             return invalid(
                 "slices", "each recorded frontier has one stream observation", index=index
             )
-        slice_observation = event_slice.observations[0]
+        slice_observation_value: object = cast(object, event_slice_value.observations[0])
         if (
-            not isinstance(slice_observation, SliceObservation)
-            or slice_observation.stream_id != source.stream_id
-            or not slice_observation.closed
-            or slice_observation.instant.value_ns != frontier_ns
+            not isinstance(slice_observation_value, SliceObservation)
+            or slice_observation_value.stream_id != source.stream_id
+            or not slice_observation_value.closed
+            or slice_observation_value.instant.value_ns != frontier_ns
         ):
             return policy(
                 "slices", "replay frontier matches CT-10 known-at observations", index=index
@@ -515,13 +532,17 @@ def _validate_append_receipt(
     """Bind the writer acknowledgment to a complete event and the stored raw row."""
     if not isinstance(receipt, JournalAppendReceipt):
         return invalid("journal_receipt", "record returns a typed JournalAppendReceipt")
-    event = receipt.event
-    store_receipt = receipt.store_receipt
-    if not isinstance(event, JournalEvent) or not isinstance(store_receipt, StoreReceipt):
+    event_value: object = cast(object, receipt.event)
+    store_receipt_value: object = cast(object, receipt.store_receipt)
+    if not isinstance(event_value, JournalEvent) or not isinstance(
+        store_receipt_value, StoreReceipt
+    ):
         return invalid(
             "journal_receipt",
             "an append receipt contains a typed JournalEvent and StoreReceipt",
         )
+    event = event_value
+    store_receipt = store_receipt_value
     if receipt.edge_receipts:
         return policy("journal_receipt", "a single ATC decision has no unverified side writes")
     event_matches = (
@@ -553,6 +574,8 @@ def _validate_append_receipt(
     event_identity = fingerprint(event.fp1_identity())
     if is_refusal(event_identity) or event_identity.value != event.fingerprint:
         return policy("journal_event", "the acknowledged event fingerprint is complete")
+    sequence_value: object = cast(object, store_receipt.sequence)
+    format_value: object = cast(object, store_receipt.format_version)
     if (
         store_receipt.world is not World.REPLAY
         or store_receipt.room_role is not RoomRole.JOURNAL
@@ -560,13 +583,13 @@ def _validate_append_receipt(
         or store_receipt.outcome not in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
         or store_receipt.is_evidence_bearing is not True
         or store_receipt.retained_forever is not True
-        or store_receipt.sequence is None
-        or isinstance(store_receipt.sequence, bool)
-        or not isinstance(store_receipt.sequence, int)
-        or store_receipt.sequence < 0
-        or isinstance(store_receipt.format_version, bool)
-        or not isinstance(store_receipt.format_version, int)
-        or store_receipt.format_version != 1
+        or sequence_value is None
+        or isinstance(sequence_value, bool)
+        or not isinstance(sequence_value, int)
+        or sequence_value < 0
+        or isinstance(format_value, bool)
+        or not isinstance(format_value, int)
+        or format_value != 1
     ):
         return policy(
             "store_receipt",
@@ -575,7 +598,7 @@ def _validate_append_receipt(
     raw = store.read_stream(expected_writer.stream_name, for_world=World.REPLAY)
     if is_refusal(raw):
         return raw
-    physical_sequence = store_receipt.sequence
+    physical_sequence = sequence_value
     if physical_sequence >= len(raw.value):
         return policy("store_receipt", "the physical sequence exists in the checked journal")
     row = raw.value[physical_sequence]
@@ -644,9 +667,19 @@ def execute_alternative_run(
             expected=expected_command_owner_epoch,
             configured=config.command.command_owner_epoch,
         )
-    source_data = _validate_source(recorded_source)
-    if is_refusal(source_data):
+    if not isinstance(recorded_source, RecordedReplaySource):
+        source_data = _validate_source(recorded_source)
+        if isinstance(source_data, TypedRefusal):
+            return source_data
+        return invalid("recorded_source", "a validated RecordedReplaySource is required")
+    source = recorded_source
+    source_data = _validate_source(source)
+    if isinstance(source_data, TypedRefusal):
         return source_data
+    split_fingerprint = source.split_fp1
+    split_role = source.split_role
+    if split_fingerprint is None or split_role is None:
+        return policy("split", "an ATC run pins its CT-12 split manifest and segment role")
     if not isinstance(registry, AlternativeInterpreterRegistry):
         return invalid("registry", "ATC execution receives a typed interpreter registry")
     checked_registry = AlternativeInterpreterRegistry.try_create(
@@ -661,8 +694,6 @@ def execute_alternative_run(
     if is_refusal(registration_result):
         return registration_result
     registration = registration_result.value
-    if is_refusal(registration):
-        return registration
     if not isinstance(journal_writer, JournalWriter) or not isinstance(journal_store, JournalStore):
         return invalid("journal", "ATC execution requires the QMF CT-13 writer and store")
     if journal_writer.world is not World.REPLAY or journal_store.world is not World.REPLAY:
@@ -670,7 +701,7 @@ def execute_alternative_run(
     if journal_writer.writer.stream != journal_writer.stream_name:
         return policy("journal_writer", "the CT-13 WriterId owns its named stream")
     state = _freeze_mapping(initial_accounting_state, "initial_accounting_state")
-    if not isinstance(state, Mapping):
+    if isinstance(state, TypedRefusal):
         return state
     initial_fp = fingerprint({"class": "qmb-atc-accounting-state-v1", "state": _plain(state)})
     if is_refusal(initial_fp):
@@ -680,11 +711,11 @@ def execute_alternative_run(
     if is_refusal(simulated):
         return simulated
     simulate = simulated.value
-    working_state = state
+    working_state: Mapping[str, object] = state
     working_fp = initial_fp.value
     references: list[ATCJournalReference] = []
     expected_events: dict[int, Fingerprint] = {}
-    frontiers = cast("dict[int, list[SourceObservation]]", source_data)
+    frontiers = source_data
     for frontier_ns in sorted(frontiers):
         instant = Instant(value_ns=frontier_ns)
         observations = tuple(frontiers[frontier_ns])
@@ -693,7 +724,7 @@ def execute_alternative_run(
                 "class": "qmb-atc-frontier-input-v1",
                 "frontier_ns": frontier_ns,
                 "observations": [item.fingerprint.value for item in observations],
-                "source_fp1": cast("RecordedReplaySource", recorded_source).fingerprint.value,
+                "source_fp1": source.fingerprint.value,
             }
         )
         if is_refusal(input_fp):
@@ -714,13 +745,15 @@ def execute_alternative_run(
                 "registered interpreter failed; no result was accepted",
                 exception=type(exc).__name__,
             )
-        if is_refusal(evaluated):
-            return evaluated
-        if not isinstance(evaluated, Ok):
+        evaluated_value: object = cast(object, evaluated)
+        if isinstance(evaluated_value, TypedRefusal):
+            return evaluated_value
+        if not isinstance(evaluated_value, Ok):
             return invalid("evaluation", "a policy interpreter returns a QMF Result")
-        evaluated = evaluated.value
-        if not isinstance(evaluated, AlternativePolicyEvaluation):
+        evaluation_value: object = cast("Ok[object]", evaluated_value).value
+        if not isinstance(evaluation_value, AlternativePolicyEvaluation):
             return invalid("evaluation", "a policy interpreter returns AlternativePolicyEvaluation")
+        evaluated = evaluation_value
         checked = AlternativePolicyEvaluation.try_create(
             accounting_state=evaluated.accounting_state,
             risk_verdict=evaluated.risk_verdict,
@@ -760,10 +793,10 @@ def execute_alternative_run(
             "interpreter_registration_fp1": registration.fingerprint.value,
             "output_fp1": output_fp.value.value,
             "policy_pair_identity": config.policy_pair.identity(),
-            "recorded_source_fp1": cast("RecordedReplaySource", recorded_source).fingerprint.value,
+            "recorded_source_fp1": source.fingerprint.value,
             "simulate_token_fp1": simulate.simulate_token.value,
-            "split_fp1": cast("RecordedReplaySource", recorded_source).split_fp1.value,
-            "split_role": cast("RecordedReplaySource", recorded_source).split_role.value,
+            "split_fp1": split_fingerprint.value,
+            "split_role": split_role.value,
             "command_owner_epoch": config.command.command_owner_epoch,
             "risk_accepted": checked.value.risk_accepted,
             "risk_verdict": checked.value.risk_verdict,
@@ -783,12 +816,13 @@ def execute_alternative_run(
             outcome=expected_outcome,
             correlation_id=config.composition_fp.value,
         )
-        if is_refusal(appended):
-            return appended
-        if not isinstance(appended, Ok):
+        appended_value: object = cast(object, appended)
+        if isinstance(appended_value, TypedRefusal):
+            return appended_value
+        if not isinstance(appended_value, Ok):
             return invalid("journal_receipt", "record returns a QMF Result")
         validated_append = _validate_append_receipt(
-            appended.value,
+            cast("Ok[object]", appended_value).value,
             expected_writer=journal_writer,
             expected_sequence=expected_sequence,
             expected_instant=instant,
@@ -836,9 +870,9 @@ def execute_alternative_run(
         "journal_refs": [reference.identity() for reference in references],
         "policy_pair_identity": config.policy_pair.identity(),
         "registry_fp1": registry.fingerprint.value,
-        "source_fp1": cast("RecordedReplaySource", recorded_source).fingerprint.value,
-        "split_fp1": cast("RecordedReplaySource", recorded_source).split_fp1.value,
-        "split_role": cast("RecordedReplaySource", recorded_source).split_role.value,
+        "source_fp1": source.fingerprint.value,
+        "split_fp1": split_fingerprint.value,
+        "split_role": split_role.value,
     }
     result_fp = fingerprint(identity)
     if is_refusal(result_fp):
@@ -847,9 +881,9 @@ def execute_alternative_run(
         AlternativeRunReceipt(
             config=config,
             simulate=simulate,
-            source_fingerprint=cast("RecordedReplaySource", recorded_source).fingerprint,
-            split_fingerprint=cast("RecordedReplaySource", recorded_source).split_fp1,
-            split_role=cast("RecordedReplaySource", recorded_source).split_role,
+            source_fingerprint=source.fingerprint,
+            split_fingerprint=split_fingerprint,
+            split_role=split_role,
             registry_fingerprint=registry.fingerprint,
             interpreter_registration=registration,
             initial_accounting_state_fingerprint=initial_fp.value,
