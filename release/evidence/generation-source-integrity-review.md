@@ -13,3 +13,9 @@ Other actual public false admissions:
 Bounded repair: pass original source mapping through the existing canonical source-manifest admission, preserving supported bytes semantics and refusing non-string paths rather than converting them. Validate wrapped fingerprint values via Fingerprint.try_create in generation and logic reference admission. Reconstruct typed LogicIdentity and typed Confluence/legs through their existing semantic validators, avoiding current nominal-instance early-return shortcuts. Preserve genuine authored text/byte source identity, valid parameter-search equality, nonempty validated confluence, and declared ordering behavior. Do not invent new source projections or generator grammar.
 
 Existing generation ownership/gaps suites remain green: `.venv/bin/python -m pytest -q -p no:cacheprovider qml/tests/test_generation_ownership.py qml/tests/test_generation_gaps_unfilled.py` — **27 passed**, despite these independent public defects. No source fixes, staging, commits, or full generation acceptance claim.
+
+## e8f2a03e corrective review
+
+Candidate `e8f2a03e6a6eaa6d0f8a39f1aef482d3c27dc74b`: original byte source now exactly matches canonical mint identity; integer path, malformed nominal Fingerprint search, malformed LogicIdentity and direct empty nominal Confluence each typed-refuse. Existing generation/confluence suites: **53 passed**.
+
+CHANGES REQUIRED remains for an actual nested typed bypass: `author_new_structure(confluence_legs=[{'role': 'level', 'confluence_ref': Confluence(())}])` succeeds and cites a fingerprint of the invalid empty child. `_coerce_child_ref` still fingerprints a typed Confluence before its semantic validation. Revalidate that child through canonical Confluence admission before deriving its reference. Exact public reproduction sent numeric/root. No product edits or commits.
