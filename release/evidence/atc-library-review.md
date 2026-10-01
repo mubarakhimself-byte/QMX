@@ -31,3 +31,19 @@ Adapted original `/tmp/review_atc_retry_v2.py` to the explicit initial-state/wri
 `/tmp/review_atc_extra.py` adds an actual durable second decision for the same writer and trial label, changing composition fingerprint and frontier input. Restart still reconstructs/tells trial 0 and evaluates ask 1, despite the extra conflicting trial evidence (three total durable decisions). `alternative.py:1282` filters labeled-event completeness by expected composition, hiding the same-label foreign event before checking extras. Census every decision owned by the pinned writer/trial label before filtering config/frontier; reject conflicting or extra lineage. Exact actual-store repro sent data/root; product untouched. Further fault/readback approval remains pending this correction.
 
 Reviewer focused ATC/Study-driver/resume suite: **37 passed**. The independent conflicting-label recovery failure above remains blocking despite these green tests.
+
+## 0fac48d6 independent reconciliation approval
+
+Candidate `0fac48d6a361b558f40dd59ea11a210f9aefa28d`: **bounded PASS for complete checked-trial recovery and ambiguity refusal**, atop f68d7f7b. Original extra same-label foreign-config/frontier repro now refuses with calls [(0,0)] and two durable decisions; no recovered tell/new ask occurs. Source census includes all same-label checked DECISION rows before expected config/writer/frontier filtering.
+
+Independent actual-filesystem controls:
+
+- Original boot positive passes both writers; retry-v2 reconstructs missing terminal with no second trial-0 interpreter call.
+- Cross-boot retry reconstructs terminal under original boot-1 writer; only new ask uses boot-2 writer, independently verified in both persisted terminal bodies.
+- Before/after actual intent and terminal writes: pre-intent failure has no evaluator effect and safe retry; uncertain written intent with no decision refuses; completed chain before missing/uncertain terminal reconstructs; written terminal readback resumes. No duplicate first-trial evaluation.
+- Before/after actual CT07 edge persistence: retry completes terminal/occurrence and evaluates only the new ask, with calls [(0,0),(0,1)].
+- Eight actual malformed durable-chain controls alter before/after-state fp, output fp, source fp, split fp, interpreter registration, command epoch or frontier input. Initial execution and recovery each typed-refuse with exactly one first-trial call.
+- Actual raw CT13 composition-body tamper under unchanged event fingerprint and torn terminal/intent JSONL tail both refuse recovery without reevaluation.
+- Six real hostile append-ACK controls (None, bool sequence, foreign correlation, edges, missing StoreReceipt, bool format) still typed-refuse.
+
+Scripts: `/tmp/review_atc_retry_boot_v2.py`, `/tmp/review_atc_write_faults_v2.py`, `/tmp/review_atc_edge_faults.py`, `/tmp/review_atc_bad_chain.py`, `/tmp/review_atc_raw_tamper.py`, plus original ambiguity/boot/ACK scripts. Reviewer ATC/Study-driver/resume suites **38 passed**. Existing actual cancellation/resume/objective-policy variation controls remain green. Fixtures are local registered policy interpreters with actual QMF persistence; no financial grammar/provider or complete QMA/CLI/node claim. No product writes or Git mutations.
