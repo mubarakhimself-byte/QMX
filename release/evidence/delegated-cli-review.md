@@ -1,0 +1,9 @@
+# Independent Sol review — delegated QMA/QMB CLI identifiers
+
+Candidates `613c6a748bc3d6a7de897e7b3e129f4e7b55f4c8` and `b32df4756305fe47696ac89e19dc276dba2ebe36`. **Changes required in actual transport serialization; no execution approval.**
+
+The QMB parser enforces exact keys/types, duplicate JSON refusal, fixed replay semantics, matching seven dedicated environment identifiers, and no caller-selected runtime roots/policy. Independent mismatch controls for every identifier refuse; bool attempt, integer boolean semantic flags, foreign world, policy and raw-root injection refuse. Five parser/actual CLI tests pass. Valid delegated CLI currently reports typed unavailable operator_runtime, preserving no legacy fallback; it does not execute economics.
+
+Actual BacktestingService→CliQmbDoorTransport spawn was exercised with the existing local subprocess fixture and traced environment construction without substituting results. The core-minted invocation contains attempt_id integer1, but its actual environment has no QMA_QMB_ATTEMPT_ID. `_door_env` passes that integer through `_payload_str`, which accepts strings only. Therefore the new strict QMB parser refuses a valid real delegated route (or sees unrelated inherited ambient attempt). Serialize the validated positive integer deliberately and clear/set all dedicated envelope fields without inheriting stale identifiers. Add a production-route captured-env regression, not only manually built parser environments. Findings sent to root/execution.
+
+Registered ExperimentSpec resolution derives split data_ref in the service; this is distinct from parser authenticity and future operator-root resolution. The standalone captured service probe used the existing optional no-experiment-registry fixture to isolate the serialization fault, so it does not prove a registered CT47 chain. QMA never imports QMB; the transport carries identifiers and QMB owns runtime resolution. No product edits or provider calls.
