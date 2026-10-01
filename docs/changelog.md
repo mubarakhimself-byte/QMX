@@ -5,122 +5,121 @@ type: changelog
 status: ratified
 sources: [_docwork/ledger.yaml, _docwork/gaps.yaml, _docwork/feature_inventory.yaml, _docwork/review-consistency.md, _docwork/review-redteam.md, docs/index.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md]
 generated: 2026-08-18
-verified: '2026-08-30'
+verified: '2026-09-25'
 stale_after: 90d
-decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0207, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0214, DEC-0215, DEC-0216, DEC-0231, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0240, DEC-0241, DEC-0242, DEC-0243, DEC-0244, DEC-0245, DEC-0246, DEC-0247, DEC-0248, DEC-0249, DEC-0250, DEC-0251, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0260, DEC-0261, DEC-0262, DEC-0114, DEC-0121, DEC-0142, DEC-0278, DEC-0300, DEC-0304, DEC-0315, DEC-0316, DEC-0324, DEC-0327, DEC-0328, DEC-0329, DEC-0330, DEC-0331, DEC-0334, DEC-0335, DEC-0337, DEC-0338, DEC-0340, DEC-0341, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0347, DEC-0349, DEC-0350, DEC-0360, DEC-0379]
+decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192, DEC-0193, DEC-0194, DEC-0195, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0203, DEC-0204, DEC-0205, DEC-0206, DEC-0207, DEC-0208, DEC-0209, DEC-0210, DEC-0211, DEC-0212, DEC-0213, DEC-0214, DEC-0215, DEC-0216, DEC-0231, DEC-0236, DEC-0237, DEC-0238, DEC-0239, DEC-0240, DEC-0241, DEC-0242, DEC-0243, DEC-0244, DEC-0245, DEC-0246, DEC-0247, DEC-0248, DEC-0249, DEC-0250, DEC-0251, DEC-0252, DEC-0253, DEC-0254, DEC-0255, DEC-0256, DEC-0257, DEC-0258, DEC-0259, DEC-0260, DEC-0261, DEC-0262, DEC-0263, DEC-0264, DEC-0265, DEC-0266, DEC-0267, DEC-0268, DEC-0269, DEC-0270, DEC-0271, DEC-0272, DEC-0273, DEC-0274, DEC-0275, DEC-0276, DEC-0277, DEC-0278, DEC-0279, DEC-0280, DEC-0281, DEC-0282, DEC-0283, DEC-0284, DEC-0285, DEC-0286, DEC-0287, DEC-0114, DEC-0121, DEC-0142, DEC-0300, DEC-0304, DEC-0315, DEC-0316, DEC-0324, DEC-0327, DEC-0328, DEC-0329, DEC-0330, DEC-0331, DEC-0334, DEC-0335, DEC-0337, DEC-0338, DEC-0340, DEC-0341, DEC-0343, DEC-0344, DEC-0345, DEC-0346, DEC-0347, DEC-0349, DEC-0350, DEC-0360, DEC-0379, DEC-0380, DEC-0381, DEC-0382, DEC-0383, DEC-0384, DEC-0385, DEC-0386, DEC-0387, DEC-0388, DEC-0389, DEC-0390, DEC-0391, DEC-0392, DEC-0393, DEC-0394, DEC-0395, DEC-0396, DEC-0397, DEC-0398, DEC-0399, DEC-0400, DEC-0401, DEC-0402, DEC-0403, DEC-0404, DEC-0405, DEC-0406, DEC-0407, DEC-0408, DEC-0409, DEC-0410, DEC-0411, DEC-0412, DEC-0413, DEC-0414, DEC-0415, DEC-0416, DEC-0417, DEC-0418, DEC-0419, DEC-0420, DEC-0421, DEC-0422, DEC-0423, DEC-0424, DEC-0425, DEC-0426, DEC-0427, DEC-0428, DEC-0429, DEC-0430, DEC-0431, DEC-0432, DEC-0433, DEC-0434, DEC-0435, DEC-0436, DEC-0437, DEC-0438, DEC-0439, DEC-0440, DEC-0441, DEC-0442, DEC-0443, DEC-0444, DEC-0445, DEC-0446, DEC-0447, DEC-0448, DEC-0449, DEC-0450, DEC-0451, DEC-0452, DEC-0453, DEC-0454, DEC-0455, DEC-0456, DEC-0457, DEC-0458, DEC-0459, DEC-0460, DEC-0461, DEC-0462, DEC-0463, DEC-0464, DEC-0465, DEC-0466, DEC-0467, DEC-0468, DEC-0469, DEC-0470, DEC-0471, DEC-0472, DEC-0473, DEC-0474, DEC-0475, DEC-0476, DEC-0477, DEC-0478, DEC-0479, DEC-0480, DEC-0481, DEC-0482, DEC-0483, DEC-0484, DEC-0485, DEC-0486, DEC-0487, DEC-0488, DEC-0489, DEC-0490, DEC-0491, DEC-0492, DEC-0493, DEC-0494, DEC-0495, DEC-0496, DEC-0497, DEC-0498, DEC-0499, DEC-0500, DEC-0501, DEC-0502, DEC-0503, DEC-0504, DEC-0505, DEC-0506, DEC-0507, DEC-0508, DEC-0509, DEC-0510]
 ---
 
 # QMF Documentation Changelog
 
 This records changes to the QMF knowledge base. It is not a software release log and does not convert provisional decisions into implementation authority.
 
-## 2026-09-29 — Story 69.4: send_message stays mailbox, not invoke; replies inherit and cannot retarget
+## 2026-09-25 — UI host plus backend-delta absorption (change mode)
 
-Home/Copilot product chat remains mailbox `send_message`, not invoke. No `InvocationEnvelope`, no required `instance_id`, no GrantRecord, no invoke `idempotency_key` or product-session `command_id` as send identity. Authoring `psess:` with `app_instance_id` absent is a legal send; the daemon does not mint a synthetic instance. Envelope `instance_id` remains required on invoke (Epic 60). A mailbox `reply` or `question` named by `reply_to_ref` / `causation_id` inherits `product_session_ref` from that authorized parent; a named payload field must equal the parent or the write is refused. Daemon-originated replies may not accept an arbitrary session. `MessageKind` and `DeliveryState` stay closed. Product-chat send uses `handoff|reply|notify|status|question`; `approval_request` is not a Home composer mint. `message.delta` remains progress only; `list_mailbox` snapshots remain truth. Unique chrome issuer `dispatchChat` is Epic 66.
+The 2026-09-23/24 UI host spine (`architecture-QMX-UI-2026-09-23`, local UI AD-1..AD-24) and the 2026-09-24 backend-delta spine (`architecture-QMX-UI-BACKEND-2026-09-24`, local backend AD-1..AD-17) are absorbed into `docs/` after Codex 2026-09-24 focused closure plus 2026-09-25 recheck **PASS**. Preflight verdict: reuse — no new COMP, no COMP-UI, no new contract id, no new dependency edge (DEC-0505, [ADR-0026](decisions/ADR-0026-ui-host-and-backend-delta.md)). ADR-0024 and ADR-0025 Decision sections stand as written. GAP-0081 and GAP-0100 are **answered** as this sitting's chrome law and remain out-of-scope as pack-and-grant kit holes (DEC-0509, DEC-0468). Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold, the 2026-09-19 Workflows fold, or the 2026-09-23 pack-and-grant fold.
 
-Touched: COMP-QMA-DAEMON inherit/retarget on `send_message`; COMP-QMA-WIRE mailbox-not-invoke payload refuse; [ct-48-qma-mailbox-envelope.yaml](contracts/ct-48-qma-mailbox-envelope.yaml); [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb UI AD-2..AD-24 and backend AD-3..AD-17; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0469..DEC-0510 ratified (authority rider SRC-29). Umbrella DEC-0504; preflight DEC-0505; AM-01..AM-17 DEC-0506; wiring honesty DEC-0507; dead-list DEC-0508; catalog restamp DEC-0509; cheap-veto A10–A14 DEC-0510. Codex C1/C2 and J1–J5 closed. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no COMP-UI**; **no new CT** |
+| Gaps | GAP-0081 and GAP-0100 answered; GAP-0109..GAP-0114 deferred non-blocking |
+| Features | FEAT-0064..FEAT-0071 planned; do not duplicate FEAT-0058..FEAT-0063 |
+| Cheap-veto A10–A14 | pairing TTL number; stage_max_bytes number; Rhea seed; Node pin; product data root |
+| Touched docs | [ADR-0026](decisions/ADR-0026-ui-host-and-backend-delta.md) (new); [SCN-0028](scenarios/SCN-0028-first-operator-pair.md)..[SCN-0035](scenarios/SCN-0035-cancel-queued-to-running.md); UI lens `docs/lenses/ui/`; qma-daemon/qma-wire/qmb; CT-40/CT-42/CT-48 annotations; constitution L7/L31; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; security-model; logging-spec; test-strategy; registry `pairing.session_ttl` / `artifact.stage_max_bytes`; ADR-0024/0025 dated follow-ups; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only). check_citations PASS. lint_docs clean. lint_docs --strict expected-blocked by ADR-0023/SCN-0017 provisional plus eight pre-existing 30d-stale files. Prefold 12-lens GO. Consistency 8-lens FAIL-with-amendments; criticals and majors desk-fixed same session. |
 
-## 2026-09-29 — Story 69.1: additive Envelope product_session_ref is excluded from fp1
+## 2026-09-23 — Pack-and-grant gap catalog correction (DEC-0468)
 
-Operator product-chat Envelopes persist additive `product_session_ref` (`psess:` pointer at the product-session projection) on the existing CT-48 / journal `message.*` row. Story 46.4's field list is held. No parallel conversation store, no new sqlite class, no new CT. The field is excluded from Envelope fp1 with `correlation_id` and `causation_id`; changing only the session pointer does not mint a different fp1. Optional value is an omitted key, never null. Quant/machine bus rows with no product conversation omit the field; seed `send_message` stays legal for `machine` when absent. Admitted operator `send_message` copies the named payload field onto the Envelope at write; body text is never parsed. ProductSession own identity remains `product_session_id` on that row. The field was absent at inspect SHA `34c148be`; Envelope types existed as fixtures there.
+Operator-direct: a catalog gap is an unanswered design question. The pack-and-grant sitting already decided kit AD-1..AD-9. GAP-0101..GAP-0108 are **answered** sitting law delivered by FEAT-0058..FEAT-0063, including GAP-0104 daemon JSON-lines (kit AD-5 / sequence step 2). GAP-0081 and GAP-0100 are **out-of-scope as kit holes** (UI is not designed). Catalog IDs stay for history. GAP-0093/GAP-0096 stay for a later operator look. Wiring honesty at `34c148b` (DEC-0465) still records connect versus absent as product surface.
 
-Touched: COMP-QMA-CORE mailbox Envelope; COMP-QMA-DAEMON copy-at-write on `send_message`; COMP-QMA-WIRE `send_message` payload; [ct-48-qma-mailbox-envelope.yaml](contracts/ct-48-qma-mailbox-envelope.yaml); [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 correction — ledger + gap catalog only |
+| Authority | DEC-0468 ratified (authority rider SRC-26) |
+| Gaps | GAP-0101..GAP-0108 answered; GAP-0081 and GAP-0100 out-of-scope |
+| Touched | gap-report; ADR-0025; ADR-0024 follow-up; AGENTS.md; increment brief; epics handoff; this changelog |
+| Gates | re-run after this correction |
 
-## 2026-09-20 — Story 55.4: a tab is not a session; view:* are not contributions
+## 2026-09-23 — Pack-and-grant kit absorption (change mode)
 
-A tab/window/view is not a `product_session` and does not own grants or occupancy. `view:*` remains an AD-17 wire DTO only — not a plugin contribution point and not a ContributionHit (GAP-0081; SCN-0018 Branch B). Occupancy stays none. GAP-0081 chrome is not filled. Additive CT-40; no new CT.
+The 2026-09-23 pack-and-grant child spine (`architecture-QMX-2026-09-23/ARCHITECTURE-SPINE.md`, local AD-1..AD-9) is absorbed into `docs/` as an SDK relationship on top of ADR-0024. Preflight verdict: reuse — no new COMP, no sixth application, no new contract id, no new dependency edge (DEC-0462, [ADR-0025](decisions/ADR-0025-pack-and-grant-kit.md)). ADR-0024 Decision stands as written (named amendments DEC-0463/DEC-0464). ADR-0023 mill package stays **provisional**. Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold or the 2026-09-19 Workflows fold.
 
-Touched: COMP-QMA-DAEMON chrome surface over `product_session`; COMP-QMA-WIRE `view:*` DTO; [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb kit AD-1..AD-9; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0452..DEC-0467 ratified (authority rider). DEC-0452..DEC-0460 = kit AD-1..AD-9; DEC-0461 umbrella; DEC-0462 preflight; DEC-0463 parent AD-8 amendment; DEC-0464 parent AD-24 amendment; DEC-0465 wiring honesty @ `34c148b`; DEC-0466 dead-list; DEC-0467 cheap-veto A7–A9. Local AD ids do not renumber parents. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no new CT** |
+| Gaps | GAP-0101..GAP-0108 new deferred non-blocking; notes on GAP-0081/0100/0093/0096 in place |
+| Features | FEAT-0058..FEAT-0063 planned; first epic FEAT-0058 (host SDK pack-and-grant) |
+| Cheap-veto A7–A9 | A7 `failure_class` spellings; A8 JSON-lines extra fields; A9 retry ceiling is a registry row, no number minted (DEC-0467) |
+| Touched docs | [ADR-0025](decisions/ADR-0025-pack-and-grant-kit.md) (new); [SCN-0023](scenarios/SCN-0023-home-instance-pick.md)..[SCN-0027](scenarios/SCN-0027-diagnosis-json-lines.md); qma-core/qma-daemon/qma-wire; CT-40 annotation; constitution L7; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; dependencies notes; ADR-0020/0024 dated follow-ups; observability logging-spec QMA row; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict expected-blocked** (ADR-0023 and SCN-0017 `status: provisional` per mill stamp; plus pre-existing stale 30d docs). Review: consistency mini-review `_docwork/review-consistency-pack-and-grant.md`. |
 
-## 2026-09-20 — Story 55.3: session context lives in the journal, not a tab
+## 2026-09-19 — Workflows construction-kit absorption (change mode)
 
-`product_session` is a journaled COMP-QMA-DAEMON projection on the existing daemon journal / CAS (not a sixth store class). Restart/reconnect restores the same bound `product_session.context` by folding `product_session.*` events — tests prove journal restore, not in-process RAM. Two tabs of the same product (`app_instance_id`) share one `psess:`. Closing a tab writes nothing and does not close the session. A new tab does not mint a new `product_session`. Reconnect is a query from `(resume_cursor, cursor_generation)`; compacted history past the cursor yields snapshot/resync with a new `cursor_generation`, never a silent empty replay. Occupancy remains none. Additive CT-40; no new CT.
+The 2026-09-18/19 Workflows construction-kit spine (`architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md`, candidate `qmx-workflows-arch-2026-09-19-c`, local AD-1..AD-31) is absorbed into `docs/` as composition over existing application-layer products. Preflight verdict: reuse — no new COMP, no sixth application, no new contract id, no new dependency edge (DEC-0446, [ADR-0024](decisions/ADR-0024-workflows-construction-kit.md)). ADR-0023 mill package stays **provisional**. Implementation authorization remains factory-pipeline-only. An accidental `main` commit of partial docs was reset; this fold lands uncommitted.
 
-Touched: COMP-QMA-DAEMON `product_session` journal restore and tab sharing; [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb Workflows AD-1..AD-31; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0414..DEC-0451 ratified (authority rider). DEC-0414..DEC-0444 = AD-1..AD-31; DEC-0445 umbrella; DEC-0446 preflight; DEC-0447 cheap-veto; DEC-0448 L36 amendment; DEC-0449 DEC-0389 named amendment; DEC-0450 wiring honesty @ `270e992`; DEC-0451 dead-list. Local AD-1..AD-31 do not renumber QMF/QMB/QML/NODE/QMA/CONNECT/Workbench/mill parents. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no new CT** |
+| Gaps | GAP-0092..GAP-0100 new deferred non-blocking; notes on GAP-0081/0083/0058/0062 in place; do not fill GAP-0085/0063/0061 |
+| Features | FEAT-0051..FEAT-0057 planned; first epic FEAT-0051 (ContributionHit concatenate + pin/tombstone) |
+| Cheap-veto A1–A6 | A1 PolicyPair field catalogue; A2 AD-25 fencing enum; A3 InvocationEnvelope field set; A4 ContributionHit pin tuple; A5 recipe-def identity; A6 CheckpointManifest restore order (DEC-0447) |
+| Touched docs | [ADR-0024](decisions/ADR-0024-workflows-construction-kit.md) (new); [SCN-0018](scenarios/SCN-0018-contribution-hit-honesty.md)..[SCN-0022](scenarios/SCN-0022-pack-lifecycle-headless.md); qma-core/qma-daemon/qma-wire, qmb, qml, trading-node, qmf-risk/qmf-registry/qmf-data; CT-40/CT-47/CT-22/CT-27/CT-33/CT-06/CT-04 annotations; constitution L36; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; dependencies notes; ADR-0020/0022/0023 dated follow-ups; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict expected-blocked** (ADR-0023 and SCN-0017 `status: provisional` per mill stamp). Review: consistency FAIL-with-amendments (3 major + 7 minor) + adversarial schema-hole findings recorded as GAP-0094 notes; desk fixes applied 2026-09-19. |
 
-## 2026-09-20 — Story 55.2: granted_ops are GrantRecords; mismatch and revoke refuse
+## 2026-09-16 — QML research expansion absorption (change mode)
 
-`product_session.granted_ops` stores `grant_id`s, never bare op-id strings. COMP-QMA-DAEMON resolves each id to the host `GrantRecord` persisted beside the product_session projection on the existing daemon sqlite (not a new store class). Envelope `grant_id` / op / effect / contribution / instance that do not match the bound GrantRecord are typed `GRANT_MISMATCH` before execution. Revoke or `expires_at`: already-accepted work may finish; new dispatch is refused. Upgrade cannot widen or retarget without an explicit re-grant that bumps `context_revision`. Manifests request; the host grants. Story 44.3 Tool Registry is not rewritten. Additive CT-40; no new CT.
+The 2026-09-16 QML research-expansion spine (`architecture-QMX-2026-09-16/ARCHITECTURE-SPINE.md`, status draft/proposed, local AD-1..AD-21) is absorbed into `docs/` as **PROPOSED** composition over existing application-layer products. Preflight verdict: reuse — no new COMP, no sixth application, no new contract id, no new dependency edge (DEC-0402, [ADR-0023](decisions/ADR-0023-qml-research-expansion.md)). Operator-direct paradigm DEC-0380 is ratified; the package itself is proposed, not operator-accepted. Implementation authorization remains factory-pipeline-only.
 
-Touched: COMP-QMA-DAEMON `product_session` grant binding; [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb QML research AD-1..AD-21; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0380 ratified operator paradigm. DEC-0381..DEC-0401 (AD-1..AD-21) provisional. DEC-0402 umbrella provisional. DEC-0403..DEC-0407 package umbrellas provisional. DEC-0408..DEC-0413 dead. Local AD-1..AD-21 do not renumber QMF/QMB/QML/NODE/QMA/CONNECT/Workbench parents. |
+| Preflight | reuse existing application-layer products; **no new COMP**; **no new CT** |
+| Gaps | GAP-0064 new (FR-RES PRD hole, sibling to GAP-0061, DEC-0405); GAP-0073 layout trigger met, hybrid still deferred (DEC-0407); GAP-0085 still deferred — Stage 0 carries open roles; fill-now is dead DEC-0413; GAP-0061 not closed (mill FRs live on GAP-0064) |
+| Features | FEAT-0047..FEAT-0050 planned; first epic FEAT-0047 (AD-14 seed bind + Stage 0 view) |
+| Cheap-veto A1–A5 | A1 `source_id=strats` freeze; A2 AD-4 include/exclude lists; A3 six dim spellings + `unscored`; A4 QMA AD-19 empty-corpus factual refresh only; A5 FR-RES-* on GAP-0064, GAP-0061 not closed (DEC-0404) |
+| Touched docs | [ADR-0023](decisions/ADR-0023-qml-research-expansion.md) (new); [SCN-0017](scenarios/SCN-0017-stage0-honesty-envelope.md); qml, qma-core, qma-daemon, qma-wire, qmb, qmf-registry; CT-33/CT-34/CT-44/CT-07/CT-40/CT-32/CT-06 annotations; constitution; AGENTS.md; glossary; gap-report; traceability; index; overview; stack; dependencies; ADR-0018/0020/0022 dated follow-ups; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict expected-blocked** (ADR-0023 and SCN-0017 `status: provisional` per operator stamp) |
 
-## 2026-09-20 — Story 55.1: product_session.context is the bound request context
+## 2026-09-14 — Workbench expansion absorption (change mode)
 
-COMP-QMA-DAEMON mints `product_session` as a journal-derived projection on the existing daemon sqlite (`psess:` ids, not QMA Session `sess:`). `product_session.context` holds principal, nullable `account_scope`, occupancy `none` (not live-adjacent), contribution `(qualified_id, package_version)`, `instance_id`, `config_revision`, and `as_of`. A public call missing or stale versus that context is typed `mismatch`. Occupancy remains none. A tab is not this row; `scope_path` does not gain a segment. No sixth COMP and no new CT. At inspect SHA `270e992` this row did not exist.
+The 2026-09-14 workbench feature-altitude spine (`architecture-QMX-2026-09-14/ARCHITECTURE-SPINE.md`, status final, local AD-1..AD-16) is absorbed into `docs/` as composition over the existing application-layer products. Preflight verdict: reuse — no new COMP, no sixth application, no new contract id, no new dependency edge (DEC-0285, [ADR-0022](decisions/ADR-0022-workbench-expansion.md)). Implementation authorization remains factory-pipeline-only.
 
-Touched: COMP-QMA-DAEMON `product_session` journal projection; [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb workbench AD-1..AD-16; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0269..DEC-0287 minted ratified (authority rider). No live DEC superseded. Umbrella DEC-0285; wiring-status reconcile DEC-0286; cheap-veto DEC-0287. Local AD-1..AD-16 do not renumber QMF/QMB/QML/NODE/QMA/CONNECT parents. |
+| Preflight | reuse existing application-layer products; **no new COMP** |
+| Gaps | GAP-0061 (PRD FR addenda), GAP-0062 (workbench AD-10 / DEC-0278 host machine), GAP-0063 (first generator algorithm) deferred non-blocking; GAP-0085 ownership noted as QML/host write path (workbench AD-4 / DEC-0272) — nouns still deferred; QMA already refuses `GAP_0085_STRATEGY_MECHANISMS` |
+| Features | FEAT-0033..FEAT-0039 planned (connect-wave 0033–0038 first; generation 0039 may trail) |
+| Cheap-veto A1–A5 | A1 connect-wave first / generation trails; A2 work-environment roster UI-open; A3 generated layouts are not preference evidence; A4 Optuna pin stays `4.9.0`; A5 no PRD rewrite (GAP-0061) |
+| wiring_status | `source-inspected` — matching source exists on `integration@1b451a8`; composition-root / daemon-process / real-CLI-transport / e2e walk still connect work (DEC-0286) |
+| Touched docs | [ADR-0022](decisions/ADR-0022-workbench-expansion.md) (new); [SCN-0015](scenarios/SCN-0015-three-experiment-lanes.md); [SCN-0016](scenarios/SCN-0016-projection-vs-path-dependent.md); [SCN-0012](scenarios/SCN-0012-qmb-replay-run.md) (workbench_lane / research-paper / ExperimentSpec note); [index.md](index.md); this changelog. Broader blast radius (other Stage 9 seats): qmb/qml/qma-*/qmf-registry/qmf-risk/qmf-data/trading-node component specs; CT-22..34 and CT-40..51 wiring comments; constitution; overview; stack; dependencies; glossary; gap-report; traceability; AGENTS.md; ADR-0017/0018/0020 dated follow-ups |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict CLEAN** |
 
-## 2026-09-20 — Story 54.4: GrantRecord is immutable; revocation is a separate record
+## 2026-09-11 — CONNECT FX paper absorption (change mode)
 
-`GrantRecord` is immutable after mint and does not carry `revoked_at`. Fields follow CONTRACTS §3b: `grant_id`, `principal`, `audience`, contribution `(qualified_id, package_version)`, `instance_id`, `config_revision`, `op_id`, `op_version`, `effect_class`, `parameter_ceiling.allow_keys`, `account_scope` (null unless granted), `expires_at`. Revocation is append-only `GrantRevocation` `{grant_id, revoked_at, principal, reason}`; minted GrantRecord bytes do not change. Evaluation moments are accept, dispatch, nested call, retry, and external commit: already-accepted work may finish under the grant that accepted it; new dispatch after revoke or `expires_at` is refused. Upgrade cannot widen or retarget without an explicit re-grant that bumps `context_revision`. Manifests request; the host grants. `product_session.granted_ops` stores `grant_id`s, not bare op-id strings — this story does not mint `product_session` rows (Epic 55). Additive CT-40; no new CT.
+The 2026-09-11 CONNECT child feature spine (`architecture-CONNECT-2026-09-11/ARCHITECTURE-SPINE.md`, status final) is absorbed into `docs/` as hexagonal port completion on the existing cTrader adapter. Preflight verdict: reuse `COMP-QMN` and `COMP-QMF-VENUE` — no new component, no new contract id, no new dependency edge (DEC-0268, [ADR-0021](decisions/ADR-0021-connect-fx-paper.md)). Implementation authorization remains factory-pipeline-only.
 
-Touched: [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
-
-## 2026-09-20 — Story 54.3: Idempotency domain, nested identity, and effect-specific outcomes
-
-Caller issues `idempotency_key`. Uniqueness domain is `(principal, op_id, op_version, instance_id, config_revision, grant_id, target, canonical_input_hash)` with retention at least the journal lifetime of the invocation. Collision with a different payload hash is a typed refusal; replay of the same key within retention returns the prior result. Nested public calls carry `parent_logical_invocation_id` and `call_depth`; child `logical_invocation_id` derives from `(parent, depth, child_op_id, child_canonical_input_hash)` and nested invocation does not union permissions. Effect-class outcomes: `none`/`read` may retry; `append-evidence` dedupes; `mutate-config` is CAS on `config_revision`; `place-run` treats `logical_invocation_id` as run identity; `external-egress` must obtain a receipt or become `unknown` and must not blind-retry. `reconcile_policy` is `query-then-decide` | `unknown-manual` | `never-retry` (SCN-0021 Then 3).
-
-Touched: [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
-
-## 2026-09-20 — Story 54.2: InvocationEnvelope is bound request context, not authority
-
-Every public call (in-process, CLI, wire, nested) carries an additive CT-40 `InvocationEnvelope` with the cheap-veto A3 / CONTRACTS §1b field set. Transport never bypasses it. The envelope is signed/bound request context: the host resolves contribution, descriptor, and `GrantRecord` from authoritative stores, compares every bound field, and emits typed `stale` / `mismatch` / `GRANT_MISMATCH` before execution. Ambiguous `instance_id` or `config_revision` is a typed refusal — never silent latest. `input_hash` is canonical JSON of the `input_schema`-validated payload (sorted keys); secrets are never inlined. The signature algorithm remains `GAP-DESK-ENVELOPE-CRYPTO`; mismatch refuse is still required. GrantRecord minting/revocation is Story 54.4. At inspect SHA `270e992` this envelope was not on the wire.
-
-Touched: [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
-
-## 2026-09-19 — Story 53.4: A hit is not a grant; listings distinguish published from healthy
-
-Publishing or discovering a ContributionHit does not authorize invoke (SCN-0018 Branch B). Discovery listings distinguish published vs configured vs granted vs reachable vs healthy as independent axes; a hit is not a grant even when published and healthy. `view:*` remains an AD-17 wire DTO only — not a plugin contribution point and not a ContributionHit (GAP-0081). Stage 0 hypotheses / `research_ref` stay off this DTO. Occupancy remains none. `product_session.granted_ops` stay a separate AD-8 state; this story does not mint `product_session` (Epic 55). Tool availability still requires the later GrantRecord intersection (Stories 54/55). At inspect SHA `270e992` this listing overlay was not wired.
-
-Touched: COMP-QMA-WIRE listing and view:* DTOs on additive CT-40; COMP-QMA-DAEMON listing overlay over `published_contributions()`.
-
-## 2026-09-19 — Story 53.3: Pin tuple, invoke revalidation, and disable yields tombstone
-
-A ContributionHit pin stores `(qualified_id, package_version, availability_revision)` — not a descriptor digest and not fp1. Invoke revalidates that exact tuple against the live published roster and `availability_revision`. A matching live tuple may proceed to grant checks later (Stories 54/55); the pin alone is not a grant. After disable, uninstall, or leave-roster, a later invoke of that pin is typed `unavailable` or `tombstone` — never another `package_version`, never another contribution, never a stale fp1. In-flight `pin_leases` keep the bytes they started with; GC only when leases are empty and no dependant remains. Side-by-side versions remain allowed. Pin leases live on the existing `plugin_install_records` projection (no sixth sqlite class). At inspect SHA `270e992` this pin/tombstone path was not wired.
-
-Touched: COMP-QMA-WIRE pin DTO on additive CT-40; COMP-QMA-DAEMON pin/invoke/lease over `published_contributions()`.
-
-## 2026-09-19 — Story 53.2: Concatenate live published_contributions(); pack contributes expand at enable
-
-Federated search concatenates CT-44 Knowledge search, COMP-QMB `library.search`, and COMP-QMA-DAEMON `published_contributions()`. It is never a fourth store and never a door run; occupancy remains none. QMB never opens daemon sqlite; the daemon never `import qmb`. Pack `contributes` are `{point, local_id}` objects (never opaque strings); `qualified_id` defaults to `package_id + ":" + local_id`. Colliding `(point, qualified_id)` on enable refuses and the previous roster stays consistent. Successful enable publishes `availability_revision` atomically with the roster swap so ContributionHits appear on the next concatenate. Ranked/semantic/hybrid stays `unsupported-capability` (GAP-0073).
-
-Touched: COMP-QMA-CORE pack `contributes` parsing; COMP-QMA-DAEMON federated concatenate and plugin enable.
-
-## 2026-09-19 — Story 53.1: Federated DTO gains ContributionHit on additive CT-40
-
-COMP-QMA-WIRE format-mints ContributionHit on the existing CT-40 federated hit family. A hit is exactly one of KnowledgeHit, ArtifactHit, or ContributionHit. ContributionHit identity is the live `published_contributions()` tuple (`hit_class=contribution`, `plugin_id`, `point`, `qualified_id`, `package_id`, `package_version`, `availability_revision`, `availability`) and is never fp1, never a registry kind, and never `ArtifactHit.kind`. No new CT number (do not mint CT-52). `facade_search` / `facade_get` remain the discovery query names. `view:*` is not a ContributionHit (GAP-0081). `hit_class` `strats` / `qml_candidate` / hypothesis kinds stay refused (DEC-0412). At inspect SHA `270e992` the third class was not on the wire.
-
-Touched: [ct-40-qma-wire-envelope.yaml](contracts/ct-40-qma-wire-envelope.yaml).
-
-## 2026-09-15 — Story 36.2: Production QMB door is a real qmb CLI transport
-
-The QMA Backtesting Service default door is `CliQmbDoorTransport`, which subprocess-spawns a `qmb` CLI process along Agent → QMA backtest tool → Backtesting Service → qmb door → QMB. `RecordingQmbDoorTransport` remains a non-production recorder and is not a working integration. The daemon, plugins, and worker images still have no `import qmb` edge. Occupancy stays one `qmb` run per ExecutionEnvironment. `JobHandle.cancel` still does not map onto a live `qmb` abort (Story 36.5).
-
-Touched: [qma-daemon.md](components/qma-daemon.md).
-
-## 2026-09-14 — Story 32.3: Extensibility rungs 1–3 bind; rung 4 stays GAP-0081
-
-The public extension surface is exactly three rungs (DEC-0280; FR-W37): ui-editable config variables on templates (`configurable: true`, L38); ordinary Python logic plus QMB ports/adapters; and QMA plugins, skills, graph templates, and desk packs. Rung 4 (UI contribution SDK / `qma-ui-contract`) is refused as GAP-0081 deferred; no `ui_view` contribution point is minted. No-code authoring (SQ-style DSL, RandomCondition editor, `.qml` revival) is not an extension rung — ordinary Python remains the logic path. QMA `plugin` vocabulary stays QMA-scoped (DEC-0346); no QMB module is a plugin. The work-environment roster remains a later UI alias over fingerprints and is not minted as a roster kind (NFR-W06 A2; FR-W16).
-
-Touched: [qma-core.md](components/qma-core.md), [qma-daemon.md](components/qma-daemon.md), [qma-wire.md](components/qma-wire.md), [qml.md](components/qml.md), [qmb.md](components/qmb.md).
-
-## 2026-09-14 — Story 32.2: Tab-close cancels nothing
-
-`JobHandle.cancel` is the only coordinated cancel authority (DEC-0278; FR-W36). UI client detach and tab-close leave JobHandle state unchanged and never write `cancelled`, `aborted`, `failed`, or `done`. A plugin, Routine, worker, or UI widget cannot set a terminal JobHandle or QMB ledger state. While the QMA→QMB door is `RecordingQmbDoorTransport`, `JobHandle.cancel` still enters `cancelled` (Story 45.4) and does not map onto a live `qmb` abort (Epic 36). Ungoverned `qmb.run()` process death writes nothing to the QMB ledger or Experiment Ledger.
-
-Touched: [qma-core.md](components/qma-core.md), [qma-daemon.md](components/qma-daemon.md), [qma-wire.md](components/qma-wire.md).
-
-## 2026-09-14 — Story 32.1: Continuation is a daemon property
-
-Laptop-off continuation is owned by `qma-daemon` plus a reachable remote ExecutionEnvironment plus the durable outbox (DEC-0278). A laptop-only reachable set is a typed refusal. GAP-0062's always-on host stays operator config — no machine name is invented. QMB process-per-run and Story 46.7 continuation budgets are unchanged.
-
-Touched: [qma-daemon.md](components/qma-daemon.md), [qma-wire.md](components/qma-wire.md), [variables.yaml](registry/variables.yaml).
-
-## 2026-09-02 — Story 26.16: V1 seat-containment limit stated honestly
-
-Release and security prose now state that V1 has **no hardened OS-level memory or security confinement** for bot seats, cite **GAP-0054** as still `deferred`, and retain the compensating controls (QL-8 static scan, capability starvation, host process isolation, callback deadline, memory ceiling, quarantine, plus slice-progress last-resort). This does not close GAP-0054 and invents no higher cap.
-
-Touched: [security-model.md](lenses/security/security-model.md), [qml.md](components/qml.md), [trading-node.md](components/trading-node.md), [incident-playbook.md](lenses/ops/incident-playbook.md), [gap-report.md](gap-report.md) (GAP-0054 remains deferred), `qmn/FAILURES.md` FR-19.
+| Field | Value |
+|---|---|
+| Mode | Change mode Stage 9 — absorb CONNECT AD-1..AD-5; Stages 1–8 not rebuilt |
+| Authority snapshot | DEC-0263..DEC-0268 minted ratified (authority rider). No live DEC superseded. DEC-0266 interprets DEC-0247 (observation names the CT-20 kind; journal type is `data quality`) and does not supersede it. |
+| AD-1 / DEC-0263 | Fail-closed live selection by `(world, VenueId)` reading explicit roster `VenueClientKind`; unknown live `VenueId` is `unsupported capability` |
+| AD-2 / DEC-0264 | Honest FX paper: vendor demo host + `AccountRole.DEMO` + `world=live` + same live client + CT-19 encode + position/balance read-back. Sensing-only submit is not paper. |
+| AD-3 / DEC-0265 | Encode and `connect_open_api` complete `ConnectionManager` in `qmf-venue`; `qmn.venue` remains the sole importer; production must call `connect_open_api` |
+| AD-4 / DEC-0266 | FTR-01 closed: `position-read-back` / `balance-read-back` map onto CT-13 `data quality` |
+| AD-5 / DEC-0267 | Crypto plurality without a fourth V1 kind; no exchange pick this increment |
+| Gaps | GAP-0059 (FTR-02) and GAP-0060 (canonical live source token) deferred non-blocking |
+| Feature | FEAT-0032 planned, blocked_by FEAT-0023/0024/0026/0031 |
+| Cheap-veto A1–A5 | A1 FX-first / crypto later; A2 brownfield SHA `1b451a8`; A3 journal type `data quality`; A4 protobuf stays `==7.36.0`; A5 no PRD amendment |
+| Touched docs | [ADR-0021](decisions/ADR-0021-connect-fx-paper.md) (new); [trading-node.md](components/trading-node.md); [qmf-venue.md](components/qmf-venue.md); [ctrader.md](components/ctrader.md); CT-13/CT-18/CT-19/CT-20/CT-21; constitution L21/L22/L30; [overview.md](architecture/overview.md); [stack.md](architecture/stack.md); [glossary.md](glossary.md); [gap-report.md](gap-report.md); [traceability](knowledge/traceability.md); [index.md](index.md); [AGENTS.md](AGENTS.md); [SCN-0005](scenarios/SCN-0005-uncertain-venue-submission.md); [ADR-0019](decisions/ADR-0019-trading-node.md) dated CONNECT follow-up; this changelog |
+| Gates | validate_ledger PASS; validate_registry PASS; validate_inventory PASS (pre-existing house-accepted warnings only); check_citations PASS (house-accepted dead-DEC class only); lint_docs CLEAN; **lint_docs --strict CLEAN** |
 
 ## 2026-08-30 — Trading-node increment veto round closed (operator rulings)
 

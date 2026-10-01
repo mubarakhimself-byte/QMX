@@ -4,10 +4,10 @@ title: QMF V1 Stack and Pipeline
 type: architecture
 status: ratified
 depends_on: [COMP-QMF-CORE, COMP-QMF-REGISTRY, COMP-QMF-DATA, COMP-QMF-INDICATORS, COMP-QMF-STRUCTURE, COMP-QMF-VENUE, COMP-QMF-RISK, COMP-QMF-DATA-INGEST, COMP-QMF-DATA-STORE, COMP-QMF-DATA-BACKUP, COMP-QMB, COMP-QML, COMP-QMN, COMP-CTRADER, COMP-DUKASCOPY, COMP-CALENDAR-FEED, COMP-OBJECT-STORAGE, COMP-QMA-CORE, COMP-QMA-WIRE, COMP-QMA-DAEMON]
-decisions: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0118, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0189, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, DEC-0259, DEC-0334, DEC-0335, DEC-0336, DEC-0337, DEC-0342, DEC-0344, DEC-0347]
-sources: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ctrader-venue-facts.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/spotware-org-inventory.md, docs/decisions/ADR-0019-trading-node.md, docs/architecture/dependencies.yaml, docs/registry/variables.yaml, docs/contracts/]
+decisions: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0118, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0189, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, DEC-0259, DEC-0268, DEC-0285, DEC-0287, DEC-0334, DEC-0335, DEC-0336, DEC-0337, DEC-0342, DEC-0344, DEC-0347, DEC-0392, DEC-0401, DEC-0432, DEC-0445, DEC-0451]
+sources: [DEC-0008, DEC-0009, DEC-0011, DEC-0013, DEC-0022, DEC-0024, DEC-0030, DEC-0033, DEC-0035, DEC-0042, DEC-0045, DEC-0055, DEC-0058, DEC-0059, DEC-0060, DEC-0065, DEC-0089, DEC-0091, DEC-0096, DEC-0099, DEC-0100, DEC-0101, DEC-0102, DEC-0103, DEC-0104, DEC-0106, DEC-0111, DEC-0117, DEC-0126, DEC-0127, DEC-0128, DEC-0129, DEC-0135, DEC-0136, DEC-0137, DEC-0138, DEC-0139, DEC-0141, DEC-0143, DEC-0159, DEC-0167, DEC-0168, DEC-0171, DEC-0178, DEC-0180, DEC-0184, DEC-0186, DEC-0196, DEC-0197, DEC-0198, DEC-0199, DEC-0200, DEC-0201, DEC-0202, DEC-0208, DEC-0211, DEC-0212, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QML-2026-08-21/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-14/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ctrader-venue-facts.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/spotware-org-inventory.md, docs/decisions/ADR-0019-trading-node.md, docs/decisions/ADR-0022-workbench-expansion.md, docs/decisions/ADR-0023-qml-research-expansion.md, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-09-18/ARCHITECTURE-SPINE.md, docs/architecture/dependencies.yaml, docs/registry/variables.yaml, docs/contracts/]
 generated: 2026-08-18
-verified: '2026-08-29'
+verified: 2026-09-25
 stale_after: 90d
 ---
 
@@ -33,7 +33,7 @@ Every version was verified on the web 2026-08-19 and re-verified at the sitting'
 | TA-Lib (C library + Python wrapper) | 0.7.1 + 0.7.1 — AD-23 canonical arithmetic reference, pinned per QMF release as lockfile-resolved artifacts (distribution filename + hash) plus the declared reference-configuration record asserted at import; verified current 2026-08-20 | DEC-0127 |
 | tzdata (PyPI) | pinned in calendar extensions only; `TZPATH` is forced to the pin and the resolved version participates in fingerprints | DEC-0106 |
 | Spotware openapi-proto-messages | integer release tag 91 (MIT) — the cTrader venue protocol artifact, pinned in the AD-6 register; the GitHub Releases feed is the change record; a tag change mints a new capability declaration plus gated re-verification. Message definitions only (data, not code) | DEC-0141 |
-| protobuf (runtime) | pinned per QMF release; decodes the Spotware proto message definitions at the venue network edge; permitted in `qmf-venue` only, never in `qmf-core` | DEC-0141 |
+| protobuf (runtime) | `==7.36.0` in `qmf-venue` only; 7.36.1 exists 2026-08-31 and is not adopted here (CONNECT A4, cheap-veto) | DEC-0141, DEC-0268 |
 
 numpy, pandas, and pyarrow are permitted only in outer packages — never in `qmf-core`, which takes zero outside dependencies. The store stack — Parquet, DuckDB, SQLite, JSONL — is ratified behind QMF-owned contracts, and DuckDB's engine major is pinned per release (DEC-0117). TA-Lib is the ratified AD-23 canonical arithmetic reference — C library 0.7.1 + Python wrapper 0.7.1, pinned per QMF release as lockfile-resolved artifacts (distribution filename + hash) plus a declared reference-configuration record asserted at import — and the reference pair is recorded in the AD-6 `DEPENDENCIES.md` register. (DEC-0104, DEC-0117, DEC-0127) The Spotware `openapi-proto-messages` package supplies the cTrader wire schema, pinned at integer release tag 91; only its proto message definitions are consumed, and the official OpenApiPy SDK is **reference-only** because its pinned Twisted reactor violates AD-6's platform-imposing prohibition, so zero Spotware code runs in QMX. (DEC-0141)
 
@@ -150,15 +150,18 @@ QMB is the experimentation/backtesting application product — one pure library 
 | Name | Version | Role | Cites |
 |---|---|---|---|
 | click | 8.4.2 (exact) | The `qmb` CLI door | DEC-0168 |
-| optuna | 4.9.0 (exact) | Default sampler adapter behind the typed parameter-space port; runs `n_jobs=1` | DEC-0168 |
+| optuna | 4.9.0 (exact) | Default sampler adapter behind the typed parameter-space port; runs `n_jobs=1` | DEC-0168, DEC-0287 |
 
-Both pins were verified on the web 2026-08-20. `click` and `optuna` are pinned exactly; an optuna **major** bump is a contract-versioning event — the sampler sits behind a versioned adapter port — not a silent upgrade, and optuna always runs single-process (`n_jobs=1`), leaving process management to the QMB orchestrator. The pins are held authoritatively by the `qmb_cli_pin` and `qmb_sampler_pin` registry rows — non-configurable version pins, never UI-editable — and are referenced here, not restated as authority. (DEC-0168)
+Both pins were verified on the web 2026-08-20. `click` and `optuna` are pinned exactly; an optuna **major** bump is a contract-versioning event — the sampler sits behind a versioned adapter port — not a silent upgrade, and optuna always runs single-process (`n_jobs=1`), leaving process management to the QMB orchestrator. The pins are held authoritatively by the `qmb_cli_pin` and `qmb_sampler_pin` registry rows — non-configurable version pins, never UI-editable — and are referenced here, not restated as authority. (DEC-0168) Upstream Optuna 5.0.0 exists (2026-09-07); the workbench sitting does **not** adopt it — `optuna==4.9.0` stays the QMB lockfile pin (DEC-0287 A4 / DEC-0168). The 2026-09-14 workbench increment inherits every pin above and adds **no new framework** ([ADR-0022](../decisions/ADR-0022-workbench-expansion.md), DEC-0285, DEC-0287).
 
 ## QML application stack
 
 QML is the QMX bot-authoring library — one uv-installable pure library (`import qml`) — outside the seven-package roster and outside QMF V1, consuming the QMF backend libraries (`qmf-core`, `qmf-registry`, `qmf-risk`) in lockstep. It inherits QMF's runtime and quality toolchain unchanged: CPython 3.14 on the tier-1 OSes, uv, `uv_build`, ruff, pyright, pytest, and poethepoet exactly as fixed above. Its distribution is `uv add qml` — a lockfile-tracked pinned dependency — and SemVer is display-only provenance, never identity (CT-33 `fp1` and the logic-artifact source-manifest identity carry Bot identity); the `qmf-*` packages are consumed in lockstep. **QML pins no new runtime dependency**: it adds nothing beyond the `qmf-*` packages it consumes, so there is no QML pins table below. (DEC-0180)
 
 One mechanism is deliberately scoped rather than pinned: the conformance gate's Layer-2 runner isolation in V1 is **static AST/import scanning + capability starvation (hosts inject read surfaces only) + host process isolation** (stdlib process management, the host owning process spawning). Hardened OS-level runtime confinement (restricted tokens/job objects on Windows, seccomp-class on Linux) is a **named deferred dependency** of the node/platform sitting, **not a hidden pin**; a dynamically-evasive malicious bot is out of V1's threat model (bots are operator- or operator's-agent-authored). Any future authoring-surface dependency (an editor, a grammar) arrives with its own sitting. (DEC-0178)
+
+**[PROPOSED]** The QML research expansion adds no new runtime framework. json-render and MCP Apps are presentation candidates, not daemon dependencies (DEC-0392). Inherited pins stand. Hypothesis persistence is a host-filesystem blob store under `research_root`, not daemon SQLite (DEC-0401).
+
 
 ## Trading node application stack
 
@@ -169,8 +172,8 @@ Every pin below was verified 2026-08-28 as authoring evidence and is registered 
 | Name | Version / status | Role | Cites |
 |---|---|---|---|
 | `just` (external tool) | v1.58.0 (released 2026-08-03) | The operations-toolkit runner: `just node-…` recipes in the root justfile whose bodies live under `qmn/deploy/justfile-recipes/` — DevOps tooling, never a product command line; installed by the day-one bootstrap before any recipe runs | DEC-0186, DEC-0201 |
-| Container runtime (external tool) | docker-ce `28.3.3` + compose plugin `2.39.2` | Provisioning installs it for the SEPARATE observability stack alone, with the image registry added to the egress allow-list; the trading node keeps its no-container-requirement and runs and passes with the stack absent | DEC-0201, DEC-0212 |
-| Observability stack — Prometheus + Grafana + Loki/Promtail-class (external tools) | `prom/prometheus:v3.5.5`, `grafana/grafana:13.1.4`, `grafana/loki:3.7.7`, `grafana/promtail:3.6.11` (never floating tags) | A separate zero-authority system under `qmn/deploy/observability/` (its own checked-in compose file, its own non-`qmx` account, its own storage budget), the one place containers are permitted; the node itself is a plain systemd service, and this stack is a zero-authority consumer of the node's exported signals | DEC-0200, DEC-0201, DEC-0212 |
+| Container runtime (external tool) | SEED ONLY — a Docker- or Podman-class runtime plus compose, version pinned at the implementation gate | Provisioning installs it for the SEPARATE observability stack alone, with the image registry added to the egress allow-list; the trading node keeps its no-container-requirement and runs and passes with the stack absent | DEC-0201, DEC-0212 |
+| Observability stack — Prometheus + Grafana + Loki/Promtail-class (external tools) | SEED ONLY — versions pinned at the implementation gate, never floating tags | A separate zero-authority system under `qmn/deploy/observability/` (its own checked-in compose file, its own non-`qmx` account, its own storage budget), the one place containers are permitted; the node itself is a plain systemd service, and this stack is a zero-authority consumer of the node's exported signals | DEC-0200, DEC-0201, DEC-0212 |
 | prometheus_client | ==0.26.0 (Apache-2.0) | Metric registry and exposition format for the node's `qmn_` signal families; exposition only | DEC-0200 |
 | cryptography | ==50.0.1 (Apache-2.0 OR BSD-3-Clause; released 2026-08-25) | AEAD (`ChaCha20Poly1305` / `AESGCM`) for the KEK store and the CT-14 payload cipher; resolves to the cp311-abi3 wheels on Linux x86-64 and Windows | DEC-0197 |
 | rclone (external tool) | v1.75.0 (MIT; released 2026-07-31) | Off-machine backup transfer only (native Backblaze B2 and S3 backends covering R2/Wasabi/MinIO); pinned in the AD-6 register as a tool, never a Python dependency | DEC-0198 |
@@ -180,7 +183,7 @@ Every pin below was verified 2026-08-28 as authoring evidence and is registered 
 | keyring (workstation wizard only) | ==25.7.0 (`WinVaultKeyring`) | Reads the `qmx/*` provisioning secrets and the escrowed CT-14 backup payload key from Windows Credential Manager during provisioning; not a VPS dependency | DEC-0197 |
 | Python stdlib sd_notify | 3.14 — the raw `sd_notify` wire protocol over an `AF_UNIX` datagram socket | Owned by the supervisor and door layer; there is NO stdlib `sd_notify` helper and NO `python-systemd` dependency | DEC-0189 |
 | click | **NOT TAKEN by the node** | The node ships no command line, so no CLI framework is a node dependency; QMB keeps its own `==8.4.2` pin, unaffected | DEC-0186, DEC-0211 |
-| protobuf | stays `qmf-venue`'s `==7.36.0` | The cTrader transport increment keeps protobuf inside `qmf-venue`; the node adds no protobuf dependency of its own and reaches the venue only through the `qmn.venue` import boundary | DEC-0196, DEC-0186 |
+| protobuf | stays `qmf-venue`'s `==7.36.0` | The cTrader transport increment keeps protobuf inside `qmf-venue`; the node adds no protobuf dependency of its own and reaches the venue only through the `qmn.venue` import boundary. CONNECT 2026-09-11 does not bump to 7.36.1 (DEC-0268) | DEC-0196, DEC-0186, DEC-0268 |
 
 No Twisted, no Spotware SDK, no database server, and no OpenTelemetry in V1 — the exportable signals suffice — and **no container for the node**: it runs as a plain systemd service and no Docker requirement stands over it (NFR-10); containers appear only in the separate observability stack the node neither needs nor waits for. (DEC-0200, DEC-0201)
 
@@ -213,6 +216,31 @@ The QMX agentic system (QMA) is a third application-layer product — the daemon
 | pgvector (arrives only with the deferred memory provider) | 0.8.6 — deferred | Arrives only with the deferred memory backend | DEC-0334, DEC-0342 |
 
 The JSON-Schema validator is deliberately `[UNPINNED]` — the implementation choice is made at the build gate rather than invented here. Hindsight and pgvector are deferred and arrive only with the deferred external memory provider behind its eval (GAP-0072). OpenCodex sits behind the `ModelDeployment` contract with `auth_mode: none` and a mandatory loopback bind, and its own provider credentials stay outside QMA's namespace (DEC-0344). QMA pins no database server: the daemon's stores are SQLite, DuckDB fold views, and append-only journals behind daemon-owned contracts, and the no-database-server rule binds QMA's own stores while never reaching inside a provider's storage behind a QMA-owned port (DEC-0342).
+
+## Workflows construction kit — no new runtime pins
+
+The 2026-09-19 Workflows fold adds **no new runtime pins** and no new product dependency (DEC-0445, DEC-0451). n8n, OpenBB, json-render / `@json-render/*`, MCP Apps, Hermes, LEAN, and QuantConnect are **mental models only** — not product dependencies and not imported runtimes (DEC-0432, DEC-0451). mutmut remains optional test-strength only (WSL/POSIX on Windows, disposable copy, never `mutmut apply` on the shared worktree); it is not a product pin (DEC-0432). Inherited QMF/QMB/QML/QMN/QMA pins stand unchanged.
+
+## Pack-and-grant kit — no new runtime pins
+
+The 2026-09-23 pack-and-grant fold adds **no required runtime** (DEC-0461, DEC-0459). json-render remains unpinned (upstream v0.21.0 cited as a presentation candidate, not a pin). MCP Apps remain a SEP-1865-class presentation candidate, not storage. OpenTelemetry remains export-port adapter only (DEC-0322, DEC-0456). Inherited pins stand unchanged.
+
+## QMX UI host stack (client of COMP-QMA-WIRE)
+
+QMF V1 still has no UI layer (DEC-0009). The 2026-09-25 fold adds a **QMX product UI** seed as a Svelte client of `COMP-QMA-WIRE`, not a COMP and not a QMF runtime (DEC-0469, DEC-0505). Optional frontend adapter pins stay optional (DEC-0459). This sitting mints no QMA Python runtime change. The first-party Svelte host is absent at `integration@34c148be` (DEC-0507).
+
+| Name | Version / status | Role | Cites |
+|---|---|---|---|
+| Svelte | 5.57.1 | Host framework | DEC-0469 |
+| SvelteKit | 2.70.3 `adapter-static`, `ssr=false` | Static SPA; origin is never daemon port 8765 | DEC-0469 |
+| TypeScript | 5.9 | Kit 2 peer | DEC-0469 |
+| Vite | 8.3.0 | Bundler | DEC-0469 |
+| Tailwind CSS | 4.3.3 | Utility CSS | DEC-0469 |
+| shadcn-svelte | 1.7.0 Rhea compact | Working visual seed, not a brand freeze | DEC-0469, DEC-0510 A12 |
+| bits-ui | 2.19.3 | Primitive kit | DEC-0469 |
+| `@xyflow/svelte` | 1.6.6 | Graph canvas | DEC-0469 |
+| Node.js | `>=22.12.0 <23.0.0` | Toolchain; pnpm lockfile at an unexecuted scaffold gate | DEC-0469, DEC-0510 A13 |
+| Tauri 2 | optional later shell | Not required for v1 protocol (`GAP-0112`) | DEC-0478 |
 
 ## Related
 

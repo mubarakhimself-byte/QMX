@@ -41,3 +41,13 @@ Rules:
   post-implementation QA phase — test design, tracing, automation — run
   against factory-built code on `integration`. They remain planning/QA
   instruments: implementation still ships only through the factory lanes.
+
+## Attended Codex release lane — operator authorization 2026-10-01
+
+For `release/rc-2026-10-01`, the operator authorizes Codex coordination,
+GPT 6 Luna implementation, and independent GPT 6.1 Sol exploration/review.
+Ratified `main` documentation governs; factory/static/QA checks remain required.
+Work stays in the isolated release worktree. No automatic push or merge is allowed;
+`main`, `integration`, and `ui-integration` remain under operator control.
+The separately attended Claude session owns `apps/qmx-ui`; Codex integrates its
+reviewed contribution and owns backend, shared contracts, gates and packaging.

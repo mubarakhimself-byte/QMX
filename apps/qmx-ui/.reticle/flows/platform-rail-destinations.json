@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "name": "platform-rail-destinations",
+  "projectId": "qmx-ui",
+  "precondition": {
+    "kind": "element",
+    "query": { "testid": "rail-product-destinations" },
+    "state": "visible"
+  },
+  "createdAt": 1790700000000,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-home" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-home" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "home"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "productDestinationCount",
+            "equals": 4
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "settingsIsProduct",
+            "equals": false
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "openedAppIconCount",
+            "equals": 0
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-copilot" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-copilot" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "copilot"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "openedAppIconCount",
+            "equals": 0
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-library" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-library" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "library"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "reticle_act",
+      "anchor": { "kind": "testid", "value": "rail-authoring" },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "destination-authoring" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "selectedDestination",
+            "equals": "authoring"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "productDestinationCount",
+            "equals": 4
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "settingsIsProduct",
+            "equals": false
+          },
+          {
+            "kind": "state",
+            "store": "qmx-shell",
+            "path": "openedAppIconCount",
+            "equals": 0
+          }
+        ]
+      }
+    }
+  ],
+  "startPath": "/",
+  "intent": "With zero opened apps, the platform rail selects Home, Copilot, Library, and Authoring as independent destinations; Settings is not a product destination.",
+  "intentId": "flow:platform-rail-destinations"
+}

@@ -1,0 +1,6 @@
+{
+  "host": "qmx-ui",
+  "inspect_sha": "34c148be404a375cbfd79fd4ce6997452e4f1d20",
+  "first_party_svelte_at_inspect": false,
+  "daemon_port_forbidden": 8765
+}

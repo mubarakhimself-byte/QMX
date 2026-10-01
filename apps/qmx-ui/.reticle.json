@@ -1,0 +1,5 @@
+{
+  "framework": "sveltekit",
+  "projectId": "qmx-ui",
+  "port": 4400
+}

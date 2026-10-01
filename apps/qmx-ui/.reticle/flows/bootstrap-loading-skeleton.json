@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "name": "bootstrap-loading-skeleton",
+  "projectId": "qmx-ui",
+  "precondition": {
+    "kind": "state",
+    "store": "qmx-bootstrap",
+    "path": "chromeState",
+    "equals": "empty"
+  },
+  "createdAt": 1790606424855,
+  "steps": [
+    {
+      "tool": "reticle_act",
+      "anchor": {
+        "kind": "testid",
+        "value": "fixture-loading"
+      },
+      "args": {},
+      "action": "click",
+      "expect": {
+        "kind": "allOf",
+        "predicates": [
+          {
+            "kind": "element",
+            "query": { "testid": "bootstrap-skeleton" },
+            "state": "visible"
+          },
+          {
+            "kind": "state",
+            "store": "qmx-bootstrap",
+            "path": "chromeState",
+            "equals": "loading"
+          }
+        ]
+      }
+    }
+  ],
+  "startPath": "/",
+  "intent": "Clicking the loading factory-test fixture shows the bootstrap skeleton on the QMX SPA origin, not daemon 8765.",
+  "intentId": "flow:bootstrap-loading-skeleton"
+}
