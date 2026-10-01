@@ -24,7 +24,7 @@ from qmb.host.operator_replay import (
     _materialize_builder,  # pyright: ignore[reportPrivateUsage]
     _runtime_policy_identity,  # pyright: ignore[reportPrivateUsage]
 )
-from qmb.host.qma_cli import QmaBacktestContext
+from qmb.host.qma_cli import QmaBacktestContext, decode_qma_backtest_context
 from qmb.host.replay_request import ReplayInputRequest, persist_replay_request
 from qmb.orchestrator.ledger import read_merge_view
 from qmf.core import Fingerprint, Result, World, fingerprint, is_ok
@@ -48,7 +48,7 @@ def _ok(result: Result[T]) -> T:
 
 
 def _builder_source() -> str:
-    return '''from pathlib import Path
+    return """from pathlib import Path
 from qmb.config import STARTING_CAPITAL_KEY, compile_run_config
 from qmb.execution import (COST_ADAPTER_KEY, COST_ADAPTER_PER_LOT, COST_CALIBRATION_KEY,
     FILL_ADAPTER_DECLARED_PATH, FILL_ADAPTER_KEY, FILL_BASIS_KEY,
@@ -175,7 +175,7 @@ def build(context, binding, port, book_fragment, bms_fragment):
     return Ok({"request": request.value, "config": compiled.value,
         "bound_execution": bound.value, "admission": admission.value,
         "journal_reader": reader, "terminal_ledger": ledger.value})
-'''
+"""
 
 
 def _context_payload(
@@ -232,9 +232,7 @@ def _initial_descriptor(
     bms_ref: Fingerprint,
 ) -> dict[str, object]:
     files = {"runtime_builder.py": _builder_source()}
-    builder_stamp = _ok(
-        fingerprint({"class": "qmb-operator-builder-source-v1", "files": files})
-    )
+    builder_stamp = _ok(fingerprint({"class": "qmb-operator-builder-source-v1", "files": files}))
     policy_identity: dict[str, object] = {}
     body: dict[str, object] = {
         "class": OPERATOR_BINDING_KIND,
@@ -320,9 +318,7 @@ def prepare_operator_replay_runtime(
 
     env = _environment(payload, tmp_path / "runtime")
     context = _ok(
-        decode_qma_backtest_context(
-            payload_text=env["QMA_QMB_DOOR_PAYLOAD"], environ=env
-        )
+        decode_qma_backtest_context(payload_text=env["QMA_QMB_DOOR_PAYLOAD"], environ=env)
     )
     body = _initial_descriptor(
         context,
@@ -433,6 +429,18 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
             timeout=60,
         )
         assert refused.returncode != 0
+        bool_attempt = {**response, "attempt_id": True}
+        claim_path.write_text(json.dumps(bool_attempt), encoding="utf-8")
+        bool_refused = subprocess.run(
+            [str(cli), "backtest", "run"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=verification_environment,
+            timeout=60,
+        )
+        assert bool_refused.returncode != 0
+        assert "terminal_result" in bool_refused.stderr
     terminal_lines = _ok(
         read_merge_view(roots["terminal_ledger"], world=World.REPLAY, role="confirmation")
     )
@@ -440,3 +448,44 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     assert terminal_lines[0].ct32_fingerprint is not None
     assert terminal_lines[0].ct32_fingerprint.value == response["ct32_fp1"]
     assert terminal_lines[0].measures
+
+
+def test_qmb_cli_preflight_rejects_boolean_descriptor_version(
+    tmp_path: Path,
+) -> None:
+    experiment_spec_fp1 = _ok(fingerprint({"class": "registered-experiment-spec-test"}))
+    env, roots, _request_ref = prepare_operator_replay_runtime(tmp_path, experiment_spec_fp1)
+    context = _ok(
+        decode_qma_backtest_context(payload_text=env["QMA_QMB_DOOR_PAYLOAD"], environ=env)
+    )
+    binding_directory = (
+        Path(env["QMB_REPLAY_RUNTIME_ROOT"])
+        / context.experiment_spec_fp1.value.replace(":", "-")
+        / context.evidence_ref.value.replace(":", "-")
+    )
+    descriptor_path = binding_directory / "operator-binding.json"
+    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+    descriptor["format_version"] = True
+    identity = {key: value for key, value in descriptor.items() if key != "descriptor_fp1"}
+    descriptor["descriptor_fp1"] = _ok(fingerprint(identity)).value
+    descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    cli = Path(sys.executable).with_name("qmb")
+    environment = os.environ.copy()
+    environment.update(env)
+    environment["QMA_QMB_PREFLIGHT"] = "1"
+    result = subprocess.run(
+        [str(cli), "backtest", "run"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert "operator_binding" in result.stderr
+    terminal_rows = _ok(
+        read_merge_view(roots["terminal_ledger"], world=World.REPLAY, role="confirmation")
+    )
+    assert terminal_rows == ()

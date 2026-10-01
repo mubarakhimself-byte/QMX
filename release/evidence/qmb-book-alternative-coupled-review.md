@@ -86,3 +86,55 @@ Archive: `/workspace/qmx-independent-review-archive/qma-qmb-local-authority-diag
 | `qmb13-context-boundaries-results.json` | `f43f70d10905c239b3f316c26b552f6bda5f76e79f7b60f40012221c3b4e18b3` |
 | `QMB13_REVIEW_ARGV_SOURCE_NOTES.json` | `65f635cdd661dffb7ac950d863588843b899b8460ef407e107095a3217a61942` |
 | `SHA256.json` at completion | `98aeebd5c8600b39c3aec830c51047e25e0301a143f27093a184bc4a86a8ad9e` |
+
+## Corrected Book13 re-review — 2026-10-01
+
+**PASS within the corrected frozen 13-file slice; both prior P2 findings are resolved at these hashes.** The historical FAIL and its original diagnostics above remain unchanged. This append supplies no complete candidate, normal registered QMA, provider, installed release or security approval.
+
+The exact manifest `/workspace/qmx-qmb13-book-corrected-review-manifest.json`, SHA-256 `edfe133c2cdc421d913a8b16c0a4d5f0a0405c5c75e991908a4ea37b53ce10e6`, matched all 13 files at entry and completion. Only the three hashes below changed from the earlier table; the other ten match that original frozen table exactly.
+
+| Corrected file | SHA-256 |
+| --- | --- |
+| `qmb/src/qmb/host/operator_replay.py` | `a92ab0c1c1cb20e932ef281d7f3de73e030b661800c1bc030d23d64e46fb2650` |
+| `qmb/tests/test_operator_replay_process.py` | `2d118fed357e40158eb9b29deb30f54ea88d3c844657d0b55340d7c31d32a1c4` |
+| `qmb/tests/test_operator_alternative_cli_journey.py` | `fdc2f880f1ca65aae1d728e9ef772db4489d04b7e6ebb37d1486c4f30dc43e42` |
+
+Source review confirms `_matches_terminal_claim` now requires the complete exact key set and exact runtime type plus value for every field in the flat Book claim. It cannot conflate boolean/float attempts with integers. Descriptor decoding requires exact integer format version equal to `OPERATOR_BINDING_FORMAT_VERSION` before identity parsing or builder execution. The shared-context validation and producer/readback/occurrence ordering are preserved.
+
+Exact existing-suite command, working directory `/workspace/QMX-release`:
+
+```sh
+PATH=/workspace/QMX-release/.venv/bin:$PATH uv run --no-sync pytest -q -p no:cacheprovider qmb/tests/test_qma_cli.py qmb/tests/test_operator_replay.py qmb/tests/test_operator_replay_process.py qmb/tests/test_operator_alternative.py qmb/tests/test_operator_alternative_replay.py qmb/tests/test_operator_alternative_cli_journey.py qmb/tests/test_operator_occurrence.py
+```
+
+**PASS: 25 passed in 17.78s.** The actual Book CLI test retains genuine attempt 1 execution and matching claim verification, refuses a boolean attempt claim, and the new actual CLI preflight test refuses a correctly rehashed boolean descriptor version with no terminal ledger row.
+
+The archived original review programs and results were retained. Corrected copies change only the source-manifest binding and separate result filename; the Book copy additionally asserts the expected repaired refusals and nonzero actual CLI exit. This repeats the same bounded ordinary identity/persistence controls, without product/test edits or new provider/security activity:
+
+```sh
+PATH=/workspace/QMX-release/.venv/bin:$PATH PYTHONPATH=/workspace/QMX-release/qmb/tests uv run --no-sync python /workspace/qmx-independent-review-archive/qma-qmb-local-authority-diagnostics/review_qmb13_book_witness_corrected.py
+PATH=/workspace/QMX-release/.venv/bin:$PATH PYTHONPATH=/workspace/QMX-release/qmb/tests uv run --no-sync python /workspace/qmx-independent-review-archive/qma-qmb-local-authority-diagnostics/review_qmb13_context_boundaries_corrected.py
+```
+
+| Repeated control | Result |
+| --- | --- |
+| Genuine Book producer, claimed and claimless readback | PASS; the real production replay service on the recorded local fixture persisted CT-32, unique confirmation LedgerLine and its producer occurrence. Both verification modes accepted; verification kept journal/ledger hashes unchanged. |
+| Prior boolean attempt claim | PASS refusal; direct verifier refuses `True` for integer attempt 1. Actual `.venv/bin/qmb backtest run` verification exits 1 with `terminal_result` policy rejection. Journal/ledger hashes remain unchanged. |
+| Prior boolean descriptor version | PASS refusal; the descriptor's hash and context pin were correctly recomputed for JSON `true`, so refusal cannot be explained by stale identity. |
+| Other invocation attribution | PASS; all eight claimed/claimless job/attempt/environment/occupancy changes refuse with unchanged journal/ledger hashes. Relabeled job/attempt claims do not turn a foreign invocation into success. |
+| Real CT-32 without producer witness | PASS; the same explicit local persistence-refusal injection omits the occurrence after real CT-32/terminal creation. Both claimed and claimless public verification refuse, without further journal/ledger changes. |
+| Nominal shared contexts | PASS; 133 malformed cases across all seven Book/Alternative adapters refuse before builder calls. Complete fixture file census and hashes remain unchanged. |
+| Existing Alternative CLI and occurrence controls | PASS within the 25-test suite; actual local recorded execution and matching claimed/claimless durable verification retain the earlier identity/readback behavior, and malformed/foreign/conflicting occurrence controls pass. |
+
+The separately reported actual Alternative CLI one-evaluation counter remains evidence from a fixture QMA context, not a normal registered QMA operation/worker proof; this re-review did not repeat that separate counter diagnostic. Full coupled QMA persistence, normal card/graph publication and execution, pending Study integration, final installed release checks and provider/security lanes remain separate. Factory checks and coverage floors are unchanged. No source/test edits or commits were made by this reviewer.
+
+Corrected diagnostics remain in the same archive, with exact argv and all 13 source hashes in `QMB13_BOOK_CORRECTED_REVIEW_ARGV_SOURCE_NOTES.json`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `review_qmb13_book_witness_corrected.py` | `17ddb61b36751ecb81ea731f3ae3891bb4c42cb9794d5b88d2aea5aceb8f68f5` |
+| `qmb13-book-witness-corrected-results.json` | `b6fd80d202918abc9947dcea74d8b778c2d64cae712fafaf7ca1bf6424c6ab3c` |
+| `review_qmb13_context_boundaries_corrected.py` | `40f79aeadb357465e10bbb1355b9de27a830ca7ea91f47ac27baa726e97ecee8` |
+| `qmb13-context-boundaries-corrected-results.json` | `1f4eb22694dcda0ef4b18fbd8b2ab679d9b2468f2934ee820c6610f48d085d85` |
+| `QMB13_BOOK_CORRECTED_REVIEW_ARGV_SOURCE_NOTES.json` | `2ed2c2bdcff7f5e3ec0f13b6f3cf71d778cba75619ba9a7db84fd5cefc0c0e27` |
+| `SHA256.json` at corrected completion | `31a1b5a207a6f1730f01e08c9edc42813ba1c5de1b7432977ae5edfbc253b7dc` |

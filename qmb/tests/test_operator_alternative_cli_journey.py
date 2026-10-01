@@ -197,9 +197,7 @@ def _registry() -> AlternativeInterpreterRegistry:
                     )
                 ),
                 _ok(
-                    AlternativeMeasureDeclaration.try_create(
-                        "accepted_entry", UnitKind.COUNT.value
-                    )
+                    AlternativeMeasureDeclaration.try_create("accepted_entry", UnitKind.COUNT.value)
                 ),
             ),
         )
@@ -239,7 +237,7 @@ def _writer(machine: str, role: str, stream: str, epoch: str) -> dict[str, str]:
 
 def _builder_source(archive_refs: tuple[str, ...]) -> str:
     refs = archive_refs
-    return f'''from collections.abc import Mapping
+    return f"""from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
@@ -400,7 +398,7 @@ def build(context: QmaBacktestContext, binding):
         registry_persistence=persistence.value,
         lineage_writer=lineage_writer.value,
     ))
-'''
+"""
 
 
 def _context_payload(
@@ -516,9 +514,7 @@ def _write_descriptor(
         / cast(str, payload["evidence_ref"]).replace(":", "-")
     )
     directory.mkdir(parents=True)
-    (directory / "operator-alternative-binding.json").write_text(
-        json.dumps(body), encoding="utf-8"
-    )
+    (directory / "operator-alternative-binding.json").write_text(json.dumps(body), encoding="utf-8")
     return _fp(body["descriptor_fp1"])
 
 
@@ -593,9 +589,7 @@ def test_qmb_cli_runs_and_verifies_operator_bound_alternative_without_reevaluati
     foreign_descriptor_payload["operator_descriptor_fp1"] = _ok(
         fingerprint({"class": "foreign-descriptor"})
     ).value
-    refused_descriptor = _run_cli(
-        _env(foreign_descriptor_payload, runtime_root)
-    )
+    refused_descriptor = _run_cli(_env(foreign_descriptor_payload, runtime_root))
     assert refused_descriptor.returncode != 0
     assert not tuple(roots["journal"].rglob("*.jsonl"))
 
@@ -608,10 +602,7 @@ def test_qmb_cli_runs_and_verifies_operator_bound_alternative_without_reevaluati
     assert result["source_fp1"] == source.fingerprint.value
     assert result["split_fp1"] == source.split_fp1.value
     journal_file = (
-        roots["journal"]
-        / cast(str, payload["job_id"])
-        / "atc-cli-stream"
-        / "000000.jsonl"
+        roots["journal"] / cast(str, payload["job_id"]) / "atc-cli-stream" / "000000.jsonl"
     )
     before_verify = journal_file.read_bytes()
     assert before_verify

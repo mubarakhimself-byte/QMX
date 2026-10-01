@@ -279,10 +279,12 @@ def verify_operator_replay_result(
         "operator_descriptor_fp1": binding.value.descriptor_fp1.value,
         "terminal_line_fp1": line_stamp.value.value,
     }
-    if claimed_result is not None and dict(cast(Mapping[str, object], claimed_result)) != actual:
+    if claimed_result is not None and not _matches_terminal_claim(
+        cast(Mapping[str, object], claimed_result), actual
+    ):
         return policy(
             "terminal_result",
-            "the prior subprocess response exactly matches the reopened persisted ledger row",
+            "the prior subprocess response has the exact typed body of the reopened ledger row",
         )
     if _require_occurrence:
         occurrence = _book_occurrence_identity(
@@ -302,6 +304,20 @@ def verify_operator_replay_result(
         if is_refusal(witnessed):
             return witnessed
     return Ok(actual)
+
+
+def _matches_terminal_claim(claimed: object, actual: Mapping[str, object]) -> bool:
+    """Compare the complete flat JSON claim without Python bool/int equality aliases."""
+    if not isinstance(claimed, Mapping):
+        return False
+    body = cast(Mapping[object, object], claimed)
+    if set(body) != set(actual):
+        return False
+    for key, expected in actual.items():
+        value = body.get(key)
+        if type(value) is not type(expected) or value != expected:
+            return False
+    return True
 
 
 def _book_occurrence_identity(
@@ -381,7 +397,11 @@ def _decode_binding(raw: object, context: QmaBacktestContext) -> Result[Operator
             missing=sorted(_BINDING_FIELDS.difference(body)),
             extra=sorted(set(body).difference(_BINDING_FIELDS)),
         )
-    if body.get("class") != OPERATOR_BINDING_KIND or body.get("format_version") != 1:
+    if (
+        body.get("class") != OPERATOR_BINDING_KIND
+        or type(body.get("format_version")) is not int
+        or body.get("format_version") != OPERATOR_BINDING_FORMAT_VERSION
+    ):
         return invalid("operator_binding", "operator binding has the supported v1 class")
     identity = {key: value for key, value in body.items() if key != "descriptor_fp1"}
     descriptor_fp = _parse_fp(body.get("descriptor_fp1"), "descriptor_fp1")
