@@ -48,6 +48,7 @@ from qma.core.vocabulary.enums import (
 from qma.core.vocabulary.registry import VocabularyError, parse_closed
 from qma.daemon.envs.router import ComputeRouter
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher, TaskTransitionResult
+from qma.daemon.taskgraph.projection import TaskGraphStateService
 from qma.daemon.taskgraph.state import JobHandleEvidence
 from qma.wire.cancel_job import (
     cancel_job_command_hash,
@@ -283,10 +284,12 @@ class JobHandleService:
         router: ComputeRouter | None = None,
         dispatcher: TaskGraphDispatcher | None = None,
         store: JobHandleStore | None = None,
+        durable: TaskGraphStateService | None = None,
     ) -> None:
         self._router = router if router is not None else ComputeRouter()
         self._dispatcher = dispatcher
         self._store = store if store is not None else JobHandleStore()
+        self._durable = durable
         self._streams: dict[str, list[JobStreamEvent]] = {}
         self._wakes: dict[str, JobWake] = {}
         if dispatcher is not None and dispatcher.router is not self._router:
@@ -319,6 +322,18 @@ class JobHandleService:
 
     def snapshot(self) -> tuple[Mapping[str, object], ...]:
         return self._store.snapshot()
+
+    def restore_durable_jobs(self) -> Result[tuple[JobHandle, ...]]:
+        """Restore exact handles from task_graph_state and mark in-flight work unknown."""
+        if self._durable is None:
+            return Ok(())
+        records = self._durable.job_handle_records()
+        if is_refusal(records):
+            return records
+        restored = self._store.restore(records.value)
+        if is_refusal(restored):
+            return restored
+        return self.recover_after_restart()
 
     def submit(
         self,
@@ -455,6 +470,9 @@ class JobHandleService:
             return Ok(handle)
         lost = daemon_restarted or not supervisor_reachable or not environment_reachable
         if not lost:
+            return Ok(handle)
+        if daemon_restarted and handle.state is JobHandleState.QUEUED:
+            # A queued handle has no accepted worker execution to reconcile.
             return Ok(handle)
         trigger = (
             "daemon_restart"
@@ -1094,6 +1112,14 @@ class JobHandleService:
                 )
         else:
             self._store.put(handle)
+        if self._durable is not None:
+            persisted = self._durable.record_job_handle(handle.to_payload())
+            if is_refusal(persisted):
+                if previous is not None:
+                    self._store.put(previous)
+                else:
+                    self._store.discard(handle.job_id)
+                return persisted
         self._append_stream(
             handle.job_id,
             event,

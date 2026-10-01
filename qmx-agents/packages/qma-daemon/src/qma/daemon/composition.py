@@ -55,7 +55,7 @@ class DaemonRuntimeComposition:
             router=router,
             ledgers=task_ledgers,
         )
-        jobs = JobHandleService(router=router, dispatcher=dispatcher)
+        jobs = JobHandleService(router=router, dispatcher=dispatcher, durable=task_graphs)
         tools = ToolRegistry(environments=environments)
         backtesting = BacktestingService(
             tools=tools,

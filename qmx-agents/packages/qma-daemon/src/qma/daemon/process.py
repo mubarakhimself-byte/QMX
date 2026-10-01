@@ -945,6 +945,12 @@ class DaemonProcess:
                 variables=variables,
             )
             process.backtesting.bind_product_sessions(process.product_sessions)
+            restored_jobs = process.jobs.restore_durable_jobs()
+            if is_refusal(restored_jobs):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_jobs
             process._bind_operator_logger(
                 boot_epoch_id=boot_epoch_id,
                 handler=log_handler,

@@ -906,6 +906,81 @@ class TaskGraphStateService:
     def occupancy_for(self, graph_id: str) -> Mapping[str, object]:
         return MappingProxyType(dict(self._occupancy.get(graph_id, empty_occupancy())))
 
+    def graph_for_task(self, task_id: object) -> TaskGraph | None:
+        """Resolve a Task's graph from the existing durable projection cache."""
+        if not isinstance(task_id, str) or not task_id:
+            return None
+        return next(
+            (
+                graph
+                for graph in self._rows.values()
+                if any(task.id == task_id for task in graph.tasks)
+            ),
+            None,
+        )
+
+    def job_handle_records(self) -> Result[tuple[Mapping[str, object], ...]]:
+        """Return JobHandles folded into the existing task_graph_state occupancy."""
+        records: list[Mapping[str, object]] = []
+        for occupancy in self._occupancy.values():
+            slots_raw = occupancy.get("slots", {})
+            if not isinstance(slots_raw, Mapping):
+                return _invalid("occupancy.slots", "occupancy slots are a mapping")
+            for task_id, slot_raw in slots_raw.items():
+                if not isinstance(slot_raw, Mapping):
+                    return _invalid("occupancy.slot", "occupancy slot is a mapping")
+                handle_raw = slot_raw.get("job_handle")
+                if handle_raw is None:
+                    continue
+                if not isinstance(handle_raw, Mapping):
+                    return _invalid("job_handle", "persisted JobHandle is a mapping")
+                handle = dict(cast("Mapping[str, object]", handle_raw))
+                if handle.get("task_id") != task_id:
+                    return _invalid("job_handle.task_id", "JobHandle task must match its slot")
+                records.append(MappingProxyType(handle))
+        return Ok(tuple(records))
+
+    def record_job_handle(self, payload: Mapping[str, object]) -> Result[None]:
+        """Persist an exact JobHandle snapshot on its existing Task Graph row."""
+        task_id = payload.get("task_id")
+        job_id = payload.get("job_id")
+        owner = payload.get("owner")
+        if not isinstance(task_id, str) or not isinstance(job_id, str):
+            return _invalid("job_handle", "JobHandle requires task_id and job_id")
+        graph = self.graph_for_task(task_id)
+        if graph is None:
+            return _invalid("task_id", "JobHandle Task has no persisted Task Graph", given=task_id)
+        task = next((item for item in graph.tasks if item.id == task_id), None)
+        if task is None or owner != task.owner.value:
+            return policy_rejection(
+                "owner", "JobHandle owner must match the persisted Task owner", task_id=task_id
+            )
+        occupancy = dict(self._occupancy.get(graph.id, empty_occupancy()))
+        slots_raw = occupancy.get("slots", {})
+        slots = (
+            dict(cast("Mapping[str, object]", slots_raw))
+            if isinstance(slots_raw, Mapping)
+            else {}
+        )
+        previous = slots.get(task_id)
+        slot = dict(cast("Mapping[str, object]", previous)) if isinstance(previous, Mapping) else {}
+        previous_handle = slot.get("job_handle")
+        if isinstance(previous_handle, Mapping) and previous_handle.get("job_id") != job_id:
+            return policy_rejection(
+                "job_id",
+                "a Task cannot be rebound to a different durable JobHandle",
+                task_id=task_id,
+            )
+        slot.setdefault("door", "run")
+        slot.setdefault("consumes_environment", False)
+        slot["job_handle"] = dict(payload)
+        slots[task_id] = slot
+        occupancy["slots"] = slots
+        persisted = self.persist(graph, occupancy=occupancy)
+        if is_refusal(persisted):
+            return persisted
+        return Ok(None)
+
     def persist(
         self,
         graph: TaskGraph,

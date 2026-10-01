@@ -167,7 +167,6 @@ def test_sqlite_stays_one_connection_and_qmb_jsonl_is_not_merged(tmp_path: Path)
     finally:
         process.close()
 
-
 def test_unauthenticated_and_plaintext_non_loopback_are_startup_refusals(
     tmp_path: Path,
 ) -> None:
@@ -690,8 +689,28 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert refused is not None and "error" in refused, refused
+        first_before_restart = process.jobs.handle_for(job_id)
+        second_before_restart = process.jobs.handle_for(second_job_id)
+        assert first_before_restart is not None
+        assert second_before_restart is not None
     finally:
         process.close()
+
+    restarted = _compose(tmp_path, boot="boot-ct40-restart")
+    try:
+        first_after_restart = restarted.jobs.handle_for(job_id)
+        second_after_restart = restarted.jobs.handle_for(second_job_id)
+        assert first_after_restart is not None
+        assert second_after_restart is not None
+        assert first_after_restart.job_id == first_before_restart.job_id
+        assert first_after_restart.state.value == "unknown"
+        assert second_after_restart.job_id == second_before_restart.job_id
+        assert second_after_restart.state.value == "unknown"
+        refused_cancel = restarted.jobs.cancel(job_id)
+        assert is_refusal(refused_cancel), "unknown jobs remain fail-closed against cancellation"
+        assert restarted.jobs.handle_for(job_id) == first_after_restart
+    finally:
+        restarted.close()
 
 
 def test_example_script() -> None:
