@@ -14,10 +14,42 @@ export type OpenedApp = {
   attention?: "running" | "unknown" | "failed";
 };
 
+export const DEMO_APPS: OpenedApp[] = [
+  {
+    instanceId: "demo-research",
+    label: "Research (demo)",
+    attention: "running",
+  },
+];
+
 class Workbench {
   connection = $state<ConnectionState>("not-bound");
   /** Instances come from the daemon listing; empty until a transport exists. */
   openedApps = $state<OpenedApp[]>([]);
+  /**
+   * Demo mode shows labelled sample apps and data for design review.
+   * Off means the rail shows only daemon instances.
+   */
+  demoMode = $state(true);
+  /**
+   * Message-only context chips a widget added to a copilot composer
+   * (UI CHAT §8): not durable refs, not a send, cleared on use.
+   */
+  copilotRefs = $state<string[]>([]);
+
+  addRef(label: string) {
+    if (!this.copilotRefs.includes(label))
+      this.copilotRefs = [...this.copilotRefs, label];
+  }
+
+  removeRef(label: string) {
+    this.copilotRefs = this.copilotRefs.filter((r) => r !== label);
+  }
+
+  /** Rail entries: daemon instances, plus demo apps while demo mode is on. */
+  get railApps(): OpenedApp[] {
+    return this.demoMode ? [...DEMO_APPS, ...this.openedApps] : this.openedApps;
+  }
 
   /** Chrome-only close: unmounts the app view, never cancels its jobs. */
   closeApp(instanceId: string) {

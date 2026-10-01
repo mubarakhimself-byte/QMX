@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import AppWindow from "@lucide/svelte/icons/app-window";
+  import ChartCandlestick from "@lucide/svelte/icons/chart-candlestick";
   import RailButton from "./RailButton.svelte";
   import {
     PRODUCT_DESTINATIONS,
@@ -33,12 +33,12 @@
   <div class="bg-border my-2 h-px w-8" role="separator"></div>
 
   <ul aria-label="Opened apps" class="flex flex-col items-center gap-1">
-    {#each workbench.openedApps as app (app.instanceId)}
+    {#each workbench.railApps as app (app.instanceId)}
       <li>
         <RailButton
           href={`/apps/${encodeURIComponent(app.instanceId)}`}
           label={app.label}
-          icon={AppWindow}
+          icon={ChartCandlestick}
           active={isActive(
             page.url.pathname,
             `/apps/${encodeURIComponent(app.instanceId)}`,

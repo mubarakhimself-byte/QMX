@@ -16,6 +16,9 @@
   import History from "@lucide/svelte/icons/history";
   import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
+  import Minimize2 from "@lucide/svelte/icons/minimize-2";
+  import Minus from "@lucide/svelte/icons/minus";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import X from "@lucide/svelte/icons/x";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -32,6 +35,9 @@
     onrefresh,
     onmessage,
     onexpand,
+    onminimize,
+    minimized = false,
+    expanded = false,
     onclose,
     class: className,
   }: {
@@ -46,6 +52,11 @@
     /** Adds a reference to this widget into the relevant copilot session. */
     onmessage?: () => void;
     onexpand?: () => void;
+    /** Collapse the body to the header only (client layout). */
+    onminimize?: () => void;
+    minimized?: boolean;
+    /** True while this widget is the expanded view; swaps the icon. */
+    expanded?: boolean;
     onclose?: () => void;
     class?: string;
   } = $props();
@@ -107,12 +118,21 @@
           MessageSquarePlus,
           onmessage,
         )}{/if}
-      {#if onexpand}{@render tool("Expand", Maximize2, onexpand)}{/if}
+      {#if onminimize}{@render tool(
+          minimized ? "Restore" : "Minimise",
+          minimized ? ChevronDown : Minus,
+          onminimize,
+        )}{/if}
+      {#if onexpand}{@render tool(
+          expanded ? "Return to dashboard" : "Expand",
+          expanded ? Minimize2 : Maximize2,
+          onexpand,
+        )}{/if}
       {#if onclose}{@render tool("Close", X, onclose)}{/if}
     </div>
   </header>
 
-  <div class="relative min-h-0 flex-1 overflow-auto p-2.5">
+  <div class="relative min-h-0 flex-1 overflow-auto p-2.5" hidden={minimized}>
     {#if state === "loading"}
       <div class="flex flex-col gap-2 pt-1" aria-busy="true">
         <Skeleton class="h-4 w-1/3" />
@@ -136,7 +156,7 @@
         {/if}
       </div>
     {:else}
-      <div class={cn(state === "stale" && "opacity-70")}>
+      <div class={cn("h-full", state === "stale" && "opacity-70")}>
         {@render children?.()}
       </div>
       {#if reason}

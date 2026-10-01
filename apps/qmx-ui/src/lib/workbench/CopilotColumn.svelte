@@ -13,12 +13,16 @@
     hint,
     placeholder,
     onclose,
+    refs = [],
+    onremoveref,
   }: {
     title?: string;
     profile?: string;
     hint?: string;
     placeholder?: string;
     onclose?: () => void;
+    refs?: string[];
+    onremoveref?: (ref: string) => void;
   } = $props();
 </script>
 
@@ -44,5 +48,7 @@
   <div class="min-h-0 flex-1 overflow-auto">
     <EmptyState class="h-full" title="No messages yet" description={hint} />
   </div>
-  <div class="p-2"><Composer {placeholder} label={`${title} message`} /></div>
+  <div class="p-2">
+    <Composer {placeholder} label={`${title} message`} {refs} {onremoveref} />
+  </div>
 </aside>
