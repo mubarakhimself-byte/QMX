@@ -358,7 +358,19 @@ def test_committed_fill_with_lost_readback_reconciles_idempotently(
 
 
 @pytest.mark.parametrize(
-    "damage", ["engine", "format", "raw-fingerprint", "evidence-flag", "bool-sequence"]
+    "damage",
+    [
+        "engine",
+        "format",
+        "raw-fingerprint",
+        "evidence-flag",
+        "bool-sequence",
+        "event-world",
+        "event-writer",
+        "event-bool-sequence",
+        "event-correlation",
+        "unexpected-edges",
+    ],
 )
 def test_forged_physical_receipt_never_advances_virtual_memory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
@@ -416,8 +428,24 @@ def test_forged_physical_receipt_never_advances_virtual_memory(
             changes = {"fingerprint": f"fp1:sha256:{'0' * 64}"}
         elif damage == "evidence-flag":
             changes = {"is_evidence_bearing": 0}
-        else:
+        elif damage == "bool-sequence":
             changes = {"sequence": False}
+        else:
+            event_changes: dict[str, object]
+            if damage == "event-world":
+                event_changes = {"world": "live"}
+            elif damage == "event-writer":
+                event_changes = {"writer": None}
+            elif damage == "event-correlation":
+                event_changes = {"correlation_id": "foreign"}
+            else:
+                event_changes = {"sequence": True}
+            if damage == "unexpected-edges":
+                forged = replace(result.value, edge_receipts=(physical,))
+                return cast("Result[JournalAppendReceipt]", Ok(forged))
+            forged_event = replace(result.value.event, **event_changes)
+            forged = replace(result.value, event=forged_event)
+            return cast("Result[JournalAppendReceipt]", Ok(forged))
         forged = replace(result.value, store_receipt=replace(physical, **changes))
         return cast("Result[JournalAppendReceipt]", Ok(forged))
 

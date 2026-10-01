@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from qmf.core import (
+    DisplayTime,
     Fingerprint,
     Instant,
     Instrument,
@@ -17,6 +18,7 @@ from qmf.core import (
     Result,
     SinkAck,
     VenueId,
+    World,
     WriteOutcome,
     WriterId,
     fingerprint,
@@ -472,9 +474,35 @@ def _receipt_matches(
     event_value, physical_value = cast(object, value.event), cast(object, value.store_receipt)
     if not isinstance(event_value, JournalEvent) or not isinstance(physical_value, StoreReceipt):
         return False
+    if type(value.edge_receipts) is not tuple or value.edge_receipts:
+        return False
     event, physical = event_value, physical_value
+    event_writer = cast(object, event.writer)
+    event_instant = cast(object, event.instant)
+    event_world = cast(object, event.world)
+    event_identity = cast(object, event.fingerprint)
+    event_payload = cast(object, event.payload)
+    event_correlation = cast(object, event.correlation_id)
+    event_display = cast(object, event.display_time)
+    if (
+        event.event_type is not JournalEventType.RISK_TRANSITION
+        or not isinstance(event_writer, WriterId)
+        or type(event.sequence) is not int
+        or event.sequence != expected_sequence
+        or not isinstance(event_instant, Instant)
+        or not isinstance(event_world, World)
+        or not isinstance(event_identity, Fingerprint)
+        or not isinstance(event_payload, Mapping)
+        or event.outcome is not None
+        or (event_correlation is not None and not isinstance(event_correlation, str))
+        or (event_display is not None and not isinstance(event_display, DisplayTime))
+    ):
+        return False
     event_fp = fingerprint(event.to_row())
     if is_refusal(event_fp):
+        return False
+    identity_fp = fingerprint(event.fp1_identity())
+    if is_refusal(identity_fp) or identity_fp.value != event_identity:
         return False
     rows = journal.read_stream(stream_name, for_world=journal.world)
     if is_refusal(rows) or type(physical.sequence) is not int or physical.sequence < 0:
@@ -485,10 +513,11 @@ def _receipt_matches(
     raw = rows.value[index]
     raw_fp = fingerprint(raw)
     return (
-        event.event_type is JournalEventType.RISK_TRANSITION
+        event.correlation_id is None
+        and event.display_time is None
+        and raw == event.to_row()
         and event.payload == payload
         and event.instant == instant
-        and event.sequence == expected_sequence
         and event.writer == writer
         and event.world is journal.world
         and raw.get("fingerprint") == event.fingerprint.value
