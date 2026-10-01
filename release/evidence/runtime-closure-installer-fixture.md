@@ -16,3 +16,9 @@ Component hashes:
 - `runtime-wheelhouse.json`: `400a94f6bf30054856c3d34a1a69ca687d3af698d49886976e2c333764cce499`
 
 Strict validator review remains FAIL pending duplicate-inventory and compressed-tag corrections (`runtime-closure-review.md`); neither affects these actual 24 wheels. Repeat actual installation after corrections and again with complete final reviewed product source. Native Windows, native recovery, provider connectivity and image/security verification remain pending.
+
+## Corrected helper repeat
+
+The held corrected helper `2332a76bddd610b1569b0adf29fb7125d6d3dd21ac442ea2aeb378caafc3b842` passed actual offline installation and installed lifecycle in a second fresh destination `/workspace/qmx-ubuntu-runtime/runtime-closure-fixture-corrected`, with a separate durable root. Same network-disabled invocation and mounts, using bundle `/workspace/qmx-runtime-closure-install-fixture-corrected` and installed destination `/proof/runtime-closure-fixture-corrected`. Traces `/workspace/qmx-runtime-closure-fixture-corrected-install.log` and `/workspace/qmx-runtime-closure-fixture-corrected-lifecycle.log`; input proof `/workspace/qmx-runtime-closure-fixture-corrected-inputs.json`, driver `/workspace/qmx-runtime-closure-fixture-corrected-smoke.py`. All 14 products, 24 runtime wheels, dependency check, installed origins, 40 mandatory pack files, absent factory tools and restart with distinct PID: PASS. This remains mixed old-product installer mechanics, not final reviewed product acceptance.
+
+Root scoped corrected-source command `uv run --no-sync pytest -q -p no:cacheprovider tools/tests/test_release_install.py tools/tests/test_runtime_wheel_closure.py`: 26 passed in 0.26s, `/workspace/qmx-runtime-closure-corrected-root.log`. Independent correction re-review remains pending at this record.
