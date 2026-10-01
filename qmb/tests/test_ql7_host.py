@@ -642,7 +642,12 @@ def test_durable_request_resolves_registered_split_and_manifest_bound_bot(
     seal = _ok(HoldoutSeal.from_manifest(split, 12))
     venue = _ok(VenueId.try_create("venue-ic"))
     instrument = _ok(Instrument.try_create(venue, "EURUSD"))
-    metadata_identity = {"instrument": instrument.fp1_identity(), "price_scale": 5}
+    metadata_identity = {
+        "instrument": instrument.fp1_identity(),
+        "metadata_version": "local-fixture-v1",
+        "price_scale": 5,
+        "source_policy": {"kind": "recorded-local"},
+    }
     metadata = _ok(
         PinnedInstrumentPriceMetadata.try_create(
             instrument=instrument,

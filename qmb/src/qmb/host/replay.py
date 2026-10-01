@@ -89,6 +89,7 @@ class PinnedInstrumentPriceMetadata:
 
     instrument: Instrument
     price_scale: int
+    metadata_identity: Mapping[str, object]
     fingerprint: Fingerprint
 
     @classmethod
@@ -131,7 +132,12 @@ class PinnedInstrumentPriceMetadata:
                 "metadata_identity",
                 "the pinned metadata identity declares this exact instrument and price scale",
             )
-        return Ok(cls(instrument, price_scale, ref.value))
+        frozen_identity = _freeze_evidence(cast("Mapping[str, object]", metadata_identity))
+        if not isinstance(frozen_identity, Mapping):
+            return invalid("metadata_identity", "pinned metadata identity freezes as a mapping")
+        return Ok(
+            cls(instrument, price_scale, cast("Mapping[str, object]", frozen_identity), ref.value)
+        )
 
 
 def read_recorded_replay_source(

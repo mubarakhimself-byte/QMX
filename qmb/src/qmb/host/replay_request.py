@@ -409,10 +409,7 @@ def _identity(
         "split_role": split_role.value,
         "archive_fingerprints": [item.value for item in archive_fingerprints],
         "stream_id": stream_id,
-        "price_metadata_identity": {
-            "instrument": price_metadata.instrument.fp1_identity(),
-            "price_scale": price_metadata.price_scale,
-        },
+        "price_metadata_identity": dict(price_metadata.metadata_identity),
         "price_metadata_fp1": price_metadata.fingerprint.value,
         "bot_identity": dict(bot_identity),
         "source_tree": dict(source_tree),
