@@ -49,6 +49,7 @@ ALLOWED_NODE_RECIPES: Final[frozenset[str]] = frozenset(
         "node-config-init",
         "node-config-validate",
         "node-config-explain",
+        "node-deployment-validate",
         "node-notify-test",
         "node-hub-publish",
         "node-host-loss-restore",

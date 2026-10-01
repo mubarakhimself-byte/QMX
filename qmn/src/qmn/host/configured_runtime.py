@@ -8,8 +8,12 @@ conditions.
 
 from __future__ import annotations
 
+import argparse
 import json
-from collections.abc import Mapping
+import os
+import stat
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -48,10 +52,14 @@ __all__ = [
     "ConfiguredRuntimeAssessment",
     "assess_configured_runtime",
     "configured_registry_as_of_fingerprint",
+    "main",
     "resolve_registered_binding",
 ]
 
 CONFIGURED_RUNTIME_FORMAT_VERSION: Final[int] = 1
+_MAX_DEPLOYMENT_BYTES: Final[int] = 1 << 20
+_O_NOFOLLOW: Final[int] = cast("int", getattr(os, "O_NOFOLLOW", 0))
+_O_DIRECTORY: Final[int] = cast("int", getattr(os, "O_DIRECTORY", 0))
 _TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
     {
         "format_version",
@@ -167,10 +175,11 @@ def assess_configured_runtime(
     if is_refusal(root):
         return root
     try:
-        resolved_root = root.value.resolve(strict=True)
-        resolved_path = path.value.resolve(strict=True)
-        resolved_path.relative_to(resolved_root)
-        raw_bytes = resolved_path.read_bytes()
+        input_root = root.value.absolute()
+        input_path = path.value.absolute()
+        relative_path = input_path.relative_to(input_root)
+        resolved_root = input_root.resolve(strict=True)
+        raw_bytes = _read_deployment_no_follow(resolved_root, relative_path)
     except (OSError, ValueError):
         return unavailable(
             "deployment_file",
@@ -844,6 +853,69 @@ def _absolute_path(value: object, field: str) -> Result[Path]:
     return Ok(path)
 
 
+def _read_deployment_no_follow(root: Path, relative_path: Path) -> bytes:
+    """Read a bounded deployment file through a no-follow descriptor chain."""
+    if (
+        _O_NOFOLLOW == 0
+        or _O_DIRECTORY == 0
+        or os.open not in os.supports_dir_fd
+    ):
+        raise OSError("descriptor-relative no-follow reads are unavailable")
+    if not relative_path.parts or relative_path.is_absolute() or any(
+        part in {"", ".", ".."} for part in relative_path.parts
+    ):
+        raise ValueError("deployment path is not a normalized relative path")
+    directory_fd = os.open("/", os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
+    leaf_fd: int | None = None
+    try:
+        for part in root.parts[1:]:
+            next_fd = _open_directory_component(part, directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        for part in relative_path.parts[:-1]:
+            next_fd = _open_directory_component(part, directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        leaf_fd = os.open(
+            relative_path.parts[-1],
+            os.O_RDONLY | _O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_fd,
+        )
+        info = os.fstat(leaf_fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_DEPLOYMENT_BYTES:
+            raise OSError("deployment file is not a regular file under 1 MiB")
+        data = bytearray()
+        while len(data) <= _MAX_DEPLOYMENT_BYTES:
+            chunk = os.read(leaf_fd, min(65536, _MAX_DEPLOYMENT_BYTES + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+        if len(data) > _MAX_DEPLOYMENT_BYTES:
+            raise OSError("deployment file exceeds 1 MiB")
+        return bytes(data)
+    finally:
+        try:
+            if leaf_fd is not None:
+                os.close(leaf_fd)
+        finally:
+            os.close(directory_fd)
+
+
+def _open_directory_component(name: str, parent_fd: int) -> int:
+    fd = os.open(
+        name,
+        os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW,
+        dir_fd=parent_fd,
+    )
+    try:
+        if not stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("deployment path component is not a directory")
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
 def _mapping(
     value: object,
     field: str,
@@ -856,3 +928,51 @@ def _mapping(
     if unknown:
         return invalid(field, f"{field} has no unknown fields", unknown=sorted(unknown))
     return Ok(MappingProxyType(dict(body)))
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the same filesystem/registry preflight used by supervised startup.
+
+    This DevOps diagnostic reports preflight only. A valid document is not
+    activation, admission, provider readiness, or permission to connect.
+    """
+    parser = argparse.ArgumentParser(description="QMN configured-runtime preflight only")
+    parser.add_argument("--deployment", required=True)
+    parser.add_argument("--qmx-root", required=True)
+    args = parser.parse_args(argv)
+    assessed = assess_configured_runtime(args.deployment, qmx_root=args.qmx_root)
+    if is_refusal(assessed):
+        print(
+            json.dumps(
+                {
+                    "status": "refused",
+                    "reason": dict(assessed.context),
+                    "provider_calls": 0,
+                    "activation_performed": False,
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 2
+    value = assessed.value
+    print(
+        json.dumps(
+            {
+                "activation_authorized": value.activation_authorized,
+                "descriptor_digest": value.descriptor_digest,
+                "machine": value.machine,
+                "provider_calls": 0,
+                "provider_ready": value.provider_ready,
+                "stand_down": value.stand_down,
+                "stand_down_reason": value.stand_down_reason,
+                "status": "preflight_valid_not_activated",
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

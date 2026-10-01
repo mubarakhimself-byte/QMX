@@ -1,0 +1,16 @@
+{
+  "snapshot_head": "517faea2757cf2a8e431a8f787de44dc56d1496e",
+  "source_files": {
+    "qmn/deploy/config.py": "89c72215e1581e66999721e7f54760853c39f9aa985943362550e148926e7cd3",
+    "qmn/deploy/justfile-recipes/node.just": "a2077eeef1ec0a98ca53d20ebfe11a9dba3f6b3918b55bca2b0c342ffe8a6f5d",
+    "qmn/deploy/boundary.py": "3650ddab4c5b0dcb270e010af19371ee0c024809a25f2097d06b411a2564e248",
+    "qmn/deploy/systemd/templates/qmn.service.in": "a02964a2528970cfadaa83d37593c2488c60f316539e7e981adcc80b388d78bf",
+    "qmn/deploy/systemd/units.py": "04800f46112e7ab1d90c6171272a02f266221186c748411ddde1925585258c46",
+    "qmn/src/qmn/config/cli.py": "28c8697656f5841df9d505b38c4d2f164b130bf0604a64aaa2ce56dd3bfa678e",
+    "qmn/src/qmn/host/configured_runtime.py": "c2cffeca63133f6365ae336b4f2116a26801cf0e84c4f899bc1cfa7f3699ad87",
+    "qmn/tests/test_qmn_deploy_config.py": "5df34625bbddd0c5db5763e4757be607cc4e669325ab42dd57b2af6099cde273",
+    "docs/components/trading-node.md": "960c529f08021c9ce8487db9f42731a512d1e62b9b0ef1f8021b88037178314a",
+    "docs/lenses/ops/runbook.md": "e8820f686b7e1ca17ffde0ac8fda86c406a31a94dd9328edaa1ffc60e8d9dbbb"
+  },
+  "wheel_sha256": "928feb6d0e4dd164c0ca127a3161f4bf4fa5a20b2b0257fe388c879ea7db1e51"
+}

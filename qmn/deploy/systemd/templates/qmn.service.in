@@ -59,6 +59,7 @@ LogNamespace=qmn
 Environment=TZ=UTC
 Environment=QMX_ROOT=/opt/qmx/current
 Environment=QMX_STATE=/var/lib/qmx
+Environment=QMN_DEPLOYMENT_CONFIG=/opt/qmx/current/qmn-deployment.json
 Environment=QMN_POWERS_SOCKET=/run/qmn/powers.sock
 Environment=QMN_EVIDENCE_BIND=127.0.0.1:8787
 

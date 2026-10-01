@@ -52,13 +52,19 @@ node-replay *ARGS:
     uv run python "{{qmn_deploy}}/replay.py" --check-mode {{ARGS}}
 
 node-config-init *ARGS:
-    @echo "node-config-init: reserved"
+    uv run python "{{qmn_deploy}}/config.py" init {{ARGS}}
 
 node-config-validate *ARGS:
-    @echo "node-config-validate: reserved"
+    uv run python "{{qmn_deploy}}/config.py" validate {{ARGS}}
 
 node-config-explain *ARGS:
-    @echo "node-config-explain: reserved"
+    uv run python "{{qmn_deploy}}/config.py" explain {{ARGS}}
+
+# Validate the exact boot document selected by qmn.service. This runs the
+# host's filesystem/registry preflight in a separate DevOps process; it does
+# not compose resources, authorize a seat, open credentials, or connect a venue.
+node-deployment-validate *ARGS:
+    uv run python "{{qmn_deploy}}/config.py" validate-deployment {{ARGS}}
 
 node-notify-test *ARGS:
     @echo "node-notify-test: reserved (ops principal notify_test power)"

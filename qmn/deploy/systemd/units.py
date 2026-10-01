@@ -43,6 +43,7 @@ NODE_SERVICE_ACCOUNT: Final[str] = "qmx"
 OBSERVABILITY_SERVICE_ACCOUNT: Final[str] = "qmxobs"
 OBSERVABILITY_UNIT: Final[str] = "qmx-observability.service"
 POWERS_SOCKET_PATH: Final[str] = "/run/qmn/powers.sock"
+DEPLOYMENT_CONFIG_PATH: Final[str] = "/opt/qmx/current/qmn-deployment.json"
 READ_WRITE_PATHS_NODE: Final[str] = "/var/lib/qmx"
 READ_WRITE_PATHS_OBS: Final[str] = "/var/lib/qmx-observability"
 REQUIRED_RESTRICT_FAMILIES: Final[frozenset[str]] = frozenset({"AF_UNIX", "AF_INET", "AF_INET6"})
@@ -277,6 +278,10 @@ def inspect_unit_text(name: str, text: str) -> UnitInspection:
             findings.append("powers socket path not referenced")
         if _setting(text, "LogNamespace") != "qmn":
             findings.append("qmn.service must set LogNamespace=qmn for the observability stack")
+        if _setting(text, "Environment=QMN_DEPLOYMENT_CONFIG") != DEPLOYMENT_CONFIG_PATH:
+            findings.append(
+                "qmn.service must pin QMN_DEPLOYMENT_CONFIG beneath QMX_ROOT"
+            )
 
     # Credential-consuming units: only LoadCredentialEncrypted, never plaintext
     # LoadCredential for secret material; seal flag is provision-time.
