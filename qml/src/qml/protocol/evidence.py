@@ -16,6 +16,7 @@ from typing import Final, cast
 
 from qmf.core.chrono import Instant
 from qmf.core.exact import ExactRational
+from qmf.core.fingerprint import canonical_bytes
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 
 from qml._refuse import clean_token, invalid
@@ -99,6 +100,36 @@ def _refuse_float(value: object, field: str) -> Result[None]:
     return Ok(None)
 
 
+def _freeze_exact_graph(value: object, field: str) -> Result[object]:
+    """Snapshot nested evidence and reject floats anywhere in the value graph."""
+    if isinstance(value, float):
+        return invalid(field, "evidence values are exact; a nested binary float is refused (AD-7)")
+    if isinstance(value, Mapping):
+        output: dict[str, object] = {}
+        for key, item in cast("Mapping[object, object]", value).items():
+            if not isinstance(key, str):
+                return invalid(field, "nested evidence mapping keys are strings")
+            frozen = _freeze_exact_graph(item, field)
+            if is_refusal(frozen):
+                return frozen
+            output[key] = frozen.value
+        return Ok(MappingProxyType(output))
+    if isinstance(value, (list, tuple)):
+        items: list[object] = []
+        for item in cast("Sequence[object]", value):
+            frozen = _freeze_exact_graph(item, field)
+            if is_refusal(frozen):
+                return frozen
+            items.append(frozen.value)
+        return Ok(tuple(items))
+    if value is None or isinstance(value, (str, int, bool, ExactRational)):
+        return Ok(value)
+    encoded = canonical_bytes(value)
+    if is_refusal(encoded):
+        return invalid(field, "evidence contains only canonical exact immutable values")
+    return Ok(value)
+
+
 def _parse_presence(value: object) -> Result[PresenceState]:
     if isinstance(value, PresenceState):
         return Ok(value)
@@ -122,6 +153,9 @@ class SeriesSample:
     presence: PresenceState
     knowable_at: Instant
     value: object | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "value", deep_freeze(self.value))
 
     def fp1_identity(self) -> dict[str, object]:
         content: dict[str, object] = {
@@ -157,6 +191,9 @@ class SeriesSample:
         float_guard = _refuse_float(value, "value")
         if is_refusal(float_guard):
             return float_guard
+        frozen_value = _freeze_exact_graph(value, "value")
+        if is_refusal(frozen_value):
+            return frozen_value
         if state.value is PresenceState.PRESENT:
             if value is None:
                 return invalid(
@@ -171,12 +208,12 @@ class SeriesSample:
                 "never a sentinel",
                 presence=state.value.value,
             )
-        return Ok(cls(presence=state.value, knowable_at=instant.value, value=value))
+        return Ok(cls(presence=state.value, knowable_at=instant.value, value=frozen_value.value))
 
     @classmethod
     def try_from_payload(cls, payload: object) -> Result[SeriesSample]:
         if isinstance(payload, cls):
-            return Ok(payload)
+            return cls.try_create(payload.presence, payload.knowable_at, payload.value)
         if not isinstance(payload, Mapping):
             return invalid(
                 "sample",
@@ -309,11 +346,10 @@ class StructureFold:
             )
         else:
             mapping = cast("Mapping[str, object]", geometry)
-            for nested in mapping.values():
-                float_guard = _refuse_float(nested, "geometry")
-                if is_refusal(float_guard):
-                    return float_guard
-            geo = MappingProxyType(dict(mapping))
+            frozen_geometry = _freeze_exact_graph(mapping, "geometry")
+            if is_refusal(frozen_geometry):
+                return frozen_geometry
+            geo = cast("Mapping[str, object]", frozen_geometry.value)
         return Ok(
             cls(
                 producer_key=key,
@@ -526,7 +562,7 @@ def _coerce_series(key: str, value: object) -> Result[PresenceMappedSeries]:
                 key=key,
                 given=value.producer_key,
             )
-        return Ok(value)
+        return PresenceMappedSeries.try_create(key, value.samples)
     if isinstance(value, SeriesSample):
         return PresenceMappedSeries.try_create(key, (value,))
     if isinstance(value, Mapping):
@@ -562,7 +598,14 @@ def _coerce_fold(key: str, value: object) -> Result[StructureFold]:
                 key=key,
                 given=value.producer_key,
             )
-        return Ok(value)
+        return StructureFold.try_create(
+            key,
+            value.knowable_at,
+            observed_at=value.observed_at,
+            confirmed_at=value.confirmed_at,
+            invalidated_at=value.invalidated_at,
+            geometry=value.geometry,
+        )
     if not isinstance(value, Mapping):
         return invalid(
             "structure_folds",
@@ -719,7 +762,11 @@ class MappingReadSurface:
     frames: Mapping[int, object]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "frames", MappingProxyType(dict(self.frames)))
+        frozen: dict[int, object] = {}
+        for instant, payload in self.frames.items():
+            graph = deep_freeze(payload)
+            frozen[instant] = graph
+        object.__setattr__(self, "frames", MappingProxyType(frozen))
 
     def at(self, instant: object, /) -> Result[object]:
         if not isinstance(instant, Instant):

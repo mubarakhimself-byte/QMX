@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TypeVar, get_args
+from typing import TypeVar, cast, get_args
 
 from qmf.core.chrono import CalendarIdentity, DataDrivenClock, Instant
 from qmf.core.exact import ExactRational, Price, PriceDelta, UnitKind
@@ -27,6 +28,7 @@ from qml.protocol import (
     FunctionFactory,
     HostedBot,
     MappingReadSurface,
+    PresenceMappedSeries,
     PresenceState,
     SeriesSample,
     StructureFold,
@@ -383,6 +385,87 @@ def test_sample_requires_knowable_at() -> None:
     assert present.knowable_at == instant
     gap = _ok(SeriesSample.try_create("gap", instant))
     assert gap.value is None
+
+
+def test_actual_callback_evidence_is_recursively_frozen_across_reads() -> None:
+    declaration = _declaration()
+    instant = _instant()
+    payload: dict[str, object] = {
+        "kind": "series",
+        "samples": [
+            {
+                "presence": "present",
+                "knowable_at": instant.value_ns,
+                "value": {"quote": {"bid": {"amount": 1}}},
+            }
+        ],
+    }
+    surface = _ok(MappingReadSurface.try_create({instant: payload}))
+    seen: list[FootprintEvidence] = []
+    bot = _ok(
+        construct_bot(
+            FunctionFactory(logic=lambda evidence: seen.append(evidence) or ()),
+            declaration=declaration,
+            assignment={"lookback": 20},
+            read_surfaces={"primary": surface},
+        )
+    )
+
+    _ok(bot.on_instant(instant))
+    sample_payload = cast(list[dict[str, object]], payload["samples"])[0]
+    sample_value = cast(dict[str, object], sample_payload["value"])
+    quote = cast(dict[str, object], sample_value["quote"])
+    bid = cast(dict[str, object], quote["bid"])
+    bid["amount"] = 99
+    _ok(bot.on_instant(instant))
+
+    first_value = cast(Mapping[str, object], seen[0].series["primary"].samples[0].value)
+    second_value = cast(Mapping[str, object], seen[1].series["primary"].samples[0].value)
+    first_quote = cast(Mapping[str, object], first_value["quote"])
+    second_quote = cast(Mapping[str, object], second_value["quote"])
+    assert cast(Mapping[str, object], first_quote["bid"])["amount"] == 1
+    assert cast(Mapping[str, object], second_quote["bid"])["amount"] == 1
+
+
+def test_typed_and_mapped_evidence_revalidate_presence_and_nested_exact_values() -> None:
+    declaration = _declaration()
+    keys = _ok(declared_evidence_keys(declaration.footprint))
+    instant = _instant()
+    provisional = SeriesSample(PresenceState.PROVISIONAL, instant, 1)
+    typed_series = PresenceMappedSeries("primary", (provisional,))
+    typed = collect_evidence(
+        {"primary": _surface(instant, typed_series)}, instant, declared_keys=keys
+    )
+    assert is_refusal(typed)
+
+    nested_float = collect_evidence(
+        {
+            "primary": _surface(
+                instant,
+                {
+                    "kind": "series",
+                    "samples": [
+                        {
+                            "presence": "present",
+                            "knowable_at": instant.value_ns,
+                            "value": {"nested": [{"price": 1.5}]},
+                        }
+                    ],
+                },
+            )
+        },
+        instant,
+        declared_keys=keys,
+    )
+    assert is_refusal(nested_float)
+
+    invalid_fold = StructureFold(
+        "primary", instant, geometry={"nested": {"price": 1.5}}
+    )
+    folded = collect_evidence(
+        {"primary": _surface(instant, invalid_fold)}, instant, declared_keys=keys
+    )
+    assert is_refusal(folded)
 
 
 # --- AC: zero-or-more CT-23 intents; advisory stop; no Book full-loss --------
