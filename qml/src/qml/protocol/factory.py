@@ -317,8 +317,6 @@ def restore_bot(
 def _as_bot_definition(value: object) -> Result[BotDefinition]:
     from qml.declaration.bot import BotDefinition  # noqa: PLC0415
 
-    if isinstance(value, BotDefinition):
-        return Ok(value)
     return BotDefinition.try_from_mapping(value)
 
 

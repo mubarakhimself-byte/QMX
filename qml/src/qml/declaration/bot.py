@@ -258,7 +258,16 @@ class BotDefinition:
     def try_from_mapping(cls, payload: object) -> Result[BotDefinition]:
         """Admit a CT-33 mapping (kind envelope, body, or the six groups)."""
         if isinstance(payload, cls):
-            return Ok(payload)
+            payload = {
+                "strategy_family_id": payload.strategy_family_id,
+                "confluence_set": payload.confluence_set,
+                "parameter_space": payload.parameter_space,
+                "footprint": payload.footprint,
+                "permitted_exit_intents": payload.permitted_exit_intents,
+                "logic_reference": payload.logic_reference,
+                "at_birth_parent_refs": payload.at_birth_parent_refs,
+                "format_version": payload.kind_format_version,
+            }
         if not isinstance(payload, Mapping):
             return invalid(
                 "bot_definition",
@@ -269,9 +278,23 @@ class BotDefinition:
         nested = mapping.get("body")
         if isinstance(nested, Mapping) and "strategy_family_id" not in mapping:
             header_refs = mapping.get("at_birth_parent_refs")
+            header_versions = _bot_version_values(mapping)
             mapping = dict(cast("Mapping[str, object]", nested))
+            body_versions = _bot_version_values(mapping)
+            if not _bot_versions_agree((*header_versions, *body_versions)):
+                return invalid(
+                    "contract_format_version",
+                    "CT-33 envelope and body version declarations agree",
+                )
             if header_refs is not None and "at_birth_parent_refs" not in mapping:
                 mapping["at_birth_parent_refs"] = header_refs
+            if header_versions and not body_versions:
+                mapping["contract_format_version"] = header_versions[0]
+        if not _bot_versions_agree(_bot_version_values(mapping)):
+            return invalid(
+                "contract_format_version",
+                "CT-33 format version aliases agree",
+            )
         blocked = _refuse_forbidden(mapping)
         if is_refusal(blocked):
             return blocked
@@ -288,6 +311,21 @@ class BotDefinition:
             at_birth_parent_refs=mapping.get("at_birth_parent_refs", ()),
             format_version=version,
         )
+
+
+def _bot_version_values(mapping: Mapping[str, object]) -> tuple[object, ...]:
+    return tuple(
+        mapping[key]
+        for key in ("contract_format_version", "format_version")
+        if key in mapping
+    )
+
+
+def _bot_versions_agree(values: tuple[object, ...]) -> bool:
+    if len(values) < 2:
+        return True
+    first = values[0]
+    return all(type(value) is type(first) and value == first for value in values[1:])
 
 
 def _refuse_forbidden(mapping: Mapping[str, object]) -> Result[None]:

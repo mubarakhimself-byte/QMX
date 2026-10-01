@@ -167,7 +167,11 @@ class HardConstraintFilter:
     @classmethod
     def try_create(cls, payload: object) -> Result[HardConstraintFilter]:
         if isinstance(payload, cls):
-            return Ok(payload)
+            payload = {
+                "measure_identity": payload.measure_identity,
+                "op": payload.op,
+                "value": payload.value,
+            }
         if not isinstance(payload, Mapping):
             return invalid(
                 "hard_constraint",
@@ -290,7 +294,31 @@ class ParameterSpec:
     def try_create(cls, payload: object, *, index: int = 0) -> Result[ParameterSpec]:
         """Validate one parameter; a missing unit-kind is ``invalid input``."""
         if isinstance(payload, cls):
-            return Ok(payload)
+            normalized: dict[str, object] = {
+                "name": payload.name,
+                "type": payload.type,
+                "unit_kind": payload.unit_kind,
+                "default": payload.default,
+                "ui": payload.ui,
+            }
+            if type(payload.type) is ParameterType:
+                if payload.type in {
+                    ParameterType.EXACT_INTEGER,
+                    ParameterType.EXACT_RATIONAL,
+                } and isinstance(payload.bounds, tuple) and len(payload.bounds) == 2:
+                    normalized["bounds"] = {
+                        "min": payload.bounds[0],
+                        "max": payload.bounds[1],
+                    }
+                elif payload.type is ParameterType.CATEGORICAL or payload.bounds is not None:
+                    normalized["bounds"] = payload.bounds
+            elif payload.bounds is not None:
+                normalized["bounds"] = payload.bounds
+            if payload.step is not None:
+                normalized["step"] = payload.step
+            if payload.hard_constraint is not None:
+                normalized["hard_constraint"] = payload.hard_constraint
+            payload = normalized
         if not isinstance(payload, Mapping):
             return invalid(
                 "parameter_space",
