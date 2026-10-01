@@ -38,9 +38,18 @@ deployed incident, a production composition path, or live trading exposure.
   before updating reservation state, and fails closed after an append refusal or
   uncertain acknowledgment. Recovery rejects incomplete streams and requires a
   supplied committed high-water matching the recovered prefix. However, the
-  production composition has not yet wired an authoritative QMF journal reader
-  to supply that proof or the ledger to an actual Book/KSA caller, so QM 05
-  remains open across product composition and end-to-end restart recovery.
+  QMN `QmfEntryReservationJournal` adapter now uses QMF's resumed CT-13 writer
+  and checked reader to append and recover the typed transition stream. The
+  production composition still has not wired this adapter to an actual Book/KSA
+  caller, so QM 05 remains open across product composition and end-to-end
+  restart recovery.
+
+The shipped `python -m qmn.host.supervise` entrypoint now validates configured
+root/state directories and a loopback evidence bind, serves `/healthz` while
+alive, and reports `/readiness` as unavailable with `stand-down-alive` while no
+venue adapter is composed. It supports systemd notify/watchdog and OS stop. This
+establishes a provider-free supervised process lifecycle, not trading readiness
+or the full QMN decision composition.
 
 The integrated proof is still open: no production Book/KSA caller of
 `consume_signal_snapshot` was established. `SeatDispatchReceipt.hops` still
@@ -72,8 +81,10 @@ Latest targeted reservation and identity command:
 uv run --no-sync pytest -q qmn/tests/test_qmn_seat_tunnel.py qmn/tests/test_qmn_order.py qmn/tests/test_qmn_encode.py packages/qmf-venue/tests/test_commands_ct19.py packages/qmf-venue/tests/test_encode_ct19.py
 ```
 
-The command reports **133 passed**. Ruff passed and Pyright reported 0 errors,
-0 warnings, and 0 informations on the focused source.
+The command reports **133 passed**. A separate checked-journal adapter and
+supervised-process verification command reports **47 passed** across the
+adapter, seat tunnel, order path, and supervisor process tests. Ruff passed and
+Pyright reported 0 errors, 0 warnings, and 0 informations on those scoped files.
 
 The broader command `uv run --no-sync pytest -q qmn/tests
 packages/qmf-venue/tests` reached **1,412 passed, 7 skipped, 1 failed**. Its
