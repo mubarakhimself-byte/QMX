@@ -42,6 +42,7 @@ from qmn.mis.signal_snapshot import (
     SignalSnapshot,
     consume_signal_snapshot,
 )
+from qmn.order.amend import AMEND_JOURNAL_KIND, DynamicProtectionOrigin
 from qmn.order.identity import NativeExecutionMap
 from qmn.order.path import OrderPath, OrderPathSubmission, OrderPathTerminalResolution
 from qmn.protection.ksa import (
@@ -54,6 +55,7 @@ from qmn.seats.admission import AdmittedNodeSeat
 from qmn.seats.dispatch import (
     BookPathContext,
     NativeExitAuthority,
+    RatchetCommandAuthorization,
     SeatDispatchReceipt,
     authorize_native_exit_intent,
     dispatch_hosted_intents,
@@ -171,7 +173,10 @@ class QmfHostedDecisionJournal:
         body = cast("Mapping[str, object]", event)
         if body.get("class") == DECISION_TRANSCRIPT_CLASS:
             event_type = JournalEventType.DATA_QUALITY
-        elif body.get("kind") == "command" and body.get("phase") == "before-dispatch":
+        elif (
+            body.get("phase") == "before-dispatch"
+            and body.get("kind") in {"command", AMEND_JOURNAL_KIND}
+        ):
             event_type = JournalEventType.ORDER
         else:
             return invalid(
@@ -571,6 +576,39 @@ class HostedDecisionRoot:
                 )
             subject_present: object = None
             subject_observations: object = None
+            amend_origin = DynamicProtectionOrigin.BOT_PROPOSAL
+            command_fp = command.fingerprint()
+            if is_refusal(command_fp):
+                return command_fp
+            ratchet_matches = tuple(
+                authorization
+                for authorization in receipt.value.ratchet_authorizations
+                if authorization.command_fp1 == command_fp.value
+            )
+            if len(ratchet_matches) > 1:
+                return policy(
+                    "ratchet_authorization",
+                    "one exact source authorization binds an originated ratchet command",
+                )
+            if ratchet_matches:
+                authorization = ratchet_matches[0]
+                if (
+                    type(authorization) is not RatchetCommandAuthorization
+                    or command.kind.value != "amend_protection"
+                    or command.subject_reference != authorization.native_position_id
+                    or command.venue_id != self.path.venue_id
+                    or command.account != self.path.account
+                    or command.session_epoch != self.path.session_epoch
+                    or authorization.binding_epoch != epoch.value
+                    or authorization.bot_id != candidate_fp.value
+                    or authorization.source_frontier_ns > decision_at.value_ns
+                ):
+                    return policy(
+                        "ratchet_authorization",
+                        "ratchet source lineage matches this full CT-19 command, current epoch, "
+                        "selected Bot and frontier",
+                    )
+                amend_origin = DynamicProtectionOrigin.BREAKEVEN_RATCHET
             if command.kind.value == "close_position":
                 authority = self.path.native_exit_authority
                 if type(authority) is not NativeExitAuthority:
@@ -593,6 +631,7 @@ class HostedDecisionRoot:
                 handed_off_at=timing.value.handed_off_at,
                 subject_present_at_submission=subject_present,
                 subject_observations=subject_observations,
+                amend_origin=amend_origin,
             )
             if is_refusal(result):
                 return result

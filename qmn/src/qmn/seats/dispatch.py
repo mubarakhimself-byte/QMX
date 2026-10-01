@@ -15,7 +15,23 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core import Account, Fingerprint, Instant, Ok, Result, TypedRefusal, is_refusal
+from qmf.core import (
+    Account,
+    ExactRational,
+    Fingerprint,
+    Instant,
+    Instrument,
+    Ok,
+    PriceDelta,
+    Result,
+    TypedRefusal,
+    UnitKind,
+    VenueId,
+    fingerprint,
+    is_refusal,
+)
+from qmf.data import JournalEvent, JournalWriter
+from qmf.data.store import EvidenceStore, JournalStore
 from qmf.risk.binding import BookBindingRecord
 from qmf.risk.door import (
     EntryIntent,
@@ -26,7 +42,13 @@ from qmf.risk.door import (
 )
 from qmf.risk.exit_policy import ExitPolicy, resolve_exit_policy_entry
 from qmf.risk.paper import ExecutionTarget
+from qmf.venue.ctrader import RoundingMode
 
+from qmn.capital.ratchet import (
+    BreakevenRatchetOrigin,
+    dispatch_originated_breakeven_ratchet,
+    originate_breakeven_ratchet,
+)
 from qmn.ledger.binding_ledger import BindingVirtualLedger
 from qmn.ledger.native_position import (
     NativePositionAttribution,
@@ -34,7 +56,17 @@ from qmn.ledger.native_position import (
     resolve_native_position_attribution,
     write_native_position_attribution,
 )
+from qmn.ledger.protection_market import resolve_checked_live_spot_prices
+from qmn.ledger.protection_plan import (
+    ProtectionRatchetPolicy,
+    create_protection_admission_plan,
+    find_protection_admission_plan,
+    persist_protection_admission_plan,
+    resolve_protection_ratchet_policy,
+)
+from qmn.ledger.protection_state import resolve_checked_native_protection_readback
 from qmn.ledger.virtual import VirtualPosition, VirtualPositionStatus
+from qmn.order.amend import AmendAtomicity, BookDynamicProtectionPolicy
 from qmn.order.door import (
     BOT_SIZE_FIELDS,
     AuthorizedIntent,
@@ -42,12 +74,12 @@ from qmn.order.door import (
     mint_place_order_from_authorized,
     reject_bot_supplied_final_size,
 )
-from qmn.order.identity import NativeExecutionMap
+from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.seats._refuse import invalid, policy
 from qmn.seats.admission import AdmittedNodeSeat
 from qmn.seats.host import GovernedSeat, drive_governed_seat
-from qmn.venue import CloseScope, Command, CommandIdBinding
+from qmn.venue import CloseScope, Command, CommandIdBinding, ProtectionAmendment
 
 __all__ = [
     "INTENT_PATH_HOPS",
@@ -86,6 +118,12 @@ class BookPathContext:
     binding_record: object
     native_exit_authority: object = None
     exit_policy: object = None
+    protection_ratchet_policy: object = None
+    protection_plan_writer: object = None
+    protection_plan_journal: object = None
+    amend_atomicity: object = None
+    dynamic_protection_policy: object = None
+    resolved_node_config: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +143,10 @@ class NativeExitAuthority:
     netting_partition: object = None
     subject_present_at_submission: object = None
     subject_observations: object = None
+    evidence_store: object = None
+    spot_events_by_position_ref: Mapping[str, tuple[JournalEvent, ...]] | None = None
+    price_digits: object = None
+    price_rounding: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +159,7 @@ class SeatDispatchReceipt:
     bms_instance_id: str
     seat_id: str
     exit_attributions: tuple[NativePositionAttribution, ...] = ()
+    ratchet_authorizations: tuple[RatchetCommandAuthorization, ...] = ()
 
     def as_mapping(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -126,7 +169,42 @@ class SeatDispatchReceipt:
                 "hops": list(self.hops),
                 "intent_count": len(self.authorized),
                 "exit_attributions": [item.identity() for item in self.exit_attributions],
+                "ratchet_authorizations": [
+                    item.as_mapping() for item in self.ratchet_authorizations
+                ],
                 "seat_id": self.seat_id,
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RatchetCommandAuthorization:
+    """Source lineage authorizing one already-originated breakeven command."""
+
+    command_fp1: Fingerprint
+    plan_fp1: Fingerprint
+    binding_epoch: Fingerprint
+    position_ref: Fingerprint
+    native_position_id: str
+    bot_id: str
+    family_id: str
+    current_stop_event_fp1: Fingerprint
+    spot_event_fp1s: tuple[Fingerprint, ...]
+    source_frontier_ns: int
+
+    def as_mapping(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "binding_epoch": self.binding_epoch.value,
+                "bot_id": self.bot_id,
+                "command_fp1": self.command_fp1.value,
+                "current_stop_event_fp1": self.current_stop_event_fp1.value,
+                "family_id": self.family_id,
+                "native_position_id": self.native_position_id,
+                "plan_fp1": self.plan_fp1.value,
+                "position_ref": self.position_ref.value,
+                "source_frontier_ns": self.source_frontier_ns,
+                "spot_event_fp1s": [event.value for event in self.spot_event_fp1s],
             }
         )
 
@@ -227,6 +305,7 @@ def dispatch_hosted_intents(
     authorized: list[AuthorizedIntent] = []
     commands: list[Command] = []
     exit_attributions: list[NativePositionAttribution] = []
+    ratchet_authorizations: list[RatchetCommandAuthorization] = []
     entry_reservations: list[tuple[str, Fingerprint]] = []
     pending_in_batch: set[str] = set()
     ordinal = door.ordering_ordinal
@@ -246,8 +325,14 @@ def dispatch_hosted_intents(
             )
             if is_refusal(exited):
                 return exited
-            commands.append(exited.value[0])
-            exit_attributions.append(exited.value[1])
+            command, attribution, ratchet_authorization = exited.value
+            if command is None:
+                continue
+            commands.append(command)
+            if attribution is not None:
+                exit_attributions.append(attribution)
+            if ratchet_authorization is not None:
+                ratchet_authorizations.append(ratchet_authorization)
             continue
         if not isinstance(item, EntryIntent):
             return policy(
@@ -297,6 +382,14 @@ def dispatch_hosted_intents(
         )
         if is_refusal(protected):
             return protected
+        plan_written = _persist_entry_protection_plan(
+            command=command.value,
+            authorized=frozen.value,
+            seat=admitted.value,
+            door=door,
+        )
+        if is_refusal(plan_written):
+            return plan_written
         authorized.append(frozen.value)
         commands.append(command.value)
         pending_in_batch.add(instrument_key)
@@ -316,7 +409,115 @@ def dispatch_hosted_intents(
             bms_instance_id=door.bms_instance_id,
             seat_id=admitted.value.seat_id,
             exit_attributions=tuple(exit_attributions),
+            ratchet_authorizations=tuple(ratchet_authorizations),
         )
+    )
+
+
+def _persist_entry_protection_plan(
+    *,
+    command: Command,
+    authorized: AuthorizedIntent,
+    seat: AdmittedNodeSeat,
+    door: BookPathContext,
+) -> Result[None]:
+    """Persist full-risk entry lineage when the resolved Book permits dynamic tightening."""
+    if door.exit_policy is None:
+        return Ok(None)
+    if type(door.exit_policy) is not ExitPolicy:
+        return invalid("exit_policy", "protection plan resolves a typed Book ExitPolicy")
+    if ExitKind.TIGHTEN_PROTECTIVE_STOP not in door.exit_policy.permitted_exit_intent_kinds:
+        return Ok(None)
+    if not isinstance(door.binding_record, BookBindingRecord):
+        return invalid("binding_record", "dynamic protection plan binds the exact CT-28 epoch")
+    if type(door.decision_at) is not Instant:
+        return invalid("decision_at", "dynamic protection plan is stamped at the admitted frontier")
+    resolved_values = _resolve_book_ratchet_values(door)
+    if is_refusal(resolved_values):
+        return resolved_values
+    if (
+        door.protection_ratchet_policy is not None
+        and door.protection_ratchet_policy != resolved_values.value
+    ):
+        return policy(
+            "protection_ratchet_policy",
+            "host value matches actual resolved registry rows",
+        )
+    if door.protection_plan_writer is None or door.protection_plan_journal is None:
+        return policy(
+            "protection_plan_writer",
+            "dynamic protection requires its durable CT-13 plan writer before order dispatch",
+        )
+    candidate = seat.proof.candidate
+    declaration = candidate.declaration
+    family_id = declaration.strategy_family_id.value
+    resolved_entry = resolve_exit_policy_entry(door.exit_policy, family_id)
+    if is_refusal(resolved_entry):
+        return resolved_entry
+    binding_epoch = door.binding_record.fingerprint()
+    command_fp = command.fingerprint()
+    exit_policy_fp = fingerprint(door.exit_policy.fp1_identity())
+    if is_refusal(binding_epoch):
+        return binding_epoch
+    if is_refusal(command_fp):
+        return command_fp
+    if is_refusal(exit_policy_fp):
+        return exit_policy_fp
+    values = resolved_values.value
+    parameters = command.order_parameters
+    if parameters is None or parameters.trade_side not in {"buy", "sell"}:
+        return policy("position_side", "ratchet plan retains the exact CT-19 trade side")
+    policy_source_identity = {
+        "class": "qmn-resolved-book-ratchet-policy-source",
+        "format_version": 1,
+        "book_definition_fp1": door.binding_record.book_definition_fingerprint.value,
+        "binding_epoch_fp1": binding_epoch.value.value,
+        "exit_policy_fp1": exit_policy_fp.value.value,
+        "resolved_family_entry": resolved_entry.value.fp1_identity(),
+        "family_id": family_id,
+        "ratchet_config_source": dict(values.source_identity),
+        "registry_values": {
+            "breakeven_ratchet_trigger": values.trigger.fp1_identity(),
+            "breakeven_ratchet_offset": values.offset.fp1_identity(),
+            "amend_min_improvement": values.amend_min_improvement.fp1_identity(),
+        },
+    }
+    plan = create_protection_admission_plan(
+        command_fp1=command_fp.value,
+        binding_epoch=binding_epoch.value,
+        bot_id=candidate.fingerprint.value,
+        family_id=family_id,
+        direction="long" if parameters.trade_side == "buy" else "short",
+        reference_price=door.entry_price,
+        original_risk_distance=authorized.faces.original_risk_distance,
+        trigger=values.trigger,
+        offset=values.offset,
+        amend_min_improvement=values.amend_min_improvement,
+        policy_source_identity=policy_source_identity,
+    )
+    if is_refusal(plan):
+        return plan
+    persisted = persist_protection_admission_plan(
+        plan.value,
+        writer=door.protection_plan_writer,
+        journal=door.protection_plan_journal,
+        stream_name=getattr(door.protection_plan_writer, "stream_name", None),
+        at=door.decision_at,
+    )
+    if is_refusal(persisted):
+        return persisted
+    return Ok(None)
+
+
+def _resolve_book_ratchet_values(door: BookPathContext) -> Result[ProtectionRatchetPolicy]:
+    if type(door.binding_record) is not BookBindingRecord:
+        return invalid("binding_record", "ratchet config resolves under the exact CT-28 Book")
+    instrument = getattr(door.entry_price, "instrument", None)
+    return resolve_protection_ratchet_policy(
+        config=door.resolved_node_config,
+        book_definition_fp1=door.binding_record.book_definition_fingerprint,
+        book_instance_id=door.binding_record.book_instance_id.value,
+        instrument=instrument,
     )
 
 
@@ -327,7 +528,13 @@ def authorize_native_exit_intent(
     seat: object,
     ordering_ordinal: int,
     persist_projection: bool = True,
-) -> Result[tuple[Command, NativePositionAttribution]]:
+) -> Result[
+    tuple[
+        Command | None,
+        NativePositionAttribution | None,
+        RatchetCommandAuthorization | None,
+    ]
+]:
     """Resolve a native close subject; optionally persist its CT-13 projection."""
     if type(persist_projection) is not bool:
         return invalid("persist_projection", "projection mode is an exact bool")
@@ -336,7 +543,7 @@ def authorize_native_exit_intent(
     evaluated = evaluate_exit_intent(intent)
     if is_refusal(evaluated):
         return evaluated
-    if intent.kind is not ExitKind.CLOSE_FULL:
+    if intent.kind not in {ExitKind.CLOSE_FULL, ExitKind.TIGHTEN_PROTECTIVE_STOP}:
         return policy(
             "exit_intent",
             "tighten-protective-stop needs the separately admitted protection path; "
@@ -379,11 +586,16 @@ def authorize_native_exit_intent(
         or position.binding_epoch != epoch.value
         or position.bot_id != candidate.fingerprint.value
         or intent.reason_code.book_family != family_id
-        or intent.kind.value not in declaration.permitted_exit_intents
     ):
         return policy(
             "book_exit_identity",
             "CT-28, BMS, open virtual position, selected Bot, family and declared exit kind agree",
+        )
+    if intent.kind.value not in declaration.permitted_exit_intents:
+        return policy(
+            "exit_intent",
+            "the selected Bot declaration permits this exact hosted exit kind",
+            exit_kind=intent.kind.value,
         )
     policy_record = door.exit_policy
     if type(policy_record) is not ExitPolicy:
@@ -467,6 +679,19 @@ def authorize_native_exit_intent(
             source_frontier_ns=resolved.value.source_frontier_ns,
             decision_at_ns=door.decision_at.value_ns,
         )
+    if intent.kind is ExitKind.TIGHTEN_PROTECTIVE_STOP:
+        tightened = _authorize_native_ratchet(
+            intent=intent,
+            door=door,
+            seat=seat,
+            position=position,
+            mapping=mappings[0],
+            evidence=evidence,
+            attribution=resolved.value,
+            persist_projection=persist_projection,
+            ordering_ordinal=ordering_ordinal,
+        )
+        return tightened
     command = Command.close_position(
         door.venue_id,
         door.account,
@@ -486,7 +711,273 @@ def authorize_native_exit_intent(
         )
         if is_refusal(persisted):
             return persisted
-    return Ok((command.value, resolved.value))
+    return Ok((command.value, resolved.value, None))
+
+
+def _authorize_native_ratchet(
+    *,
+    intent: ExitIntent,
+    door: BookPathContext,
+    seat: AdmittedNodeSeat,
+    position: VirtualPosition,
+    mapping: object,
+    evidence: NativePositionEvidence,
+    attribution: NativePositionAttribution,
+    persist_projection: bool,
+    ordering_ordinal: int,
+) -> Result[
+    tuple[
+        Command | None,
+        NativePositionAttribution | None,
+        RatchetCommandAuthorization | None,
+    ]
+]:
+    """Originate one admitted Book ratchet from durable plan and checked price sources."""
+    authority = door.native_exit_authority
+    if not isinstance(authority, NativeExitAuthority):
+        return invalid("native_exit_authority", "ratchet sources carry typed native authority")
+    binding_record = cast(BookBindingRecord, door.binding_record)
+    venue_id = cast(VenueId, door.venue_id)
+    account = cast(Account, door.account)
+    plan_journal = cast(JournalStore, door.protection_plan_journal)
+    plan_writer = door.protection_plan_writer
+    if type(plan_writer) is not JournalWriter:
+        return policy("protection_plan_writer", "ratchet reopens the plan from its exact stream")
+    if (
+        intent.tighten is None
+        or type(authority.evidence_store) is not EvidenceStore
+        or not isinstance(authority.spot_events_by_position_ref, Mapping)
+        or type(authority.price_digits) is not int
+        or isinstance(authority.price_digits, bool)
+        or not isinstance(authority.price_rounding, RoundingMode)
+        or type(door.protection_plan_journal) is not type(authority.journal)
+        or type(door.protection_plan_journal) is not JournalStore
+        or type(door.decision_at) is not Instant
+    ):
+        return policy(
+            "protection_evidence",
+            "ratchet requires durable Book plan, joined current stop and checked LIVE quote "
+            "sources",
+        )
+    epoch = binding_record.fingerprint()
+    if is_refusal(epoch):
+        return epoch
+    plan = find_protection_admission_plan(
+        journal=plan_journal,
+        stream_name=plan_writer.stream_name,
+        command_fp1=position.command_identity,
+        binding_epoch=epoch.value,
+    )
+    if is_refusal(plan):
+        return plan
+    candidate = seat.proof.candidate
+    family = candidate.declaration.strategy_family_id.value
+    exit_policy = cast(ExitPolicy, door.exit_policy)
+    resolved_entry = resolve_exit_policy_entry(exit_policy, family)
+    if is_refusal(resolved_entry):
+        return resolved_entry
+    exit_policy_fp = fingerprint(exit_policy.fp1_identity())
+    if is_refusal(exit_policy_fp):
+        return exit_policy_fp
+    resolved_values = _resolve_book_ratchet_values(door)
+    if is_refusal(resolved_values):
+        return resolved_values
+    registry_values = resolved_values.value
+    expected_source: dict[str, object] = {
+        "class": "qmn-resolved-book-ratchet-policy-source",
+        "format_version": 1,
+        "book_definition_fp1": binding_record.book_definition_fingerprint.value,
+        "binding_epoch_fp1": epoch.value.value,
+        "exit_policy_fp1": exit_policy_fp.value.value,
+        "resolved_family_entry": resolved_entry.value.fp1_identity(),
+        "family_id": family,
+        "ratchet_config_source": dict(registry_values.source_identity),
+        "registry_values": {
+            "breakeven_ratchet_trigger": registry_values.trigger.fp1_identity(),
+            "breakeven_ratchet_offset": registry_values.offset.fp1_identity(),
+            "amend_min_improvement": registry_values.amend_min_improvement.fp1_identity(),
+        },
+    }
+    if (
+        plan.value.plan.command_fp1 != position.command_identity
+        or plan.value.plan.binding_epoch != epoch.value
+        or plan.value.plan.bot_id != candidate.fingerprint.value
+        or plan.value.plan.family_id != family
+        or plan.value.plan.policy.source_identity != expected_source
+        or plan.value.plan.direction not in {"long", "short"}
+        or plan.value.event.instant.value_ns > attribution.source_frontier_ns
+    ):
+        return policy(
+            "protection_plan",
+            "persisted Book plan matches the exact position, Bot, family, epoch and "
+            "registered policy",
+        )
+    binding = authority.binding_by_position_ref.get(intent.virtual_position_ref.value)
+    native_mapping = cast(NativeExecutionMapping, mapping)
+    instrument = native_mapping.instrument
+    symbol_id = native_mapping.native_symbol_id
+    if type(binding) is not CommandIdBinding or type(instrument) is not Instrument:
+        return policy("protection_context", "ratchet reuses the checked native position binding")
+    current_stop = resolve_checked_native_protection_readback(
+        journal=authority.journal,
+        journal_stream=evidence.readback_stream,
+        evidence_store=authority.evidence_store,
+        source_event=evidence.readback_event,
+        authorized_writers=authority.authorized_writers,
+        expected_position_id=attribution.native_position_id,
+        expected_account_id=attribution.native_account_id,
+        expected_session_epoch=binding.session_epoch,
+        expected_symbol_id=symbol_id,
+        instrument=instrument,
+        price_digits=authority.price_digits,
+        rounding=authority.price_rounding,
+    )
+    if is_refusal(current_stop):
+        return current_stop
+    stop_distance = (
+        plan.value.plan.reference_price.subtract(current_stop.value.stop_loss)
+        if plan.value.plan.direction == "long"
+        else current_stop.value.stop_loss.subtract(plan.value.plan.reference_price)
+    )
+    if is_refusal(stop_distance):
+        return stop_distance
+    spot_events = authority.spot_events_by_position_ref.get(
+        intent.virtual_position_ref.value
+    )
+    if type(spot_events) is not tuple or not spot_events:
+        return policy("spot_events", "ratchet reads recorded live spot frontiers after admission")
+    best_excursion = ExactRational.try_create(0, 1, UnitKind.R_MULTIPLE)
+    if is_refusal(best_excursion):
+        return best_excursion
+    latest_source_ns = attribution.source_frontier_ns
+    for spot_event in spot_events:
+        prices = resolve_checked_live_spot_prices(
+            journal=authority.journal,
+            journal_stream=evidence.readback_stream,
+            evidence_store=authority.evidence_store,
+            source_event=spot_event,
+            authorized_writers=authority.authorized_writers,
+            instrument=instrument,
+            expected_venue_id=venue_id.value,
+            expected_account_id=attribution.native_account_id,
+            expected_session_epoch=binding.session_epoch,
+            not_before=plan.value.event.instant,
+            decision_at=door.decision_at,
+        )
+        if is_refusal(prices):
+            return prices
+        if spot_event.instant.value_ns < attribution.source_frontier_ns:
+            continue
+        quote = prices.value.bid if plan.value.plan.direction == "long" else prices.value.ask
+        favorable = (
+            quote.subtract(plan.value.plan.reference_price)
+            if plan.value.plan.direction == "long"
+            else plan.value.plan.reference_price.subtract(quote)
+        )
+        if is_refusal(favorable):
+            return favorable
+        if favorable.value.as_fraction() > 0:
+            ratio = favorable.value.as_fraction() / (
+                plan.value.plan.original_risk_distance.as_fraction()
+            )
+            candidate_r = ExactRational.try_create(
+                ratio.numerator, ratio.denominator, UnitKind.R_MULTIPLE
+            )
+            if is_refusal(candidate_r):
+                return candidate_r
+            if candidate_r.value.as_fraction() > best_excursion.value.as_fraction():
+                best_excursion = candidate_r
+        latest_source_ns = max(latest_source_ns, spot_event.instant.value_ns)
+    if latest_source_ns > door.decision_at.value_ns:
+        return policy("spot_frontier", "ratchet source prices are not later than decision time")
+    if intent.tighten.bound.instrument != instrument or (
+        intent.tighten.bound.scale != plan.value.plan.reference_price.scale
+    ):
+        return policy("tighten_bound", "intent bound shares the admitted instrument and scale")
+    moved = stop_distance.value.as_fraction() - registry_values.offset.as_fraction()
+    if moved > intent.tighten.bound.as_fraction():
+        return policy("tighten_bound", "Book-originated stop move stays within the intent bound")
+    proposal = originate_breakeven_ratchet(
+        original_risk_distance=plan.value.plan.original_risk_distance,
+        current_stop_distance=stop_distance.value,
+        favorable_excursion=best_excursion.value,
+        reference_price=plan.value.plan.reference_price,
+        trigger=plan.value.plan.policy.trigger,
+        offset=plan.value.plan.policy.offset,
+        amend_min_improvement=plan.value.plan.policy.amend_min_improvement,
+    )
+    if is_refusal(proposal):
+        return proposal
+    if proposal.value.origin is BreakevenRatchetOrigin.NOT_YET:
+        return Ok((None, None, None))
+    if (
+        type(door.amend_atomicity) is not AmendAtomicity
+        or door.dynamic_protection_policy
+        is not BookDynamicProtectionPolicy.SINGLE_SIDED_BREAKEVEN_RATCHET
+    ):
+        return policy("amend_policy", "ratchet amendment has the exact measured Book/order policy")
+    amendment = proposal.value.amendment
+    if amendment is None:
+        return policy("amendment", "originated ratchet includes its exact stop amendment")
+    signed_offset = PriceDelta.try_create(
+        -registry_values.offset.value
+        if plan.value.plan.direction == "long"
+        else registry_values.offset.value,
+        registry_values.offset.instrument,
+        registry_values.offset.scale,
+    )
+    if is_refusal(signed_offset):
+        return signed_offset
+    signed_amendment = ProtectionAmendment.try_create(
+        amendment.protection_side,
+        signed_offset.value,
+        amendment.reference_price,
+        original_risk_distance=amendment.original_risk_distance,
+    )
+    if is_refusal(signed_amendment):
+        return signed_amendment
+    command = Command.amend_protection(
+        venue_id,
+        account,
+        door.session_epoch,
+        ordering_ordinal,
+        signed_amendment.value,
+        attribution.native_position_id,
+    )
+    if is_refusal(command):
+        return command
+    admitted = dispatch_originated_breakeven_ratchet(
+        command.value,
+        atomicity=door.amend_atomicity,
+        breakeven_offset=signed_offset.value,
+    )
+    if is_refusal(admitted):
+        return admitted
+    command_fp = command.value.fingerprint()
+    if is_refusal(command_fp):
+        return command_fp
+    if persist_projection:
+        persisted = write_native_position_attribution(
+            journal=authority.journal,
+            writer=authority.projection_writer,
+            instant=door.decision_at,
+            attribution=attribution,
+        )
+        if is_refusal(persisted):
+            return persisted
+    authorization = RatchetCommandAuthorization(
+        command_fp1=command_fp.value,
+        plan_fp1=plan.value.plan_fp1,
+        binding_epoch=epoch.value,
+        position_ref=intent.virtual_position_ref,
+        native_position_id=attribution.native_position_id,
+        bot_id=plan.value.plan.bot_id,
+        family_id=plan.value.plan.family_id,
+        current_stop_event_fp1=evidence.readback_event.fingerprint,
+        spot_event_fp1s=tuple(event.fingerprint for event in spot_events),
+        source_frontier_ns=latest_source_ns,
+    )
+    return Ok((command.value, attribution, authorization))
 
 
 def dispatch_seat_intents(

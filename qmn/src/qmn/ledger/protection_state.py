@@ -15,6 +15,7 @@ from qmf.core import (
     VenueId,
     World,
     WriterId,
+    canonical_bytes,
     fingerprint,
     is_refusal,
 )
@@ -114,7 +115,16 @@ def resolve_checked_native_protection_readback(
     raw_journal_rows = journal.read_stream(journal_stream, for_world=World.LIVE)
     if is_refusal(raw_journal_rows):
         return raw_journal_rows
-    matching_rows = tuple(row for row in raw_journal_rows.value if row == source_event.to_row())
+    expected_row = canonical_bytes(source_event.to_row())
+    if is_refusal(expected_row):
+        return expected_row
+    matching_rows: list[Mapping[str, object]] = []
+    for row in raw_journal_rows.value:
+        actual_row = canonical_bytes(row)
+        if is_refusal(actual_row):
+            return actual_row
+        if actual_row.value == expected_row.value:
+            matching_rows.append(cast("Mapping[str, object]", row))
     if len(matching_rows) != 1:
         return policy("source_event", "checked CT-13 event has one exact physical row")
 

@@ -39,7 +39,15 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.chrono import CalendarIdentity
-from qmf.data import JournalAppendReceipt, JournalEventType, JournalReader, JournalWriter
+from qmf.data import (
+    JournalAppendReceipt,
+    JournalEventType,
+    JournalReader,
+    JournalWriter,
+)
+from qmf.data import (
+    JournalEvent as QmfJournalEvent,
+)
 from qmf.data.store import EvidenceStore, JournalStore
 from qmf.data.store.engines.jsonl import jsonl_opener
 from qmf.risk.binding import (
@@ -73,10 +81,13 @@ from qmf.risk.footprint_requirements import FootprintRequirements
 from qmf.risk.paper import ExecutionTarget
 from qmf.venue.commands import (
     CommandObservation,
-    JournalEvent,
     SubmissionOutcome,
     SubmissionResult,
 )
+from qmf.venue.commands import (
+    JournalEvent as VenueJournalEvent,
+)
+from qmf.venue.ctrader import RoundingMode
 from qml.conformance import (
     admit_ungoverned_tunnel,
     gate_registration,
@@ -93,6 +104,8 @@ from qml.protocol import (
     construct_bot,
     mint_state_scope,
 )
+from qmn.config import compile_node_config
+from qmn.data.observation_sink import QmfLiveJournalSink, QmfLiveObservationSink
 from qmn.host.decision_root import (
     DECISION_TRANSCRIPT_CLASS,
     HostedDecisionRoot,
@@ -124,6 +137,7 @@ from qmn.order import (
     OrderPath,
     OrderPathTerminalResolution,
 )
+from qmn.order.amend import AmendAtomicity, BookDynamicProtectionPolicy
 from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
@@ -433,19 +447,79 @@ def _rate() -> ExactRational:
     return _ok(ExactRational.try_create(1_000, 1, UnitKind.RATE))
 
 
-def _entry() -> EntryIntent:
+def _entry(direction: Direction = Direction.LONG) -> EntryIntent:
     slot = _ok(EvidenceSlot.try_create("sqs", "sqs-ref-1", _instant()))
     cited = _ok(CitedEvidence.try_create(sqs_reading=slot))
     return _ok(
         EntryIntent.try_create(
             _instrument(),
-            Direction.LONG,
+            direction,
             _ok(ReasonCode.try_create("momentum-break", "scalper-v1")),
             _ok(ExecutionTarget.try_create("demo", _venue(), "acct-1")),
             proposed_r=_r(1),
             cited_evidence=cited,
         )
     )
+
+
+def _append_live_source_event(
+    *,
+    store: EvidenceStore,
+    writer: JournalWriter,
+    venue_id: VenueId,
+    account_id: int,
+    session_epoch: str,
+    wire_kind: str,
+    native_id: str,
+    instant: Instant,
+    raw_payload: Mapping[str, object],
+    journal_raw_payload: Mapping[str, object] | None = None,
+) -> QmfJournalEvent:
+    observation_sink = QmfLiveObservationSink(store=store, writer=writer)
+    journal_store = _ok(store.for_world(World.LIVE)).journal
+    journal_sink = QmfLiveJournalSink(
+        writer=writer, journal_store=journal_store, evidence_store=store
+    )
+    observation = {
+        "observation": {
+            "payload": {
+                "event_time_ns": instant.value_ns,
+                "known_at_ns": instant.value_ns,
+                "source": "ctrader-conformance-fixture",
+                "source_native_id": native_id,
+                "revision": "1",
+                "venue_id": venue_id.value,
+                "response_account_id": account_id,
+                "response_session_epoch": session_epoch,
+                "session_epoch": session_epoch,
+                "wire_kind": wire_kind,
+            }
+        },
+        "raw_payload": raw_payload,
+    }
+    recorded = _ok(observation_sink.emit(observation))
+    appended = _ok(
+        journal_sink.append(
+            {
+                "event_type": "data quality",
+                "event_time_ns": instant.value_ns,
+                "known_at_ns": instant.value_ns,
+                "source": "ctrader-conformance-fixture",
+                "source_native_id": native_id,
+                "revision": "1",
+                "venue_id": venue_id.value,
+                "trader_account_id": account_id,
+                "session_epoch": session_epoch,
+                "wire_kind": wire_kind,
+                "raw_payload": dict(
+                    raw_payload if journal_raw_payload is None else journal_raw_payload
+                ),
+                "_observation_ack": recorded,
+            }
+        )
+    )
+    receipt = cast(JournalAppendReceipt, appended.detail["journal_append_receipt"])
+    return receipt.event
 
 
 class _OffsetStopModule:
@@ -737,7 +811,7 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
             receive_instant=_instant(),
             detail="test UNKNOWN state",
         ),
-        journal_event=JournalEvent.for_outcome(
+        journal_event=VenueJournalEvent.for_outcome(
             command_id, first.commands[0].kind, SubmissionOutcome.UNKNOWN
         ),
     )
@@ -759,7 +833,7 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
             receive_instant=_instant(),
             venue_code="rejected",
         ),
-        journal_event=JournalEvent.for_outcome(
+        journal_event=VenueJournalEvent.for_outcome(
             command_id, first.commands[0].kind, SubmissionOutcome.REJECTED_BY_VENUE
         ),
     )
@@ -850,6 +924,7 @@ fixture_configured_root_record_sink = _ConfiguredRootRecordSink
 def _exercise_configured_decision_root(
     tmp_path: Path,
     *,
+    direction: Direction = Direction.LONG,
     after_root_ready: Callable[
         [HostedDecisionRoot, object, JournalStore, dict[str, object]], None
     ]
@@ -943,7 +1018,7 @@ def _exercise_configured_decision_root(
             OrderPathTiming(
                 enqueued_at=_ok(MonotonicReading.try_create(100, "boot-1")),
                 now_mono=_ok(MonotonicReading.try_create(200, "boot-1")),
-                handed_off_at=_instant(),
+                handed_off_at=_instant(_NS + 5),
             )
         )
 
@@ -956,6 +1031,8 @@ def _exercise_configured_decision_root(
             forms_per_order_type={"market": ENTRY_RELATIVE_FORM},
             submission_deadline_duration=_duration(5_000_000_000),
             command_journal=decision_journal,
+            amend_journal=decision_journal,
+            amend_atomicity=AmendAtomicity.ATOMIC,
             position_ledger=ledger,
         )
     )
@@ -963,19 +1040,61 @@ def _exercise_configured_decision_root(
     bot_world = _world()
     bot_world["declaration"] = replace(
         cast(BotDefinition, bot_world["declaration"]),
-        permitted_exit_intents=(ExitKind.CLOSE_FULL.value,),
+        permitted_exit_intents=(
+            ExitKind.CLOSE_FULL.value,
+            ExitKind.TIGHTEN_PROTECTIVE_STOP.value,
+        ),
     )
     exit_logic = _ok(ExitLogicRef.try_create("book.default.evidence_stop", {"style": "structure"}))
     exit_policy = _ok(
         ExitPolicy.try_create(
             {"trend-follow": exit_logic},
-            permitted_exit_intent_kinds=(ExitKind.CLOSE_FULL,),
+            permitted_exit_intent_kinds=(
+                ExitKind.CLOSE_FULL,
+                ExitKind.TIGHTEN_PROTECTIVE_STOP,
+            ),
         )
     )
+    ratchet_config = _ok(
+        compile_node_config(
+            book={
+                "breakeven_ratchet_trigger": {
+                    "value": {"numerator": 1, "denominator": 10, "unit_kind": "r-multiple"},
+                    "value_status": "ratified",
+                },
+                "breakeven_ratchet_offset": {
+                    "value": {
+                        "value": 2,
+                        "instrument": {"venue": _venue().value, "symbol": "EURUSD"},
+                        "scale": 5,
+                    },
+                    "value_status": "ratified",
+                },
+                "amend_min_improvement": {
+                    "value": {"numerator": 0, "denominator": 1, "unit_kind": "r-multiple"},
+                    "value_status": "ratified",
+                },
+            }
+        )
+    )
+    plan_writer_id = _ok(WriterId.try_create("node-test", "risk", "protection-plans", "boot-1"))
+    plan_writer = _ok(
+        JournalWriter.resume(world.journal, plan_writer_id, stream_name="protection-plans")
+    )
     intent_state: dict[str, object] = {}
-    factory = FunctionFactory(logic=lambda _evidence: intent_state.get("intents", (_entry(),)))
+    factory = FunctionFactory(
+        logic=lambda _evidence: intent_state.get("intents", (_entry(direction),))
+    )
     admitted = _ok(_propose(factory=factory, world=bot_world, exit_policy=exit_policy))
-    path = replace(path, exit_policy=exit_policy)
+    path = replace(
+        path,
+        exit_policy=exit_policy,
+        resolved_node_config=ratchet_config,
+        protection_plan_writer=plan_writer,
+        protection_plan_journal=world.journal,
+        amend_atomicity=AmendAtomicity.ATOMIC,
+        dynamic_protection_policy=BookDynamicProtectionPolicy.SINGLE_SIDED_BREAKEVEN_RATCHET,
+    )
     native_map = cast(NativeExecutionMap, path.native_execution_map)
     altered_row = replace(native_map.mappings[0], native_symbol_id=999)
     stale_native_map = replace(native_map, mappings=(altered_row, *native_map.mappings[1:]))
@@ -1180,16 +1299,42 @@ def _exercise_configured_decision_root(
             instant=_instant(),
         )
     )
-    readback_event = _ok(
-        native_writer.record(
-            JournalEventType.DATA_QUALITY,
-            {"raw_payload": {"positions": [lineage]}},
-            instant=_instant(_NS + 2),
-        )
+    raw_position = {
+        "positionId": 44,
+        "tradeData": {"symbolId": 7},
+        "stopLoss": 1.09 if direction is Direction.LONG else 1.11,
+        "positions": [lineage],
+    }
+    readback_event = _append_live_source_event(
+        store=evidence,
+        writer=native_writer,
+        venue_id=_venue(),
+        account_id=42,
+        session_epoch=cast(str, path.session_epoch),
+        wire_kind="position-readback",
+        native_id="native-position-44-readback",
+        instant=_instant(_NS + 2),
+        raw_payload=raw_position,
+        journal_raw_payload={"positions": [lineage]},
+    )
+    spot_event = _append_live_source_event(
+        store=evidence,
+        writer=native_writer,
+        venue_id=_venue(),
+        account_id=42,
+        session_epoch=cast(str, path.session_epoch),
+        wire_kind="spot",
+        native_id="native-spot-44-ratchet",
+        instant=_instant(_NS + 3),
+        raw_payload=(
+            {"bid": 110_150, "ask": 110_152}
+            if direction is Direction.LONG
+            else {"bid": 109_850, "ask": 109_852}
+        ),
     )
     evidence_pair = NativePositionEvidence(
         fill_event=fill_event.event,
-        readback_event=readback_event.event,
+        readback_event=readback_event,
         fill_stream="native-observations",
         readback_stream="native-observations",
     )
@@ -1213,6 +1358,10 @@ def _exercise_configured_decision_root(
         projection_writer=projection_writer,
         subject_present_at_submission=True,
         subject_observations=(),
+        evidence_store=evidence,
+        spot_events_by_position_ref={opened.position.position_ref.value: (spot_event,)},
+        price_digits=5,
+        price_rounding=RoundingMode.HALF_EVEN,
     )
     exit_path = replace(path, native_exit_authority=authority)
     exit_intent = _ok(
@@ -1363,7 +1512,7 @@ def _exercise_configured_decision_root(
     tighten = _ok(
         TightenProtectiveStop.try_create(
             StopMoveDirection.TIGHTEN,
-            _ok(PriceDelta.try_create(10, _instrument(), 5)),
+            _ok(PriceDelta.try_create(2_000, _instrument(), 5)),
         )
     )
     tighten_intent = _ok(
@@ -1374,10 +1523,50 @@ def _exercise_configured_decision_root(
             tighten=tighten,
         )
     )
-    refused_tighten = _refusal(
-        dispatch_hosted_intents(admitted, (tighten_intent,), path=exit_path)
+    below_required_move = _ok(
+        TightenProtectiveStop.try_create(
+            StopMoveDirection.TIGHTEN,
+            _ok(PriceDelta.try_create(997, _instrument(), 5)),
+        )
     )
-    assert refused_tighten.context["field"] == "exit_intent"
+    too_small_bound = _ok(
+        ExitIntent.try_create(
+            ExitKind.TIGHTEN_PROTECTIVE_STOP,
+            _ok(ReasonCode.try_create("risk-cut", "trend-follow")),
+            opened.position.position_ref,
+            tighten=below_required_move,
+        )
+    )
+    bound_refusal = _refusal(
+        dispatch_hosted_intents(
+            admitted,
+            (too_small_bound,),
+            path=replace(exit_path, decision_at=_instant(_NS + 4)),
+        )
+    )
+    assert bound_refusal.context["field"] == "tighten_bound"
+    assert _ok(
+        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
+    ) == before_denied_projections
+    assert ordinal_store.high_water == before_denied_ordinal
+    assert ledger.records == before_denied_ledger
+    assert _ok(client.observations()) == before_denied_venue
+    refused_tighten = _refusal(
+        dispatch_hosted_intents(
+                admitted,
+                (tighten_intent,),
+                path=replace(
+                    exit_path,
+                    decision_at=_instant(_NS + 4),
+                    native_exit_authority=replace(
+                    authority,
+                    evidence_store=None,
+                    spot_events_by_position_ref=None,
+                ),
+            ),
+        )
+    )
+    assert refused_tighten.context["field"] == "protection_evidence"
     assert _ok(
         JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
     ) == before_denied_decisions
@@ -1387,6 +1576,46 @@ def _exercise_configured_decision_root(
     assert ordinal_store.high_water == before_denied_ordinal
     assert ledger.records == before_denied_ledger
     assert _ok(client.observations()) == before_denied_venue
+    intent_state["intents"] = (tighten_intent,)
+    ratchet_root = _ok(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=exit_path,
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    ratchet_transcript = _ok(
+        ratchet_root.run_slice(
+            snapshot=snapshot,
+            decision_at=_instant(_NS + 4),
+            stream=SeatTransitionStream(),
+            cancel=CancelToken(),
+            probe=_drive_probe(),
+        )
+    )
+    assert len(ratchet_transcript.dispatch.commands) == 1
+    ratchet_command = ratchet_transcript.dispatch.commands[0]
+    assert ratchet_command.kind is CommandKind.AMEND_PROTECTION
+    assert ratchet_command.subject_reference == "44"
+    assert ratchet_command.protection_amendment is not None
+    expected_signed_offset = -2 if direction is Direction.LONG else 2
+    assert ratchet_command.protection_amendment.new_distance.value == expected_signed_offset
+    ratchet_level = _ok(
+        ratchet_command.protection_amendment.reference_price.add(
+            ratchet_command.protection_amendment.new_distance
+        )
+    )
+    assert ratchet_level.value == (109_998 if direction is Direction.LONG else 110_002)
+    assert len(ratchet_transcript.dispatch.ratchet_authorizations) == 1
+    ratchet_submission = ratchet_transcript.submissions[0]
+    assert not isinstance(ratchet_submission, OrderPathTerminalResolution)
+    assert ratchet_submission.result.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE
+    assert ledger.position_by_ref(opened.position.position_ref) == opened.position
+    intent_state["intents"] = (exit_intent,)
     exit_root = _ok(
         HostedDecisionRoot.try_open(
             seat=admitted,
@@ -1401,7 +1630,7 @@ def _exercise_configured_decision_root(
     exit_transcript = _ok(
         exit_root.run_slice(
             snapshot=snapshot,
-            decision_at=_instant(_NS + 2),
+            decision_at=_instant(_NS + 5),
             stream=SeatTransitionStream(),
             cancel=CancelToken(),
             probe=_drive_probe(),
@@ -1433,7 +1662,7 @@ def _exercise_configured_decision_root(
     reopened_projection = _ok(
         JournalReader(reopened).read_checked("native-projections", for_world=World.LIVE)
     )
-    assert len(reopened_projection) == 1
+    assert len(reopened_projection) == 2
     current = ledger.position_by_ref(opened.position.position_ref)
     assert current is not None and current.status.value == "open"
     reopened.close()
@@ -1443,6 +1672,12 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     tmp_path: Path,
 ) -> None:
     _exercise_configured_decision_root(tmp_path)
+
+
+def test_configured_decision_root_signs_nonzero_offset_for_short_stop(
+    tmp_path: Path,
+) -> None:
+    _exercise_configured_decision_root(tmp_path, direction=Direction.SHORT)
 
 
 fixture_exercise_configured_decision_root = _exercise_configured_decision_root

@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from qmf.core import Result, World, is_refusal
+from qmf.core import Fingerprint, Ok, Result, World, fingerprint, is_refusal
 from qmf.core.chrono import WriterId
 from qmf.data.store import JournalStore
 
+from qmn.config.compiler import ResolvedNodeConfig
 from qmn.host._refuse import invalid, policy, unavailable
 from qmn.host.boot_ceremony import (
     BootAttemptRecord,
@@ -32,6 +33,7 @@ __all__ = [
     "ConfiguredHostedResources",
     "invoke_configured_hosted_runtime",
     "persist_configured_standdown",
+    "validate_assessed_path_config",
 ]
 
 
@@ -95,6 +97,9 @@ def invoke_configured_hosted_runtime(
     path = resources.root_inputs.path
     if not isinstance(path, BookPathContext):
         return invalid("book_path", "resource provider carries typed BookPathContext")
+    path_config = validate_assessed_path_config(path, assessment.node_config)
+    if is_refusal(path_config):
+        return path_config
     if path.binding_record != assessment.binding_record:
         return policy("binding_record", "hosted Book path carries the assessed CT-28 record")
     writer = WriterId.try_create(assessment.machine, "supervisor", "boot-lifecycle", boot_epoch_id)
@@ -120,6 +125,40 @@ def invoke_configured_hosted_runtime(
         preflight=resources.preflight,
     )
     return run_sealed_hosted_runtime(request, resources.root_inputs)
+
+
+def validate_assessed_path_config(path: object, expected: ResolvedNodeConfig) -> Result[None]:
+    """Bind the Book ratchet inputs to the exact node config checked at preflight."""
+    actual: object = getattr(path, "resolved_node_config", None)
+    if type(actual) is not ResolvedNodeConfig:
+        return policy(
+            "node_config",
+            "the Book path carries the exact assessed resolved node configuration",
+        )
+    if type(actual.fingerprint) is not Fingerprint or type(expected.fingerprint) is not Fingerprint:
+        return policy("node_config", "resolved config carries exact fingerprint identities")
+    actual_fp = fingerprint(actual.fp1_identity())
+    expected_fp = fingerprint(expected.fp1_identity())
+    declared_actual = Fingerprint.try_create(actual.fingerprint.value)
+    declared_expected = Fingerprint.try_create(expected.fingerprint.value)
+    if is_refusal(actual_fp):
+        return actual_fp
+    if is_refusal(expected_fp):
+        return expected_fp
+    if is_refusal(declared_actual):
+        return declared_actual
+    if is_refusal(declared_expected):
+        return declared_expected
+    if (
+        actual_fp.value != declared_actual.value
+        or expected_fp.value != declared_expected.value
+        or actual_fp.value != expected_fp.value
+    ):
+        return policy(
+            "node_config",
+            "the Book path's full value-bearing row identity matches operator assessment",
+        )
+    return Ok(None)
 
 
 def persist_configured_standdown(

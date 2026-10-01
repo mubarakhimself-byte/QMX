@@ -435,11 +435,22 @@ class QmfLiveJournalSink:
         if is_refusal(journal_rows):
             return journal_rows
         physical_index = receipt.store_receipt.sequence
+        expected_physical_row = canonical_bytes(receipt.event.to_row())
+        if is_refusal(expected_physical_row):
+            return expected_physical_row
+        actual_physical_row = (
+            canonical_bytes(journal_rows.value[physical_index])
+            if type(physical_index) is int
+            and 0 <= physical_index < len(journal_rows.value)
+            else None
+        )
+        if actual_physical_row is None or is_refusal(actual_physical_row):
+            return policy("journal_readback", "physical CT-13 row is canonically readable")
         if (
             type(physical_index) is not int
             or physical_index < 0
             or physical_index >= len(journal_rows.value)
-            or journal_rows.value[physical_index] != receipt.event.to_row()
+            or actual_physical_row.value != expected_physical_row.value
         ):
             return policy("journal_readback", "CT-13 physical row matches its exact append receipt")
         return Ok(SinkAck(detail={"journal_append_receipt": receipt}))
