@@ -1,5 +1,5 @@
 if (import.meta.env.DEV) {
-  // Virtual module from @reticlehq/vite-plugin; pairs with the daemon token.
+  // Virtual module from @reticlehq/vite-plugin; dev-only inspection bridge.
   // @ts-expect-error served only in vite dev
-  void import("/@reticle-connect").then(() => import("./reticle-dev"));
+  void import("/@reticle-connect");
 }

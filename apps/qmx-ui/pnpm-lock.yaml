@@ -24,9 +24,15 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       tailwind-variants:
-        specifier: 3.2.2
-        version: 3.2.2(tailwind-merge@3.3.1)(tailwindcss@4.3.3)
+        specifier: 3.3.1
+        version: 3.3.1(tailwind-merge@3.3.1)(tailwindcss@4.3.3)
     devDependencies:
+      '@internationalized/date':
+        specifier: ^3.12.4
+        version: 3.12.4
+      '@lucide/svelte':
+        specifier: 1.49.0
+        version: 1.49.0(svelte@5.57.1(@typescript-eslint/types@8.44.1))
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
@@ -57,6 +63,9 @@ importers:
       eslint-plugin-svelte:
         specifier: 3.23.0
         version: 3.23.0(eslint@9.36.0(jiti@2.7.0))(svelte@5.57.1(@typescript-eslint/types@8.44.1))
+      paneforge:
+        specifier: 1.0.2
+        version: 1.0.2(svelte@5.57.1(@typescript-eslint/types@8.44.1))
       prettier:
         specifier: 3.9.9
         version: 3.9.9
@@ -242,6 +251,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@lucide/svelte@1.49.0':
+    resolution: {integrity: sha512-RFH6Vx7dj6hshcBa1qJ0nKAWwkh385jJbDwF1WVg7yflC89310BsA55SEmJnaSRfr03dAyZMMLUC1EMGBu0Z0Q==}
+    peerDependencies:
+      svelte: ^5
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -1295,6 +1309,11 @@ packages:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
 
+  paneforge@1.0.2:
+    resolution: {integrity: sha512-KzmIXQH1wCfwZ4RsMohD/IUtEjVhteR+c+ulb/CHYJHX8SuDXoJmChtsc/Xs5Wl8NHS4L5Q7cxL8MG40gSU1bA==}
+    peerDependencies:
+      svelte: ^5.29.0
+
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -1403,6 +1422,16 @@ packages:
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
 
+  runed@0.23.4:
+    resolution: {integrity: sha512-9q8oUiBYeXIDLWNK5DfCWlkL0EW3oGbk845VdKlPeia28l751VpfesaB/+7pI6rnbx1I6rqoZ2fZxptOJLxILA==}
+    peerDependencies:
+      svelte: ^5.7.0
+
+  runed@0.29.2:
+    resolution: {integrity: sha512-0cq6cA6sYGZwl/FvVqjx9YN+1xEBu9sDDyuWdDW1yWX7JF2wmvmVKfH+hVCZs+csW+P3ARH92MjI3H9QTagOQA==}
+    peerDependencies:
+      svelte: ^5.7.0
+
   runed@0.35.1:
     resolution: {integrity: sha512-2F4Q/FZzbeJTFdIS/PuOoPRSm92sA2LhzTnv6FXhCoENb3huf5+fDuNOg1LNvGOouy3u/225qxmuJvcV3IZK5Q==}
     peerDependencies:
@@ -1487,6 +1516,12 @@ packages:
     peerDependencies:
       svelte: ^5.30.2
 
+  svelte-toolbelt@0.9.3:
+    resolution: {integrity: sha512-HCSWxCtVmv+c6g1ACb8LTwHVbDqLKJvHpo6J8TaqwUme2hj9ATJCpjCPNISR1OCq2Q4U1KT41if9ON0isINQZw==}
+    engines: {node: '>=18', pnpm: '>=8.7.0'}
+    peerDependencies:
+      svelte: ^5.30.2
+
   svelte@5.57.1:
     resolution: {integrity: sha512-Uqj49lWKB+iSSnneuwiYYJ7MZgkB+eXr0LXBhv4uDuAkXqnWmq65Sxflfvp0Lc6MdKjMUxGaeOKWJqz5SNiVIA==}
     engines: {node: '>=18'}
@@ -1497,14 +1532,16 @@ packages:
   tailwind-merge@3.3.1:
     resolution: {integrity: sha512-gBXpgUm/3rp1lMZZrM/w7D8GKqshif0zAymAhbCyIt8KMe+0v9DQ7cdYLR4FHH/cKpdTXb+A/tKKU3eolfsI+g==}
 
-  tailwind-variants@3.2.2:
-    resolution: {integrity: sha512-Mi4kHeMTLvKlM98XPnK+7HoBPmf4gygdFmqQPaDivc3DpYS6aIY6KiG/PgThrGvii5YZJqRsPz0aPyhoFzmZgg==}
-    engines: {node: '>=16.x', pnpm: '>=7.x'}
+  tailwind-variants@3.3.1:
+    resolution: {integrity: sha512-4pAvwUtM4HKBiRZftncAbpn6V9Hhwoa5Fl7O2u5zbp7Z5Cvu+/o/6+176WY3WCEES209543quG8zFIcXCsc5Jw==}
+    engines: {node: '>=16.9.x', pnpm: '>=7.x'}
     peerDependencies:
       tailwind-merge: '>=3.0.0'
       tailwindcss: '*'
     peerDependenciesMeta:
       tailwind-merge:
+        optional: true
+      tailwindcss:
         optional: true
 
   tailwindcss@4.3.3:
@@ -1895,6 +1932,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@lucide/svelte@1.49.0(svelte@5.57.1(@typescript-eslint/types@8.44.1))':
+    dependencies:
+      svelte: 5.57.1(@typescript-eslint/types@8.44.1)
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -2824,6 +2865,12 @@ snapshots:
     dependencies:
       p-limit: 3.1.0
 
+  paneforge@1.0.2(svelte@5.57.1(@typescript-eslint/types@8.44.1)):
+    dependencies:
+      runed: 0.23.4(svelte@5.57.1(@typescript-eslint/types@8.44.1))
+      svelte: 5.57.1(@typescript-eslint/types@8.44.1)
+      svelte-toolbelt: 0.9.3(svelte@5.57.1(@typescript-eslint/types@8.44.1))
+
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
@@ -2914,6 +2961,16 @@ snapshots:
     dependencies:
       queue-microtask: 1.2.3
 
+  runed@0.23.4(svelte@5.57.1(@typescript-eslint/types@8.44.1)):
+    dependencies:
+      esm-env: 1.2.2
+      svelte: 5.57.1(@typescript-eslint/types@8.44.1)
+
+  runed@0.29.2(svelte@5.57.1(@typescript-eslint/types@8.44.1)):
+    dependencies:
+      esm-env: 1.2.2
+      svelte: 5.57.1(@typescript-eslint/types@8.44.1)
+
   runed@0.35.1(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.44.1))(vite@8.3.0(@types/node@22.18.6)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.44.1))(typescript@5.9.2)(vite@8.3.0(@types/node@22.18.6)(jiti@2.7.0)))(svelte@5.57.1(@typescript-eslint/types@8.44.1)):
     dependencies:
       dequal: 2.0.3
@@ -3001,6 +3058,13 @@ snapshots:
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
+  svelte-toolbelt@0.9.3(svelte@5.57.1(@typescript-eslint/types@8.44.1)):
+    dependencies:
+      clsx: 2.1.1
+      runed: 0.29.2(svelte@5.57.1(@typescript-eslint/types@8.44.1))
+      style-to-object: 1.0.14
+      svelte: 5.57.1(@typescript-eslint/types@8.44.1)
+
   svelte@5.57.1(@typescript-eslint/types@8.44.1):
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -3025,11 +3089,10 @@ snapshots:
 
   tailwind-merge@3.3.1: {}
 
-  tailwind-variants@3.2.2(tailwind-merge@3.3.1)(tailwindcss@4.3.3):
-    dependencies:
-      tailwindcss: 4.3.3
+  tailwind-variants@3.3.1(tailwind-merge@3.3.1)(tailwindcss@4.3.3):
     optionalDependencies:
       tailwind-merge: 3.3.1
+      tailwindcss: 4.3.3
 
   tailwindcss@4.3.3: {}
 
