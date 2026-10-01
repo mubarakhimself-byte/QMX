@@ -122,6 +122,7 @@ from qmn.host.boot_ceremony import (
     run_check_mode,
     supervisor_writer_is_reserved,
 )
+from qmn.host.boot_journal import BOOT_ATTEMPT_RECORD_VERSION, QmfBootAttemptJournalSink
 from qmn.host.concurrency import (
     CONCURRENCY_SURFACE,
     SEAT_CONCURRENCY_OWNED_BY,
@@ -131,6 +132,11 @@ from qmn.host.concurrency import (
     ConcurrencyProofReport,
     InjectedBounds,
     prove_host_concurrency,
+)
+from qmn.host.configured_hosted import (
+    ConfiguredHostedResources,
+    invoke_configured_hosted_runtime,
+    persist_configured_standdown,
 )
 from qmn.host.failure_campaign import (
     DESIGNED_DEGRADED_STATES,
@@ -339,6 +345,12 @@ from qmn.host.runtime_risk_gate import (
     refuse_paper_profit_as_proof,
     run_runtime_risk_gate,
 )
+from qmn.host.sealed_runtime import (
+    HostedRootInputs,
+    SealedHostedRuntime,
+    SealedRuntimeRequest,
+    run_sealed_hosted_runtime,
+)
 from qmn.host.seat_concurrency import (
     SEAT_CONCURRENCY_SURFACE,
     SeatConcurrencyLoad,
@@ -415,6 +427,7 @@ __all__ = [
     "ASYNC_ALLOWED_SURFACES",
     "BLOCKED_INFRA_ITEMS",
     "BLOCKED_INFRA_SCOPES",
+    "BOOT_ATTEMPT_RECORD_VERSION",
     "BOOT_BOUND_SURFACES",
     "BOOT_CEREMONY_STEPS",
     "BOOT_CEREMONY_SURFACE",
@@ -564,6 +577,7 @@ __all__ = [
     "CompositionRootRegistry",
     "ConcurrencyLoad",
     "ConcurrencyProofReport",
+    "ConfiguredHostedResources",
     "CrashLoopFold",
     "CrashLoopVerdict",
     "DiskHeadroomBand",
@@ -579,6 +593,7 @@ __all__ = [
     "GoldenFixtureProof",
     "GoldenScenarioInputs",
     "GoldenScenarioReport",
+    "HostedRootInputs",
     "HumanInputRecord",
     "HumanInputScope",
     "InMemoryBootAttemptSink",
@@ -603,6 +618,7 @@ __all__ = [
     "QaDebtClosureMatrix",
     "QaDebtGateInputs",
     "QaDebtRow",
+    "QmfBootAttemptJournalSink",
     "ReadinessPacket",
     "RecordingNotifyTransport",
     "ResolvedCompositionClasses",
@@ -616,6 +632,8 @@ __all__ = [
     "ScopeRecord",
     "SealedBootEpoch",
     "SealedComposition",
+    "SealedHostedRuntime",
+    "SealedRuntimeRequest",
     "SeatConcurrencyLoad",
     "SeatConcurrencyProofReport",
     "SeatInjectedBounds",
@@ -665,12 +683,14 @@ __all__ = [
     "guard_synchronous_placement",
     "install_compose_kinds",
     "install_composition_occurrence_kind",
+    "invoke_configured_hosted_runtime",
     "list_readiness_human_inputs",
     "mint_compose_record",
     "notify_ready",
     "notify_watchdog",
     "notify_watchdog_trigger",
     "persist_composition_lineage",
+    "persist_configured_standdown",
     "persist_explicit_lineage_edge",
     "preflight_checks_for_mode",
     "prove_host_concurrency",
@@ -722,6 +742,7 @@ __all__ = [
     "run_paper_milestone_qa_debt_gate",
     "run_paper_milestone_security_probes",
     "run_runtime_risk_gate",
+    "run_sealed_hosted_runtime",
     "run_unattended_paper_week",
     "sd_notify",
     "settings_status_from_config",

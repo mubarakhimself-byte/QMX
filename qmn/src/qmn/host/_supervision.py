@@ -15,7 +15,7 @@ import os
 import signal
 import socket
 import sys
-from collections.abc import Mapping, MutableSequence, Sequence
+from collections.abc import Callable, Mapping, MutableSequence, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -29,6 +29,11 @@ from qmf.data import JournalWriter
 from qmf.data.store import EvidenceStore, JournalStore
 
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
+from qmn.host.configured_hosted import (
+    ConfiguredHostedResources,
+    invoke_configured_hosted_runtime,
+    persist_configured_standdown,
+)
 from qmn.host.configured_runtime import assess_configured_runtime
 from qmn.time.clock import VpsClock
 
@@ -71,6 +76,11 @@ __all__ = [
     "sd_notify",
     "supervision_process_model",
 ]
+
+
+def _configured_resources(value: object) -> ConfiguredHostedResources | None:
+    return value if isinstance(value, ConfiguredHostedResources) else None
+
 
 SUPERVISION_SURFACE: Final[str] = "qmn.host"
 EVENT_LOOP_COUNT: Final[int] = 1
@@ -255,7 +265,10 @@ def supervision_process_model() -> Mapping[str, object]:
     )
 
 
-def main() -> int:
+def main(
+    *,
+    hosted_resources_for: Callable[[object], Result[ConfiguredHostedResources]] | None = None,
+) -> int:
     """Run the configured provider-free stand-down supervisor process.
 
     This release has no production venue adapter composed into the process yet.
@@ -339,11 +352,85 @@ def main() -> int:
                     assessment.context.get("field", "configured runtime preflight refused"),
                 )
             )
-        else:
+        elif hosted_resources_for is None:
             configured_runtime_reason = (
-                assessment.value.stand_down_reason
-                or "configured runtime is not authorized for activation"
+                "registered deployment is valid; hosted seat, KSA, Book, "
+                "reservation, and OrderPath resources are unavailable"
             )
+            stand_down = persist_configured_standdown(
+                journal_store=journal_store.value,
+                machine=assessment.value.machine,
+                boot_epoch_id=boot_epoch_id,
+                instant=clock.value.wall_now,
+                reason=configured_runtime_reason,
+            )
+            if is_refusal(stand_down):
+                configured_runtime_reason = (
+                    "configured runtime stand-down could not be durably recorded: "
+                    f"{dict(stand_down.context)}"
+                )
+        else:
+            offered = hosted_resources_for(assessment.value)
+            if is_refusal(offered):
+                configured_runtime_reason = str(
+                    offered.context.get("reason", "hosted runtime resources refused")
+                )
+                stand_down = persist_configured_standdown(
+                    journal_store=journal_store.value,
+                    machine=assessment.value.machine,
+                    boot_epoch_id=boot_epoch_id,
+                    instant=clock.value.wall_now,
+                    reason=configured_runtime_reason,
+                    failure_id="configured_runtime.resources_refused",
+                )
+                if is_refusal(stand_down):
+                    configured_runtime_reason += "; durable stand-down write refused"
+            else:
+                offered_resources = _configured_resources(offered.value)
+                if offered_resources is None:
+                    configured_runtime_reason = (
+                        "hosted resource provider returned an untyped resource set"
+                    )
+                    stand_down = persist_configured_standdown(
+                        journal_store=journal_store.value,
+                        machine=assessment.value.machine,
+                        boot_epoch_id=boot_epoch_id,
+                        instant=clock.value.wall_now,
+                        reason=configured_runtime_reason,
+                        failure_id="configured_runtime.resources_untyped",
+                    )
+                    if is_refusal(stand_down):
+                        configured_runtime_reason += "; durable stand-down write refused"
+                else:
+                    runtime = invoke_configured_hosted_runtime(
+                        assessment.value,
+                        journal_store=journal_store.value,
+                        boot_epoch_id=boot_epoch_id,
+                        instant=clock.value.wall_now,
+                        resources=offered_resources,
+                    )
+                    if is_refusal(runtime):
+                        configured_runtime_reason = str(
+                            runtime.context.get("reason", "hosted runtime composition refused")
+                        )
+                        stand_down = persist_configured_standdown(
+                            journal_store=journal_store.value,
+                            machine=assessment.value.machine,
+                            boot_epoch_id=boot_epoch_id,
+                            instant=clock.value.wall_now,
+                            reason=configured_runtime_reason,
+                            failure_id="configured_runtime.composition_refused",
+                        )
+                        if is_refusal(stand_down):
+                            configured_runtime_reason += "; durable stand-down write refused"
+                    elif runtime.value.ready:
+                        configured_runtime_reason = (
+                            "hosted root composed; decision loop unavailable"
+                        )
+                    else:
+                        configured_runtime_reason = "hosted runtime remains stand-down: " + str(
+                            runtime.value.stand_down_reason
+                        )
     ready = notify_ready()
     if is_refusal(ready):
         server.server_close()

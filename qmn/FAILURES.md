@@ -1415,14 +1415,24 @@ designed failure; every typed refusal the node can emit belongs here.
   `configured_runtime.activation_event_mismatch`), or the referenced CT-24
   transition does not match the exact binding epoch, seat, operator and active
   transition facts (`configured_runtime.activation_binding_mismatch`,
-  `configured_runtime.activation_transition_mismatch`).
+  `configured_runtime.activation_transition_mismatch`), configured resources
+  do not include the admitted seat, KSA, Book, reservation and OrderPath ports
+  (`configured_runtime.hosted_resources_missing`), the checked activation is not
+  operator-requested and enforced ACTIVE (`configured_runtime.activation_not_active`),
+  or the injected host resource provider refuses, returns an untyped resource
+  bundle, or cannot open the checked hosted root
+  (`configured_runtime.resources_refused`,
+  `configured_runtime.resources_untyped`,
+  `configured_runtime.composition_refused`).
 - **Auto-recovery / retry:** none — correct the operator-pinned reference or
   protocol artifact through its authoritative registration path, then restart
   and let the configured preflight reread the exact pins. No descriptor is
   downloaded or substituted automatically.
 - **Visible degraded state:** the supervisor remains alive in stand-down; the
   readiness door returns unavailable; activation, sequencer, venue connection,
-  and provider readiness remain closed.
+  and provider readiness remain closed. Resource and activation failures are
+  persisted as CT-13 boot-lifecycle stage amendments before the process serves
+  the status endpoint.
 - **Notification tier:** operator-visible (journaled).
 - **Product-user affordance:** The configured runtime preflight refused its
   pinned inputs. Inspect `read_failure_detail` on the evidence channel, correct

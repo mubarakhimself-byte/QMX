@@ -519,6 +519,20 @@ def _drive_probe() -> ScriptedLimitProbe:
     return ScriptedLimitProbe(elapsed_ns=(0, 1), memory_bytes=(1, 1))
 
 
+# Public fixture aliases for cross-test composition without copying builders.
+fixture_ok = _ok
+fixture_instant = _instant
+fixture_duration = _duration
+fixture_book_binding_record = _book_binding_record
+fixture_path = _path
+fixture_venue = _venue
+fixture_account = _account
+fixture_propose = _propose
+fixture_evidence_store = EvidenceStore
+fixture_conformance_double = ConformanceDouble
+fixture_entry_relative_form = ENTRY_RELATIVE_FORM
+
+
 # --- surface ----------------------------------------------------------------
 
 
@@ -818,6 +832,9 @@ def test_reservation_append_requires_explicit_complete_true_ack() -> None:
 class _ConfiguredRootRecordSink:
     def write(self, _record: object, /) -> Result[SinkAck]:
         return Ok(SinkAck())
+
+
+fixture_configured_root_record_sink = _ConfiguredRootRecordSink
 
 
 def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath(
