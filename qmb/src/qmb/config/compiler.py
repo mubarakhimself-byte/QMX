@@ -54,6 +54,8 @@ from qmb.config.replay import (
 )
 from qmb.registryread.port import RegistryReadPort, ResolvedRef
 
+STUDY_TRIAL_LABEL_KEY: Final[str] = "qmb_study_trial_label"
+
 __all__ = [
     "ASSIGNMENT_IS_CANONICAL_KEY",
     "ASSIGNMENT_KEY",
@@ -75,6 +77,7 @@ __all__ = [
     "RUN_CONFIG_KNOWN_FORMAT_VERSIONS",
     "SANCTIONED_OVERLAP_KEYS",
     "STARTING_CAPITAL_KEY",
+    "STUDY_TRIAL_LABEL_KEY",
     "ResolvedRunConfig",
     "artifact_relative_path",
     "compile_run_config",
@@ -443,6 +446,12 @@ class ResolvedRunConfig:
                 "never residual resolved keys",
                 extra=sorted(special),
             )
+        if STUDY_TRIAL_LABEL_KEY in keys_map:
+            from qmb.optimize.sampler import validate_trial_label  # noqa: PLC0415
+
+            parsed_trial_label = validate_trial_label(keys_map[STUDY_TRIAL_LABEL_KEY])
+            if is_refusal(parsed_trial_label):
+                return parsed_trial_label
         clock = clean_token(body.get("clock"))
         provenance = clean_token(body.get("data_provenance"))
         if clock is None or provenance is None:
@@ -500,6 +509,7 @@ def compile_run_config(
     invocation_flags: object = None,
     workspace_defaults: object = None,
     condition_presets: object = (),
+    study_trial_label: object = None,
 ) -> Result[ResolvedRunConfig]:
     """Compile exactly one resolved run-config from the fixed-precedence layers.
 
@@ -512,6 +522,14 @@ def compile_run_config(
     resolved_port = _require_port(port)
     if is_refusal(resolved_port):
         return resolved_port
+    trial_label_value: dict[str, object] | None = None
+    if study_trial_label is not None:
+        from qmb.optimize.sampler import validate_trial_label  # noqa: PLC0415
+
+        parsed_trial_label = validate_trial_label(study_trial_label)
+        if is_refusal(parsed_trial_label):
+            return parsed_trial_label
+        trial_label_value = parsed_trial_label.value
     book = _require_fragment(book_fragment, SOURCE_BOOK, "book_fragment")
     if is_refusal(book):
         return book
@@ -546,6 +564,11 @@ def compile_run_config(
         preset_fps.append(preset.fingerprint)
     acc = _overlay(acc, spec.value)
     acc = _overlay(acc, flags.value)
+    if STUDY_TRIAL_LABEL_KEY in acc:
+        return invalid(
+            STUDY_TRIAL_LABEL_KEY,
+            "the study trial label is an internal identity field, never a caller-declared run key",
+        )
     if "world" in acc:
         return invalid(
             "world",
@@ -663,6 +686,8 @@ def compile_run_config(
         keys[ASSIGNMENT_KEY] = dict(qml_ext.value.assignment)
         keys[ASSIGNMENT_IS_CANONICAL_KEY] = qml_ext.value.assignment_is_canonical
         keys[RESOLVED_PRODUCERS_KEY] = list(qml_ext.value.resolved_producers)
+    if trial_label_value is not None:
+        keys[STUDY_TRIAL_LABEL_KEY] = trial_label_value
     replay = mint_replay_binding(
         book_fp1=book.value.source_fp1,
         bms_fp1=bms.value.source_fp1,

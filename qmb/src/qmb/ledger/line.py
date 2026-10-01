@@ -20,16 +20,24 @@ from qmf.core.fingerprint import (
     governed_namespace,
 )
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.risk.performance import PerformanceResult
+from qmf.risk.performance import (
+    PerformanceMeasure,
+    PerformanceResult,
+    PopulationDeclaration,
+    ResultPeriod,
+    UndefinedMeasure,
+)
 
 from qmb._refuse import clean_token, invalid, policy
-from qmb.config.compiler import ResolvedRunConfig
+from qmb.config.compiler import STUDY_TRIAL_LABEL_KEY, ResolvedRunConfig
 from qmb.results.ct32 import mint_run_performance_result
 
 __all__ = [
     "BOOK_BAR_READ_ROLE",
     "LEDGER_FORMAT_VERSION",
     "LEDGER_FORMAT_VERSION_1",
+    "LEDGER_FORMAT_VERSION_2",
+    "LEDGER_KNOWN_FORMAT_VERSIONS",
     "LEDGER_LINE_CLASS",
     "ONE_LINE_PER_RUN",
     "PROVENANCE_SANDBOX",
@@ -56,7 +64,11 @@ __all__ = [
 
 LEDGER_LINE_CLASS: Final[str] = "qmb-ledger-line"
 LEDGER_FORMAT_VERSION_1: Final[int] = 1
-LEDGER_FORMAT_VERSION: Final[int] = LEDGER_FORMAT_VERSION_1
+LEDGER_FORMAT_VERSION_2: Final[int] = 2
+LEDGER_FORMAT_VERSION: Final[int] = LEDGER_FORMAT_VERSION_2
+LEDGER_KNOWN_FORMAT_VERSIONS: Final[frozenset[int]] = frozenset(
+    {LEDGER_FORMAT_VERSION_1, LEDGER_FORMAT_VERSION_2}
+)
 ROLE_CONFIRMATION: Final[str] = "confirmation"
 ROLE_TRIAL: Final[str] = "trial"
 ROLE_REPLICATE: Final[str] = "replicate"
@@ -128,6 +140,8 @@ class LedgerLine:
     refusal: Mapping[str, object] | None = None
     sweep_coordinates: Mapping[str, object] | None = None
     workbench_lane: str | None = None
+    trial_label: Mapping[str, object] | None = None
+    format_version: int = LEDGER_FORMAT_VERSION
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "result_label", MappingProxyType(dict(self.result_label)))
@@ -139,6 +153,8 @@ class LedgerLine:
             object.__setattr__(
                 self, "sweep_coordinates", MappingProxyType(dict(self.sweep_coordinates))
             )
+        if self.trial_label is not None:
+            object.__setattr__(self, "trial_label", MappingProxyType(dict(self.trial_label)))
 
     def fp1_identity(self) -> dict[str, object]:
         """Canonical identity content. Writer/occurrence and SemVer are omitted.
@@ -149,7 +165,7 @@ class LedgerLine:
         content: dict[str, object] = {
             "book_bar_fp1": self.book_bar_fp1.value,
             "class": LEDGER_LINE_CLASS,
-            "format_version": LEDGER_FORMAT_VERSION,
+            "format_version": self.format_version,
             "measures": [dict(item) for item in self.measures],
             "result_label": dict(self.result_label),
             "role": self.role,
@@ -162,6 +178,8 @@ class LedgerLine:
             content["refusal"] = dict(self.refusal)
         if self.sweep_coordinates is not None:
             content["sweep_coordinates"] = dict(self.sweep_coordinates)
+        if self.trial_label is not None:
+            content["trial_label"] = dict(self.trial_label)
         if self.workbench_lane is not None:
             content["workbench_lane"] = self.workbench_lane
             if self.ct32_fingerprint is not None:
@@ -185,10 +203,14 @@ class LedgerLine:
                 given=repr(body.get("class")),
             )
         version = body.get("format_version")
-        if version != LEDGER_FORMAT_VERSION:
+        if (
+            isinstance(version, bool)
+            or not isinstance(version, int)
+            or version not in LEDGER_KNOWN_FORMAT_VERSIONS
+        ):
             return invalid(
                 "format_version",
-                "this reader understands ledger format version 1",
+                "this reader understands the declared ledger format migration ladder",
                 given=repr(version),
             )
         run_id = _as_fingerprint(body.get("run_id"), "run_id")
@@ -240,6 +262,17 @@ class LedgerLine:
                     given=repr(type(raw_coordinates).__name__),
                 )
             coordinates = cast("Mapping[str, object]", raw_coordinates)
+        trial_label: Mapping[str, object] | None = None
+        if "trial_label" in body:
+            if version != LEDGER_FORMAT_VERSION_2:
+                return invalid(
+                    "trial_label",
+                    "trial labels are supported starting with ledger format version 2",
+                )
+            parsed_trial_label = _validate_study_trial_label(body.get("trial_label"))
+            if is_refusal(parsed_trial_label):
+                return parsed_trial_label
+            trial_label = parsed_trial_label.value
         banned = _verdict_keys(body)
         if banned:
             return policy(
@@ -268,6 +301,8 @@ class LedgerLine:
                 refusal=refusal,
                 sweep_coordinates=coordinates,
                 workbench_lane=lane.value,
+                trial_label=trial_label,
+                format_version=version,
             )
         )
 
@@ -358,6 +393,24 @@ def mint_completed_line(
                 "a governed terminal line consumes the typed CT-32 result",
                 given=repr(type(performance_result).__name__),
             )
+        result_label_value: object = cast(object, performance_result.result_label)
+        period_value: object = cast(object, performance_result.period)
+        population_value: object = cast(object, performance_result.population)
+        measure_set_value: object = cast(object, performance_result.measure_set)
+        if (
+            not isinstance(result_label_value, ResultLabel)
+            or not isinstance(period_value, ResultPeriod)
+            or not isinstance(population_value, PopulationDeclaration)
+            or not isinstance(measure_set_value, tuple)
+            or any(
+                not isinstance(item, (PerformanceMeasure, UndefinedMeasure))
+                for item in cast(tuple[object, ...], measure_set_value)
+            )
+        ):
+            return invalid(
+                "performance_result",
+                "CT-32 nested label, period, population, and measure slots are typed values",
+            )
         baseline = artifact.value
         label_matches = (
             performance_result.result_label.fp1_identity() == baseline.result_label.fp1_identity()
@@ -400,6 +453,15 @@ def mint_completed_line(
         return lane
     label = _label_payload(selected_artifact.result_label, factory_sandbox=factory_sandbox)
     measures = tuple(item.fp1_identity() for item in selected_artifact.measure_set)
+    trial_label: Mapping[str, object] | None = None
+    raw_trial_label = config.keys.get(STUDY_TRIAL_LABEL_KEY)
+    if raw_trial_label is not None:
+        parsed_trial_label = _validate_study_trial_label(raw_trial_label)
+        if is_refusal(parsed_trial_label):
+            return parsed_trial_label
+        if parsed_role.value != ROLE_TRIAL:
+            return invalid("trial_label", "Study trial labels may only accompany role=trial")
+        trial_label = parsed_trial_label.value
     return _build_line(
         run_id=config.fingerprint,
         role=parsed_role.value,
@@ -411,6 +473,7 @@ def mint_completed_line(
         refusal=None,
         sweep_coordinates=coordinates.value,
         workbench_lane=lane.value,
+        trial_label=trial_label,
     )
 
 
@@ -605,6 +668,7 @@ def _build_line(
     refusal: Mapping[str, object] | None,
     sweep_coordinates: Mapping[str, object] | None = None,
     workbench_lane: str | None = None,
+    trial_label: Mapping[str, object] | None = None,
 ) -> Result[LedgerLine]:
     line = LedgerLine(
         run_id=run_id,
@@ -617,6 +681,7 @@ def _build_line(
         refusal=refusal,
         sweep_coordinates=sweep_coordinates,
         workbench_lane=workbench_lane,
+        trial_label=trial_label,
     )
     banned = _verdict_keys(line.fp1_identity())
     if banned:
@@ -629,6 +694,13 @@ def _build_line(
     if labels is not None:
         return labels
     return Ok(line)
+
+
+def _validate_study_trial_label(value: object) -> Result[dict[str, object]]:
+    """Load the QMB sampler-owned label parser without a static import cycle."""
+    from qmb.optimize.sampler import validate_trial_label  # noqa: PLC0415
+
+    return validate_trial_label(value)
 
 
 def _refuse_b4_label_fields(body: Mapping[str, object]) -> TypedRefusal | None:

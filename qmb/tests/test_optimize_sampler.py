@@ -28,6 +28,8 @@ from qmb.optimize import (
     refuse_sampler_contract_bump,
     sampler_identity,
     trial_label,
+    trial_label_assignment,
+    validate_trial_label,
 )
 from qmb.registryread import AsOfSet, DatedPointer, PassiveHub, RegistryReadPort, SupersedesRef
 from qmf.core.chrono import Instant, WriterId
@@ -382,6 +384,23 @@ def test_trial_label_is_reproducible_and_float_free() -> None:
     label_b = _ok(trial_label(study_fp, 8, 0, batch.proposals[0]))
     assert _ok(fingerprint(label_a)) == _ok(fingerprint(label_b))
     assert not _has_float(label_a)
+
+
+def test_v2_trial_label_roundtrips_its_persistable_parameter_assignment() -> None:
+    study_fp = _ok(fingerprint({"study": "trial-label-roundtrip"}))
+    batch = _ok(propose_generation(_space(), 8, [], 0, direction="max", batch_size=2))
+    label = _ok(trial_label(study_fp, 8, 0, batch.proposals[0]))
+    assert label["format_version"] == 2
+    assert label["ask_index"] == batch.proposals[0].ask_index
+    normalized = _ok(validate_trial_label(label))
+    assert _ok(trial_label_assignment(normalized)) == batch.proposals[0].assignment
+
+    malformed = dict(label)
+    malformed["ask_index"] = True
+    assert is_refusal(validate_trial_label(malformed))
+    malformed = dict(label)
+    malformed["unexpected"] = "caller coordinate"
+    assert is_refusal(validate_trial_label(malformed))
 
 
 def test_a_future_optuna_major_bump_is_a_contract_versioning_event() -> None:

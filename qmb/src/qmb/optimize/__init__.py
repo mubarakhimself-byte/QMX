@@ -54,6 +54,14 @@ from qmb.optimize.objective import (
     compute_winner_set,
     study_criteria_identity,
 )
+from qmb.optimize.replay_study import (
+    RECORDED_STUDY_ADAPTER_CLASS,
+    RecordedStudyRun,
+    ReplayTrialBindings,
+    read_recorded_study_trials,
+    run_recorded_study_generations,
+    validate_trial_binding,
+)
 from qmb.optimize.resume import (
     COST_ESTIMATE_CLASS,
     COST_ESTIMATE_FORMAT_VERSION,
@@ -102,6 +110,8 @@ from qmb.optimize.sampler import (
     STUDY_LABEL_CLASS,
     TRIAL_LABEL_CLASS,
     TRIAL_LABEL_FORMAT_VERSION,
+    TRIAL_LABEL_FORMAT_VERSION_1,
+    TRIAL_LABEL_KNOWN_FORMAT_VERSIONS,
     AdmittedStudy,
     ConvertedValue,
     ParameterBatch,
@@ -119,6 +129,8 @@ from qmb.optimize.sampler import (
     refuse_sampler_contract_bump,
     sampler_identity,
     trial_label,
+    trial_label_assignment,
+    validate_trial_label,
 )
 from qmb.optimize.sensitivity import (
     EXCLUDED_REASONS,
@@ -234,6 +246,7 @@ __all__ = [
     "PARAMETER_BATCH_FORMAT_VERSION",
     "PRIOR_TRIAL_CLASS",
     "PROPOSED_TRIAL_CLASS",
+    "RECORDED_STUDY_ADAPTER_CLASS",
     "REPORT_EMITS_IMAGE_PAYLOAD",
     "REPORT_INVENTS_THRESHOLD",
     "REPORT_MAKES_EDGE_CLAIM",
@@ -299,6 +312,8 @@ __all__ = [
     "TRIAL_BUDGET_SCALE_WITH_PARAMS",
     "TRIAL_LABEL_CLASS",
     "TRIAL_LABEL_FORMAT_VERSION",
+    "TRIAL_LABEL_FORMAT_VERSION_1",
+    "TRIAL_LABEL_KNOWN_FORMAT_VERSIONS",
     "TRIAL_SPLIT_PLAN_CLASS",
     "TRIAL_SPLIT_RUN_CLASS",
     "WINNER_MAKES_BAR_VERDICT",
@@ -320,6 +335,8 @@ __all__ = [
     "ParameterSlice",
     "PriorTrial",
     "ProposedTrial",
+    "RecordedStudyRun",
+    "ReplayTrialBindings",
     "ScoredTrial",
     "SensitivityReport",
     "SliceBin",
@@ -357,11 +374,13 @@ __all__ = [
     "plan_study_resume",
     "plan_trial_runs",
     "propose_generation",
+    "read_recorded_study_trials",
     "refuse_parallel_ask",
     "refuse_sampler_contract_bump",
     "refuse_search_quality_verdict",
     "refuse_split_edge_or_budget",
     "resume_stepper",
+    "run_recorded_study_generations",
     "run_study_generations",
     "sampler_identity",
     "sensitivity_identity",
@@ -375,6 +394,9 @@ __all__ = [
     "study_warmup_from_config",
     "trading_evidence_range",
     "trial_label",
+    "trial_label_assignment",
+    "validate_trial_binding",
+    "validate_trial_label",
 ]
 
 

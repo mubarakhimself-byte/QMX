@@ -98,6 +98,8 @@ __all__ = [
     "STUDY_LABEL_CLASS",
     "TRIAL_LABEL_CLASS",
     "TRIAL_LABEL_FORMAT_VERSION",
+    "TRIAL_LABEL_FORMAT_VERSION_1",
+    "TRIAL_LABEL_KNOWN_FORMAT_VERSIONS",
     "AdmittedStudy",
     "ConvertedValue",
     "ParameterBatch",
@@ -115,6 +117,8 @@ __all__ = [
     "refuse_sampler_contract_bump",
     "sampler_identity",
     "trial_label",
+    "trial_label_assignment",
+    "validate_trial_label",
 ]
 
 # The registry pin key for the default adapter — referenced, never restated as a
@@ -162,7 +166,11 @@ STUDY_ARTIFACT_CLASS: Final[str] = "qmb-study-artifact"
 STUDY_ARTIFACT_FORMAT_VERSION: Final[int] = 1
 STUDY_LABEL_CLASS: Final[str] = "qmb-study-label"
 TRIAL_LABEL_CLASS: Final[str] = "qmb-optimize-trial-label"
-TRIAL_LABEL_FORMAT_VERSION: Final[int] = 1
+TRIAL_LABEL_FORMAT_VERSION_1: Final[int] = 1
+TRIAL_LABEL_FORMAT_VERSION: Final[int] = 2
+TRIAL_LABEL_KNOWN_FORMAT_VERSIONS: Final[frozenset[int]] = frozenset(
+    {TRIAL_LABEL_FORMAT_VERSION_1, TRIAL_LABEL_FORMAT_VERSION}
+)
 
 
 # --- identity surfaces -------------------------------------------------------
@@ -1001,6 +1009,7 @@ def trial_label(
     label: dict[str, object] = {
         "class": TRIAL_LABEL_CLASS,
         "format_version": TRIAL_LABEL_FORMAT_VERSION,
+        "ask_index": proposal.ask_index,
         "generation_index": parsed_generation.value,
         "generator_provenance": generator_provenance(),
         "parameters": [item.fp1_identity() for item in proposal.parameters],
@@ -1010,6 +1019,133 @@ def trial_label(
         "study_fp": parsed_study_fp.value.value,
     }
     return Ok(label)
+
+
+def validate_trial_label(value: object) -> Result[dict[str, object]]:
+    """Validate and normalize a persisted study/generation/ask identity label."""
+    if not isinstance(value, Mapping):
+        return invalid("trial_label", "a Study trial label is a mapping")
+    body = cast("Mapping[object, object]", value)
+    expected = {
+        "ask_index",
+        "class",
+        "format_version",
+        "generation_index",
+        "generator_provenance",
+        "parameters",
+        "role",
+        "sampler_identity",
+        "seed",
+        "study_fp",
+    }
+    if set(body) != expected:
+        return invalid(
+            "trial_label",
+            "a v2 trial label carries exact study, ask, sampler, and assignment fields",
+            fields=sorted(str(item) for item in body),
+        )
+    if (
+        body.get("class") != TRIAL_LABEL_CLASS
+        or body.get("format_version") != TRIAL_LABEL_FORMAT_VERSION
+    ):
+        return invalid("trial_label", "a persisted trial label uses the current v2 format")
+    generation = _non_negative_int(body.get("generation_index"), "generation_index")
+    if is_refusal(generation):
+        return generation
+    ask = _non_negative_int(body.get("ask_index"), "ask_index")
+    if is_refusal(ask):
+        return ask
+    seed = _non_negative_int(body.get("seed"), "seed")
+    if is_refusal(seed):
+        return seed
+    if body.get("role") != ROLE_TRIAL:
+        return invalid("trial_label", "a study trial is labelled with role=trial")
+    study_fp = Fingerprint.try_create(body.get("study_fp"))
+    if is_refusal(study_fp):
+        return study_fp
+    sampler = body.get("sampler_identity")
+    if (
+        not isinstance(sampler, Mapping)
+        or dict(cast("Mapping[str, object]", sampler)) != sampler_identity()
+    ):
+        return invalid("sampler_identity", "a trial label matches the admitted sampler contract")
+    provenance = body.get("generator_provenance")
+    if not isinstance(provenance, Mapping):
+        return invalid("generator_provenance", "a trial label records generator provenance")
+    current_provenance = generator_provenance()
+    if dict(cast("Mapping[str, object]", provenance)) != current_provenance:
+        return unsupported(
+            "generator_provenance",
+            "the recorded trial generator matches this pinned runtime version",
+        )
+    raw_parameters = body.get("parameters")
+    if not isinstance(raw_parameters, Sequence) or isinstance(raw_parameters, (str, bytes)):
+        return invalid("parameters", "a trial label carries an ordered parameter identity list")
+    normalized_parameters: list[dict[str, object]] = []
+    names: set[str] = set()
+    for index, raw in enumerate(cast("Sequence[object]", raw_parameters)):
+        if not isinstance(raw, Mapping):
+            return invalid("parameters", "each trial parameter identity is a mapping", index=index)
+        parameter = cast("Mapping[object, object]", raw)
+        name = parameter.get("name")
+        parameter_class = parameter.get("class")
+        if not isinstance(name, str) or not name.strip() or parameter_class != SAMPLED_VALUE_CLASS:
+            return invalid(
+                "parameters", "each trial parameter has a stable name and sampled-value class"
+            )
+        if name in names:
+            return invalid("parameters", "trial parameter names are unique", name=name)
+        names.add(name)
+        allowed = {"class", "name", "value", "conversion"}
+        if set(parameter) - allowed or "value" not in parameter:
+            return invalid("parameters", "a sampled parameter identity has only declared fields")
+        item: dict[str, object] = {
+            "class": SAMPLED_VALUE_CLASS,
+            "name": name,
+            "value": parameter["value"],
+        }
+        conversion = parameter.get("conversion")
+        if conversion is not None:
+            if not isinstance(conversion, Mapping):
+                return invalid("conversion", "numeric sampled values carry conversion metadata")
+            item["conversion"] = dict(cast("Mapping[str, object]", conversion))
+        normalized_parameters.append(item)
+    if not normalized_parameters:
+        return invalid("parameters", "a Study trial has at least one sampled parameter")
+    normalized = dict(cast("Mapping[str, object]", body))
+    normalized["study_fp"] = study_fp.value.value
+    normalized["parameters"] = normalized_parameters
+    return Ok(normalized)
+
+
+def trial_label_assignment(value: object) -> Result[dict[str, object]]:
+    """Decode exact parameter values from a validated persisted trial label."""
+    label = validate_trial_label(value)
+    if is_refusal(label):
+        return label
+    assignment: dict[str, object] = {}
+    for raw in cast("Sequence[object]", label.value["parameters"]):
+        parameter = cast("Mapping[str, object]", raw)
+        name = cast(str, parameter["name"])
+        encoded = parameter["value"]
+        if isinstance(encoded, Mapping):
+            value_body = cast("Mapping[str, object]", encoded)
+            if value_body.get("class") != "exact-rational":
+                return invalid("parameters", "a persisted mapping value is an exact rational")
+            decoded = ExactRational.try_create(
+                value_body.get("num"), value_body.get("den"), value_body.get("unit_kind")
+            )
+            if is_refusal(decoded):
+                return decoded
+            assignment[name] = decoded.value
+        elif isinstance(encoded, (str, bool, int)):
+            assignment[name] = encoded
+        else:
+            return invalid(
+                "parameters",
+                "persisted parameter values are exact rationals, strings, booleans, or integers",
+            )
+    return Ok(assignment)
 
 
 def refuse_sampler_contract_bump(recorded_provenance: object) -> Result[None]:
