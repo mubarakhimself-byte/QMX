@@ -919,6 +919,28 @@ def invoke_host_status(
     else:
         return invalid("environ", "environ is a string mapping")
     target = _as_root(root, env_map)
+    if _live_lock_pid(target) is None:
+        _drop_stale_lock(target)
+        if _live_lock_pid(target) is None:
+            return Ok(
+                cast(
+                    "Mapping[str, object]",
+                    redact_host_surface(
+                        {
+                            "verb": "host.status",
+                            "state": "stopped",
+                            "lock": "free",
+                            "pid": None,
+                            "bind": None,
+                            "operator_established": None,
+                            "operator_established_known": False,
+                            "ttl": "unset",
+                            "pending_record_ids": [],
+                            "bound_record_ids": [],
+                        }
+                    ),
+                )
+            )
     token = _read_token(target)
     if not isinstance(token, Ok):
         return token
@@ -1045,6 +1067,20 @@ def invoke_host_stop(
     else:
         return invalid("environ", "environ is a string mapping")
     target = _as_root(root, env_map)
+    live = _live_lock_pid(target)
+    if live is None:
+        _drop_stale_lock(target)
+        if _live_lock_pid(target) is None:
+            stopped: dict[str, object] = {
+                "verb": "host.stop",
+                "state": "stopped",
+                "pid": None,
+                "lock": "free",
+                "root": str(target),
+                "cancels_qmn": STOP_CANCELS_QMN,
+                "stops_remote": STOP_STOPS_REMOTE,
+            }
+            return Ok(cast("Mapping[str, object]", redact_host_surface(stopped)))
     token = _read_token(target)
     if not isinstance(token, Ok):
         return _owner_stop_when_file_missing(
@@ -1055,7 +1091,6 @@ def invoke_host_stop(
             wait_attempts=wait_attempts,
             sleeper=sleeper,
         )
-    live = _live_lock_pid(target)
     if callable(transport):
         called = transport("stop", token.value, root=target)
         if isinstance(called, TypedRefusal):

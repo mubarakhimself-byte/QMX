@@ -426,10 +426,36 @@ def test_status_and_stop_use_host_control_and_redact(tmp_path: Path) -> None:
 
 
 def test_status_without_token_refuses(tmp_path: Path) -> None:
+    _write_lock(tmp_path, os.getpid())
     refused = invoke_host_status(root=tmp_path)
     assert is_refusal(refused)
     assert refused.category is RefusalCategory.POLICY_REJECTION
     assert refused.context["field"] == "host_control"
+
+
+def test_status_and_stop_report_stopped_without_using_stale_host_control(
+    tmp_path: Path,
+) -> None:
+    _write_token(tmp_path)
+    status = _ok_mapping(invoke_host_status(root=tmp_path))
+    assert status["state"] == "stopped"
+    assert status["lock"] == "free"
+    assert status["bind"] is None
+    assert status["operator_established"] is None
+    assert status["operator_established_known"] is False
+    stopped = _ok_mapping(invoke_host_stop(root=tmp_path))
+    assert stopped["state"] == "stopped"
+    assert stopped["lock"] == "free"
+    assert (tmp_path / HOST_CONTROL_FILE).is_file()
+
+
+def test_status_does_not_hide_unreachable_socket_for_live_writer(tmp_path: Path) -> None:
+    _write_lock(tmp_path, os.getpid())
+    _write_token(tmp_path)
+    _write_bind(tmp_path, "127.0.0.1", 1)
+    refused = invoke_host_status(root=tmp_path)
+    assert is_refusal(refused)
+    assert "host-control call failed" in str(refused.context.get("reason", ""))
 
 
 def test_click_host_start_status_stop(tmp_path: Path) -> None:
@@ -551,6 +577,7 @@ def test_configure_pairing_ttl_over_host_control(tmp_path: Path) -> None:
     server = _HostControlServer(_TOKEN, root=tmp_path)
     server.start()
     try:
+        _write_lock(tmp_path, os.getpid())
         _write_token(tmp_path)
         _write_bind(tmp_path, "127.0.0.1", server.port)
         fixture_duration = "PT15M"
@@ -883,6 +910,7 @@ def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None
     server = _HostControlServer(_TOKEN, root=tmp_path)
     server.start()
     try:
+        _write_lock(tmp_path, os.getpid())
         _write_token(tmp_path)
         _write_bind(tmp_path, "127.0.0.1", server.port)
         report = _ok_mapping(invoke_host_rotate_control(root=tmp_path))
@@ -942,11 +970,12 @@ def test_click_host_rotate_control(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
 def test_running_daemon_verbs_refuse_without_token(tmp_path: Path, verb: str) -> None:
+    _write_lock(tmp_path, os.getpid())
     _write_bind(tmp_path, "127.0.0.1", 19240)
     if verb == "status":
         refused = invoke_host_status(root=tmp_path)
     elif verb == "stop":
-        refused = invoke_host_stop(root=tmp_path, wait_attempts=1)
+        refused = invoke_host_stop(root=tmp_path, wait_attempts=1, owns_root=False)
     elif verb == "configure":
         refused = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
     else:
@@ -979,9 +1008,13 @@ def test_running_daemon_verbs_refuse_stale_token(tmp_path: Path, verb: str) -> N
         server.join(timeout=2)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="posix chmod 000 is the unreadable-file stand-in")
+@pytest.mark.skipif(
+    os.name == "nt" or getattr(os, "geteuid", lambda: 1)() == 0,
+    reason="chmod 000 is not unreadable to Windows or root",
+)
 @pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
 def test_running_daemon_verbs_refuse_unreadable_token(tmp_path: Path, verb: str) -> None:
+    _write_lock(tmp_path, os.getpid())
     path = tmp_path / HOST_CONTROL_FILE
     _write_token(tmp_path)
     os.chmod(path, 0)
@@ -989,7 +1022,7 @@ def test_running_daemon_verbs_refuse_unreadable_token(tmp_path: Path, verb: str)
         if verb == "status":
             refused = invoke_host_status(root=tmp_path)
         elif verb == "stop":
-            refused = invoke_host_stop(root=tmp_path, wait_attempts=1)
+            refused = invoke_host_stop(root=tmp_path, wait_attempts=1, owns_root=False)
         elif verb == "configure":
             refused = invoke_host_configure_pairing_ttl("PT15M", root=tmp_path)
         else:
@@ -1187,8 +1220,8 @@ def test_owner_stop_when_file_missing_is_not_broadened(tmp_path: Path) -> None:
         owns_root=True,
         signal_stop=signal_stop,
     )
-    assert is_refusal(idle)
-    assert idle.context["field"] == "host_control"
+    assert is_ok(idle)
+    assert idle.value["state"] == "stopped"
     assert signaled == []
 
 
