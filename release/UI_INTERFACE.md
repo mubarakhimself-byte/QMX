@@ -44,7 +44,25 @@ The daemon now exposes the ratified operator ProductSession lifecycle over the a
 
 `start_mission` currently acknowledges graph compilation with a durable `QUEUED` JobHandle. The daemon leaves it queued until a registered executor accepts the task and the ComputeRouter grants its environment lease; compilation alone does not mean a worker started or completed the task.
 
-`start_mission` and `launch_task` continue to take `{product_session_ref, envelope, payload}`. The envelope's caller session must equal the supplied session reference; its contribution, instance, config revision, operation version, effect class, input hash, and grant id are checked against the live enabled roster, descriptor, and durable GrantRecord before the trusted host adapter runs. For QMB replay, `run_fp1` resolves an already registered CT-47 `ExperimentSpec`; CT-47 `data_ref` remains the split/source identity. `qmb.backtest.run` may separately accept `evidence_ref`, the fp1 of the persisted QMB replay-request envelope whose CT-12 split pin must equal that ExperimentSpec `data_ref`. The QMB CLI executor is not yet wired to resolve this envelope, so the daemon returns typed unavailable until that adapter is complete. Owner/environment are resolved only from the matching operator binding. A compiled Task Graph or accepted JobHandle remains distinct from actual task completion evidence.
+`start_mission` and `launch_task` continue to take `{product_session_ref, envelope, payload}`. The envelope's caller session must equal the supplied session reference; its contribution, instance, config revision, operation version, effect class, input hash, and grant id are checked against the live enabled roster, descriptor, and durable GrantRecord before the trusted host adapter runs. For QMB replay, `run_fp1` resolves an already registered CT-47 `ExperimentSpec`; CT-47 `data_ref` remains the split/source identity. `qmb.backtest.run` may separately accept `evidence_ref`, the fp1 of the persisted QMB replay-request envelope whose CT-12 split pin must equal that ExperimentSpec `data_ref`. The QMB CLI now selects a content-pinned operator composition by these trusted references, reloads registered Book/BMS/Bot records and recorded inputs, and refuses missing configuration. Actual delegated builder execution, daemon worker dispatch and connected installed acceptance remain under verification. Owner/environment are resolved only from the matching operator binding. A compiled Task Graph or accepted JobHandle remains distinct from actual task completion evidence.
+
+## Alternative execution integration requirements
+
+ATC remains in the full release scope. Its registered ingress and result consumer
+are still being integrated; these requirements do not claim a completed wire
+adapter. An alternative run carries explicit `composition_class: alternative`,
+CT-07 PolicyPair and interpreter lineage. Book, BMS and Bot identities remain
+absent. The UI must not manufacture those identities or a Book CT-32/R result.
+
+Alternative completion requires the actual checked CT-13 execution chain and a
+durable terminal artifact bound to its source, split, policy and final state.
+Reopening results must read that artifact and journal evidence. Optimization
+consumes an explicitly registered, unit-kinded policy objective and the same
+generation barrier/reopen discipline; an unavailable objective is a typed
+refusal. No default financial score, fraction, leverage basis or cost convention
+may be inferred from an example policy name. Both composition classes require
+actual worker acceptance, held environment lease, terminal evidence, cancellation
+and restart/reconnect checks, and second-pack reuse of the common host runtime.
 
 ## Published UI baseline evidence boundary
 
