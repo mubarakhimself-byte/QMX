@@ -561,6 +561,14 @@ def run_alternative_study(
         candidate_registry = _candidate_registry(candidate.value, registration.value)
         if is_refusal(candidate_registry):
             return candidate_registry
+        reserved = terminal_store.reserve_trial(
+            trial_label=label,
+            candidate_fp=candidate.value.fingerprint,
+            source_fp=source.fingerprint,
+            split_fp=source.split_fp1,
+        )
+        if is_refusal(reserved):
+            return reserved
         try:
             executed = cast(_ExecuteTrial, execute_trial)(
                 generation,

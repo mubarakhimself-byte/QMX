@@ -54,6 +54,7 @@ __all__ = [
 ALTERNATIVE_TERMINAL_CLASS = "qmb-alternative-terminal-v1"
 ALTERNATIVE_TERMINAL_EDGE_STREAM = "qmb-alternative-terminal-policy-pair"
 _ROW_CLASS = "qmb-alternative-terminal-row-v1"
+_INTENT_CLASS = "qmb-alternative-study-intent-v1"
 
 
 def _plain(value: object) -> object:
@@ -292,7 +293,10 @@ class AlternativeTerminalStore:
         )
         if is_refusal(persisted_edge):
             return persisted_edge
-        sequence = len(existing.value) + 1
+        row_count = self._row_count()
+        if is_refusal(row_count):
+            return row_count
+        sequence = row_count.value + 1
         row: dict[str, object] = {
             "artifact": artifact.value.identity(),
             "artifact_fp1": artifact.value.fingerprint.value,
@@ -318,6 +322,184 @@ class AlternativeTerminalStore:
         if not any(item.fingerprint == artifact.value.fingerprint for item in reopened.value):
             return policy("alternative_terminal", "terminal JSONL append reopens exactly")
         return Ok(artifact.value)
+
+    def reserve_trial(
+        self,
+        *,
+        trial_label: object,
+        candidate_fp: object,
+        source_fp: object,
+        split_fp: object,
+    ) -> Result[None]:
+        """Durably record evaluator invocation before allowing external effects.
+
+        If the process stops after evaluation but before its terminal artifact, the
+        reservation remains unresolved and the study refuses to execute that ask again.
+        """
+        from qmb.optimize.sampler import validate_trial_label  # noqa: PLC0415
+
+        label = validate_trial_label(trial_label)
+        if is_refusal(label):
+            return label
+        parsed_candidate = _fp(
+            candidate_fp.value if isinstance(candidate_fp, Fingerprint) else candidate_fp,
+            "candidate_fp",
+        )
+        parsed_source = _fp(
+            source_fp.value if isinstance(source_fp, Fingerprint) else source_fp, "source_fp"
+        )
+        parsed_split = _fp(
+            split_fp.value if isinstance(split_fp, Fingerprint) else split_fp, "split_fp"
+        )
+        if is_refusal(parsed_candidate):
+            return parsed_candidate
+        if is_refusal(parsed_source):
+            return parsed_source
+        if is_refusal(parsed_split):
+            return parsed_split
+        label_fp = fingerprint(label.value)
+        if is_refusal(label_fp):
+            return label_fp
+        pending = self.pending_trials()
+        if is_refusal(pending):
+            return pending
+        key = label_fp.value.value
+        if key in pending.value:
+            return policy("trial_intent", "one unresolved evaluator intent blocks retry")
+        rows = self._read_raw_rows()
+        if is_refusal(rows):
+            return rows
+        if any(
+            row.get("intent_fp1") == key
+            for row in rows.value
+            if row.get("class") == _INTENT_CLASS
+        ):
+            return policy("trial_intent", "a trial label is reserved at most once")
+        row: dict[str, object] = {
+            "candidate_fp1": parsed_candidate.value.value,
+            "class": _INTENT_CLASS,
+            "format_version": 1,
+            "intent_fp1": key,
+            "sequence": len(rows.value) + 1,
+            "source_fp1": parsed_source.value.value,
+            "split_fp1": parsed_split.value.value,
+            "trial_label": label.value,
+            "writer": _writer_identity(self.writer),
+        }
+        encoded = canonical_bytes(row)
+        if is_refusal(encoded):
+            return encoded
+        written = append_bytes_no_follow(
+            self.path,
+            encoded.value + b"\n",
+            contain_within=self.root,
+            field="alternative_ledger",
+        )
+        if is_refusal(written):
+            return written
+        reread = self._read_raw_rows()
+        if is_refusal(reread):
+            return reread
+        if not any(
+            item.get("intent_fp1") == key and item.get("sequence") == len(rows.value) + 1
+            for item in reread.value
+        ):
+            return policy("trial_intent", "study intent append is physically read back")
+        return Ok(None)
+
+    def pending_trials(self) -> Result[Mapping[str, Mapping[str, object]]]:
+        """Return durable evaluator intents without a matching terminal artifact."""
+        rows = self._read_raw_rows()
+        if is_refusal(rows):
+            return rows
+        artifacts = self._read_rows()
+        if is_refusal(artifacts):
+            return artifacts
+        terminals = {
+            label_fp.value
+            for artifact in artifacts.value
+            if (label_fp := _artifact_trial_label_fp(artifact)) is not None
+        }
+        intents: dict[str, Mapping[str, object]] = {}
+        for row in rows.value:
+            if row.get("class") != _INTENT_CLASS:
+                continue
+            key = cast("str", row["intent_fp1"])
+            if key in terminals:
+                continue
+            if key in intents:
+                return policy("trial_intent", "one trial label has one durable invocation intent")
+            intents[key] = cast("Mapping[str, object]", _freeze(row))
+        return Ok(MappingProxyType(intents))
+
+    def _row_count(self) -> Result[int]:
+        rows = self._read_raw_rows()
+        if is_refusal(rows):
+            return rows
+        return Ok(len(rows.value))
+
+    def _read_raw_rows(self) -> Result[tuple[Mapping[str, object], ...]]:
+        if not self.path.exists():
+            return Ok(())
+        loaded = read_contained_bytes(
+            self.path,
+            contain_within=self.root,
+            max_bytes=MAX_JSONL_BYTES,
+            field="alternative_ledger",
+        )
+        if is_refusal(loaded):
+            return loaded
+        raw = loaded.value
+        if raw and not raw.endswith(b"\n"):
+            return storage("alternative_ledger", "terminal JSONL has no torn or partial tail")
+        rows: list[Mapping[str, object]] = []
+        for index, chunk in enumerate(raw[:-1].split(b"\n") if raw else ()):
+            try:
+                parsed: object = json.loads(chunk)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return storage(
+                    "alternative_ledger", "terminal row is valid UTF-8 JSON", index=index
+                )
+            if not isinstance(parsed, Mapping):
+                return storage("alternative_ledger", "terminal JSONL row is an object", index=index)
+            row = cast("Mapping[str, object]", parsed)
+            encoded = canonical_bytes(row)
+            if is_refusal(encoded) or encoded.value != chunk:
+                return storage(
+                    "alternative_ledger", "terminal row uses canonical bytes", index=index
+                )
+            if (
+                row.get("format_version") != 1
+                or type(row.get("format_version")) is not int
+                or row.get("sequence") != index + 1
+                or type(row.get("sequence")) is not int
+                or row.get("writer") != _writer_identity(self.writer)
+            ):
+                return storage(
+                    "alternative_ledger", "terminal row sequence and writer are valid", index=index
+                )
+            row_class = row.get("class")
+            if row_class == _INTENT_CLASS:
+                label = row.get("trial_label")
+                if not isinstance(label, Mapping):
+                    return storage(
+                        "alternative_ledger", "study intent carries a trial label", index=index
+                    )
+                label_fp = fingerprint(cast("Mapping[str, object]", label))
+                if is_refusal(label_fp) or row.get("intent_fp1") != label_fp.value.value:
+                    return policy(
+                        "trial_intent", "study intent label matches its fingerprint", index=index
+                    )
+                for field in ("candidate_fp1", "source_fp1", "split_fp1"):
+                    parsed_fp = _fp(row.get(field), field)
+                    if is_refusal(parsed_fp):
+                        return parsed_fp
+            elif row_class != _ROW_CLASS:
+                return storage(
+                    "alternative_ledger", "terminal row uses a recognized class", index=index
+                )
+            rows.append(row)
+        return Ok(tuple(rows))
 
     def read(
         self,
@@ -371,55 +553,13 @@ class AlternativeTerminalStore:
         return rows
 
     def _read_rows(self) -> Result[tuple[AlternativeTerminalArtifact, ...]]:
-        if not self.path.exists():
-            return Ok(())
-        loaded = read_contained_bytes(
-            self.path,
-            contain_within=self.root,
-            max_bytes=MAX_JSONL_BYTES,
-            field="alternative_ledger",
-        )
-        if is_refusal(loaded):
-            return loaded
-        raw = loaded.value
-        if raw and not raw.endswith(b"\n"):
-            return storage("alternative_ledger", "terminal JSONL has no torn or partial tail")
-        if not raw:
-            return Ok(())
+        rows = self._read_raw_rows()
+        if is_refusal(rows):
+            return rows
         artifacts: list[AlternativeTerminalArtifact] = []
-        for index, chunk in enumerate(raw[:-1].split(b"\n")):
-            try:
-                parsed: object = json.loads(chunk)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                return storage(
-                    "alternative_ledger", "terminal row is valid UTF-8 JSON", index=index
-                )
-            if not isinstance(parsed, Mapping):
-                return storage("alternative_ledger", "terminal JSONL row is an object", index=index)
-            row = cast("Mapping[str, object]", parsed)
-            encoded = canonical_bytes(row)
-            if is_refusal(encoded) or encoded.value != chunk:
-                return storage(
-                    "alternative_ledger", "terminal JSONL row uses canonical bytes", index=index
-                )
-            if (
-                row.get("class") != _ROW_CLASS
-                or type(row.get("format_version")) is not int
-                or row.get("format_version") != 1
-                or type(row.get("sequence")) is not int
-                or row.get("sequence") != index + 1
-            ):
-                return storage(
-                    "alternative_ledger",
-                    "terminal rows use contiguous private format v1",
-                    index=index,
-                )
-            if row.get("writer") != _writer_identity(self.writer):
-                return storage(
-                    "alternative_ledger",
-                    "terminal row writer matches its scoped fragment",
-                    index=index,
-                )
+        for index, row in enumerate(rows.value):
+            if row.get("class") == _INTENT_CLASS:
+                continue
             body = row.get("artifact")
             if not isinstance(body, Mapping):
                 return storage(
@@ -645,6 +785,16 @@ def _fp_nested(body: Mapping[str, object], outer: str, inner: str) -> Result[Fin
     return _fp(cast("Mapping[str, object]", value).get(inner), inner)
 
 
+def _artifact_trial_label_fp(
+    artifact: AlternativeTerminalArtifact,
+) -> Fingerprint | None:
+    label = artifact.body.get("trial_label")
+    if not isinstance(label, Mapping):
+        return None
+    stamped = fingerprint(cast("Mapping[str, object]", label))
+    return None if is_refusal(stamped) else stamped.value
+
+
 def _verify_receipt_chain(receipt: AlternativeRunReceipt, store: JournalStore) -> Result[None]:
     body = AlternativeTerminalArtifact.from_run(receipt)
     if is_refusal(body):
@@ -698,11 +848,24 @@ def _verify_terminal_body(body: Mapping[str, object], store: object) -> Result[N
             return event_fp
         if is_refusal(store_fp):
             return store_fp
-        if seq >= len(checked.value) or physical >= len(raw_rows.value):
+        if physical >= len(raw_rows.value):
             return policy(
                 "journal_refs", "terminal CT-13 event and physical row exist", index=index
             )
-        event = checked.value[seq]
+        matching_events = [
+            candidate
+            for candidate in checked.value
+            if candidate.writer == writer.value
+            and candidate.sequence == seq
+            and candidate.fingerprint == event_fp.value
+        ]
+        if len(matching_events) != 1:
+            return policy(
+                "journal_refs",
+                "logical reference resolves uniquely by writer, sequence, and event fingerprint",
+                index=index,
+            )
+        event = matching_events[0]
         raw = raw_rows.value[physical]
         raw_fp = fingerprint(raw)
         if (

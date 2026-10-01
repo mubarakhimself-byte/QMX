@@ -7,7 +7,7 @@ provider; the source observations and journal writes use real QMF persistence AP
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -637,6 +637,125 @@ def test_alternative_study_refuses_objective_unit_mismatch_before_trial(tmp_path
     )
     assert is_refusal(result)
     assert _ok(terminal.read(journal_store=journal, registry=registry_persistence)) == ()
+
+
+def test_terminal_failure_reservation_prevents_evaluator_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source(tmp_path)
+    journal, _ = _journal(tmp_path)
+    config = _ok(validate_alternative_run_config(_config_payload()))
+    registry = _registry()
+    registry_persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+    lineage_writer = _ok(WriterId.try_create("test-host", "qmb", "lineage", "boot-1"))
+    bindings = (_ok(AlternativeParameterBinding.try_create("max_gross", "risk", "max_gross")),)
+    objective = _ok(AlternativeStudyObjective.try_create("accepted_entry", "max", "count"))
+    calls: list[tuple[int, int]] = []
+
+    def execute_trial(
+        generation: int,
+        proposal: ProposedTrial,
+        label: Mapping[str, object],
+        candidate: AlternativeRunConfig,
+        candidate_registry: AlternativeInterpreterRegistry,
+        replay_source: RecordedReplaySource,
+    ) -> Result[object]:
+        calls.append((generation, proposal.ask_index))
+        writer_id = _ok(
+            WriterId.try_create(
+                "test-host", "qmb", f"study-{generation}-{proposal.ask_index}", "boot-1"
+            )
+        )
+        writer = _ok(JournalWriter.resume(journal, writer_id))
+        return cast(
+            "Result[object]",
+            execute_alternative_run(
+                candidate,
+                replay_source,
+                candidate_registry,
+                initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+                expected_command_owner_epoch=18,
+                journal_writer=writer,
+                journal_store=journal,
+                trial_label=label,
+            ),
+        )
+
+    kwargs: dict[str, object] = {
+        "generation_count": 1,
+        "base_config": config,
+        "registry": registry,
+        "source": source,
+        "objective": objective,
+        "bindings": bindings,
+        "terminal_store": terminal,
+        "journal_store": journal,
+        "registry_persistence": registry_persistence,
+        "lineage_writer": lineage_writer,
+        "execute_trial": execute_trial,
+    }
+    original_append = AlternativeTerminalStore.append
+
+    def fail_terminal(*_args: object, **_kwargs: object) -> Result[object]:
+        return invalid("injected", "terminal persistence failed after actual CT-13 effects")
+
+    monkeypatch.setattr(AlternativeTerminalStore, "append", fail_terminal)
+    first = run_alternative_study(_alternative_study_stepper(), **kwargs)
+    assert is_refusal(first)
+    assert calls == [(0, 0)]
+    assert len(_ok(JournalReader(journal).read_checked("study-0-0", for_world=World.REPLAY))) == 1
+
+    monkeypatch.setattr(AlternativeTerminalStore, "append", original_append)
+    restarted = run_alternative_study(_alternative_study_stepper(), **kwargs)
+    assert is_refusal(restarted)
+    assert calls == [(0, 0)]
+    assert len(_ok(terminal.pending_trials())) == 1
+
+
+def test_terminal_chain_uses_physical_row_after_fresh_writer_boot(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    journal, _ = _journal(tmp_path)
+    registry_persistence = _ok(
+        RegistryPersistence.open(EvidenceStore(tmp_path / "registry-room"), World.REPLAY)
+    )
+    terminal = _ok(
+        AlternativeTerminalStore.try_create(tmp_path / "alternative-ledger", writer=_writer())
+    )
+    lineage_writer = _ok(WriterId.try_create("test-host", "qmb", "lineage", "boot-1"))
+    config = _ok(validate_alternative_run_config(_config_payload()))
+    for boot in ("boot-1", "boot-2"):
+        writer_id = _ok(WriterId.try_create("test-host", "qmb", "atc-recorded", boot))
+        writer = _ok(JournalWriter.resume(journal, writer_id))
+        receipt = _ok(
+            execute_alternative_run(
+                config,
+                source,
+                _registry(),
+                initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+                expected_command_owner_epoch=18,
+                journal_writer=writer,
+                journal_store=journal,
+            )
+        )
+        _ok(
+            terminal.append(
+                receipt,
+                journal_store=journal,
+                registry=registry_persistence,
+                lineage_writer=lineage_writer,
+            )
+        )
+    artifacts = _ok(terminal.read(journal_store=journal, registry=registry_persistence))
+    assert len(artifacts) == 2
+    refs = cast("Sequence[object]", artifacts[1].body["journal_refs"])
+    second_ref = cast("Mapping[str, object]", refs[0])
+    assert second_ref["sequence"] == 0
+    assert second_ref["store_sequence"] == 1
 
 
 def test_atc_requires_exact_interpreter_key_before_writing(tmp_path: Path) -> None:
