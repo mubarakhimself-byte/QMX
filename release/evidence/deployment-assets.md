@@ -40,3 +40,32 @@ Ruff and scoped Pyright PASS 0 diagnostics. Independent Sol mutation controls
 also passed for all original bundle assets replaced after snapshot, including
 lock and wheels, and for lock replaced before snapshot. Real expanded bundle
 build/install and stable-commit review binding remain pending.
+
+
+Actual immutable build/install verification (2026-10-01): candidate
+`88fa98073263e9a4569129c7572bb47a6182381a` built from registered detached
+`/workspace/QMX-package-assets` into `/workspace/qmx-bundle-assets-candidate`.
+A second build into `/workspace/qmx-bundle-assets-repeat` produced the same
+38 inventoried artifacts with every SHA-256 identical (PASS;
+`/workspace/qmx-reproducibility-assets.json`). Commands used the release venv
+Python with `tools/build_release.py <destination>`; logs
+`/workspace/qmx-bundle-assets-build.log` and
+`/workspace/qmx-bundle-assets-repeat.log`.
+
+The bundled installer ran outside the checkout:
+`/workspace/QMX-release/.venv/bin/python /workspace/qmx-bundle-assets-candidate/install.py /workspace/qmx-installed-assets-candidate`.
+PASS: all 14 product wheels installed non-editably, locked dependencies and
+`pip check` succeeded. QMB/QMN/QML imports resolve inside installed site-packages.
+The installed `qmn/deploy` tree contains 62 paths, source-manifest.json exists,
+and the Linux `venv` alias resolves to `.venv`. Log:
+`/workspace/qmx-assets-install.log`.
+
+Actual installed launcher and `qmb host` commands ran from `/workspace` against
+fresh state `/tmp/qmx-bundle-assets-wjnw70tg` and loopback port 57129:
+start → status → stop → stopped status → restart → status → final stop all PASS.
+Process ids were 52414 and 52474. Reproducible smoke script:
+`/workspace/qmx-assets-candidate-smoke.py`; exact commands/output:
+`/workspace/qmx-assets-candidate-smoke.log`. This verifies packaging and local
+host lifecycle for that recorded SHA, not later source repairs or full release
+acceptance. No deployment script, system service or provider act was invoked.
+Native Windows and connected product execution remain pending.
