@@ -9,3 +9,12 @@ Actual finite ordinary nominal Instrument controls on valid nested provider row 
 Fingerprint(None/123) typed-refuses. Raw stop bool/integer/NaN/infinity and absent stop refuse; missing/mismatched native identity and account/session controls are covered. Official QMF price scale bounds are 0..MAX_SCALE (72), not an invented int64 decimal-place bound; 19 is lawful here. Full pinned metadata provenance is the caller's responsibility and is not proven by this primitive. Existing scoped tests independently report 2 passed in 0.86s, but remain insufficient against the nominal crash.
 
 Expected positive remains exact decoded 1.08523 at scale5 =108523 with raw double provenance and declared rounding. This is a local checked-shape fixture, not an actual provider response admission.
+
+
+## Nominal authority correction — bounded PASS
+
+Exact held source SHA256 `1384cf279d5ae2d882d377e2f8db0c004684025a1e0c4ed7d79a35f2598339a7`; test `8921321aebeb2fa3c803b9611c447146b57c6576d37e36abf5b9e7f9c115da0d`. Independent scoped pytest: **3 passed in 0.81s**.
+
+Original three ordinary malformed Instrument cases now typed-refuse, as do nested mapping-valued VenueId and blank symbol. Official VenueId/Instrument reconstruction precedes price decoding and rejects normalization drift. Independent legal exact stopLoss=1.0 positives at scales0,5,19,MAX_SCALE72 decode to value10**scale with the requested exact scale; no invented int64-digit cap. MAX_SCALE+1, bool digits/account/symbol, foreign subject/account/session, malformed source fingerprint and nonfinite/bool raw stops refuse. The original 1.08523→108523 scale5 positive remains covered.
+
+Approval is only this decode primitive and nominal/numeric refusal boundary. It does not prove source-event archive membership, checked CT13 row containment, freshness, full-symbol metadata provenance, native protection lineage, LIVE pump or provider integration. Other active protection files are excluded.
