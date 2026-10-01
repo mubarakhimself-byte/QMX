@@ -5,6 +5,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import PageHeader from "$lib/workbench/PageHeader.svelte";
   import { cn } from "$lib/utils";
+  import { workbench } from "$lib/workbench/workbench.svelte";
 
   // Settings scopes (UI EXPERIENCE §7): global, app, session, instance.
   const SCOPES = [
@@ -83,6 +84,28 @@
             </Card.Footer>
           </Card.Root>
         {:else if scope === "developer"}
+          <Card.Root size="sm">
+            <Card.Header>
+              <Card.Title>Demo mode</Card.Title>
+              <Card.Description>
+                Shows a labelled sample Research app, workflow, Library and
+                conversation for design review. Sample data only; nothing is
+                saved or run.
+              </Card.Description>
+            </Card.Header>
+            <Card.Footer>
+              <Button
+                size="sm"
+                variant={workbench.demoMode ? "secondary" : "outline"}
+                aria-pressed={workbench.demoMode}
+                onclick={() => (workbench.demoMode = !workbench.demoMode)}
+              >
+                {workbench.demoMode
+                  ? "Demo mode is on: turn off"
+                  : "Turn on demo mode"}
+              </Button>
+            </Card.Footer>
+          </Card.Root>
           <Card.Root size="sm">
             <Card.Header>
               <Card.Title>Component gallery</Card.Title>

@@ -45,3 +45,11 @@ Governing specs:
 
 - Widget expand: in-canvas layout change with "Back" (current) vs a browser-style tab (storyboard). Docs leave this open.
 - Saved widget layouts: client-local only for now. No backend contract exists.
+
+## Demo mode (UI-only, must not ship as product data)
+
+`workbench.demoMode` (Settings › Developer) shows labelled sample surfaces: the Research app on the rail, a sample workflow in Authoring, the Copilot sample session, and a Library list built from `public/demo/mql5-articles.json` (titles, dates, sections and a short excerpt from the local `mql5-library` catalog; no full text). Each one carries a Demo banner. When a transport is bound, these are replaced by:
+
+- Library: facade search + article detail (full text, generated summary, key points) from the daemon's Library.
+- Copilot: `psess:` mailbox history; tool-call records and result tables from the JobHandle; "Save to Library" via artifact staging.
+- Authoring: the graph from `get_editor_draft_head`; node settings/code from the draft; last results from the JobHandle of a published version.
