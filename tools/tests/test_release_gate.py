@@ -23,6 +23,7 @@ def evidence() -> Evidence:
                 "ui.tar.gz",
                 "qmn-deploy.tar.gz",
                 "README.md",
+                "source-manifest.json",
                 "launcher.py",
                 "install.py",
                 "requirements.lock",

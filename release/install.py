@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import venv
 import zipfile
 from collections.abc import Mapping
@@ -49,6 +50,7 @@ REQUIRED_ARTIFACTS = frozenset(
         "ui.tar.gz",
         "qmn-deploy.tar.gz",
         "README.md",
+        "source-manifest.json",
         "pack-resources.json",
     }
 )
@@ -324,6 +326,23 @@ def install(bundle: Path, destination: Path) -> None:
             "Use a new destination to preserve an existing installation and its data"
         )
     record, artifacts = _manifest(bundle)
+    # Installation may launch pip or other environment setup. Bind every input
+    # to a private verified snapshot before those effects, not late bundle reads.
+    with tempfile.TemporaryDirectory(prefix="qmx-verified-") as temporary:
+        verified = Path(temporary)
+        for name, expected in artifacts.items():
+            data = (bundle / name).read_bytes()
+            if hashlib.sha256(data).hexdigest() != expected:
+                raise RuntimeError(f"Product artifact changed after preflight: {name}")
+            (verified / name).write_bytes(data)
+        (verified / "acceptance.json").write_text(json.dumps(record, indent=2) + "\n")
+        verified_record, verified_artifacts = _manifest(verified)
+        _install_verified(verified, destination, verified_record, verified_artifacts)
+
+
+def _install_verified(
+    bundle: Path, destination: Path, record: dict[str, object], artifacts: dict[str, str]
+) -> None:
     wheels = sorted(str(bundle / name) for name in artifacts if name.endswith(".whl"))
     ui_bytes = (bundle / "ui.tar.gz").read_bytes()
 
@@ -353,6 +372,7 @@ def install(bundle: Path, destination: Path) -> None:
         # local alias does not install services, change system paths or trade.
         (destination / ".venv").symlink_to("venv", target_is_directory=True)
     shutil.copyfile(bundle / "README.md", destination / "README.md")
+    shutil.copyfile(bundle / "source-manifest.json", destination / "source-manifest.json")
     shutil.copyfile(bundle / "launcher.py", destination / "launcher.py")
     shutil.copyfile(bundle / "acceptance.json", destination / "installed-artifacts.json")
     print(f"Installed candidate {record.get('candidate')} in {destination}")

@@ -78,6 +78,7 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
     )
     (path / "ui.tar.gz").write_bytes(ui)
     (path / "README.md").write_text("Candidate install instructions\n")
+    (path / "source-manifest.json").write_text(json.dumps({"backend": "a" * 40}))
     node = _archive(
         {
             "install.py": b"pass\n",
@@ -95,6 +96,7 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
         "ui.tar.gz",
         "qmn-deploy.tar.gz",
         "README.md",
+        "source-manifest.json",
     )
     for name in required:
         artifacts[name] = hashlib.sha256((path / name).read_bytes()).hexdigest()
@@ -103,7 +105,9 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
     return path
 
 
-def _mock_environment(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]], list[Path]]:
+def _mock_environment(
+    monkeypatch: pytest.MonkeyPatch, *, wheel_hashes: dict[str, str] | None = None
+) -> tuple[list[list[str]], list[Path]]:
     monkeypatch.setattr(installer.sys, "version_info", (3, 14))
     calls: list[list[str]] = []
     environments: list[Path] = []
@@ -120,6 +124,10 @@ def _mock_environment(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]],
     def fake_run(command: list[str], *, check: bool) -> None:
         assert check is True
         calls.append(command)
+        if wheel_hashes is not None and "--no-deps" in command:
+            for name in command[command.index("--no-deps") + 1 :]:
+                path = Path(name)
+                wheel_hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
 
     monkeypatch.setattr(installer.venv, "EnvBuilder", FakeBuilder)
     monkeypatch.setattr(installer.subprocess, "run", fake_run)
@@ -248,7 +256,8 @@ def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
     bundle = _bundle(tmp_path / "bundle")
     extra = bundle / "unlisted-9.9.9-py3-none-any.whl"
     extra.write_bytes(_wheel("unlisted"))
-    calls, environments = _mock_environment(monkeypatch)
+    wheel_hashes: dict[str, str] = {}
+    calls, environments = _mock_environment(monkeypatch, wheel_hashes=wheel_hashes)
 
     with pytest.raises(RuntimeError, match="Unlisted product wheel"):
         installer.install(bundle, tmp_path / "refused")
@@ -262,8 +271,12 @@ def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
     assert len(calls) == 3
     assert "--require-hashes" in calls[0]
     pip_wheels = set(calls[1][5:])
-    expected_wheels = {str(path) for path in bundle.glob("*.whl")}
-    assert pip_wheels == expected_wheels
+    expected_hashes = {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in bundle.glob("*.whl")
+    }
+    assert {Path(name).name for name in pip_wheels} == set(expected_hashes)
+    assert wheel_hashes == expected_hashes
+    assert all(Path(name).parent != bundle for name in pip_wheels)
     assert (destination / "ui" / "index.html").read_bytes() == b"<html></html>"
     assert (destination / "launcher.py").is_file()
     assert (destination / "installed-artifacts.json").is_file()
@@ -295,6 +308,7 @@ def test_node_assets_and_template_interpreter_alias_are_installed(
     installer.install(bundle, destination)
     assert (destination / "qmn/deploy/systemd/templates/qmn.service.in").is_file()
     assert (destination / "README.md").is_file()
+    assert json.loads((destination / "source-manifest.json").read_text())["backend"] == "a" * 40
     if installer.os.name != "nt":
         assert (destination / ".venv").is_symlink()
         assert (destination / ".venv").resolve() == (destination / "venv").resolve()
@@ -311,6 +325,48 @@ def test_node_archive_missing_mandatory_template_refuses_before_environment(
     (bundle / "acceptance.json").write_text(json.dumps(record))
     _, environments = _mock_environment(monkeypatch)
     with pytest.raises(RuntimeError, match="no required file"):
+        installer.install(bundle, tmp_path / "installed")
+    assert environments == []
+    assert not (tmp_path / "installed").exists()
+
+
+def test_bundle_replacement_after_preflight_cannot_change_installed_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    _mock_environment(monkeypatch)
+    original_create = installer.venv.EnvBuilder.create
+
+    def replace_bundle_during_create(builder: object, destination: Path) -> None:
+        (bundle / "qmn-deploy.tar.gz").write_bytes(_archive({"replacement.py": b"bad"}))
+        (bundle / "launcher.py").write_text("replacement launcher\n")
+        (bundle / "README.md").write_text("replacement readme\n")
+        original_create(builder, destination)
+
+    monkeypatch.setattr(installer.venv.EnvBuilder, "create", replace_bundle_during_create)
+    destination = tmp_path / "installed"
+    installer.install(bundle, destination)
+    assert (destination / "qmn/deploy/install.py").is_file()
+    assert not (destination / "qmn/deploy/replacement.py").exists()
+    assert (destination / "launcher.py").read_text() == "pass\n"
+    assert (destination / "README.md").read_text() == "Candidate install instructions\n"
+
+
+def test_bundle_replacement_before_snapshot_refuses_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    _, environments = _mock_environment(monkeypatch)
+    original_manifest = installer._manifest
+
+    def replace_after_manifest(path: Path):
+        record = original_manifest(path)
+        if path == bundle:
+            (bundle / "launcher.py").write_text("replacement launcher\n")
+        return record
+
+    monkeypatch.setattr(installer, "_manifest", replace_after_manifest)
+    with pytest.raises(RuntimeError, match="changed after preflight"):
         installer.install(bundle, tmp_path / "installed")
     assert environments == []
     assert not (tmp_path / "installed").exists()

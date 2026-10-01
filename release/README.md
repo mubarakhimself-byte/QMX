@@ -25,7 +25,7 @@ inventory, installer and launcher. Factory tooling is not a runtime dependency.
 Build a second empty destination from the same commit and compare the hashes
 in the two `acceptance.json` artifact inventories to test reproducibility.
 The candidate is a full Git SHA; source refs are recorded in
-`release/SOURCE_MANIFEST.json`.
+the bundled `source-manifest.json` (repository `release/SOURCE_MANIFEST.json`).
 
 ## Install outside the checkout
 

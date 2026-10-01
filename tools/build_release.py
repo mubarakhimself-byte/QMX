@@ -153,6 +153,9 @@ def build(destination: Path) -> None:
             shutil.copyfile(source / "release/launcher.py", destination / "launcher.py")
             shutil.copyfile(source / "release/install.py", destination / "install.py")
             shutil.copyfile(source / "release/README.md", destination / "README.md")
+            shutil.copyfile(
+                source / "release/SOURCE_MANIFEST.json", destination / "source-manifest.json"
+            )
             archive(source / "qmn/deploy", destination / "qmn-deploy.tar.gz")
             build_ui(destination, candidate, source)
             packs = source / "qmx-agents/packages/qma-daemon/src/qma/daemon/bundled_packs"

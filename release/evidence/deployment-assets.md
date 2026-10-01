@@ -24,3 +24,19 @@ Ruff and scoped Pyright PASS; log `/workspace/qmx-deploy-packaging-tests.log`,
 immutable bundle rebuild/install after this change remain NOT RUN. Prior
 35-artifact reproducibility evidence applies only to its recorded older SHA,
 not this expanded candidate inventory.
+
+Independent Sol review found a post-preflight node archive replacement could
+be extracted after venv/pip setup. Installer now copies every inventoried
+input into a private temporary snapshot, rechecks every hash and reruns
+complete preflight there before environment creation. Pip, archives, README,
+launcher and recorded manifests use that verified snapshot only. Source refs
+are now bundled and copied as `source-manifest.json`.
+
+Regression controls cover replacement before snapshot (refusal, no destination)
+and during environment creation (original verified contents installed). The
+positive mocked wheel-install control checks all 14 actual input byte hashes,
+not their original directory location. Focused installer/gate suite PASS 130;
+Ruff and scoped Pyright PASS 0 diagnostics. Independent Sol mutation controls
+also passed for all original bundle assets replaced after snapshot, including
+lock and wheels, and for lock replaced before snapshot. Real expanded bundle
+build/install and stable-commit review binding remain pending.
