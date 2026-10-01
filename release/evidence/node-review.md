@@ -37,3 +37,9 @@ A new actual-filesystem positive appends a decision using boot-1, then another d
 
 Combined independent Node KSA/seat/reservation plus runloop/warmup verification passed **65 tests**. No provider/native exit production closure is approved by this correction.
 The bounded indexed-receipt approval also includes `3bbf73f8`'s committed `BindingVirtualLedger.uses_reservation_journal` identity/composition predicate, already exercised in the reviewed working tree. This is evidence binding of the unchanged predicate, not a new full-root approval.
+
+# Conservative configured preflight — `56fade4d0418a8e8a1b0344a5efef6bd25ad1903`
+
+Independent Sol review approves this bounded stand-down preflight only. Supervisor records boot before assessment and continues reporting trading unavailable; parsed local declarations and descriptor validity never grant activation/provider readiness. Required reference strings and registry-as-of are declarations in this commit, not authoritative registry resolution. Full registered runtime/root wiring under concurrent development is excluded.
+
+Reviewed exact committed module/supervisor diff. To avoid reviewing active owner edits, `/tmp/review_preflight.py` loads the immutable git module bytes and runs its three committed direct tests against actual temporary deployment/descriptor files. Missing pinned bytes and outside-root deployment refuse; valid local descriptor digest still yields stand_down=True, activation_authorized=False, provider_ready=False. Four additional controls (wrong actual descriptor digest, bool format version, unknown activation key, empty required references) refuse. No provider connections or product edits. No full supervisor/root/provider acceptance.
