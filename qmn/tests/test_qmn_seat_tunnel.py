@@ -24,6 +24,7 @@ from qmf.core import (
     MonotonicReading,
     Ok,
     Price,
+    PriceDelta,
     Quantity,
     RefusalCategory,
     Result,
@@ -64,6 +65,8 @@ from qmf.risk.door import (
     ExitKind,
     ExitLogicRef,
     ReasonCode,
+    StopMoveDirection,
+    TightenProtectiveStop,
 )
 from qmf.risk.exit_policy import ExitPolicy
 from qmf.risk.footprint_requirements import FootprintRequirements
@@ -1354,6 +1357,33 @@ def _exercise_configured_decision_root(
     )
     assert after_denied_decisions == before_denied_decisions
     assert after_denied_projections == before_denied_projections == []
+    assert ordinal_store.high_water == before_denied_ordinal
+    assert ledger.records == before_denied_ledger
+    assert _ok(client.observations()) == before_denied_venue
+    tighten = _ok(
+        TightenProtectiveStop.try_create(
+            StopMoveDirection.TIGHTEN,
+            _ok(PriceDelta.try_create(10, _instrument(), 5)),
+        )
+    )
+    tighten_intent = _ok(
+        ExitIntent.try_create(
+            ExitKind.TIGHTEN_PROTECTIVE_STOP,
+            _ok(ReasonCode.try_create("risk-cut", "trend-follow")),
+            opened.position.position_ref,
+            tighten=tighten,
+        )
+    )
+    refused_tighten = _refusal(
+        dispatch_hosted_intents(admitted, (tighten_intent,), path=exit_path)
+    )
+    assert refused_tighten.context["field"] == "exit_intent"
+    assert _ok(
+        JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
+    ) == before_denied_decisions
+    assert _ok(
+        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
+    ) == before_denied_projections
     assert ordinal_store.high_water == before_denied_ordinal
     assert ledger.records == before_denied_ledger
     assert _ok(client.observations()) == before_denied_venue
