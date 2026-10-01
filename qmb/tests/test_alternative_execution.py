@@ -413,3 +413,37 @@ def test_atc_refuses_false_physical_receipt_for_a_real_append(
     reopened = _ok(JournalReader(journal).read_checked(writer.stream_name, for_world=World.REPLAY))
     assert len(reopened) == 1
     assert reopened[0].event_type is JournalEventType.DECISION
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("event_type", "decision"), ("world", "replay"), ("outcome", "authorized")],
+)
+def test_atc_refuses_malformed_typed_event_acknowledgment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    original_record = writer.record
+
+    def malformed_event(*args: object, **kwargs: object) -> Result[JournalAppendReceipt]:
+        actual = original_record(*args, **kwargs)
+        assert is_ok(actual)
+        event = replace(actual.value.event, **{field: value})
+        return Ok(replace(actual.value, event=event))
+
+    monkeypatch.setattr(writer, "record", malformed_event)
+    result = execute_alternative_run(
+        _config_payload(),
+        source,
+        _registry(),
+        initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+        expected_command_owner_epoch=18,
+        journal_writer=writer,
+        journal_store=journal,
+    )
+    assert is_refusal(result)
+    assert writer.next_sequence == 1
