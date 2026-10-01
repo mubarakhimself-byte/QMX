@@ -664,8 +664,8 @@ class SliceHandler(Protocol):
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool]:  # pragma: no cover - protocol seam
-        """Sub-phase 3: ``True`` fills the eligible resting intent against this path."""
+    ) -> Result[bool | ExecutionDisposition]:  # pragma: no cover - protocol seam
+        """Execute an order, optionally separating fill occurrence from terminality."""
         ...
 
     def update_closed_data(
@@ -684,6 +684,24 @@ class SliceHandler(Protocol):
     ) -> Result[object]:  # pragma: no cover - protocol seam
         """Sub-phase 5: strategy callbacks return zero-or-more resting intent tokens."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDisposition:
+    """Per-slice fill occurrence and whether the resting order reached terminal state.
+
+    Legacy handler booleans keep their established meaning: ``True`` means one
+    fill and terminal order; ``False`` means no fill and a still-live order.
+    """
+
+    filled: bool
+    terminal: bool
+
+    def __post_init__(self) -> None:
+        if type(self.filled) is not bool or type(self.terminal) is not bool:
+            raise TypeError("execution disposition flags are booleans")
+        if self.terminal and not self.filled:
+            raise ValueError("an unfilled order remains live until an explicit terminal event")
 
 
 @dataclass(frozen=True, slots=True)
@@ -708,7 +726,7 @@ class SilentSliceHandler:
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool]:
+    ) -> Result[bool | ExecutionDisposition]:
         del intent, observation, frontier
         return Ok(False)
 
@@ -965,7 +983,9 @@ def run(
         outcomes.append(done)
         current = done.frontier
         resting = done.resting
-        filled.extend(done.filled)
+        for intent_id in done.filled:
+            if intent_id not in filled:
+                filled.append(intent_id)
         if done.warmup is not None:
             warmup = done.warmup
         data_points += len(event.observations)
@@ -1222,21 +1242,38 @@ def _phase_resting_orders(acc: _Acc) -> Result[_Acc]:
         if is_refusal(ranked):
             return ranked
         for intent in ranked.value:
-            filled = acc.handler.execute_resting(intent, observation, acc.frontier)
-            if is_refusal(filled):
-                return filled
-            if filled.value:
+            executed = acc.handler.execute_resting(intent, observation, acc.frontier)
+            if is_refusal(executed):
+                return executed
+            disposition = _execution_disposition(executed.value)
+            if is_refusal(disposition):
+                return disposition
+            if disposition.value.filled:
                 locked = guard_trading(is_warming_up=acc.slice_warming, action="fill")
                 if is_refusal(locked):
                     return locked
-                acc.filled.append(intent.intent_id)
+                if intent.intent_id not in acc.filled:
+                    acc.filled.append(intent.intent_id)
                 actions.append(f"fill:{intent.intent_id}")
             else:
-                kept.append(intent)
                 actions.append(f"no-fill:{intent.intent_id}")
+            if not disposition.value.terminal:
+                kept.append(intent)
     acc.remaining = kept
     acc.traces.append(_trace("resting-orders", acc.stream_ids, actions))
     return Ok(acc)
+
+
+def _execution_disposition(value: object) -> Result[ExecutionDisposition]:
+    if isinstance(value, ExecutionDisposition):
+        return Ok(value)
+    if isinstance(value, bool):
+        return Ok(ExecutionDisposition(filled=value, terminal=value))
+    return invalid(
+        "execution_disposition",
+        "a slice handler returns a boolean or typed fill/terminal disposition",
+        given=repr(type(value).__name__),
+    )
 
 
 def _rank_resting_cohort(

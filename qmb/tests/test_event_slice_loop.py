@@ -12,6 +12,7 @@ from qmb.runloop import (
     SUBPHASES,
     DeclaredStream,
     EventSlice,
+    ExecutionDisposition,
     FrontierClock,
     RestingIntent,
     SilentSliceHandler,
@@ -83,7 +84,7 @@ class _RecordingHandler:
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool]:
+    ) -> Result[bool | ExecutionDisposition]:
         del observation, frontier
         self.calls.append((SUBPHASES[2], intent.stream_id))
         return Ok(True)
@@ -109,6 +110,31 @@ class _RecordingHandler:
         return Ok((_intent(f"new-{stream_id}", stream_id),))
 
 
+class _PartialSequenceHandler(_RecordingHandler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.dispositions = iter(
+            (
+                ExecutionDisposition(filled=True, terminal=False),
+                ExecutionDisposition(filled=False, terminal=False),
+                ExecutionDisposition(filled=True, terminal=True),
+            )
+        )
+
+    def execute_resting(
+        self,
+        intent: RestingIntent,
+        observation: SliceObservation | None,
+        frontier: Instant,
+    ) -> Result[bool | ExecutionDisposition]:
+        del intent, observation, frontier
+        return Ok(next(self.dispositions))
+
+    def mint_intents(self, stream_id: str, frontier: Instant) -> Result[object]:
+        del stream_id, frontier
+        return Ok(())
+
+
 def test_subphases_are_the_pinned_identity_bearing_strings() -> None:
     assert SUBPHASES == (
         "frontier-advance",
@@ -118,6 +144,21 @@ def test_subphases_are_the_pinned_identity_bearing_strings() -> None:
         "strategy-callbacks",
         "new-intents-rest",
     )
+
+
+def test_partial_fill_remains_live_through_no_fill_and_later_fill() -> None:
+    handler = _PartialSequenceHandler()
+    slices = tuple((_obs("eurusd", _NS + offset),) for offset in (0, 1, 2))
+    outcome = _ok(
+        run(
+            slices=slices,
+            stream_set=_streams("eurusd"),
+            handler=handler,
+            initial_resting=(_intent("entry-1", "eurusd"),),
+        )
+    )
+    assert outcome.filled == ("entry-1",)
+    assert outcome.resting == ()
     assert qmb.SUBPHASES is SUBPHASES
     assert SAME_SLICE_NEW_INTENT_FILL is False
     assert qmb.SAME_SLICE_NEW_INTENT_FILL is False
