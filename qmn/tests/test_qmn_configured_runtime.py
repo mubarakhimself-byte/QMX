@@ -116,7 +116,17 @@ def _references(root: Path) -> tuple[dict[str, str], str, BookBindingRecord]:
         [calendar.value],
         [producer.value],
     )
-    logic = mint_logic_identity("fixture-bot", "1.0.0", {"bot.py": "def on_instant(self): pass"})
+    logic = mint_logic_identity(
+        "fixture-bot",
+        "1.0.0",
+        {
+            "bot.py": "def on_instant(self, evidence):\n    return ()\n",
+            "factory.py": (
+                "from qml.protocol import FunctionFactory\n"
+                "factory = FunctionFactory(logic=lambda evidence: ())\n"
+            ),
+        },
+    )
     assert is_ok(footprint) and is_ok(logic)
     bot = mint_bot_definition(
         strategy_family_id="fixture-family",
@@ -283,6 +293,9 @@ def _deployment(root: Path, descriptor_path: Path | None, digest: str) -> Path:
     path = root / "deployment.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+fixture_deployment = _deployment
 
 
 def test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down(tmp_path: Path) -> None:

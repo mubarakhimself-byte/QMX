@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import stat
 import sys
@@ -57,6 +58,7 @@ __all__ = [
 ]
 
 CONFIGURED_RUNTIME_FORMAT_VERSION: Final[int] = 1
+CONFIGURED_RUNTIME_FORMAT_V2: Final[int] = 2
 _MAX_DEPLOYMENT_BYTES: Final[int] = 1 << 20
 _O_NOFOLLOW: Final[int] = cast("int", getattr(os, "O_NOFOLLOW", 0))
 _O_DIRECTORY: Final[int] = cast("int", getattr(os, "O_DIRECTORY", 0))
@@ -72,6 +74,7 @@ _TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
         "required_references",
     }
 )
+_TOP_LEVEL_KEYS_V2: Final[frozenset[str]] = _TOP_LEVEL_KEYS | {"host_resource_profile"}
 _LAYER_KEYS: Final[frozenset[str]] = frozenset(
     {"roster", "bms", "book", "node_defaults", "roster_identity", "config_version"}
 )
@@ -124,6 +127,7 @@ class ConfiguredRuntimeAssessment:
     stand_down_reason: str | None
     activation_authorized: bool = False
     provider_ready: bool = False
+    host_resource_profile: Mapping[str, object] | None = None
 
     @property
     def stand_down(self) -> bool:
@@ -192,17 +196,77 @@ def assess_configured_runtime(
     if not isinstance(payload, Mapping):
         return invalid("deployment_file", "the configured deployment is a JSON object")
     body = cast("Mapping[str, object]", payload)
+    version = body.get("format_version")
+    if version is None:
+        expected_keys = _TOP_LEVEL_KEYS
+    elif type(version) is int and version in {
+        CONFIGURED_RUNTIME_FORMAT_VERSION,
+        CONFIGURED_RUNTIME_FORMAT_V2,
+    }:
+        expected_keys = _TOP_LEVEL_KEYS if version == 1 else _TOP_LEVEL_KEYS_V2
+    else:
+        return invalid("format_version", "configured-runtime format version is 1 or 2")
     keys = frozenset(body.keys())
-    if keys != _TOP_LEVEL_KEYS:
+    if keys != expected_keys:
         return invalid(
             "deployment_file",
             "the deployment has exactly the versioned configured-runtime fields",
-            missing=sorted(_TOP_LEVEL_KEYS - keys),
-            unknown=sorted(keys - _TOP_LEVEL_KEYS),
+            missing=sorted(expected_keys - keys),
+            unknown=sorted(keys - expected_keys),
         )
-    version = body.get("format_version")
-    if type(version) is not int or version != CONFIGURED_RUNTIME_FORMAT_VERSION:
-        return invalid("format_version", "configured-runtime format version is 1")
+    if version is None:
+        return invalid("format_version", "configured-runtime format version is 1 or 2")
+    host_profile: Mapping[str, object] | None = None
+    if version == CONFIGURED_RUNTIME_FORMAT_V2:
+        profile_pin = body.get("host_resource_profile")
+        if not isinstance(profile_pin, Mapping):
+            return invalid(
+                "host_resource_profile",
+                "version 2 pins an application-layer host resource profile",
+            )
+        pin = cast("Mapping[str, object]", profile_pin)
+        if frozenset(pin) != frozenset({"descriptor_path", "descriptor_fp1"}):
+            return invalid(
+                "host_resource_profile",
+                "profile pin contains only descriptor_path and descriptor_fp1",
+            )
+        profile_path = pin.get("descriptor_path")
+        profile_fp = Fingerprint.try_create(pin.get("descriptor_fp1"))
+        if is_refusal(profile_fp):
+            return profile_fp
+        if not isinstance(profile_path, str) or not Path(profile_path).is_absolute():
+            return invalid(
+                "host_resource_profile.descriptor_path",
+                "profile descriptor path is absolute and operator pinned",
+            )
+        try:
+            relative_profile = Path(profile_path).relative_to(root.value)
+            profile_bytes = _read_deployment_no_follow(resolved_root, relative_profile)
+        except (OSError, ValueError):
+            return unavailable(
+                "host_resource_profile",
+                "profile descriptor is a regular no-follow file beneath QMX_ROOT",
+            )
+        try:
+            raw_profile = json.loads(profile_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return invalid("host_resource_profile", "profile descriptor is UTF-8 JSON")
+        if not isinstance(raw_profile, Mapping):
+            return invalid("host_resource_profile", "profile descriptor is an object")
+        profile_body = cast("Mapping[str, object]", raw_profile)
+        actual_profile_fp = fingerprint(profile_body)
+        if is_refusal(actual_profile_fp):
+            return actual_profile_fp
+        if actual_profile_fp.value != profile_fp.value:
+            return policy(
+                "host_resource_profile.descriptor_fp1",
+                "profile descriptor bytes match the separately pinned fp1",
+                failure_id="configured_runtime.host_profile_identity_mismatch",
+            )
+        frozen_profile = _freeze_json_mapping(profile_body, "host_resource_profile")
+        if is_refusal(frozen_profile):
+            return frozen_profile
+        host_profile = frozen_profile.value
 
     machine = clean_token(body.get("machine"))
     if machine is None:
@@ -360,6 +424,7 @@ def assess_configured_runtime(
                 "configured deployment declarations validated; authoritative registered "
                 "seat resolution, activation, and boot ceremony have not been admitted"
             ),
+            host_resource_profile=host_profile,
         )
     )
 
@@ -928,6 +993,43 @@ def _mapping(
     if unknown:
         return invalid(field, f"{field} has no unknown fields", unknown=sorted(unknown))
     return Ok(MappingProxyType(dict(body)))
+
+
+def _freeze_json_mapping(value: object, field: str) -> Result[Mapping[str, object]]:
+    if not isinstance(value, Mapping):
+        return invalid(field, "profile descriptor is a JSON object")
+    frozen = _freeze_json_value(cast("Mapping[object, object]", value), field)
+    if is_refusal(frozen):
+        return frozen
+    return Ok(cast("Mapping[str, object]", frozen.value))
+
+
+def _freeze_json_value(value: object, field: str) -> Result[object]:
+    if value is None or type(value) in {str, int, bool}:
+        return Ok(value)
+    if type(value) is float:
+        return Ok(value) if math.isfinite(value) else invalid(
+            field, "profile numbers are finite JSON values"
+        )
+    if isinstance(value, Mapping):
+        frozen: dict[str, object] = {}
+        for key, item in cast("Mapping[object, object]", value).items():
+            if type(key) is not str:
+                return invalid(field, "profile object keys are strings")
+            child = _freeze_json_value(item, field)
+            if is_refusal(child):
+                return child
+            frozen[key] = child.value
+        return Ok(MappingProxyType(frozen))
+    if isinstance(value, list):
+        values: list[object] = []
+        for item in cast("list[object]", value):
+            child = _freeze_json_value(item, field)
+            if is_refusal(child):
+                return child
+            values.append(child.value)
+        return Ok(tuple(values))
+    return invalid(field, "profile descriptor contains only JSON values")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

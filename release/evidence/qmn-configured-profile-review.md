@@ -9,3 +9,14 @@ Public actual v2 fixture resolves a persisted QMB CT10/CT12 replay request whose
 Actual defect: after genuine persisted v2 assessment and resolve_host_resource_profile, `resolved.mis_producers[0]['parameters']['changed']=1` succeeds while resolved.mis_catalog_fp1 remains unchanged. _mapping_rows protects only the outer row, and assessment.host_resource_profile also protects only the outer descriptor. This breaks the independently pinned whole-admitted-identity invariant. Recursively snapshot validated JSON containers at assessment and resolved MIS boundaries; preserve exact pinned fingerprints, reject unsupported mutable types rather than interpreting them as authority. Numeric owner/root notified. No product edits.
 
 Private application profile format v2 does not expand the 71-row node config/public CT contracts. Historical persisted activation readback and validated source are not a fresh seal or provider readiness. The compiled callback identifier containing entry-once does not imply it emits entry intents: implementation deliberately emits none. This bounded review preserves that limitation.
+
+
+## Recursive snapshot correction — bounded PASS
+
+Exact held hashes: configured_runtime.py `07c90fa388f0d98fa4e3404f44323b541dad36da021b410bdfcd562909a1c55e`; configured_composition.py `01961a02325b5f39642f94e771e22b93522de324e8e34d01c4993e24bbbcfea2`; runtime test `3a899168214c39ac764eeb1228afdef2a9572816d8ac82e06cff943e10b0ea52`; composition test `bcfe0215ae7ba6b93a9560d3927021b256ccadcb948d074794b04dc4c59b6161`. Independent focused two-suite run: **12 passed in 3.98s**.
+
+Original nested resolved MIS mutation now raises TypeError; nested assessed descriptor mutation also raises TypeError. A direct caller-supplied ordinary mapping used to resolve a profile is recursively copied: mutating the original nested parameters afterward changes neither the resolved parameters nor pinned MIS fingerprint. Public resolver controls with NaN, infinity and unsupported object nested values return typed refusals. Genuine actual CT10/CT12 source still resolves; standdown/readinessfalse/activationfalse are retained. This closes the finite pinned-identity mutation defect.
+
+Approval is only the private source-validation profile/snapshot boundary. The compiled callback intentionally emits no intents; declared SQS is not a typed actual SQS artifact, and source instrument/native execution scale linkage, production resource lifecycle/pump, fresh activation and installed/live/provider integration remain outside approval. No new native authority or promotion claim.
+
+Root combined source-validation and native-root characterization run: **36 PASS in 5.70 seconds**, `/workspace/qmx-profile-snapshot-tighten-characterization-root.log`. Held four profile hashes match independent approval. Native-root TIGHTEN refusal characterization remains separate test-only work; it does not establish a supported tighten implementation.
