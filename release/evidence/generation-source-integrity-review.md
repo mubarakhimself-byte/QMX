@@ -19,3 +19,11 @@ Existing generation ownership/gaps suites remain green: `.venv/bin/python -m pyt
 Candidate `e8f2a03e6a6eaa6d0f8a39f1aef482d3c27dc74b`: original byte source now exactly matches canonical mint identity; integer path, malformed nominal Fingerprint search, malformed LogicIdentity and direct empty nominal Confluence each typed-refuse. Existing generation/confluence suites: **53 passed**.
 
 CHANGES REQUIRED remains for an actual nested typed bypass: `author_new_structure(confluence_legs=[{'role': 'level', 'confluence_ref': Confluence(())}])` succeeds and cites a fingerprint of the invalid empty child. `_coerce_child_ref` still fingerprints a typed Confluence before its semantic validation. Revalidate that child through canonical Confluence admission before deriving its reference. Exact public reproduction sent numeric/root. No product edits or commits.
+
+## 6ae34954 nested-child corrective retest
+
+Candidate `6ae3495434a81de5200b0c6c0b9dbeec4b47fab4` atop e8f2a03e: **bounded PASS**. `_coerce_child_ref` now validates nominal child Confluence through Confluence.try_create before deriving its fingerprint. Original nested empty-child admission and malformed bool format-version child both typed-refuse.
+
+Independent `/tmp/review_generation_final.py` confirms original invalid path/fingerprint/logic/direct-empty-child controls remain refused; genuine text and UTF-8 byte sources produce exactly the canonical mint LogicIdentity; a genuine nested authored child preserves its exact canonical child fingerprint. Typed ProducerBinding reconstructed from a valid ProducerTemplate preserves the f2fdd1e9 nested arithmetic dict/list snapshot: mutation of original reference configuration does not change its admitted binding fingerprint. Existing confluence ordering/identity controls remain green.
+
+Reviewer combined generation ownership/gaps, confluence, footprint suites: **82 passed**. This approves the bounded generation source/nominal identity correction, not external source execution, install, or full QMA worker behavior. Evidence-only edits, no staging or commits.
