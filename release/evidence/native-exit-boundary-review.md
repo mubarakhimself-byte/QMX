@@ -1,0 +1,32 @@
+# Independent Sol diagnosis — native-position exit boundary
+
+The missing native-position producer is an implementation gap under existing authority, not an unresolved permission to add a new contract. This is a read-only architecture diagnosis, not approval of an implementation or provider connectivity.
+
+## Existing authority and source seams
+
+- `docs/components/trading-node.md:205`: CT20 position-read-back and balance-read-back journal as CT13 data quality; no eighth type or new catalog.
+- `docs/components/trading-node.md:447`: measured CT18 netting/hedging model, mandatory fill attribution, exhaustive/disjoint netting attribution, and refusal when a narrower action would execute wider.
+- `docs/components/trading-node.md:493`: virtual positions derive from fills joined by declared command identity; venue positions are observation-derived and remain distinct.
+- `docs/contracts/ct-20-venue-event.yaml:14` and `:21`: record verbatim before interpretation; close commands carry subject references and use subject-terminal resolution.
+- `packages/qmf-venue/src/qmf/venue/events.py:476`: `InboundVenueEvent` retains immutable verbatim `raw_payload`, native identity, optional `subject_native_id`, receipt stamps and session epoch. `correlation_id` is occurrence metadata, not authoritative ownership identity.
+- `qmn/src/qmn/venue/live.py:1456`: existing readback interpretation emits position-read-back and data quality. `:1617` collects persisted raw readback evidence; this is not itself a validated ownership join.
+- `qmn/src/qmn/ledger/binding_ledger.py:504`: `fold_fill` requires `AttributedFill` joined by actual command identity. `qmn/src/qmn/order/identity.py:292` binds command identity before wire handoff.
+- `packages/qmf-data/src/qmf/data/journal_producer.py:427`: checked journal reading provides integrity, which must be supplemented by configured writer authority checks.
+- `qmn/src/qmn/ledger/virtual.py:187` and `:210`: current venue fold aggregates by account/instrument and cannot identify separate hedging positions.
+- `packages/qmf-venue/src/qmf/venue/encode.py:727`: close_position requires a venue-native integer positionId. A virtual fingerprint cannot satisfy this requirement.
+
+## Narrow implementation proposal for the existing QMN root
+
+Add a typed native-position attribution projection in `qmn.ledger`, with immutable records keyed by `(venue, account role, account id, binding epoch, virtual position ref)`. Carry actual native PID, native account/symbol, position model, opening command fingerprint, source fill/readback fingerprints, source frontier and composition provenance. Names are implementation choices; these are QMN projection values, not a new CT or journal event kind.
+
+At the sole venue boundary, decode native PID/account/symbol and explicit opening-order/deal linkage from recorded actual native messages. Do not infer linkage from a correlation string, fingerprint digits, matching quantity, or account/instrument alone. Join the explicit native lineage through the existing durable command binding to the ledger's opening command identity and virtual reference. Missing native evidence or an ambiguous join returns a typed refusal. If a broker readback lacks the link, use its recorded order/deal lineage evidence; do not invent it.
+
+Persist the typed attribution as an application payload under the existing CT13 DATA_QUALITY readback path after the raw CT20 evidence is committed. Require complete physical receipts before publishing the projection or dispatching an exit. Recovery replays checked events and validates configured authorized writer lineage, LIVE world (demo accounts still use LIVE observations), composition/config identity, exact venue/account/environment/native map, binding epoch and command ownership. Conflicting mappings, malformed payloads and stale evidence block dispatch; an arbitrary same-epoch writer is not authority. Keep source event fingerprints so recovery can verify the exact evidence rather than trusting a self-contained assertion.
+
+The exit root resolves an existing open virtual position through this projection, allocates/persists the normal new command identity and ordinal, then builds `Command.close_position` with the resolved PID string as `subject_reference`. Preserve the existing terminal-subject check, UNKNOWN block, protective pacing and checked decision transcript. Do not turn an accepted command acknowledgement into a fill/closed virtual ledger state.
+
+For hedging, permit only a uniquely attributed native position. For netting, prove the action cannot close another virtual/foreign exposure under the declared binding partition and CT18 scope; otherwise refuse and retain the exit intent. The existing signed shared-flatten limitation must not be invented by this adapter. No close_all fallback and no unsupported partial-close emulation.
+
+Required local controls: recorded entry fill/readback to exact exit PID; actual journal reopen; forged writer/world/account/symbol/epoch/command lineage; malformed or missing PID; two hedging PIDs on one instrument; foreign/shared netting exposure; ambiguous readback; stale or terminal subject; torn append and incomplete/mismatched receipt. Local ConformanceDouble checks must remain labeled fixtures and cannot establish provider connectivity.
+
+The venue-specific extraction of native lineage is adapter work. Ratified contracts already specify identity, attribution, readback, scope refusal and journal vocabulary. A genuinely new discretionary allocation rule for ambiguous shared netting positions would require an explicit existing Book attribution declaration or a parent decision; the adapter must not silently supply one.
