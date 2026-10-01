@@ -33,9 +33,14 @@ deployed incident, a production composition path, or live trading exposure.
   newer than the supplied decision frontier, checks open positions, and reserves
   an instrument across later dispatch calls using the same ledger. A matching
   attributed fill clears that reservation; a typed accepted/UNKNOWN result keeps
-  it; typed rejected/denied outcomes release it. Reservations remain in-memory
-  and no durable recovery/replay stream or product outcome callback is wired
-  yet, so QM 05 remains open across process restart and composition lifecycle.
+  it; typed rejected/denied outcomes release it. The ledger now journals
+  admission, submission outcome, and attributed-fill reservation transitions
+  before updating reservation state, and fails closed after an append refusal or
+  uncertain acknowledgment. Recovery rejects incomplete streams and requires a
+  supplied committed high-water matching the recovered prefix. However, the
+  production composition has not yet wired an authoritative QMF journal reader
+  to supply that proof or the ledger to an actual Book/KSA caller, so QM 05
+  remains open across product composition and end-to-end restart recovery.
 
 The integrated proof is still open: no production Book/KSA caller of
 `consume_signal_snapshot` was established. `SeatDispatchReceipt.hops` still
@@ -61,16 +66,14 @@ The demo SQS baseline was accepted by a live snapshot and a future snapshot
 frontier was accepted at decision time. Result: **2 failed, 1 passed**. Those
 are the intended contract failures; both pass after the repair.
 
-Latest targeted domain command:
+Latest targeted reservation and identity command:
 
 ```text
-uv run --no-sync pytest -q qmn/tests/test_qmn_mis_signal_snapshot.py qmn/tests/test_qmn_order_door.py qmn/tests/test_qmn_seat_tunnel.py qmn/tests/test_qmn_runtime_risk_gate.py qmn/tests/test_qmn_encode.py packages/qmf-venue/tests/test_commands_ct19.py packages/qmf-venue/tests/test_encode_ct19.py
+uv run --no-sync pytest -q qmn/tests/test_qmn_seat_tunnel.py qmn/tests/test_qmn_order.py qmn/tests/test_qmn_encode.py packages/qmf-venue/tests/test_commands_ct19.py packages/qmf-venue/tests/test_encode_ct19.py
 ```
 
-Earlier bounded slice: **150 passed**. After the CT-28 and pending-reservation
-corrections, the focused command covering the seat tunnel, order door, live
-encoder, and CT-19 venue encoders reports **137 passed**. Ruff passed and
-Pyright reported 0 errors, 0 warnings, and 0 informations on the focused source.
+The command reports **133 passed**. Ruff passed and Pyright reported 0 errors,
+0 warnings, and 0 informations on the focused source.
 
 The broader command `uv run --no-sync pytest -q qmn/tests
 packages/qmf-venue/tests` reached **1,412 passed, 7 skipped, 1 failed**. Its
