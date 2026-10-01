@@ -169,17 +169,25 @@ def _admit_declaration(declaration: object) -> Result[BotDefinition]:
         return Ok(declaration)
     minted = mint_bot_definition(declaration)
     if is_refusal(minted):
-        promoted = _promote_template_identity_refusal(minted)
+        promoted = _promote_template_identity_refusal(minted, declaration)
         if promoted is not minted:
             return promoted
         return minted
     return minted
 
 
-def _promote_template_identity_refusal(refusal: TypedRefusal) -> TypedRefusal:
+def _promote_template_identity_refusal(
+    refusal: TypedRefusal,
+    declaration: object,
+) -> TypedRefusal:
     """Surface an omitted AD-22 identity field even when wrapped by a parent mapping."""
     field = _nested_template_field(refusal.context)
-    if field is None:
+    binding_index = _producer_binding_index(refusal.context)
+    if (
+        field is None
+        or binding_index is None
+        or not _template_field_is_omitted(declaration, binding_index, field)
+    ):
         return refusal
     return invalid(
         field,
@@ -189,6 +197,51 @@ def _promote_template_identity_refusal(refusal: TypedRefusal) -> TypedRefusal:
         layer=_LAYER,
         journal=True,
     )
+
+
+def _template_field_is_omitted(value: object, binding_index: int, field: str) -> bool:
+    """Confirm the raw declaration actually omits this template identity field.
+
+    Refusal field names can be wrapped by the Bot and Footprint coercers. A
+    malformed present value must retain its original validation error instead of
+    being reported as a missing AD-22 field.
+    """
+    bindings = _producer_bindings_from_declaration(value)
+    if bindings is None or binding_index >= len(bindings):
+        return False
+    binding = bindings[binding_index]
+    if isinstance(binding, Mapping):
+        binding_map = cast("Mapping[str, object]", binding)
+        body = binding_map.get("template", binding_map)
+        return isinstance(body, Mapping) and field not in body
+    return False
+
+
+def _producer_binding_index(context: Mapping[str, object]) -> int | None:
+    if context.get("field") == "producer_bindings":
+        index = context.get("index")
+        if type(index) is int and index >= 0:
+            return index
+    cause = context.get("cause")
+    if isinstance(cause, Mapping):
+        return _producer_binding_index(cast("Mapping[str, object]", cause))
+    return None
+
+
+def _producer_bindings_from_declaration(value: object) -> tuple[object, ...] | None:
+    if not isinstance(value, Mapping):
+        return None
+    mapping = cast("Mapping[str, object]", value)
+    nested = mapping.get("body")
+    if isinstance(nested, Mapping) and "strategy_family_id" not in mapping:
+        mapping = cast("Mapping[str, object]", nested)
+    footprint = mapping.get("footprint")
+    if not isinstance(footprint, Mapping):
+        return None
+    raw_bindings = cast("Mapping[str, object]", footprint).get("producer_bindings")
+    if isinstance(raw_bindings, Sequence) and not isinstance(raw_bindings, (str, bytes)):
+        return tuple(cast("Sequence[object]", raw_bindings))
+    return None
 
 
 def _nested_template_field(context: Mapping[str, object]) -> str | None:
