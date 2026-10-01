@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
+import pytest
+from qmb._refuse import invalid
 from qmb.config import STARTING_CAPITAL_KEY, compile_run_config
 from qmb.execution import (
     SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
@@ -21,8 +24,8 @@ from qmb.host.replay_request import (
 from qmb.orchestrator.ledger import read_merge_view
 from qmb.results.measures import MEASURE_IDENTITIES, PerformanceMeasure
 from qmb.runloop.loop import STREAM_SET_KEY
-from qmf.core import Result, World, WriterId, fingerprint, is_ok
-from qmf.data.journal_producer import JournalReader, JournalWriter
+from qmf.core import Ok, Result, World, WriterId, fingerprint, is_ok
+from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.splits import SegmentRole
 from qmf.data.store import JournalStore, jsonl_opener
 from replay_fixture_support import (
@@ -40,7 +43,22 @@ def _ok(result: Result[T]) -> T:
     return result.value
 
 
-def test_persisted_request_runs_through_economic_terminal_path(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "receipt_case",
+    (
+        "append-refusal",
+        "ok-none",
+        "world-string",
+        "payload-object",
+        "logical-bool",
+        "writer-none",
+        "physical-bool",
+        "edge-receipt",
+    ),
+)
+def test_persisted_request_runs_through_economic_terminal_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, receipt_case: str
+) -> None:
     fixture = make_recorded_replay_fixture(tmp_path, slippage_adapter=SLIPPAGE_ADAPTER_ZERO)
     request = _ok(
         ReplayInputRequest.try_create(
@@ -103,6 +121,79 @@ def test_persisted_request_runs_through_economic_terminal_path(tmp_path: Path) -
         binding, writer, reader
     ))
     ledger = make_trial_ledger(tmp_path / "terminal-ledger")
+
+    original_record_data_quality = JournalWriter.record_data_quality
+
+    def malformed_source_witness(
+        self: JournalWriter,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        correlation_id: object = None,
+        display_time: object = None,
+    ) -> Result[JournalAppendReceipt]:
+        if receipt_case == "append-refusal":
+            return invalid("injected", "CT-13 source provenance did not persist")
+        if receipt_case == "ok-none":
+            return cast(Result[JournalAppendReceipt], Ok(None))
+        actual = original_record_data_quality(
+            self,
+            payload,
+            instant=instant,
+            correlation_id=correlation_id,
+            display_time=display_time,
+        )
+        if not is_ok(actual):
+            return actual
+        receipt = actual.value
+        if receipt_case == "world-string":
+            event = replace(receipt.event, world="replay")  # pyright: ignore[reportArgumentType]
+            return Ok(replace(receipt, event=event))
+        if receipt_case == "payload-object":
+            event = replace(receipt.event, payload=object())  # pyright: ignore[reportArgumentType]
+            return Ok(replace(receipt, event=event))
+        if receipt_case == "logical-bool":
+            event = replace(receipt.event, sequence=True)  # pyright: ignore[reportArgumentType]
+            return Ok(replace(receipt, event=event))
+        if receipt_case == "writer-none":
+            event = replace(receipt.event, writer=None)  # pyright: ignore[reportArgumentType]
+            return Ok(replace(receipt, event=event))
+        if receipt_case == "physical-bool":
+            store_receipt = replace(
+                receipt.store_receipt, sequence=True  # pyright: ignore[reportArgumentType]
+            )
+            return Ok(replace(receipt, store_receipt=store_receipt))
+        if receipt_case == "edge-receipt":
+            return Ok(replace(receipt, edge_receipts=(receipt.store_receipt,)))
+        raise AssertionError(f"unknown receipt case {receipt_case}")
+
+    monkeypatch.setattr(JournalWriter, "record_data_quality", malformed_source_witness)
+    refused_before_run = execute_recorded_replay_request(
+        request=resolved,
+        expected_request_ref=request_ref,
+        request_root=fixture.request_root,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
+        expected_split_fp1=fixture.expected_split_fp1,
+        config=config,
+        bound_execution=bound,
+        admission=admission,
+        journal_reader=reader,
+        terminal_ledger=ledger,
+    )
+    assert not is_ok(refused_before_run)
+    events_before_run = _ok(reader.read_checked("positions", for_world=World.REPLAY))
+    assert all(event.event_type.value == "data quality" for event in events_before_run)
+    assert all(
+        event.payload.get("kind") == "qmb-recorded-replay-source-binding-v1"
+        for event in events_before_run
+    )
+    if receipt_case in {"append-refusal", "ok-none"}:
+        assert events_before_run == []
+    else:
+        assert len(events_before_run) == 1
+    assert _ok(read_merge_view(ledger.root, world=World.REPLAY, role="confirmation")) == ()
+    monkeypatch.setattr(JournalWriter, "record_data_quality", original_record_data_quality)
 
     outcome = execute_recorded_replay_request(
         request=resolved,

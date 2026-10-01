@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.chrono import Instant, WriterId
 from qmf.core.exact import Money
@@ -41,6 +41,7 @@ from qmf.core.fingerprint import (
     fingerprint,
 )
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_ok, is_refusal
+from qmf.data.journal import JournalEventType
 from qmf.data.journal_producer import JournalReader
 from qmf.risk.exit_record import ExitRecord, ExitRecordStream, ExitResultLabel
 from qmf.risk.performance import PerformanceResult
@@ -48,6 +49,9 @@ from qmf.risk.performance import PerformanceResult
 from qmb._refuse import clean_token, invalid, policy
 from qmb.analysis.deferred import refuse_live_money_gating, refuse_synthetic_portfolio
 from qmb.config.compiler import ResolvedRunConfig
+
+if TYPE_CHECKING:
+    from qmb.host.replay_request import ResolvedReplayRequest
 
 __all__ = [
     "ANALYSIS_PROJECT_CLASS",
@@ -1054,6 +1058,14 @@ def _resolve_source_ct29(
         return policy(
             "source_lineage", "the resolved replay request matches its pinned CT-10/CT-12 source"
         )
+    source_witness = _read_source_binding_witness(
+        source=source,
+        request=request,
+        config=config,
+        source_identity=source_identity,
+    )
+    if is_refusal(source_witness):
+        return source_witness
     expected_data = config.keys.get("data_fingerprint")
     expected_split = config.keys.get("split_fingerprint")
     if (
@@ -1183,6 +1195,108 @@ def _resolve_source_ct29(
             fees_match=actual_fees == expected_fees.value,
         )
     return Ok((cite_token, tuple(projected)))
+
+
+def _read_source_binding_witness(
+    *,
+    source: CT29ProjectionSource,
+    request: ResolvedReplayRequest,
+    config: ResolvedRunConfig,
+    source_identity: Mapping[str, object],
+) -> Result[None]:
+    """Join CT-32's run config to the actual executed CT-10/CT-12 request.
+
+    CT-32 config keys need not duplicate data and split fingerprints. The replay
+    producer persists their actual join in CT-13 before the first slice; this
+    reader refuses a different, otherwise-valid request/source pairing.
+    """
+    events = source.journal_reader.read_checked(source.stream_name, for_world=config.world)
+    if is_refusal(events):
+        return events
+    run_config_fp = config.fingerprint.value
+    candidates = tuple(
+        event
+        for event in events.value
+        if event.event_type is JournalEventType.DATA_QUALITY
+        and event.payload.get("kind") == "qmb-recorded-replay-source-binding-v1"
+        and event.payload.get("run_config_fp1") == run_config_fp
+    )
+    if len(candidates) != 1:
+        return policy(
+            "source_witness",
+            "one durable CT-13 source-binding witness joins this run to its request",
+            matches=len(candidates),
+    )
+    event = candidates[0]
+    expected_label = source_identity.get("result_label")
+    expected_label_map = (
+        cast(Mapping[str, object], expected_label)
+        if isinstance(expected_label, Mapping)
+        else None
+    )
+    label = source.result_label.fp1_identity()
+    label_fp = fingerprint(label)
+    if is_refusal(label_fp):
+        return label_fp
+    expected = {
+        "class": "qmb-ct13-data-quality-v1",
+        "component": "COMP-QMB",
+        "contract": "CT-13",
+        "event_type_wire": JournalEventType.DATA_QUALITY.value,
+        "signal": "recorded-replay-source-binding",
+        "kind": "qmb-recorded-replay-source-binding-v1",
+        "command": "execute_recorded_replay_request",
+        "is_edge_claim": False,
+        "fills_gaps": False,
+        "request_ref": request.request_ref.value,
+        "source_fp1": request.source.fingerprint.value,
+        "split_fp1": request.split_fp1.value,
+        "run_config_fp1": config.fingerprint.value,
+        "binding_epoch_fp1": source.binding_epoch.value,
+        "bot_fp1": config.bot_fp1.value,
+        "book_fp1": config.book_fp1.value,
+        "bms_fp1": config.bms_fp1.value,
+        "result_label": label,
+        "result_label_fp1": label_fp.value.value,
+    }
+    witness_checks: dict[str, bool] = {
+        "binding": config.replay_binding is not None,
+        "world": event.world is config.world,
+        "instant": bool(request.source.slices)
+        and event.instant == request.source.slices[0].observations[0].instant,
+        "writer_machine": event.writer.machine == source.writer.machine,
+        "writer_role": event.writer.role == source.writer.role,
+        "writer_stream": event.writer.stream == source.writer.stream,
+        "payload": dict(event.payload) == expected,
+        "label": expected_label_map is None
+        or (
+            expected_label_map.get("world") == label["world"]
+            and source_identity.get("account_binding_role") == label["account_role"]
+        ),
+    }
+    if (
+        config.replay_binding is None
+        or event.world is not config.world
+        or not request.source.slices
+        or event.instant != request.source.slices[0].observations[0].instant
+        or event.writer.machine != source.writer.machine
+        or event.writer.role != source.writer.role
+        or event.writer.stream != source.writer.stream
+        or dict(event.payload) != expected
+        or (
+            expected_label_map is not None
+            and (
+                expected_label_map.get("world") != label["world"]
+                or source_identity.get("account_binding_role") != label["account_role"]
+            )
+        )
+    ):
+        return policy(
+            "source_witness",
+            "CT-13 witness matches exact request, source, split, config, binding, and label",
+            failed=[key for key, passed in witness_checks.items() if not passed],
+        )
+    return Ok(None)
 
 
 def _ct32_trade_count(identity: Mapping[str, object]) -> Result[int]:

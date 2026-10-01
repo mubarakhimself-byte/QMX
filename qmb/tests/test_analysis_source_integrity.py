@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TypeVar, cast
 
 from qmb.analysis import CT29ProjectionSource, cite_projection, project
+from qmb.host.replay_request import ResolvedReplayRequest
 from qmb.results.ct32 import PerformanceResult
 from qmf.core import Result, WriterId, fingerprint, is_ok, is_refusal
 from replay_fixture_support import ProjectionReplayFixture, build_projection_replay
@@ -148,4 +149,39 @@ def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_referen
             predicate=predicate,
             as_of=as_of,
         )
+    )
+
+
+def test_projection_refuses_genuine_foreign_ct10_ct12_request_for_same_terminal(
+    tmp_path: Path,
+) -> None:
+    original: ProjectionReplayFixture = _ok(
+        build_projection_replay(tmp_path / "original", registry_as_of=_at(hour=0))
+    )
+    foreign: ProjectionReplayFixture = _ok(
+        build_projection_replay(
+            tmp_path / "foreign",
+            registry_as_of=_at(hour=0),
+            entry_offsets_hours=(3,),
+        )
+    )
+    original_request = cast(ResolvedReplayRequest, original.source.replay_request)
+    foreign_request = cast(ResolvedReplayRequest, foreign.source.replay_request)
+    assert (
+        foreign_request.source.fingerprint != original_request.source.fingerprint
+    )
+    swapped_request = replace(
+        original.source,
+        replay_request=foreign_request,
+    )
+    result = project(
+        source_ct32=original.performance_result,
+        source_ct29=swapped_request,
+        predicate={"max_trades": 1},
+        as_of=_at(hour=0),
+    )
+    assert is_refusal(result), (
+        "an actual alternate CT-10 source and CT-12 request cannot borrow the original "
+        "run's CT-13/CT-32 provenance",
+        result,
     )

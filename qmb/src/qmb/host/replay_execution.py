@@ -22,8 +22,10 @@ from qmf.core import (
     fingerprint,
     is_refusal,
 )
-from qmf.data.journal_producer import JournalReader
+from qmf.data.journal import JournalEvent, JournalEventType
+from qmf.data.journal_producer import JournalAppendReceipt, JournalReader
 from qmf.data.observation import SourceObservation
+from qmf.data.store import RoomRole, StoreReceipt
 from qmf.registry import RegistrationRecord
 from qmf.risk.performance import PerformanceResult
 from qml.protocol.evidence import MappingReadSurface
@@ -276,6 +278,15 @@ def execute_recorded_replay_request(
         or config.bms_fp1 != binding.record.bms_definition_fingerprint
     ):
         return policy("book_fp1", "the resolved Book and ReplayBinding identify the same Book")
+    source_witness = _ensure_replay_source_witness(
+        request=request,
+        source_fingerprint=source_fp,
+        config=config,
+        admission=admission,
+        journal_reader=journal_reader,
+    )
+    if is_refusal(source_witness):
+        return source_witness
     recovery = read_replay_positions(
         journal_reader=journal_reader,
         stream_name=admission.journal_writer.stream_name,
@@ -465,6 +476,203 @@ def execute_recorded_replay_request(
             terminal_line=persisted.value,
         )
     )
+
+
+_SOURCE_WITNESS_KIND = "qmb-recorded-replay-source-binding-v1"
+
+
+def _ensure_replay_source_witness(
+    *,
+    request: ResolvedReplayRequest,
+    source_fingerprint: Fingerprint,
+    config: ResolvedRunConfig,
+    admission: BookAdmissionContext,
+    journal_reader: object,
+) -> Result[JournalEvent]:
+    """Persist and reopen the actual request/source/config join before execution.
+
+    This private CT-13 data-quality witness supplies the source join that CT-32's
+    run-config fingerprint does not carry on its own. It is written before the
+    slice loop, and its complete canonical body is checked on retries and by the
+    analysis projection resolver.
+    """
+    if not isinstance(journal_reader, JournalReader):
+        return invalid("journal_reader", "source provenance is witnessed in the CT-13 room")
+    if not request.source.slices:
+        return invalid("source_slices", "source provenance has a materialized CT-10 frontier")
+    writer = admission.journal_writer.writer
+    stream_name = admission.journal_writer.stream_name
+    if writer.stream != stream_name or journal_reader.journal.world is not World.REPLAY:
+        return policy("source_witness", "source provenance uses the pinned replay CT-13 stream")
+    source_fp = fingerprint(request.source.fp1_identity())
+    config_fp = fingerprint(config.fp1_identity())
+    result_label = admission.result_label.fp1_identity()
+    label_fp = fingerprint(result_label)
+    if is_refusal(source_fp):
+        return source_fp
+    if is_refusal(config_fp):
+        return config_fp
+    if is_refusal(label_fp):
+        return label_fp
+    if source_fp.value != source_fingerprint or config_fp.value != config.fingerprint:
+        return policy("source_witness", "witness identities match resolved source and config")
+    if request.split_fp1 != request.source.split_fp1:
+        return policy(
+            "source_witness", "request ref and source split identify one resolved request"
+        )
+    bot_fp = config.bot_fp1
+    binding_fp = config.binding_fp1
+    if binding_fp is None:
+        return policy("binding", "source provenance is attached to a typed replay binding")
+    payload: dict[str, object] = {
+        "class": "qmb-ct13-data-quality-v1",
+        "component": "COMP-QMB",
+        "contract": "CT-13",
+        "event_type_wire": JournalEventType.DATA_QUALITY.value,
+        "signal": "recorded-replay-source-binding",
+        "kind": _SOURCE_WITNESS_KIND,
+        "command": "execute_recorded_replay_request",
+        "is_edge_claim": False,
+        "fills_gaps": False,
+        "request_ref": request.request_ref.value,
+        "source_fp1": source_fp.value.value,
+        "split_fp1": request.split_fp1.value,
+        "run_config_fp1": config.fingerprint.value,
+        "binding_epoch_fp1": binding_fp.value,
+        "bot_fp1": bot_fp.value,
+        "book_fp1": config.book_fp1.value,
+        "bms_fp1": config.bms_fp1.value,
+        "result_label": result_label,
+        "result_label_fp1": label_fp.value.value,
+    }
+    existing = journal_reader.read_checked(stream_name, for_world=World.REPLAY)
+    if is_refusal(existing):
+        return existing
+    candidates = tuple(
+        event
+        for event in existing.value
+        if event.event_type is JournalEventType.DATA_QUALITY
+        and event.payload.get("kind") == _SOURCE_WITNESS_KIND
+        and event.payload.get("run_config_fp1") == config.fingerprint.value
+    )
+    if candidates:
+        if (
+            len(candidates) != 1
+            or dict(candidates[0].payload) != payload
+            or candidates[0].instant != request.source.slices[0].observations[0].instant
+            or candidates[0].world is not World.REPLAY
+            or candidates[0].writer.machine != writer.machine
+            or candidates[0].writer.role != writer.role
+            or candidates[0].writer.stream != writer.stream
+        ):
+            return policy(
+                "source_witness",
+                "one run config has exactly one immutable request/source provenance witness",
+            )
+        return Ok(candidates[0])
+
+    first_frontier = request.source.slices[0].observations[0].instant
+    expected_sequence = admission.journal_writer.next_sequence
+    recorded = admission.journal_writer.record_data_quality(payload, instant=first_frontier)
+    if is_refusal(recorded):
+        return recorded
+    if type(recorded.value) is not JournalAppendReceipt:
+        return policy("source_witness_receipt", "CT-13 append returns its typed receipt")
+    receipt = recorded.value
+    if type(receipt.event) is not JournalEvent or type(receipt.store_receipt) is not StoreReceipt:
+        return policy(
+            "source_witness_receipt", "CT-13 receipt contains typed event and store receipt"
+        )
+    event = receipt.event
+    store_receipt = receipt.store_receipt
+    if (
+        type(event.event_type) is not JournalEventType
+        or event.event_type is not JournalEventType.DATA_QUALITY
+        or type(event.writer) is not WriterId
+        or type(event.instant) is not Instant
+        or event.world is not World.REPLAY
+        or type(event.sequence) is not int
+        or event.sequence != expected_sequence
+        or not isinstance(event.payload, Mapping)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or type(event.fingerprint) is not Fingerprint
+        or event.outcome is not None
+        or type(receipt.edge_receipts) is not tuple
+        or bool(receipt.edge_receipts)
+    ):
+        return policy(
+            "source_witness_receipt", "CT-13 event fields are typed before identity checks"
+        )
+    if (
+        type(store_receipt.fingerprint) is not Fingerprint
+        or type(store_receipt.world) is not World
+        or type(store_receipt.room_role) is not RoomRole
+        or type(store_receipt.engine) is not str
+        or type(store_receipt.sequence) is not int
+        or store_receipt.sequence < 0
+        or type(store_receipt.is_evidence_bearing) is not bool
+        or type(store_receipt.retained_forever) is not bool
+        or type(store_receipt.format_version) is not int
+    ):
+        return policy("source_witness_receipt", "CT-13 store receipt fields are typed")
+    event_fp = fingerprint(event.fp1_identity())
+    if is_refusal(event_fp):
+        return event_fp
+    receipt_checks: dict[str, bool] = {
+        "event_type": event.event_type is JournalEventType.DATA_QUALITY,
+        "payload": dict(event.payload) == payload,
+        "world": event.world is World.REPLAY,
+        "writer": event.writer == writer,
+        "instant": event.instant == first_frontier,
+        "logical_sequence": event.sequence == expected_sequence,
+        "event_fp": event_fp.value == event.fingerprint,
+        "edges": receipt.edge_receipts == (),
+        "physical_sequence": store_receipt.sequence >= 0,
+        "engine": store_receipt.engine == "jsonl",
+        "store_world": store_receipt.world is World.REPLAY,
+        "evidence": store_receipt.is_evidence_bearing is True,
+        "retention": store_receipt.retained_forever is True,
+        "room_role": store_receipt.room_role is RoomRole.JOURNAL,
+        "format": store_receipt.format_version == 1,
+    }
+    if (
+        event.event_type is not JournalEventType.DATA_QUALITY
+        or dict(event.payload) != payload
+        or event.writer != writer
+        or event.instant != first_frontier
+        or event_fp.value != event.fingerprint
+        or store_receipt.engine != "jsonl"
+        or store_receipt.world is not World.REPLAY
+        or store_receipt.is_evidence_bearing is not True
+        or store_receipt.retained_forever is not True
+        or store_receipt.room_role is not RoomRole.JOURNAL
+        or store_receipt.format_version != 1
+    ):
+        return policy(
+            "source_witness_receipt",
+            "CT-13 witness has the exact evidence receipt",
+            failed=[key for key, passed in receipt_checks.items() if not passed],
+        )
+    raw_rows = journal_reader.journal.read_stream(stream_name, for_world=World.REPLAY)
+    if is_refusal(raw_rows):
+        return raw_rows
+    physical = store_receipt.sequence
+    if physical >= len(raw_rows.value):
+        return policy("source_witness_receipt", "physical CT-13 receipt indexes the durable row")
+    raw_fp = fingerprint(raw_rows.value[physical])
+    if is_refusal(raw_fp) or raw_fp.value != store_receipt.fingerprint:
+        return policy("source_witness_receipt", "store receipt fp1 matches the physical raw row")
+    raw_event = JournalEvent.from_row(raw_rows.value[physical])
+    if is_refusal(raw_event):
+        return raw_event
+    if raw_event.value.to_row() != event.to_row():
+        return policy("source_witness_receipt", "physical row exactly matches the typed event")
+    readback = journal_reader.read_checked(stream_name, for_world=World.REPLAY)
+    if is_refusal(readback):
+        return readback
+    matches = tuple(item for item in readback.value if item.fingerprint == event.fingerprint)
+    if len(matches) != 1 or matches[0].to_row() != event.to_row():
+        return policy("source_witness_readback", "source provenance is read back exactly once")
+    return Ok(matches[0])
 
 
 def _bind_source_paths(
