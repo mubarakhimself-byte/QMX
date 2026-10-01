@@ -92,8 +92,9 @@ def _plain_int(value: object) -> int | None:
 
 def _as_instant(value: object, field: str) -> Result[Instant]:
     if isinstance(value, Instant):
-        return Ok(value)
-    ns = _plain_int(value)
+        ns: object = value.value_ns
+    else:
+        ns = _plain_int(value)
     if ns is None:
         return invalid(
             field,
