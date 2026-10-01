@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 from typing import Final, cast
 
 from qmf.core import Fingerprint, Ok, Result, World, is_refusal
@@ -50,6 +51,9 @@ class ReplayTrialBindings:
 
     request: ResolvedReplayRequest
     expected_split_fp1: Fingerprint
+    request_root: Path
+    raw_store_root: Path
+    holdout_months: int
     config: ResolvedRunConfig
     bound_execution: BoundExecution
     admission: BookAdmissionContext
@@ -236,6 +240,10 @@ def run_recorded_study_generations(
 
         executed = execute_recorded_replay_request(
             request=prepared.value.request,
+            expected_request_ref=prepared.value.request.request_ref,
+            request_root=prepared.value.request_root,
+            raw_store_root=prepared.value.raw_store_root,
+            holdout_months=prepared.value.holdout_months,
             expected_split_fp1=prepared.value.expected_split_fp1,
             config=prepared.value.config,
             bound_execution=prepared.value.bound_execution,

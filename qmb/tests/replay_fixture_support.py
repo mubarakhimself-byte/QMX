@@ -261,6 +261,9 @@ class RecordedReplayFixture:
             ReplayTrialBindings(
                 request=resolved_request.value,
                 expected_split_fp1=self.expected_split_fp1,
+                request_root=self.request_root,
+                raw_store_root=self.raw_store_root,
+                holdout_months=18,
                 config=resolved_config,
                 bound_execution=bound.value,
                 admission=admission.value,

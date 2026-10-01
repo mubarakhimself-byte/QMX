@@ -37,7 +37,7 @@ from qmb.host.book_handler import (
     read_replay_positions,
 )
 from qmb.host.replay import RecordedReplaySource
-from qmb.host.replay_request import ResolvedReplayRequest
+from qmb.host.replay_request import ResolvedReplayRequest, resolve_replay_request
 from qmb.ledger.line import LedgerLine
 from qmb.results.ct29 import CT29ClosedTrade, read_ct29_closed_trades
 from qmb.results.ct32 import mint_run_performance_result
@@ -64,6 +64,10 @@ class RecordedExecutionResult:
 def execute_recorded_replay_request(
     *,
     request: object,
+    expected_request_ref: object,
+    request_root: object,
+    raw_store_root: object,
+    holdout_months: object,
     config: object,
     bound_execution: object,
     admission: object,
@@ -88,6 +92,33 @@ def execute_recorded_replay_request(
     """
     if not isinstance(request, ResolvedReplayRequest):
         return invalid("request", "execution consumes a validated persisted replay request")
+    expected_request = (
+        Ok(expected_request_ref)
+        if isinstance(expected_request_ref, Fingerprint)
+        else Fingerprint.try_create(expected_request_ref)
+    )
+    if is_refusal(expected_request):
+        return expected_request
+    if request.request_ref != expected_request.value:
+        return policy("request_ref", "resolved request matches trusted CT-47 evidence_ref")
+    supplied_source: object = getattr(request, "source", None)
+    if not isinstance(supplied_source, RecordedReplaySource):
+        return invalid("source", "resolved replay source is the typed CT-10 materialization")
+    canonical_request = resolve_replay_request(
+        request_root=request_root,
+        request_ref=expected_request.value,
+        expected_split_fp1=expected_split_fp1,
+        raw_store_root=raw_store_root,
+        holdout_months=holdout_months,
+    )
+    if is_refusal(canonical_request):
+        return canonical_request
+    if not _same_materialized_source(supplied_source, canonical_request.value.source):
+        return policy(
+            "source_materialization",
+            "execution paths, slices, and read surfaces match fresh CT-10 readback",
+        )
+    request = canonical_request.value
     if not isinstance(config, ResolvedRunConfig) or config.world is not World.REPLAY:
         return invalid("config", "recorded QMB execution uses a resolved world=replay config")
     if role == "trial":
@@ -516,3 +547,30 @@ def _realized_equity_curve(
             return closing
         points.append(closing.value)
     return Ok(tuple(points))
+
+
+def _same_materialized_source(
+    supplied: RecordedReplaySource,
+    authoritative: RecordedReplaySource,
+) -> bool:
+    """Compare derived runtime surfaces against a fresh canonical CT-10 materialization."""
+    if supplied.fp1_identity() != authoritative.fp1_identity():
+        return False
+    if tuple(item.fingerprint for item in supplied.observations) != tuple(
+        item.fingerprint for item in authoritative.observations
+    ):
+        return False
+    if tuple(item.fp1_identity() for item in supplied.slices) != tuple(
+        item.fp1_identity() for item in authoritative.slices
+    ):
+        return False
+    if tuple(item.fp1_identity() for item in supplied.execution_paths) != tuple(
+        item.fp1_identity() for item in authoritative.execution_paths
+    ):
+        return False
+    if set(supplied.read_surfaces) != set(authoritative.read_surfaces):
+        return False
+    return all(
+        supplied.read_surfaces[name].frames == authoritative.read_surfaces[name].frames
+        for name in supplied.read_surfaces
+    )

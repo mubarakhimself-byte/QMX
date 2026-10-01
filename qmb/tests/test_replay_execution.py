@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -20,7 +21,7 @@ from qmb.host.replay_request import (
 from qmb.orchestrator.ledger import read_merge_view
 from qmb.results.measures import MEASURE_IDENTITIES, PerformanceMeasure
 from qmb.runloop.loop import STREAM_SET_KEY
-from qmf.core import Result, World, WriterId, is_ok
+from qmf.core import Result, World, WriterId, fingerprint, is_ok
 from qmf.data.journal_producer import JournalReader, JournalWriter
 from qmf.data.splits import SegmentRole
 from qmf.data.store import JournalStore, jsonl_opener
@@ -105,6 +106,10 @@ def test_persisted_request_runs_through_economic_terminal_path(tmp_path: Path) -
 
     outcome = execute_recorded_replay_request(
         request=resolved,
+        expected_request_ref=request_ref,
+        request_root=fixture.request_root,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
         expected_split_fp1=fixture.expected_split_fp1,
         config=config,
         bound_execution=bound,
@@ -133,6 +138,41 @@ def test_persisted_request_runs_through_economic_terminal_path(tmp_path: Path) -
     durable = _ok(read_merge_view(ledger.root, world=World.REPLAY, role="confirmation"))
     assert len(durable) == 1
     assert durable[0].fp1_identity() == result.terminal_line.fp1_identity()
+
+    final_path = resolved.source.execution_paths[-1]
+    assert final_path.bid is not None
+    altered_bid = replace(final_path.bid, value=final_path.bid.value - 500)
+    altered_paths = (*resolved.source.execution_paths[:-1], replace(final_path, bid=altered_bid))
+    altered_source = replace(resolved.source, execution_paths=altered_paths)
+    altered_result = execute_recorded_replay_request(
+        request=replace(resolved, source=altered_source),
+        expected_request_ref=request_ref,
+        request_root=fixture.request_root,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
+        expected_split_fp1=fixture.expected_split_fp1,
+        config=config,
+        bound_execution=bound,
+        admission=admission,
+        journal_reader=reader,
+        terminal_ledger=ledger,
+    )
+    assert not is_ok(altered_result)
+    foreign_ref = _ok(fingerprint({"foreign": True}))
+    forged_reference_result = execute_recorded_replay_request(
+        request=replace(resolved, request_ref=foreign_ref),
+        expected_request_ref=request_ref,
+        request_root=fixture.request_root,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
+        expected_split_fp1=fixture.expected_split_fp1,
+        config=config,
+        bound_execution=bound,
+        admission=admission,
+        journal_reader=reader,
+        terminal_ledger=ledger,
+    )
+    assert not is_ok(forged_reference_result)
 
 
 def test_one_basis_point_quote_path_is_a_real_nofill_control(tmp_path: Path) -> None:
@@ -206,6 +246,10 @@ def test_one_basis_point_quote_path_is_a_real_nofill_control(tmp_path: Path) -> 
     result = _ok(
         execute_recorded_replay_request(
             request=resolved,
+            expected_request_ref=request_ref,
+            request_root=fixture.request_root,
+            raw_store_root=fixture.raw_store_root,
+            holdout_months=18,
             expected_split_fp1=fixture.expected_split_fp1,
             config=config,
             bound_execution=bound,
