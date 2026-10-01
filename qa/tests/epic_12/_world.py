@@ -162,6 +162,7 @@ def build_world(
     *,
     permitted: tuple[str, ...] = ("close_full",),
     drop_producer: bool = False,
+    source: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Build a valid conformant world (declaration + drivable factory + catalogs).
 
@@ -170,6 +171,7 @@ def build_world(
     every producer so reference-resolution succeeds and the completeness check is
     the one that fires.
     """
+    logic_source = CLEAN_SOURCE if source is None else source
     zone = _pinned("zone")
     sma = _pinned("sma")
     session = _pinned("session")
@@ -189,7 +191,7 @@ def build_world(
     footprint = unwrap(
         mint_footprint([_stream()], [_calendar()], footprint_producers), "footprint"
     )
-    logic = unwrap(mint_logic_identity("qa-bot", "1.0.0", CLEAN_SOURCE), "logic")
+    logic = unwrap(mint_logic_identity("qa-bot", "1.0.0", logic_source), "logic")
     declaration = unwrap(
         mint_bot_definition(
             {
@@ -212,7 +214,7 @@ def build_world(
         "catalog_producers": catalog_producers,
         "footprint": footprint,
         "factory": Factory(),
-        "source": dict(CLEAN_SOURCE),
+        "source": dict(logic_source),
     }
 
 

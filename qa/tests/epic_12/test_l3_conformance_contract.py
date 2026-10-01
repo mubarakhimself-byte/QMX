@@ -349,7 +349,12 @@ def test_e12_l3_10_spawned_runner_yields_the_same_pure_verdict() -> None:
     """
     from qmb.host.runner import run_sandbox
 
-    world = w.build_world()
+    source = dict(w.CLEAN_SOURCE)
+    source["qa_bot/factory.py"] = (
+        "from qml.protocol import FunctionFactory\n"
+        "factory = FunctionFactory(logic=lambda evidence: ())\n"
+    )
+    world = w.build_world(source=source)
     silent = FunctionFactory(logic=lambda evidence: ())
     d = world["declaration"]
     in_process = run_layer2_suite(
@@ -363,7 +368,7 @@ def test_e12_l3_10_spawned_runner_yields_the_same_pure_verdict() -> None:
     sandboxed = run_sandbox(
         declaration=d,
         source_tree=world["source"],
-        factory_spec=None,  # 'silent' spec — reconstructable in the isolated child
+        factory_spec=None,  # resolve the manifest-bound source factory in the child
         state_scope=w.scope_for(d),
         state_bound=w.STATE_BOUND,
         timeout_seconds=60,

@@ -21,6 +21,7 @@ Observation discipline (hardened author contract):
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -82,7 +83,7 @@ def config(tag: str = "e15", streams: tuple[str, ...] = ("eurusd", "gbpusd"), **
     stamp = ok(fingerprint({"n": "e15-cfg", "tag": tag, "streams": list(streams)}))
     payload: dict[str, object] = {"stream_set": streams}
     payload.update(keys)
-    return ResolvedRunConfig(
+    resolved = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -97,11 +98,13 @@ def config(tag: str = "e15", streams: tuple[str, ...] = ("eurusd", "gbpusd"), **
         binding_fp1=stamp,
     )
 
+    return replace(resolved, fingerprint=ok(fingerprint(resolved.fp1_identity())))
+
 
 def sim_config(tag: str = "sim"):
     """A world=simulated run-config (synthetic-store world, SCN-0012 Branch B)."""
     stamp = ok(fingerprint({"n": "e15-sim", "tag": tag}))
-    return ResolvedRunConfig(
+    resolved = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -115,6 +118,8 @@ def sim_config(tag: str = "sim"):
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+
+    return replace(resolved, fingerprint=ok(fingerprint(resolved.fp1_identity())))
 
 
 def slices(streams: tuple[str, ...] = ("eurusd", "gbpusd"), n: int = 2):
