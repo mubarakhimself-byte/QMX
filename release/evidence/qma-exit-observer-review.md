@@ -19,3 +19,13 @@ Independent `/tmp/review_qma_unknown_write.py` injects typed failure in the actu
 Full current worker authority, restart observer reattachment, actual terminal artifact verification and cancellation/second-pack journeys remain separately pending. No product edits or Git mutations.
 
 Reviewer focused backtesting-door suite: **10 passed**; held-out UNKNOWN persistence failure remains blocking.
+
+## 626b6cbc durable UNKNOWN retry retest
+
+Candidate `626b6cbcb7447b1a895105195cd2c682d9a571ca`: **bounded PASS for retained/retried child-exit uncertainty projection**. Original persistent UNKNOWN-write refusal now keeps the observer alive with retained failure, rather than abandon a RUNNING handle.
+
+Independent `/tmp/review_observer_sqlite.py` uses actual SingleSqliteWriter, persisted TaskGraphStateService, JobHandleService and observer thread. Injected one-shot real projection refusal on queued→running or running→unknown, with wait returning None/True/raising exception, each retries to UNKNOWN using exactly one wait. Closing/reopening SQLite and reloading the TaskGraph projection independently confirms persisted UNKNOWN. This checks actual dedicated-writer ownership and durable readback rather than assuming raw SQLite thread behavior.
+
+`/tmp/review_observer_cancel.py` holds wait behind a barrier, commits cancellation first, then releases a known exit 0: CANCELLED remains the terminal, and observer stops without replacement. Known-exit transient projection retry remains covered by the focused suite's one-shot wait (second wait raises), and original persistent known-exit refusal retains observer ownership. Source attachment occurs after startup/coordinated metadata append attempt; failures still attach observation so an already spawned child is not orphaned.
+
+Reviewer backtesting-door suite **10 passed**. This approval is strictly observer retry/order/terminal preservation. Exit code 0 alone still does not verify the owned matching durable CT32/ATC terminal artifact; root explicitly queued that production completion proof. Current accepted worker authority, process-restart reattachment, full cancellation/provider behavior and second-pack isolation remain separate pending reviews. No product edits/staging/commits.
