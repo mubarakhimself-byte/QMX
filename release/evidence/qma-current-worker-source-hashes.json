@@ -1,0 +1,33 @@
+{
+  "head": "b484d6f7e3704692386060e1d76c645d77c7cbd7",
+  "source_files": {
+    "qa/integration/test_qma_registered_replay.py": "e76fad14dd78644f8b057d86c5a7d95cc519d4d6c091f4d875306c2a6e7dd0df",
+    "qmx-agents/packages/qma-daemon/examples/desk_plugin_packs_usage.py": "16fb7b0bf747eb55bb68b529a53a0a4b07d4b4198d21970248e4b546a91d70df",
+    "qmx-agents/packages/qma-daemon/examples/experiment_spec_usage.py": "a8a476bb82972e0fad671d8bf3b860589b2d897fe4316a3ecb4f496c69b41dd0",
+    "qmx-agents/packages/qma-daemon/examples/occupancy_query_usage.py": "9791202e0c76e4e0326055fea44430d9358b17d79142d9f90641c124db19c87d",
+    "qmx-agents/packages/qma-daemon/examples/procedure_successor_usage.py": "d13d16992902831b08148981b39923ce528878f71f646cbb0170dca53791b985",
+    "qmx-agents/packages/qma-daemon/examples/qmb_door_usage.py": "33d5efdd11f8977682bfdbc68e2ad32a06599db40b64afd6f6d96d20a321e688",
+    "qmx-agents/packages/qma-daemon/examples/quant_experiment_desk_ledger_usage.py": "3b50c482101b950cf05924914310b283458ae29202ce7b67b73e7c3c61608d3e",
+    "qmx-agents/packages/qma-daemon/examples/workbench_lanes_usage.py": "9e2098597c46537fe93a11072ff5b32fac3cc7829151fbf1a04aea3faff4ed6b",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py": "8eb95b2e00588bf0d80327630bfa22c9ab57060c79b559722aa9d93f5992a467",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py": "5422433be07bf9212f8cced3ff20fa37438a80f22d971a2e77b6ab0ec923e93e",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/experiments/service.py": "cfe0b4625c41b9d33acc636b01a8cd5ed9b11120cb969bf0cb5faeb229ede875",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/experiments/sqlite.py": "5b9b5a8bb988c18b69e5ed2a820506b0a1bc72691100421c735a41e10ac8ad35",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/ledgers/experiment.py": "324fc83d2105de028c6d04a7b9fde7b08514f52c3b3a023f958b947d05571fe8",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "d3ff821cd70d979a1112bb6ff8abeabac0f612d1936bf5275113d19412b6942d",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/dispatcher.py": "8077e1409e28c40b6555054f2d4749ef564e6c47007c8c87db2a437b3aa0441c",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/outbox.py": "ec7256a559793741990cbf8240bc2e44eff9a5d6950388a27c8b9835daf1db70",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/procedures.py": "bf67c8f98615755a07bc879f28a0fb739fac2a996a7457a125d052ad741b2fad",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/projection.py": "dcb3416b621ebdd1ab3a3b1a07171e2c43da068b9a1c4eef922c4620451aaa60",
+    "qmx-agents/packages/qma-daemon/tests/test_coordinated_lanes.py": "40dc6a31b9eb3611b25f1d2bcb559abe775724f0bdef654a375b0828d3f4d5a4",
+    "qmx-agents/packages/qma-daemon/tests/test_daemon_experiment_spec.py": "19037729a688901eae5ec387bc56ea2731e7fcb863a816d441e5b31880f23ce1",
+    "qmx-agents/packages/qma-daemon/tests/test_desk_plugin_pack_registration.py": "8d7a4a9d6f2e5681ec34ad77ddaf7c88c8d100ba247921d0d72aa612777649af",
+    "qmx-agents/packages/qma-daemon/tests/test_experiment_spec_persistence.py": "002cc8c8a0b46f4c53f0840f3d7989b87ea64b140125178b1263fdd3c6179968",
+    "qmx-agents/packages/qma-daemon/tests/test_occupancy_queries.py": "347e93687a0eee016b2d7f1d12d6987755c4bd2799a79cf6af9bf85b729259fe",
+    "qmx-agents/packages/qma-daemon/tests/test_procedure_door_successors.py": "c48f09b63f59eb8ab7be24836ae46f5da4d1ddbada589a4dd278583aab1874b4",
+    "qmx-agents/packages/qma-daemon/tests/test_qmb_backtesting_door.py": "f6e4a670888848ded0a31f351900d89ac41f19178ed5a6315ee99266a740dce0",
+    "qmx-agents/packages/qma-daemon/tests/test_qmb_cli_transport.py": "364ac34d7d3c6284f7855fc3d49552a44b1b3611815070f428614ec224c34f7e",
+    "qmx-agents/packages/qma-daemon/tests/test_quant_experiment_desk_ledgers.py": "fa886c3859510f2f045f2fa0384a2be753e1a1788b476fbcfd15a3e03526e1fe"
+  },
+  "changed_during_review": []
+}
