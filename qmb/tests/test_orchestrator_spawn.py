@@ -70,9 +70,11 @@ def _config(*, tag: str, streams: tuple[str, ...] = ("eurusd", "gbpusd")) -> Res
 
 def test_child_config_decoder_recomputes_identity_and_refuses_tampering() -> None:
     config = _config(tag="decode-identity")
-    payload = spawn_mod._encode_config(config)
+    # A corrupt child payload cannot be expressed through the public launch door;
+    # inspect the private serialization boundary while retaining its type checks.
+    payload = spawn_mod._encode_config(config)  # pyright: ignore[reportPrivateUsage]
     payload["keys"] = {STREAM_SET_KEY: ["eurusd"], "test_tag": "forged"}
-    refused = spawn_mod._decode_config(payload)
+    refused = spawn_mod._decode_config(payload)  # pyright: ignore[reportPrivateUsage]
     assert is_refusal(refused)
     assert refused.context["field"] == "fingerprint"
 

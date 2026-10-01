@@ -6,13 +6,13 @@ import lzma
 import multiprocessing
 import struct
 import tempfile
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Protocol, TypeVar, cast
+from typing import Protocol, TypeVar, cast
 
 import pytest
-
 from click.testing import CliRunner
 from qmb.data import (
     CONVERSION_BOUNDARY,

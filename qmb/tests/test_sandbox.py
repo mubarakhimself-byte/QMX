@@ -308,8 +308,10 @@ def test_worker_rejects_alternate_factory_callable_in_same_manifest() -> None:
         "alternate = FunctionFactory(logic=lambda evidence: ())\n"
     )
     declaration = _declaration(source=source)
+    # White-box payload corruption exercises the private worker boundary without
+    # adding a product API that could admit caller-authored worker payloads.
     payload = _ok(
-        host_runner._encode_payload(
+        host_runner._encode_payload(  # pyright: ignore[reportPrivateUsage]
             definition=declaration,
             source_tree=source,
             factory_spec=host_runner.FactorySpec(
@@ -322,7 +324,7 @@ def test_worker_rejects_alternate_factory_callable_in_same_manifest() -> None:
             state_bound=_BOUND,
         )
     )
-    refused = host_runner._worker_collect(payload)
+    refused = host_runner._worker_collect(payload)  # pyright: ignore[reportPrivateUsage]
     assert is_refusal(refused)
     assert refused.context["field"] == "factory_spec"
 
