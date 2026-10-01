@@ -25,9 +25,31 @@
         "get_diagnosis",
         "get_instance_health",
         "list_mailbox",
-        "get_editor_draft_head"
+        "get_editor_draft_head",
+        "get_product_session"
       ]
     },
     "args": { "type": "object" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "name": { "const": "get_product_session" } },
+        "required": ["name"]
+      },
+      "then": {
+        "required": ["args"],
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["product_session_ref"],
+            "properties": {
+              "product_session_ref": { "type": "string", "pattern": "^psess:.+" }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

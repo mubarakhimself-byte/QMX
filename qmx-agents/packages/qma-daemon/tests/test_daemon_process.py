@@ -462,6 +462,43 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         assert isinstance(grant_result, dict)
         assert grant_result["context_revision"] == 1
         assert process.product_sessions.get(session_id).value.context_revision == 1
+        recovered_session = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 23,
+                    "method": "get_product_session",
+                    "params": {"product_session_ref": session_id},
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert recovered_session is not None and "error" not in recovered_session
+        recovered_result = recovered_session["result"]
+        assert recovered_result["product_session_id"] == session_id
+        recovered_grants = recovered_result["grant_records"]
+        assert len(recovered_grants) == 1
+        assert recovered_grants[0]["grant_id"] == grant_result["grant_id"]
+        assert recovered_grants[0]["op_id"] == descriptor.op_id
+        injected_query = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 24,
+                    "method": "get_product_session",
+                    "params": {
+                        "product_session_ref": session_id,
+                        "owner_actor_id": "actor:caller-invented",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert injected_query is not None and "error" in injected_query
         stale_grant = process._dispatch_paired_ct40(
             connection,
             json.dumps(

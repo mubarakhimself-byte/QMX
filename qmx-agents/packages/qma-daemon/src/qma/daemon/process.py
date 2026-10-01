@@ -2550,6 +2550,49 @@ class DaemonProcess:
             if is_refusal(head):
                 return _jsonrpc_refusal(req_id, head)
             return _jsonrpc_result(req_id, head.value.to_payload())
+        if method == WireQuery.GET_PRODUCT_SESSION.value:
+            gated_query = connection.require_query_capability(method)
+            if is_refusal(gated_query):
+                return _jsonrpc_refusal(req_id, gated_query)
+            if (
+                connection.principal_class is not PrincipalClass.OPERATOR
+                or self._operator_principal() is None
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "principal_class", "ProductSession reads require an authenticated operator"
+                    ),
+                )
+            raw_params = request.get("params")
+            if not isinstance(raw_params, Mapping):
+                return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
+            params = cast("Mapping[str, object]", raw_params)
+            unknown = sorted(set(params) - {"product_session_ref"})
+            if unknown:
+                return _jsonrpc_refusal(
+                    req_id,
+                    invalid_input("params", "unknown get_product_session fields", fields=unknown),
+                )
+            session_ref = params.get("product_session_ref")
+            if not isinstance(session_ref, str) or not session_ref.startswith("psess:"):
+                return _jsonrpc_refusal(
+                    req_id, invalid_input("product_session_ref", "expected psess: id")
+                )
+            session_result = self._product_sessions.get(session_ref)
+            if is_refusal(session_result):
+                return _jsonrpc_refusal(req_id, session_result)
+            if session_result.value.principal != PrincipalClass.OPERATOR.value:
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection("principal", "ProductSession is not operator-owned"),
+                )
+            grants = self._product_sessions.granted_records(session_ref)
+            if is_refusal(grants):
+                return _jsonrpc_refusal(req_id, grants)
+            payload = dict(session_result.value.to_payload())
+            payload["grant_records"] = [dict(record.to_payload()) for record in grants.value]
+            return _jsonrpc_result(req_id, payload)
         if method == WireCommand.TRANSFER_ARTIFACT.value:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:

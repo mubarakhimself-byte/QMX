@@ -227,10 +227,11 @@ def test_initialize_and_family_schemas_load() -> None:
     assert "transfer_complete" in _name_enum("command")
     assert "save_editor_draft" in _name_enum("command")
     assert "publish_editor_draft" in _name_enum("command")
-    assert len(_name_enum("query")) == 15
+    assert len(_name_enum("query")) == 16
     assert "get_diagnosis" in _name_enum("query")
     assert "get_instance_health" in _name_enum("query")
     assert "get_provider_health" in _name_enum("query")
     assert "list_mailbox" in _name_enum("query")
     assert "get_editor_draft_head" in _name_enum("query")
+    assert "get_product_session" in _name_enum("query")
     assert len(_name_enum("event")) == 10

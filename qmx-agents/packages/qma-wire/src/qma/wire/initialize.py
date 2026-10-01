@@ -111,13 +111,19 @@ TRANSFER_COMPLETE_CAPABILITY: Final[str] = "transfer_complete"
 TRANSFER_COMPLETE_CAPABILITY_MINTED: Final[bool] = True
 SAVE_EDITOR_DRAFT_CAPABILITY: Final[str] = "save_editor_draft"
 GET_EDITOR_DRAFT_HEAD_CAPABILITY: Final[str] = "get_editor_draft_head"
+GET_PRODUCT_SESSION_CAPABILITY: Final[str] = "get_product_session"
 PUBLISH_EDITOR_DRAFT_CAPABILITY: Final[str] = "publish_editor_draft"
 CANCEL_JOB_CAPABILITY: Final[str] = "cancel_job"
 CANCEL_JOB_CAPABILITY_MINTED: Final[bool] = True
 # AR-UI-06 remainder — other epics mint these. Additive CT-40 only.
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset()
 _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
-    {PACK_UI_REQUEST_CAPABILITY, GET_PACK_UI_REQUEST_CAPABILITY, CANCEL_JOB_CAPABILITY}
+    {
+        PACK_UI_REQUEST_CAPABILITY,
+        GET_PACK_UI_REQUEST_CAPABILITY,
+        CANCEL_JOB_CAPABILITY,
+        GET_PRODUCT_SESSION_CAPABILITY,
+    }
 )
 
 _SEMVER: Final[re.Pattern[str]] = re.compile(
@@ -171,6 +177,7 @@ def advertise_pairing_capabilities(
     caps[TRANSFER_COMPLETE_CAPABILITY] = True
     caps[SAVE_EDITOR_DRAFT_CAPABILITY] = True
     caps[GET_EDITOR_DRAFT_HEAD_CAPABILITY] = True
+    caps[GET_PRODUCT_SESSION_CAPABILITY] = True
     caps[PUBLISH_EDITOR_DRAFT_CAPABILITY] = True
     caps[PACK_UI_REQUEST_CAPABILITY] = True
     caps[GET_PACK_UI_REQUEST_CAPABILITY] = True
@@ -488,6 +495,7 @@ def negotiate_initialize(
         else:
             negotiated.pop(TRANSFER_COMPLETE_CAPABILITY, None)
         negotiated[CANCEL_JOB_CAPABILITY] = True
+        negotiated[GET_PRODUCT_SESSION_CAPABILITY] = True
         # Editor-draft capabilities are negotiated independently. The client
         # must explicitly request each one before it is enabled on this session.
         for name in (
@@ -796,6 +804,10 @@ class WireConnection:
             if self._capabilities.get(name) is True:
                 return accepted
             return editor_draft_capability_unavailable(name)
+        if name == GET_PRODUCT_SESSION_CAPABILITY:
+            if self._capabilities.get(name) is True:
+                return accepted
+            return query_unavailable(name)
         if name != LIST_MAILBOX_CAPABILITY:
             return accepted
         if self._capabilities.get(LIST_MAILBOX_CAPABILITY) is True:

@@ -42,8 +42,8 @@ def test_seed_vocabulary_counts_and_owner() -> None:
     assert ADDABLE_COMMAND_COUNT == 7
     assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 16
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 9
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 16
+    assert ADDABLE_QUERY_COUNT == 10
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 17
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS
@@ -91,6 +91,7 @@ def test_seed_members_match_ratified_packet() -> None:
     assert WireQuery.LIST_MAILBOX.value == "list_mailbox"
     assert "get_editor_draft_head" in WIRE_QUERIES
     assert WireQuery.GET_EDITOR_DRAFT_HEAD.value == "get_editor_draft_head"
+    assert "get_product_session" in WIRE_QUERIES
     assert WireQuery.GET_PROVIDER_HEALTH.value != WireQuery.GET_INSTANCE_HEALTH.value
     assert {
         "agent.started",
