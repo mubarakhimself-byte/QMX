@@ -86,6 +86,31 @@ documentation edits, so those failures are recorded as observed and are not attr
 the immutable-reference patch. The focused registry-read and config-fragment suites above
 passed.
 
+## CT-29 close projection follow-up
+
+The QMB results adapter reads a gap-checked CT-13 writer stream and resolves explicit
+`exit_record_ref` values through a caller-provided typed CT-29 resolver. It recomputes
+each exit-record fingerprint, checks writer, binding epoch, result label and close
+instant, requires explicit opening-side attribution by virtual-position fingerprint,
+and refuses a second record for the same virtual position. It computes net P&L from
+the CT-29 gross result less exact cost components, returns the exact fee sum, and retains
+both the CT-13 event and CT-29 record fingerprints. It does not itself prove the
+resolver or side mapping came from durable composition-root stores; replay integration
+must supply those dependencies and consume the returned typed projection.
+
+Commands run from the release root:
+
+```text
+uv run --no-sync pytest -q -p no:cacheprovider qmb/tests/test_results_ct29.py
+4 passed in 0.76s
+
+uv run --no-sync pyright --pythonpath /workspace/QMX-release/.venv/bin/python qmb/src/qmb/results/ct29.py qmb/tests/test_results_ct29.py
+0 errors, 0 warnings, 0 informations
+
+uv run --no-sync ruff check qmb/src/qmb/results/ct29.py qmb/tests/test_results_ct29.py
+All checks passed
+```
+
 Compatibility: no public signatures, schemas, fp1 recipes, or reference container types
 changed. The edge write adds an internal content-addressed pending-intent record for
 supersedes retries. It is not served as lineage evidence; the JSONL edge remains unreadable
