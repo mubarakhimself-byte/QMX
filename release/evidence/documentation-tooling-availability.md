@@ -1,0 +1,7 @@
+# Documentation factory tooling availability
+
+Governing `docs/AGENTS.md` names the documentation-factory skill and `scripts/blast_radius.py`; it also requires citation/graph/non-provisional release validators. Published main remains the documentation authority. This availability finding does not waive those checks or authorize architecture changes.
+
+At current source integration (`6726f8a553ce95402928c21fb86bde5475dfb570`), read-only discovery found no project `SKILL.md`, `lint_docs.py` or `blast_radius.py` in `/workspace/QMX-release` (only unrelated installed poe tool skill files). `git ls-tree -r --name-only origin/main | rg '(lint_docs|blast_radius|SKILL.md|documentation-factory)'` returned no matching paths, exit 1. Both `skills.list` cloud and executor authorities returned empty catalogs and no warnings. The documentation-factory-specific blast-radius/citation/graph validators are therefore **NOT RUN / unavailable tooling**, not PASS.
+
+The available attended software-factory suite independently passed 574 tests after the research repair; its exact scope and trace are in `current-packaging-factory-controls.md`. Independent review continues against governing contracts, BMAD architecture and docwork records. QMN documentation corrections describe existing component/DevOps boundaries and retain pending native/provider/activation evidence. Backend repairs and local execution continue while the unavailable documentation-specific checks remain visible for final handoff. No plugin installation or permission question was initiated.
