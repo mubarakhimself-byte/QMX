@@ -171,6 +171,24 @@ def test_confirmation_fires_the_moment_a_later_bar_closes_beyond_the_break_level
     assert record.at == Instant(value_ns=_BASE + 4 * _MINUTE)
 
 
+def test_confirmation_validates_all_instruments_before_early_match() -> None:
+    family = _family()
+    swings = _unwrap(family.detect(_series()), "detected swings")
+    high = next(swing for swing in swings if swing.kind is SwingKind.HIGH)
+    matching = _obs(6, 108_100, 107_900, 108_000)
+    foreign_after_match = _obs(7, 108_100, 107_900, 108_000, symbol="GBPUSD")
+    assert is_refusal(family.confirmation_for(high, [matching, foreign_after_match]))
+
+
+def test_confirmation_refuses_reversed_observation_order() -> None:
+    family = _family()
+    swings = _unwrap(family.detect(_series()), "detected swings")
+    high = next(swing for swing in swings if swing.kind is SwingKind.HIGH)
+    early = _obs(6, 108_100, 107_900, 108_000)
+    late = _obs(7, 108_100, 107_900, 108_000)
+    assert is_refusal(family.confirmation_for(high, [late, early]))
+
+
 def test_confirmation_returns_none_when_no_later_bar_confirms() -> None:
     family = _family()
     swings = _unwrap(family.detect(_series()), "detected swings")

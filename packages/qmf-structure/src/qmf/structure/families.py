@@ -488,6 +488,26 @@ class SwingPointFamily:
         pivot_fp = pivot.object.content_fingerprint()
         if is_refusal(pivot_fp):  # pragma: no cover - a minted object's identity is canonical
             return pivot_fp
+        pivot_instrument = pivot.break_level.instrument
+        previous_at: int | None = None
+        for index, bar in enumerate(resolved):
+            if bar.high.instrument != pivot_instrument:
+                return _invalid(
+                    "later_observations",
+                    "confirmation observations must use the pivot instrument",
+                    index=index,
+                    expected=pivot_instrument.symbol,
+                    given=bar.high.instrument.symbol,
+                )
+            if previous_at is not None and bar.at.value_ns <= previous_at:
+                return _invalid(
+                    "later_observations",
+                    "confirmation observations are strictly increasing in time",
+                    index=index,
+                    previous=previous_at,
+                    current=bar.at.value_ns,
+                )
+            previous_at = bar.at.value_ns
         bound = self.confirmation_rule.confirmation_delay_bound
         break_level = pivot.break_level.as_fraction()
         seen = 0

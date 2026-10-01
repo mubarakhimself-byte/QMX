@@ -671,6 +671,17 @@ def resolve_state(obj: object, records: object, *, at: object) -> Result[Resolve
     exists = obj.observed_at.value_ns <= horizon
     confirmed_at = min(confirmations, key=lambda i: i.value_ns) if confirmations else None
     invalidated_at = min(invalidations, key=lambda i: i.value_ns) if invalidations else None
+    if (
+        confirmed_at is not None
+        and invalidated_at is not None
+        and confirmed_at.value_ns > invalidated_at.value_ns
+    ):
+        return _invalid(
+            "records",
+            "visible lifecycle facts must satisfy observed_at <= confirmed_at <= invalidated_at",
+            confirmed_at=confirmed_at.value_ns,
+            invalidated_at=invalidated_at.value_ns,
+        )
     ordered_interactions = tuple(sorted(interactions, key=lambda r: r.at.value_ns))
     return Ok(
         ResolvedState(
@@ -934,6 +945,15 @@ def resolve_cascade(
             "a family's invalidation predicate implements the InvalidationPredicate seam "
             "(a cascades(*, parent, child, at) method)",
             given=repr(predicate),
+        )
+    if child_state.as_of != at or parent_state.as_of != at:
+        return _invalid(
+            "states",
+            "parent and child lifecycle states must both be folded at the requested "
+            "cascade horizon",
+            requested_at=at.value_ns,
+            child_as_of=child_state.as_of.value_ns,
+            parent_as_of=parent_state.as_of.value_ns,
         )
     fired = _predicate_result(predicate, parent=parent_state, child=child_state, at=at)
     if not isinstance(fired, bool):

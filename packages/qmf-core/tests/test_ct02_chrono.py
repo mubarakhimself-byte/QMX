@@ -275,6 +275,15 @@ def test_interval_overlaps() -> None:
     assert is_refusal(wrong)
 
 
+def test_empty_half_open_interval_never_overlaps() -> None:
+    empty = Interval.try_create(_instant(5), _instant(5)).value
+    other_empty = Interval.try_create(_instant(-2), _instant(-2)).value
+    containing = Interval.try_create(_instant(0), _instant(10)).value
+    assert empty.overlaps(other_empty).value is False
+    assert empty.overlaps(containing).value is False
+    assert containing.overlaps(empty).value is False
+
+
 def test_interval_fp1_identity() -> None:
     result = Interval.try_create(_instant(1), _instant(2))
     assert is_ok(result)

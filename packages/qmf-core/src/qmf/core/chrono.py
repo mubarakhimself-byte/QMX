@@ -434,6 +434,8 @@ class Interval:
         """Whether this interval and ``other`` share any instant (half-open)."""
         if not isinstance(other, Interval):
             return _invalid("other", "overlap tests another Interval", given=repr(other))
+        if self.start.value_ns == self.end.value_ns or other.start.value_ns == other.end.value_ns:
+            return Ok(False)
         return Ok(
             self.start.value_ns < other.end.value_ns and other.start.value_ns < self.end.value_ns
         )

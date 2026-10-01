@@ -490,12 +490,13 @@ class _PositionClass(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class _Layout:
-    """The per-position analysis of the aligned input columns (internal)."""
+    """The per-position and compacted dense analysis of aligned inputs (internal)."""
 
     classes: tuple[_PositionClass, ...]
     dense_index: tuple[int | None, ...]
     provisional: tuple[bool, ...]
     knowable_at: tuple[Instant, ...]
+    dense_knowable_at: tuple[Instant, ...]
     dense_inputs: Mapping[str, tuple[int, ...]]
     input_scales: Mapping[str, int]
 
@@ -511,15 +512,16 @@ def _analyze_layout(
     Otherwise a calendar-open gap follows the missing-value policy — ``refuse`` returns a
     policy rejection here, ``mark-gap`` classes it ``missing``. A not-ready input leaves
     the position ``not_ready``; a position whose inputs are all value-bearing is
-    ``complete`` and contributes to the dense sequence, flagged provisional when any
-    contributing input is provisional. Every position records its knowable-at as the max
-    over its inputs — the earliest instant at which every contributing input was knowable.
+    ``complete`` and contributes to the dense sequence, with dense-indexed provisional
+    state and knowable-at metadata. Each original position also records the max knowable-at
+    across columns for its local metadata.
     """
     length = columns[0].length
     classes: list[_PositionClass] = []
     dense_index: list[int | None] = []
     provisional: list[bool] = []
     knowable_at: list[Instant] = []
+    dense_knowable_at: list[Instant] = []
     dense: dict[str, list[int]] = {name: [] for name in names}
     for position in range(length):
         states = [column.presence_at(position) for column in columns]
@@ -529,7 +531,6 @@ def _analyze_layout(
         if any(state is PresenceState.ABSENT_BY_SCHEDULE for state in states):
             classes.append(_PositionClass.CLOSED)
             dense_index.append(None)
-            provisional.append(False)
         elif any(state is PresenceState.GAP for state in states):
             if missing_value_policy is MissingValuePolicy.REFUSE:
                 return _policy(
@@ -540,15 +541,14 @@ def _analyze_layout(
                 )
             classes.append(_PositionClass.MISSING)
             dense_index.append(None)
-            provisional.append(False)
         elif any(state is PresenceState.NOT_READY for state in states):
             classes.append(_PositionClass.NOT_READY)
             dense_index.append(None)
-            provisional.append(False)
         else:
             dense_position = len(dense[names[0]])
             for name, column in zip(names, columns, strict=True):
                 dense[name].append(column.value_at(position))
+            dense_knowable_at.append(knowable_at[-1])
             classes.append(_PositionClass.COMPLETE)
             dense_index.append(dense_position)
             provisional.append(any(state is PresenceState.PROVISIONAL for state in states))
@@ -557,6 +557,7 @@ def _analyze_layout(
         dense_index=tuple(dense_index),
         provisional=tuple(provisional),
         knowable_at=tuple(knowable_at),
+        dense_knowable_at=tuple(dense_knowable_at),
         dense_inputs={name: tuple(values) for name, values in dense.items()},
         input_scales={name: column.scale for name, column in zip(names, columns, strict=True)},
     )
@@ -568,6 +569,8 @@ def _build_channel(
     warm_up: int,
     in_progress: bool,
     output_scale: int,
+    formula_id: str,
+    period: int,
 ) -> Result[IndicatorSeries]:
     """Scatter one channel's dense output back to a full-length presence-mapped series.
 
@@ -575,11 +578,12 @@ def _build_channel(
     position is ``absent_by_schedule``, a missing one ``gap``, a not-ready input
     ``not_ready``; a complete position is ``not_ready`` while warm-up is incomplete (a
     marked value, never a number) and otherwise ``present`` — or ``provisional`` when the
-    emission policy is in-progress or a contributing input was provisional. No NaN or
-    sentinel is ever written.
+    emission policy is in-progress or a formula dependency was provisional. Knowable-at
+    metadata follows the same formula support. No NaN or sentinel is ever written.
     """
     values: list[int] = []
     presence: list[PresenceState] = []
+    knowable_at = list(layout.knowable_at)
     for position, position_class in enumerate(layout.classes):
         if position_class is _PositionClass.CLOSED:
             presence.append(PresenceState.ABSENT_BY_SCHEDULE)
@@ -592,13 +596,41 @@ def _build_channel(
             values.append(0)
         else:
             dense_position = layout.dense_index[position]
-            resolved = _resolve_complete(dense_output, dense_position, warm_up, layout, in_progress)
+            resolved = _resolve_complete(
+                dense_output,
+                dense_position,
+                warm_up,
+                layout,
+                in_progress,
+                formula_id,
+                period,
+            )
             presence.append(resolved[0])
             values.append(resolved[1])
+            if dense_position is not None:
+                start = _support_start(formula_id, period, dense_position)
+                dependencies = layout.dense_knowable_at[start : dense_position + 1]
+                knowable_at[position] = max(dependencies, key=lambda instant: instant.value_ns)
     encoded = encode_int64_values(values)
     if isinstance(encoded, TypedRefusal):
         return encoded
-    return IndicatorSeries.try_create(encoded.value, output_scale, presence, layout.knowable_at)
+    return IndicatorSeries.try_create(encoded.value, output_scale, presence, knowable_at)
+
+
+def _support_start(formula_id: str, period: int, dense_position: int) -> int:
+    """Return the first dense input that can affect this formula sample.
+
+    Rolling formulas have finite support. EMA and RSI retain recursive state, so every
+    prior dense input remains causally relevant. Unknown kernel implementations are
+    treated conservatively as recursive.
+    """
+    if period < 1:
+        return 0
+    if formula_id in {"sma", "wma"}:
+        return max(0, dense_position - period + 1)
+    if formula_id in {"mom", "roc"}:
+        return max(0, dense_position - period)
+    return 0
 
 
 def _resolve_complete(
@@ -607,6 +639,8 @@ def _resolve_complete(
     warm_up: int,
     layout: _Layout,
     in_progress: bool,
+    formula_id: str,
+    period: int,
 ) -> tuple[PresenceState, int]:
     """The presence and value of a complete position after warm-up and emission rules."""
     if dense_position is None:  # pragma: no cover - complete positions always carry a dense index
@@ -616,7 +650,8 @@ def _resolve_complete(
     value = dense_output[dense_position]
     if value is None:
         return PresenceState.NOT_READY, 0
-    if in_progress or layout.provisional[dense_position]:
+    support_start = _support_start(formula_id, period, dense_position)
+    if in_progress or any(layout.provisional[support_start : dense_position + 1]):
         return PresenceState.PROVISIONAL, value
     return PresenceState.PRESENT, value
 
@@ -765,12 +800,24 @@ def _build_outputs(
                 expected=complete_count,
             )
         built = _build_channel(
-            dense_output, layout, configuration.warm_up, in_progress, produced.scale
+            dense_output,
+            layout,
+            configuration.warm_up,
+            in_progress,
+            produced.scale,
+            configuration.formula_id,
+            _resolved_period_for_support(configuration),
         )
         if isinstance(built, TypedRefusal):
             return built
         outputs[channel.name] = built.value
     return outputs
+
+
+def _resolved_period_for_support(configuration: ConfiguredIndicator) -> int:
+    """Read a valid period for support metadata; unknown custom kernels stay conservative."""
+    period = _period_param(configuration)
+    return period if isinstance(period, int) else 0
 
 
 def _label_result(

@@ -470,6 +470,71 @@ def test_provisional_input_forces_provisional_output() -> None:
     assert result.label.evidence_class is EvidenceClass.PROVISIONAL
 
 
+def test_reference_sma_tracks_provisional_support_and_forgets_expired_inputs() -> None:
+    _require_reference()
+    config = _config(parameters={"period": _period(2)}, warm_up=1)
+    series = _input(
+        [100, 200, 300, 400],
+        [
+            PresenceState.PROVISIONAL,
+            PresenceState.PRESENT,
+            PresenceState.PRESENT,
+            PresenceState.PRESENT,
+        ],
+        scale=0,
+    )
+    result = _unwrap(
+        compute_batch(config, {"close": series}, kernel=ReferenceKernel(), world=World.REPLAY)
+    )
+    out = result.outputs["sma"]
+    assert out.presence[1] is PresenceState.PROVISIONAL
+    assert out.presence[2] is PresenceState.PRESENT
+    assert out.presence[3] is PresenceState.PRESENT
+    assert result.label.evidence_class is EvidenceClass.PROVISIONAL
+    assert is_refusal(require_governed(result))
+
+
+def test_reference_sma_knowable_time_uses_actual_rolling_support() -> None:
+    _require_reference()
+    config = _config(parameters={"period": _period(2)}, warm_up=1)
+    series = _unwrap(
+        InputSeries.from_values(
+            [100, 200, 300],
+            0,
+            [PresenceState.PRESENT] * 3,
+            [Instant(value_ns=value) for value in (100, 20, 30)],
+        )
+    )
+    out = _unwrap(
+        compute_batch(config, {"close": series}, kernel=ReferenceKernel(), world=World.REPLAY)
+    ).outputs["sma"]
+    assert [instant.value_ns for instant in out.knowable_at] == [100, 100, 30]
+
+
+def test_reference_ema_retains_recursive_provisional_support() -> None:
+    _require_reference()
+    config = _config(
+        formula_id="ema",
+        parameters={"period": _period(2)},
+        warm_up=1,
+        output_schema=[_output_channel("ema")],
+    )
+    series = _input(
+        [100, 200, 300, 400],
+        [
+            PresenceState.PROVISIONAL,
+            PresenceState.PRESENT,
+            PresenceState.PRESENT,
+            PresenceState.PRESENT,
+        ],
+        scale=0,
+    )
+    out = _unwrap(
+        compute_batch(config, {"close": series}, kernel=ReferenceKernel(), world=World.REPLAY)
+    ).outputs["ema"]
+    assert out.presence[1:] == (PresenceState.PROVISIONAL,) * 3
+
+
 # --- result label -----------------------------------------------------------
 
 

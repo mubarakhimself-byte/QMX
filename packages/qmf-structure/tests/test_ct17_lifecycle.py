@@ -457,6 +457,28 @@ def test_resolve_state_earliest_confirmation_and_invalidation() -> None:
     assert state.confirmed_at.value_ns == _T0 + 4 * _MINUTE  # the earliest confirmation
 
 
+def test_resolve_state_refuses_confirmation_after_visible_invalidation() -> None:
+    obj = _mint()
+    confirmed = _ok(ConfirmationRecord.try_create(_fp(obj), Instant(value_ns=_T0 + 8 * _MINUTE)))
+    invalidated = _ok(InvalidationRecord.try_create(_fp(obj), Instant(value_ns=_T0 + 6 * _MINUTE)))
+    result = resolve_state(
+        obj, [confirmed, invalidated], at=Instant(value_ns=_T0 + 10 * _MINUTE)
+    )
+    assert isinstance(result, TypedRefusal)
+
+
+def test_resolve_state_keeps_historical_lifecycle_facts_horizon_scoped() -> None:
+    obj = _mint()
+    confirmed = _ok(ConfirmationRecord.try_create(_fp(obj), Instant(value_ns=_T0 + 8 * _MINUTE)))
+    invalidated = _ok(InvalidationRecord.try_create(_fp(obj), Instant(value_ns=_T0 + 6 * _MINUTE)))
+    historical = _ok(
+        resolve_state(obj, [confirmed, invalidated], at=Instant(value_ns=_T0 + 7 * _MINUTE))
+    )
+    assert not historical.confirmed
+    assert historical.invalidated
+    assert not historical.still_valid
+
+
 def test_still_valid_is_not_a_stored_field_on_the_object() -> None:
     obj = _mint()
     # The object carries no resolved-state fields — "still valid" is a read-time fold only.
@@ -756,6 +778,23 @@ def test_resolve_cascade_refuses_bad_inputs() -> None:
     bad_pred = resolve_cascade(child_state, parent_state, object(), at=at)
     assert isinstance(bad_pred, TypedRefusal)
     assert bad_pred.context["field"] == "predicate"
+
+
+def test_resolve_cascade_refuses_mismatched_horizons_before_predicate() -> None:
+    child_state, parent_state = _child_and_invalidated_parent()
+    requested = Instant(value_ns=_T0 + 9 * _MINUTE)
+
+    class _RecordingPredicate:
+        called = False
+
+        def cascades(self, *, parent: ResolvedState, child: ResolvedState, at: Instant) -> bool:
+            self.called = True
+            return parent.invalidated
+
+    predicate = _RecordingPredicate()
+    result = resolve_cascade(child_state, parent_state, predicate, at=requested)
+    assert isinstance(result, TypedRefusal)
+    assert not predicate.called
 
 
 def test_resolve_cascade_refuses_non_bool_predicate_result() -> None:
