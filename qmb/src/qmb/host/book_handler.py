@@ -2655,6 +2655,7 @@ class BookExecutionSliceHandler:
             risk_rebased=position.risk_rebased,
             risk_rebase_lineage=position.risk_rebase_lineage,
             financing_costs=position.financing_costs,
+            financing_rollovers=position.financing_rollovers,
         )
         return Ok(
             BookExecutionReceipt(

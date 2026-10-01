@@ -1022,6 +1022,116 @@ def test_recorded_rollover_financing_is_journaled_and_netted_at_close(tmp_path: 
     assert len(recovered.positions[0].financing_costs) == 1
 
 
+def test_partial_exposure_rollover_is_actual_quantity_once_and_nets_at_stop(
+    tmp_path: Path,
+) -> None:
+    opened_at = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    partial_at = _ok(Instant.try_create(opened_at.value_ns + 1_000_000_000))
+    rollover = _ok(Instant.try_create(opened_at.value_ns + 2_000_000_000))
+    stop_at = _ok(Instant.try_create(opened_at.value_ns + 3_000_000_000))
+    trading_date = _ok(
+        TradingDate.try_create(
+            _ok(CalendarIdentity.try_create("broker-hours", "v1", "2026a")),
+            _ok(CivilDate.try_create(2026, 10, 5)),
+        )
+    )
+    calendar = _RecordedRolloverCalendar(rollover.value_ns, trading_date)
+    rate = _ok(SwapRate.try_create("eurusd", Direction.LONG, _ok(Money.try_create(-100, "USD", 2))))
+    calibration = _ok(
+        SwapCalibration.try_create(
+            "replay-broker",
+            rates=(rate,),
+            weekend_holiday_handling="skip",
+            calendar_identity=calendar.trading_date.calendar.fp1_identity(),
+        )
+    )
+    handler, bot, reader, writer = _handler(
+        tmp_path,
+        financing_calibration=calibration,
+        rollover_calendar=calendar,
+        slippage_adapter=SLIPPAGE_ADAPTER_ZERO,
+    )
+    rules = dict(handler.admission.order_policy_by_code)
+    rules["entry:family:breakout"] = BookOrderPolicy(
+        OrderType.MARKET, liquidity=_ok(Quantity.try_create(2, "lot", 0))
+    )
+    handler.admission = replace(
+        handler.admission,
+        requested_r=_ok(ExactRational.try_create(5, 1, UnitKind.R_MULTIPLE)),
+        order_policy_by_code=MappingProxyType(rules),
+    )
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.proposals = (entry,)
+    _ok(
+        handler.bind_paths(
+            (
+                (opened_at, _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001)),
+                (partial_at, _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001)),
+                (rollover, _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001)),
+                (stop_at, _quote_path(109_000, 109_100, 108_900, bid=109_000, ask=109_002)),
+            )
+        )
+    )
+    resting = _ok(handler.mint_intents("eurusd", opened_at))[0]
+    assert _ok(handler.execute_resting(resting, None, partial_at)) == ExecutionDisposition(
+        True, False
+    )
+    assert handler.positions == ()
+    assert len(handler.pending_entry_tickets) == 1
+    pending_tickets = handler.pending_entry_tickets
+    sequence_before_rollover = handler.admission.journal_writer.next_sequence
+
+    _ok(handler.scheduled_position_event("eurusd", rollover))
+    assert handler.admission.journal_writer.next_sequence == sequence_before_rollover + 1
+    assert handler.pending_entry_tickets == pending_tickets
+    assert not handler.positions
+    _ok(handler.scheduled_position_event("eurusd", rollover))
+    assert handler.admission.journal_writer.next_sequence == sequence_before_rollover + 1
+
+    _ok(handler.scheduled_position_event("eurusd", stop_at))
+    assert len(handler.receipts) == 2
+    closed = next(receipt for receipt in handler.receipts if receipt.exit_record is not None)
+    assert closed.position is not None
+    assert closed.position.quantity == _ok(Quantity.try_create(2, "lot", 0))
+    assert closed.position.entry_terminal_reason is EntryTerminalReason.PROTECTIVE_STOP
+    assert len(closed.position.financing_rollovers) == 1
+    assert closed.position.risk_rebased is True
+    assert closed.position.declared_plan_risk_amount is not None
+    assert closed.position.faces.original_risk_amount.as_fraction() == (
+        closed.position.declared_plan_risk_amount.as_fraction() * 2 / 5
+    )
+    record = closed.exit_record
+    assert record is not None
+    finance = tuple(item for item in record.cost_components if item.name == "financing")
+    assert len(finance) == 1
+    assert finance[0].amount == _ok(Money.try_create(-200, "USD", 2))
+    expected_net = record.realized_pnl
+    for component in record.cost_components:
+        expected_net = _ok(expected_net.subtract(component.amount))
+    assert _ok(record.net_realized_pnl()) == expected_net
+
+    recovered = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=handler.admission.binding.fingerprint,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert len(recovered.positions) == 1
+    assert recovered.positions[0].closed is True
+    assert len(recovered.positions[0].financing_costs) == 1
+    assert len(recovered.positions[0].financing_rollovers) == 1
+
+
 def test_unpersistable_open_does_not_advance_memory_and_recovers_from_ct13(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
