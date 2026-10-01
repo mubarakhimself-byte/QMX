@@ -418,9 +418,7 @@ class IntakeAuthority:
             return synced
         self._keys.clear()
         self._keys.update(rebuilt.value)
-        return _persist_recovery_barrier(
-            self._journal, self.writer, events.value, instant=instant
-        )
+        return _persist_recovery_barrier(self._journal, self.writer, events.value, instant=instant)
 
 
 def _rebuild_keys(

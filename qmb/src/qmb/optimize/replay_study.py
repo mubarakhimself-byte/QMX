@@ -189,9 +189,7 @@ def run_recorded_study_generations(
         return invalid("prepare_trial", "each candidate resolves its recorded replay context")
     if cancel_requested is not None and not callable(cancel_requested):
         return invalid("cancel_requested", "cancellation is checked through a trusted callback")
-    history = read_recorded_study_trials(
-        ledger_root, study_fp=stepper.study_fp, criteria=criteria
-    )
+    history = read_recorded_study_trials(ledger_root, study_fp=stepper.study_fp, criteria=criteria)
     if is_refusal(history):
         return history
     from qmb.optimize.resume import resume_stepper  # noqa: PLC0415

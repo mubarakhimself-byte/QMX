@@ -197,9 +197,7 @@ def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
             frozen[key] = _freeze_mapping(nested)
         elif isinstance(item, (list, tuple)):
             sequence = cast("Sequence[object]", item)
-            frozen[key] = tuple(
-                _freeze_value(member) for member in sequence
-            )
+            frozen[key] = tuple(_freeze_value(member) for member in sequence)
         else:
             frozen[key] = item
     return MappingProxyType(frozen)

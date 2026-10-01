@@ -45,8 +45,7 @@ class StudyGenerationRun:
         return {
             "class": STUDY_GENERATION_DRIVER_CLASS,
             "completed_generations": [
-                [trial.fp1_identity() for trial in generation]
-                for generation in self.generations
+                [trial.fp1_identity() for trial in generation] for generation in self.generations
             ],
             "generation_count": len(self.generations),
             "study_fp": self.stepper.study_fp.value,
@@ -103,8 +102,7 @@ def run_study_generations(
         if is_refusal(labels):
             return labels
         if len(labels.value) != batch.size or any(
-            label.get("generation_index") != current.generation_index
-            for label in labels.value
+            label.get("generation_index") != current.generation_index for label in labels.value
         ):
             return invalid("trial_labels", "every proposed ask has exactly one ledger label")
 

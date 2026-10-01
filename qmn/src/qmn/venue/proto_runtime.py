@@ -21,9 +21,7 @@ def compile_pinned_descriptor(
 ) -> Result[CompiledProto]:
     """Compile exact operator-pinned bytes and refuse any digest movement."""
     if not isinstance(expected_digest, str) or not expected_digest.startswith("sha256:"):
-        return _invalid(
-            "descriptor_digest", "the compiled descriptor digest is pinned sha256 data"
-        )
+        return _invalid("descriptor_digest", "the compiled descriptor digest is pinned sha256 data")
     compiled = compile_descriptor_set(
         descriptor_set_bytes,
         package_name=package_name,

@@ -530,15 +530,16 @@ def _cross_quote_only(
         order.side,
         expected_instrument
         if expected_instrument is not None
-        else order.stop_price.instrument if order.stop_price is not None else None,
+        else order.stop_price.instrument
+        if order.stop_price is not None
+        else None,
     )
     if is_refusal(side_price_result):
         return side_price_result
     side_price = side_price_result.value
     reference = order.stop_price if order.order_type is OrderType.STOP else None
     if reference is not None and (
-        reference.instrument != side_price.instrument
-        or reference.scale != side_price.scale
+        reference.instrument != side_price.instrument or reference.scale != side_price.scale
     ):
         return invalid("stop_price", "the stop and executable quote share identity")
     if order.order_type is OrderType.MARKET:

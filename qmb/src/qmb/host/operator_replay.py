@@ -473,9 +473,7 @@ def _runtime_inputs(
     if dict(actual_policy.value) != dict(binding.policy_identity):
         actual_policy_fp = fingerprint(actual_policy.value)
         expected_policy_fp = fingerprint(binding.policy_identity)
-        actual_fp_value = (
-            actual_policy_fp.value.value if not is_refusal(actual_policy_fp) else None
-        )
+        actual_fp_value = actual_policy_fp.value.value if not is_refusal(actual_policy_fp) else None
         expected_fp_value = (
             expected_policy_fp.value.value if not is_refusal(expected_policy_fp) else None
         )
@@ -555,9 +553,7 @@ def _runtime_policy_identity(
     result_label = _typed_identity(admission.result_label, "result_label")
     if is_refusal(result_label):
         return result_label
-    close_reasons = {
-        key: value.value for key, value in admission.close_reason_by_code.items()
-    }
+    close_reasons = {key: value.value for key, value in admission.close_reason_by_code.items()}
     order_policies = {
         key: value.fp1_identity() for key, value in admission.order_policy_by_code.items()
     }
@@ -566,48 +562,48 @@ def _runtime_policy_identity(
     config_keys = dict(config.keys)
     config_keys.pop(OPERATOR_BINDING_CONFIG_KEY, None)
     identity: dict[str, object] = {
-            "class": "qmb-operator-replay-policy-v1",
-            "builder_fp1": builder_fp1.value,
-            "config_policy": {
-                "book_fp1": config.book_fp1.value,
-                "bms_fp1": config.bms_fp1.value,
-                "book_fragment_fp1": config.book_fragment_fp1.value,
-                "bms_fragment_fp1": config.bms_fragment_fp1.value,
-                "bot_fp1": config.bot_fp1.value,
-                "clock": config.clock,
-                "condition_preset_fp1": [item.value for item in config.condition_preset_fp1],
-                "data_provenance": config.data_provenance,
-                "format_version": config.format_version,
-                "keys": config_keys,
-                "world": config.world.value,
-                "starting_capital": (
-                    config.starting_capital.fp1_identity()
-                    if config.starting_capital is not None
-                    else None
-                ),
-                "seed_overridden": config.seed_overridden,
-                "fold_rating": config.fold_rating,
-            },
-            "execution": execution_identity,
-            "book_admission": {
-                "close_reasons": close_reasons,
-                "exit_logic_ref": exit_ref.value,
-                "exit_logic_module_source_fp1": exit_source.value,
-                "money_scale": admission.money_scale,
-                "opening_bot_id": admission.opening_bot_id,
-                "order_policies": order_policies,
-                "position_cap": admission.position_cap.fp1_identity(),
-                "protective_stop_reason": admission.protective_stop_reason.fp1_identity(),
-                "requested_r": admission.requested_r.fp1_identity(),
-                "result_label": result_label.value,
-                "rollover_calendar": calendar.value,
-                "rollover_calendar_source_fp1": calendar_source.value,
-                "r_unit_price": admission.r_unit_price.fp1_identity(),
-                "target": target.value,
-                "value_factor": value_factor.value,
-                "lot_step": admission.lot_step.fp1_identity(),
-            },
-        }
+        "class": "qmb-operator-replay-policy-v1",
+        "builder_fp1": builder_fp1.value,
+        "config_policy": {
+            "book_fp1": config.book_fp1.value,
+            "bms_fp1": config.bms_fp1.value,
+            "book_fragment_fp1": config.book_fragment_fp1.value,
+            "bms_fragment_fp1": config.bms_fragment_fp1.value,
+            "bot_fp1": config.bot_fp1.value,
+            "clock": config.clock,
+            "condition_preset_fp1": [item.value for item in config.condition_preset_fp1],
+            "data_provenance": config.data_provenance,
+            "format_version": config.format_version,
+            "keys": config_keys,
+            "world": config.world.value,
+            "starting_capital": (
+                config.starting_capital.fp1_identity()
+                if config.starting_capital is not None
+                else None
+            ),
+            "seed_overridden": config.seed_overridden,
+            "fold_rating": config.fold_rating,
+        },
+        "execution": execution_identity,
+        "book_admission": {
+            "close_reasons": close_reasons,
+            "exit_logic_ref": exit_ref.value,
+            "exit_logic_module_source_fp1": exit_source.value,
+            "money_scale": admission.money_scale,
+            "opening_bot_id": admission.opening_bot_id,
+            "order_policies": order_policies,
+            "position_cap": admission.position_cap.fp1_identity(),
+            "protective_stop_reason": admission.protective_stop_reason.fp1_identity(),
+            "requested_r": admission.requested_r.fp1_identity(),
+            "result_label": result_label.value,
+            "rollover_calendar": calendar.value,
+            "rollover_calendar_source_fp1": calendar_source.value,
+            "r_unit_price": admission.r_unit_price.fp1_identity(),
+            "target": target.value,
+            "value_factor": value_factor.value,
+            "lot_step": admission.lot_step.fp1_identity(),
+        },
+    }
     normalized = _canonical_policy_graph(identity, "policy_identity")
     if is_refusal(normalized):
         return normalized
@@ -737,9 +733,7 @@ def _load_builder(root: Path, files: Mapping[str, str], entrypoint: str) -> Resu
     return Ok(module)
 
 
-def _entrypoint(
-    module: ModuleType, entrypoint: str
-) -> Result[Callable[..., Result[object]]]:
+def _entrypoint(module: ModuleType, entrypoint: str) -> Result[Callable[..., Result[object]]]:
     _module_name, attribute = entrypoint.split(":", 1)
     value = getattr(module, attribute, None)
     if not callable(value):

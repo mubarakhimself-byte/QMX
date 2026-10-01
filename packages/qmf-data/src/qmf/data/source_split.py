@@ -35,7 +35,8 @@ def partition_source_observation(manifest: object, observation: object) -> Resul
         return stamped
     if stamped.value != manifest.fingerprint:
         return policy_rejection(
-            "manifest", "CT-12 fields recompute to the cited manifest fingerprint",
+            "manifest",
+            "CT-12 fields recompute to the cited manifest fingerprint",
             expected=manifest.fingerprint.value,
             actual=stamped.value.value,
         )
