@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import TypeVar
 
-from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
-from qml.host import (
+from qmb.host import research_store as host
+from qmb.host.research_store import (
     QMA_BINDS_SECOND_CT44_OVER_RESEARCH_ROOT_V1,
     QMA_WRITES_RESEARCH_ROOT,
     RESEARCH_ROOT_IS_QMA_SETTING,
@@ -16,6 +16,7 @@ from qml.host import (
     read_research_blob,
     save_research_hypothesis,
 )
+from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from qml.research import (
     F_SLOTS,
     RESEARCH_CONTRACT_CLASS,
@@ -31,7 +32,7 @@ from qml.research import (
     save_hypothesis,
 )
 
-from qml import host, research
+from qml import research
 
 T = TypeVar("T")
 

@@ -1,4 +1,4 @@
-"""QML authoring composition-root blob store under ``research_root`` (Story 50.3).
+"""Application filesystem adapter for QML-authored canonical research bytes.
 
 Persists only canonical Stage 0 bytes keyed by ``research_ref``. Distinct from
 seed ``root_path``. Not daemon sqlite, not QMA staging, not a new COMP store,
@@ -15,8 +15,8 @@ from typing import Final
 
 from qmf.core.fingerprint import Fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-
 from qml._refuse import invalid, policy
+from qml.host import mint_ct06_envelope, mint_generation_envelope
 from qml.research.stage0 import Hypothesis, SavedHypothesis, save_authored_hypothesis
 
 __all__ = [
@@ -25,6 +25,8 @@ __all__ = [
     "RESEARCH_ROOT_IS_QMA_SETTING",
     "RESEARCH_ROOT_IS_SEED_ROOT",
     "PersistedHypothesis",
+    "mint_ct06_envelope",
+    "mint_generation_envelope",
     "persist_research_blob",
     "read_research_blob",
     "research_blob_path",

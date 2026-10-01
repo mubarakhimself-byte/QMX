@@ -5,8 +5,9 @@ module is the composition root that holds the ``WriterId`` and stamps the dated
 CT-06 envelope. QMB runs the resulting candidates; it does not author them.
 
 Declaration helpers stay unwired for Bot-kind install/register (OR-06). The
-host path is the first authoring write path for generation. The same root owns
-the Stage 0 ``research_root`` blob store (AD-8 / AD-21).
+host path is the first authoring write path for generation. Filesystem persistence
+is supplied by the application adapter
+``qmb.host.research_store``; this distribution accepts and returns pure values.
 """
 
 from __future__ import annotations
@@ -46,17 +47,6 @@ from qml.host.graduation import (
     refuse_research_ref_as_governed_evidence,
     stamp_promoted_from_edge,
 )
-from qml.host.research_store import (
-    QMA_BINDS_SECOND_CT44_OVER_RESEARCH_ROOT_V1,
-    QMA_WRITES_RESEARCH_ROOT,
-    RESEARCH_ROOT_IS_QMA_SETTING,
-    RESEARCH_ROOT_IS_SEED_ROOT,
-    PersistedHypothesis,
-    persist_research_blob,
-    read_research_blob,
-    research_blob_path,
-    save_research_hypothesis,
-)
 from qml.host.seed_cite import (
     CANDIDATE_ORIGIN,
     QMA_INVENTS_SEED_CITE,
@@ -77,17 +67,12 @@ __all__ = [
     "HOST_MINTS_CT06_ENVELOPE",
     "MILL_PROMOTED_FROM_IS_GOVERNED_EVIDENCE",
     "MILL_PROMOTED_FROM_IS_LINEAGE",
-    "QMA_BINDS_SECOND_CT44_OVER_RESEARCH_ROOT_V1",
     "QMA_INVENTS_SEED_CITE",
-    "QMA_WRITES_RESEARCH_ROOT",
     "QMB_AUTHORS_CANDIDATES",
-    "RESEARCH_ROOT_IS_QMA_SETTING",
-    "RESEARCH_ROOT_IS_SEED_ROOT",
     "SEED_CITE_FIELDS",
     "SEED_CITE_IN_FP1",
     "HostCandidate",
     "HostMintedCandidate",
-    "PersistedHypothesis",
     "SeedCite",
     "admit_candidate_origin",
     "admit_seed_cite",
@@ -97,14 +82,10 @@ __all__ = [
     "mint_ct06_envelope",
     "mint_generation_envelope",
     "mint_host_candidate",
-    "persist_research_blob",
-    "read_research_blob",
     "refuse_ct07_to_knowledge_citation",
     "refuse_qma_invented_seed_cite",
     "refuse_research_ref_as_governed_evidence",
     "register_bot_definition",
-    "research_blob_path",
-    "save_research_hypothesis",
     "stamp_promoted_from_edge",
 ]
 
