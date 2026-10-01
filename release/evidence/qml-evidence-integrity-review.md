@@ -164,3 +164,5 @@ Both protocol/factory.py _as_bot_definition and BotDefinition.try_from_mapping s
 Observed source hashes:
 - `qml/src/qml/protocol/factory.py`: `534c307930691f7c4929066ed5fb2a8566cc182fd7c5d2c902f1088b557d949c`
 - `qml/src/qml/declaration/bot.py`: `83f9280912a83bcd17f6169c942758cf36248456a34ece6fdbf7e7b589c1c61a`
+
+The same finite nominal boundary also admits kind_format_version=True, 0, or string "1"; equivalent body mappings with contract_format_version set to those values typed-refuse. These belong to the same official CT33 field-revalidation correction, not a new Layer1 requirement. Owner notified.
