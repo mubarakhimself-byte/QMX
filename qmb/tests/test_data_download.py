@@ -267,7 +267,9 @@ def test_ct15_resume_initialization_is_serialized_in_process() -> None:
         journal = _ok(evidence.for_world(World.REPLAY)).journal
         with ThreadPoolExecutor(max_workers=8) as pool:
             authorities = list(pool.map(_resume_authority, range(16), [journal] * 16))
-        assert all(authority.writer.writer == authorities[0].writer.writer for authority in authorities)
+        assert all(
+            authority.writer.writer == authorities[0].writer.writer for authority in authorities
+        )
         events = _ok(
             JournalReader(journal).read_checked(
                 "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
