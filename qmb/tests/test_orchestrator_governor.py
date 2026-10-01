@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -41,7 +42,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "orch-gov", "tag": tag}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -55,6 +56,8 @@ def _config(*, tag: str) -> ResolvedRunConfig:
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def _request(tag: str, peak: int, cpu_cost: int = 1) -> qmb.GovernedRequest:

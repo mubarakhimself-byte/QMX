@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -60,7 +61,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "orch-paths", "tag": tag}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -74,6 +75,8 @@ def _config(*, tag: str) -> ResolvedRunConfig:
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def test_exclusive_write_and_contained_read_round_trip(tmp_path: Path) -> None:
