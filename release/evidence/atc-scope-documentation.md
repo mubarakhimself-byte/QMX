@@ -1,0 +1,11 @@
+# ATC scope resolved from governing documentation
+
+Governing documentation is published main `c3e8ec5ef33d0b38cdf7f5dbdd48a6fc70ac33cf`; supporting BMAD/docwork material is historical architectural context, not a replacement authority. This is a source inspection record, not execution acceptance.
+
+`docs/components/qmb.md:272` and `docs/scenarios/SCN-0020-two-trading-compositions.md:37` require the selected Alternative Trading Composition to carry a complete AccountingPolicy/RiskPolicy and to be adopted by QMB evaluation/optimization and QMN. Book/BMS/Bot keys are absent, not null. The existing Book path retains its contracts. `SCN-0020:45` requires alternative QMB JSONL and CT-07 PolicyPair lineage; no Book CT-32/R surrogate satisfies this.
+
+`SCN-0020` explicitly supplies no worked numbers: its acceptance distinctions concern composition identity, complete policies, dummy rejection, ownership fencing and paper/L17 promotion. A missing example's financial formula is therefore not a reason to stop generic registered-policy execution, optimization, persistence or provider-free node adoption. No default Kelly formula or invented numeric policy is inferred from historical BMAD examples. Author-supplied interpreter fixtures must be labeled, finite and complete; they prove their declared behavior rather than an unspecified financial strategy or provider connectivity.
+
+Current `qmb/optimize/alternative_study.py` exposes registered candidate PolicyPair parameter bindings, exact unit/currency objectives, generation barriers, persisted terminal readback, CT-13/CT-07 checks, cancellation and resume. Those source surfaces require actual ingress execution and durable reuse evidence; class existence and library tests are not full optimization acceptance. Existing `qma.core.ports.qmb` names `optimize.run`; the implementation must use the governed operation/door rather than invent a public name.
+
+`docs/components/trading-node.md:233` and `SCN-0020:51` require one command owner, sequential fencing and UNKNOWN standdown. Live connectivity, paper-then-live and L17 remain dependent pending work under the user's prohibition on trading and credential/provider access. They do not block independent provider-free composition, execution, optimization, cancellation and durable-result repairs.
