@@ -352,7 +352,10 @@ def _coerce_child_ref(value: object) -> Result[Fingerprint]:
     if isinstance(value, Fingerprint):
         return coerce_fingerprint(value.value)
     if isinstance(value, Confluence):
-        return value.fingerprint_content()
+        checked = Confluence.try_create(value)
+        if is_refusal(checked):
+            return checked
+        return checked.value.fingerprint_content()
     pinned = coerce_fingerprint(value)
     if is_ok(pinned):
         return pinned

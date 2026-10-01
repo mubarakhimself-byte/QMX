@@ -309,6 +309,11 @@ def test_generation_revalidates_nominal_fp_and_preserves_source_content_types() 
     malformed_logic = LogicIdentity("", "", malformed_fp)
     assert is_refusal(author_new_structure(logic_reference=malformed_logic))
     assert is_refusal(author_new_structure(confluence=Confluence(())))
+    assert is_refusal(
+        author_new_structure(
+            confluence_legs=[{"role": "level", "confluence_ref": Confluence(())}]
+        )
+    )
 
     source_bytes = {"factory.py": b"def factory():\n    return None\n"}
     authored = _ok(author_new_structure(logic_source=source_bytes))
