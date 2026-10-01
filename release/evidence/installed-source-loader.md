@@ -1,0 +1,7 @@
+# Installed manifest-bound source loader
+
+**PASS within bounded scope**, frozen installed candidate `1c4c73b1e51e9194464601830e7543ecd1108b6d`, not final repaired candidate.
+
+Command: `/workspace/qmx-installed-replay-candidate/venv/bin/python -I /workspace/qmx-installed-source-loader-smoke.py`, outside checkout (`/tmp`), exit 0. Trace `/workspace/qmx-installed-source-loader-smoke.log` SHA256 `3074011a8bfb7b9b8ed919c3de4d1091b15fb5c6f0b25e6b99e6f835d7a17429`; driver SHA256 `00a847dba079f9118db3e55a0be187d6b2bf67cc978d6dcbe541c9c3ca86c818`. Product modules and actual worker originate in installed site-packages; no factory dependencies were installed. Driver imports a clearly labeled source test helper solely to construct the local declaration and no-op authored-source manifest.
+
+The default manifest-selected factory path spawned one actual installed `qmb.host.worker` subprocess and returned checked Layer2 observations/verdict; child PID differs from driver. Explicit silent-factory and mismatching source-byte controls returned typed refusals before any additional child. Runner source Git blob `316293619263dd44ae115868a90e6c71484ef261` matches frozen and current committed source at this check. This establishes actual source loading and subprocess isolation with deterministic local fixture behavior. It is not OS confinement certification, financial grammar, provider connectivity, native Windows proof, or final full-product acceptance. Reexecute on final installed artifacts.
