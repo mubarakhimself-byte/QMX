@@ -339,6 +339,7 @@ def test_door_matrix_is_keyed_by_op_id_and_version() -> None:
     run = descriptor_for(descriptors, op_id="qmb.backtest.run", version=1)
     assert project is not None and run is not None
     assert project.owner == run.owner == "COMP-QMB"
+    assert "evidence_ref" in run.configuration.optional_keys
     project_adapters = {door.adapter for door in project.supported_doors}
     run_adapters = {door.adapter for door in run.supported_doors}
     assert project_adapters != run_adapters

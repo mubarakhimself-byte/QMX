@@ -3199,6 +3199,12 @@ class DaemonProcess:
                     "data_ref",
                     "CT-47 ExperimentSpec must reference its split/source identity",
                 )
+            evidence_ref = payload.get("evidence_ref")
+            if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+                return invalid_input(
+                    "evidence_ref",
+                    "qmb.backtest.run requires a persisted QMB replay-request fingerprint",
+                )
             environment_kind = environment_ref.removeprefix("env:")
             if self._runtime_composition.environments.declaration(environment_kind) is None:
                 return NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
@@ -3209,6 +3215,7 @@ class DaemonProcess:
                     "reason": "QMB durable replay request adapter is not available",
                     "experiment_spec_fp1": cast("str", spec_fp1),
                     "split_manifest_fp1": resolved.value.spec.data_ref,
+                    "evidence_ref": evidence_ref,
                     "originating_product_session_ref": originating_product_session_ref,
                 },
             )

@@ -88,7 +88,7 @@ PUBLIC_OPERATION_PAYLOADS: Final[tuple[Mapping[str, object], ...]] = (
         "configuration": {
             "defaults": {},
             "required_keys": ["run_fp1"],
-            "optional_keys": ["as_of"],
+            "optional_keys": ["as_of", "evidence_ref"],
         },
         "declared_operation_dependencies": [],
         "resource_needs": {
