@@ -19,6 +19,7 @@ from qmb.config import (
     materialize_bms_fragment,
     materialize_book_fragment,
 )
+from qmb.config.fragments import ConfigFragment
 from qmb.doors import api
 from qmb.host import run_sandbox as public_run_sandbox
 from qmb.host.replay import PinnedInstrumentPriceMetadata, read_recorded_replay_source
@@ -374,6 +375,40 @@ def _scope(declaration: BotDefinition) -> BotStateScope:
     )
 
 
+def study_fixture_seed() -> Money:
+    """Public shared-fixture access to the QL-7 exact seed."""
+    return _SEED
+
+
+def study_fixture_defaults() -> dict[str, object]:
+    """Public shared-fixture access to the standard recorded-run defaults."""
+    return _defaults()
+
+
+def study_fixture_definition() -> BotDefinition:
+    """Public shared-fixture access to the canonical QL-7 declaration."""
+    return _definition()
+
+
+def study_fixture_fragments_with_bot(
+    bot: RegistrationRecord,
+) -> tuple[ConfigFragment, ConfigFragment, RegistryReadPort, RegistrationRecord]:
+    """Materialize the canonical Book/BMS fragments around a supplied bot."""
+    return _fragments_with_bot(bot)
+
+
+def study_fixture_record(
+    kind: str, body: Mapping[str, object] | BookDefinition | BmsDefinition
+) -> RegistrationRecord:
+    """Create a registry record with this module's canonical fixture writer."""
+    return _record(kind, body)
+
+
+def study_fixture_scope(declaration: BotDefinition) -> BotStateScope:
+    """Mint a state scope aligned with the canonical QL-7 declaration."""
+    return _scope(declaration)
+
+
 def test_construct_via_ql7_factory_and_drive_declared_footprint_only() -> None:
     definition = _definition()
     at = _instant()
@@ -714,7 +749,7 @@ def test_durable_request_resolves_registered_split_and_manifest_bound_bot(
         resolve_replay_request(
             request_root=tmp_path / "request-root",
             request_ref=request_ref,
-            split=split,
+            split=None,
             expected_split_fp1=split.fingerprint,
             raw_store_root=store_root,
             holdout_months=12,

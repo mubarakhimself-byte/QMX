@@ -14,6 +14,7 @@ from typing import TypeVar, cast
 
 from qmb.config import (
     STARTING_CAPITAL_KEY,
+    ReplayBinding,
     compile_run_config,
 )
 from qmb.execution import (
@@ -69,23 +70,26 @@ from qmf.registry import RegistrationRecord
 from qml.declaration.bot import BotDefinition
 from qml.protocol import BotStateScope
 
-# Existing test modules provide the canonical builders exercised by their own
-# regression suites. These imports keep the integrated fixture aligned with
-# those builders while avoiding duplicate CT-22/27/33 and Book grammars.
-from test_alternative_execution import _NS, _split, _writer
+# Public shared-fixture adapters keep this integration fixture aligned with
+# builders owned and tested by their source suites.
+from test_alternative_execution import (
+    STUDY_FIXTURE_EPOCH_NS,
+    study_fixture_split,
+    study_fixture_writer,
+)
 from test_book_handler import (
     BookOrderPolicy,
-    _instrument,
-    _NeverRolloverCalendar,
-    _OffsetStop,
+    NeverRolloverCalendarFixture,
+    OffsetStopFixture,
+    study_fixture_instrument,
 )
 from test_ql7_host import (
-    _SEED,
-    _defaults,
-    _definition,
-    _fragments_with_bot,
-    _record,
-    _scope,
+    study_fixture_defaults,
+    study_fixture_definition,
+    study_fixture_fragments_with_bot,
+    study_fixture_record,
+    study_fixture_scope,
+    study_fixture_seed,
 )
 
 T = TypeVar("T")
@@ -106,7 +110,7 @@ def _observation_at(side: str, sequence: int, event_ns: int, price: int) -> Sour
             source_native_id=f"study-{sequence}-{side}",
             revision="1",
             receive_wall_time=instant,
-            writer=_writer(),
+            writer=study_fixture_writer(),
             sequence=sequence,
             world=World.REPLAY,
             foreign_money=_ok(ForeignMoney.try_create(price, 5)),
@@ -154,7 +158,7 @@ def _entry_source_tree() -> dict[str, str]:
 def _entry_bot_definition(source_tree: dict[str, str]) -> BotDefinition:
     from qml.logic import mint_logic_identity
 
-    base = _definition()
+    base = study_fixture_definition()
     logic = _ok(mint_logic_identity("research-bot", "1.0.0", source_tree))
     payload = base.identity_payload()
     body = dict(cast(Mapping[str, object], payload["body"]))
@@ -220,10 +224,10 @@ class RecordedReplayFixture:
         if is_refusal(resolved_request):
             return resolved_request
         bot_record = self.bot_record
-        book_fragment, bms_fragment, port, _ = _fragments_with_bot(bot_record)
+        book_fragment, bms_fragment, port, _ = study_fixture_fragments_with_bot(bot_record)
         run_spec: dict[str, object] = {
             "bot": bot_record.stable_id,
-            STARTING_CAPITAL_KEY: _SEED,
+            STARTING_CAPITAL_KEY: study_fixture_seed(),
             **proposal.assignment,
         }
         config = compile_run_config(
@@ -231,7 +235,10 @@ class RecordedReplayFixture:
             book_fragment=book_fragment,
             bms_fragment=bms_fragment,
             run_spec=run_spec,
-            workspace_defaults=self._workspace_defaults(self.slippage_adapter),
+            workspace_defaults={
+                **study_fixture_defaults(),
+                **self._workspace_defaults(self.slippage_adapter),
+            },
             study_trial_label=label,
         )
         if is_refusal(config):
@@ -249,9 +256,7 @@ class RecordedReplayFixture:
             journal_dir=root / f"ct13-{generation}-{proposal.ask_index}",
             open_stream=jsonl_opener(),
         )
-        writer_id = _ok(
-            WriterId.try_create("qmb-study-fixture", "replay", "positions", "boot-1")
-        )
+        writer_id = _ok(WriterId.try_create("qmb-study-fixture", "replay", "positions", "boot-1"))
         writer = JournalWriter(journal, writer_id, stream_name="positions")
         reader = JournalReader(journal)
         admission = self._admission(binding, writer, reader)
@@ -274,7 +279,7 @@ class RecordedReplayFixture:
 
     @staticmethod
     def _admission(
-        binding: object, writer: JournalWriter, reader: JournalReader
+        binding: ReplayBinding, writer: JournalWriter, reader: JournalReader
     ) -> Result[BookAdmissionContext]:
         from qmb.execution.fill import OrderType
         from qmf.core import (
@@ -296,10 +301,10 @@ class RecordedReplayFixture:
         return BookAdmissionContext.try_create(
             binding=binding,
             exit_logic_ref=_ok(ExitLogicRef.try_create("book.stop", {})),
-            exit_logic_module=_OffsetStop(),
+            exit_logic_module=OffsetStopFixture(),
             requested_r=_ok(ExactRational.try_create(1, 1, UnitKind.R_MULTIPLE)),
             r_unit_price=_ok(ExactRational.try_create(100, 1, UnitKind.RATE)),
-            value_factor=_ok(ValueFactor.try_create(20_000, 1, _instrument(), "USD")),
+            value_factor=_ok(ValueFactor.try_create(20_000, 1, study_fixture_instrument(), "USD")),
             money_scale=2,
             lot_step=_ok(Quantity.try_create(1, "lot", 0)),
             position_cap=_ok(Quantity.try_create(5, "lot", 0)),
@@ -315,7 +320,7 @@ class RecordedReplayFixture:
             },
             journal_writer=writer,
             journal_reader=reader,
-            rollover_calendar=_NeverRolloverCalendar(),
+            rollover_calendar=NeverRolloverCalendarFixture(),
             protective_stop_reason=stop_reason,
         )
 
@@ -332,7 +337,7 @@ class RecordedReplayFixture:
             )
         )
         result: dict[str, object] = {
-            **_defaults(),
+            **study_fixture_defaults(),
             STREAM_SET_KEY: ("primary",),
             COST_ADAPTER_KEY: COST_ADAPTER_PER_LOT,
             COST_CALIBRATION_KEY: commission,
@@ -347,9 +352,7 @@ class RecordedReplayFixture:
             SlippageCalibration.try_create(
                 slippage_adapter,
                 "replay-broker",
-                percent=_ok(
-                    ExactRational.try_create(1, 10_000, UnitKind.DIMENSIONLESS_RATIO)
-                ),
+                percent=_ok(ExactRational.try_create(1, 10_000, UnitKind.DIMENSIONLESS_RATIO)),
             )
         )
         result[SLIPPAGE_CALIBRATION_KEY] = slippage
@@ -363,15 +366,15 @@ def make_recorded_replay_fixture(
 ) -> RecordedReplayFixture:
     """Persist CT-10 and retain CT-12 pins for assignment-specific durable requests."""
     store_root = root / "ct10-room"
-    split, seal = _split()
+    split, seal = study_fixture_split()
     boundary = SourceObservationBoundary(EvidenceStore(store_root, seal=seal))
     observations: tuple[SourceObservation, ...] = (
-        _observation_at("bid", 0, _NS, 1_09500),
-        _observation_at("ask", 1, _NS, 1_09520),
-        _observation_at("bid", 2, _NS + 1, 1_09500),
-        _observation_at("ask", 3, _NS + 1, 1_09520),
-        _observation_at("bid", 4, _NS + 2, 1_09000),
-        _observation_at("ask", 5, _NS + 2, 1_09020),
+        _observation_at("bid", 0, STUDY_FIXTURE_EPOCH_NS, 1_09500),
+        _observation_at("ask", 1, STUDY_FIXTURE_EPOCH_NS, 1_09520),
+        _observation_at("bid", 2, STUDY_FIXTURE_EPOCH_NS + 1, 1_09500),
+        _observation_at("ask", 3, STUDY_FIXTURE_EPOCH_NS + 1, 1_09520),
+        _observation_at("bid", 4, STUDY_FIXTURE_EPOCH_NS + 2, 1_09000),
+        _observation_at("ask", 5, STUDY_FIXTURE_EPOCH_NS + 2, 1_09020),
     )
     refs = tuple(
         _ok(boundary.admit(observation)).archive.fingerprint.value for observation in observations
@@ -394,8 +397,8 @@ def make_recorded_replay_fixture(
     )
     source_tree = _entry_source_tree()
     declaration = _entry_bot_definition(source_tree)
-    bot_record = _record("bot-definition", declaration.body())
-    scope: BotStateScope = _scope(declaration)
+    bot_record = study_fixture_record("bot-definition", declaration.body())
+    scope: BotStateScope = study_fixture_scope(declaration)
     return RecordedReplayFixture(
         expected_split_fp1=split.fingerprint,
         split=split,

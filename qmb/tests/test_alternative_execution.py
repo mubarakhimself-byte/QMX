@@ -7,9 +7,10 @@ provider; the source observations and journal writes use real QMF persistence AP
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import pytest
 from qmb._refuse import invalid
@@ -161,6 +162,19 @@ def _split() -> tuple[SplitManifest, HoldoutSeal]:
     return manifest, _ok(HoldoutSeal.from_manifest(manifest, 18))
 
 
+def study_fixture_writer() -> WriterId:
+    """Public shared-fixture access to this module's canonical writer."""
+    return _writer()
+
+
+def study_fixture_split() -> tuple[SplitManifest, HoldoutSeal]:
+    """Public shared-fixture access to this module's persisted split contract."""
+    return _split()
+
+
+STUDY_FIXTURE_EPOCH_NS = _NS
+
+
 def _source(tmp_path: Path):
     boundary = SourceObservationBoundary(EvidenceStore(tmp_path / "ct10-room"))
     refs = tuple(
@@ -204,7 +218,9 @@ class _TestExactInterpreter:
         prior_position = request.prior_accounting_state.get("position_units")
         if not isinstance(prior_cash, int) or not isinstance(prior_position, int):
             return invalid("test_state", "the test accounting state contains exact integer units")
-        accepted = 0 < ask.verbatim <= risk["max_gross"]
+        max_gross = risk.get("max_gross")
+        assert isinstance(max_gross, int)
+        accepted = 0 < ask.verbatim <= max_gross
         next_state = {
             "cash_units": prior_cash - ask.verbatim if accepted else prior_cash,
             "position_units": prior_position + 1 if accepted else prior_position,
@@ -359,7 +375,20 @@ def test_atc_refuses_untyped_append_acknowledgments_without_attribute_errors(
 ) -> None:
     source = _source(tmp_path)
     journal, writer = _journal(tmp_path)
-    monkeypatch.setattr(writer, "record", lambda *args, **kwargs: Ok(ack))
+
+    def untyped_ack(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        outcome: object | None = None,
+        correlation_id: object | None = None,
+        display_time: object | None = None,
+    ) -> Result[JournalAppendReceipt]:
+        del event_type, payload, instant, outcome, correlation_id, display_time
+        return Ok(cast(JournalAppendReceipt, ack))
+
+    monkeypatch.setattr(writer, "record", untyped_ack)
     result = execute_alternative_run(
         _config_payload(),
         source,
@@ -384,8 +413,23 @@ def test_atc_refuses_false_physical_receipt_for_a_real_append(
     journal, writer = _journal(tmp_path)
     original_record = writer.record
 
-    def false_receipt(*args: object, **kwargs: object) -> Result[JournalAppendReceipt]:
-        actual = original_record(*args, **kwargs)
+    def false_receipt(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        outcome: object | None = None,
+        correlation_id: object | None = None,
+        display_time: object | None = None,
+    ) -> Result[JournalAppendReceipt]:
+        actual = original_record(
+            event_type,
+            payload,
+            instant=instant,
+            outcome=outcome,
+            correlation_id=correlation_id,
+            display_time=display_time,
+        )
         assert is_ok(actual)
         changes: dict[str, object] = {"fingerprint": _ok(fingerprint({"unrelated": "artifact"}))}
         if corrupt_metadata:
@@ -429,8 +473,23 @@ def test_atc_refuses_malformed_typed_event_acknowledgment(
     journal, writer = _journal(tmp_path)
     original_record = writer.record
 
-    def malformed_event(*args: object, **kwargs: object) -> Result[JournalAppendReceipt]:
-        actual = original_record(*args, **kwargs)
+    def malformed_event(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        outcome: object | None = None,
+        correlation_id: object | None = None,
+        display_time: object | None = None,
+    ) -> Result[JournalAppendReceipt]:
+        actual = original_record(
+            event_type,
+            payload,
+            instant=instant,
+            outcome=outcome,
+            correlation_id=correlation_id,
+            display_time=display_time,
+        )
         assert is_ok(actual)
         event = replace(actual.value.event, **{field: value})
         return Ok(replace(actual.value, event=event))

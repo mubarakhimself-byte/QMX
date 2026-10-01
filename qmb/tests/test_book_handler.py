@@ -240,6 +240,15 @@ class _RecordedRolloverCalendar:
         return Ok(False)
 
 
+def study_fixture_instrument() -> Instrument:
+    """Public shared-fixture access to the Book regression instrument."""
+    return _instrument()
+
+
+OffsetStopFixture = _OffsetStop
+NeverRolloverCalendarFixture = _NeverRolloverCalendar
+
+
 def _price(value: int) -> Price:
     return _ok(Price.try_create(value, _instrument(), 5))
 
