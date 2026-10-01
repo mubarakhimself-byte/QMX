@@ -41,3 +41,19 @@ spawn/socket use. Domain HTTP/storage/fingerprint restrictions remain enforced.
 QMN containment disclosure suite 9 PASS after restoring deferred GAP-0054 and
 compensating-control disclosures in latest-main security, QML and incident docs.
 This does not close GAP-0054 or security verification.
+
+Governing corpus correction: commit a14c1213 aligns the complete `_docwork` and
+`_bmad-output` roots to published main c3e8ec5, in addition to the `docs` root.
+The archived Sept-16 `query_hermes_sessions.py` then exposed four factory lint
+findings. Candidate repair removes an unused import, simplifies its guard,
+parameterizes search values and correctly escapes schema identifiers. Only a
+synthetic temporary SQLite database was opened for a positive ordinary-name
+control and an embedded-quote/SQL-text identifier control; both PASS. The
+referenced personal Hermes database was not accessed. Architecture prose and
+ratification status remain unchanged by this script repair.
+
+Intermediate current checks: `uv run --no-sync ruff check .` PASS;
+`uv run --no-sync pyright --pythonpath .venv/bin/python` PASS (0 diagnostics).
+Logs `/workspace/qmx-factory-lint-current.log` and
+`/workspace/qmx-root-types-current.log`. Concurrent implementation continues;
+these are not final same-candidate certification.
