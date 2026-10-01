@@ -14,7 +14,9 @@ QMB governed orchestration now records one terminal ledger row for completed or 
 
 The QML host adapter preserves typed CT-23 proposals on `RestingIntent.proposal`, and the runloop includes that typed proposal in its outcome identity. Unrecognized proposal objects are refused. It does not label a proposal Book-authorized or executable; Book admission is still required.
 
-The QMB replay materializer reads CT-10 archive receipts through `SourceObservationBoundary` and the QMF `EvidenceStore`, checks replay world, quote-side coordinates, correction status, and bitemporal frontiers, then builds as-of QML read surfaces. Nested payloads are immutable and stream selection is fingerprinted. It preserves CT-10 `ForeignMoney`; constructing execution `Price` values requires an explicit metadata identity whose fp1, CT-03 instrument, and exact source scale all match. A persisted local-fixture test drives a selected `HostedBot` callback through `qmb.run()` and observes its typed proposal.
+The QMB replay materializer reads CT-10 archive receipts through `SourceObservationBoundary` and the QMF `EvidenceStore`, checks replay world, quote-side coordinates, correction status, and bitemporal frontiers, then builds as-of QML read surfaces. Nested payloads are immutable and stream selection is fingerprinted. It preserves CT-10 `ForeignMoney`; constructing execution `Price` values requires explicit metadata whose fp1, CT-03 instrument, and exact source scale all match. CT-12 source admission now recomputes the manifest fingerprint and partitions source observations using both event and known-at times; the shared raw-content seal guard also includes `known_at_ns` so an event-only caller cannot understate a late arrival.
+
+QMB now has a durable content-addressed `ReplayInputRequest` envelope. It pins the CT-12 manifest identity/ref and role, explicit CT-10 archive receipt refs, source stream, full CT-03 price metadata identity, selected CT-33 declaration/source, canonical parameter assignment, and injected state scope. Resolution requires the registry-resolved typed `SplitManifest` and separately supplied expected CT-12 ref, reads the receipts from the configured QMF store, runs selected-source Layer-2 conformance, and constructs the `HostedBot`. A persisted local-fixture test exercises this full resolution path with nested extra metadata and a source manifest-bound factory.
 
 ## Verification
 
@@ -22,7 +24,11 @@ The QMB replay materializer reads CT-10 archive receipts through `SourceObservat
 
 `uv run --locked python -m pytest -q -p no:cacheprovider qmb/tests/test_ql7_host.py qmb/tests/test_sandbox.py qml/tests/test_layer2.py` — 52 passed with the proposal-preservation follow-up.
 
-`uv run --directory qmb pytest -q -p no:cacheprovider tests/test_replay_materializer.py tests/test_ql7_host.py tests/test_execution_ports.py tests/test_execution_composition.py` — 35 passed.
+`uv run --directory qmb pytest -q tests/test_ql7_host.py tests/test_replay_materializer.py` — 14 passed after durable request integration and again after deep-freeze and full metadata-identity fixes.
+
+`uv run --directory packages/qmf-data pytest -q tests/test_splits.py tests/test_seal.py tests/test_source_boundary.py` — 101 passed, including stale CT-12 fingerprint and event-before-seal/known-at-at-seal held-outs.
+
+Scoped Pyright and Ruff checks passed on `qmb/src/qmb/host/replay.py`, `qmb/src/qmb/host/replay_request.py`, their focused tests, and the changed QMF CT-12/source-seal modules/tests.
 
 `uv run ruff check qmb/src/qmb/host/replay.py qmb/src/qmb/host/adapter.py qmb/src/qmb/runloop/loop.py qmb/tests/test_replay_materializer.py qmb/tests/test_ql7_host.py` and targeted QMB Pyright on those modules/tests — passed.
 
@@ -32,4 +38,4 @@ Independent subprocess held-outs confirmed refusal for a manifest-bound throwing
 
 ## Remaining execution work
 
-The governed worker still needs a durable request envelope that resolves pinned registry fragments and a recorded QMF Parquet artifact into replay observations. The host adapter preserves Bot proposals, but has not yet converted them through the Book's CT-23 door into authorized resting orders. No completed run currently feeds actual CT-29 exits, net-of-fee closed trades, equity points, and journal events into CT-32. Those are the next implementation steps; this evidence does not mark packet02 economic execution closed.
+The request resolver currently stops after QML conformance and `HostedBot` construction. The governed child still needs to receive the request reference and resolve it against trusted CT-12/configuration artifacts. The Book handler now exists as a separate composition component, but the request resolver has not yet bound it to the runloop's per-slice paths. No completed governed run currently feeds CT-13-resolved CT-29 exits, net-of-fee closed trades, equity points, and journal events into CT-32 or records that economic result in its durable terminal ledger. ATC and optimization execution remain separate integration work; this evidence does not mark packet02 economic execution closed.
