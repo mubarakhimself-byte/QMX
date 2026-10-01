@@ -53,3 +53,15 @@ Governing specs:
 - Library: facade search + article detail (full text, generated summary, key points) from the daemon's Library.
 - Copilot: `psess:` mailbox history; tool-call records and result tables from the JobHandle; "Save to Library" via artifact staging.
 - Authoring: the graph from `get_editor_draft_head`; node settings/code from the draft; last results from the JobHandle of a published version.
+
+## New scope from the 2026-10-01 design pass (needs a ruling)
+
+Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc decision before backend work.
+
+- **Library article text**: serve full text plus figures for Knowledge items (today the demo reads the local MQL5 catalog via a dev-only Vite route behind `QMX_DEMO_MQL5_DIR`). Add a "key points" summary written by a small, cheap model on the daemon, never in the browser.
+- **Sources**: daemon-side feed subscriptions (RSS/APIs) for arXiv q-fin, alphaXiv, SSRN, MQL5; store kept items as Knowledge hits. The browser never fetches feeds. Forex Factory calendar remains the only _ruled_ source (DEC-0214, free only).
+- **News**: headline feed (free sources) with time, source, symbols, impact and tone; consumers are the News widget, node news windows (ruled), workflow triggers on topic/symbol, and copilot citations.
+- **Turn into hypothesis**: write a QML Stage 0 hypothesis citing a Knowledge item (`research_ref`).
+- **ML models**: there is no ML-model entity in the docs. The UI shows models with "slots" (entry signal, position sizing, MIS regime, risk throttle). Needs a decision on how a model artifact is registered and plugged into a slot.
+- **Entity detail**: per bot/model/app/workflow — evidence runs (CT-32 with run role), journal (CT-13), node/book connections and seat state, operations with input schemas (headless apps run from here), linked artifacts.
+- **Model and tool lists** for the composer and Settings come from the daemon's provider registry; the UI stores no keys.

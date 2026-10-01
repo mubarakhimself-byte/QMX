@@ -169,3 +169,85 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Long-form reading (Library articles). */
+.prose-qmx {
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+.prose-qmx h1,
+.prose-qmx h2,
+.prose-qmx h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  scroll-margin-top: 1rem;
+}
+.prose-qmx h2 {
+  font-size: 1.45rem;
+  margin: 2.2rem 0 0.8rem;
+}
+.prose-qmx h3 {
+  font-size: 1.15rem;
+  margin: 1.6rem 0 0.6rem;
+}
+.prose-qmx p,
+.prose-qmx ul,
+.prose-qmx ol,
+.prose-qmx table,
+.prose-qmx pre,
+.prose-qmx figure {
+  margin: 0 0 1rem;
+}
+.prose-qmx ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.prose-qmx ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+}
+.prose-qmx a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-qmx img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.5rem auto;
+  background: white;
+}
+.prose-qmx pre {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.prose-qmx code {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-size: 0.88em;
+}
+.prose-qmx :not(pre) > code {
+  background: var(--muted);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.35rem;
+}
+.prose-qmx table {
+  width: 100%;
+  font-size: 0.9rem;
+  border-collapse: collapse;
+}
+.prose-qmx th,
+.prose-qmx td {
+  border-top: 1px solid var(--border);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+.prose-qmx blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}

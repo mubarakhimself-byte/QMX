@@ -10,6 +10,16 @@
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import X from "@lucide/svelte/icons/x";
   import FileBox from "@lucide/svelte/icons/file-box";
+  import Rss from "@lucide/svelte/icons/rss";
+  import Newspaper from "@lucide/svelte/icons/newspaper";
+  import AppWindowMac from "@lucide/svelte/icons/app-window-mac";
+  import { SOURCES, FEED, HEADLINES, NEWS_CONSUMERS } from "$lib/demo/feeds";
+
+  /** Omarchy-style web app: the site gets its own window. */
+  function openWebApp(url: string, name: string) {
+    window.open(url, `qmx-webapp-${name}`, "popup,width=1280,height=860");
+  }
+  let feedKind = $state<string | null>(null);
   import * as Tabs from "$lib/components/ui/tabs";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
@@ -34,6 +44,8 @@
   // Hit kinds stay separate; each keeps its own actions (UI LIBRARY §5).
   const KINDS = [
     { id: "knowledge", label: "Knowledge", icon: BookOpen },
+    { id: "sources", label: "Sources", icon: Rss },
+    { id: "news", label: "News", icon: Newspaper },
     { id: "files", label: "Artifacts", icon: FileBox },
     { id: "artifact", label: "Bots & models", icon: Package },
     { id: "contribution", label: "Apps & workflows", icon: Blocks },
@@ -235,6 +247,156 @@
                 </li>
               {/each}
             </ul>
+          {:else if kind === "sources"}
+            <div class="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
+              <section aria-label="Sources" class="flex flex-col gap-2">
+                {#each SOURCES as src (src.id)}
+                  <div class="surface flex flex-col gap-2 rounded-lg p-3.5">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium">{src.name}</span>
+                      <span
+                        class="bg-muted ml-auto rounded-sm px-1.5 py-0.5 text-[11px]"
+                        >{src.kind}</span
+                      >
+                    </div>
+                    <p class="text-muted-foreground text-sm">{src.how}</p>
+                    <div class="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onclick={() => openWebApp(src.url, src.id)}
+                      >
+                        <AppWindowMac /> Open as web app
+                      </Button>
+                      <span
+                        class={cn(
+                          "ml-auto text-[11px]",
+                          src.status === "ruled"
+                            ? "text-success"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {src.status === "ruled"
+                          ? "Ruled source"
+                          : "Proposed · needs backend"}
+                      </span>
+                    </div>
+                  </div>
+                {/each}
+              </section>
+              <section
+                aria-label="Latest from your sources"
+                class="flex flex-col gap-2"
+              >
+                <div class="flex flex-wrap gap-1.5">
+                  {#each [null, "Papers", "Articles", "Calendar"] as k (k ?? "all")}
+                    <button
+                      type="button"
+                      class={chip(feedKind === k)}
+                      aria-pressed={feedKind === k}
+                      onclick={() => (feedKind = k)}>{k ?? "Everything"}</button
+                    >
+                  {/each}
+                </div>
+                <p class="text-muted-foreground text-xs">
+                  Sample items. The daemon fetches feeds and stores what you
+                  keep.
+                </p>
+                <ul class="flex flex-col gap-2">
+                  {#each FEED.filter((f) => !feedKind || f.kind === feedKind) as f (f.id)}
+                    <li class="surface flex items-start gap-3 rounded-lg p-3.5">
+                      <span class="min-w-0 flex-1">
+                        <span class="text-muted-foreground block text-xs"
+                          >{f.source} · {f.age}</span
+                        >
+                        <span class="block font-medium">{f.title}</span>
+                        <span class="mt-1 flex gap-1"
+                          >{#each f.tags as t (t)}<span
+                              class="bg-muted rounded-sm px-1.5 text-[11px]"
+                              >{t}</span
+                            >{/each}</span
+                        >
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onclick={() => workbench.addRef(f.title)}
+                        ><MessageSquarePlus /> Copilot</Button
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            </div>
+          {:else if kind === "news"}
+            <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+              <section
+                aria-label="Headlines"
+                class="surface overflow-hidden rounded-lg"
+              >
+                <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                  <span class="bg-destructive size-2 animate-pulse rounded-full"
+                  ></span>
+                  <span class="panel-label">Headlines · sample</span>
+                </div>
+                <ul>
+                  {#each HEADLINES as h (h.time + h.title)}
+                    <li
+                      class="hover:bg-muted/40 grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3 border-t px-4 py-3 first:border-t-0"
+                    >
+                      <span class="num text-muted-foreground text-sm"
+                        >{h.time}</span
+                      >
+                      <span class="min-w-0">
+                        <span class="block font-medium">{h.title}</span>
+                        <span
+                          class="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs"
+                        >
+                          {h.source}
+                          {#each h.symbols as sym (sym)}<span
+                              class="bg-muted text-foreground rounded-sm px-1.5"
+                              >{sym}</span
+                            >{/each}
+                          <span
+                            class={h.tone === "positive"
+                              ? "text-success"
+                              : h.tone === "negative"
+                                ? "text-destructive"
+                                : ""}
+                          >
+                            {h.tone === "positive"
+                              ? "▲"
+                              : h.tone === "negative"
+                                ? "▼"
+                                : "●"}
+                            {h.tone}
+                          </span>
+                        </span>
+                      </span>
+                      <span
+                        class={cn(
+                          "rounded-sm px-1.5 py-0.5 text-[10px] uppercase",
+                          h.impact === "high"
+                            ? "bg-destructive/15 text-destructive"
+                            : h.impact === "medium"
+                              ? "bg-warning/15 text-warning"
+                              : "bg-muted text-muted-foreground",
+                        )}>{h.impact}</span
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+              <aside class="flex flex-col gap-2">
+                <p class="panel-label">Where news goes</p>
+                {#each NEWS_CONSUMERS as c (c.name)}
+                  <div class="surface rounded-lg p-3.5">
+                    <p class="font-medium">{c.name}</p>
+                    <p class="text-muted-foreground text-sm">{c.what}</p>
+                  </div>
+                {/each}
+              </aside>
+            </div>
           {:else if kind === "files"}
             <div class="surface overflow-hidden rounded-lg">
               <table class="w-full text-sm">
@@ -312,7 +474,17 @@
               : ""}
           </p>
           <div class="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" onclick={() => workbench.addRef(open.title)}>
+            <Button
+              size="sm"
+              href={resolve("/library/article/[id]", { id: String(open.id) })}
+            >
+              <BookOpen /> Read
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => workbench.addRef(open.title)}
+            >
               <MessageSquarePlus /> Add to copilot
             </Button>
             <Button
