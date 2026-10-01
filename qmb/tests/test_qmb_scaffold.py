@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import tomllib
@@ -166,7 +167,7 @@ def test_library_has_no_module_global_mutable_state() -> None:
     assert violations == []
 
 
-def _same_scope_nodes(node: ast.AST):
+def _same_scope_nodes(node: ast.AST) -> Iterator[ast.AST]:
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
         return
     yield node
@@ -272,7 +273,9 @@ def _vocabulary_violations(source: str) -> list[str]:
                             isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name is not None
                         )
                     ):
-                        assigned.add(node.name)
+                        name = node.name
+                        if name is not None:
+                            assigned.add(name)
                     elif isinstance(node, ast.MatchMapping) and node.rest is not None:
                         assigned.add(node.rest)
                 old_narrowed = narrowed.copy()
