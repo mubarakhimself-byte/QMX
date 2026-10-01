@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import runpy
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from qma.core.operations import OperationDescriptor, public_operation_descriptors
 from qma.core.refusals import GrantInactive, GrantMismatch, GrantWidenRefused, ManifestIsNotGrant
@@ -23,15 +25,16 @@ from qma.daemon.sessions import (
     PRODUCT_SESSION_STORE_CLASS,
     PRODUCT_SESSION_TABLE,
     TOOL_REGISTRY_REWRITTEN,
-    BoundSessionGrant,
+    accepted_invocation_binding,
 )
 from qma.wire.invocation_envelope import (
+    BoundInvocation,
     ContributionRecord,
     InstanceRecord,
     PublicCallTransport,
     compute_input_hash,
 )
-from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
+from qmf.core import DataDrivenClock, Instant, fingerprint, is_ok, is_refusal
 
 _DAEMON_SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon"
 _SRC = _DAEMON_SRC / "sessions" / "product_session.py"
@@ -142,6 +145,32 @@ def _stores() -> tuple[
         {(descriptor.op_id, descriptor.version): descriptor},
         {(instance.instance_id, instance.config_revision): instance},
     )
+
+
+def _binding_for_call(
+    service: ProductSessionService, *, envelope: object | None = None
+) -> tuple[str, Mapping[str, object]]:
+    contributions, descriptors, instances = _stores()
+    bound = service.dispatch_public_call(
+        "psess:desk-1",
+        transport=PublicCallTransport.IN_PROCESS,
+        envelope=_envelope() if envelope is None else envelope,
+        payload=_INPUT,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+    )
+    assert is_ok(bound), bound
+    assert bound.value.invocation is not None
+    session = service.get("psess:desk-1")
+    assert is_ok(session), session
+    identity = accepted_invocation_binding(
+        bound.value.invocation,
+        session_context=session.value.context.to_payload(),
+    )
+    assert is_ok(identity), identity
+    return identity.value
 
 
 def _session() -> ProductSessionService:
@@ -280,10 +309,14 @@ def test_envelope_mismatch_is_grant_mismatch_before_execution() -> None:
 def test_revoke_and_expiry_refuse_new_dispatch_accepted_may_finish() -> None:
     service = _session()
     contributions, descriptors, instances = _stores()
+    binding_fp1, binding_body = _binding_for_call(service)
     accepted = service.accept_work(
         "psess:desk-1",
         grant_id="grant:1",
         logical_invocation_id="inv:1",
+        attempt_id=1,
+        binding_fp1=binding_fp1,
+        binding_body=binding_body,
         now=_NOW,
     )
     assert is_ok(accepted)
@@ -300,17 +333,53 @@ def test_revoke_and_expiry_refuse_new_dispatch_accepted_may_finish() -> None:
     minted_bytes = still.value.canonical_bytes()
     assert is_ok(minted_bytes)
     assert minted_bytes.value == service.ledger.minted_bytes("grant:1")
+    finished: list[object] = []
+
+    def continue_exact(bound: object) -> None:
+        assert isinstance(bound, BoundInvocation)
+        finished.append(bound)
+
     finish = service.dispatch_public_call(
         "psess:desk-1",
         transport=PublicCallTransport.IN_PROCESS,
-        envelope=_envelope(),
+        envelope=_envelope(attempt_id=2),
         payload=_INPUT,
         now=_NOW,
         contributions=contributions,
         descriptors=descriptors,
         instances=instances,
+        execute=continue_exact,
     )
     assert is_ok(finish)
+    assert len(finished) == 1
+    third_attempt_calls: list[object] = []
+    third = service.dispatch_public_call(
+        "psess:desk-1",
+        transport=PublicCallTransport.IN_PROCESS,
+        envelope=_envelope(attempt_id=3),
+        payload=_INPUT,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+        execute=third_attempt_calls.append,
+    )
+    assert is_ok(third)
+    assert len(third_attempt_calls) == 1
+    duplicate_third_calls: list[object] = []
+    duplicate_third = service.dispatch_public_call(
+        "psess:desk-1",
+        transport=PublicCallTransport.IN_PROCESS,
+        envelope=_envelope(attempt_id=3),
+        payload=_INPUT,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+        execute=duplicate_third_calls.append,
+    )
+    assert is_refusal(duplicate_third)
+    assert duplicate_third_calls == []
     new_dispatch = service.dispatch_public_call(
         "psess:desk-1",
         transport=PublicCallTransport.WIRE,
@@ -427,11 +496,15 @@ def test_grants_persist_beside_product_session_not_new_store(tmp_path: Path) -> 
         assert is_ok(service.mint(**_mint_kwargs()))
         granted = service.host_grant("psess:desk-1", **_grant_kwargs())
         assert is_ok(granted)
+        binding_fp1, binding_body = _binding_for_call(service)
         assert is_ok(
             service.accept_work(
                 "psess:desk-1",
                 grant_id="grant:1",
                 logical_invocation_id="inv:1",
+                attempt_id=1,
+                binding_fp1=binding_fp1,
+                binding_body=binding_body,
                 now=_NOW,
             )
         )
@@ -444,6 +517,9 @@ def test_grants_persist_beside_product_session_not_new_store(tmp_path: Path) -> 
                 revoked_at=_NOW,
             )
         )
+        journal.close()
+        substrate.close()
+        substrate, journal = _open(tmp_path)
         tables = {
             str(row[0])
             for row in substrate.sqlite.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -452,10 +528,32 @@ def test_grants_persist_beside_product_session_not_new_store(tmp_path: Path) -> 
         assert GRANT_RECORD_TABLE in tables
         assert GRANT_REVOCATION_TABLE in tables
         assert "grant_record_store" not in tables
-        rebound = ProductSessionService(sqlite=substrate.sqlite)
+        rebound = ProductSessionService(journal=journal, sqlite=substrate.sqlite)
+        resumed_retry = rebound.record_retry_attempt(
+            "psess:desk-1",
+            grant_id="grant:1",
+            logical_invocation_id="inv:1",
+            previous_attempt_id=1,
+            attempt_id=2,
+            binding_fp1=binding_fp1,
+            binding_body=binding_body,
+            now=_NOW,
+        )
+        assert is_ok(resumed_retry), resumed_retry
         restored = rebound.resolve_grant("psess:desk-1", "grant:1")
         assert is_ok(restored)
         assert restored.value.op_id == "qmb.analysis.project"
+        altered_retry = rebound.record_retry_attempt(
+            "psess:desk-1",
+            grant_id="grant:1",
+            logical_invocation_id="inv:1",
+            previous_attempt_id=2,
+            attempt_id=3,
+            binding_fp1="fp1:sha256:" + ("c" * 64),
+            binding_body=binding_body,
+            now=_NOW,
+        )
+        assert is_refusal(altered_retry)
         finish = rebound.dispatch_public_call(
             "psess:desk-1",
             transport=PublicCallTransport.IN_PROCESS,
@@ -463,8 +561,7 @@ def test_grants_persist_beside_product_session_not_new_store(tmp_path: Path) -> 
             payload=_INPUT,
             now=_NOW,
         )
-        assert is_ok(finish)
-        assert isinstance(finish.value, BoundSessionGrant)
+        assert is_refusal(finish)
         new_dispatch = rebound.dispatch_public_call(
             "psess:desk-1",
             transport=PublicCallTransport.CLI,
@@ -485,6 +582,92 @@ def test_grants_persist_beside_product_session_not_new_store(tmp_path: Path) -> 
     finally:
         journal.close()
         substrate.close()
+
+
+def test_accepted_public_work_refuses_recomputed_changed_payload() -> None:
+    service = _session()
+    binding_fp1, binding_body = _binding_for_call(service)
+    accepted = service.accept_work(
+        "psess:desk-1",
+        grant_id="grant:1",
+        logical_invocation_id="inv:1",
+        attempt_id=1,
+        binding_fp1=binding_fp1,
+        binding_body=binding_body,
+        now=_NOW,
+    )
+    assert is_ok(accepted)
+
+    contributions, descriptors, instances = _stores()
+    descriptor = _descriptor()
+    changed_payload = {"run_fp1": "run-2"}
+    changed_hash = compute_input_hash(changed_payload, descriptor=descriptor)
+    assert is_ok(changed_hash), changed_hash
+    changed_envelope = _envelope(
+        attempt_id=2,
+        input_hash=changed_hash.value,
+    )
+    executed: list[object] = []
+    changed = service.dispatch_public_call(
+        "psess:desk-1",
+        transport=PublicCallTransport.IN_PROCESS,
+        envelope=changed_envelope,
+        payload=changed_payload,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+        execute=executed.append,
+    )
+    assert is_refusal(changed)
+    assert executed == []
+    altered_body = dict(binding_body)
+    altered_envelope = dict(cast(Mapping[str, object], altered_body["envelope"]))
+    altered_envelope["input_hash"] = changed_hash.value
+    altered_body["envelope"] = altered_envelope
+    altered_body["validated_payload"] = changed_payload
+    altered_fp1 = fingerprint(altered_body)
+    assert is_ok(altered_fp1), altered_fp1
+    altered_retry = service.record_retry_attempt(
+        "psess:desk-1",
+        grant_id="grant:1",
+        logical_invocation_id="inv:1",
+        previous_attempt_id=1,
+        attempt_id=2,
+        binding_fp1=altered_fp1.value.value,
+        binding_body=altered_body,
+        now=_NOW,
+    )
+    assert is_refusal(altered_retry)
+
+
+def test_sqlite_only_accepted_row_cannot_authorize_continuation(tmp_path: Path) -> None:
+    substrate, journal = _open(tmp_path)
+    service = ProductSessionService(sqlite=substrate.sqlite)
+    assert is_ok(service.mint(**_mint_kwargs()))
+    assert is_ok(service.host_grant("psess:desk-1", **_grant_kwargs()))
+    assert service._grant_store is not None  # pyright: ignore[reportPrivateUsage]
+    service._grant_store.put_accepted(  # pyright: ignore[reportPrivateUsage]
+        logical_invocation_id="inv:1", grant_id="grant:1"
+    )
+    rebound = ProductSessionService(sqlite=substrate.sqlite)
+    contributions, descriptors, instances = _stores()
+    executed: list[object] = []
+    result = rebound.dispatch_public_call(
+        "psess:desk-1",
+        transport=PublicCallTransport.IN_PROCESS,
+        envelope=_envelope(attempt_id=2),
+        payload=_INPUT,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+        execute=executed.append,
+    )
+    assert is_refusal(result)
+    assert executed == []
+    journal.close()
+    substrate.close()
 
 
 def test_does_not_rewrite_tool_registry() -> None:

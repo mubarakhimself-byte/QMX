@@ -55,7 +55,7 @@ from qma.core.refusals.variants import (
     GrantWidenRefused,
     NestedGrantUnionRefused,
 )
-from qma.core.vocabulary.enums import PrincipalClass
+from qma.core.vocabulary.enums import GrantEvaluationMoment, PrincipalClass
 from qma.core.vocabulary.registry import VocabularyError, parse_closed
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.stores import StoreClass
@@ -107,6 +107,7 @@ from qma.wire.selected_ref import (
     parse_selected_ref,
     parse_selected_refs,
 )
+from qmf.core import Fingerprint, fingerprint
 from qmf.core.refusal import (
     Ok,
     RefusalCategory,
@@ -1253,6 +1254,155 @@ def parse_product_session(value: object) -> Result[ProductSession]:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _AcceptedInvocation:
+    """Durable public-call identity and most recent host attempt."""
+
+    grant_id: str
+    binding_fp1: str | None
+    attempt_id: int | None
+    binding_body: Mapping[str, object] | None
+
+
+def _identity_value(value: object) -> object:
+    """Copy the canonical non-null identity members."""
+    if isinstance(value, Mapping):
+        mapped = cast(Mapping[object, object], value)
+        return {
+            key: _identity_value(item)
+            for key, item in mapped.items()
+            if isinstance(key, str) and item is not None
+        }
+    if isinstance(value, (list, tuple)):
+        items = cast(Sequence[object], value)
+        return [_identity_value(item) for item in items]
+    return value
+
+
+def _freeze_identity(value: object) -> object:
+    if isinstance(value, Mapping):
+        mapped = cast(Mapping[str, object], value)
+        return MappingProxyType({key: _freeze_identity(item) for key, item in mapped.items()})
+    if isinstance(value, (list, tuple)):
+        items = cast(Sequence[object], value)
+        return tuple(_freeze_identity(item) for item in items)
+    return value
+
+
+def _identity_members_are_string_keyed(value: object) -> bool:
+    if isinstance(value, Mapping):
+        mapped = cast(Mapping[object, object], value)
+        return all(
+            isinstance(key, str) and _identity_members_are_string_keyed(item)
+            for key, item in mapped.items()
+        )
+    if isinstance(value, (list, tuple)):
+        items = cast(Sequence[object], value)
+        return all(_identity_members_are_string_keyed(item) for item in items)
+    return True
+
+
+def accepted_invocation_binding(
+    bound: object, *, session_context: object
+) -> Result[tuple[str, Mapping[str, object]]]:
+    """Build the immutable body used to bind acceptance and every retry."""
+    if type(bound) is not BoundInvocation:
+        return invalid_input(
+            "accepted_binding", "acceptance is derived from a validated invocation"
+        )
+    context = _identity_value(session_context)
+    if not isinstance(context, Mapping):
+        return invalid_input("accepted_binding", "acceptance includes the bound session context")
+    descriptor = _identity_value(bound.descriptor.to_payload())
+    envelope = dict(cast(Mapping[str, object], _identity_value(bound.envelope.to_payload())))
+    envelope.pop("attempt_id", None)
+    body: dict[str, object] = {
+        "class": "qma-accepted-public-invocation-v1",
+        "format_version": 1,
+        "session_context": dict(cast(Mapping[str, object], context)),
+        "descriptor": descriptor,
+        "envelope": envelope,
+        "grant": _identity_value(bound.grant.to_payload()),
+        "instance": {
+            "instance_id": bound.instance.instance_id,
+            "config_revision": bound.instance.config_revision,
+        },
+        "contribution": {
+            "qualified_id": bound.contribution.qualified_id,
+            "package_version": bound.contribution.package_version,
+            "availability": bound.contribution.availability,
+        },
+        "validated_payload": _identity_value(bound.validated_payload),
+    }
+    built = fingerprint(body)
+    if is_refusal(built):
+        return built
+    frozen = _freeze_identity(body)
+    if not isinstance(frozen, Mapping):
+        return invalid_input("accepted_binding", "accepted body is an immutable mapping")
+    return Ok((built.value.value, cast(Mapping[str, object], frozen)))
+
+
+def _checked_accepted_binding(
+    body: object, binding_fp1: object
+) -> Result[tuple[str, Mapping[str, object]]]:
+    if not isinstance(body, Mapping):
+        return invalid_input("accepted_binding", "durable acceptance carries its canonical body")
+    if not _identity_members_are_string_keyed(cast(object, body)):
+        return invalid_input(
+            "accepted_binding", "durable acceptance uses string-keyed identity maps"
+        )
+    mapped = cast(Mapping[str, object], body)
+    required = {
+        "class",
+        "format_version",
+        "session_context",
+        "descriptor",
+        "envelope",
+        "grant",
+        "instance",
+        "contribution",
+        "validated_payload",
+    }
+    if (
+        set(mapped) != required
+        or mapped.get("class") != "qma-accepted-public-invocation-v1"
+        or type(mapped.get("format_version")) is not int
+        or mapped.get("format_version") != 1
+        or any(
+            not isinstance(mapped.get(key), Mapping)
+            for key in (
+                "session_context",
+                "descriptor",
+                "envelope",
+                "grant",
+                "instance",
+                "contribution",
+                "validated_payload",
+            )
+        )
+    ):
+        return invalid_input("accepted_binding", "durable acceptance uses the supported body")
+    canonical = _identity_value(mapped)
+    if not isinstance(canonical, dict):
+        return invalid_input("accepted_binding", "durable acceptance body is canonical")
+    canonical_body = cast(dict[str, object], canonical)
+    built = fingerprint(canonical_body)
+    if is_refusal(built):
+        return built
+    parsed = Fingerprint.try_create(binding_fp1)
+    if is_refusal(parsed):
+        return parsed
+    if built.value != parsed.value:
+        return policy_rejection(
+            "binding_fp1", "accepted body reproduces the declared whole-invocation fingerprint"
+        )
+    frozen = _freeze_identity(canonical_body)
+    if not isinstance(frozen, Mapping):
+        return invalid_input("accepted_binding", "accepted body is an immutable mapping")
+    return Ok((built.value.value, cast(Mapping[str, object], frozen)))
+
+
 @dataclass
 class ProductSessionService:
     """Mint and query the product_session journal projection (Story 55.1).
@@ -1278,6 +1428,9 @@ class ProductSessionService:
     _sqlite_store: ProductSessionSqliteStore | None = field(default=None, init=False)
     _grant_store: GrantSqliteStore | None = field(default=None, init=False)
     _grants_hydrated: bool = field(default=False, init=False)
+    _accepted_invocations: dict[str, _AcceptedInvocation] = field(
+        default_factory=dict[str, _AcceptedInvocation], init=False
+    )
     _compacted_through: int = field(default=0, init=False)
     _restored_from_journal: bool = field(default=False, init=False)
 
@@ -1863,34 +2016,140 @@ class ProductSessionService:
     def _hydrate_grants(self) -> Result[None]:
         if self._grants_hydrated:
             return Ok(None)
-        self._grants_hydrated = True
         store = self._grant_store
-        if store is None or self.ledger.grants:
-            return Ok(None)
-        grants = store.list_grants()
-        if is_refusal(grants):
-            return grants
-        for record in grants.value:
-            imported = self.ledger.import_grant(record)
-            if is_refusal(imported):
-                return imported
-        revocations = store.list_revocations()
-        if is_refusal(revocations):
-            return revocations
-        for revocation in revocations.value:
-            imported_rev = self.ledger.import_revocation(revocation)
-            if is_refusal(imported_rev):
-                return imported_rev
-        accepted = store.list_accepted()
-        if is_refusal(accepted):
-            return accepted
-        for invocation, grant_id in accepted.value:
-            imported_acc = self.ledger.import_accepted(
-                grant_id=grant_id,
-                logical_invocation_id=invocation,
-            )
-            if is_refusal(imported_acc):
-                return imported_acc
+        if store is not None and not self.ledger.grants:
+            grants = store.list_grants()
+            if is_refusal(grants):
+                return grants
+            for record in grants.value:
+                imported = self.ledger.import_grant(record)
+                if is_refusal(imported):
+                    return imported
+            revocations = store.list_revocations()
+            if is_refusal(revocations):
+                return revocations
+            for revocation in revocations.value:
+                imported_rev = self.ledger.import_revocation(revocation)
+                if is_refusal(imported_rev):
+                    return imported_rev
+
+        accepted_by_store: dict[str, str] = {}
+        if store is not None:
+            accepted = store.list_accepted()
+            if is_refusal(accepted):
+                return accepted
+            for invocation, grant_id in accepted.value:
+                imported_acc = self.ledger.import_accepted(
+                    grant_id=grant_id,
+                    logical_invocation_id=invocation,
+                )
+                if is_refusal(imported_acc):
+                    return imported_acc
+                accepted_by_store[invocation] = grant_id
+
+        accepted_from_journal: dict[str, _AcceptedInvocation] = {}
+        if self.journal is not None:
+            events = self.journal.read_events()
+            if is_refusal(events):
+                return events
+            for event in events.value:
+                if event.event != PRODUCT_SESSION_GRANT_ACCEPTED_EVENT:
+                    continue
+                payload = event.payload
+                invocation = payload.get("logical_invocation_id")
+                grant_id = payload.get("grant_id")
+                if (
+                    not isinstance(invocation, str)
+                    or not invocation
+                    or not isinstance(grant_id, str)
+                    or not grant_id
+                ):
+                    return invalid_input(
+                        "grant_accepted",
+                        "accepted invocation journal row identifies a grant and invocation",
+                        journal_seq=event.journal_seq,
+                    )
+                attempt_raw = payload.get("attempt_id")
+                binding_raw = payload.get("binding_fp1")
+                binding_checked = _checked_accepted_binding(
+                    payload.get("binding_body"), binding_raw
+                )
+                binding = binding_checked.value if is_ok(binding_checked) else None
+                body_matches_event = False
+                if binding is not None:
+                    body_envelope = binding[1].get("envelope")
+                    envelope_mapping = (
+                        cast(Mapping[str, object], body_envelope)
+                        if isinstance(body_envelope, Mapping)
+                        else None
+                    )
+                    body_matches_event = (
+                        envelope_mapping is not None
+                        and envelope_mapping.get("logical_invocation_id") == invocation
+                        and envelope_mapping.get("grant_id") == grant_id
+                    )
+                previous = accepted_from_journal.get(invocation)
+                if (
+                    type(attempt_raw) is int
+                    and attempt_raw >= 1
+                    and binding is not None
+                    and body_matches_event
+                    and previous is None
+                    and attempt_raw == 1
+                ):
+                    accepted_from_journal[invocation] = _AcceptedInvocation(
+                        grant_id=grant_id,
+                        binding_fp1=binding[0],
+                        attempt_id=1,
+                        binding_body=binding[1],
+                    )
+                    imported = self.ledger.import_accepted(
+                        grant_id=grant_id,
+                        logical_invocation_id=invocation,
+                    )
+                    if is_refusal(imported):
+                        return imported
+                    continue
+                if (
+                    previous is not None
+                    and previous.binding_fp1 is not None
+                    and previous.attempt_id is not None
+                    and previous.grant_id == grant_id
+                    and type(attempt_raw) is int
+                    and attempt_raw == previous.attempt_id + 1
+                    and binding is not None
+                    and body_matches_event
+                    and binding[0] == previous.binding_fp1
+                    and binding[1] == previous.binding_body
+                ):
+                    accepted_from_journal[invocation] = _AcceptedInvocation(
+                        grant_id=grant_id,
+                        binding_fp1=previous.binding_fp1,
+                        attempt_id=attempt_raw,
+                        binding_body=previous.binding_body,
+                    )
+                    continue
+                # Legacy acceptance rows, missing predecessor rows, and any
+                # inconsistent chain remain accepted for grant completion but
+                # cannot authorize a host retry after restart.
+                accepted_from_journal[invocation] = _AcceptedInvocation(
+                    grant_id=grant_id,
+                    binding_fp1=None,
+                    attempt_id=None,
+                    binding_body=None,
+                )
+
+        for invocation, grant_id in accepted_by_store.items():
+            row = accepted_from_journal.get(invocation)
+            if row is None or row.grant_id != grant_id:
+                accepted_from_journal[invocation] = _AcceptedInvocation(
+                    grant_id=grant_id,
+                    binding_fp1=None,
+                    attempt_id=None,
+                    binding_body=None,
+                )
+        self._accepted_invocations = accepted_from_journal
+        self._grants_hydrated = True
         return Ok(None)
 
     def _append_event(
@@ -2016,9 +2275,7 @@ class ProductSessionService:
         session = loaded.value
         next_context_revision = session.context_revision
         if expected_context_revision is not None:
-            expected = _require_int(
-                "expected_revision", expected_context_revision, minimum=0
-            )
+            expected = _require_int("expected_revision", expected_context_revision, minimum=0)
             if is_refusal(expected):
                 return expected
             if expected.value != session.context_revision:
@@ -2103,10 +2360,53 @@ class ProductSessionService:
         *,
         grant_id: object,
         logical_invocation_id: object,
+        attempt_id: object,
+        binding_fp1: object,
+        binding_body: object,
         now: object,
         scope_path: object = (),
     ) -> Result[AcceptedGrantWork]:
         """Accept work under a live session grant. Later revoke does not unwind it."""
+        hydrated = self._hydrate_grants()
+        if is_refusal(hydrated):
+            return hydrated
+        attempt = _require_int("attempt_id", attempt_id, minimum=1)
+        if is_refusal(attempt):
+            return attempt
+        if attempt.value != 1:
+            return _invalid(
+                "attempt_id",
+                "a new public invocation starts at attempt 1; only the host retry loop "
+                "increments it",
+                attempt_id=attempt.value,
+            )
+        binding = _checked_accepted_binding(binding_body, binding_fp1)
+        if is_refusal(binding):
+            return binding
+        invocation = _require_str("logical_invocation_id", logical_invocation_id)
+        if is_refusal(invocation):
+            return invocation
+        body_envelope = binding.value[1].get("envelope")
+        envelope_mapping = (
+            cast(Mapping[str, object], body_envelope)
+            if isinstance(body_envelope, Mapping)
+            else None
+        )
+        if (
+            envelope_mapping is None
+            or envelope_mapping.get("logical_invocation_id") != invocation.value
+            or envelope_mapping.get("grant_id") != grant_id
+        ):
+            return policy_rejection(
+                "accepted_binding", "whole identity names the requested invocation and grant"
+            )
+        existing = self._accepted_invocations.get(invocation.value)
+        if existing is not None:
+            return policy_rejection(
+                "logical_invocation_id",
+                "an accepted public invocation cannot be submitted again as a new start",
+                logical_invocation_id=invocation.value,
+            )
         resolved = self.resolve_grant(product_session_id, grant_id)
         if is_refusal(resolved):
             return resolved
@@ -2121,6 +2421,9 @@ class ProductSessionService:
         stamped = self._append_event(
             PRODUCT_SESSION_GRANT_ACCEPTED_EVENT,
             {
+                "attempt_id": attempt.value,
+                "binding_body": cast(dict[str, object], _identity_value(binding.value[1])),
+                "binding_fp1": binding.value[0],
                 "grant_id": work.grant_id,
                 "logical_invocation_id": work.logical_invocation_id,
                 "moment": work.moment.value,
@@ -2129,11 +2432,111 @@ class ProductSessionService:
         )
         if is_refusal(stamped):
             return stamped
+        self._accepted_invocations[work.logical_invocation_id] = _AcceptedInvocation(
+            grant_id=work.grant_id,
+            binding_fp1=binding.value[0],
+            attempt_id=attempt.value,
+            binding_body=binding.value[1],
+        )
         if self._grant_store is not None:
             self._grant_store.put_accepted(
                 logical_invocation_id=work.logical_invocation_id,
                 grant_id=work.grant_id,
             )
+        return Ok(work)
+
+    def record_retry_attempt(
+        self,
+        product_session_id: object,
+        *,
+        grant_id: object,
+        logical_invocation_id: object,
+        previous_attempt_id: object,
+        attempt_id: object,
+        binding_fp1: object,
+        binding_body: object,
+        now: object,
+        scope_path: object = (),
+    ) -> Result[AcceptedGrantWork]:
+        """Record a subsequent attempt for work already accepted on this invocation."""
+        hydrated = self._hydrate_grants()
+        if is_refusal(hydrated):
+            return hydrated
+        previous = _require_int("previous_attempt_id", previous_attempt_id, minimum=1)
+        if is_refusal(previous):
+            return previous
+        attempt = _require_int("attempt_id", attempt_id, minimum=2)
+        if is_refusal(attempt):
+            return attempt
+        if attempt.value != previous.value + 1:
+            return _invalid(
+                "attempt_id",
+                "a host retry increments the previous attempt by exactly one",
+                previous_attempt_id=previous.value,
+                attempt_id=attempt.value,
+            )
+        binding = _checked_accepted_binding(binding_body, binding_fp1)
+        if is_refusal(binding):
+            return binding
+        invocation = _require_str("logical_invocation_id", logical_invocation_id)
+        if is_refusal(invocation):
+            return invocation
+        accepted_work = self._accepted_invocations.get(invocation.value)
+        if (
+            accepted_work is None
+            or accepted_work.binding_fp1 is None
+            or accepted_work.binding_body is None
+            or accepted_work.attempt_id != previous.value
+            or accepted_work.binding_fp1 != binding.value[0]
+            or accepted_work.binding_body != binding.value[1]
+            or accepted_work.grant_id != grant_id
+        ):
+            return policy_rejection(
+                "logical_invocation_id",
+                "host retry continues only the exact durably accepted invocation and next attempt",
+                logical_invocation_id=invocation.value,
+                expected_previous_attempt=(
+                    accepted_work.attempt_id if accepted_work is not None else None
+                ),
+            )
+        resolved = self.resolve_grant(product_session_id, grant_id)
+        if is_refusal(resolved):
+            return resolved
+        authorized = self.ledger.evaluate(
+            grant_id=resolved.value.grant_id,
+            moment=GrantEvaluationMoment.RETRY,
+            now=now,
+            logical_invocation_id=logical_invocation_id,
+        )
+        if is_refusal(authorized):
+            return authorized
+        if authorized.value.grant_id != resolved.value.grant_id:
+            return _invalid("grant_id", "retry attempt retains its originally accepted grant")
+        work = AcceptedGrantWork(
+            grant_id=resolved.value.grant_id,
+            logical_invocation_id=invocation.value,
+            moment=GrantEvaluationMoment.RETRY,
+        )
+        stamped = self._append_event(
+            PRODUCT_SESSION_GRANT_ACCEPTED_EVENT,
+            {
+                "attempt_id": attempt.value,
+                "binding_body": cast(dict[str, object], _identity_value(binding.value[1])),
+                "binding_fp1": binding.value[0],
+                "grant_id": work.grant_id,
+                "logical_invocation_id": work.logical_invocation_id,
+                "moment": work.moment.value,
+            },
+            scope_path=scope_path,
+        )
+        if is_refusal(stamped):
+            return stamped
+        self._accepted_invocations[work.logical_invocation_id] = _AcceptedInvocation(
+            grant_id=work.grant_id,
+            binding_fp1=binding.value[0],
+            attempt_id=attempt.value,
+            binding_body=binding.value[1],
+        )
         return Ok(work)
 
     def revoke_grant(
@@ -2363,7 +2766,7 @@ class ProductSessionService:
                 envelope=env,
                 payload=payload,
                 stores=stores,
-                execute=execute,
+                execute=None,
                 parent_permissions=parent_permissions,
                 parent_grants=caller_ops if nested_transport else None,
                 child_grants=session.granted_ops if nested_transport else None,
@@ -2372,6 +2775,64 @@ class ProductSessionService:
             if is_refusal(dispatched):
                 return dispatched
             invocation = dispatched.value
+            accepted_binding = accepted_invocation_binding(
+                invocation,
+                session_context=session.context.to_payload(),
+            )
+            if is_refusal(accepted_binding):
+                return accepted_binding
+            prior = self._accepted_invocations.get(env.logical_invocation_id)
+            if prior is None:
+                if env.attempt_id != 1:
+                    return policy_rejection(
+                        "attempt_id", "a new public invocation starts at attempt 1"
+                    )
+            elif (
+                prior.binding_body is None
+                or prior.binding_fp1 is None
+                or prior.grant_id != env.grant_id
+                or prior.binding_fp1 != accepted_binding.value[0]
+                or prior.binding_body != accepted_binding.value[1]
+            ):
+                return policy_rejection(
+                    "logical_invocation_id",
+                    "continued accepted work matches its complete durable invocation binding",
+                    logical_invocation_id=env.logical_invocation_id,
+                )
+            elif (
+                prior.attempt_id is None
+                or env.attempt_id != prior.attempt_id + 1
+                or env.effect_class.value not in {"none", "read"}
+            ):
+                return policy_rejection(
+                    "attempt_id",
+                    "accepted work continues only at the next host-owned read attempt",
+                    logical_invocation_id=env.logical_invocation_id,
+                    expected_attempt=(
+                        prior.attempt_id + 1 if prior.attempt_id is not None else None
+                    ),
+                )
+            if execute is not None:
+                if prior is not None:
+                    continued = self.record_retry_attempt(
+                        product_session_id,
+                        grant_id=env.grant_id,
+                        logical_invocation_id=env.logical_invocation_id,
+                        previous_attempt_id=cast(int, prior.attempt_id),
+                        attempt_id=env.attempt_id,
+                        binding_fp1=accepted_binding.value[0],
+                        binding_body=accepted_binding.value[1],
+                        now=now,
+                    )
+                    if is_refusal(continued):
+                        return continued
+                execute(invocation)
+        elif self._accepted_invocations.get(env.logical_invocation_id) is not None:
+            return policy_rejection(
+                "accepted_binding", "accepted continuation requires canonical validated stores"
+            )
+        elif env.attempt_id != 1:
+            return policy_rejection("attempt_id", "a new public invocation starts at attempt 1")
         return Ok(
             BoundSessionGrant(
                 grant=evaluated.value,

@@ -42,15 +42,18 @@ __all__ = [
     "ADMISSION_ARTIFACT_FORMAT_VERSION",
     "AdmissionArtifactRef",
     "PersistedSqsBaseline",
+    "SqsBaselineDerivationReceipt",
     "persist_shakedown_signature_page",
     "persist_sqs_baseline",
+    "persist_sqs_baseline_derivation",
     "read_admission_artifact",
+    "read_sqs_baseline_derivation_receipt",
 ]
 
 ADMISSION_ARTIFACT_FORMAT_VERSION: Final[int] = 1
 _ARTIFACT_ROW_CLASS: Final[str] = "qmn-admission-artifact-row-v1"
 _ARTIFACT_CLASSES: Final[frozenset[str]] = frozenset(
-    {"shakedown-signature-page", "sqs-baseline-artifact"}
+    {"shakedown-signature-page", "sqs-baseline-artifact", "sqs-baseline-derivation"}
 )
 
 
@@ -72,6 +75,23 @@ class PersistedSqsBaseline:
     artifact: SqsBaselineArtifact
     reference: AdmissionArtifactRef
     derivation_verified: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SqsBaselineDerivationReceipt:
+    """Durable fit recipe and provenance; this type alone is not fit verification."""
+
+    reference: AdmissionArtifactRef
+    baseline_reference: AdmissionArtifactRef
+    average_spread: PriceDelta
+    sample_count: int
+    session_id: str
+    statistic: str
+    rounding_policy: str
+    refit_series_id: str
+    refit_policy_fp: Fingerprint
+    session_occurrence_fp1s: tuple[Fingerprint, ...]
+    calendar_registration_fp1: Fingerprint
 
 
 def persist_shakedown_signature_page(
@@ -188,6 +208,114 @@ def persist_sqs_baseline(
     )
 
 
+def persist_sqs_baseline_derivation(
+    store: object,
+    *,
+    baseline_reference: object,
+    average_spread: object,
+    sample_count: object,
+    session_id: object,
+    statistic: object,
+    rounding_policy: object,
+    refit_series_id: object,
+    refit_policy_fp: object,
+    session_occurrence_fp1s: object,
+    calendar_registration_fp1: object,
+) -> Result[AdmissionArtifactRef]:
+    """Persist a private recipe/readback witness beside an unverified SQS input.
+
+    The witness is data, not authority to mark a baseline derived. Its checked
+    reader validates every field and a caller must recompute from reopened CT-10
+    facts and the pinned calendar before treating the fit as derived.
+    """
+    checked_reference = _revalidate_reference(baseline_reference)
+    if is_refusal(checked_reference):
+        return checked_reference
+    baseline_ref = checked_reference.value
+    if baseline_ref.artifact_class != "sqs-baseline-artifact":
+        return invalid("baseline_reference", "fit receipt cites an SQS input artifact")
+    baseline = read_sqs_baseline(store, baseline_ref)
+    if is_refusal(baseline):
+        return baseline
+    if type(average_spread) is not PriceDelta:
+        return invalid("average_spread", "fit receipt carries an exact PriceDelta")
+    checked_average = PriceDelta.try_create(
+        average_spread.value, average_spread.instrument, average_spread.scale
+    )
+    if is_refusal(checked_average):
+        return checked_average
+    if checked_average.value.instrument != baseline.value.artifact.key.instrument:
+        return policy("average_spread", "fit quantity uses the input baseline instrument")
+    if checked_average.value.as_fraction() != baseline.value.artifact.average_spread.as_fraction():
+        return policy("average_spread", "fit quantity equals the persisted baseline quantity")
+    if type(sample_count) is not int or sample_count <= 0:
+        return invalid("sample_count", "fit recipe records a positive exact sample count")
+    tokens: dict[str, str] = {}
+    for name, raw in (
+        ("session_id", session_id),
+        ("statistic", statistic),
+        ("rounding_policy", rounding_policy),
+        ("refit_series_id", refit_series_id),
+    ):
+        if type(raw) is not str or not raw.strip():
+            return invalid(name, "fit recipe uses explicit nonblank text")
+        tokens[name] = raw
+    if tokens["statistic"] not in {"mean", "median"}:
+        return unavailable("statistic", "fit receipt supports only the implemented mean/median")
+    if tokens["rounding_policy"] != "exact-decimal-no-rounding-v1":
+        return unavailable("rounding_policy", "fit receipt supports the implemented exact policy")
+    if baseline.value.artifact.statistic != (f"{tokens['statistic']}/{tokens['rounding_policy']}"):
+        return policy("statistic", "fit recipe matches the input artifact's declared statistic")
+    if baseline.value.artifact.refit_series_id != tokens["refit_series_id"]:
+        return policy("refit_series_id", "fit recipe matches the input artifact's refit series")
+    if type(refit_policy_fp) is not Fingerprint:
+        return invalid("refit_policy_fp", "fit recipe carries an official policy fingerprint")
+    checked_refit_fp = _coerce_fp(refit_policy_fp, "refit_policy_fp")
+    if is_refusal(checked_refit_fp):
+        return checked_refit_fp
+    if checked_refit_fp.value != baseline.value.artifact.refit_policy_fp:
+        return policy("refit_policy_fp", "fit recipe matches the input artifact's refit policy")
+    checked_calendar_fp = _coerce_fp(calendar_registration_fp1, "calendar_registration_fp1")
+    if is_refusal(checked_calendar_fp):
+        return checked_calendar_fp
+    if not isinstance(session_occurrence_fp1s, Sequence) or isinstance(
+        session_occurrence_fp1s, (str, bytes)
+    ):
+        return invalid("session_occurrence_fp1s", "fit receipt cites official window occurrences")
+    occurrences: list[Fingerprint] = []
+    for raw in cast(Sequence[object], session_occurrence_fp1s):
+        parsed = _coerce_fp(raw, "session_occurrence_fp1s")
+        if is_refusal(parsed):
+            return parsed
+        occurrences.append(parsed.value)
+    if not occurrences or len({item.value for item in occurrences}) != len(occurrences):
+        return invalid("session_occurrence_fp1s", "fit receipt has unique checked occurrences")
+    calendar_identity = baseline_ref.calendar_identity
+    if calendar_identity is None:
+        return invalid("baseline_reference", "fit receipt input cites its CT-02 identity")
+    body = {
+        "class": "qmn-sqs-derived-fit-v1",
+        "format_version": ADMISSION_ARTIFACT_FORMAT_VERSION,
+        "baseline_reference": _reference_body(baseline_ref),
+        "average_spread": checked_average.value.fp1_identity(),
+        "sample_count": sample_count,
+        "session_id": tokens["session_id"],
+        "statistic": tokens["statistic"],
+        "rounding_policy": tokens["rounding_policy"],
+        "refit_series_id": tokens["refit_series_id"],
+        "refit_policy_fp1": checked_refit_fp.value.value,
+        "session_occurrence_fp1s": [item.value for item in occurrences],
+        "calendar_registration_fp1": checked_calendar_fp.value.value,
+    }
+    return _persist_body(
+        store,
+        "sqs-baseline-derivation",
+        body,
+        baseline_ref.source_archive_fp1s,
+        calendar_identity,
+    )
+
+
 def read_admission_artifact(
     store: object,
     reference: object,
@@ -265,6 +393,17 @@ def read_admission_artifact(
                 "SQS body binds the typed baseline, calendar, source refs, "
                 "and declared conditioning",
             )
+    elif reference.artifact_class == "sqs-baseline-derivation":
+        receipt = _decode_sqs_baseline_derivation(store, row_body, reference)
+        if is_refusal(receipt):
+            return receipt
+        if (
+            receipt.value.baseline_reference.source_archive_fp1s != reference.source_archive_fp1s
+            or receipt.value.baseline_reference.calendar_identity != reference.calendar_identity
+        ):
+            return policy(
+                "derivation_lineage", "fit receipt repeats exact source and calendar refs"
+            )
     return Ok(row_body)
 
 
@@ -295,6 +434,199 @@ def read_sqs_baseline(
             derivation_verified=False,
         )
     )
+
+
+def read_sqs_baseline_derivation_receipt(
+    store: object,
+    reference: object,
+) -> Result[SqsBaselineDerivationReceipt]:
+    """Reopen the durable fit recipe while leaving physical-fit proof to its verifier."""
+    checked_reference = _revalidate_reference(reference)
+    if is_refusal(checked_reference):
+        return checked_reference
+    if checked_reference.value.artifact_class != "sqs-baseline-derivation":
+        return invalid("reference", "fit reader receives a durable derivation receipt")
+    body = read_admission_artifact(store, checked_reference.value)
+    if is_refusal(body):
+        return body
+    return _decode_sqs_baseline_derivation(store, body.value, checked_reference.value)
+
+
+def _decode_sqs_baseline_derivation(
+    store: object,
+    body: Mapping[str, object],
+    reference: AdmissionArtifactRef,
+) -> Result[SqsBaselineDerivationReceipt]:
+    required = {
+        "class",
+        "format_version",
+        "baseline_reference",
+        "average_spread",
+        "sample_count",
+        "session_id",
+        "statistic",
+        "rounding_policy",
+        "refit_series_id",
+        "refit_policy_fp1",
+        "session_occurrence_fp1s",
+        "calendar_registration_fp1",
+    }
+    if (
+        set(body) != required
+        or body.get("class") != "qmn-sqs-derived-fit-v1"
+        or type(body.get("format_version")) is not int
+        or body.get("format_version") != ADMISSION_ARTIFACT_FORMAT_VERSION
+    ):
+        return invalid("derivation", "private SQS fit receipt has its exact versioned fields")
+    baseline_ref = _decode_reference_body(body.get("baseline_reference"))
+    if is_refusal(baseline_ref):
+        return baseline_ref
+    if baseline_ref.value.artifact_class != "sqs-baseline-artifact":
+        return invalid("baseline_reference", "derived-fit receipt cites its input baseline")
+    baseline = read_sqs_baseline(store, baseline_ref.value)
+    if is_refusal(baseline):
+        return baseline
+    if (
+        reference.artifact_class != "sqs-baseline-derivation"
+        or reference.source_archive_fp1s != baseline_ref.value.source_archive_fp1s
+        or reference.calendar_identity != baseline_ref.value.calendar_identity
+    ):
+        return policy("derivation_lineage", "receipt reference matches nested input lineage")
+    raw_count = body.get("sample_count")
+    if type(raw_count) is not int or raw_count <= 0:
+        return invalid("sample_count", "fit receipt has a positive exact sample count")
+    tokens: dict[str, str] = {}
+    for name in ("session_id", "statistic", "rounding_policy", "refit_series_id"):
+        raw = body.get(name)
+        if type(raw) is not str or not raw.strip():
+            return invalid(name, "fit receipt carries an explicit nonblank token")
+        tokens[name] = raw
+    if tokens["statistic"] not in {"mean", "median"}:
+        return unavailable("statistic", "fit receipt statistic is not implemented")
+    if tokens["rounding_policy"] != "exact-decimal-no-rounding-v1":
+        return unavailable("rounding_policy", "fit receipt rounding policy is not implemented")
+    artifact = baseline.value.artifact
+    if artifact.statistic != f"{tokens['statistic']}/{tokens['rounding_policy']}":
+        return policy("statistic", "fit receipt matches the input's declared statistic")
+    if artifact.refit_series_id != tokens["refit_series_id"]:
+        return policy("refit_series_id", "fit receipt matches the input's refit-series identity")
+    refit_fp = _coerce_fp(body.get("refit_policy_fp1"), "refit_policy_fp1")
+    if is_refusal(refit_fp):
+        return refit_fp
+    if refit_fp.value != artifact.refit_policy_fp:
+        return policy("refit_policy_fp1", "fit receipt matches the input refit policy")
+    registration_fp = _coerce_fp(body.get("calendar_registration_fp1"), "calendar_registration_fp1")
+    if is_refusal(registration_fp):
+        return registration_fp
+    occurrence_raw = body.get("session_occurrence_fp1s")
+    if not isinstance(occurrence_raw, list):
+        return invalid("session_occurrence_fp1s", "fit receipt has occurrence fingerprints")
+    occurrences: list[Fingerprint] = []
+    for raw in cast(list[object], occurrence_raw):
+        parsed = _coerce_fp(raw, "session_occurrence_fp1s")
+        if is_refusal(parsed):
+            return parsed
+        occurrences.append(parsed.value)
+    if not occurrences or len({item.value for item in occurrences}) != len(occurrences):
+        return invalid("session_occurrence_fp1s", "fit receipt occurrences are unique and nonempty")
+    if [item.value for item in occurrences] != sorted(item.value for item in occurrences):
+        return invalid("session_occurrence_fp1s", "fit receipt occurrences have canonical order")
+    expected_session_identity = canonical_bytes(
+        {
+            "class": "qmn-sqs-session-conditioning-v1",
+            "session_id": tokens["session_id"],
+            "calendar_registration_fp1": registration_fp.value.value,
+        }
+    )
+    if is_refusal(expected_session_identity):
+        return expected_session_identity
+    if artifact.session_window_id != expected_session_identity.value.decode("utf-8"):
+        return policy("session_id", "fit receipt matches the input's stable session conditioning")
+    average_body = body.get("average_spread")
+    if not isinstance(average_body, Mapping):
+        return invalid("average_spread", "fit receipt carries exact PriceDelta identity content")
+    average_map = cast(Mapping[str, object], average_body)
+    average = _decode_price_delta(average_map, artifact.key.instrument)
+    if is_refusal(average):
+        return average
+    if dict(average.value.fp1_identity()) != dict(average_map):
+        return invalid("average_spread", "fit receipt carries canonical PriceDelta content")
+    if average.value.as_fraction() != artifact.average_spread.as_fraction():
+        return policy("average_spread", "fit receipt and input preserve the same exact quantity")
+    return Ok(
+        SqsBaselineDerivationReceipt(
+            reference=reference,
+            baseline_reference=baseline_ref.value,
+            average_spread=average.value,
+            sample_count=raw_count,
+            session_id=tokens["session_id"],
+            statistic=tokens["statistic"],
+            rounding_policy=tokens["rounding_policy"],
+            refit_series_id=tokens["refit_series_id"],
+            refit_policy_fp=refit_fp.value,
+            session_occurrence_fp1s=tuple(occurrences),
+            calendar_registration_fp1=registration_fp.value,
+        )
+    )
+
+
+def _decode_reference_body(value: object) -> Result[AdmissionArtifactRef]:
+    required = {
+        "artifact_class",
+        "artifact_fp1",
+        "archive_fp1",
+        "source_archive_fp1s",
+        "calendar_identity",
+    }
+    if not isinstance(value, Mapping):
+        return invalid("baseline_reference", "nested CT-11 reference has exact typed fields")
+    raw_body = cast(Mapping[object, object], value)
+    if set(raw_body) != required:
+        return invalid("baseline_reference", "nested CT-11 reference has exact typed fields")
+    body = cast(Mapping[str, object], value)
+    kind = body.get("artifact_class")
+    if type(kind) is not str:
+        return invalid("artifact_class", "nested reference class is text")
+    artifact_fp = _coerce_fp(body.get("artifact_fp1"), "artifact_fp1")
+    archive_fp = _coerce_fp(body.get("archive_fp1"), "archive_fp1")
+    if is_refusal(artifact_fp):
+        return artifact_fp
+    if is_refusal(archive_fp):
+        return archive_fp
+    raw_sources = body.get("source_archive_fp1s")
+    if not isinstance(raw_sources, list):
+        return invalid("source_archive_fp1s", "nested reference has stored source refs")
+    sources: list[Fingerprint] = []
+    for raw in cast(list[object], raw_sources):
+        parsed = _coerce_fp(raw, "source_archive_fp1s")
+        if is_refusal(parsed):
+            return parsed
+        sources.append(parsed.value)
+    calendar = body.get("calendar_identity")
+    if not isinstance(calendar, Mapping):
+        return invalid("calendar_identity", "nested baseline reference pins CT-02 identity")
+    checked_calendar = _revalidate_calendar(cast(Mapping[str, object], calendar))
+    if is_refusal(checked_calendar):
+        return checked_calendar
+    return _revalidate_reference(
+        AdmissionArtifactRef(
+            artifact_class=kind,
+            artifact_fp1=artifact_fp.value,
+            archive_fp1=archive_fp.value,
+            source_archive_fp1s=tuple(sources),
+            calendar_identity=checked_calendar.value,
+        )
+    )
+
+
+def _reference_body(reference: AdmissionArtifactRef) -> Mapping[str, object]:
+    return {
+        "artifact_class": reference.artifact_class,
+        "artifact_fp1": reference.artifact_fp1.value,
+        "archive_fp1": reference.archive_fp1.value,
+        "source_archive_fp1s": [item.value for item in reference.source_archive_fp1s],
+        "calendar_identity": dict(reference.calendar_identity or {}),
+    }
 
 
 def _persist_body(
@@ -653,7 +985,7 @@ def _revalidate_reference(value: object) -> Result[AdmissionArtifactRef]:
         if is_refusal(checked_calendar):
             return checked_calendar
         calendar = checked_calendar.value
-    if ref.artifact_class == "sqs-baseline-artifact":
+    if ref.artifact_class in {"sqs-baseline-artifact", "sqs-baseline-derivation"}:
         if not source_refs or calendar is None:
             return invalid("reference", "SQS receipt carries quote-source and calendar lineage")
     elif source_refs or calendar is not None:

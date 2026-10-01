@@ -42,3 +42,30 @@ b02e47c1259d07bcd3dead015a828427dbfe4600a2552db44d960c7cacd53623 test_two_regist
 27345d29b147435eb7e56d6c6c1d94ec5a72385ece4d17dfd0edfa2ba3e96b86 two_registered_bots_recovery.b02e47.notes.json
 54e4343fde58cf10ddb8cffdce85828ba22fdc4b92b9249b407fa6549104c7c6 SHA256.json (archive snapshot)
 ```
+
+## Corrected frozen test re-review — bounded PASS, 2026-10-01
+
+The owner explicitly froze `qmb/tests/test_two_registered_bots_recovery.py` SHA256 `16242094f8458f1f2097d4903f08ce576e42da299bc807de66c45c1ec6c4202d`. It matched review entry and completion. The earlier `b02e47…` negative-proof FAIL remains historical evidence; this verdict covers the corrected bytes only. No product/test edits, commits, new probes, provider or security activity.
+
+**Negative census correction PASS.** The negative flow now opens the actual RegistryPersistence before the rejected registration and reads its official `backup_export()` before and after. Each physical registry-room export has `record_count == 0`. The real `Registrar.stable_ids()` is also empty after missing-ticket refusal. The misleading semantic Bot-fingerprint lookup was removed. `backup_export` reads exact stored records through the world-scoped CT-26 backup-input boundary, so these assertions inspect actual physical record contents rather than an unrelated key miss. The genuine positive still writes and physically reopens six official CT-06 registrations under their real stable ids, providing the functioning persistence control.
+
+**Cross-Bot callback boundary PASS.** Each target factory is still loaded from its actual source manifest. A counting wrapper delegates its real `construct` method and counts calls; both cross-Bot restore attempts refuse with `construct_calls == 0`. This confirms refusal precedes bot construction, while the unchanged positive exercises those actual source factories for nonempty traces and successful continuation. It does not claim no import/module-loading effects: loading the module intentionally occurs before the restore call.
+
+A diff against the archived held `b02e47…` file shows only the constructor wrapper/Protocol and real registrar/export census correction. The source-bound positive remains unchanged: distinct actual declared sources, real sandbox/gate candidates, official registration, semantic-vs-CT-06 identity reconstruction, fresh registry read, source-loaded factories and JSON snapshot continuation.
+
+Exact validation from `/workspace/QMX-release`:
+
+```text
+uv run --no-sync pytest -q -p no:cacheprovider qmb/tests/test_two_registered_bots_recovery.py
+2 passed in 2.51s
+```
+
+This is **bounded test journey PASS**. Candidate/source equality is still asserted by the fixture; the low-level product accepts a trusted Boolean ConformanceTicket. The test does not prove a production candidate-bound registration ingress or unforgeable ticket, nor normal second-QMA-pack/publisher/occupancy behavior, factory coverage compliance, installed/provider/cross-OS execution, complete security or release acceptance. Those limits survive the correction.
+
+Archived original/corrected bytes and argv/result binding:
+
+```text
+16242094f8458f1f2097d4903f08ce576e42da299bc807de66c45c1ec6c4202d test_two_registered_bots_recovery.162420-held.py
+ea86146139cee2f917cedee54f69202828b5814da8c3476441d658f833c6bfb2 two_registered_bots_recovery.162420.notes.json
+7f6d420c4072c51b55b383e70b0c8b98187e80e9a70feeb7304091bd76ed9839 SHA256.json (archive snapshot)
+```

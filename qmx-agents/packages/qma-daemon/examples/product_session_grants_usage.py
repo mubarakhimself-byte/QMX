@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from qma.core.operations import public_operation_descriptors
 from qma.core.refusals import GrantInactive, GrantMismatch, GrantWidenRefused, ManifestIsNotGrant
 from qma.daemon.sessions import (
     GRANT_SIXTH_STORE_MINTED,
     TOOL_REGISTRY_REWRITTEN,
     ProductSessionService,
+    accepted_invocation_binding,
 )
+from qma.wire.invocation_envelope import ContributionRecord, InstanceRecord, compute_input_hash
 from qmf.core import is_ok, is_refusal
 
 _NOW = "2026-09-20T00:00:00Z"
@@ -89,11 +92,63 @@ def main() -> None:
     widened = service.apply_upgrade("psess:desk-1", "grant:1", instance_id="inst:2")
     assert isinstance(widened, GrantWidenRefused)
 
+    descriptor = next(
+        item
+        for item in public_operation_descriptors()
+        if item.op_id == "qmb.analysis.project" and item.version == 1
+    )
+    contribution_record = ContributionRecord(
+        qualified_id=_CONTRIBUTION["qualified_id"],
+        package_version=_CONTRIBUTION["package_version"],
+        availability="enabled",
+    )
+    instance_record = InstanceRecord(instance_id="inst:1", config_revision=4)
+    input_payload = {"run_fp1": "run-1"}
+    input_hash = compute_input_hash(input_payload, descriptor=descriptor)
+    assert is_ok(input_hash), input_hash
+    bound = service.dispatch_public_call(
+        "psess:desk-1",
+        transport="in-process",
+        envelope={
+            "logical_invocation_id": "inv:ok",
+            "attempt_id": 1,
+            "op_id": "qmb.analysis.project",
+            "op_version": 1,
+            "contribution": dict(_CONTRIBUTION),
+            "instance_id": "inst:1",
+            "config_revision": 4,
+            "grant_id": "grant:1",
+            "effect_class": "read",
+            "idempotency_key": "idem:ok",
+            "reconcile_policy": "query-then-decide",
+            "input_hash": input_hash.value,
+            "call_depth": 0,
+            "caller_kind": "user",
+            "caller_session_ref": "psess:desk-1",
+        },
+        payload=input_payload,
+        now=_NOW,
+        contributions={contribution_record.as_tuple(): contribution_record},
+        descriptors={(descriptor.op_id, descriptor.version): descriptor},
+        instances={(instance_record.instance_id, instance_record.config_revision): instance_record},
+    )
+    assert is_ok(bound), bound
+    assert bound.value.invocation is not None
+    session = service.get("psess:desk-1")
+    assert is_ok(session), session
+    binding = accepted_invocation_binding(
+        bound.value.invocation,
+        session_context=session.value.context.to_payload(),
+    )
+    assert is_ok(binding), binding
     assert is_ok(
         service.accept_work(
             "psess:desk-1",
             grant_id="grant:1",
             logical_invocation_id="inv:ok",
+            attempt_id=1,
+            binding_fp1=binding.value[0],
+            binding_body=binding.value[1],
             now=_NOW,
         )
     )

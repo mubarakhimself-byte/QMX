@@ -629,6 +629,7 @@ class BacktestingService:
         environment_ref: str,
         experiment_spec_fp1: str,
         evidence_ref: str,
+        command: object | None = None,
     ) -> Result[Mapping[str, object] | None]:
         """Resolve the operator runtime before acceptance or job-side effects."""
         if self._experiments is None:
@@ -658,6 +659,7 @@ class BacktestingService:
         invocation = build_qmb_door_invocation(
             request.value,
             job_id=_job_id_for(request.value),
+            command=command,
             split_manifest_fp1=resolved.value.spec.data_ref,
             attempt_id=attempt_id,
         )
@@ -731,10 +733,20 @@ class BacktestingService:
                 environment_ref=request.environment_ref,
                 experiment_spec_fp1=request.experiment_spec_fp1,
                 evidence_ref=request.evidence_ref,
+                command=command,
             )
             if is_refusal(runtime_preflight):
                 return runtime_preflight
             prepared_runtime = runtime_preflight.value
+            if (
+                command == "optimize.run"
+                and prepared_runtime is None
+                and getattr(self._transport, "production", False) is True
+            ):
+                return invalid_input(
+                    "qmb_preflight",
+                    "registered optimize.run requires a typed alternative Study preflight",
+                )
             validated = self._experiments.validate_coordinated_run(
                 spec_fp1=request.experiment_spec_fp1,
                 dispatch_lease=dispatch_lease,
@@ -815,11 +827,25 @@ class BacktestingService:
             expected_result["operator_descriptor_fp1"] = prepared_runtime.get(
                 "operator_descriptor_fp1"
             )
-            expected_result["class"] = (
-                "qmb-recorded-replay-result-v1"
-                if prepared_runtime.get("mints_ct32") is True
-                else "qmb-alternative-result-v1"
-            )
+            expected_result["composition_class"] = prepared_runtime.get("composition_class")
+            composition = prepared_runtime.get("composition_class")
+            if composition == "book":
+                expected_result["class"] = "qmb-recorded-replay-result-v1"
+            elif composition == "alternative":
+                expected_result["class"] = "qmb-alternative-result-v1"
+            elif composition == "alternative-study":
+                expected_result["class"] = "qmb-operator-alternative-study-result-v1"
+                for field_name in (
+                    "study_fp1",
+                    "operational_fp1",
+                    "generation_count",
+                    "batch_size",
+                ):
+                    expected_result[field_name] = prepared_runtime[field_name]
+            else:
+                return invalid_input(
+                    "composition_class", "trusted preflight selects one known QMB composition"
+                )
         placed_handle = minted.value
         self._expected_terminal_results[minted.value.job_id] = MappingProxyType(expected_result)
         if prepared_runtime is not None and self._experiments is not None:
@@ -973,8 +999,22 @@ class BacktestingService:
     def _validate_terminal_payload(
         self, payload: Mapping[str, object], expected: Mapping[str, object]
     ) -> Result[Mapping[str, object]]:
+        study_result = expected.get("class") == "qmb-operator-alternative-study-result-v1"
         for field_name, field_value in expected.items():
-            if field_name in {"mints_ct32", "operator_descriptor_fp1"}:
+            if field_name in {"mints_ct32", "operator_descriptor_fp1"} or (
+                study_result
+                and field_name
+                in {
+                    "job_id",
+                    "attempt_id",
+                    "experiment_spec_fp1",
+                    "evidence_ref",
+                    "split_manifest_fp1",
+                    "composition_class",
+                    "generation_count",
+                    "batch_size",
+                }
+            ):
                 continue
             actual = payload.get(field_name)
             if type(actual) is not type(field_value) or actual != field_value:
@@ -991,12 +1031,14 @@ class BacktestingService:
             if expected_mode is False
             else None
         )
+        if expected.get("composition_class") == "alternative-study":
+            expected_class = "qmb-operator-alternative-study-result-v1"
         if payload.get("class") != expected_class:
             return policy_rejection(
                 "qmb_terminal_result", "durable result class matches the trusted preflight mode"
             )
         descriptor_fp = expected.get("operator_descriptor_fp1")
-        if isinstance(descriptor_fp, str):
+        if isinstance(descriptor_fp, str) and not study_result:
             result_binding = payload.get("operator_binding")
             result_descriptor = (
                 cast(Mapping[str, object], result_binding).get("runtime_descriptor_fp1")
@@ -1021,6 +1063,12 @@ class BacktestingService:
                 "final_accounting_state_fp1",
             )
             if expected_class == "qmb-alternative-result-v1"
+            else (
+                "study_fp1",
+                "operational_fp1",
+                "occurrence_event_fp1",
+            )
+            if expected_class == "qmb-operator-alternative-study-result-v1"
             else ("ct32_fp1", "run_fp1", "terminal_line_fp1")
         )
         for field_name in fingerprint_fields:
@@ -1033,8 +1081,43 @@ class BacktestingService:
             ):
                 return invalid_input(
                     field_name,
-                    "durable QMB completion carries canonical CT-32, run, and terminal "
-                    "fingerprints",
+                    "durable QMB completion carries its canonical composition fingerprints",
+                )
+        if expected_class == "qmb-operator-alternative-study-result-v1":
+            history = payload.get("generation_run")
+            artifacts = payload.get("terminal_artifact_fp1s")
+            if not isinstance(history, Mapping) or not isinstance(artifacts, (list, tuple)):
+                return invalid_input(
+                    "generation_run", "durable Study result carries history and terminals"
+                )
+            history_row = cast(Mapping[str, object], history)
+            generation_count = expected.get("generation_count")
+            batch_size = expected.get("batch_size")
+            generations = history_row.get("completed_generations")
+            generation_list = cast(Sequence[object], generations)
+            artifact_list = cast(Sequence[object], artifacts)
+            if (
+                type(generation_count) is not int
+                or type(batch_size) is not int
+                or type(history_row.get("generation_count")) is not int
+                or history_row.get("generation_count") != generation_count
+                or not isinstance(generations, (list, tuple))
+                or len(generation_list) != generation_count
+                or len(artifact_list) != generation_count * batch_size
+                or history_row.get("study_fp") != expected.get("study_fp1")
+            ):
+                return policy_rejection(
+                    "generation_run", "Study completion covers the entire pinned budget"
+                )
+            if any(
+                not isinstance(item, str)
+                or len(item) != 75
+                or not item.startswith("fp1:sha256:")
+                or any(char not in "0123456789abcdef" for char in item[11:])
+                for item in artifact_list
+            ):
+                return invalid_input(
+                    "terminal_artifact_fp1s", "Study terminal references are canonical fp1 values"
                 )
         return Ok(payload)
 

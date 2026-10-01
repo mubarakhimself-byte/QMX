@@ -273,7 +273,7 @@ def _runtime_preflight(
         raw = json.loads(completed.stdout, object_pairs_hook=_unique_json_object)
     except ValueError, TypeError:
         return invalid_input("qmb_preflight", "QMB preflight returns one JSON object")
-    expected_keys = {
+    base_keys = {
         "class",
         "format_version",
         "job_id",
@@ -290,6 +290,18 @@ def _runtime_preflight(
     if not isinstance(raw, Mapping):
         return invalid_input("qmb_preflight", "QMB preflight uses the exact result schema")
     result = cast(Mapping[str, object], raw)
+    composition = result.get("composition_class")
+    if not isinstance(composition, str):
+        return invalid_input("qmb_preflight", "QMB composition class is supported text")
+    study_keys: set[str] = {
+        "study_fp1",
+        "operational_fp1",
+        "generation_count",
+        "batch_size",
+    }
+    expected_keys: set[str] = base_keys | (
+        study_keys if composition == "alternative-study" else set[str]()
+    )
     if set(result) != expected_keys:
         return invalid_input("qmb_preflight", "QMB preflight uses the exact result schema")
     if (
@@ -317,12 +329,28 @@ def _runtime_preflight(
             )
     if type(result.get("mints_ct32")) is not bool:
         return invalid_input("qmb_preflight", "QMB result mode is an exact boolean")
-    composition = result.get("composition_class")
-    if not isinstance(composition, str):
-        return invalid_input("qmb_preflight", "QMB composition class is supported text")
-    expected_mode = {"book": True, "alternative": False}.get(composition)
+    expected_mode = {"book": True, "alternative": False, "alternative-study": False}.get(
+        composition
+    )
     if expected_mode is None or result.get("mints_ct32") is not expected_mode:
         return invalid_input("qmb_preflight", "QMB result mode matches the selected composition")
+    command_name = payload.get("command")
+    if command_name == "optimize.run" and composition != "alternative-study":
+        return policy_rejection(
+            "composition_class", "optimize.run preflight resolves the registered Study adapter"
+        )
+    if composition == "alternative-study":
+        for key in ("study_fp1", "operational_fp1"):
+            value = result.get(key)
+            if (
+                not isinstance(value, str)
+                or re.fullmatch(r"fp1:sha256:[0-9a-f]{64}", value) is None
+            ):
+                return invalid_input(key, "Study preflight pins its exact plan fingerprints")
+        for key in ("generation_count", "batch_size"):
+            value = result.get(key)
+            if type(value) is not int or value < 1:
+                return invalid_input(key, "Study preflight pins positive exact counts")
     descriptor_fp = result.get("operator_descriptor_fp1")
     if (
         not isinstance(descriptor_fp, str)
@@ -710,13 +738,27 @@ class CliQmbDoorTransport:
             "final_measures",
             "final_accounting_state_fp1",
         }
+        study_required = {
+            "class",
+            "format_version",
+            "study_fp1",
+            "operational_fp1",
+            "generation_run",
+            "terminal_artifact_fp1s",
+            "occurrence_event_fp1",
+        }
         result_class = result.get("class")
         required = (
-            alternative_required if result_class == "qmb-alternative-result-v1" else book_required
+            alternative_required
+            if result_class == "qmb-alternative-result-v1"
+            else study_required
+            if result_class == "qmb-operator-alternative-study-result-v1"
+            else book_required
         )
         if set(result) != required or result_class not in {
             "qmb-recorded-replay-result-v1",
             "qmb-alternative-result-v1",
+            "qmb-operator-alternative-study-result-v1",
         }:
             return invalid_input(
                 "qmb_terminal_result",
@@ -733,6 +775,89 @@ class CliQmbDoorTransport:
             or not isinstance(result.get("final_measures"), list)
         ):
             return invalid_input("qmb_terminal_result", "ATC result has its exact typed shape")
+        if result_class == "qmb-operator-alternative-study-result-v1":
+            generation_run = result.get("generation_run")
+            if (
+                type(result.get("format_version")) is not int
+                or result.get("format_version") != 1
+                or not isinstance(generation_run, Mapping)
+                or not isinstance(result.get("terminal_artifact_fp1s"), list)
+            ):
+                return invalid_input(
+                    "qmb_terminal_result", "Study result has its exact typed history shape"
+                )
+            history = cast(Mapping[str, object], generation_run)
+            if set(history) != {
+                "class",
+                "completed_generations",
+                "generation_count",
+                "study_fp",
+                "writes_evidence",
+            }:
+                return invalid_input(
+                    "generation_run", "Study history uses the exact generation-run identity"
+                )
+            generations = history.get("completed_generations")
+            generation_total = history.get("generation_count")
+            if (
+                history.get("class") != "qmb-study-generation-run"
+                or type(generation_total) is not int
+                or not isinstance(generations, list)
+                or history.get("writes_evidence") is not False
+            ):
+                return invalid_input(
+                    "generation_run", "Study result contains a complete fixed generation history"
+                )
+            generation_list = cast(list[object], generations)
+            if generation_total < 1 or len(generation_list) != generation_total:
+                return invalid_input(
+                    "generation_run", "Study result contains its complete generation count"
+                )
+            artifact_refs = cast(list[object], result["terminal_artifact_fp1s"])
+            if not artifact_refs or any(
+                not isinstance(item, str) or re.fullmatch(r"fp1:sha256:[0-9a-f]{64}", item) is None
+                for item in artifact_refs
+            ):
+                return invalid_input(
+                    "terminal_artifact_fp1s", "Study result lists canonical terminal artifacts"
+                )
+            for index, generation in enumerate(generation_list):
+                if not isinstance(generation, list) or not generation:
+                    return invalid_input(
+                        "completed_generations",
+                        "each completed generation has read-back trials",
+                        generation=index,
+                    )
+                for ask, trial in enumerate(cast(list[object], generation)):
+                    if not isinstance(trial, Mapping):
+                        return invalid_input(
+                            "completed_generations", "each read-back trial is an identity object"
+                        )
+                    trial_row = cast(Mapping[str, object], trial)
+                    objective_den = trial_row.get("objective_den")
+                    if (
+                        set(trial_row)
+                        != {
+                            "class",
+                            "generation_index",
+                            "ask_index",
+                            "parameters",
+                            "objective_num",
+                            "objective_den",
+                        }
+                        or trial_row.get("class") != "qmb-prior-trial"
+                        or type(trial_row.get("generation_index")) is not int
+                        or trial_row.get("generation_index") != index
+                        or type(trial_row.get("ask_index")) is not int
+                        or trial_row.get("ask_index") != ask
+                        or not isinstance(trial_row.get("parameters"), Mapping)
+                        or type(trial_row.get("objective_num")) is not int
+                        or type(objective_den) is not int
+                        or objective_den <= 0
+                    ):
+                        return invalid_input(
+                            "completed_generations", "trial identity and order are canonical"
+                        )
         fingerprint_fields = (
             (
                 "operator_binding_fp1",
@@ -747,6 +872,13 @@ class CliQmbDoorTransport:
             )
             if result_class == "qmb-alternative-result-v1"
             else (
+                "study_fp1",
+                "operational_fp1",
+                "occurrence_event_fp1",
+                "terminal_artifact_fp1s",
+            )
+            if result_class == "qmb-operator-alternative-study-result-v1"
+            else (
                 "ct32_fp1",
                 "run_fp1",
                 "terminal_line_fp1",
@@ -759,6 +891,8 @@ class CliQmbDoorTransport:
             "split_manifest_fp1",
             *fingerprint_fields,
         ):
+            if field_name == "terminal_artifact_fp1s":
+                continue
             field_value = result.get(field_name)
             if (
                 not isinstance(field_value, str)

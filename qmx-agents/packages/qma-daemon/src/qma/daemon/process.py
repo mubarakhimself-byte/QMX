@@ -30,7 +30,7 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
@@ -55,7 +55,7 @@ from qma.core.ports.qmb import (
 )
 from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.refusals import NoEnvironment
-from qma.core.vocabulary.enums import PrincipalClass, TaskMissionState
+from qma.core.vocabulary.enums import EffectClass, PrincipalClass, TaskMissionState
 from qma.daemon.artifacts import (
     ArtifactStore,
     DestControlHandle,
@@ -184,8 +184,13 @@ from qma.daemon.plugins.pack_ui import (
     restore_plugin_install_records_projection,
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.retry import HostRetryLoop
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
-from qma.daemon.sessions.product_session import BoundSessionGrant, ProductSessionService
+from qma.daemon.sessions.product_session import (
+    BoundSessionGrant,
+    ProductSessionService,
+    accepted_invocation_binding,
+)
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.nested import NestedMissionHost
@@ -217,6 +222,7 @@ from qma.wire.invocation_envelope import (
     BoundInvocation,
     ContributionRecord,
     InstanceRecord,
+    InvocationEnvelope,
     PublicCallTransport,
     compute_input_hash,
     format_utc_iso_z,
@@ -782,6 +788,7 @@ class DaemonProcess:
         self._diagnosis = DiagnosisQueryService()
         self._host_control: HostControlChannel | None = None
         self._variables = variables
+        self._host_retry_loop = HostRetryLoop(variables=variables)
         self._local_operator: LocalOperatorLive | None = None
         self._pairing_ws = PairingWsRegistry()
         self._product_sessions = ProductSessionService(
@@ -2843,12 +2850,61 @@ class DaemonProcess:
         execution: list[Result[object]] = []
 
         def execute(bound: BoundInvocation) -> None:
-            execution.append(
-                self._execute_bound_product_operation(
-                    bound,
+            current_session = self._product_sessions.get(session_ref)
+            if is_refusal(current_session):
+                execution.append(current_session)
+                return
+            binding = accepted_invocation_binding(
+                bound,
+                session_context=current_session.value.context.to_payload(),
+            )
+            if is_refusal(binding):
+                execution.append(binding)
+                return
+
+            def execute_attempt(attempt: InvocationEnvelope) -> Result[object]:
+                if attempt.attempt_id == 1:
+                    accepted = self._product_sessions.accept_work(
+                        session_ref,
+                        grant_id=attempt.grant_id,
+                        logical_invocation_id=attempt.logical_invocation_id,
+                        attempt_id=attempt.attempt_id,
+                        binding_fp1=binding.value[0],
+                        binding_body=binding.value[1],
+                        now=now,
+                    )
+                    if is_refusal(accepted):
+                        return accepted
+                elif attempt.attempt_id > bound.envelope.attempt_id:
+                    accepted = self._product_sessions.record_retry_attempt(
+                        session_ref,
+                        grant_id=attempt.grant_id,
+                        logical_invocation_id=attempt.logical_invocation_id,
+                        previous_attempt_id=attempt.attempt_id - 1,
+                        attempt_id=attempt.attempt_id,
+                        binding_fp1=binding.value[0],
+                        binding_body=binding.value[1],
+                        now=now,
+                    )
+                    if is_refusal(accepted):
+                        return accepted
+                return self._execute_bound_product_operation(
+                    replace(bound, envelope=attempt),
                     originating_product_session_ref=session_ref,
                 )
-            )
+
+            if bound.envelope.effect_class not in {EffectClass.NONE, EffectClass.READ}:
+                execution.append(execute_attempt(bound.envelope))
+                return
+            retried = self._host_retry_loop.run(bound.envelope, execute_attempt)
+            if is_refusal(retried):
+                execution.append(retried)
+                return
+            outcome = retried.value
+            if outcome.refusal is not None:
+                execution.append(outcome.refusal)
+                return
+            execution.append(Ok(outcome.value))
 
         dispatched = self._product_sessions.dispatch_public_call(
             session_ref,
@@ -3369,7 +3425,7 @@ class DaemonProcess:
                     dispatched_config_revision=accepted_row.target.get("config_revision"),
                     request_config_revision=bound.envelope.config_revision,
                 )
-            if "as_of" in bound.validated_payload:
+            if bound.validated_payload.get("as_of") is not None:
                 return TypedRefusal(
                     category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
                     retryability=Retryability.AFTER_CONDITION,
