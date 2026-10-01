@@ -200,6 +200,21 @@ def test_run_layer2_suite_has_no_book_and_no_process_parameter() -> None:
     assert "isolation" not in names
 
 
+def test_layer2_refuses_source_manifest_that_differs_from_bot_identity() -> None:
+    declaration = _declaration()
+    refused = run_layer2_suite(
+        declaration=declaration,
+        factory=_silent(),
+        source_tree={
+            "research_bot/bot.py": "def on_instant(self, evidence):\n    raise RuntimeError()\n"
+        },
+        state_scope=_scope(declaration),
+        state_bound=_BOUND,
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "logic_source_manifest"
+
+
 # --- AC: golden-slice generator keyed off footprint --------------------------
 
 

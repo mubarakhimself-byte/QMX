@@ -18,6 +18,7 @@ The runner owns only spawning and isolation. Observations feed
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 import os
@@ -26,8 +27,10 @@ import sys
 import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from types import ModuleType
 from typing import Final, TextIO, cast
 
@@ -110,6 +113,7 @@ class FactorySpec:
 
     kind: str
     source: str = ""
+    entrypoint: str | None = None
 
 
 def run_sandbox(
@@ -128,9 +132,6 @@ def run_sandbox(
     Layer-2 failure **before** any process is spawned. The runner never computes
     the verdict and never injects a Book.
     """
-    spec = coerce_factory_spec(factory_spec)
-    if is_refusal(spec):
-        return spec
     timeout = _coerce_timeout(timeout_seconds)
     if is_refusal(timeout):
         return timeout
@@ -147,6 +148,61 @@ def run_sandbox(
         return _journal(scan)
     if scan.value.findings:
         return _verdict_from_scan_findings(definition, scan.value)
+    if factory_spec is None:
+        # The selected artifact is the declared, fingerprinted source tree.
+        # Never substitute a silent fixture when production omitted a loader.
+        candidates = [
+            (path, source)
+            for path, source in files.items()
+            if path.rsplit("/", 1)[-1] == "factory.py"
+        ]
+        if len(candidates) != 1:
+            return policy(
+                "factory_spec",
+                "conformance must load one factory.py from the manifest-bound logic source",
+                candidates=tuple(path for path, _ in candidates),
+                layer=_LAYER,
+            )
+        spec = Ok(
+            FactorySpec(
+                kind=FACTORY_KIND_SOURCE,
+                source=candidates[0][1],
+                entrypoint=_module_entrypoint(candidates[0][0]),
+            )
+        )
+    else:
+        spec = coerce_factory_spec(factory_spec)
+        if is_refusal(spec):
+            return spec
+        if spec.value.kind == FACTORY_KIND_SILENT:
+            return policy(
+                "factory_spec",
+                "an explicit silent fixture cannot mint a production Layer-2 verdict",
+                layer=_LAYER,
+            )
+        if spec.value.kind == FACTORY_KIND_SOURCE:
+            # CT-33 pins source bytes but does not currently pin a callable
+            # selector. Therefore only the unique conventional factory.py:factory
+            # is admissible until the selector is added to LogicIdentity.
+            conventional = [p for p in files if p.rsplit("/", 1)[-1] == "factory.py"]
+            expected = _module_entrypoint(conventional[0]) if len(conventional) == 1 else None
+            if expected is None or (
+                spec.value.entrypoint is not None and spec.value.entrypoint != expected
+            ):
+                return policy(
+                    "factory_spec",
+                    "source manifest selects its unique conventional factory.py:factory entrypoint",
+                    layer=_LAYER,
+                )
+            path = _entrypoint_path(files, expected)
+            if path is None or files[path] != spec.value.source:
+                return policy(
+                    "factory_spec",
+                    "factory entrypoint resolves to matching source bytes in the logic manifest",
+                    entrypoint=expected,
+                    layer=_LAYER,
+                )
+            spec = Ok(FactorySpec(spec.value.kind, spec.value.source, expected))
     payload = _encode_payload(
         definition=definition,
         source_tree=files,
@@ -166,12 +222,16 @@ def run_sandbox(
 def coerce_factory_spec(value: object) -> Result[FactorySpec]:
     """Admit a reconstructable factory spec. A Book key is a Layer-2 failure."""
     if value is None:
-        return Ok(FactorySpec(kind=FACTORY_KIND_SILENT))
+        return invalid(
+            "factory_spec",
+            "silent is a test fixture; production conformance names manifest-bound source",
+            layer=_LAYER,
+        )
     if isinstance(value, FactorySpec):
         blocked = _refuse_book(value.source) if value.source else None
         if blocked is not None:
             return blocked
-        return _validate_spec(value.kind, value.source)
+        return _validate_spec(value.kind, value.source, value.entrypoint)
     if isinstance(value, str):
         return _validate_spec(FACTORY_KIND_SOURCE, value)
     if not isinstance(value, Mapping):
@@ -203,15 +263,49 @@ def coerce_factory_spec(value: object) -> Result[FactorySpec]:
             given=type(source).__name__,
             layer=_LAYER,
         )
-    return _validate_spec(kind, source)
+    entrypoint = mapping.get("entrypoint")
+    if entrypoint is not None and not isinstance(entrypoint, str):
+        return invalid("factory_spec", "factory entrypoint is module:attribute", layer=_LAYER)
+    parsed = _validate_spec(kind, source, entrypoint)
+    if is_refusal(parsed) or entrypoint is None:
+        return parsed
+    if ":" not in entrypoint:
+        return invalid(
+            "factory_spec", "factory entrypoint is module:attribute", given=entrypoint, layer=_LAYER
+        )
+    module, attribute = entrypoint.split(":", 1)
+    if (
+        not module
+        or not attribute.isidentifier()
+        or any(not part.isidentifier() for part in module.split("."))
+    ):
+        return invalid(
+            "factory_spec", "factory entrypoint is module:attribute", given=entrypoint, layer=_LAYER
+        )
+    return parsed
 
 
-def load_factory(spec: FactorySpec) -> Result[object]:
+def load_factory(spec: FactorySpec, *, source_tree: object = None) -> Result[object]:
     """Reconstruct the factory in this process. Used by the isolated child."""
     if spec.kind == FACTORY_KIND_SILENT:
         return Ok(FunctionFactory(logic=_silent_logic))
     try:
-        module = _load_source_factory_module(spec.source)
+        if source_tree is None:
+            module = _load_source_factory_module(spec.source)
+        else:
+            normalized = normalize_source_manifest(source_tree)
+            if is_refusal(normalized):
+                return normalized
+            path = _entrypoint_path(normalized.value, spec.entrypoint)
+            if path is None or normalized.value[path] != spec.source:
+                return policy(
+                    "factory_spec",
+                    "a source factory resolves to matching bytes at its manifest entrypoint",
+                    entrypoint=spec.entrypoint,
+                    layer=_LAYER,
+                )
+            with _manifest_factory(normalized.value, path, spec) as factory:
+                return Ok(factory)
     except SyntaxError as exc:
         return invalid(
             "factory_spec",
@@ -226,7 +320,10 @@ def load_factory(spec: FactorySpec) -> Result[object]:
             given=type(exc).__name__,
             layer=_LAYER,
         )
-    factory = getattr(module, "factory", None)
+    attribute = "factory"
+    if spec.entrypoint is not None and ":" in spec.entrypoint:
+        attribute = spec.entrypoint.split(":", 1)[1]
+    factory = getattr(module, attribute, None)
     if factory is None:
         return invalid(
             "factory_spec",
@@ -234,6 +331,66 @@ def load_factory(spec: FactorySpec) -> Result[object]:
             layer=_LAYER,
         )
     return Ok(factory)
+
+
+@contextmanager
+def _manifest_module(source_tree: Mapping[str, str], entry_path: str):
+    """Load a manifest module while its complete source tree remains available."""
+    module_path = entry_path[:-3] if entry_path.endswith(".py") else entry_path
+    parts = module_path.split("/")
+    if parts[-1] == "__init__":
+        parts.pop()
+    module_name = ".".join(parts)
+    if not module_name or any(not part.isidentifier() for part in parts):
+        raise ImportError("manifest factory path is not a Python module path")
+    with tempfile.TemporaryDirectory(prefix="qml_logic_manifest_") as root:
+        root_path = Path(root)
+        for relative, body in source_tree.items():
+            target = root_path.joinpath(*relative.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(body, encoding="utf-8", newline="\n")
+        sys.path.insert(0, root)
+        try:
+            importlib.invalidate_caches()
+            module = importlib.import_module(module_name)
+            yield module
+        finally:
+            sys.path.remove(root)
+            for name, loaded in tuple(sys.modules.items()):
+                loaded_path = getattr(loaded, "__file__", None)
+                if isinstance(loaded_path, str) and Path(loaded_path).is_relative_to(root_path):
+                    sys.modules.pop(name, None)
+
+
+def _module_entrypoint(path: str) -> str:
+    module = path[:-3] if path.endswith(".py") else path
+    parts = module.split("/")
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) + ":factory"
+
+
+def _entrypoint_path(source_tree: Mapping[str, str], entrypoint: str | None) -> str | None:
+    if not isinstance(entrypoint, str) or ":" not in entrypoint:
+        return None
+    module, attribute = entrypoint.split(":", 1)
+    if not attribute.isidentifier() or any(not part.isidentifier() for part in module.split(".")):
+        return None
+    base = module.replace(".", "/")
+    matches = [path for path in (base + ".py", base + "/__init__.py") if path in source_tree]
+    return matches[0] if len(matches) == 1 else None
+
+
+@contextmanager
+def _manifest_factory(source_tree: Mapping[str, str], entry_path: str, spec: FactorySpec):
+    if spec.entrypoint is None:
+        raise ImportError("manifest factory entrypoint is required")
+    attribute = spec.entrypoint.split(":", 1)[1]
+    with _manifest_module(source_tree, entry_path) as module:
+        factory = getattr(module, attribute, None)
+        if factory is None:
+            raise ImportError("manifest factory entrypoint attribute is missing")
+        yield factory
 
 
 def _load_source_factory_module(source: str) -> ModuleType:
@@ -304,17 +461,48 @@ def _worker_collect(raw: object) -> Result[Layer2Observations]:
     spec = coerce_factory_spec(mapping.get("factory_spec"))
     if is_refusal(spec):
         return spec
-    factory = load_factory(spec.value)
-    if is_refusal(factory):
-        return factory
-    return collect_layer2_observations(
-        declaration=mapping.get("declaration"),
-        factory=factory.value,
-        source_tree=mapping.get("source_tree"),
-        assignment=mapping.get("assignment"),
-        state_scope=mapping.get("state_scope"),
-        state_bound=mapping.get("state_bound"),
-    )
+    if spec.value.kind == FACTORY_KIND_SILENT:
+        return policy(
+            "factory_spec",
+            "an explicit silent fixture cannot mint a production Layer-2 verdict",
+            layer=_LAYER,
+        )
+    source = normalize_source_manifest(mapping.get("source_tree"))
+    if is_refusal(source):
+        return _journal(source)
+    conventional = [item for item in source.value if item.rsplit("/", 1)[-1] == "factory.py"]
+    expected_entrypoint = _module_entrypoint(conventional[0]) if len(conventional) == 1 else None
+    if expected_entrypoint is None or spec.value.entrypoint != expected_entrypoint:
+        return policy(
+            "factory_spec",
+            "the isolated worker selects the unique conventional factory.py:factory entrypoint",
+            layer=_LAYER,
+        )
+    path = _entrypoint_path(source.value, spec.value.entrypoint)
+    if path is None or source.value[path] != spec.value.source:
+        return policy(
+            "factory_spec",
+            "the isolated conformance factory must match its declared source-manifest entrypoint",
+            entrypoint=spec.value.entrypoint,
+            layer=_LAYER,
+        )
+    try:
+        with _manifest_factory(source.value, path, spec.value) as factory:
+            return collect_layer2_observations(
+                declaration=mapping.get("declaration"),
+                factory=factory,
+                source_tree=source.value,
+                assignment=mapping.get("assignment"),
+                state_scope=mapping.get("state_scope"),
+                state_bound=mapping.get("state_bound"),
+            )
+    except Exception as exc:
+        return unavailable(
+            "factory_spec",
+            "factory source failed to load from its manifest entrypoint",
+            given=type(exc).__name__,
+            layer=_LAYER,
+        )
 
 
 def _spawn_isolated(
@@ -465,7 +653,11 @@ def _encode_payload(
     payload: dict[str, object] = {
         "declaration": definition.identity_payload(),
         "source_tree": dict(source_tree),
-        "factory_spec": {"kind": factory_spec.kind, "source": factory_spec.source},
+        "factory_spec": {
+            "kind": factory_spec.kind,
+            "source": factory_spec.source,
+            "entrypoint": factory_spec.entrypoint,
+        },
         "assignment": assigned,
         "state_scope": scope.value,
         "state_bound": state_bound,
@@ -491,7 +683,7 @@ def _scope_payload(state_scope: object) -> Result[Mapping[str, object]]:
     )
 
 
-def _validate_spec(kind: str, source: str) -> Result[FactorySpec]:
+def _validate_spec(kind: str, source: str, entrypoint: str | None = None) -> Result[FactorySpec]:
     if kind == FACTORY_KIND_SILENT:
         return Ok(FactorySpec(kind=FACTORY_KIND_SILENT))
     if kind != FACTORY_KIND_SOURCE:
@@ -511,7 +703,7 @@ def _validate_spec(kind: str, source: str) -> Result[FactorySpec]:
     blocked = _refuse_book(source)
     if blocked is not None:
         return blocked
-    return Ok(FactorySpec(kind=FACTORY_KIND_SOURCE, source=source))
+    return Ok(FactorySpec(kind=FACTORY_KIND_SOURCE, source=source, entrypoint=entrypoint))
 
 
 def _refuse_book_keys(mapping: Mapping[str, object]) -> TypedRefusal | None:

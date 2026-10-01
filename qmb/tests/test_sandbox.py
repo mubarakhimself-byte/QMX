@@ -37,6 +37,10 @@ T = TypeVar("T")
 _CLEAN_SOURCE: dict[str, str] = {
     "research_bot/__init__.py": "",
     "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
+    "research_bot/factory.py": (
+        "from qml.protocol import FunctionFactory\n"
+        "factory = FunctionFactory(logic=lambda evidence: ())\n"
+    ),
 }
 _FACTORY_SOURCE = (
     "from qml.protocol import FunctionFactory\n"
@@ -263,6 +267,66 @@ def test_source_factory_spec_isolated_run_passes() -> None:
     assert verdict.fp1_identity()["class"] == "qml-layer2-verdict"
 
 
+def test_source_factory_must_be_bound_to_the_declared_manifest() -> None:
+    declaration = _declaration()
+    refused = _sandbox(
+        declaration,
+        factory_spec={"kind": "source", "source": "factory = lambda: None\n"},
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "factory_spec"
+
+
+def test_explicit_silent_fixture_cannot_mint_layer2_verdict() -> None:
+    declaration = _declaration()
+    refused = _sandbox(declaration, factory_spec={"kind": "silent"})
+    assert is_refusal(refused)
+    assert refused.context["field"] == "factory_spec"
+
+
+def test_manifest_bound_throwing_factory_fails_conformance_without_override() -> None:
+    source = dict(_CLEAN_SOURCE)
+    source["research_bot/factory.py"] = (
+        "from qml.protocol import FunctionFactory\n"
+        "def logic(evidence):\n"
+        "    raise RuntimeError('declared bot failed')\n"
+        "factory = FunctionFactory(logic=logic)\n"
+    )
+    declaration = _declaration(source=source)
+    refused = _sandbox(declaration, source=source)
+    assert is_refusal(refused)
+    assert refused.category is RefusalCategory.UNAVAILABLE_DEPENDENCY
+    assert refused.context["field"] == "factory_spec"
+
+
+def test_worker_rejects_alternate_factory_callable_in_same_manifest() -> None:
+    source = dict(_CLEAN_SOURCE)
+    source["research_bot/factory.py"] = (
+        "from qml.protocol import FunctionFactory\n"
+        "def fail(evidence):\n    raise RuntimeError('selected source failed')\n"
+        "factory = FunctionFactory(logic=fail)\n"
+        "alternate = FunctionFactory(logic=lambda evidence: ())\n"
+    )
+    declaration = _declaration(source=source)
+    payload = _ok(
+        host_runner._encode_payload(
+            definition=declaration,
+            source_tree=source,
+            factory_spec=host_runner.FactorySpec(
+                kind="source",
+                source=source["research_bot/factory.py"],
+                entrypoint="research_bot.factory:alternate",
+            ),
+            assignment={"lookback": 20},
+            state_scope=_scope(declaration),
+            state_bound=_BOUND,
+        )
+    )
+    refused = host_runner._worker_collect(payload)
+    assert is_refusal(refused)
+    assert refused.context["field"] == "factory_spec"
+
+
 def test_load_factory_source_binds_factory() -> None:
     factory = _ok(
         host_runner.load_factory(
@@ -400,4 +464,5 @@ def test_payload_starves_capabilities_and_injects_read_surfaces_only(
     assert mapping["book_present"] is False
     assert mapping["read_surfaces_only"] is True
     spec = cast("Mapping[str, object]", mapping["factory_spec"])
-    assert spec["kind"] == "silent"
+    assert spec["kind"] == "source"
+    assert spec["source"] == _FACTORY_SOURCE

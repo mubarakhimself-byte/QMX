@@ -21,7 +21,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.chrono import Instant
-from qmf.core.fingerprint import Fingerprint, World
+from qmf.core.fingerprint import Fingerprint, World, fingerprint
 from qmf.core.refusal import (
     Ok,
     RefusalCategory,
@@ -33,7 +33,11 @@ from qmf.core.refusal import (
 
 from qmb._refuse import invalid, policy, unavailable
 from qmb.config.compiler import ResolvedRunConfig
-from qmb.ledger.line import WORKBENCH_LANE_GOVERNED, mint_aborted_line
+from qmb.ledger.line import (
+    WORKBENCH_LANE_GOVERNED,
+    mint_aborted_line,
+    mint_completed_line,
+)
 from qmb.orchestrator.governor import (
     ON_FULL_ENQUEUE,
     GovernedRequest,
@@ -862,6 +866,12 @@ def _drain_governed(
         token, done = _collect_next(live)
         del live[token]
         if is_refusal(done):
+            recorded = _append_terminal(ledger, by_id[token].config, done)
+            if is_refusal(recorded):
+                reaped = _reap_live(tuple(live.values()), by_id=by_id, ledger=ledger)
+                if is_refusal(reaped):
+                    return reaped
+                return recorded
             if is_aborted_refusal(done):
                 aborted = aborted or done
                 admitted = governor.release(token)
@@ -885,6 +895,12 @@ def _drain_governed(
             if is_refusal(reaped):
                 return reaped
             return done
+        recorded = _append_terminal(ledger, by_id[token].config, done.value)
+        if is_refusal(recorded):
+            reaped = _reap_live(tuple(live.values()), by_id=by_id, ledger=ledger)
+            if is_refusal(reaped):
+                return reaped
+            return recorded
         collected[token] = done.value
         admitted = governor.release(token)
         if is_refusal(admitted):
@@ -921,6 +937,12 @@ def _collect_all(
         token, done = _collect_next(remaining)
         del remaining[token]
         if is_refusal(done):
+            recorded = _append_terminal(ledger, by_id[token].config, done)
+            if is_refusal(recorded):
+                reaped = _reap_live(tuple(remaining.values()), by_id=by_id, ledger=ledger)
+                if is_refusal(reaped):
+                    return reaped
+                return recorded
             if is_aborted_refusal(done):
                 aborted = aborted or done
                 continue
@@ -928,6 +950,12 @@ def _collect_all(
             if is_refusal(reaped):
                 return reaped
             return done
+        recorded = _append_terminal(ledger, by_id[token].config, done.value)
+        if is_refusal(recorded):
+            reaped = _reap_live(tuple(remaining.values()), by_id=by_id, ledger=ledger)
+            if is_refusal(reaped):
+                return reaped
+            return recorded
         collected[token] = done.value
     if aborted is not None:
         return aborted
@@ -1141,23 +1169,37 @@ def _decode_config(raw: object) -> Result[ResolvedRunConfig]:
                 return preset
             parsed_presets.append(preset.value)
         presets = tuple(parsed_presets)
-    return Ok(
-        ResolvedRunConfig(
-            format_version=version,
-            book_fp1=book.value,
-            bms_fp1=bms.value,
-            bot_fp1=bot.value,
-            book_fragment_fp1=book_frag.value,
-            bms_fragment_fp1=bms_frag.value,
-            keys=keys.value,
-            clock=clock,
-            data_provenance=provenance,
-            world=world,
-            fingerprint=stamp.value,
-            binding_fp1=binding,
-            condition_preset_fp1=presets,
-        )
+    resolved = ResolvedRunConfig(
+        format_version=version,
+        book_fp1=book.value,
+        bms_fp1=bms.value,
+        bot_fp1=bot.value,
+        book_fragment_fp1=book_frag.value,
+        bms_fragment_fp1=bms_frag.value,
+        keys=keys.value,
+        clock=clock,
+        data_provenance=provenance,
+        world=world,
+        fingerprint=stamp.value,
+        binding_fp1=binding,
+        condition_preset_fp1=presets,
     )
+    derived = fingerprint(resolved.fp1_identity())
+    if is_refusal(derived):
+        return invalid(
+            "config",
+            "the child run-config identity must be fp1-clean",
+            cause=dict(derived.context),
+        )
+    if derived.value != stamp.value:
+        return policy(
+            "fingerprint",
+            "the isolated child refuses a run-config whose serialized fields "
+            "do not reproduce its fp1",
+            given=stamp.value.value,
+            computed=derived.value.value,
+        )
+    return Ok(resolved)
 
 
 def _decode_slices(
@@ -1464,6 +1506,35 @@ def _reap_live(
             first_ledger_failure = first_ledger_failure or appended
     if first_ledger_failure is not None:
         return first_ledger_failure
+    return Ok(None)
+
+
+def _append_terminal(
+    ledger: LedgerSink | None,
+    config: ResolvedRunConfig,
+    terminal: IsolatedRun | TypedRefusal,
+) -> Result[None]:
+    """Persist the one terminal governed row at the orchestration boundary."""
+    if ledger is None:
+        return Ok(None)
+    if isinstance(terminal, IsolatedRun):
+        line = mint_completed_line(
+            config,
+            outcome_identity=terminal.outcome_identity,
+            ct32_fingerprint=terminal.ct32_fingerprint,
+            workbench_lane=WORKBENCH_LANE_GOVERNED,
+        )
+    else:
+        line = mint_aborted_line(
+            config,
+            terminal,
+            workbench_lane=WORKBENCH_LANE_GOVERNED,
+        )
+    if is_refusal(line):
+        return line
+    appended = ledger.append(line.value)
+    if is_refusal(appended):
+        return appended
     return Ok(None)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -49,20 +50,21 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "orch-ledger", "tag": tag}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
         bot_fp1=stamp,
         book_fragment_fp1=stamp,
         bms_fragment_fp1=stamp,
-        keys={STREAM_SET_KEY: ("eurusd",)},
+        keys={STREAM_SET_KEY: ("eurusd",), "test_tag": tag},
         clock="replay",
         data_provenance="recorded",
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def _sink(tmp_path: Path, *, slot: object = 0) -> qmb.LedgerSink:
@@ -270,6 +272,26 @@ def test_fragment_line_is_fp1_canonical_and_lf_terminated(tmp_path: Path) -> Non
     expected = _ok(canonical_bytes(lines[0].fp1_identity()))
     assert payload == expected
     assert lines[0].fp1_identity()["class"] == LEDGER_LINE_CLASS
+
+
+def test_governed_spawn_appends_exactly_one_completion_row(tmp_path: Path) -> None:
+    config = _config(tag="governed-terminal")
+    sink = _sink(tmp_path)
+    spawned = _ok(
+        qmb.spawn_governed(
+            qmb.SpawnJob(config=config, slices=_slices(), projected_peak_memory=1),
+            output_root=tmp_path,
+            cpu_budget=1,
+            memory_budget=10,
+            ledger=sink,
+        )
+    )
+    assert len(spawned) == 1
+    rows = _ok(qmb.read_merge_view(sink.root, world=World.REPLAY, role=qmb.ROLE_CONFIRMATION))
+    assert len(rows) == 1
+    assert rows[0].run_id == config.fingerprint
+    assert rows[0].refusal is None
+    assert rows[0].ct32_fingerprint == spawned[0].ct32_fingerprint
 
 
 def test_factory_sandbox_stamps_provenance_sandbox(tmp_path: Path) -> None:

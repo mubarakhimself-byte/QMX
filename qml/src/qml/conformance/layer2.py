@@ -31,6 +31,7 @@ from qml.conformance.harness import (
 from qml.conformance.scan import ScanFinding, ScanReport, scan_logic_source
 from qml.conformance.slice import generate_golden_slice
 from qml.declaration.bot import BotDefinition, mint_bot_definition
+from qml.logic import fingerprint_source_manifest
 from qml.protocol.factory import resolve_assignment
 
 __all__ = [
@@ -288,6 +289,17 @@ def collect_layer2_observations(
     if is_refusal(bot):
         return _journal(bot)
     definition = bot.value
+    source_fingerprint = fingerprint_source_manifest(source_tree)
+    if is_refusal(source_fingerprint):
+        return _journal(source_fingerprint)
+    expected_source = definition.logic_reference.source_manifest
+    if source_fingerprint.value != expected_source:
+        return _fail(
+            "logic_source_manifest",
+            "Layer 2 must execute and scan the source manifest cited by the Bot definition",
+            expected=expected_source.value,
+            given=source_fingerprint.value.value,
+        )
     decl_fp = definition.fingerprint_content()
     if is_refusal(decl_fp):
         return _journal(decl_fp)

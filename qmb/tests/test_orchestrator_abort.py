@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -58,7 +59,7 @@ def _config(*, tag: str, **keys: object) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "orch-abort", "tag": tag}))
     payload: dict[str, object] = {STREAM_SET_KEY: ("eurusd",)}
     payload.update(keys)
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -72,6 +73,9 @@ def _config(*, tag: str, **keys: object) -> ResolvedRunConfig:
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    identity = fingerprint(config.fp1_identity())
+    assert is_ok(identity), identity
+    return replace(config, fingerprint=identity.value)
 
 
 def _hanging_live(

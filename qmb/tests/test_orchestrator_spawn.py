@@ -6,6 +6,7 @@ import ast
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -50,20 +51,30 @@ def _slices(
 
 def _config(*, tag: str, streams: tuple[str, ...] = ("eurusd", "gbpusd")) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "orch-spawn", "tag": tag, "streams": list(streams)}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
         bot_fp1=stamp,
         book_fragment_fp1=stamp,
         bms_fragment_fp1=stamp,
-        keys={STREAM_SET_KEY: streams},
+        keys={STREAM_SET_KEY: streams, "test_tag": tag},
         clock="replay",
         data_provenance="recorded",
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
+
+
+def test_child_config_decoder_recomputes_identity_and_refuses_tampering() -> None:
+    config = _config(tag="decode-identity")
+    payload = spawn_mod._encode_config(config)
+    payload["keys"] = {STREAM_SET_KEY: ["eurusd"], "test_tag": "forged"}
+    refused = spawn_mod._decode_config(payload)
+    assert is_refusal(refused)
+    assert refused.context["field"] == "fingerprint"
 
 
 def _imported_roots(directory: Path) -> set[str]:
