@@ -269,6 +269,7 @@ class ReplayPosition:
     opened_at: Instant
     entry_price: Price
     protective_stop: Price
+    entry_terminal_reason: EntryTerminalReason
     quantity: Quantity
     faces: RFaces
     entry_fill_ref: Fingerprint
@@ -296,6 +297,7 @@ class ReplayPosition:
             "entry_costs": [component.fp1_identity() for component in self.entry_costs],
             "entry_price": self.entry_price.fp1_identity(),
             "protective_stop": self.protective_stop.fp1_identity(),
+            "entry_terminal_reason": self.entry_terminal_reason.value,
             "faces": self.faces.fp1_identity(),
             "instrument": self.instrument,
             "direction": self.direction.value,
@@ -720,6 +722,7 @@ def _restore_replay_position(raw: object) -> Result[ReplayPosition]:
             return invalid("replay_position", "position instrument and opening Bot are strings")
         entry_price = _parse_price(body.get("entry_price"))
         protective_stop = _parse_price(body.get("protective_stop"))
+        entry_terminal_reason = EntryTerminalReason(body.get("entry_terminal_reason"))
         quantity = _parse_quantity(body.get("quantity"))
         faces = _parse_faces(body.get("faces"))
         opened_at = _parse_instant(body.get("opened_at"))
@@ -775,10 +778,57 @@ def _restore_replay_position(raw: object) -> Result[ReplayPosition]:
             return faces
         if is_refusal(opened_at):
             return opened_at
+        if declared_plan_quantity is None or declared_plan_amount is None:
+            return invalid(
+                "entry_plan",
+                "a persisted QMB replay position records its admitted quantity and R amount",
+            )
         if risk_rebased != (lineage_ref is not None):
             return policy(
                 "risk_rebase_lineage", "a rebased position carries exactly one lineage ref"
             )
+        is_partial = quantity.value.as_fraction() < declared_plan_quantity.as_fraction()
+        if quantity.value.as_fraction() > declared_plan_quantity.as_fraction():
+            return policy("entry_quantity", "recovered actual quantity never exceeds its plan")
+        if risk_rebased != is_partial:
+            return policy(
+                "risk_rebased", "exactly a partial terminal entry carries a one-time risk rebase"
+            )
+        if risk_rebased:
+            expected_amount = _scale_money(
+                declared_plan_amount,
+                quantity.value.as_fraction(),
+                declared_plan_quantity.as_fraction(),
+            )
+            if is_refusal(expected_amount):
+                return expected_amount
+            if not _same_money_amount(faces.value.original_risk_amount, expected_amount.value):
+                return policy(
+                    "risk_rebase",
+                    "recovered RFaces equal the exact proportional amount for actual quantity",
+                    actual=faces.value.original_risk_amount.fp1_identity(),
+                    expected=expected_amount.value.fp1_identity(),
+                )
+            expected_lineage = fingerprint(
+                {
+                    "class": "qmb-entry-risk-rebase-lineage",
+                    "from_amount": declared_plan_amount.fp1_identity(),
+                    "from_quantity": declared_plan_quantity.fp1_identity(),
+                    "to_amount": faces.value.original_risk_amount.fp1_identity(),
+                    "to_quantity": quantity.value.fp1_identity(),
+                    "terminal_reason": entry_terminal_reason.value,
+                    "ticket": command_ref.value.value,
+                }
+            )
+            if is_refusal(expected_lineage):
+                return expected_lineage
+            if expected_lineage.value != lineage_ref:
+                return policy(
+                    "risk_rebase_lineage",
+                    "recovered rebase lineage binds exact plan, actual quantity, reason and ticket",
+                )
+        elif not _same_money_amount(faces.value.original_risk_amount, declared_plan_amount):
+            return policy("risk_rebase", "full-size position retains its planned R amount")
         position = ReplayPosition(
             position_ref=position_ref.value,
             binding_epoch=epoch.value,
@@ -790,6 +840,7 @@ def _restore_replay_position(raw: object) -> Result[ReplayPosition]:
             opened_at=opened_at.value,
             entry_price=entry_price.value,
             protective_stop=protective_stop.value,
+            entry_terminal_reason=entry_terminal_reason,
             quantity=quantity.value,
             faces=faces.value,
             entry_fill_ref=fill_ref.value,
@@ -1027,6 +1078,10 @@ def _scale_money(amount: Money, numerator: Fraction, denominator: Fraction) -> R
     if scaled.denominator != 1:
         return invalid("original_risk_amount", "rebased R amount is exactly representable")
     return Money.try_create(scaled.numerator, amount.currency, scale)
+
+
+def _same_money_amount(left: Money, right: Money) -> bool:
+    return left.currency == right.currency and left.as_fraction() == right.as_fraction()
 
 
 def _gross_exit_pnl(
@@ -1402,6 +1457,7 @@ class BookExecutionSliceHandler:
             "entry_fills": [fill.fp1_identity() for fill in pending.fills],
             "entry_price": first_fill.price.fp1_identity(),
             "protective_stop": pending.admission.declared_full_loss_price.fp1_identity(),
+            "entry_terminal_reason": terminal_reason.value,
             "faces": faces.value.fp1_identity(),
             "instrument": pending.intent.instrument.symbol,
             "opened_at": first_fill.instant.fp1_identity(),
@@ -1434,6 +1490,7 @@ class BookExecutionSliceHandler:
             opened_at=first_fill.instant,
             entry_price=first_fill.price,
             protective_stop=pending.admission.declared_full_loss_price,
+            entry_terminal_reason=terminal_reason,
             quantity=total_quantity.value,
             faces=faces.value,
             entry_fill_ref=first_fill.fill_ref,
@@ -2134,6 +2191,7 @@ class BookExecutionSliceHandler:
             opened_at=position.opened_at,
             entry_price=position.entry_price,
             protective_stop=position.protective_stop,
+            entry_terminal_reason=position.entry_terminal_reason,
             quantity=position.quantity,
             faces=position.faces,
             entry_fill_ref=position.entry_fill_ref,

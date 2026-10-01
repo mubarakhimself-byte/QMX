@@ -408,6 +408,9 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
         "entry_fill_ref": fill_ref.value,
         "entry_price": entry_price.fp1_identity(),
         "protective_stop": _price(105_000).fp1_identity(),
+        "entry_terminal_reason": EntryTerminalReason.REPLAY_COMPLETE.value,
+        "declared_plan_quantity": quantity.fp1_identity(),
+        "declared_plan_risk_amount": risk_amount.fp1_identity(),
         "faces": faces.fp1_identity(),
         "instrument": instrument.symbol,
         "opened_at": instant.fp1_identity(),
@@ -454,10 +457,13 @@ def test_ct13_position_recovery_preserves_identity_and_rejects_tampering(
         opened_at=instant,
         entry_price=entry_price,
         protective_stop=_price(105_000),
+        entry_terminal_reason=EntryTerminalReason.REPLAY_COMPLETE,
         quantity=quantity,
         faces=faces,
         entry_fill_ref=fill_ref,
         entry_costs=(),
+        declared_plan_quantity=quantity,
+        declared_plan_risk_amount=risk_amount,
     )
     assert len(restored.positions) == 1
     assert restored.positions[0].fp1_identity() == expected_position.fp1_identity()
@@ -711,6 +717,7 @@ def test_cancelled_partial_entry_rebases_and_reopens_once(tmp_path: Path) -> Non
     assert position.quantity == _ok(Quantity.try_create(2, "lot", 0))
     assert position.faces.original_risk_amount == _ok(Money.try_create(200, "USD", 0))
     assert position.risk_rebased is True
+    assert position.entry_terminal_reason is EntryTerminalReason.CANCELLED
     reopened = _ok(
         read_replay_positions(
             journal_reader=reader,
