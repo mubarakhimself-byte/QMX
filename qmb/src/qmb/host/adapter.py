@@ -120,7 +120,9 @@ def _to_resting(intents: object, stream_id: str) -> Result[tuple[RestingIntent, 
         stamped = fingerprint(identity())
         if is_refusal(stamped):
             return stamped
-        token = RestingIntent.try_create(f"{stamped.value.value}:{index}", stream_id)
+        token = RestingIntent.try_create(
+            f"{stamped.value.value}:{index}", stream_id, proposal=intent
+        )
         if is_refusal(token):
             return token
         tokens.append(token.value)

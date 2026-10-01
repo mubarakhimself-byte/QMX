@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TypeVar
 
 from qmb.config import (
@@ -31,9 +32,12 @@ from qmb.registryread import AsOfSet, DatedPointer, PassiveHub, RegistryReadPort
 from qmb.runloop import EventSlice, SliceObservation, StreamSet, run_slice
 from qmf.core.chrono import CalendarIdentity, Instant, WriterId
 from qmf.core.exact import ExactRational, Money, PriceDelta, UnitKind
-from qmf.core.fingerprint import fingerprint
+from qmf.core.fingerprint import World, fingerprint
 from qmf.core.identity import Instrument, VenueId
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
+from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
+from qmf.data.source_boundary import SourceObservationBoundary
+from qmf.data.store import EvidenceStore
 from qmf.registry import RegistrationRecord
 from qmf.risk.door import Direction, EntryIntent, ReasonCode
 from qmf.risk.grammar import AdmissionImpact, TemplateSection, TemplateVariable, UiEditability
@@ -66,6 +70,10 @@ _SEED = Money(value=1_000_000, currency="USD", scale=2)
 _SOURCE = {
     "research_bot/__init__.py": "",
     "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
+    "research_bot/factory.py": (
+        "from qml.protocol import FunctionFactory\n"
+        "factory = FunctionFactory(logic=lambda evidence: ())\n"
+    ),
 }
 _CLEAN = _SOURCE
 
@@ -478,7 +486,95 @@ def test_conformant_slice_handler_mints_on_declared_stream() -> None:
     )
     assert len(outcome.minted) == 1
     assert outcome.resting[-1].stream_id == "eurusd"
+    assert outcome.resting[-1].authorized is None
+    assert outcome.resting[-1].proposal == _entry()
     assert outcome.subphase_order()[-2] == "strategy-callbacks"
+
+
+def test_selected_ct33_callback_runs_over_persisted_qmf_replay_surface(tmp_path: Path) -> None:
+    boundary = SourceObservationBoundary(EvidenceStore(tmp_path / "qmf-room"))
+    refs: list[str] = []
+    for sequence, (side, amount) in enumerate((("bid", 1_234_500), ("ask", 1_234_520))):
+        observed = _ok(
+            SourceObservation.try_create(
+                event_time=_instant(),
+                known_at=_instant(),
+                source="local-recorded-ct33-fixture",
+                source_native_id=f"quote-{side}",
+                revision="1",
+                receive_wall_time=_instant(),
+                writer=_ok(WriterId.try_create("fixture-node", "data", "market", "boot")),
+                sequence=sequence,
+                world=World.REPLAY,
+                foreign_money=_ok(ForeignMoney.try_create(amount, 5)),
+                market_data=_ok(
+                    MarketDataContext.try_create(
+                        venue="ctrader",
+                        symbol="EURUSD",
+                        resolution="tick",
+                        side=side,
+                        license_tag="local-fixture",
+                        provenance={"source_kind": "recorded-local-test"},
+                    )
+                ),
+            )
+        )
+        refs.append(_ok(boundary.admit(observed)).archive.fingerprint.value)
+    from qmb.host.replay import read_recorded_replay_source
+
+    recorded = _ok(
+        read_recorded_replay_source(
+            store_root=tmp_path / "qmf-room",
+            archive_fingerprints=tuple(refs),
+            stream_id="eurusd",
+        )
+    )
+    calls: list[int] = []
+
+    def selected_logic(evidence: object) -> tuple[EntryIntent, ...]:
+        assert getattr(evidence, "evaluation_instant", None) == _instant()
+        calls.append(1)
+        return (_entry(),)
+
+    definition = _definition()
+    hosted = _ok(
+        qmb.construct_conformant_bot(
+            FunctionFactory(logic=selected_logic),
+            declaration=definition,
+            assignment=definition.canonical_assignment(),
+            read_surfaces={"primary": recorded.read_surfaces["eurusd"]},
+        )
+    )
+    result = _ok(
+        qmb.run(
+            slices=recorded.slices,
+            stream_set=("eurusd",),
+            handler=qmb.ConformantSliceHandler(hosted=hosted, stream_id="eurusd"),
+        )
+    )
+    assert calls == [1]
+    assert result.resting[0].proposal == _entry()
+    assert result.resting[0].authorized is None
+
+
+def test_resting_proposal_requires_typed_ct23_identity() -> None:
+    refused = qmb.RestingIntent.try_create("proposal-1", "eurusd", proposal={"kind": "entry"})
+    assert is_refusal(refused)
+    assert refused.context["field"] == "proposal"
+
+    long_intent = _entry()
+    short_intent = EntryIntent.try_create(
+        long_intent.instrument,
+        Direction.SHORT,
+        long_intent.reason_code,
+        long_intent.execution_target,
+        advisory_stop_proposal=long_intent.advisory_stop_proposal,
+    )
+    assert is_ok(short_intent)
+    long_token = qmb.RestingIntent.try_create("same-id", "eurusd", proposal=long_intent)
+    short_token = qmb.RestingIntent.try_create("same-id", "eurusd", proposal=short_intent.value)
+    assert is_ok(long_token) and is_ok(short_token)
+    assert long_token.value.fp1_identity() != short_token.value.fp1_identity()
 
 
 def test_layer2_under_qmb_hosting_passes_verdict_through_unchanged() -> None:

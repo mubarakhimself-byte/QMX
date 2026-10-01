@@ -24,6 +24,7 @@ from typing import Final, Protocol, cast, runtime_checkable
 from qmf.core.chrono import Clock, Duration, Instant, Interval
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.risk.door import EntryIntent, ExitIntent
 from qmf.risk.performance import PerformanceResult
 
 from qmb._refuse import clean_token, invalid, policy
@@ -414,6 +415,7 @@ class RestingIntent:
     stream_id: str
     order: object | None = None
     authorized: object | None = None
+    proposal: object | None = None
 
     def fp1_identity(self) -> dict[str, object]:
         """Canonical identity. Package SemVer never enters."""
@@ -421,6 +423,9 @@ class RestingIntent:
         identity = getattr(self.order, "fp1_identity", None)
         if callable(identity):
             content["order"] = identity()
+        proposal_identity = getattr(self.proposal, "fp1_identity", None)
+        if callable(proposal_identity):
+            content["proposal"] = proposal_identity()
         return content
 
     @classmethod
@@ -431,6 +436,7 @@ class RestingIntent:
         *,
         order: object = None,
         authorized: object = None,
+        proposal: object = None,
     ) -> Result[RestingIntent]:
         """Validate one resting intent token."""
         iid = clean_token(intent_id)
@@ -447,7 +453,21 @@ class RestingIntent:
                 "a resting intent names a non-empty stream id",
                 given=repr(stream_id),
             )
-        return Ok(cls(intent_id=iid, stream_id=sid, order=order, authorized=authorized))
+        if proposal is not None and not isinstance(proposal, (EntryIntent, ExitIntent)):
+            return invalid(
+                "proposal",
+                "a resting proposal is a typed CT-23 EntryIntent or ExitIntent",
+                given=type(proposal).__name__,
+            )
+        return Ok(
+            cls(
+                intent_id=iid,
+                stream_id=sid,
+                order=order,
+                authorized=authorized,
+                proposal=proposal,
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1698,4 +1718,5 @@ def _coerce_resting(raw: object) -> Result[RestingIntent]:
         mapping.get("stream_id"),
         order=mapping.get("order"),
         authorized=mapping.get("authorized", mapping.get("intent")),
+        proposal=mapping.get("proposal"),
     )
