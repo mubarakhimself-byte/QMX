@@ -17,3 +17,7 @@ COVERAGE_FILE=/workspace/qmx-qml-expanded-measurement uv run --no-sync pytest -q
 ```
 
 Result: **378 tests PASS; coverage FAIL 78.4022796501916%**. Exact source-only numerator is 7,979 covered line/branch units out of 10,177; another 163 are needed to reach the unchanged 80% floor. Trace `/workspace/qmx-expanded-qml-coverage.log`, counters `/workspace/qmx-expanded-qml-coverage.json`. This is meaningful behavior characterization with a remaining gate failure, not acceptance or a replacement for the full root and package gates.
+
+## Recovery and canonical-persistence expansion
+
+After the seventh public-contract characterization and actual host canonical persistence/graduation controls, root ran `COVERAGE_FILE=/workspace/qmx-qml-current-recovery-measurement uv run --no-sync pytest -q qml/tests qmb/tests/test_ql7_host.py qmb/tests/test_sandbox.py qmb/tests/test_research_host_store.py qmb/tests/test_ql7_graduation_recovery.py --cov=qml/src --cov-branch --cov-report=json:/workspace/qmx-qml-current-recovery-coverage.json --cov-report=term --cov-fail-under=80`. **395 passed; coverage gate FAIL**, exit 1. Covered units 7,980 / 10,177 = **78.4121057%**, still short by 162 units for 80%. Trace `/workspace/qmx-qml-current-recovery-coverage.log`; JSON as named above. QML source did not change for this measurement; mutable unrelated QMA/projection edits were present and this remains an intermediate source-only measurement, not final candidate acceptance. Host persistence behavior and independent security approval are separate from coverage success.
