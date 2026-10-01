@@ -29,3 +29,16 @@ Forbidden. Logs `/workspace/qmx-ubuntu-image.log` and
 Native Windows installation and recovery are NOT RUN. A final immutable
 build, repeated build, install and all acceptance lanes must target the same
 final candidate commit after continuing implementation and review.
+
+Further anonymous Ubuntu setup attempts on 2026-10-01 remain BLOCKED.
+`DOCKER_CONFIG=/workspace/qmx-anonymous-docker docker pull
+mcr.microsoft.com/devcontainers/base:ubuntu-24.04` failed after six download
+attempts with `error pulling image configuration: download failed after
+attempts=6: Forbidden` (`/workspace/qmx-ubuntu-mcr-image.log`). The explicitly
+empty Docker configuration avoids accessing account credentials.
+`curl --fail --location --head --max-time 20
+https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64-root.tar.xz`
+returned HTTP 403 Forbidden with exit 22
+(`/workspace/qmx-ubuntu-rootfs-access.log`). These failures do not establish
+Ubuntu installation or recovery. Local execution evidence continues to name
+the actual Debian 13 host.
