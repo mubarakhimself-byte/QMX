@@ -24,7 +24,9 @@ QMB now has a durable content-addressed `ReplayInputRequest` envelope. It pins t
 
 The operator-owned CLI binding is a content-addressed descriptor selected by trusted QMA run/evidence/split references. It pins CT-06 bot/Book/BMS records, registry as-of, request/raw/journal/ledger roots, the QMB builder source bytes and entrypoint, and the complete behavior policy derived from the resolved config, execution adapters, Book policies, exit module, and calendar. The QMB console-script entrypoint in the checkout environment was invoked as a fresh subprocess against persisted CT-06 and CT-10/12 fixture data. The subprocess returned CT-32 and terminal-line fingerprints; a physical read of the terminal ledger confirmed its CT-32 fingerprint matches the response.
 
-QML evidence construction now freezes nested caller-owned maps/lists and recursively validates supported QMF exact nouns through their typed constructors. Unsupported canonical-but-mutable objects, nested binary floats, malformed nested `Price`/`Instrument` values, and provisional samples are refused.
+QML evidence construction now freezes nested caller-owned maps/lists and recursively validates supported QMF exact nouns through their typed constructors. Sample values and structure-fold geometry must also serialize through their existing canonical identity; unsupported `CivilDate`, `Fingerprint`, and `WriterId` sample values, unsupported fold geometry, canonical-but-mutable objects, nested binary floats, malformed nested `Price`/`Instrument` values, and provisional samples are refused. No new identity projections are invented.
+
+A QMA daemon integration test now registers an actual `ExperimentSpec` whose `data_ref` is the replay's CT-12 split, calls `BacktestingService` through the real `CliQmbDoorTransport`, waits for the spawned QMB CLI child, records the terminal JobHandle state, and verifies the single durable confirmation row carries a CT-32 fingerprint and measures. The test uses the shared QMB fixture builder but introduces no QMB dependency into QMA production modules.
 
 ## Verification
 
@@ -36,7 +38,11 @@ QML evidence construction now freezes nested caller-owned maps/lists and recursi
 
 `uv run --directory qmb pytest -q tests/test_operator_replay.py tests/test_qma_cli.py tests/test_operator_replay_process.py tests/test_replay_execution.py` — 11 passed, including the fresh QMB CLI subprocess and durable terminal-line readback.
 
-`uv run --directory qml pytest -q` — 332 passed after recursive exact-value and typed-noun validation.
+`uv run --directory qml pytest -q` — 333 passed after recursive exact-value, canonical-identity, and typed-noun validation.
+
+`PYTHONPATH=<qma-core-src>:<qma-daemon-src>:<qma-wire-src> uv run --no-sync pytest -q qmb/tests/test_operator_replay_process.py qmb/tests/test_replay_execution.py qa/integration/test_qma_registered_replay.py qml/tests/test_protocol.py` — 30 passed, including registered-spec QMA transport to the real QMB child and durable terminal row readback. The same QMA integration test passed with `QMB_EXECUTABLE=/workspace/qmx-installed-replay-candidate/venv/bin/qmb` (installed candidate `1c4c73b1`), so the service path exercised a non-editable installed executable as well.
+
+`uv run --no-sync ruff check` on the changed QMB/QML/QMA tests and modules, QMB/QML Pyright, and QMA daemon strict Pyright on the integration test — passed.
 
 `uv run --directory packages/qmf-data pytest -q tests/test_splits.py tests/test_seal.py tests/test_source_boundary.py` — 101 passed, including stale CT-12 fingerprint and event-before-seal/known-at-at-seal held-outs.
 
@@ -50,4 +56,4 @@ Independent subprocess held-outs confirmed refusal for a manifest-bound throwing
 
 ## Remaining integration work
 
-The real QMB console script has been exercised directly in a fresh child process. The complete registered CT-47 `ExperimentSpec` → QMA `BacktestingService` → `CliQmbDoorTransport` → QMB child journey, including environment-dispatch lease lifecycle, terminal projection, restart/cancel, and second-pack execution, still needs an end-to-end acceptance run. The editable-workspace subprocess test does not substitute for that journey or for the frozen installed bundle. Book optimization has a provider-free two-generation replay study with durable trial results. Full generic ATC terminal persistence, optimization, and registered ingress remain under implementation. Separate non-editable installed replay evidence is recorded in `installed-recorded-replay.md`; it does not close the QMA worker journey or final-candidate acceptance. External provider verification remains pending.
+The real QMB console script has been exercised directly in a fresh child process and through QMA's registered-spec `BacktestingService` transport. The authenticated CT-40 listener/executor lease lifecycle, terminal projection recovery, restart/cancel, and second-pack execution still need an end-to-end acceptance run. The editable-workspace subprocess tests do not substitute for the frozen installed bundle. Book optimization has a provider-free two-generation replay study with durable trial results. Full generic ATC terminal persistence, optimization, and registered ingress remain under implementation. Separate non-editable installed replay evidence is recorded in `installed-recorded-replay.md`; it does not close the QMA worker journey or final-candidate acceptance. External provider verification remains pending.
