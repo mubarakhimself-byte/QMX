@@ -377,6 +377,25 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert initialized is not None and "error" not in initialized, initialized
+        injected_binding = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 19,
+                    "method": "open_product_session",
+                    "params": {
+                        "instance_id": loaded.instance_id,
+                        "qualified_id": published.qualified_id,
+                        "package_version": published.package_version,
+                        "owner_actor_id": "actor:caller-invented",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert injected_binding is not None and "error" in injected_binding
         opened = process._dispatch_paired_ct40(
             connection,
             json.dumps(

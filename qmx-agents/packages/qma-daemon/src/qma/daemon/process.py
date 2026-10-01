@@ -2784,6 +2784,14 @@ class DaemonProcess:
         if not isinstance(raw, Mapping):
             return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
         params = cast("Mapping[str, object]", raw)
+        unknown = sorted(set(params) - {"instance_id", "qualified_id", "package_version"})
+        if unknown:
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input(
+                    "params", "unknown open_product_session fields", fields=unknown
+                ),
+            )
         instance_id = params.get("instance_id")
         qualified_id = params.get("qualified_id")
         package_version = params.get("package_version")
@@ -2911,6 +2919,24 @@ class DaemonProcess:
         if not isinstance(raw, Mapping):
             return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
         params = cast("Mapping[str, object]", raw)
+        unknown = sorted(
+            set(params)
+            - {
+                "product_session_ref",
+                "expected_revision",
+                "op_id",
+                "op_version",
+                "parameter_ceiling",
+                "expires_at",
+            }
+        )
+        if unknown:
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input(
+                    "params", "unknown grant_product_session fields", fields=unknown
+                ),
+            )
         session_ref = params.get("product_session_ref")
         expected_revision = params.get("expected_revision")
         op_id = params.get("op_id")
