@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TypeVar, cast
 
-from qmf.core.chrono import CalendarIdentity
+from qmf.core.chrono import CalendarIdentity, Duration
 from qmf.core.exact import ExactRational, UnitKind
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.identity import Instrument, VenueId
@@ -477,6 +477,65 @@ def test_nested_canonical_footprint_content_is_snapshotted_without_identity_drif
     spec["seconds"] = 300
 
     assert _ok(footprint.fingerprint_content()) == before
+
+
+def test_arithmetic_reference_custom_mutable_identity_provider_is_refused() -> None:
+    provider = _MutableFootprintIdentity(1)
+    arithmetic = _arithmetic()
+    arithmetic["reference_configuration"] = {"metadata": provider}
+    refused = mint_producer_template(
+        _template_fields(arithmetic_reference_configuration=arithmetic)
+    )
+    assert is_refusal(refused)
+    provider.amount = 99
+
+
+def test_arithmetic_reference_canonical_qmf_value_is_snapshotted() -> None:
+    reference_config: dict[str, object] = {"period": _period(3)}
+    arithmetic = _arithmetic()
+    arithmetic["reference_configuration"] = reference_config
+    template = _ok(
+        mint_producer_template(_template_fields(arithmetic_reference_configuration=arithmetic))
+    )
+    before = _ok(template.fingerprint_content())
+    reference_config["period"] = _period(99)
+    assert _ok(template.fingerprint_content()) == before
+
+
+def test_instrument_source_rejects_unvalidated_fields_and_snapshots_valid_identity() -> None:
+    venue = _ok(VenueId.try_create("venue-ic"))
+    malformed = Instrument(venue, cast(str, object()))
+    bad_inputs = [_input()]
+    bad_inputs[0]["source"] = malformed
+    assert is_refusal(mint_producer_template(_template_fields(inputs=bad_inputs)))
+
+    instrument = _ok(Instrument.try_create(venue, "EURUSD"))
+    source_inputs = [_input()]
+    source_inputs[0]["source"] = instrument
+    template = _ok(mint_producer_template(_template_fields(inputs=source_inputs)))
+    before = _ok(template.fingerprint_content())
+    object.__setattr__(venue, "value", "venue-mutated")
+    assert _ok(template.fingerprint_content()) == before
+
+
+def test_typed_qmf_metadata_is_revalidated_before_template_retains_it() -> None:
+    bad_calendar = CalendarIdentity(cast(str, object()), "v3", "2025.2")
+    assert is_refusal(
+        mint_producer_template(_template_fields(calendar_requirements=[bad_calendar]))
+    )
+
+    bad_rational = ExactRational(True, 1, UnitKind.COUNT)
+    assert is_refusal(
+        mint_producer_template(_template_fields(fixed_parameters={"n": bad_rational}))
+    )
+
+    bad_duration = Duration(cast(int, object()))
+    assert is_refusal(mint_producer_template(_template_fields(warm_up_time_bound=bad_duration)))
+
+    bad_fingerprint = Fingerprint("not-an-fp1")
+    bad_inputs = [_input()]
+    bad_inputs[0]["upstream_fingerprint"] = bad_fingerprint
+    assert is_refusal(mint_producer_template(_template_fields(inputs=bad_inputs)))
 
 
 def test_stream_set_refuses_unknown_role_and_empty_barspecs() -> None:

@@ -10,7 +10,7 @@ from typing import cast
 from qmf.core.chrono import CalendarIdentity, Duration
 from qmf.core.exact import ExactRational
 from qmf.core.fingerprint import Fingerprint, canonical_bytes
-from qmf.core.identity import Instrument
+from qmf.core.identity import Instrument, VenueId
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_ok, is_refusal
 
 from qml._refuse import clean_token, invalid
@@ -130,8 +130,9 @@ def nonneg_int(value: object) -> int | None:
 
 def coerce_fingerprint(value: object) -> Result[Fingerprint]:
     if isinstance(value, Fingerprint):
-        return Ok(value)
-    parsed = Fingerprint.try_create(value)
+        parsed = Fingerprint.try_create(value.value)
+    else:
+        parsed = Fingerprint.try_create(value)
     if is_ok(parsed):
         return parsed
     return invalid(
@@ -144,7 +145,7 @@ def coerce_fingerprint(value: object) -> Result[Fingerprint]:
 def coerce_exact_rational(value: object, *, field: str) -> Result[ExactRational]:
     """Admit an ExactRational or a {num, den, unit_kind} mapping; refuse a float."""
     if isinstance(value, ExactRational):
-        return Ok(value)
+        return ExactRational.try_create(value.numerator, value.denominator, value.unit_kind)
     if isinstance(value, float):
         return invalid(
             field,
@@ -201,7 +202,9 @@ def coerce_parameters(value: object) -> Result[dict[str, ExactRational]]:
 
 def coerce_calendar(value: object) -> Result[CalendarIdentity]:
     if isinstance(value, CalendarIdentity):
-        return Ok(value)
+        return CalendarIdentity.try_create(
+            value.rule_set, value.rule_set_version, value.tzdata_version
+        )
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
         built = CalendarIdentity.try_create(
@@ -250,7 +253,10 @@ def coerce_calendars(value: object) -> Result[tuple[CalendarIdentity, ...]]:
 def coerce_bar_spec(value: object) -> Result[dict[str, object]]:
     """Normalize a BarSpec identity reference to the CT-16 series-input fragment."""
     if isinstance(value, Fingerprint):
-        ref: dict[str, object] = {"kind": "fingerprint-ref", "ref": value.value}
+        parsed = coerce_fingerprint(value)
+        if is_refusal(parsed):
+            return parsed
+        ref: dict[str, object] = {"kind": "fingerprint-ref", "ref": parsed.value.value}
         return Ok(ref)
     if isinstance(value, str):
         parsed = Fingerprint.try_create(value)
@@ -309,11 +315,28 @@ def coerce_bar_spec(value: object) -> Result[dict[str, object]]:
 
 
 def _source_content(source: object) -> Result[dict[str, object]]:
-    if isinstance(source, Instrument):
+    if type(source) is Instrument:
+        source_venue: object = cast(object, source.venue)
+        source_symbol: object = cast(object, source.symbol)
+        if type(source_venue) is not VenueId or type(source_venue.value) is not str:
+            return invalid(
+                "source",
+                "an Instrument identity is reconstructed from validated venue and symbol tokens",
+            )
+        venue = VenueId.try_create(source_venue.value)
+        symbol = clean_token(source_symbol)
+        if is_refusal(venue) or symbol is None:
+            return invalid(
+                "source",
+                "an Instrument identity is reconstructed from validated venue and symbol tokens",
+            )
+        validated = Instrument.try_create(venue.value, symbol)
+        if is_refusal(validated):
+            return validated
         instrument: dict[str, object] = {
             "kind": "instrument",
-            "venue": source.venue.value,
-            "symbol": source.symbol,
+            "venue": validated.value.venue.value,
+            "symbol": validated.value.symbol,
         }
         return Ok(instrument)
     if isinstance(source, Mapping):
@@ -584,20 +607,24 @@ def arithmetic_reference_identity(value: object) -> Result[dict[str, object]]:
             "(compatibility mode, candle settings)",
             given=repr(type(config).__name__),
         )
-    config_map = cast("Mapping[str, object]", config)
+    config_map = cast("Mapping[object, object]", config)
     if len(config_map) == 0:
         return invalid(
             "reference_configuration",
             "the reference-configuration record must carry at least one asserted field",
         )
-    refusal = fp1_clean(dict(config_map), "reference_configuration")
+    snapshot = snapshot_identity_content(config_map, "reference_configuration")
+    if is_refusal(snapshot):
+        return snapshot
+    canonical_config = cast("Mapping[str, object]", snapshot.value)
+    refusal = fp1_clean(dict(canonical_config), "reference_configuration")
     if refusal is not None:
         return refusal
     content: dict[str, object] = {
         "class": "arithmetic-reference",
         "c_library": c_lib,
         "python_wrapper": wrapper,
-        "reference_configuration": dict(config_map),
+        "reference_configuration": dict(canonical_config),
         "format_version": CT16_FORMAT_VERSION,
     }
     return Ok(content)
@@ -670,7 +697,7 @@ def declared_budget_identity(value: object) -> Result[dict[str, object]]:
 
 def coerce_duration(value: object) -> Result[Duration]:
     if isinstance(value, Duration):
-        return Ok(value)
+        return Duration.try_create(value.value_ns)
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
         built = Duration.try_create(mapping.get("value_ns"))
