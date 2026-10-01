@@ -863,6 +863,21 @@ class LiveCTraderClient:
                 "encode requires a CT-19 Command",
                 given=type(command).__name__,
             )
+        if command.venue_id != self._venue_id:
+            return _invalid(
+                "venue_id",
+                "encoded command venue must match the client's pinned VenueId",
+                client=self._venue_id.value,
+                command=command.venue_id.value,
+            )
+        if self._account is not None and command.account != self._account:
+            return _invalid(
+                "account",
+                "encoded command account and role must match the account admitted to this client "
+                "session",
+                session=self._account.fp1_identity(),
+                command=command.account.fp1_identity(),
+            )
         if command.kind is CommandKind.PLACE_ORDER:
             return encode_place_order(
                 command,

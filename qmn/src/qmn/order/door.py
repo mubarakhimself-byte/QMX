@@ -357,7 +357,7 @@ def admit_entry_at_book_door(
     quantity_unit: object = "lot",  # mock-data-scan: allow - Book-door unit default
     quantity_scale: object = 0,
     ct23_format_version: object = CT23_ACTIVE_FORMAT_VERSION,
-    has_open_virtual_position: object = False,
+    has_open_virtual_position: object = None,
 ) -> Result[AuthorizedIntent]:
     """Admit at the Book door and freeze the three R faces before command mint."""
     units = check_door_dimensional_units(
@@ -372,7 +372,8 @@ def admit_entry_at_book_door(
     if not isinstance(has_open_virtual_position, bool):
         return _invalid(
             "has_open_virtual_position",
-            "the scale-in guard takes a bool over the open virtual position",
+            "the scale-in guard requires explicit binding/instrument state; no permissive "
+            "default exists",
             given=repr(has_open_virtual_position),
         )
     admitted = admit_entry_intent(
@@ -477,11 +478,28 @@ def mint_place_order_from_authorized(
             "place_order mints against a typed Account",
             given=type(account).__name__,
         )
+    target = authorized.admitted.execution_target
+    if (
+        target.venue_id != venue_id
+        or target.account_id != account.account_id
+        or target.role is not account.role
+        or account.venue != venue_id
+    ):
+        return _policy(
+            "execution_target",
+            "CT-19 venue and account must exactly match the frozen admitted target, including role",
+            target=target.fp1_identity(),
+            venue=repr(venue_id),
+            account=account.account_id,
+            role=account.role.value,
+        )
     params = OrderParameters.try_create(
         order_type,
         time_in_force,
         authorized.admitted_quantity,
         protective_stop_distance=authorized.faces.original_risk_distance,
+        instrument=authorized.admitted.instrument,
+        trade_side="buy" if authorized.admitted.direction.value == "long" else "sell",
     )
     if is_refusal(params):
         return params

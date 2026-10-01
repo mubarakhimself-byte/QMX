@@ -518,9 +518,20 @@ def encode_place_order(
     symbol = _require_int("symbol_id", symbol_id, minimum=1)
     if is_refusal(symbol):
         return symbol
-    if isinstance(trade_side, float):
-        return _float_refused("trade_side", trade_side)
-    side_token = trade_side.strip().lower() if isinstance(trade_side, str) else None
+    if params.trade_side is not None:
+        supplied_side = trade_side.strip().lower() if isinstance(trade_side, str) else None
+        if supplied_side is not None and supplied_side != params.trade_side:
+            return _invalid(
+                "trade_side",
+                "wire trade side must agree with the immutable order identity",
+                command=params.trade_side,
+                given=supplied_side,
+            )
+        side_token = params.trade_side
+    else:
+        if isinstance(trade_side, float):
+            return _float_refused("trade_side", trade_side)
+        side_token = trade_side.strip().lower() if isinstance(trade_side, str) else None
     side_wire = _TRADE_SIDE_WIRE.get(side_token or "")
     if side_wire is None:
         return _invalid(

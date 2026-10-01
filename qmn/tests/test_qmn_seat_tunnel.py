@@ -14,6 +14,7 @@ from qmf.core import (
     ExactRational,
     Instant,
     Instrument,
+    Money,
     Price,
     Quantity,
     RefusalCategory,
@@ -53,6 +54,7 @@ from qml.protocol import (
     construct_bot,
     mint_state_scope,
 )
+from qmn.ledger import seed_binding_ledger
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
 from qmn.seats import (
@@ -336,6 +338,13 @@ def _path(*, bms: str = "bms-1") -> BookPathContext:
         ordering_ordinal=0,
         bms_instance_id=bms,
         protective_stop_forms={"market": ENTRY_RELATIVE_FORM},
+        position_ledger=_ok(
+            seed_binding_ledger(
+                binding_epoch=_ok(fingerprint({"binding": bms})),
+                seed=_ok(Money.try_create(100_000, "USD", 2)),
+                recorded_at=_instant(),
+            )
+        ),
     )
 
 

@@ -134,11 +134,13 @@ def _cited() -> CitedEvidence:
     return _ok(CitedEvidence.try_create(sqs_reading=slot))
 
 
-def _entry(*, proposed_r: ExactRational | None = None) -> EntryIntent:
+def _entry(
+    *, proposed_r: ExactRational | None = None, direction: Direction = Direction.LONG
+) -> EntryIntent:
     return _ok(
         EntryIntent.try_create(
             _instrument(),
-            Direction.LONG,
+            direction,
             _reason(),
             _execution_target(),
             proposed_r=proposed_r,
@@ -190,6 +192,7 @@ def _admit(**overrides: object) -> AuthorizedIntent:
         "r_unit_price": _rate(1_000),
         "value_factor": _value_factor(),
         "money_scale": 2,
+        "has_open_virtual_position": False,
     }
     kwargs.update(overrides)
     return _ok(admit_entry_at_book_door(**kwargs))
@@ -247,6 +250,7 @@ def test_full_loss_absent_refuses_before_command_mint() -> None:
             r_unit_price=_rate(1_000),
             value_factor=_value_factor(),
             money_scale=2,
+            has_open_virtual_position=False,
         )
     )
     assert refused.category is RefusalCategory.INVALID_INPUT
@@ -276,6 +280,7 @@ def test_inbound_mapping_with_bot_size_never_reaches_mint() -> None:
             r_unit_price=_rate(1_000),
             value_factor=_value_factor(),
             money_scale=2,
+            has_open_virtual_position=False,
         )
     )
     assert refused.context["field"] == "quantity"
@@ -296,6 +301,22 @@ def test_scale_in_refuses_at_door() -> None:
         )
     )
     assert refused.category is RefusalCategory.POLICY_REJECTION
+
+
+def test_position_state_is_required_at_book_door() -> None:
+    refused = _refusal(
+        admit_entry_at_book_door(
+            intent=_entry(),
+            entry_price=_price(110_000),
+            exit_logic_ref=_exit_logic_ref(),
+            module=_OffsetStopModule(),
+            book_resolved_requested_r=_r(1),
+            r_unit_price=_rate(1_000),
+            value_factor=_value_factor(),
+            money_scale=2,
+        )
+    )
+    assert refused.context["field"] == "has_open_virtual_position"
 
 
 def test_place_order_quantity_is_book_derived_not_bot() -> None:
@@ -327,6 +348,47 @@ def test_place_order_quantity_is_book_derived_not_bot() -> None:
         )
     )
     assert bot_qty.context["field"] == "quantity"
+
+
+def test_place_order_target_cannot_contradict_admitted_target() -> None:
+    authorized = _admit()
+    other_account = _ok(Account.try_create("acct-demo", _VENUE, AccountRole.DEMO))
+    refused = _refusal(
+        mint_place_order_from_authorized(
+            authorized,
+            venue_id=_VENUE,
+            account=other_account,
+            session_epoch=_SESSION,
+            ordering_ordinal=3,
+        )
+    )
+    assert refused.context["field"] == "execution_target"
+
+
+def test_command_identity_binds_instrument_and_trade_side() -> None:
+    long_command = _ok(
+        mint_place_order_from_authorized(
+            _admit(intent=_entry(proposed_r=_r(1), direction=Direction.LONG)),
+            venue_id=_VENUE,
+            account=_account(),
+            session_epoch=_SESSION,
+            ordering_ordinal=10,
+        )
+    )
+    short_command = _ok(
+        mint_place_order_from_authorized(
+            _admit(intent=_entry(proposed_r=_r(1), direction=Direction.SHORT)),
+            venue_id=_VENUE,
+            account=_account(),
+            session_epoch=_SESSION,
+            ordering_ordinal=10,
+        )
+    )
+    assert long_command.order_parameters is not None
+    assert short_command.order_parameters is not None
+    assert long_command.order_parameters.trade_side == "buy"
+    assert short_command.order_parameters.trade_side == "sell"
+    assert long_command.fingerprint() != short_command.fingerprint()
 
 
 def test_command_mint_without_frozen_r_refuses() -> None:

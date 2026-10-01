@@ -64,6 +64,7 @@ from qmf.core import (
     Duration,
     Fingerprint,
     Instant,
+    Instrument,
     Ok,
     Price,
     PriceDelta,
@@ -358,6 +359,8 @@ class OrderParameters:
     limit_price: Price | None = None
     stop_price: Price | None = None
     protective_stop_distance: PriceDelta | None = None
+    instrument: Instrument | None = None
+    trade_side: str | None = None
 
     @classmethod
     def try_create(
@@ -369,6 +372,8 @@ class OrderParameters:
         limit_price: object = None,
         stop_price: object = None,
         protective_stop_distance: object = None,
+        instrument: object = None,
+        trade_side: object = None,
     ) -> Result[OrderParameters]:
         """Validate and build :class:`OrderParameters`, returning value-or-refusal.
 
@@ -424,6 +429,34 @@ class OrderParameters:
                 "instrument",
                 "every price and protective distance on one order must name the same instrument",
             )
+        resolved_instrument: Instrument | None = None
+        if instrument is not None:
+            if not isinstance(instrument, Instrument):
+                return _invalid(
+                    "instrument",
+                    "an identity-bound order names an Instrument",
+                    given=repr(instrument),
+                )
+            if any(
+                value is not None and value.instrument != instrument
+                for value in (limit, stop, protective)
+            ):
+                return _invalid(
+                    "instrument",
+                    "order prices and protective distance match its identity-bound instrument",
+                )
+            resolved_instrument = instrument
+        resolved_side: str | None = None
+        if trade_side is not None:
+            if not isinstance(trade_side, str) or trade_side.strip().lower() not in {"buy", "sell"}:
+                return _invalid(
+                    "trade_side",
+                    "an identity-bound order side is buy|sell",
+                    given=repr(trade_side),
+                )
+            resolved_side = trade_side.strip().lower()
+        if (resolved_instrument is None) != (resolved_side is None):
+            return _invalid("execution_identity", "instrument and trade_side are supplied together")
         return Ok(
             cls(
                 order_type=resolved_type,
@@ -432,6 +465,8 @@ class OrderParameters:
                 limit_price=limit,
                 stop_price=stop,
                 protective_stop_distance=protective,
+                instrument=resolved_instrument,
+                trade_side=resolved_side,
             )
         )
 
@@ -443,7 +478,7 @@ class OrderParameters:
             "order_type": self.order_type.value,
             "time_in_force": self.time_in_force.value,
             "quantity": self.quantity.fp1_identity(),
-            "format_version": CONTRACT_FORMAT_VERSION,
+            "format_version": 2 if self.instrument is not None else CONTRACT_FORMAT_VERSION,
         }
         if self.limit_price is not None:
             content["limit_price"] = self.limit_price.fp1_identity()
@@ -451,6 +486,12 @@ class OrderParameters:
             content["stop_price"] = self.stop_price.fp1_identity()
         if self.protective_stop_distance is not None:
             content["protective_stop_distance"] = self.protective_stop_distance.fp1_identity()
+        if self.instrument is not None:
+            content["instrument"] = {
+                "venue": self.instrument.venue.value,
+                "symbol": self.instrument.symbol,
+            }
+            content["trade_side"] = self.trade_side
         return content
 
 

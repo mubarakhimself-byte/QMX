@@ -439,6 +439,25 @@ def mint_signal_snapshot(
     slots = _coerce_producer_slots(producers, require_sqs=require_sqs)
     if isinstance(slots, TypedRefusal):
         return slots
+    sqs_slot = slots.get(SQS_PRODUCER_ID)
+    if sqs_slot is not None and sqs_slot.sqs is not None:
+        baseline_environment = sqs_slot.sqs.baseline_key.environment
+        if baseline_environment != env:
+            return policy(
+                "environment",
+                "the SQS baseline environment must match the enclosing snapshot environment",
+                snapshot_environment=env,
+                baseline_environment=baseline_environment,
+            )
+        baseline_instrument = sqs_slot.sqs.baseline_key.instrument
+        baseline_venue = sqs_slot.sqs.baseline_key.venue
+        if baseline_instrument.venue != baseline_venue:
+            return policy(
+                "venue",
+                "the SQS baseline venue must match the baseline instrument venue",
+                baseline_venue=baseline_venue.value,
+                instrument_venue=baseline_instrument.venue.value,
+            )
     sensors = _coerce_sensor_list(degraded_sensors)
     if isinstance(sensors, TypedRefusal):
         return sensors
@@ -472,6 +491,14 @@ def check_snapshot_freshness(
             "decision_at",
             "freshness is evaluated at an Instant decision time",
             given=repr(decision_at),
+        )
+    if decision_at.value_ns < snapshot.frontier_instant.value_ns:
+        return invalid(
+            "decision_at",
+            "a governed consumer cannot evaluate a future snapshot; decision_at is at or after "
+            "the frontier",
+            decision_at_ns=decision_at.value_ns,
+            frontier_ns=snapshot.frontier_instant.value_ns,
         )
     age = decision_at.difference(snapshot.frontier_instant)
     if is_refusal(age):

@@ -1004,6 +1004,7 @@ def _exercise_entry_preservation(fx: _Fixtures) -> Result[Mapping[str, object]]:
         r_unit_price=rate.value,
         value_factor=factor.value,
         money_scale=2,
+        has_open_virtual_position=False,
     )
     if is_refusal(authorized):
         return authorized
@@ -1832,6 +1833,7 @@ def _produce_refusal_categories(fx: _Fixtures) -> Result[dict[str, str]]:
             r_unit_price="z",
             value_factor="z",
             money_scale=2,
+            has_open_virtual_position=False,
         )
         if is_refusal(invalid_intent):
             paths[invalid_intent.category.value] = "admit_entry_at_book_door/invalid"
@@ -1942,6 +1944,7 @@ def _produce_refusal_categories(fx: _Fixtures) -> Result[dict[str, str]]:
             r_unit_price=rate.value,
             value_factor=factor.value,
             money_scale=2,
+            has_open_virtual_position=False,
         )
         if is_refusal(refused_entry):
             paths[refused_entry.category.value] = "admit_entry_at_book_door/no-full-loss"

@@ -18,6 +18,7 @@ from typing import Final, cast
 from qmf.core import Instant, Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.door import EntryIntent
 
+from qmn.ledger.binding_ledger import BindingVirtualLedger
 from qmn.order.door import (
     BOT_SIZE_FIELDS,
     AuthorizedIntent,
@@ -60,6 +61,7 @@ class BookPathContext:
     ordering_ordinal: object
     bms_instance_id: str
     protective_stop_forms: object
+    position_ledger: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +112,12 @@ def dispatch_hosted_intents(
     if is_refusal(context):
         return context
     door = context.value
+    if not isinstance(door.position_ledger, BindingVirtualLedger):
+        return invalid(
+            "position_ledger",
+            "hosted order admission requires its binding-scoped virtual position ledger",
+            given=type(door.position_ledger).__name__,
+        )
     if door.bms_instance_id != admitted.value.proof.bms_instance_id:
         return policy(
             "bms_instance_id",
@@ -123,6 +131,7 @@ def dispatch_hosted_intents(
         return items
     authorized: list[AuthorizedIntent] = []
     commands: list[Command] = []
+    pending_in_batch: set[str] = set()
     ordinal = door.ordering_ordinal
     if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0:
         return invalid(
@@ -142,6 +151,16 @@ def dispatch_hosted_intents(
                 index=index,
                 given=type(item).__name__,
             )
+        instrument_key = item.instrument.symbol
+        if (
+            door.position_ledger.has_open_virtual(instrument_key)
+            or instrument_key in pending_in_batch
+        ):
+            return policy(
+                "has_open_virtual_position",
+                "a binding/instrument virtual position or pending entry blocks scale-in",
+                instrument=instrument_key,
+            )
         frozen = admit_entry_at_book_door(
             intent=item,
             entry_price=door.entry_price,
@@ -151,6 +170,7 @@ def dispatch_hosted_intents(
             r_unit_price=door.r_unit_price,
             value_factor=door.value_factor,
             money_scale=door.money_scale,
+            has_open_virtual_position=False,
         )
         if is_refusal(frozen):
             return frozen
@@ -171,6 +191,7 @@ def dispatch_hosted_intents(
             return protected
         authorized.append(frozen.value)
         commands.append(command.value)
+        pending_in_batch.add(instrument_key)
     return Ok(
         SeatDispatchReceipt(
             authorized=tuple(authorized),

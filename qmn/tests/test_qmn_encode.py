@@ -362,6 +362,31 @@ def test_live_translates_each_kind_onto_encode_symbols() -> None:
     assert encoded_amend.payload_type == PROTO_OA_AMEND_POSITION_SLTP_REQ
 
 
+def test_identity_bound_side_cannot_be_replaced_at_encoding() -> None:
+    client = _client()
+    venue = client.venue_id
+    params = _ok(
+        OrderParameters.try_create(
+            OrderType.MARKET,
+            TimeInForce.GOOD_TILL_CANCEL,
+            _qty(),
+            instrument=_instrument(),
+            trade_side="buy",
+        )
+    )
+    command = _ok(Command.place_order(venue, _account(venue), _SESSION, 1, params))
+    refused = client.encode_command(
+        command,
+        compiled=_compiled(),
+        declaration=_declaration(),
+        ctid_trader_account_id=42,
+        symbol_id=1,
+        trade_side="sell",
+    )
+    assert isinstance(refused, TypedRefusal)
+    assert refused.context["field"] == "trade_side"
+
+
 def test_live_encode_compound_keeps_ftr02_block() -> None:
     client = _client()
     parent = _ok(

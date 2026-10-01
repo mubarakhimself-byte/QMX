@@ -163,6 +163,15 @@ def test_environment_key_separates_demo_and_live_baselines() -> None:
     assert demo_snap.environment == "demo"
     assert live_snap.fp1_identity() != demo_snap.fp1_identity()
 
+    mismatch = mint_signal_snapshot(
+        frontier_instant=_instant(1_000),
+        environment="live",
+        feed_state=CanonicalFeedState.LIVE,
+        producers=(_sqs_slot(environment="demo"),),
+        decision_freshness_bound=_duration(100),
+    )
+    assert is_refusal(mismatch)
+
 
 def test_freshness_bound_is_decision_freshness_bound_only() -> None:
     snap = _snapshot(frontier=1_000, bound=100)
@@ -172,6 +181,8 @@ def test_freshness_bound_is_decision_freshness_bound_only() -> None:
     stale = check_snapshot_freshness(snap, decision_at=_instant(1_101))
     assert is_refusal(stale)
     assert stale.category is RefusalCategory.STALE_EVIDENCE
+    future = check_snapshot_freshness(snap, decision_at=_instant(900))
+    assert is_refusal(future)
 
 
 def test_book_door_and_ksa_consume_bots_refused() -> None:
