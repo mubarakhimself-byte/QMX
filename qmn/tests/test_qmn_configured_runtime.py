@@ -11,10 +11,13 @@ import pytest
 from google.protobuf import descriptor_pb2
 from qmf.core import (
     CalendarIdentity,
+    ExactRational,
     Instant,
+    Money,
     Ok,
     SinkAck,
     SinkResult,
+    UnitKind,
     VenueId,
     World,
     WriterId,
@@ -33,6 +36,8 @@ from qmf.risk.binding import (
     PositionModel,
     StateCarry,
 )
+from qmf.risk.control_rank import ControlActionKind
+from qmf.risk.grammar import AdmissionImpact, TemplateSection, TemplateVariable, UiEditability
 from qmf.risk.templates import BmsDefinition, BookDefinition
 from qmf.venue.proto import descriptor_set_digest
 from qml.declaration import mint_bot_definition, mint_confluence
@@ -48,7 +53,9 @@ from qmn.promotion import ActivationBindingTransition, ActivationPhase, persist_
 from qmn.seats.state import OPERATOR_PRINCIPAL, GovernedSeatState
 
 
-def _references(root: Path) -> tuple[dict[str, str], str, BookBindingRecord]:
+def _references(
+    root: Path, *, nonempty_templates: bool = False
+) -> tuple[dict[str, str], str, BookBindingRecord]:
     registry = root / "registry"
     registry.mkdir(exist_ok=True)
     opened = RegistryPersistence.open(EvidenceStore(registry), World.LIVE)
@@ -57,8 +64,40 @@ def _references(root: Path) -> tuple[dict[str, str], str, BookBindingRecord]:
     writer = WriterId.try_create("fixture-machine", "composition", "registry", "fixture-boot")
     instant = Instant.try_create(1_700_000_000_000_000_000)
     assert is_ok(writer) and is_ok(instant)
-    book = BookDefinition.try_create(1, "USD", {})
-    bms = BmsDefinition.try_create(1, {})
+    book_sections: dict[str, TemplateSection] = {}
+    bms_sections: dict[str, TemplateSection] = {}
+    if nonempty_templates:
+        declared_floor = Money.try_create(100, "USD", 2)
+        assert is_ok(declared_floor)
+        floor = TemplateVariable.try_create(
+            "loss_floor",
+            UnitKind.MONEY,
+            declared_floor.value,
+            UiEditability.UNEDITABLE,
+            AdmissionImpact.RESIGN,
+        )
+        assert is_ok(floor)
+        book_section = TemplateSection.try_create("money_rules", {"loss_floor": floor.value})
+        assert is_ok(book_section)
+        book_sections["money_rules"] = book_section.value
+        rank_variables: dict[str, TemplateVariable] = {}
+        for rank, action in enumerate(ControlActionKind):
+            declared_rank = ExactRational.try_create(rank, 1, UnitKind.COUNT)
+            assert is_ok(declared_rank)
+            variable = TemplateVariable.try_create(
+                action.value,
+                UnitKind.COUNT,
+                declared_rank.value,
+                UiEditability.UNEDITABLE,
+                AdmissionImpact.RELINT,
+            )
+            assert is_ok(variable)
+            rank_variables[action.value] = variable.value
+        rank_section = TemplateSection.try_create("control_rank_table", rank_variables)
+        assert is_ok(rank_section)
+        bms_sections["control_rank_table"] = rank_section.value
+    book = BookDefinition.try_create(1, "USD", book_sections)
+    bms = BmsDefinition.try_create(1, bms_sections)
     assert is_ok(book) and is_ok(bms)
     book_fp = book.value.fingerprint()
     bms_fp = bms.value.fingerprint()
@@ -138,8 +177,17 @@ def _references(root: Path) -> tuple[dict[str, str], str, BookBindingRecord]:
     )
     assert is_ok(bot)
     record_bodies: dict[str, dict[str, object]] = {
-        "book-definition": {"accounting_currency": "USD", "sections": {}},
-        "bms-definition": {"sections": {}},
+        "book-definition": {
+            "accounting_currency": book.value.accounting_currency,
+            "sections": {
+                name: section.fp1_identity() for name, section in book.value.sections.items()
+            },
+        },
+        "bms-definition": {
+            "sections": {
+                name: section.fp1_identity() for name, section in bms.value.sections.items()
+            }
+        },
         "bot-definition": bot.value.body(),
         "book-binding": typed_binding.value.fp1_identity(),
     }
@@ -253,8 +301,14 @@ class _QmfActivationJournalSink:
         return Ok(SinkAck())
 
 
-def _deployment(root: Path, descriptor_path: Path | None, digest: str) -> Path:
-    refs, as_of, binding = _references(root)
+def _deployment(
+    root: Path,
+    descriptor_path: Path | None,
+    digest: str,
+    *,
+    nonempty_templates: bool = False,
+) -> Path:
+    refs, as_of, binding = _references(root, nonempty_templates=nonempty_templates)
     activation_evidence = _activation_evidence(root, binding)
     payload = {
         "format_version": 1,
@@ -335,6 +389,36 @@ def test_valid_local_pins_remain_stand_down_without_admission(tmp_path: Path) ->
     binding_fp = assessed.value.binding_record.fingerprint()
     assert is_ok(binding_fp)
     assert binding_fp.value == assessed.value.binding_fingerprint
+
+
+def test_nonempty_registered_book_and_bms_reload_as_typed_assessment(
+    tmp_path: Path,
+) -> None:
+    descriptor_set = descriptor_pb2.FileDescriptorSet()
+    proto = descriptor_set.file.add()
+    proto.name = "fixture-nonempty.proto"
+    proto.package = "fixture_nonempty"
+    proto.syntax = "proto3"
+    raw = descriptor_set.SerializeToString()
+    digest = descriptor_set_digest(raw)
+    assert is_ok(digest)
+    descriptor_path = tmp_path / "pinned-proto.pb"
+    descriptor_path.write_bytes(raw)
+    path = _deployment(
+        tmp_path,
+        descriptor_path,
+        digest.value,
+        nonempty_templates=True,
+    )
+
+    assessed = assess_configured_runtime(path, qmx_root=tmp_path)
+
+    assert is_ok(assessed), assessed
+    assert "money_rules" in assessed.value.book_definition.sections
+    assert "control_rank_table" in assessed.value.bms_definition.sections
+    assert assessed.value.stand_down
+    assert assessed.value.activation_authorized is False
+    assert assessed.value.provider_ready is False
 
 
 def test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry(

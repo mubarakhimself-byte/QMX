@@ -43,6 +43,7 @@ from qml.declaration import BotDefinition, mint_bot_definition
 from qmn.config.compiler import ResolvedNodeConfig, compile_node_config
 from qmn.config.roster import RosterRuntimeComposition, compose_roster_runtime
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
+from qmn.host.registered_templates import decode_bms_definition, decode_book_definition
 from qmn.promotion.journal import ActivationReconstruction, reconstruct_activation
 from qmn.seats.state import OPERATOR_PRINCIPAL, GovernedSeatState
 from qmn.venue.proto_runtime import compile_pinned_descriptor
@@ -593,11 +594,7 @@ def _decode_registered_artifacts(
     records: Mapping[str, LoadedRecord],
 ) -> Result[tuple[BookDefinition, BmsDefinition, BotDefinition, Fingerprint, BookBindingRecord]]:
     book_record = records["ct22_fp1"]
-    book = BookDefinition.try_create(
-        book_record.contract_format_version,
-        book_record.body.get("accounting_currency"),
-        book_record.body.get("sections"),
-    )
+    book = decode_book_definition(book_record.contract_format_version, book_record.body)
     if is_refusal(book):
         return book
     book_fp = book.value.fingerprint()
@@ -605,10 +602,7 @@ def _decode_registered_artifacts(
         return book_fp
 
     bms_record = records["ct27_fp1"]
-    bms = BmsDefinition.try_create(
-        bms_record.contract_format_version,
-        bms_record.body.get("sections"),
-    )
+    bms = decode_bms_definition(bms_record.contract_format_version, bms_record.body)
     if is_refusal(bms):
         return bms
     bms_fp = bms.value.fingerprint()
@@ -920,14 +914,12 @@ def _absolute_path(value: object, field: str) -> Result[Path]:
 
 def _read_deployment_no_follow(root: Path, relative_path: Path) -> bytes:
     """Read a bounded deployment file through a no-follow descriptor chain."""
-    if (
-        _O_NOFOLLOW == 0
-        or _O_DIRECTORY == 0
-        or os.open not in os.supports_dir_fd
-    ):
+    if _O_NOFOLLOW == 0 or _O_DIRECTORY == 0 or os.open not in os.supports_dir_fd:
         raise OSError("descriptor-relative no-follow reads are unavailable")
-    if not relative_path.parts or relative_path.is_absolute() or any(
-        part in {"", ".", ".."} for part in relative_path.parts
+    if (
+        not relative_path.parts
+        or relative_path.is_absolute()
+        or any(part in {"", ".", ".."} for part in relative_path.parts)
     ):
         raise ValueError("deployment path is not a normalized relative path")
     directory_fd = os.open("/", os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
@@ -1008,8 +1000,10 @@ def _freeze_json_value(value: object, field: str) -> Result[object]:
     if value is None or type(value) in {str, int, bool}:
         return Ok(value)
     if type(value) is float:
-        return Ok(value) if math.isfinite(value) else invalid(
-            field, "profile numbers are finite JSON values"
+        return (
+            Ok(value)
+            if math.isfinite(value)
+            else invalid(field, "profile numbers are finite JSON values")
         )
     if isinstance(value, Mapping):
         frozen: dict[str, object] = {}
