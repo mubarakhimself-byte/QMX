@@ -42,3 +42,5 @@ returned HTTP 403 Forbidden with exit 22
 (`/workspace/qmx-ubuntu-rootfs-access.log`). These failures do not establish
 Ubuntu installation or recovery. Local execution evidence continues to name
 the actual Debian 13 host.
+
+Later acquisition succeeded through a pinned community CI image, with Ubuntu 24.04.4 userspace verified. The earlier `1c4c73b1` bundle's offline non-editable install and installed lifecycle pass inside that container; this is not native systemd/recovery or final-source acceptance. Exact command failures, image/source provenance, hash-locked cache recovery and successful traces are recorded in [ubuntu-container-install.md](ubuntu-container-install.md). Native Windows remains NOT RUN.
