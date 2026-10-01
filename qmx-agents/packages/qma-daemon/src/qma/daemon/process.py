@@ -2822,12 +2822,13 @@ class DaemonProcess:
         if is_refusal(binding):
             return binding
         owner, environment_ref = binding.value
-        if owner.value not in self._roster.compiler.known_quant_actor_ids:
+        quant = self._mailboxes.quant_for(owner)
+        if quant is None:
             return TypedRefusal(
                 category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
                 retryability=Retryability.AFTER_CONDITION,
                 context={
-                    "reason": "QMB binding owner is not a registered Quant",
+                    "reason": "QMB binding owner has no registered Quant record",
                     "owner_actor_id": owner.value,
                 },
             )
@@ -2842,7 +2843,7 @@ class DaemonProcess:
         task_id = bound.envelope.logical_invocation_id
         return self.backtesting.place_query(
             "analysis.project",
-            owner=owner,
+            owner=quant.actor_id,
             task_id=task_id,
             environment_ref=environment_ref,
             extra=payload,

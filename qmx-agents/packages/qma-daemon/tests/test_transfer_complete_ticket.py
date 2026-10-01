@@ -835,8 +835,10 @@ def test_live_start_mission_invoke_gate(tmp_path: Path) -> None:
                 admitted_error_obj = admitted["error"]
                 assert isinstance(admitted_error_obj, dict)
                 admitted_error = cast("dict[str, object]", admitted_error_obj)
-                assert admitted_error["code"] == -32601
-                assert admitted_error["message"] == "method not found"
+                assert admitted_error["code"] == -32000
+                admitted_data = cast("dict[str, object]", admitted_error["data"])
+                admitted_context = cast("dict[str, object]", admitted_data["context"])
+                assert admitted_context["field"] == "product_session_ref"
             finally:
                 dest_writer.close()
                 writer.close()
@@ -933,8 +935,10 @@ def test_live_host_dest_placement_same_daemon_admits_start_mission(tmp_path: Pat
                 admitted_error_obj = admitted["error"]
                 assert isinstance(admitted_error_obj, dict)
                 admitted_error = cast("dict[str, object]", admitted_error_obj)
-                assert admitted_error["code"] == -32601
-                assert admitted_error["message"] == "method not found"
+                assert admitted_error["code"] == -32000
+                admitted_data = cast("dict[str, object]", admitted_error["data"])
+                admitted_context = cast("dict[str, object]", admitted_data["context"])
+                assert admitted_context["field"] == "product_session_ref"
                 assert process.transfers.open_tickets() == ()
             finally:
                 writer.close()
@@ -977,8 +981,10 @@ def test_live_start_mission_without_fp1_falls_through(tmp_path: Path) -> None:
                 skipped_error_obj = skipped["error"]
                 assert isinstance(skipped_error_obj, dict)
                 skipped_error = cast("dict[str, object]", skipped_error_obj)
-                assert skipped_error["code"] == -32601
-                assert skipped_error["message"] == "method not found"
+                assert skipped_error["code"] == -32000
+                skipped_data = cast("dict[str, object]", skipped_error["data"])
+                skipped_context = cast("dict[str, object]", skipped_data["context"])
+                assert skipped_context["field"] == "product_session_ref"
                 _ws_write(
                     writer,
                     {
@@ -994,7 +1000,10 @@ def test_live_start_mission_without_fp1_falls_through(tmp_path: Path) -> None:
                 launch_error_obj = launch["error"]
                 assert isinstance(launch_error_obj, dict)
                 launch_error = cast("dict[str, object]", launch_error_obj)
-                assert launch_error["code"] == -32601
+                assert launch_error["code"] == -32000
+                launch_data = cast("dict[str, object]", launch_error["data"])
+                launch_context = cast("dict[str, object]", launch_data["context"])
+                assert launch_context["field"] == "product_session_ref"
             finally:
                 writer.close()
                 await writer.wait_closed()

@@ -79,7 +79,12 @@ def test_qmb_binding_is_operator_owned_and_exact_revision(tmp_path: Path) -> Non
                         "owner_actor_id": "quant:research/alpha",
                         "environment_ref": "env:local",
                         "config_revision": 3,
-                    }
+                    },
+                    "pack:analysis-backtest-copy": {
+                        "owner_actor_id": "quant:research/beta",
+                        "environment_ref": "env:local",
+                        "config_revision": 3,
+                    },
                 }
             }
         ),
@@ -89,5 +94,8 @@ def test_qmb_binding_is_operator_owned_and_exact_revision(tmp_path: Path) -> Non
     assert is_ok(resolved)
     assert resolved.value[0].value == "quant:research/alpha"
     assert resolved.value[1] == "env:local"
+    distinct = backtest_binding(tmp_path, "pack:analysis-backtest-copy", 3)
+    assert is_ok(distinct)
+    assert distinct.value[0].value == "quant:research/beta"
     assert is_refusal(backtest_binding(tmp_path, "pack:analysis-backtest", 4))
     assert is_refusal(backtest_binding(tmp_path, "pack:another-instance", 3))

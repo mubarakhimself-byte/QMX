@@ -12,8 +12,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
+from qma.core.operations import public_operation_descriptors
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
 from qma.core.ports.qmb import ANALYSIS_BACKTEST_PLUGIN_ID, QMB_BACKTEST_TOOL_ID
+from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.backtest import BacktestingService, CliQmbDoorTransport
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import (
@@ -24,6 +26,8 @@ from qma.daemon.process import (
     DaemonProcess,
 )
 from qma.daemon.taskgraph.records import GraphTemplate
+from qma.wire.initialize import WIRE_PROTOCOL_VERSION, WireConnection
+from qma.wire.invocation_envelope import compute_input_hash
 from qma.wire.listener import DEFAULT_BIND_HOST, ListenerBindConfig
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER
@@ -267,6 +271,164 @@ def test_procedure_start_compiles_registered_template_for_registered_quant(
         assert is_ok(launched), launched
         assert launched.value.owner.actor_id == actor.value
         assert process.jobs.handle_for(launched.value.handle.job_id) is not None
+    finally:
+        process.close()
+
+
+def test_public_ct40_start_mission_uses_minted_product_session_grant(
+    tmp_path: Path,
+) -> None:
+    process = _compose(tmp_path)
+    try:
+        loaded = process.roster.loader.get("research-corpus")
+        assert loaded is not None
+        published = next(
+            row
+            for row in loaded.published
+            if row.point == "graph_template" and row.qualified_id == "research-corpus:survey"
+        )
+        contribution = {
+            "qualified_id": published.qualified_id,
+            "package_version": published.package_version,
+        }
+        session_id = "psess:ct40-positive"
+        session = process.product_sessions.mint(
+            product_session_id=session_id,
+            profile="app-use",
+            principal=PrincipalClass.OPERATOR.value,
+            contribution=contribution,
+            instance_id=loaded.instance_id,
+            app_instance_id=loaded.instance_id,
+            config_revision=2,
+            as_of="2026-10-01T00:00:00Z",
+            selected_refs=[{"kind": "instance_id", "id": loaded.instance_id}],
+        )
+        assert is_ok(session), session
+        descriptor = next(
+            item
+            for item in public_operation_descriptors()
+            if item.op_id == "qma.procedure.start" and item.version == 1
+        )
+        grant = process.product_sessions.host_grant(
+            session_id,
+            op_id=descriptor.op_id,
+            op_version=descriptor.version,
+            effect_class=descriptor.effect_class.value,
+            parameter_ceiling={"allow_keys": ["procedure_id"]},
+            expires_at="2099-01-01T00:00:00Z",
+        )
+        assert is_ok(grant), grant
+        request_payload = {"procedure_id": "research-corpus:survey"}
+        input_hash = compute_input_hash(request_payload, descriptor=descriptor)
+        assert is_ok(input_hash), input_hash
+        envelope = {
+            "logical_invocation_id": "inv:ct40-positive",
+            "attempt_id": 1,
+            "op_id": descriptor.op_id,
+            "op_version": descriptor.version,
+            "contribution": contribution,
+            "instance_id": loaded.instance_id,
+            "config_revision": 2,
+            "grant_id": grant.value.grant_id,
+            "effect_class": descriptor.effect_class.value,
+            "idempotency_key": "idem:ct40-positive",
+            "reconcile_policy": "query-then-decide",
+            "input_hash": input_hash.value,
+            "call_depth": 0,
+            "caller_kind": "user",
+            "caller_session_ref": session_id,
+        }
+        actor = ActorId.mint(DeskSlug.RESEARCH, "alpha")
+        assert is_ok(actor)
+        quant = Quant(
+            actor_id=actor.value,
+            desk=DeskSlug.RESEARCH,
+            quant_slug="alpha",
+            role=RoleName.RESEARCHER,
+            name="Quant alpha",
+        )
+        assert is_ok(process._mailboxes.open_for_quant(quant))
+        (tmp_path / "operator-config.json").write_text(
+            json.dumps(
+                {
+                    "qmb_bindings": {
+                        loaded.instance_id: {
+                            "owner_actor_id": actor.value.value,
+                            "environment_ref": "env:local",
+                            "config_revision": 2,
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        connection = WireConnection()
+        assert is_ok(connection.authenticate_pairing("prid:ct40positive"))
+        connection_token = "ct40-test-connection"
+        initialized = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": WIRE_PROTOCOL_VERSION,
+                        "capabilities": {},
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert initialized is not None and "error" not in initialized, initialized
+        response = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "start_mission",
+                    "params": {
+                        "product_session_ref": session_id,
+                        "envelope": envelope,
+                        "payload": request_payload,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert response is not None and "error" not in response, response
+        result = response.get("result")
+        assert isinstance(result, dict)
+        job_id = result.get("job_id")
+        assert isinstance(job_id, str)
+        assert process.jobs.handle_for(job_id) is not None
+
+        forged = dict(envelope)
+        forged["logical_invocation_id"] = "inv:ct40-forged"
+        forged["idempotency_key"] = "idem:ct40-forged"
+        forged["grant_id"] = "grant:caller-invented"
+        forged["input_hash"] = input_hash.value
+        refused = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "start_mission",
+                    "params": {
+                        "product_session_ref": session_id,
+                        "envelope": forged,
+                        "payload": request_payload,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert refused is not None and "error" in refused, refused
     finally:
         process.close()
 
