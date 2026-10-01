@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -380,6 +381,7 @@ class BacktestingService:
         self._product_sessions: ProductSessionService | None = None
         self._artifact_root = Path(artifact_root) if artifact_root is not None else None
         self._occupancy: dict[str, str] = {}
+        self._observers: list[threading.Thread] = []
 
     @property
     def plugin_id(self) -> str:
@@ -672,6 +674,7 @@ class BacktestingService:
             )
             return receipt
         self._occupancy = admitted.value
+        self._start_exit_observer(minted.value.job_id)
         if self._experiments is not None and dispatch_lease is not None:
             recorded = self._experiments.record_coordinated_run(
                 spec_fp1=request.experiment_spec_fp1,
@@ -731,6 +734,32 @@ class BacktestingService:
             return invalid_input("exit_code", "QMB process wait returns an integer exit code")
         terminal = JobHandleState.DONE if exit_code == 0 else JobHandleState.FAILED
         return self.observe_outcome(job_id, terminal)
+
+    def _start_exit_observer(self, job_id: str) -> None:
+        """Observe a real CLI child exit without accepting caller-authored status."""
+        waiter = getattr(self._transport, "wait", None)
+        if not callable(waiter):
+            return
+
+        def observe() -> None:
+            while True:
+                try:
+                    exit_code = waiter(job_id, timeout=0.25)
+                except subprocess.TimeoutExpired:
+                    continue
+                if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                    return
+                terminal = JobHandleState.DONE if exit_code == 0 else JobHandleState.FAILED
+                self.observe_outcome(job_id, terminal)
+                return
+
+        observer = threading.Thread(
+            target=observe,
+            name=f"qmb-exit-observer-{job_id}",
+            daemon=True,
+        )
+        self._observers.append(observer)
+        observer.start()
 
     def cancel(
         self,
@@ -925,6 +954,7 @@ class BacktestingService:
             return minted
         invocation = build_qmb_query_invocation(
             job_id=minted.value.job_id,
+            attempt_id=minted.value.attempt_id,
             command=row.command,
             environment_ref=environment_ref,
             occupancy_key=occupancy_key,

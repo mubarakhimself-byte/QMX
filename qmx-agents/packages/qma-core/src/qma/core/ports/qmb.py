@@ -878,6 +878,7 @@ def build_qmb_door_invocation(
 def build_qmb_query_invocation(
     *,
     job_id: str,
+    attempt_id: int,
     command: object,
     environment_ref: str,
     occupancy_key: str,
@@ -886,6 +887,8 @@ def build_qmb_query_invocation(
     """Build a query CLI invocation. Queries consume no occupancy."""
     if not job_id.strip():
         return _invalid("job_id", "QMB door invocation requires a job id")
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
+        return _invalid("attempt_id", "QMB door invocation requires a positive attempt id")
     classified = classify_qmb_door_occupancy(command)
     if not isinstance(classified, Ok):
         return classified
@@ -899,6 +902,7 @@ def build_qmb_query_invocation(
         )
     payload: dict[str, object] = {
         "job_id": job_id,
+        "attempt_id": attempt_id,
         "environment_ref": environment_ref,
         "occupancy_key": occupancy_key,
         "command": row.command,

@@ -102,6 +102,8 @@ def main() -> None:
                 environment_ref="env:docker",
                 experiment_spec_fp1=registered.value.spec.spec_fp1,
                 evidence_ref="evidence:recorded-bars",
+                dispatch_lease=lease,
+                model_deployment_ref="deploy:analyst-v1",
             )
             assert is_ok(run)
             child = service.admit_process_per_run_child(

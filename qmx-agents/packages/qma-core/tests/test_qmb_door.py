@@ -21,6 +21,7 @@ from qma.core.ports.qmb import (
     admit_qmb_job,
     build_qmb_cli_argv,
     build_qmb_door_invocation,
+    build_qmb_query_invocation,
     classify_qmb_door_occupancy,
     environment_kind_from_ref,
     occupying_qmb_job,
@@ -218,6 +219,27 @@ def test_occupancy_classifies_runs_versus_queries() -> None:
     assert is_refusal(refused)
     assert refused.context["mints_ct32"] is False
     assert refused.context["mints_experiment_spec"] is False
+
+
+def test_query_door_invocation_carries_a_positive_attempt_id() -> None:
+    invocation = build_qmb_query_invocation(
+        job_id="qmbq:local:job-1",
+        attempt_id=3,
+        command="analysis.project",
+        environment_ref="env:local",
+        occupancy_key="local",
+    )
+    assert is_ok(invocation)
+    assert invocation.value.payload["attempt_id"] == 3
+    for bad in (True, 0, -1, "3"):
+        refused = build_qmb_query_invocation(
+            job_id="qmbq:local:job-1",
+            attempt_id=bad,
+            command="analysis.project",
+            environment_ref="env:local",
+            occupancy_key="local",
+        )
+        assert is_refusal(refused)
 
 
 def test_queries_and_process_children_do_not_consume_occupancy() -> None:

@@ -397,15 +397,23 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
             assert process.jobs.handle_for(job_id) is not None
             assert process.backtesting.occupying_job("env:local") == job_id
             assert isinstance(process.backtesting.transport, CliQmbDoorTransport)
-            observed = _ok(process.backtesting.wait_and_observe(job_id, timeout=60.0))
-            assert observed.state is JobHandleState.DONE
-            terminal = await request(
-                5,
-                WireQuery.GET_JOB.value,
-                {"product_session_ref": session_ref, "handle_id": job_id},
-            )
-            assert "error" not in terminal, terminal
-            terminal_result = cast(dict[str, object], terminal["result"])
+            exit_code = process.backtesting.transport.wait(job_id, timeout=60.0)
+            assert exit_code == 0
+            terminal_result: dict[str, object] = {}
+            for _ in range(100):
+                terminal = await request(
+                    5,
+                    WireQuery.GET_JOB.value,
+                    {"product_session_ref": session_ref, "handle_id": job_id},
+                )
+                assert "error" not in terminal, terminal
+                terminal_result = cast(dict[str, object], terminal["result"])
+                if terminal_result["state"] in {
+                    JobHandleState.DONE.value,
+                    JobHandleState.FAILED.value,
+                }:
+                    break
+                await asyncio.sleep(0.01)
             assert terminal_result["state"] == JobHandleState.DONE.value
 
             # Revoking the retained dispatch authority prevents a second child

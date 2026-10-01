@@ -234,7 +234,7 @@ def test_coordinated_projection_persists_json_and_ledger(tmp_path: Path) -> None
     try:
         occupied = service.invoke(
             QMB_BACKTEST_TOOL_ID,
-            owner=_owner(),
+            owner=lease.owner,
             task_id="task-run-hold",
             environment_ref="env:docker",
             experiment_spec_fp1=spec_fp1,
@@ -245,7 +245,7 @@ def test_coordinated_projection_persists_json_and_ledger(tmp_path: Path) -> None
         assert is_ok(occupied)
         query = service.place_query(
             "analysis.project",
-            owner=_owner(),
+            owner=lease.owner,
             task_id="task-project-1",
             environment_ref="env:docker",
             persist_projection=True,
