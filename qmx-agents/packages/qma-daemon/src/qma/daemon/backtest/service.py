@@ -766,35 +766,25 @@ class BacktestingService:
                     except subprocess.TimeoutExpired:
                         continue
                     except Exception as exc:  # transport/plugin boundary
-                        with self._observer_lock:
-                            self._observer_failures[job_id] = invalid_input(
+                        self._record_lost_certainty(
+                            job_id,
+                            invalid_input(
                                 "qmb_wait",
                                 "child wait failed before a terminal code was observed",
                                 error=str(exc),
-                            )
-                            self._start_observation_if_queued(job_id)
-                            certainty = self._jobs.observe_lost_certainty(
-                                job_id, trigger="lost_supervisor"
-                            )
-                            if is_refusal(certainty):
-                                self._observer_failures[job_id] = certainty
+                            ),
+                        )
                         return
                     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
-                        with self._observer_lock:
-                            self._observer_failures[job_id] = invalid_input(
+                        self._record_lost_certainty(
+                            job_id,
+                            invalid_input(
                                 "exit_code", "child wait must return a process exit code"
-                            )
-                            self._start_observation_if_queued(job_id)
-                            certainty = self._jobs.observe_lost_certainty(
-                                job_id, trigger="lost_supervisor"
-                            )
-                            if is_refusal(certainty):
-                                self._observer_failures[job_id] = certainty
+                            ),
+                        )
                         return
                     known_exit_code = exit_code
-                terminal = (
-                    JobHandleState.DONE if known_exit_code == 0 else JobHandleState.FAILED
-                )
+                terminal = JobHandleState.DONE if known_exit_code == 0 else JobHandleState.FAILED
                 observed = self.observe_outcome(job_id, terminal)
                 if is_ok(observed):
                     with self._observer_lock:
@@ -814,6 +804,22 @@ class BacktestingService:
         )
         self._observers.append(observer)
         observer.start()
+
+    def _record_lost_certainty(self, job_id: str, cause: object) -> None:
+        """Retry the known UNKNOWN transition until its durable write succeeds."""
+        while True:
+            with self._observer_lock:
+                self._observer_failures[job_id] = cause
+                self._start_observation_if_queued(job_id)
+                certainty = self._jobs.observe_lost_certainty(job_id, trigger="lost_supervisor")
+                if is_ok(certainty):
+                    self._release_terminal()
+                    return
+                self._observer_failures[job_id] = certainty
+                current = self._jobs.handle_for(job_id)
+                if current is None or current.is_terminal:
+                    return
+            time.sleep(0.25)
 
     def _start_observation_if_queued(self, job_id: str) -> None:
         """Move the submitted handle through its started state before resolution."""

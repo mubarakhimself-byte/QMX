@@ -226,9 +226,11 @@ def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> 
         def __init__(self, exit_code: object) -> None:
             super().__init__()
             self.exit_code = exit_code
+            self.wait_calls = 0
 
         def wait(self, job_id: str, *, timeout: float = 10.0) -> object:
             del job_id, timeout
+            self.wait_calls += 1
             return self.exit_code
 
     def with_transport(transport: ExitingTransport) -> BacktestingService:
@@ -258,7 +260,26 @@ def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> 
     assert completed.state is JobHandleState.DONE
     assert service.observer_failure_for(job_id) is None
 
-    failed_service = with_transport(ExitingTransport(None))
+    class FailOnceUnknownJobs(JobHandleService):
+        def __init__(self) -> None:
+            super().__init__()
+            self.unknown_calls = 0
+
+        def observe_lost_certainty(self, job_id: str, *, trigger: str) -> Result[JobHandle]:
+            self.unknown_calls += 1
+            if self.unknown_calls == 1:
+                return invalid_input("job_handle", "transient unknown ledger append refusal")
+            return super().observe_lost_certainty(job_id, trigger=trigger)
+
+    failed_jobs = FailOnceUnknownJobs()
+    failed_transport = ExitingTransport(None)
+    failed_service = BacktestingService(
+        tools=ToolRegistry(),
+        jobs=failed_jobs,
+        environments=_envs(ExecutionEnvironmentKind.DOCKER),
+        transport=failed_transport,
+    )
+    assert is_ok(failed_service.install())
     failed = failed_service.invoke(
         QMB_BACKTEST_TOOL_ID,
         owner=_owner(),
@@ -273,6 +294,8 @@ def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> 
     unknown = failed_service.jobs.handle_for(failed_job)
     assert unknown is not None
     assert unknown.state is JobHandleState.UNKNOWN
+    assert failed_jobs.unknown_calls >= 2
+    assert failed_transport.wait_calls == 1
     assert failed_service.observer_failure_for(failed_job) is not None
 
 
