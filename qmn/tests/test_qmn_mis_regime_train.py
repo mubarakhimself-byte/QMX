@@ -132,6 +132,9 @@ def _prepared(count: int = 120):
     return cleaned, labeled
 
 
+fixture_prepared_regime_training = _prepared
+
+
 def test_training_config_records_provenance_dimensions(tmp_path: Path) -> None:
     cleaned, labeled = _prepared()
     config = _ok(

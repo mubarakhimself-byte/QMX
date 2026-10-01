@@ -143,6 +143,9 @@ def _trained(tmp_path: Path, *, seed: int = DEFAULT_TRAINING_SEED):
     return cleaned, labeled, artifact
 
 
+fixture_trained_regime_evaluation = _trained
+
+
 def test_evaluation_follows_story_30_1_contract(tmp_path: Path) -> None:
     cleaned, labeled, artifact = _trained(tmp_path)
     design = accepted_regime_classifier_design()
