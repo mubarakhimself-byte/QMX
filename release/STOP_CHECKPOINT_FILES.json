@@ -1,0 +1,294 @@
+{
+  "purpose": "Source/test/report changes since earlier remotely verified checkpoint; excludes this handoff metadata and local runtime artifacts",
+  "previous_pushed_checkpoint": "01fed525af621173cf58929801d9b58fc316d870",
+  "code_checkpoint": "bbea29d5cb470a7cc5fc48016f598e38c4e0160e",
+  "checkpoint_branch": "qmx-stop-checkpoint-2026-10-01",
+  "files": [
+    {
+      "path": "qmb/src/qmb/execution/alternative_terminal.py",
+      "bytes": 48821,
+      "sha256": "692fed1823137fc83f55977b673194ba7f7e98dfe773a6f5e9af8442f25c890b"
+    },
+    {
+      "path": "qmb/src/qmb/host/operator_alternative_study.py",
+      "bytes": 42342,
+      "sha256": "e7c11ff7da89152ee5285d4447ede82bf418e36fdb6ed5cd01990cc2ed028ae7"
+    },
+    {
+      "path": "qmb/src/qmb/host/operator_replay.py",
+      "bytes": 42155,
+      "sha256": "a92ab0c1c1cb20e932ef281d7f3de73e030b661800c1bc030d23d64e46fb2650"
+    },
+    {
+      "path": "qmb/src/qmb/optimize/alternative_sensitivity.py",
+      "bytes": 14241,
+      "sha256": "52b4e25a2e2ac526108dba5be9f11b84554d3c9a9c548076338140d704bcecbe"
+    },
+    {
+      "path": "qmb/src/qmb/optimize/alternative_study.py",
+      "bytes": 30997,
+      "sha256": "64bcf7b56e142f291f98c47635d2eabe4307fc6bb46f62d081bb0205aa063131"
+    },
+    {
+      "path": "qmb/src/qmb/optimize/sensitivity.py",
+      "bytes": 66735,
+      "sha256": "1e6e6355ddb1b1b1eaa767878d46acbef9f3ffdd841414b04e5185ad3c1d91f5"
+    },
+    {
+      "path": "qmb/tests/test_alternative_sensitivity.py",
+      "bytes": 5263,
+      "sha256": "20cb2ea673102b2e0c8a43187aad33e3d512741d809bfc5c6c651b88a30011af"
+    },
+    {
+      "path": "qmb/tests/test_alternative_terminal_phases.py",
+      "bytes": 2561,
+      "sha256": "379632a18f192e594e678c00044583bb1c3656f6b1901dc17f089c6026b86bcf"
+    },
+    {
+      "path": "qmb/tests/test_operator_alternative_cli_journey.py",
+      "bytes": 24343,
+      "sha256": "fdc2f880f1ca65aae1d728e9ef772db4489d04b7e6ebb37d1486c4f30dc43e42"
+    },
+    {
+      "path": "qmb/tests/test_operator_alternative_study.py",
+      "bytes": 20115,
+      "sha256": "c5f999557dacfed6bd3e34c6e53441c911f130481d7af09ceaf791bbacefcf21"
+    },
+    {
+      "path": "qmb/tests/test_operator_replay_process.py",
+      "bytes": 21527,
+      "sha256": "2d118fed357e40158eb9b29deb30f54ea88d3c844657d0b55340d7c31d32a1c4"
+    },
+    {
+      "path": "qmb/tests/test_two_registered_bots_recovery.py",
+      "bytes": 17051,
+      "sha256": "16242094f8458f1f2097d4903f08ce576e42da299bc807de66c45c1ec6c4202d"
+    },
+    {
+      "path": "qmn/src/qmn/host/admission_artifacts.py",
+      "bytes": 48365,
+      "sha256": "bac585581c327a8cd6ec5fe0a38af3061e522a09f8bc67092e9b51e186db31c5"
+    },
+    {
+      "path": "qmn/src/qmn/host/admission_evidence.py",
+      "bytes": 30897,
+      "sha256": "4b90a78119db6138827819e3c050ce9da50cd1636b679b77a4affd8274684329"
+    },
+    {
+      "path": "qmn/src/qmn/host/configured_runtime.py",
+      "bytes": 43308,
+      "sha256": "703a51c7d6c8525249e41a125c4ccedefd3c117c0201e230ca8264c5276fa231"
+    },
+    {
+      "path": "qmn/src/qmn/host/registered_templates.py",
+      "bytes": 18491,
+      "sha256": "af6bd841c0a38b1f59420168d6f2bcb7e238b797beb80b9c7be3d8cc533d7896"
+    },
+    {
+      "path": "qmn/src/qmn/host/sqs_baseline_producer.py",
+      "bytes": 23736,
+      "sha256": "714d11d9050f7f5053aec60ab9acb95974c05223ea55d0c6f2f0b6b74058810a"
+    },
+    {
+      "path": "qmn/tests/test_qmn_admission_artifacts.py",
+      "bytes": 9116,
+      "sha256": "8a6358c1f1440631b67be9fa6d43492a514a588e8d0d21a1fc6524517cbb3540"
+    },
+    {
+      "path": "qmn/tests/test_qmn_admission_evidence.py",
+      "bytes": 13388,
+      "sha256": "6e2d94cd9faa4d0e2ae8148ff3190c84f6f86e7b8c3951a04f70fd5646e18bb6"
+    },
+    {
+      "path": "qmn/tests/test_qmn_configured_runtime.py",
+      "bytes": 18611,
+      "sha256": "b7cfb327fa638419942af126ee6cfd29e46f7fc027fd5913ebed2adca9cc81b9"
+    },
+    {
+      "path": "qmn/tests/test_qmn_registered_templates.py",
+      "bytes": 5522,
+      "sha256": "1746a6643bf3af88940488c6c0961deda836718eaef93b4f14b802ed9e04c429"
+    },
+    {
+      "path": "qmn/tests/test_qmn_sqs_baseline_producer.py",
+      "bytes": 12160,
+      "sha256": "445917b73b69cf22759a6fc0718886249d8fe89c26fc226c1f4f391de1eb5353"
+    },
+    {
+      "path": "qmx-agents/packages/qma-core/src/qma/core/operations/catalog.py",
+      "bytes": 10094,
+      "sha256": "24eb86438115c27464bc964d72580a5eab24af186f77a20f59f9041fce606c68"
+    },
+    {
+      "path": "qmx-agents/packages/qma-core/tests/test_operation_descriptor.py",
+      "bytes": 16991,
+      "sha256": "05c64569a428a4abfbe9738a08792b90dbd51dbd9c31feea395b62332a15793e"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/examples/product_session_grants_usage.py",
+      "bytes": 6562,
+      "sha256": "01dfae31c3621c1fb8d2badbe8c4b4da0cd4ae9d0a5b3b17b7e0e78ff87311f2"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py",
+      "bytes": 40384,
+      "sha256": "06ef02ab07e95c5c0f5b3baecdee6291cc7a42926d5beb09c456066452a1ccbd"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py",
+      "bytes": 84360,
+      "sha256": "2a68b271f01fc229464f2a464defe4973549a2fc653b1431683b243f98d890be"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py",
+      "bytes": 160949,
+      "sha256": "876cdfe0939eae0fb568802f40bd1b706a9cac99e285c8704d0f1cdc61084aff"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/src/qma/daemon/sessions/__init__.py",
+      "bytes": 5487,
+      "sha256": "de3fd329e6f91ee0b592fd29e1c74e2b0e0c2b4d25e953cb09c765ffdceeefe7"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/src/qma/daemon/sessions/product_session.py",
+      "bytes": 109415,
+      "sha256": "563130a268b17d569c833d9feb42e72df08f6c56905d08bc5122b962403b2abe"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/tests/test_product_session_grants.py",
+      "bytes": 24278,
+      "sha256": "7f95dcb110ce3d19f96c9dfcff7b9c491f792baeaefafbff75a5088e5c95f1c5"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py",
+      "bytes": 18370,
+      "sha256": "0b85491a0290ca040d9ebcdf79d759b5ef5f22249b3059f60b815e5740636480"
+    },
+    {
+      "path": "qmx-agents/packages/qma-daemon/tests/test_qmb_optimize_study_transport.py",
+      "bytes": 6179,
+      "sha256": "32757622d3e0fedfc2bc14d9adf2bc7fa737a6aa8ef683eb209b09ccab149baf"
+    },
+    {
+      "path": "release/CANDIDATE_STATUS.md",
+      "bytes": 15816,
+      "sha256": "b0cb57ccba0ec78d0046a74b86ff80859f3e95e13334bf3773601110dcf7f023"
+    },
+    {
+      "path": "release/UI_INTERFACE.md",
+      "bytes": 14121,
+      "sha256": "f2f43b52126e687bfaa32cd6046350b06977c0e0eaf80b162527c58e1ba741d6"
+    },
+    {
+      "path": "release/evidence/alternative-study-interface-review.md",
+      "bytes": 17102,
+      "sha256": "6fe523962c3e4c7b4086601ccd7c7ebd6d31f7f4f24c8f3447405a6d7ceb7c79"
+    },
+    {
+      "path": "release/evidence/as-of-input-knowability-interface-review.md",
+      "bytes": 14555,
+      "sha256": "f1f4784abca7b3c6b0669efe3330becc459263a7988d87936f2dec8554d1cc7e"
+    },
+    {
+      "path": "release/evidence/checkpoint-push-verification.md",
+      "bytes": 1928,
+      "sha256": "dae669b4bb66e9cf8b46681afd4cec2736dac6fd25a7f875af5748532b97393a"
+    },
+    {
+      "path": "release/evidence/intermediate-gates-2026-10-01.md",
+      "bytes": 6494,
+      "sha256": "6eb73256994983400bda9b272c9b491314dae3559d9743ba3e50daaac08f4b0f"
+    },
+    {
+      "path": "release/evidence/qma-as-of-interface-review.md",
+      "bytes": 15016,
+      "sha256": "7902f6936dba0ffe503afb761786fcd7fa7f287afdcfa4f7e165e0200d2d7045"
+    },
+    {
+      "path": "release/evidence/qma-host-retry-review.md",
+      "bytes": 19611,
+      "sha256": "d36c95296c5b0123798bbba2bd06425e3f0d65282747cf97aaa5432373da24c6"
+    },
+    {
+      "path": "release/evidence/qma-optimize-descriptor-review.md",
+      "bytes": 2846,
+      "sha256": "ad8b7bfa7357de116c54889247faa7e006fdb5d2255f765df6c30e0ac6ef8dbd"
+    },
+    {
+      "path": "release/evidence/qmb-alternative-sensitivity-review.md",
+      "bytes": 6852,
+      "sha256": "77ba309746eb275b83fd05ef8330ce3173398e5b7ba8400678bf1e0a73a1b874"
+    },
+    {
+      "path": "release/evidence/qmb-book-alternative-coupled-review.md",
+      "bytes": 18524,
+      "sha256": "2fb9445c80e201710d8b7ab031b7ebe62e8d7101d26f06528d59cce4e2cb9dad"
+    },
+    {
+      "path": "release/evidence/qmb-operator-alternative-study-review.md",
+      "bytes": 16105,
+      "sha256": "b2e943d8595c38f02aa75f4a34e5e764c25b45502931e57e1f6a9f4330f985e2"
+    },
+    {
+      "path": "release/evidence/qml-conformance-recovery-journey-review.md",
+      "bytes": 4319,
+      "sha256": "e1e5914f54b9caa36bd9c796c458294fc32c6d5b73218779e6ad1c578ada67c6"
+    },
+    {
+      "path": "release/evidence/qml-current-coverage.md",
+      "bytes": 10705,
+      "sha256": "299c64950bd988e1cd95d5ab5282ff6321c32b20848ebb34734b40fbf269fe19"
+    },
+    {
+      "path": "release/evidence/qml-registered-bot-interface-review.md",
+      "bytes": 11630,
+      "sha256": "17ba16f514bcf707daabf271dc577f739fdaff1f600048df0fce30b0bfb3c316"
+    },
+    {
+      "path": "release/evidence/qml-two-registered-bots-recovery-review.md",
+      "bytes": 9643,
+      "sha256": "f637674167affb4da4c09b0b3f8788339bb44102200a112e8dfc9eb5c76fa278"
+    },
+    {
+      "path": "release/evidence/qmn-admission-artifacts-review.md",
+      "bytes": 12866,
+      "sha256": "484569c217ce1122dc010899d42e9f516a79df121a7878b2dcc1b0de3ebddd71"
+    },
+    {
+      "path": "release/evidence/qmn-admission-evidence-review.md",
+      "bytes": 11981,
+      "sha256": "3e33113438cf39b3b877bf4ac567d4dbaf373fd75cd2239dcf72926bf8c45ac7"
+    },
+    {
+      "path": "release/evidence/qmn-default-profile-resolver-review.md",
+      "bytes": 6554,
+      "sha256": "bd924cbe511c2d34d4967bd9256798dd1ec17fc9f454b4e13e18dfaa21f379fa"
+    },
+    {
+      "path": "release/evidence/qmn-registered-template-decoder-review.md",
+      "bytes": 6525,
+      "sha256": "8ffec94de51a3f48134d5c86a995c6e57ade4f09a6068a6cb794e9c2a66bfe91"
+    },
+    {
+      "path": "release/evidence/qmn-sqs-baseline-producer-review.md",
+      "bytes": 9190,
+      "sha256": "ccae7ca18dd0d3fb574165a2ae08dc8e40d2e5edee4cd0865c1c14b49d64834c"
+    }
+  ],
+  "code_checkpoint_paths": [
+    "qmb/tests/test_two_registered_bots_recovery.py",
+    "qmn/src/qmn/host/admission_artifacts.py",
+    "qmn/src/qmn/host/sqs_baseline_producer.py",
+    "qmn/tests/test_qmn_sqs_baseline_producer.py",
+    "qmx-agents/packages/qma-daemon/examples/product_session_grants_usage.py",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/sessions/__init__.py",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/sessions/product_session.py",
+    "qmx-agents/packages/qma-daemon/tests/test_product_session_grants.py",
+    "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py",
+    "qmx-agents/packages/qma-daemon/tests/test_qmb_optimize_study_transport.py",
+    "release/evidence/qml-two-registered-bots-recovery-review.md"
+  ]
+}

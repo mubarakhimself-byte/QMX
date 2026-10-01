@@ -1,5 +1,7 @@
 # Attended release candidate status
 
+**Stopped at the user's instruction, 2026-10-01.** This earlier running status is historical. See `STOP_HANDOFF.md` for the unfinished checkpoint, latest evidence limits and proposed bounded core work. Do not resume automatically.
+
 This is an active work record, not acceptance or a publication authorization. Published source versions and documentation authority are pinned in `SOURCE_MANIFEST.json`; separate Claude UI ownership is recorded in `UI_INTERFACE.md`. Attached audit findings were reproduced against source rather than treated as instructions from the user.
 
 ## Built snapshot and its limits
