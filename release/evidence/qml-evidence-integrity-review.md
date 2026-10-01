@@ -116,3 +116,24 @@ These are meaningful public identity/composition characterizations with local fi
 Held two-path hashes: protocol/evidence.py `59aa79a933d6b57c6d9b800d8e5c53ee48bd77f48f1f29b2ae409bd56a878d8d`; declared-evidence characterization `4f604abf942fdf47793b8d4543f11bea83cabd65bc626f7e0d27c1a645456aa1`. `_as_instant` now routes nominal Instant.value_ns through the official Instant.try_create rather than trusting the class label. Independent protocol/characterization suite **38 passed in 0.46s**.
 
 Additional `/tmp/review_qml_nominal_time.py` exercises public raw MappingReadSurface→HostedBot collection→callback: boolean/string/int64 upper overflow/lower overflow nominal knowable-at refuse for both series and StructureFold, all without callback; malformed evaluation Instants likewise refuse; legitimate future knowledge refuses; valid signed-int64 minimum, zero and maximum admit and produce exactly three callbacks. Probe exits 0. Raw frame storage is not mislabeled as semantic admission: governed validation occurs before callback/knowledge comparison, preserving exact QMF time and absence/producer behavior. No product edits/Git mutations. Bounded time/data-integrity correction approved; owner strict full-set 418 passed, 8,122/10,229 = 79.4017%, still FAIL against 80% (62 additional units needed), remains separate from this approval.
+
+
+### Layer 1 catalog content admission — residual false refusal
+
+The held catalog correction independently passes 66 focused tests, but is not approved yet. Exact SHA256: confluence.py `3a6167e21899d98986c12c3db422cccf251de89766b8bffdd966110fa6d53ed0`; families/__init__.py `03428eeb214e8e18ce0cc7028938b83d31606f0551d38b2b136f1ba95ce3158b`; test_layer1_catalog_admission_characterization.py `c206e0383be5c4264f144082ba28a4ffd9a88c545dd699f8ec1c6f0de4694b0c`.
+
+Actual public lint controls using `_recording_world()` from that test show `[world['confluence'], world['confluence_record']]` refuses, as does its reverse. The corresponding family semantic object plus its valid CT06 record also refuses in both orders. Each element alone admits identical semantic content. The new census compares the semantic content fingerprint against the CT06 envelope stable_id, so it mistakes two valid representations of one resolved content value for ambiguity. CT34 contract line34 defines content identity; family resolver explicitly accepts registration records, semantic content, and mappings. Registered stable_id must be independently verified, but resolved semantic equivalence must not depend on the wrapper representation. Owner received this finite correction.
+
+Two genuinely separate occurrences minted through RegistrationRecord.try_create with identical content and changed sequence/created_at correctly have the same stable_id and are admitted. No occurrence-only conflict is invented. Wrong map-key substitution and forged stable_id regressions pass, as do malformed authority-family duplicate/reversal and exact duplicate positives. The full owner 424-test coverage remains below 80%; this bounded review does not waive it.
+
+
+### Catalog representation correction — bounded PASS
+
+Independent focused catalog/layer1/confluence/families suite: **66 passed**. Original mixed semantic-plus-valid-CT06 controls now admit in both orders for confluence and family; separate writer-sequence/time occurrences of unchanged content admit. Independently adding a forged stable_id alongside the valid semantic object refuses in either order, preserving checked-envelope validation rather than bypassing it through a valid alternative. Existing wrong-key, malformed family authority/reversal and exact duplicate regressions remain green. Semantic content and CT06 envelope identities are checked in their respective namespaces.
+
+Exact reviewed SHA256:
+- `qml/src/qml/declaration/confluence.py`: `df45870f3c18fe0ec647f673a6e93a72ad238cd533591e6718811f47894e03fe`
+- `qml/src/qml/families/__init__.py`: `aa0daff956c6136d402eb7646ca30c76534539fbb5ab79587eb8982093f90bce`
+- `qml/tests/test_layer1_catalog_admission_characterization.py`: `576a42d1e56f4c8ccded57ab67db996961e20e4f478694933e6fc512307224f8`
+
+Bounded catalog admission approval only; the owner broad coverage remains below 80%, with no floor waiver or full candidate approval.

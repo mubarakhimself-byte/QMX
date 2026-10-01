@@ -708,24 +708,22 @@ def _lookup_confluence(wanted: Fingerprint, catalog: object) -> Result[Confluenc
     token = wanted.value
     if isinstance(catalog, Mapping):
         mapping = cast("Mapping[object, object]", catalog)
-        if token in mapping:
-            extracted = _extract_confluence(mapping[token])
-            if extracted is None:
-                return unavailable(
-                    "confluence_ref",
-                    "an unresolvable cited child confluence is an unavailable dependency",
-                    confluence_id=token,
-                    journal=True,
-                )
-            return extracted
         items: Sequence[object] = tuple(mapping.values())
     elif isinstance(catalog, Sequence) and not isinstance(catalog, (str, bytes)):
         items = cast("Sequence[object]", catalog)
     else:
         items = ()
+    matches: list[tuple[Confluence, str, str | None]] = []
     for item in items:
         extracted = _extract_confluence(item)
         if extracted is None:
+            if isinstance(catalog, Mapping) and token in catalog and catalog[token] is item:
+                return invalid(
+                    "confluence_ref",
+                    "the catalog entry under a cited confluence fingerprint is not that confluence",
+                    confluence_id=token,
+                    journal=True,
+                )
             continue
         if is_refusal(extracted):
             return extracted
@@ -733,7 +731,38 @@ def _lookup_confluence(wanted: Fingerprint, catalog: object) -> Result[Confluenc
         if is_refusal(fp):
             return fp
         if fp.value.value == token:
-            return extracted
+            if isinstance(item, RegistrationRecord):
+                # CT-06's stable identity includes its envelope and parent refs, while
+                # the Bot cite names semantic CT-34 content. Verify both identities.
+                record_fp = fingerprint(item.fp1_identity())
+                if is_refusal(record_fp) or record_fp.value != item.stable_id:
+                    return invalid(
+                        "confluence_catalog",
+                        "a registered confluence stable id must match its CT-06 identity",
+                        confluence_id=token,
+                        journal=True,
+                    )
+                stable_id = item.stable_id.value
+            else:
+                stable_id = None
+            matches.append((extracted.value, fp.value.value, stable_id))
+        elif isinstance(catalog, Mapping) and token in catalog and catalog[token] is item:
+            return invalid(
+                "confluence_ref",
+                "the catalog entry under a cited confluence fingerprint has different content",
+                confluence_id=token,
+                journal=True,
+            )
+    if matches:
+        stable_ids = {stable_id for _, _, stable_id in matches if stable_id is not None}
+        if len(stable_ids) > 1:
+            return invalid(
+                "confluence_catalog",
+                "conflicting registered identities resolve to one cited confluence fingerprint",
+                confluence_id=token,
+                journal=True,
+            )
+        return Ok(matches[0][0])
     return unavailable(
         "confluence_ref",
         "an unresolvable cited child confluence is an unavailable dependency",

@@ -224,6 +224,7 @@ def resolve_family_at_layer1(
     if is_refusal(items):
         return items
     token = wanted.value.value
+    matches: list[tuple[StrategyFamilyRecord, str | None]] = []
     for item in items.value:
         peeked = _peek_family_id(item)
         if peeked is None or peeked != token:
@@ -233,7 +234,31 @@ def resolve_family_at_layer1(
             continue
         if is_refusal(extracted):
             return extracted
-        return extracted
+        semantic_fp = extracted.value.fingerprint_content()
+        if is_refusal(semantic_fp):
+            return semantic_fp
+        if isinstance(item, RegistrationRecord):
+            record_fp = fingerprint(item.fp1_identity())
+            if is_refusal(record_fp) or record_fp.value != item.stable_id:
+                return invalid(
+                    "family_catalog",
+                    "a registered strategy family stable id must match its CT-06 identity",
+                    family_id=token,
+                )
+            stable_id = item.stable_id.value
+        else:
+            stable_id = None
+        matches.append((extracted.value, stable_id))
+    if matches:
+        stable_ids = {stable_id for _, stable_id in matches if stable_id is not None}
+        if len(stable_ids) > 1:
+            return invalid(
+                "family_catalog",
+                "conflicting strategy family records share the cited family id",
+                family_id=token,
+                journal=True,
+            )
+        return Ok(matches[0][0])
     return unavailable(
         "strategy_family_id",
         "the cited strategy family does not resolve to a dated CT-06 metadata "
