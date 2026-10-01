@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -173,6 +174,25 @@ class _CounterFactory:
         return Ok(_Counter())
 
 
+class _CountingFactory(_CounterFactory):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def construct(
+        self,
+        *,
+        declaration: object,
+        assignment: object,
+        read_surfaces: object,
+    ) -> Result[object]:
+        self.calls += 1
+        return super().construct(
+            declaration=declaration,
+            assignment=assignment,
+            read_surfaces=read_surfaces,
+        )
+
+
 class _Overflow:
     def export_state(self) -> dict[str, object]:
         return {"blob": "x" * 80}
@@ -315,6 +335,62 @@ def test_snapshot_is_a_versioned_serialized_contract() -> None:
     round_trip = _ok(BotStateSnapshot.from_mapping(mapping))
     assert _ok(round_trip.fingerprint()) == _ok(snapshot.fingerprint())
     assert round_trip.payload["n"] == 1
+
+
+def test_snapshot_refuses_mutable_custom_identity_provider() -> None:
+    declaration = _declaration()
+    scope = _scope(declaration)
+
+    class MutableIdentity:
+        def __init__(self) -> None:
+            self.value = 1
+
+        def fp1_identity(self) -> dict[str, object]:
+            return {"value": self.value}
+
+    state = MutableIdentity()
+    refused = BotStateSnapshot.try_create(
+        scope=scope,
+        state_bound=256,
+        payload={"state": state},
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "payload"
+
+
+def test_nominal_snapshot_is_revalidated_before_restore_factory_effects() -> None:
+    declaration = _declaration()
+    scope = _scope(declaration)
+    valid = _ok(
+        BotStateSnapshot.try_create(
+            scope=scope,
+            state_bound=_BOUND,
+            payload={"n": 1},
+        )
+    )
+    malformed = (
+        replace(valid, format_version=True),
+        replace(valid, format_version=0),
+        replace(valid, format_version="1"),
+        replace(valid, state_bound=0),
+        replace(valid, scope=None),
+        replace(valid, scope=replace(scope, protocol_format_version=True)),
+        replace(valid, scope=replace(scope, logic_identity=None)),
+    )
+    factory = _CountingFactory()
+    for snapshot in malformed:
+        refused = BotStateSnapshot.from_mapping(snapshot)
+        assert is_refusal(refused)
+        restored = restore_bot(
+            snapshot,
+            factory,
+            declaration=declaration,
+            assignment={"lookback": 20},
+            read_surfaces={},
+            current_scope=scope,
+        )
+        assert is_refusal(restored)
+        assert factory.calls == 0
 
 
 # --- AC: any differing tuple component is unavailable, never best-effort -----

@@ -18,7 +18,7 @@ from qmf.core.fingerprint import Fingerprint, canonical_bytes, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
 
 from qml._refuse import clean_token, invalid, policy, unavailable, unsupported
-from qml.footprint._coerce import deep_freeze
+from qml.footprint._coerce import deep_freeze, snapshot_identity_content
 from qml.logic import LogicIdentity
 
 __all__ = [
@@ -113,7 +113,14 @@ def _freeze_payload(value: object) -> Result[Mapping[str, object]]:
             given=type(value).__name__,
         )
     mapping = cast("Mapping[object, object]", value)
-    frozen = deep_freeze(dict(mapping))
+    snapshotted = snapshot_identity_content(dict(mapping), "payload")
+    if is_refusal(snapshotted):
+        return snapshotted
+    snapshot_value: object = snapshotted.value
+    if not isinstance(snapshot_value, Mapping):
+        return invalid("payload", "bot state payload snapshots as a canonical mapping")
+    canonical = cast("Mapping[object, object]", snapshot_value)
+    frozen: object = deep_freeze(dict(canonical))
     if not isinstance(frozen, Mapping):
         return invalid("payload", "bot state payload is a mapping after freeze")
     return Ok(cast("Mapping[str, object]", frozen))
@@ -211,7 +218,12 @@ class BotStateScope:
     @classmethod
     def try_from_mapping(cls, value: object) -> Result[BotStateScope]:
         if isinstance(value, cls):
-            return Ok(value)
+            value = {
+                "os": value.os,
+                "logic_identity": value.logic_identity,
+                "protocol_format_version": value.protocol_format_version,
+                "arithmetic_reference_build": value.arithmetic_reference_build,
+            }
         if not isinstance(value, Mapping):
             return invalid(
                 "scope",
@@ -336,7 +348,12 @@ class BotStateSnapshot:
     @classmethod
     def from_mapping(cls, mapping: object) -> Result[BotStateSnapshot]:
         if isinstance(mapping, cls):
-            return Ok(mapping)
+            mapping = {
+                "format_version": mapping.format_version,
+                "scope": mapping.scope,
+                "state_bound": mapping.state_bound,
+                "payload": mapping.payload,
+            }
         if not isinstance(mapping, Mapping):
             return invalid(
                 "snapshot",
