@@ -1,78 +1,87 @@
 <script lang="ts">
   import BellDot from "@lucide/svelte/icons/bell-dot";
+  import Loader from "@lucide/svelte/icons/loader";
   import History from "@lucide/svelte/icons/history";
-  import MessagesSquare from "@lucide/svelte/icons/messages-square";
-  import Workflow from "@lucide/svelte/icons/workflow";
-  import LibraryBig from "@lucide/svelte/icons/library-big";
+  import AppWindow from "@lucide/svelte/icons/app-window";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import * as Resizable from "$lib/components/ui/resizable";
   import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
   import PageHeader from "$lib/workbench/PageHeader.svelte";
   import EmptyState from "$lib/workbench/EmptyState.svelte";
-  import Composer from "$lib/workbench/Composer.svelte";
+  import WidgetFrame from "$lib/workbench/WidgetFrame.svelte";
+  import StatTile from "$lib/workbench/StatTile.svelte";
+  import CopilotColumn from "$lib/workbench/CopilotColumn.svelte";
+
+  let copilotOpen = $state(true);
 </script>
 
 <div class="flex h-full flex-col">
-  <PageHeader title="Home" subtitle="Work in progress, attention and resume" />
+  <PageHeader title="Home" subtitle="Everything running, waiting and recent">
+    {#snippet actions()}
+      {#if !copilotOpen}
+        <Button variant="ghost" size="sm" onclick={() => (copilotOpen = true)}>
+          <Sparkles /> Copilot
+        </Button>
+      {/if}
+    {/snippet}
+  </PageHeader>
 
-  <div class="min-h-0 flex-1 overflow-auto">
-    <div class="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_22rem]">
-      <div class="flex flex-col gap-4">
-        <Card.Root size="sm">
-          <Card.Header>
-            <Card.Title>Needs attention</Card.Title>
-            <Card.Description
-              >Failed, unknown and running jobs.</Card.Description
-            >
-          </Card.Header>
-          <Card.Content>
+  <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
+    <Resizable.Pane defaultSize={72} minSize={45}>
+      <div class="flex h-full flex-col gap-2 overflow-auto p-2">
+        <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <StatTile label="Running jobs" hint="Not connected" />
+          <StatTile label="Needs attention" hint="Not connected" />
+          <StatTile label="Opened apps" hint="Not connected" />
+          <StatTile label="Copilot sessions" hint="Not connected" />
+        </div>
+
+        <div class="grid auto-rows-[13rem] gap-2 lg:grid-cols-2">
+          <WidgetFrame title="Needs attention">
             <EmptyState
+              class="h-full"
               icon={BellDot}
               title="Nothing needs attention"
-              description="Jobs appear here once QMX is connected to its daemon."
+              description="Failed and unknown jobs land here."
             />
-          </Card.Content>
-        </Card.Root>
-
-        <Card.Root size="sm">
-          <Card.Header>
-            <Card.Title>Resume</Card.Title>
-            <Card.Description>Recent sessions and opened apps.</Card.Description
-            >
-          </Card.Header>
-          <Card.Content>
-            <EmptyState icon={History} title="No recent work" />
-          </Card.Content>
-        </Card.Root>
+          </WidgetFrame>
+          <WidgetFrame title="Running">
+            <EmptyState
+              class="h-full"
+              icon={Loader}
+              title="No jobs running"
+              description="Backtests, research runs and workflows in progress."
+            />
+          </WidgetFrame>
+          <WidgetFrame title="Recent sessions">
+            <EmptyState
+              class="h-full"
+              icon={History}
+              title="No recent sessions"
+              description="Resume a Copilot or Authoring session from here."
+            />
+          </WidgetFrame>
+          <WidgetFrame title="Apps">
+            <EmptyState
+              class="h-full"
+              icon={AppWindow}
+              title="No apps installed"
+              description="Installed mini apps and workflows open from here."
+            />
+          </WidgetFrame>
+        </div>
       </div>
-
-      <div class="flex flex-col gap-4">
-        <Card.Root size="sm">
-          <Card.Header><Card.Title>Start</Card.Title></Card.Header>
-          <Card.Content class="flex flex-col gap-2">
-            <Button variant="outline" class="justify-start" href="/copilot">
-              <MessagesSquare /> Open Copilot
-            </Button>
-            <Button variant="outline" class="justify-start" href="/authoring">
-              <Workflow /> Open Authoring
-            </Button>
-            <Button variant="outline" class="justify-start" href="/library">
-              <LibraryBig /> Browse Library
-            </Button>
-          </Card.Content>
-        </Card.Root>
-
-        <Card.Root size="sm">
-          <Card.Header>
-            <Card.Title>Quick chat</Card.Title>
-            <Card.Description>
-              Separate from Copilot sessions. Not tied to any app.
-            </Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Composer placeholder="Ask about your work…" label="Home chat" />
-          </Card.Content>
-        </Card.Root>
-      </div>
-    </div>
-  </div>
+    </Resizable.Pane>
+    {#if copilotOpen}
+      <Resizable.Handle />
+      <Resizable.Pane defaultSize={28} minSize={20} maxSize={40}>
+        <CopilotColumn
+          title="Home copilot"
+          hint="Ask about your running work. Separate from Copilot sessions and not tied to any app."
+          placeholder="Ask about your work…"
+          onclose={() => (copilotOpen = false)}
+        />
+      </Resizable.Pane>
+    {/if}
+  </Resizable.PaneGroup>
 </div>

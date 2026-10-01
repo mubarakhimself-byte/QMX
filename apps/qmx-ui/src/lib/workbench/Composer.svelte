@@ -1,7 +1,9 @@
 <script lang="ts">
-  import Plus from "@lucide/svelte/icons/plus";
+  import Paperclip from "@lucide/svelte/icons/paperclip";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import AtSign from "@lucide/svelte/icons/at-sign";
+  import Wrench from "@lucide/svelte/icons/wrench";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import { Button } from "$lib/components/ui/button";
   import { workbench } from "./workbench.svelte";
 
@@ -12,12 +14,13 @@
 
   let draft = $state("");
   // Send goes through dispatchChat once a transport is bound; never faked.
-  const canSend = $derived(workbench.connection === "connected");
-  const reason = "Sending needs a connection to the QMX daemon.";
+  const online = $derived(workbench.connection === "connected");
+  const chip =
+    "text-muted-foreground hover:text-foreground hover:bg-muted flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs disabled:pointer-events-none disabled:opacity-50";
 </script>
 
 <form
-  class="bg-card ring-foreground/10 focus-within:ring-ring/40 flex flex-col gap-1 rounded-2xl p-2 ring-1"
+  class="bg-panel focus-within:border-ring/50 flex flex-col rounded-md border"
   onsubmit={(e) => e.preventDefault()}
 >
   <label class="sr-only" for="composer-input">{label}</label>
@@ -26,32 +29,34 @@
     bind:value={draft}
     rows="2"
     {placeholder}
-    class="placeholder:text-muted-foreground max-h-48 min-h-12 resize-none bg-transparent px-2 py-1 text-sm outline-none"
+    class="placeholder:text-muted-foreground max-h-48 min-h-10 resize-none bg-transparent px-3 pt-2.5 text-sm outline-none"
   ></textarea>
-  <div class="flex items-center gap-1">
-    <Button variant="ghost" size="icon-sm" aria-label="Add content" disabled>
-      <Plus />
-    </Button>
-    <Button
-      variant="ghost"
-      size="sm"
-      class="text-muted-foreground"
-      aria-label="Choose target"
-      disabled
-    >
-      <AtSign /> No target
-    </Button>
+  <div class="flex items-center gap-0.5 px-1.5 pb-1.5">
+    <button type="button" class={chip} disabled aria-label="Attach content">
+      <Paperclip class="size-3.5" /> Attach
+    </button>
+    <button type="button" class={chip} disabled aria-label="Choose target">
+      <AtSign class="size-3.5" /> Target
+    </button>
+    <button type="button" class={chip} disabled aria-label="Choose tools">
+      <Wrench class="size-3.5" /> Tools
+    </button>
+    {#if !online}
+      <span
+        class="text-muted-foreground ml-auto flex items-center gap-1 text-[11px]"
+        title="Sending needs a connection to the QMX daemon."
+      >
+        <WifiOff class="size-3" /> Offline
+      </span>
+    {/if}
     <Button
       type="submit"
-      size="icon-sm"
-      class="ml-auto"
-      aria-label="Send"
-      disabled={!canSend || !draft.trim()}
+      size="icon-xs"
+      class={online ? "ml-auto" : "ml-1.5"}
+      aria-label={online ? "Send" : "Send (offline)"}
+      disabled={!online || !draft.trim()}
     >
       <ArrowUp />
     </Button>
   </div>
-  {#if !canSend}
-    <p class="text-muted-foreground px-2 text-xs">{reason}</p>
-  {/if}
 </form>

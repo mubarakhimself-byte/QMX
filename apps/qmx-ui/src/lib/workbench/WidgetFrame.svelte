@@ -15,7 +15,6 @@
   import type { Snippet } from "svelte";
   import History from "@lucide/svelte/icons/history";
   import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
-  import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import X from "@lucide/svelte/icons/x";
   import { Button } from "$lib/components/ui/button";
@@ -80,9 +79,7 @@
         </Button>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content
-      >{handler ? label : `${label} — not available`}</Tooltip.Content
-    >
+    <Tooltip.Content>{label}</Tooltip.Content>
   </Tooltip.Root>
 {/snippet}
 
@@ -90,26 +87,32 @@
   aria-label={title}
   data-state={state}
   class={cn(
-    "bg-card text-card-foreground ring-foreground/10 flex min-h-0 flex-col overflow-hidden rounded-2xl ring-1",
+    "bg-panel text-card-foreground flex min-h-0 flex-col overflow-hidden rounded-md border",
     className,
   )}
 >
-  <header class="flex h-10 shrink-0 items-center gap-2 pr-1.5 pl-3">
-    <h3 class="truncate text-[13px] font-medium">{title}</h3>
+  <header class="flex h-8 shrink-0 items-center gap-2 border-b pr-1 pl-2.5">
+    <h3 class="panel-label truncate">{title}</h3>
     {#if controls}{@render controls()}{/if}
     {#if state === "stale" || state === "reconnecting" || state === "unknown"}
-      <Badge variant="outline" class="text-warning">{STATE_TEXT[state]}</Badge>
+      <Badge variant="outline" class="text-warning h-4 px-1.5 text-[10px]"
+        >{STATE_TEXT[state]}</Badge
+      >
     {/if}
     <div class="ml-auto flex items-center">
-      {@render tool("Refresh", History, onrefresh)}
-      {@render tool("Add to copilot", MessageSquarePlus, onmessage)}
-      {@render tool("More", EllipsisVertical, undefined)}
-      {@render tool("Expand", Maximize2, onexpand)}
-      {@render tool("Close", X, onclose)}
+      <!-- Only controls with a real handler render; no dead buttons. -->
+      {#if onrefresh}{@render tool("Refresh", History, onrefresh)}{/if}
+      {#if onmessage}{@render tool(
+          "Add to copilot",
+          MessageSquarePlus,
+          onmessage,
+        )}{/if}
+      {#if onexpand}{@render tool("Expand", Maximize2, onexpand)}{/if}
+      {#if onclose}{@render tool("Close", X, onclose)}{/if}
     </div>
   </header>
 
-  <div class="relative min-h-0 flex-1 overflow-auto px-3 pb-3">
+  <div class="relative min-h-0 flex-1 overflow-auto p-2.5">
     {#if state === "loading"}
       <div class="flex flex-col gap-2 pt-1" aria-busy="true">
         <Skeleton class="h-4 w-1/3" />
@@ -122,7 +125,7 @@
       >
         <p
           class={cn(
-            "text-sm font-medium",
+            "text-xs font-medium",
             state === "failed" && "text-destructive",
           )}
         >

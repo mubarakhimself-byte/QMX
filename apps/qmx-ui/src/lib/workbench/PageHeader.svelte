@@ -10,7 +10,7 @@
 
 <svelte:head><title>{title} · QMX</title></svelte:head>
 
-<header class="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+<header class="flex h-10 shrink-0 items-center gap-3 border-b px-3">
   <h1 class="text-sm font-semibold">{title}</h1>
   {#if subtitle}
     <span class="text-muted-foreground truncate text-sm">{subtitle}</span>

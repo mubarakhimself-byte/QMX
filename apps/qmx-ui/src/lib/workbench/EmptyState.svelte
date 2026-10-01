@@ -19,20 +19,18 @@
 
 <div
   class={cn(
-    "flex flex-col items-center justify-center gap-2 p-6 text-center",
+    "flex flex-col items-center justify-center gap-1.5 p-4 text-center",
     className,
   )}
 >
   {#if Icon}
-    <div
-      class="bg-muted text-muted-foreground mb-1 flex size-10 items-center justify-center rounded-xl"
-    >
-      <Icon class="size-5" />
+    <div class="text-muted-foreground/70 mb-0.5">
+      <Icon class="size-5" strokeWidth={1.5} />
     </div>
   {/if}
-  <p class="text-sm font-medium">{title}</p>
+  <p class="text-muted-foreground text-xs font-medium">{title}</p>
   {#if description}
-    <p class="text-muted-foreground max-w-sm text-sm text-balance">
+    <p class="text-muted-foreground/80 max-w-xs text-xs text-balance">
       {description}
     </p>
   {/if}

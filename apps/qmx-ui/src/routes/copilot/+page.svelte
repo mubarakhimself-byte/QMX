@@ -55,7 +55,7 @@
     <Resizable.Pane defaultSize={20} minSize={14} maxSize={32}>
       <aside
         aria-label="Sessions"
-        class="bg-panel flex h-full flex-col gap-2 p-2"
+        class="bg-panel flex h-full flex-col gap-1.5 p-2"
       >
         <Button variant="outline" size="sm" class="justify-start" disabled>
           <Plus /> New session
@@ -90,14 +90,14 @@
             description="Ask the copilot to research, build a workflow, or explain a result. It can reference apps, widgets and Library items."
           />
         </div>
-        <div class="p-3"><Composer /></div>
+        <div class="mx-auto w-full max-w-3xl p-3"><Composer /></div>
       </section>
     </Resizable.Pane>
     <Resizable.Handle />
 
     <Resizable.Pane defaultSize={36} minSize={20}>
       <Tabs.Root bind:value={workTab} class="flex h-full flex-col gap-0">
-        <div class="flex h-10 shrink-0 items-center border-b px-2">
+        <div class="flex h-9 shrink-0 items-center border-b px-2">
           <Tabs.List variant="line" aria-label="Work area">
             {#each WORK_TABS as t (t.id)}
               <Tabs.Trigger value={t.id}><t.icon />{t.label}</Tabs.Trigger>

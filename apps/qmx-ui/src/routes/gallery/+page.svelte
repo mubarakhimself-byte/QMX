@@ -9,7 +9,7 @@
   import WidgetFrame, {
     type WidgetState,
   } from "$lib/workbench/WidgetFrame.svelte";
-  import Composer from "$lib/workbench/Composer.svelte";
+  import CopilotColumn from "$lib/workbench/CopilotColumn.svelte";
 
   // Design-review gallery: a sample mini-app shape. Not an installed app, no live data.
   const NAV = ["Overview", "Signals", "Risk"];
@@ -145,7 +145,7 @@
 
   <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
     <Resizable.Pane defaultSize={72} minSize={45}>
-      <div class="h-full overflow-auto p-3">
+      <div class="h-full overflow-auto p-2">
         {#if expanded}
           <!-- Expand is a layout change with an explicit return, not a new destination. -->
           <div class="flex h-full flex-col gap-2">
@@ -168,7 +168,7 @@
           </div>
         {:else}
           <div
-            class="grid auto-rows-[minmax(11rem,auto)] gap-3 md:grid-cols-2 xl:grid-cols-3"
+            class="grid auto-rows-[minmax(11rem,auto)] gap-2 md:grid-cols-2 xl:grid-cols-3"
           >
             <WidgetFrame
               title="Price summary"
@@ -197,19 +197,13 @@
     {#if copilotOpen}
       <Resizable.Handle />
       <Resizable.Pane defaultSize={28} minSize={20}>
-        <aside aria-label="App copilot" class="bg-panel flex h-full flex-col">
-          <div
-            class="flex h-10 shrink-0 items-center border-b px-3 text-sm font-medium"
-          >
-            App copilot
-            <Badge variant="outline" class="ml-2">app-use</Badge>
-          </div>
-          <div class="text-muted-foreground min-h-0 flex-1 p-3 text-xs">
-            Shown only for apps that declare a copilot profile. Its history is
-            separate from the main Copilot.
-          </div>
-          <div class="p-3"><Composer placeholder="Ask about this app…" /></div>
-        </aside>
+        <CopilotColumn
+          title="App copilot"
+          profile="app-use"
+          hint="Shown only for apps that declare a copilot profile. Its history is separate from the main Copilot."
+          placeholder="Ask about this app…"
+          onclose={() => (copilotOpen = false)}
+        />
       </Resizable.Pane>
     {/if}
   </Resizable.PaneGroup>
