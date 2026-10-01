@@ -11,6 +11,9 @@ export type ConnectionState =
 export type OpenedApp = {
   instanceId: string;
   label: string;
+  /** Built-in app routes (e.g. /trade) override the default /apps/<id>. */
+  href?: string;
+  icon?: "chart" | "node" | "lab" | "ml";
   attention?: "running" | "unknown" | "failed";
 };
 
@@ -18,8 +21,22 @@ export const DEMO_APPS: OpenedApp[] = [
   {
     instanceId: "demo-research",
     label: "Research (demo)",
+    icon: "chart",
     attention: "running",
   },
+  {
+    instanceId: "demo-trade",
+    label: "Trading node (demo)",
+    icon: "node",
+    href: "/trade",
+  },
+  {
+    instanceId: "demo-lab",
+    label: "Backtest lab (demo)",
+    icon: "lab",
+    attention: "running",
+  },
+  { instanceId: "demo-ml", label: "ML Studio (demo)", icon: "ml" },
 ];
 
 /**

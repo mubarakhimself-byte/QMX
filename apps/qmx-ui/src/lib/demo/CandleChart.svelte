@@ -18,7 +18,12 @@
   let {
     candles,
     markers = [],
-  }: { candles: Candle[]; markers?: ChartMarker[] } = $props();
+    precision = 5,
+  }: {
+    candles: Candle[];
+    markers?: ChartMarker[];
+    precision?: number;
+  } = $props();
   let el: HTMLDivElement;
 
   /**
@@ -64,7 +69,7 @@
       borderVisible: false,
       wickUpColor: up,
       wickDownColor: down,
-      priceFormat: { type: "price", precision: 5, minMove: 0.00001 },
+      priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision },
     });
     series.setData(candles);
     if (markers.length) {

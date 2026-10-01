@@ -324,6 +324,9 @@
               you approve it.
             </p>
           </div>
+          <Button size="sm" variant="outline" href={resolve("/trade")}
+            >Open trading node</Button
+          >
         </div>
         <table class="w-full text-sm">
           <thead class="text-muted-foreground text-left text-xs">

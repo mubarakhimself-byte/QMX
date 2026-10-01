@@ -1,6 +1,18 @@
 <script lang="ts">
   import { page } from "$app/state";
   import ChartCandlestick from "@lucide/svelte/icons/chart-candlestick";
+  import Server from "@lucide/svelte/icons/server";
+  import FlaskConical from "@lucide/svelte/icons/flask-conical";
+  import BrainCircuit from "@lucide/svelte/icons/brain-circuit";
+
+  const APP_ICONS = {
+    chart: ChartCandlestick,
+    node: Server,
+    lab: FlaskConical,
+    ml: BrainCircuit,
+  };
+  const appHref = (a: { instanceId: string; href?: string }) =>
+    a.href ?? `/apps/${encodeURIComponent(a.instanceId)}`;
   import RailButton from "./RailButton.svelte";
   import {
     PRODUCT_DESTINATIONS,
@@ -36,13 +48,10 @@
     {#each workbench.railApps as app (app.instanceId)}
       <li>
         <RailButton
-          href={`/apps/${encodeURIComponent(app.instanceId)}`}
+          href={appHref(app)}
           label={app.label}
-          icon={ChartCandlestick}
-          active={isActive(
-            page.url.pathname,
-            `/apps/${encodeURIComponent(app.instanceId)}`,
-          )}
+          icon={APP_ICONS[app.icon ?? "chart"]}
+          active={isActive(page.url.pathname, appHref(app))}
           badge={app.attention}
         />
       </li>
