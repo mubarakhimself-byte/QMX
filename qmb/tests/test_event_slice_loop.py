@@ -135,6 +135,24 @@ class _PartialSequenceHandler(_RecordingHandler):
         return Ok(())
 
 
+class _MalformedDispositionHandler(_RecordingHandler):
+    def __init__(self, *, filled: object, terminal: object) -> None:
+        super().__init__()
+        value = object.__new__(ExecutionDisposition)
+        object.__setattr__(value, "filled", filled)
+        object.__setattr__(value, "terminal", terminal)
+        self.value = value
+
+    def execute_resting(
+        self,
+        intent: RestingIntent,
+        observation: SliceObservation | None,
+        frontier: Instant,
+    ) -> Result[bool | ExecutionDisposition]:
+        del intent, observation, frontier
+        return Ok(self.value)
+
+
 def test_subphases_are_the_pinned_identity_bearing_strings() -> None:
     assert SUBPHASES == (
         "frontier-advance",
@@ -159,6 +177,18 @@ def test_partial_fill_remains_live_through_no_fill_and_later_fill() -> None:
     )
     assert outcome.filled == ("entry-1",)
     assert outcome.resting == ()
+
+
+def test_loop_revalidates_typed_execution_disposition_at_handler_boundary() -> None:
+    for filled, terminal in ((1, False), (False, True)):
+        refused = run(
+            slices=((_obs("eurusd"),),),
+            stream_set=_streams("eurusd"),
+            handler=_MalformedDispositionHandler(filled=filled, terminal=terminal),
+            initial_resting=(_intent("entry-1", "eurusd"),),
+        )
+        assert is_refusal(refused)
+        assert refused.context["field"] == "execution_disposition"
     assert qmb.SUBPHASES is SUBPHASES
     assert SAME_SLICE_NEW_INTENT_FILL is False
     assert qmb.SAME_SLICE_NEW_INTENT_FILL is False

@@ -1266,7 +1266,14 @@ def _phase_resting_orders(acc: _Acc) -> Result[_Acc]:
 
 def _execution_disposition(value: object) -> Result[ExecutionDisposition]:
     if isinstance(value, ExecutionDisposition):
-        return Ok(value)
+        filled = value.filled
+        terminal = value.terminal
+        if type(filled) is not bool or type(terminal) is not bool or (terminal and not filled):
+            return invalid(
+                "execution_disposition",
+                "typed fill and terminal flags satisfy the exact boolean order law",
+            )
+        return Ok(ExecutionDisposition(filled=filled, terminal=terminal))
     if isinstance(value, bool):
         return Ok(ExecutionDisposition(filled=value, terminal=value))
     return invalid(
