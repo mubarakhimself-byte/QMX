@@ -515,10 +515,7 @@ def encode_place_order(
     ctid = _require_int("ctid_trader_account_id", ctid_trader_account_id, minimum=1)
     if is_refusal(ctid):
         return ctid
-    if (
-        params.native_account_id is not None
-        and params.native_account_id != ctid.value
-    ):
+    if params.native_account_id is not None and params.native_account_id != ctid.value:
         return _invalid(
             "ctid_trader_account_id",
             "wire account id must match the id sealed into the command identity",
@@ -537,8 +534,7 @@ def encode_place_order(
         )
     if params.trade_side is not None:
         if trade_side is not None and (
-            not isinstance(trade_side, str)
-            or trade_side.strip().lower() not in {"buy", "sell"}
+            not isinstance(trade_side, str) or trade_side.strip().lower() not in {"buy", "sell"}
         ):
             return _invalid(
                 "trade_side",

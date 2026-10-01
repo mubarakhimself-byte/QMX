@@ -688,9 +688,7 @@ class OrderPath:
         """Explicit no-retry gate after wire handoff."""
         return self.pacer.refuse_retry_after_handoff(command_fp1)
 
-    def _observe_entry_result(
-        self, command: Command, submission: SubmissionResult
-    ) -> Result[None]:
+    def _observe_entry_result(self, command: Command, submission: SubmissionResult) -> Result[None]:
         """Resolve a hosted entry reservation from the exact submitted command."""
         params = command.order_parameters
         if (

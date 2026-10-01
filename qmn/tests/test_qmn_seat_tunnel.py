@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 from typing import TypeVar, cast
 
 from qmb.runloop import CancelToken, ScriptedLimitProbe
@@ -15,11 +16,14 @@ from qmf.core import (
     Fingerprint,
     Instant,
     Instrument,
+    JournalSink,
     Money,
+    Ok,
     Price,
     Quantity,
     RefusalCategory,
     Result,
+    SinkAck,
     UnitKind,
     ValueFactor,
     VenueId,
@@ -246,9 +250,7 @@ def _book_binding_record() -> BookBindingRecord:
         )
     )
     profile = _ok(
-        VenueBindingProfile.try_create(
-            {"protective-stop-attachment"}, PositionModel.HEDGING, "USD"
-        )
+        VenueBindingProfile.try_create({"protective-stop-attachment"}, PositionModel.HEDGING, "USD")
     )
     ranks = _ok(
         ControlRankTable.try_create(
@@ -410,7 +412,7 @@ def _path(
     binding_record: BookBindingRecord | None = None,
     ledger_epoch: Fingerprint | None = None,
     reservation_recovery: EntryReservationRecovery | None = None,
-    reservation_journal: RecordingJournalSink | None = None,
+    reservation_journal: JournalSink[object] | None = None,
 ) -> BookPathContext:
     binding = binding_record if binding_record is not None else _book_binding_record()
     epoch = _ok(binding.fingerprint())
@@ -647,6 +649,8 @@ def test_hosted_entry_crosses_book_bms_protection_and_order() -> None:
     assert receipt.commands[0].kind is CommandKind.PLACE_ORDER
     assert receipt.authorized[0].requested_r == _r(1)
     assert not hasattr(receipt.authorized[0].admitted, "bot_quantity")
+
+
 def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() -> None:
     admitted = _ok(_propose())
     path = _path()
@@ -724,9 +728,7 @@ def test_pending_entry_recovers_from_committed_journal_events_after_restart() ->
         binding_record=cast(BookBindingRecord, path.binding_record),
         reservation_recovery=recovery,
     )
-    refused = _refusal(
-        dispatch_hosted_intents(admitted, (_entry(),), path=recovered_path)
-    )
+    refused = _refusal(dispatch_hosted_intents(admitted, (_entry(),), path=recovered_path))
     assert refused.context["field"] == "has_open_virtual_position"
 
 
@@ -748,6 +750,25 @@ def test_uncertain_reservation_append_latches_entry_admission_closed() -> None:
     empty_recovery = EntryReservationRecovery(incomplete.binding_epoch, (), 0, True)
     _ok(ledger.recover_entry_reservations(empty_recovery))
     assert ledger.reservation_admission_ready
+
+
+class _AckWithoutCompletion:
+    def __init__(self, detail: Mapping[str, object]) -> None:
+        self.detail = detail
+
+    def append(self, _event: object, /) -> Result[SinkAck]:
+        return Ok(SinkAck(self.detail))
+
+
+def test_reservation_append_requires_explicit_complete_true_ack() -> None:
+    for detail in ({}, {"complete": False}, {"complete": "true"}):
+        path = _path(reservation_journal=_AckWithoutCompletion(detail))
+        ledger = cast(BindingVirtualLedger, path.position_ledger)
+        identity = _ok(fingerprint({"missing-completion": repr(detail)}))
+        refused = _refusal(ledger.reserve_entry("EURUSD", identity))
+        assert refused.context["field"] == "reservation_journal"
+        assert not ledger.has_pending_entry("EURUSD")
+        assert not ledger.reservation_admission_ready
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:

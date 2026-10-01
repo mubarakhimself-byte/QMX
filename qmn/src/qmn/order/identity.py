@@ -128,9 +128,7 @@ class NativeExecutionMap:
         keys: set[tuple[str, str, str, str, str]] = set()
         for item in cast("Iterable[object]", mappings):
             if not isinstance(item, NativeExecutionMapping):
-                return _invalid(
-                    "mappings", "each native execution row is a NativeExecutionMapping"
-                )
+                return _invalid("mappings", "each native execution row is a NativeExecutionMapping")
             if item.instrument.venue != item.target.venue_id:
                 return _invalid(
                     "instrument", "mapped instrument venue matches its execution target"
@@ -191,9 +189,7 @@ class NativeExecutionMap:
             )
         )
 
-    def resolve(
-        self, target: object, instrument: object
-    ) -> Result[NativeExecutionMapping]:
+    def resolve(self, target: object, instrument: object) -> Result[NativeExecutionMapping]:
         if not isinstance(target, ExecutionTarget) or not isinstance(instrument, Instrument):
             return _invalid(
                 "target", "native mapping lookup uses an ExecutionTarget and Instrument"

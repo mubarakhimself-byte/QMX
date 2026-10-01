@@ -325,20 +325,21 @@ def main() -> int:
         journal_store.value.close()
         print(f"qmn supervisor sd_notify READY failed: {dict(ready.context)}", file=sys.stderr)
         return 2
-    last_watchdog = time.monotonic()
+    last_watchdog = time.monotonic()  # ambient-scan: allow — supervisor watchdog timing only
     watchdog_usec = _watchdog_interval_usec()
     try:
         while not stopped:
             server.handle_request()
+            monotonic_now = time.monotonic()  # ambient-scan: allow — watchdog timing only
             if (
                 watchdog_usec is not None
-                and time.monotonic() - last_watchdog >= watchdog_usec / 2_000_000
+                and monotonic_now - last_watchdog >= watchdog_usec / 2_000_000
             ):
                 watched = notify_watchdog()
                 if is_refusal(watched):
                     print("qmn supervisor watchdog notification failed", file=sys.stderr)
                     return 2
-                last_watchdog = time.monotonic()
+                last_watchdog = monotonic_now
     finally:
         server.server_close()
         sd_notify("STOPPING=1")
@@ -394,7 +395,7 @@ def _open_process_journal(state: Path) -> Result[JournalStore]:
     world_store = evidence.for_world(World.LIVE)
     if is_refusal(world_store):
         return world_store
-    boot_epoch = uuid4().hex
+    boot_epoch = uuid4().hex  # ambient-scan: allow — unique systemd process boot identity
     writer_id = WriterId.try_create(
         socket.gethostname(), "supervisor", "node-supervision", boot_epoch
     )
@@ -407,7 +408,8 @@ def _open_process_journal(state: Path) -> Result[JournalStore]:
     )
     if is_refusal(resumed):
         return resumed
-    stamp = Instant.try_create(time.time_ns())
+    wall_now_ns = time.time_ns()  # ambient-scan: allow — durable process-start event timestamp
+    stamp = Instant.try_create(wall_now_ns)
     if is_refusal(stamp):
         return stamp
     recorded = resumed.value.record_control_action(

@@ -128,11 +128,6 @@ def dispatch_hosted_intents(
             "reservation_journal",
             "hosted entries wait for complete reservation recovery and a clean durable journal",
         )
-    if not door.position_ledger.reservation_admission_ready:
-        return policy(
-            "reservation_journal",
-            "hosted entries wait for complete reservation recovery and a clean durable journal",
-        )
     if not isinstance(door.native_execution_map, NativeExecutionMap):
         return invalid(
             "native_execution_map",

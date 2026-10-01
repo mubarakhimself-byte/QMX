@@ -17,6 +17,7 @@ __all__ = ["QmfEntryReservationJournal"]
 
 _EVENT_CLASS = "qmn-entry-reservation-event"
 _STREAM_EVENT_CLASS = "qmn-entry-reservation-journal"
+_RECOVERY_BARRIER_CLASS = "qmn-entry-reservation-recovery"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,37 @@ class QmfEntryReservationJournal:
     def recover(self, binding_epoch: object) -> Result[EntryReservationRecovery]:
         if not isinstance(binding_epoch, Fingerprint):
             return _invalid_epoch()
+        if self.writer.is_blocked:
+            retried = self.writer.retry_blocked()
+            if is_refusal(retried):
+                return retried
+        events = JournalReader(self.journal).read_checked(
+            self.writer.stream_name, for_world=self.journal.world
+        )
+        if is_refusal(events):
+            return events
+        barrier = self.writer.record(
+            JournalEventType.DATA_QUALITY,
+            {
+                "class": _RECOVERY_BARRIER_CLASS,
+                "stream_class": _STREAM_EVENT_CLASS,
+                "binding_epoch": binding_epoch.value,
+                "reconciled_reservation_count": sum(
+                    1
+                    for event in events.value
+                    if event.event_type is JournalEventType.DATA_QUALITY
+                    and event.payload.get("class") == _STREAM_EVENT_CLASS
+                    and isinstance(event.payload.get("reservation"), Mapping)
+                    and cast("Mapping[str, object]", event.payload["reservation"]).get(
+                        "binding_epoch"
+                    )
+                    == binding_epoch.value
+                ),
+            },
+            instant=self.instant(),
+        )
+        if is_refusal(barrier):
+            return barrier
         events = JournalReader(self.journal).read_checked(
             self.writer.stream_name, for_world=self.journal.world
         )

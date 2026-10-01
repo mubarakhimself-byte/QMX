@@ -524,7 +524,9 @@ class OrderParameters:
             "format_version": (
                 3
                 if self.native_mapping_fingerprint is not None
-                else 2 if self.instrument is not None else CONTRACT_FORMAT_VERSION
+                else 2
+                if self.instrument is not None
+                else CONTRACT_FORMAT_VERSION
             ),
         }
         if self.limit_price is not None:

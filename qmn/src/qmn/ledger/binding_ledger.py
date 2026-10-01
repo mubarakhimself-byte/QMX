@@ -126,9 +126,7 @@ class EntryReservationEvent:
             return invalid("reservation_event", "persisted event is a mapping")
         source = cast("Mapping[object, object]", payload)
         if source.get("class") != "qmn-entry-reservation-event":
-            return invalid(
-                "reservation_event", "persisted event has the reservation event class"
-            )
+            return invalid("reservation_event", "persisted event has the reservation event class")
         binding = Fingerprint.try_create(source.get("binding_epoch"))
         identity = Fingerprint.try_create(source.get("command_identity"))
         if is_refusal(binding):
@@ -347,11 +345,11 @@ class BindingVirtualLedger:
         if is_refusal(appended):
             self._reservation_uncertain = True
             return appended
-        if appended.value.detail.get("complete") is False:
+        if appended.value.detail.get("complete") is not True:
             self._reservation_uncertain = True
             return policy(
                 "reservation_journal",
-                "reservation journal did not confirm a complete durable append",
+                "reservation journal must explicitly confirm a complete durable append",
             )
         self._reservation_sequence = next_sequence
         return Ok(None)
@@ -383,10 +381,7 @@ class BindingVirtualLedger:
         seen: set[str] = set()
         for raw in cast("Sequence[object]", entries):
             pair = cast("tuple[object, ...]", raw) if isinstance(raw, tuple) else ()
-            if (
-                len(pair) != 2
-                or not isinstance(pair[1], Fingerprint)
-            ):
+            if len(pair) != 2 or not isinstance(pair[1], Fingerprint):
                 return invalid(
                     "entries", "each reservation is an instrument and command fingerprint"
                 )
@@ -453,9 +448,7 @@ class BindingVirtualLedger:
         ):
             return policy("entry_reservation", "submission outcome must match the pending command")
         event_kind = (
-            "accepted"
-            if submission.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE
-            else "unknown"
+            "accepted" if submission.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE else "unknown"
         )
         appended = self._append_reservation_event(
             token,
@@ -472,9 +465,7 @@ class BindingVirtualLedger:
     ) -> Result[None]:
         token = clean_token(instrument)
         if token is None or not isinstance(command_identity, Fingerprint):
-            return invalid(
-                "entry_reservation", "release requires instrument and command identity"
-            )
+            return invalid("entry_reservation", "release requires instrument and command identity")
         if self._pending_entries.get(token) != command_identity:
             return policy(
                 "entry_reservation",
@@ -855,15 +846,15 @@ def seed_binding_ledger(
             given=type(reservation_journal).__name__,
         )
     ledger = BindingVirtualLedger(
-            binding_epoch=binding_epoch,
-            currency=cur,
-            money_scale=scale,
-            seed=seed,
-            realized_cash=seed,
-            _records=[seed_record],
-            _reservation_journal=journal,
-            _sequence=1,
-        )
+        binding_epoch=binding_epoch,
+        currency=cur,
+        money_scale=scale,
+        seed=seed,
+        realized_cash=seed,
+        _records=[seed_record],
+        _reservation_journal=journal,
+        _sequence=1,
+    )
     if reservation_recovery is not None:
         recovered = ledger.recover_entry_reservations(reservation_recovery)
         if is_refusal(recovered):
