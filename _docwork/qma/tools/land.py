@@ -12,16 +12,16 @@ Steps:
   5. optionally run the five documentation-factory gates against --root target
 """
 import argparse
-import contextlib
 import os
 import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
-with contextlib.suppress(Exception):
+try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 
 SKILL = os.path.expanduser('~/.claude/skills/documentation-factory/scripts')
 HYGIENE = re.compile(r"(another session|other session|second session|session is (still )?(running|live)|in[- ]flight work|concurrent(ly)? (session|pass|writer)|parallel (session|pass)|be patient|wait for the (other|node) (session|pass))", re.I)
@@ -35,15 +35,12 @@ def hygiene(source):
             for fn in fns:
                 p = os.path.join(dp, fn)
                 try:
-                    txt = Path(p).read_text(encoding='utf-8')
-                except OSError:
-                    txt = None
-                if txt is None:
+                    txt = open(p, encoding='utf-8').read()
+                except Exception:
                     continue
                 for i, line in enumerate(txt.split('\n'), 1):
                     if HYGIENE.search(line):
-                        rel = os.path.relpath(p, source)
-                        bad.append(f'{rel}:{i}: {line.strip()[:160]}')
+                        bad.append('%s:%d: %s' % (os.path.relpath(p, source), i, line.strip()[:160]))
     return bad
 
 
@@ -94,7 +91,7 @@ def main():
     a = ap.parse_args()
     bad = hygiene(a.source)
     if bad:
-        print(f'HYGIENE VIOLATIONS ({len(bad)}):')
+        print('HYGIENE VIOLATIONS (%d):' % len(bad))
         for b in bad:
             print('  ' + b)
         if a.hygiene_only:
@@ -105,7 +102,7 @@ def main():
     if a.hygiene_only:
         return
     sync_lane(a.source, a.target)
-    print(f'staged docs copied: {copy_staged(a.source, a.target)}')
+    print('staged docs copied: %d' % copy_staged(a.source, a.target))
     rc = run([sys.executable, os.path.join(a.target, '_docwork', 'qma', 'tools', 'apply_fragments.py'), '--root', a.target])
     if rc != 0:
         print('FRAGMENT FAILURES — fix and re-run')
@@ -114,8 +111,8 @@ def main():
         for script, extra in (('validate_ledger.py', []), ('validate_registry.py', []), ('validate_inventory.py', []),
                               ('check_citations.py', []), ('lint_docs.py', []), ('lint_docs.py', ['--strict'])):
             key = script + (' --strict' if extra else '')
-            codes[key] = run([sys.executable, os.path.join(SKILL, script), '--root', a.target, *extra])
-        print('GATE EXIT CODES: ' + ', '.join(f'{key}={code}' for key, code in codes.items()))
+            codes[key] = run([sys.executable, os.path.join(SKILL, script), '--root', a.target] + extra)
+        print('GATE EXIT CODES: ' + ', '.join('%s=%d' % kv for kv in codes.items()))
         sys.exit(1 if any(codes.values()) else 0)
     sys.exit(rc)
 

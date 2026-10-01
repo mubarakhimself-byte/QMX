@@ -3290,3 +3290,1870 @@ ledger:
     tags: [trading-node, veto-round, placement-variants, self-setup, docker, mis-labelers, mis-training, epics]
     date: 2026-08-30
     spine_ref: "operator-direct:2026-08-30"
+
+  - id: DEC-0263
+    title: "CONNECT AD-1 — Fail-closed live selection"
+    statement: "Implementation of qmn.venue.VenueClientPort is selected by the pair (world, VenueId), never by VenueId alone (TN-11). world = replay selects REPLAY for every VenueId and the composition refuses any venue-connecting kind. world = simulated refuses. world = live reads an explicit roster field VenueClientKind on that binding — not inferred from VenueId spelling. CTRADER is legal only when that field is ctrader. CONFORMANCE is legal only when the field is conformance or the VenueId value starts with conformance: (the existing credential-free convention). Absent field, unknown kind, or any other live VenueId is unsupported capability. The integration else-branch that assigns CTRADER is a connect bug, not TN-11."
+    status: ratified
+    rationale: "Prevents an unknown live VenueId opening a cTrader client and two units inventing different live defaults. TN-2 compose and TN-11 pair selection stand; the live default-to-CTRADER is an implementation accident not that law. CONNECT sitting 2026-09-11, spine status final."
+    sources: [EXT-2172, EXT-2177, EXT-2182]
+    authority: rider
+    component: COMP-QMN
+    tags: [connect, venue-selection, fail-closed, VenueClientKind, tn-11]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md#ad-1"
+
+  - id: DEC-0264
+    title: "CONNECT AD-2 — Honest FX paper"
+    statement: "An FX paper claim requires every element: vendor cTrader demo host; AccountRole.DEMO; world = live; the same live VenueClientPort implementation used for live; submit encode of every CT-19 kind the bound CT-18 declaration supports; position and balance read-back per DEC-0266. LiveCTraderClient.submit returning unsupported capability after session and capabilities are ready is not paper. Live-capital bleeding is not an adapter skip. Spot FX is not deferred. No local matching engine. No Bot or Book twin. Soak remains TN-9: the demo connection carries the order path; the live connection, when credentials exist, is sensing and recording only until a live binding. Connection count is derived from the roster (DEC-0244): a soak roster may name one (venue, environment) pair."
+    status: ratified
+    rationale: "Prevents sensing-only CONNECT being called paper and skipping spot FX because live capital is small. Paper remains Book-level (AD-35 / DEC-0149). CONNECT sitting 2026-09-11, spine status final."
+    sources: [EXT-2173, EXT-2177, EXT-2182]
+    authority: rider
+    component: COMP-QMN
+    tags: [connect, fx-paper, soak, ad-35, tn-9]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0265
+    title: "CONNECT AD-3 — Encode and session locus"
+    statement: "qmn.venue is the sole qmf-venue importer (DEC-0241). ProtoOA command encode for the five CT-19 kinds and connect_open_api complete the existing ConnectionManager in qmf-venue (DEC-0243 exemption already applied). Encode symbols live in qmf-venue; qmn.venue.live translates a Command onto those symbols and must not compile proto messages itself. qmn.venue also holds duty scheduling, the verification-suite runner, CT-18 fills, error-map rows, and the port implementation. After an open session and verified capabilities, LiveCTraderClient.submit hands a well-formed Command to that encode path; it does not refuse as Story 24.3 sensing-only. A CT-19 kind the bound CT-18 declaration supports that remains sensing-only is a connect bug. The production node calls connect_open_api; a tests-only caller is a connect bug. DEC-0242 stays recorded-not-applied. No CCXT, no Hummingbot, no Spotware SDK, no Twisted."
+    status: ratified
+    rationale: "Prevents a third venue-gateway library, a second connection manager, and command encode outside the sanctioned boundary. CONNECT sitting 2026-09-11, spine status final."
+    sources: [EXT-2174, EXT-2177, EXT-2182]
+    authority: rider
+    component: COMP-QMF-VENUE
+    tags: [connect, encode, ConnectionManager, connect_open_api, DEC-0241, DEC-0242, DEC-0243]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md#ad-3"
+
+  - id: DEC-0266
+    title: "CONNECT AD-4 — FTR-01 closed: position/balance read-back maps to CT-13 data quality"
+    statement: "position-read-back and balance-read-back are CT-20 observation kinds (DEC-0247). They map through CT-20's versioned (observation kind) to event-type table onto CT-13 data quality. No eighth journal type. No second catalog. DEC-0247's word observation names the CT-20 kind, not a journal type — CT-13's seven (decision, order, fill, risk transition, promotion, data quality, control action) do not include observation; that wording collision is surfaced here and is not a license to mint. reconcile() returns the four-verdict Reconciliation over the declared lookback and no longer returns unsupported capability for those kinds. Adapters never synthesize the observations. Journal type data quality is CONNECT assumption A3, individually overturnable without unwinding DEC-0247."
+    status: ratified
+    rationale: "Prevents an eighth journal type, two units mapping position/balance onto different types, and soak drift checks that cannot run. Interprets DEC-0247; does not supersede it. CONNECT sitting 2026-09-11, spine status final."
+    sources: [EXT-2175, EXT-2178, EXT-2179, EXT-2182]
+    authority: rider
+    component: COMP-QMF-VENUE
+    tags: [connect, FTR-01, ct-20, ct-13, data-quality, DEC-0247, assumption-a3]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md#ad-4"
+
+  - id: DEC-0267
+    title: "CONNECT AD-5 — Crypto plurality without a fourth V1 kind"
+    statement: "A later non-cTrader live venue is a new CT-18 static declaration plus a new VenueClientPort implementation selected by (world, VenueId) through DEC-0263. Same four contracts. Same qmn.venue import boundary. Adapter code lives in qmf-venue and imports only qmf-core. This increment does not mint a fourth VenueClientKind and does not pick an exchange. TN-11's three V1 implementations (CTRADER, REPLAY, CONFORMANCE) stand until a later increment amends them. TN-22 second broker is roster applies to the same protocol family; a new protocol is a later module (L22), never config onto the cTrader client."
+    status: ratified
+    rationale: "Prevents config-mapping a non-cTrader VenueId onto LiveCTraderClient, extracting a gateway library, and Book/BMS/sizing redesign under CONNECT. Conflict TN-11 THREE vs L22 is scoped, not overridden. CONNECT sitting 2026-09-11, spine status final."
+    sources: [EXT-2176, EXT-2178, EXT-2180, EXT-2182]
+    authority: rider
+    component: COMP-QMN
+    tags: [connect, plurality, L22, VenueClientKind, crypto]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md#ad-5"
+
+  - id: DEC-0268
+    title: "CONNECT FX-paper spine adopted in full (hexagonal port completion; reuse COMP-QMN and COMP-QMF-VENUE)"
+    statement: "The 2026-09-11 CONNECT child feature spine (architecture-CONNECT-2026-09-11, status final) is adopted in full as DEC-0263 through DEC-0267. Paradigm is hexagonal port completion: one systemd-supervised process remains the only impure shell; qmn.venue.VenueClientPort remains the only injectable venue seam; this increment does not mint a second port, a second runtime, or a gateway library. Preflight verdict is reuse COMP-QMN (selection, paper routing, duty scheduling, verify, CT-18 fills, error-map, live client) and reuse COMP-QMF-VENUE (connect_open_api and ProtoOA encode on the existing ConnectionManager). No new component. No new contract id. No new dependency edge. Parents QMX AD-1..AD-41 and NODE TN-1..TN-25 bind read-only. Brownfield defects at integration@1b451a848d897e42f6e2c7fd9f2ea86fab7295f2 (else-branch CTRADER, sensing-only submit, FTR-01 refuse, tests-only connect_open_api) are connect bugs this spine forbids, not seed to copy. Conflicts are surfaced not overridden: PRD section 7 node-runtime OOS vs DEC-0259; PRD section 7 forex-only vs later crypto; DEC-0247 observation vs CT-13 seven (interpreted by DEC-0266); TN-11 THREE vs L22 (scoped by DEC-0267). Stack seed: protobuf==7.36.0 in qmf-venue only; 7.36.1 exists and is not adopted here; Open API 5035 on demo.ctraderapi.com and live.ctraderapi.com; proto tag 91 in-house. Implementation authorization arrives only through the factory pipeline. Cheap-veto assumptions A1-A5 ride this umbrella."
+    status: ratified
+    rationale: "Operator-directed documentation-factory change-mode absorption of a status:final architecture spine (2026-09-11). The sitting itself was operator-absent with tagged assumptions; those assumptions are the cheap-veto surface, not silent invention."
+    sources: [EXT-2182, EXT-2177, EXT-2178, EXT-2179, EXT-2180, EXT-2181]
+    authority: rider
+    component: COMP-QMN
+    tags: [connect, spine-adoption, preflight, reuse, cheap-veto]
+    date: 2026-09-11
+    spine_ref: "SRC-16:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0269
+    title: "Workbench AD-1 — Workbench is not a sixth application"
+    statement: "Every new capability names an existing COMP-* owner, or an explicit connect/extend of one. Minting a new application package or a permanent experiment daemon besides qma-daemon is a spine amendment. Inherited stores stand: qmf-registry, qmf-data rooms, QMB JSONL run ledger, QMA daemon sqlite (journal, Experiment Ledger). A new store beside those is a spine amendment. DEC-0084 stays dead."
+    status: ratified
+    rationale: "Prevents a COMP-EXP / HTTP experiment service / second identity store drifting from QMB+QMA. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2183, EXT-2200, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-1, no-sixth-app, DEC-0084]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-1"
+
+  - id: DEC-0270
+    title: "Workbench AD-2 — Three experiment lanes, door-derived"
+    statement: "Exactly three lanes, selected by which door is called, never by a flag on a payload. (1) ungoverned — qmb.run() / ordinary Python / import qml on a controlled-room host. Returns values. Writes no QMB ledger line, no CT-32 registry record, no ExperimentSpec. It is not a Library object. L33 graduation (ungoverned Python to governed evidence) is a separate extension-package + registration act, not this spawn. (2) governed — QMB orchestrator spawn not placed by the CT-47 door (CLI/API spawn_governed, including path-dependent analysis.rerun). One QMB ledger line, one CT-32. No ExperimentSpec. (3) coordinated — QMA Backtesting Service places at most one qmb CLI/MCP invocation per ExecutionEnvironment and never import qmb. Requires a registered ExperimentSpec. The spawned run's QMB ledger line and CT-32 are the evidence, reached by _ref from the Experiment Ledger; QMA does not copy them. workbench_lane is derived from the door and is recorded only as workbench metadata on the QMB ledger line (governed for every orchestrator spawn, including those QMA placed) and on the Experiment Ledger entry (coordinated when QMA placed it). It is not QMF AD-12 evidence class, not B-4 role, and not a CT-32 field. A QMA-placed run therefore has two honest labels on two objects. UI/agents select a lane by calling run / spawn_governed / the QMA backtest tool; a fourth call path is a spine amendment."
+    status: ratified
+    rationale: "Prevents exploratory values, governed evidence, and agent jobs collapsing into one run noun; prevents caller-declared lane flags; prevents treating spawn as L33. Workbench sitting 2026-09-14, spine status final after parent-consistency amendments."
+    sources: [EXT-2184, EXT-2208, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-2, lanes, workbench_lane, L33]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0271
+    title: "Workbench AD-3 — Library identity is a projection"
+    statement: "Library has no new COMP. Kind owner is COMP-QMF-REGISTRY; query surfaces are the QMB B-15 registry-read as-of port, the QMB ledger merge view, and the QMA Experiment Ledger. Shared Library objects are exactly these existing kinds, cited by fp1: CT-33 bot, CT-34 confluence, strategy-family, CT-22 Book, CT-27 BMS, CT-28 binding, CT-12 split, CT-10 observation, CT-32 result, CT-47 ExperimentSpec (coordinated lane only). Logic source-manifests are cited from CT-33, not a separate Library kind. Not Library objects: QMA staging/RefinementProposals, JobHandles, Graph Templates, Skills, Routines, saved views, analysis publications, derived datasets. Work-environment tabs and display aliases are UX over those fingerprints. STRATS is a KnowledgeSource corpus (QMA AD-19); it does not write registry kinds. Saved views and analysis publications are not registry kinds; Library search returns them only as query hits citing the source kind's fp1."
+    status: ratified
+    rationale: "Prevents one bot/result existing as three records; a STRATS-shaped second store; QMA staging mixed into Library kinds. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2185, EXT-2212]
+    authority: rider
+    component: COMP-QMF-REGISTRY
+    tags: [workbench, ad-3, library, fp1]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-3"
+
+  - id: DEC-0272
+    title: "Workbench AD-4 — Generation is not search"
+    statement: "Search varies declared CT-33 parameters (QMB optimize/sweep, B-8) and writes trial ledger lines citing the same bot fp1. Generation, if built, authors new CT-33/CT-34 content and/or logic-source bytes via QML. The QML/host composition root mints the CT-06 envelope. QMA StrategyHandle may only (1) reference an already-fingerprinted registry record and (2) register those bytes as a dev-zone candidate with a QMA origin field and a CT-07 predecessor edge. QMA never assembles CT-33/CT-34 JSON, never mints mechanism nouns, never fills RandomCondition slots. The typed Entry/Exit/Filter/Session vocabulary remains a later QML increment (GAP-0085); write-ownership is QML/host, not QMA. SQ RandomCondition templates are a donor shape, not a schema to copy. The first generator algorithm is GAP-0063."
+    status: ratified
+    rationale: "Prevents TPE parameter search being sold as strategy generation; a generator living inside QMB's tunnel; QMA assembling CT-33 JSON. Ownership of GAP-0085 is now ruled; nouns stay deferred. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2186, EXT-2204, EXT-2212]
+    authority: rider
+    component: COMP-QML
+    tags: [workbench, ad-4, generation, search, GAP-0085]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-4"
+
+  - id: DEC-0273
+    title: "Workbench AD-5 — Two named analysis methods"
+    statement: "Exactly two methods, both COMP-QMB library functions with thin doors (B-1). Projection (analysis.project) reads one cited CT-32 and its CT-29 stream. Output is a saved view, not a CT-32. The durable body is the canonical JSON {method: projection, source_ct32, source_ct29, predicate, as_of} — a citation without that body is not a saved view. as_of is the source CT-32's registry_as_of / occurrence, never query time. Identity fp1 is of that JSON. Never a copied trade list or rescaled measure set. Permitted predicates: hours/days/session windows, max-trades caps, include/exclude filters. Forbidden as projection: any change to size, R, Book/BMS fragments, execution ports, or starting_capital. Claim-class is always projection; never admission evidence. Homes: ungoverned — return value only, not durable, not a Library object; governed-without-QMA — JSON sidecar in the source run-dir (not a new orchestrator spawn, not a QMB ledger line, not a CT-32); coordinated — the QMA daemon (Agent holding dispatch_lease) persists the JSON and an analysis.published Experiment Ledger entry citing that fp1. QMB never opens daemon sqlite. analysis.project is not a run: no CT-32, no QMB ledger line, no ExperimentSpec successor, no occupancy. Coordinated call = daemon shells the CLI as a query, waits, persists refs. analysis.rerun remains a run. Path-dependent (analysis.rerun) is a new QMB run through the tunnel (new resolved run-config: Book/BMS fragments, fill/cost/financing ports, starting_capital). A starting_capital override stamps seed_overridden on the binding and forces the B-4 fold unrated (B-3). Its canonical artifact is the new CT-32. analysis_method and lane are not CT-32 fields; they live on the QMB ledger line (governed) and/or the Experiment Ledger entry (coordinated) as metadata citing the CT-32 by _ref. Combining two bots' equity/trade streams into a synthetic portfolio is neither method — refused here; F07 stays deferred. compare_runs is a readout of cited CT-32 fields, not an analysis method and not a new artifact; it stamps nothing. F08 that only overlays two existing series uses compare_runs; F08 that changes sizing/Book/seed is path-dependent (AD-6). QMA queries may call analysis.project / analysis.rerun and persist refs; they may not reimplement the filter."
+    status: ratified
+    rationale: "Prevents a filtered trade list being treated as a Book/BMS counterfactual; a new CT-32 sibling for a projection; size/seed rewrites as rescale. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2187, EXT-2208, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-5, analysis, projection, path-dependent]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-5"
+
+  - id: DEC-0274
+    title: "Workbench AD-6 — Book and BMS variants are candidates plus replay"
+    statement: "A proposed Book/BMS version is a complete new fingerprinted CT-22/CT-27 document in the registry dev zone (not a patch record). Path-dependent evaluation is a QMB governed or coordinated replay citing that fingerprint (DEC-0270, DEC-0273). QMA may emit it only as a money_path_relevant candidate whose approval_request carries the field-level diff against the predecessor; QMA never fills an unset money-path field. Shape owner remains QMF Risk; mint remains the composition-root pattern (same as CT-33)."
+    status: ratified
+    rationale: "Prevents trade-list rescaling posing as Book simulation; QMA filling unset risk fields; patch records posing as definitions. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2188, EXT-2212]
+    authority: rider
+    component: COMP-QMF-RISK
+    tags: [workbench, ad-6, book, bms, candidates]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-6"
+
+  - id: DEC-0275
+    title: "Workbench AD-7 — Paper trinity"
+    statement: "research-paper = QMB governed replay (world=replay, Book/BMS fragments in the run-config) outside the node, before promotion. node-paper = Book-level demo routing + soak/demotion (role=demo, world=live); no per-bot paper lane (DEC-0261). QMA-paper does not exist — no execution tool at any account role (DEC-0341). QuantConnect paper-brokerage is not a QMX lane. Promotion remains a human act outside QMA onto the node. QMB may append WriterId-scoped fragments to the B-15 hub inbox; sandbox-provenance fragments stay refused at publish and pull (TN-20). hub_publish is human. QMA never writes the hub; it holds candidate refs only."
+    status: ratified
+    rationale: "Prevents QuantConnect paper-brokerage, node soak, and QMB replay sharing one paper noun; keeps the only legal hub write path (B-15 WriterId fragments) open while sandbox-provenance stays refused. Workbench sitting 2026-09-14, spine status final after parent-consistency amendments."
+    sources: [EXT-2189, EXT-2201, EXT-2208, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-7, paper-trinity, QMA-paper, hub-inbox]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-7"
+
+  - id: DEC-0276
+    title: "Workbench AD-8 — The QMA to QMB door is connect, not new"
+    statement: "Keep the route Agent to QMA backtest tool to Backtesting Service to qmb CLI (MCP later) to QMB. Replace RecordingQmbDoorTransport with a real CLI transport. Compose the long-running asyncio daemon process (loopback listener + sole sqlite writer + pack roster) from the existing modules — that process is connect, not a new COMP. Persist ExperimentSpec, the QMA Experiment Ledger, and ExperimentSpec CT-07 successor edges through the daemon journal / sqlite writer. The QMB run ledger remains QMB JSONL, reached by _ref, never copied, never merged (QMA AD-6). QMB does not write ExperimentSpec edges. Occupancy: one qmb CLI/MCP run invocation per ExecutionEnvironment (backtest, optimize, sweep, robustness, analysis.rerun, data download that mutates rooms). QMB's process-per-run children inside that invocation are not additional QMA jobs. analysis.project, compare_runs, sweep.rank, ledger reads, and data.gap-check|verify|catalog|list are queries: they do not consume occupancy, mint no CT-32, and mint no ExperimentSpec successor. Docs that still say CT-47 no code exists are stale relative to integration@1b451a8 (DEC-0286)."
+    status: ratified
+    rationale: "Prevents a second backtest governor; import qmb from QMA; treating the recording transport as a working integration. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2190, EXT-2199, EXT-2212]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workbench, ad-8, ct-47, connect, occupancy]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-8"
+
+  - id: DEC-0277
+    title: "Workbench AD-9 — Procedures live in QMA; steps live in QMB"
+    statement: "Reusable procedures are QMA Graph Templates, Skills, and operator Routines. QMB does not grow a task graph. A step that names a QMB run (backtest, optimize, sweep, robustness, analysis.rerun, mutating data download) is placed through the CT-47 qmb door as one CLI/MCP run invocation (occupancy, DEC-0276). A step that names a QMB query (analysis.project, compare_runs, sweep.rank, gap-check/verify/catalog/list) is a door query: no occupancy, no CT-32, no spec successor. The daemon, every plugin, and every QMA worker image never import qmb. The CLI process is QMB; in-process library calls from QMA are a spine amendment. One Graph Template instantiation is one Mission. Each door step that changes resolved-config is an ExperimentSpec successor (create_successor + the QMA ExperimentSpec CT-07 branches-from edge already minted for specs — not bot supersedes, not a new edge kind); the procedure is not itself an ExperimentSpec. Composition stays non-linear: any step may be the first door placement. SQ Custom Projects remain a donor shape, not a clone. No compulsory research-to-backtest-to-paper wizard."
+    status: ratified
+    rationale: "Prevents a workflow engine inside QMB and a compulsory linear wizard. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2191, EXT-2212]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workbench, ad-9, procedures, graph-templates]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-9"
+
+  - id: DEC-0278
+    title: "Workbench AD-10 — Continuation is a daemon property"
+    statement: "Work that must survive workstation sleep is owned by qma-daemon plus registered remote ExecutionEnvironments and the durable outbox. If laptop-off is promised, the daemon or a reachable remote env must not live only on the sleeping laptop. QMB orchestrator lifetime is the job. Coordinated cancel authority is JobHandle.cancel only; the door maps it to QMB abort and the QMB ledger writes aborted. Governed-without-QMA cancel is QMB abort only. Ungoverned cancel is process death and writes nothing. Closing a UI tab cancels nothing. No other writer may set a terminal JobHandle or ledger state. The concrete always-on host is GAP-0062 — the property is decided; the machine is not."
+    status: ratified
+    rationale: "Prevents QMB process-per-run being treated as unattended continuation. Host machine left as an explicit gap, not silent prose. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2192, EXT-2204, EXT-2212]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workbench, ad-10, continuation, GAP-0062]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-10"
+
+  - id: DEC-0279
+    title: "Workbench AD-11 — Notebooks import the library; lifecycle is an environment"
+    statement: "Exploratory notebooks import qmb / import qml on a controlled-room host (B-9). A managed interpreter lifecycle, if product-owned, is a QMA ExecutionEnvironment (Analysis RLM kernel or a declared env kind). It is not a QMB module and not a new COMP."
+    status: ratified
+    rationale: "Prevents a Jupyter product inside QMB; reviving the banned bare kernel name outside QMA. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2193, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-11, notebooks]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-11"
+
+  - id: DEC-0280
+    title: "Workbench AD-12 — Extensibility ladder"
+    statement: "Four rungs, in order: (1) ui-editable config variables on templates; (2) ordinary Python logic + QMB ports/adapters; (3) QMA plugins, skills, graph templates, desk packs; (4) UI contribution SDK. Rungs 1-3 bind now. Rung 4 stays GAP-0081 deferred. No-code authoring is not promised. QMA plugin vocabulary stays QMA-scoped (DEC-0346)."
+    status: ratified
+    rationale: "Prevents promising a UI plugin SDK that is GAP-0081; treating source-only extension as the product. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2194, EXT-2212]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workbench, ad-12, extensibility, GAP-0081]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-12"
+
+  - id: DEC-0281
+    title: "Workbench AD-13 — Data work wraps qmf-data"
+    statement: "Acquire / verify / gap-check / catalog / generate are QMB data commands wrapping qmf-data (B-11). CSV/file import is a CT-15 adapter (extend ingest), not a new store. Spike/OHLC quality detectors, if added, extend QMB data over existing observations — they are not AD-5 analysis views and not a new COMP. Quality surfaces are read models over CT-13 data quality events and gap_check reports. A derived dataset is a new fingerprinted artifact with a lineage edge; it is not a Library kind (DEC-0271). Vendor-style timezone clones that auto-update the source under an experiment's feet are refused. Only a coordinated ExperimentSpec exists (DEC-0270); its data_ref must cite CT-12 split fingerprints (B-8). Governed runs cite splits on the resolved run-config, not via ExperimentSpec. Ungoverned calls mint neither."
+    status: ratified
+    rationale: "Prevents a QuantDataManager clone store; silent auto-update of experiment inputs. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2195, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-13, qmf-data, ct-12]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-13"
+
+  - id: DEC-0282
+    title: "Workbench AD-14 — A candidate set is a query"
+    statement: "Retain / filter / rank is a read-time view over (1) QMB ledger lines, (2) registry as-of sets including dev-zone candidates of Library kinds, (3) coordinated Experiment Ledger refs. It does not read QMA staging. sweep.rank is this view; it publishes no copied-row artifact. A saved view's home follows DEC-0273: return value (ungoverned); JSON sidecar in the source run-dir (governed-without-QMA); daemon-persisted JSON plus analysis.published (coordinated). Not qmf-registry, not a new sqlite table, not a citation without a body."
+    status: ratified
+    rationale: "Prevents a copied-row candidate database beside the ledger. Workbench sitting 2026-09-14, spine status final after parent-consistency amendment dropping staging from this view."
+    sources: [EXT-2196, EXT-2208, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-14, candidate-set]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-14"
+
+  - id: DEC-0283
+    title: "Workbench AD-15 — Labels stay parent-shaped"
+    statement: "Do not extend CT-32 or B-4. Mapping is total. Governed/coordinated confirmation run: B-4 role=confirmation; no AD-15 claim-class (it is not an analysis); AD-12 evidence class as parent. Optimize trial / sweep combo: role=trial. MC / WF replicate: role=replicate plus B-7 procedure label robustness or infra-stress. Aborted: role=aborted. Projection saved view: no B-4 role (not a run); claim-class projection; inherit source world; never confirmed. Path-dependent re-run: B-4 role of that run; may be published as analysis only as an Experiment Ledger analysis.published entry citing the new CT-32; still not admission evidence unless role=confirmation. Confirmation evidence remains B-4 role=confirmation only. L20 stands. Replay-world verdicts still cannot gate live money. Published analysis = a saved view or an Experiment Ledger analysis.published entry, not every CT-32."
+    status: ratified
+    rationale: "Prevents projection, synthetic, or trial results masquerading as confirmation; extending CT-32 or B-4 with workbench fields. Workbench sitting 2026-09-14, spine status final."
+    sources: [EXT-2197, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, ad-15, labels, b-4]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-15"
+
+  - id: DEC-0284
+    title: "Workbench AD-16 — Research-undertaking identity"
+    statement: "There is no Project kind and no Workspace kind. Coordinated research continuity is the ExperimentSpec fp1 (code_ref when code changes, resolved_config_ref for parameter/config, data_ref = CT-12 split, environment_ref). QMB workspace defaults are a config-compiler layer (B-3), never an identity. A notebook file is an ungoverned working surface until an orchestrator spawn or a CT-47 placement; it joins the undertaking only as code_ref or as an ExecutionEnvironment session, not as a fourth identity. Display names project / workspace are UX aliases over ExperimentSpec (coordinated) or over a bot fp1 (governed). UI tabs may group those aliases; they must not mint a record."
+    status: ratified
+    rationale: "Prevents a QuantConnect Project package; Workspace-as-identity; Bot + ExperimentSpec + run-config + notebook as four unjoined records. Workbench sitting 2026-09-14, spine status final (F12 join landed as this AD after reconcile-inputs flagged the quiet miss)."
+    sources: [EXT-2198, EXT-2212]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workbench, ad-16, ExperimentSpec, project, workspace]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#ad-16"
+
+  - id: DEC-0285
+    title: "Workbench spine adopted in full (reuse existing applications; no sixth package)"
+    statement: "The 2026-09-14 QMX strategy-experimentation workbench spine (architecture-QMX-2026-09-14, status final) is adopted in full as DEC-0269 through DEC-0284. Paradigm is workbench composition over hexagonal libraries: one fingerprint identity, three door-derived experiment lanes, two named analysis methods. Preflight verdict is reuse COMP-QMB (analysis functions, CLI coverage, data commands, governed/ungoverned doors), COMP-QML (generation authoring, ungoverned tunnel), COMP-QMA-CORE (ExperimentSpec, handles, ports), COMP-QMA-WIRE (CT-40 listener posture), COMP-QMA-DAEMON (real CLI door, ExperimentSpec persistence, composed asyncio process, Graph Templates, continuation), COMP-QMF-REGISTRY (Library kinds), COMP-QMF-RISK (Book/BMS complete candidates), COMP-QMF-DATA (rooms wrapped by QMB data commands), COMP-QMN (node-paper, unforked run_slice, never research-paper). No new component. No new contract id. No new dependency edge. Parents QMF AD-1..41, QMB B-1..15, QML QL-1..10, NODE TN-1..25, QMA AD-1..29, CONNECT AD-1..5 bind read-only. Local AD-1..AD-16 do not renumber parents. Dead list honored: DEC-0084/0085/0086 stay dead; DEC-0376 stays cut; QMA-paper does not exist; donor engines stay shapes-only. Implementation authorization arrives only through the factory pipeline."
+    status: ratified
+    rationale: "Operator-directed documentation-factory change-mode absorption of a status:final architecture spine (2026-09-14). The sitting itself was operator-absent with tagged assumptions; those assumptions are the cheap-veto surface (DEC-0287), not silent invention."
+    sources: [EXT-2212, EXT-2200, EXT-2201, EXT-2205, EXT-2206]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, spine-adoption, preflight, reuse]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0286
+    title: "Contract wiring_status reconcile — source-inspected is not end-to-end demonstrated"
+    statement: "On integration@1b451a848d897e42f6e2c7fd9f2ea86fab7295f2, matching source exists for CT-32 (qmb/src/qmb/results), CT-33/CT-34 (qml/src/qml/declaration and confluence), CT-47 and CT-40..CT-51 (qma-core/qma-wire/qma-daemon packages), and qmf-risk value types for CT-22..CT-31. Contract YAML wiring_status defined-unwired plus the prose no code exists is stale documentation drift, not an architectural fork and not a second design. The reconciled stamp is source-inspected: matching packages exist at that SHA; class/test existence is not end-to-end demonstration. Remaining connect work includes replacing RecordingQmbDoorTransport with a real CLI transport, composing the asyncio daemon process (no asyncio.run/websockets/uvicorn under qma-daemon/qma-wire src), CLI coverage of robustness and sweep batch/rank, and analysis.project. Implementation authorization still arrives only through the factory pipeline."
+    status: ratified
+    rationale: "Operator instruction for this documentation-factory sitting: reconcile stale defined-unwired / no code exists stamps with integration source; source-inspected is not end-to-end demonstrated. Independently re-verified via git grep/ls-tree on the SHA without checkout."
+    sources: [EXT-2202, EXT-2199, EXT-2212]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, wiring_status, source-inspected, ct-32, ct-33, ct-47]
+    date: 2026-09-14
+    spine_ref: "SRC-17:ARCHITECTURE-SPINE.md#consistency-conventions"
+
+  - id: DEC-0287
+    title: "Workbench cheap-veto register and unresolved holes"
+    statement: "Cheap-veto assumptions, each individually overturnable without unwinding another call: (A1) Connect-wave (door + projections + named analysis + procedures/continuation config) is the coherent first implementation area; generation can trail without blocking Library or What-if. (A2) Work-environment roster stays UI-open (AD-16 aliases only). (A3) Generated layouts and reactions to them are not preference evidence. (A4) Optuna pin stays optuna==4.9.0 on integration despite upstream 5.0.0 (DEC-0168 stands; TPE default change is a contract-versioning event). (A5) No PRD rewrite this sitting — FR addenda for ExperimentSpec, analysis methods, generation-vs-search, and procedures are GAP-0061. Unresolved holes kept as gaps, never silent prose: GAP-0085 mechanism vocabulary (ownership ruled by DEC-0272; nouns open); GAP-0063 first generator algorithm; GAP-0062 concrete always-on host for DEC-0278; GAP-0061 PRD FR addenda."
+    status: ratified
+    rationale: "The architecture sitting was operator-absent Fast-path; tagged assumptions are the cheap-veto surface. Operator instruction for this documentation-factory sitting: keep those holes as gaps, never silent prose; do not rewrite the PRD; generated layouts are not preference evidence."
+    sources: [EXT-2203, EXT-2204, EXT-2206, EXT-2209, EXT-2211]
+    authority: rider
+    component: COMP-QMB
+    tags: [workbench, cheap-veto, assumptions, gaps]
+    date: 2026-09-14
+    spine_ref: "SRC-17:.memlog.md"
+
+  - id: DEC-0380
+    title: "Operator-direct paradigm — mill absorbed as two-stage QML authoring; STRATS is not a language"
+    statement: "STRATS is not a QMX language. Stats was a staging mill (noise to structured hypothesis) because QMX was unfinished. Absorb that mill as a QML expansion: two-stage bot authoring. Stage 0 = research hypotheses (dictionary, bindings, graph, holes). Stage 1 = existing CT-33 + Python + QL-8. Graduation is graduate_to_governed. QMF is the framework. QML, QMB, and QMA are libraries. QMN is the node. No new COMP. No new CT. Stats is seed corpus only. source_id=strats is the adapter key, not product copy. The architecture package at architecture-QMX-2026-09-16 is proposed, not accepted; absorbed AD-1..AD-21 stamp provisional. LIBRARY-ADAPTATION.md is superseded and is not current. Do not start videos/n8n/Hermes. Do not fill GAP-0085. Do not implement production code from this documentation-factory pass. First epic after docs is AD-14 seed bind plus Stage 0 view."
+    status: ratified
+    rationale: "Direct operator ruling in the 2026-09-16 documentation-factory session. Rider wins over architecture-package commentary. The sitting's 21 ADs remain proposed until the operator accepts the package."
+    sources: [EXT-2213, EXT-2214, EXT-2236, EXT-2239]
+    authority: rider
+    component: COMP-QML
+    tags: [law, qml, research, mill, operator-direct]
+    date: 2026-09-16
+    spine_ref: "SRC-20"
+
+  - id: DEC-0381
+    title: "QML-research AD-1 — Product Library stays two-rail; hypotheses are not a third rail"
+    statement: "Workbench AD-3 Library-object set and kind roster are unchanged. Product Library discovery federates two typed hit classes only (AD-9): Knowledge (seed cites) and Artifact (fp1). A QML hypothesis is not a Library object and not a registry kind until Stage 1 registration mints CT-33/CT-34. qmb.registryread.library continues to refuse strats. Display aliases never mint a third identity. Federation is a discovery DTO, not a fifth persistence surface."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-1. Package is proposed, not operator-accepted (DEC-0380)."
+    sources: [EXT-2215]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-1, library, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-1"
+
+  - id: DEC-0382
+    title: "QML-research AD-2 — Stats is the seed corpus; QMX points, it does not absorb"
+    statement: "Canonical seed is the portable tree at the operator-configured root_path (today C:/Users/Mubarak/Desktop/Stats). Markdown/YAML files are source of truth; SQLite is derived and disposable. QMA snapshots that tree. Copy/subtree into QMX git is forbidden. Submodule is deferred until a remote host cannot receive a path. Desktop/strats is debris. Population stays paused until the operator starts it. Target markets remain forex and crypto-spot; no futures execution in the seed; futures/stock sources may contribute only with explicit transfer caveats. Prop-firm is an overlay, not a third library. Stats must not contain QMX adapters, executors, CT-33/34, Book/BMS bindings, run ledgers, genetic machinery, BMS/KSA/MIS, certification, or account/position/agent memory. Product language for the mill is QML. Seed-disk ids (STRAT-NNNNNN, kebab slugs) may remain on disk; they are not product nouns."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-2. Package proposed (DEC-0380)."
+    sources: [EXT-2216]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [qml-research, ad-2, seed-corpus, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0383
+    title: "QML-research AD-3 — Seed source_id and six confidence keys freeze for life"
+    statement: "Exactly one KnowledgeSource binds singleton key source_id strats, kind plain_file_library, as the seed adapter. That key is technical archaeology, not UI/glossary language. CT-44 Provenance/Citation use source_ref for that source. confidence_dimensions are exactly extraction_confidence, rule_explicitness, source_quality_completeness, ambiguity_unresolved_status, empirical_status, portability_market_transfer_status. Changing them is a new source_id, not an in-place rename. Evidence labels are opaque seed-corpus strings — QMA stores verbatim, never parses. Until a locator carries corpus-authored scores, first-slice cite must emit the six keys with value unscored (corpus-owned default), never a QMA-computed scalar and never Memory admission_confidence. That default is not live adapter behaviour on integration@8510c03 (cite currently requires a caller-supplied map)."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-3. Freeze key remains cheap-veto (DEC-0404). Package proposed (DEC-0380)."
+    sources: [EXT-2217, EXT-2238]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [qml-research, ad-3, source_id, ct-44, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-3"
+
+  - id: DEC-0384
+    title: "QML-research AD-4 — Snapshot include/exclude is adapter config, not a seed schema"
+    statement: "The adapter's snapshot set is configuration of the research-corpus plugin, not fields written into Stats and not hardcoded layout in qma-core / plain_file.py. qma-core stays layout-agnostic; PlainFileLibrarySource continues to skip hidden path parts only. Include (plugin config): README.md, STRATS-BUILD-STATE.md, schema/, dictionary/, strategies/, sources/, knowledge/, lineage/, catalog/, IDEA.md. Exclude (plugin config): .hermes/, .obsidian/, backend/strats.sqlite, __pycache__/, backend/*.py. Two adapters that hash different include sets mint different snapshot_refs — there is one production adapter."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-4. Include/exclude lists remain cheap-veto (DEC-0404). Package proposed (DEC-0380)."
+    sources: [EXT-2218, EXT-2238]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [qml-research, ad-4, snapshot, research-corpus, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-4"
+
+  - id: DEC-0385
+    title: "QML-research AD-5 — Seed locators are corpus paths; colliding slugs carry file_path"
+    statement: "Seed locator equals posix relative path plus optional #heading fragment. Retrieve strips the fragment and returns file bytes. Bindings and graph nodes for a colliding slug must name (file_path, id) as the seed already requires. QMA does not mint a parallel primitive id scheme. qma-core stays layout-agnostic; path/heading conventions live in the research-corpus adapter. Hypothesis identity is a different locus (DEC-0401)."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-5. Package proposed (DEC-0380)."
+    sources: [EXT-2219]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [qml-research, ad-5, locator, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-5"
+
+  - id: DEC-0386
+    title: "QML-research AD-6 — Four planes stay distinct"
+    statement: "Four planes: (1) research candidate — Stage 0 hypothesis (dictionary cites, bindings, graph, DNA-shaped holes); seed files feed this plane via cite; a hypothesis may also start with zero seed package. (2) governed bot — CT-33 + Python logic + CT-34. (3) evidence — QMB ledger + CT-32 (and ExperimentSpec on the coordinated lane). (4) deployment — QMN paper | live after human promote. A Stage 0 graph is never an executor, backtest spec, Graph Template, or order adapter. Trigger is not order. Boolean/temporal operators (ALL / sequence / within / ...) stay on the hypothesis or later Python WHEN, not CT-34 declaration. A dictionary entry must not become a CT-16 producer or a CT-29 close-reason by import. Class entry_hypothesis with unresolved F must not be completed by QMX invention. F labels (source_defined / external_policy / deliberately_open / unresolved) stay on the hypothesis. Seed lineage (I) is not CT-07 and is not ExperimentSpec branches-from."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-6. Package proposed (DEC-0380)."
+    sources: [EXT-2220, EXT-2245]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-6, four-planes, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-6"
+
+  - id: DEC-0387
+    title: "QML-research AD-7 — Handoff is cite, author a hypothesis, then graduate; never auto-mint"
+    statement: "Three legal entries, none a toll booth for the others: (1) QMB ungoverned Python — zero QML; (2) QML gate_registration — CT-33 + Python, no Stage 0; (3) Stage 0 save then graduate_to_governed — requires a hypothesis research_ref. QML UI/agents MUST expose (2) without opening Stage 0. Executable artifacts appear only when a human (or human-approved QML authoring) produces CT-33/34 + logic. QMB then validates on a legal lane. Only a human promotes onto the node. RefinementProposals are applied, never promoted. Live StrategyHandle origin stays the frozen string qma. Optional seed handoff is a distinct non-fp1 field seed_cite: { source_ref, snapshot_ref, locator } citing an existing Knowledge Citation — never a reshape of origin. Single writer of seed_cite: the QML authoring composition root. QMA copies it at register only if the host supplied it; QMA never invents locators. seed_cite must not enter CT-33/CT-34/fp1 preimage. No CT-07 edge to a Knowledge Citation. Skipping Stage 0 means no originating_research_ref and no mill CT-07; seed_cite may still be set. Informal role translation (location≈level, trigger≈trigger, filter≈filter, confirmation≈confirmation; invalidation stays Book/F) is a handoff aid, not a contract mint."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-7. Package proposed (DEC-0380)."
+    sources: [EXT-2221]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-7, graduation, seed_cite, dont-box-in, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-7"
+
+  - id: DEC-0388
+    title: "QML-research AD-8 — Reuse existing owners; QML absorbs the mill process"
+    statement: "Reuse-or-new only. Owners: COMP-QML (Stage 1 authoring + QL-7/QL-8; Stage 0 types per AD-15), COMP-QMA-CORE (CT-44), COMP-QMA-DAEMON (KnowledgeService, PlainFileLibrarySource, cite-copy), desk pack research-corpus (seed bind + AD-4 include/exclude), COMP-QMB (Artifact-rail queries), COMP-QMF-REGISTRY (kinds), COMP-QMA-WIRE (federated hit DTO / additive CT-40 family only). No federating COMP, no mill daemon, no identity port on the facade. Replace in-memory StratsCorpus with PlainFileLibrarySource(root_path, source_id=strats). Seed root_path homes on operator-principal plugin/daemon load config (the research-corpus pack), a filesystem path, not an env var, not a git path, not a venue secret, not a qmb setting. v1 persistence owner of hypotheses is the QML authoring composition root (the same root that stamps CT-06/CT-07 for bots per QL-1). Config key research_root is distinct from seed root_path and is not a QMA daemon / research-corpus setting. COMP-QMA-DAEMON MUST NOT write the research root and MUST NOT bind a second CT-44 source_id in v1."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-8. Package proposed (DEC-0380)."
+    sources: [EXT-2222]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-8, reuse, preflight, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-8"
+
+  - id: DEC-0389
+    title: "QML-research AD-9 — Federated discovery concatenates two existing queries"
+    statement: "Federated discovery is a concatenate of two existing queries — never a fourth store and never a door run. Workbench AD-8 occupancy is unchanged: this path consumes none. Owner of the federated hit DTO is COMP-QMA-WIRE (additive CT-40 family). Owner of Knowledge search remains CT-44 / COMP-QMA-DAEMON. Owner of Artifact search remains COMP-QMB (library.search / B-15 / ledger merge / Experiment Ledger refs per Workbench AD-3). Frozen hits — exactly one of: KnowledgeHit { hit_class: knowledge, source_ref, snapshot_ref, locator } (durable detail requires a Citation after cite; cite-copy artifact_ref is not an Artifact-rail hit); ArtifactHit { hit_class: artifact, fp1, kind } where kind is in Workbench AD-3 roster or closed query-hit tags saved-view | analysis.published (live tokens; not registry kinds). No other hit_class — including no qml_candidate and no strats. Stage 0 hypotheses are found through the QML research surface, not this DTO. Display aliases on KnowledgeHits MUST NOT say hypothesis or research candidate. Viewing cited seed bytes is a read-only projection and does not mint research_ref. Must not persist a unified row cache, read QMA staging, or treat locators as fp1. Ranked/semantic search stays GAP-0073 (unsupported-capability)."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-9. Package proposed (DEC-0380)."
+    sources: [EXT-2223]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [qml-research, ad-9, federated-discovery, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-9"
+
+  - id: DEC-0390
+    title: "QML-research AD-10 — Optional librarian is a skill on the same ports"
+    statement: "A contextual librarian is a QMA Skill/Graph Template over search/retrieve/cite plus QML Stage 0 helpers. The main agent workspace is a separate view onto the same contracts. No wizard is required to start from a paper, idea, existing package, or ungoverned Python. Closing a UI tab cancels nothing."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-10. Package proposed (DEC-0380)."
+    sources: [EXT-2224]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [qml-research, ad-10, librarian, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-10"
+
+  - id: DEC-0391
+    title: "QML-research AD-11 — Updates are new snapshots; QMX does not merge the dictionary"
+    statement: "Edits to the seed happen in Stats (or a future population agent writing Stats files). QMA learns them by snapshot() plus recorded re-pin; snapshots of strats form a linear supersedes chain. Cite copies remain the bytes of the pinned snapshot (StaleSnapshot otherwise). UI/agent browse without a Mission still pins a session snapshot_ref before retrieve/cite; unpinned live-tree reads are refused. Colliding slugs stay keepers. Duplicate/conflict handling is the seed's (file_path, id) rule plus DNA H, not a QMX merge."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-11. Package proposed (DEC-0380)."
+    sources: [EXT-2225]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [qml-research, ad-11, snapshot, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-11"
+
+  - id: DEC-0392
+    title: "QML-research AD-12 — JSON Render and MCP Apps present; they do not store or execute"
+    statement: "json-render (catalog-constrained generative UI) and MCP Apps (ui:// resources, SEP-1865 stable 2026-01-26) may render DTOs in chat or a tool pane. They are not identity, persistence, or authority. Native web UI is first; desktop later. qma-ui-contract stays GAP-0081. Additive CT-40 query families for the facade are backend work now; chrome is the UI session."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-12. Package proposed (DEC-0380)."
+    sources: [EXT-2226]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [qml-research, ad-12, presentation, gap-0081, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-12"
+
+  - id: DEC-0393
+    title: "QML-research AD-13 — Workflows sitting consumes citations, hypotheses, and doors, not DNA graphs"
+    statement: "Workflows may take Knowledge Citations, QML research_refs, and Artifact fp1s as inputs and may place QMB door steps per Workbench AD-8/AD-9. A Stage 0 graph is not a workflow definition. This sitting does not choose a workflow runtime or editor."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-13. Package proposed (DEC-0380)."
+    sources: [EXT-2227]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-13, workflows, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-13"
+
+  - id: DEC-0394
+    title: "QML-research AD-14 — First vertical slice is seed bind plus a Stage 0 view"
+    statement: "The first implementable slice: configure root_path; snapshot per AD-4; search/retrieve/cite against STRAT-000001 and one dictionary entry; Mission pin; QML vocabulary helper resolves swing-high from cited bytes the host passed in; read-only Stage 0 projection of LAYOUT-DEMO preserves entry_hypothesis and unresolved F (no invented exits, no invented short side). The projection does not mint research_ref and is not a wizard. LAYOUT-DEMO is not extracted research to complete. register_library_kind(strats) still refuses; no CT-33 mint; no population ingest. Class/test existence is not e2e (DEC-0286, DEC-0406)."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-14. First epic after docs (DEC-0380). Package proposed (DEC-0380)."
+    sources: [EXT-2228, EXT-2245]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-14, first-slice, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-14"
+
+  - id: DEC-0395
+    title: "QML-research AD-15 — Stage 0 is QML's fourth surface, on QML's own ladder"
+    statement: "Stage 0 types live in qml.research, a public submodule of the qml distribution, on QML's own format-version ladder. RESEARCH_FORMAT_VERSION is an independent integer in that module (not QL-7 protocol / QL-8 conformance versions). They are not CT-33 helpers, not QMA/qma-core types, not host-private schemas. Hosts consume the module; they do not fork it. QML still mints no QMF-ladder (CT-*) shared contract. Stage 0 never sizes, never emits CT-23 intents, never becomes a Book/node seat, and is never cited by governed evidence (CT-32 / seats cite Bot fp1 only). Graduation (DEC-0397) is the only mill bridge into CT-33 + Python; gate_registration without a hypothesis remains legal (DEC-0387). The library stays pure per QMF AD-15 (no threads, no I/O, no process spawning). QMA hosts own seed snapshot / search / retrieve / cite. The QML authoring composition root owns hypothesis serialization and listing. A hypothesis may start from an idea, chart, journal, or seed package — Stage 0 is the mill, not a Stats viewer. Proposed parent QL-1: QML's surface is four thin things — (1) CT-33/CT-34 author types, (2) Stage 0 research-candidate types, (3) QL-7 protocol, (4) QL-8 gate. The amendment is a documentation-factory obligation, not an implementation veto. It is not legal to preserve the three-count by hiding Stage 0 in QMA or in host-private DNA files."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-15. QL-1 four-count is a proposed parent amendment (DEC-0403). Package proposed (DEC-0380)."
+    sources: [EXT-2229, EXT-2244]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-15, qml.research, ql-1, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-15"
+
+  - id: DEC-0396
+    title: "QML-research AD-16 — Dictionary is vocabulary over files, not registry kinds"
+    statement: "A dictionary entry is a role-neutral file record (12-field markdown in the seed). QML ships parse/validate/lookup helpers over bytes the host passed in (cited copies or caller-supplied buffers) — QML performs no filesystem I/O. Collision resolution uses (file_path, id). Meaning (12 fields, eligible roles, class taxonomy, F/H labels) is computed only by qml.research. The research-corpus adapter returns bytes + locators + AD-4 include/exclude; it MUST NOT emit structured dictionary/DNA fields. QMA cites locators; it does not register slugs as kinds. Binding an entry into a bot still requires a human (or human-approved) choice of CT-16/CT-17 producer or plain Python, then a CT-34 leg role from the closed enum level | trigger | confirmation | filter. Eligible roles on the dictionary (invalidation, target, context, ...) stay on Stage 0. GAP-0085 stays deferred. Dictionary growth happens in the seed tree and appears via new snapshot; QML does not fork a second vocabulary store in v1. Pillars (location, context, trigger, confirmation) are human lenses, not a closed Stage 0 schema."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-16. GAP-0085 stays deferred per operator rider (DEC-0380). Package proposed (DEC-0380)."
+    sources: [EXT-2230]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-16, dictionary, gap-0085, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-16"
+
+  - id: DEC-0397
+    title: "QML-research AD-17 — Graduation is graduate_to_governed, not a QMB spawn"
+    statement: "Graduation mints the two artifacts only after both QL-8 layers pass. originating_research_ref is a qmf-core Fingerprint (fp1:sha256:<hex>) so existing graduate_to_governed can consume it. For mill graduation it MUST be the hypothesis research_ref (preimage class = qml-research-hypothesis, DEC-0401). Parent QL-8 ungoverned-experiment graduation keeps its own preimage class; do not call qmf.structure.research.graduate_to_governed. Knowledge Citation digest / artifact_ref / source_ref / seed_cite is not a legal originating_research_ref. Seed cites travel on AD-7 seed_cite only. Host stamps promoted-from CT-07 with to_ref = research_ref. That edge is lineage, not governed evidence: CT-32 and seats cite only the Bot fp1. Self-edge remains refused. Informal collapse: open Stage 0 roles to closed CT-34 enum + Python WHEN; unresolved F to empty permitted_exit_intents and/or Book family policy, never invented exits. Skipping Stage 0 uses gate_registration with no mill CT-07."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-17. Package proposed (DEC-0380)."
+    sources: [EXT-2231]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-17, graduate_to_governed, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-17"
+
+  - id: DEC-0398
+    title: "QML-research AD-18 — Product nouns are QMX / QML; STRATS is seed-disk only"
+    statement: "Mill module/surface = research. One DNA-shaped package = hypothesis (also research candidate until graduated). Vocab item = dictionary entry. Stats tree = seed corpus. Lifecycle copy: seed corpus to cite to hypothesis to graduation to declaration + logic. Banned in product language: STRATS as ontology brand, second language, COMP-LIB, Knowledge Base, primitive as a brand, DNA/STRAT-ids as UI nouns (they may appear as imported locator text). Homonym: Stage 0 composition is field/type graph (Boolean / temporal / lifecycle). Never export Confluence / confluence from qml.research. CT-34 Confluence remains the fingerprinted leg-set registry kind."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-18. Aligns with operator-direct DEC-0380. Package proposed (DEC-0380)."
+    sources: [EXT-2232]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-18, naming, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-18"
+
+  - id: DEC-0399
+    title: "QML-research AD-19 — QMA cites; QML owns meaning"
+    statement: "QMA's Knowledge port remains read-only transport: snapshot, search, retrieve, cite-copy. QML owns Stage 0 types, vocabulary helpers, and Stage 1 authoring. QMB owns experiments after something runnable exists. The Trading Node owns paper|live after L17. A later CT-44 source_id over a QML-owned research root is a new source, not a rename of strats, and stays deferred in v1 even if host files exist (DEC-0401). QMA does not parse dictionary/DNA meaning (DEC-0396). QMA AD-19 read-only law holds; the empty-corpus sentence is a docs factual refresh only (DEC-0403)."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-19. Package proposed (DEC-0380)."
+    sources: [EXT-2233, EXT-2242]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-19, meaning-ownership, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-19"
+
+  - id: DEC-0400
+    title: "QML-research AD-20 — Independence law and honesty envelope"
+    statement: "These are distinct objects: dictionary entry (what exists, role-neutral) is not binding (what job it does in this hypothesis) is not graph (how bound parts interact: Boolean / temporal / lifecycle) is not hypothesis (candidate spec + evidence + unknowns + research lineage) is not declaration (CT-33) is not logic (Python WHEN) is not CT-32 (measured) is not seat (QMN after promote). Stage 0 must preserve F labels and H unknowns. Graduation refuses to invent exits, producers, or CT-29 close-reasons to complete a hypothesis. Class entry_hypothesis / fragment / descriptive_pattern / composite / complete is Stage 0 taxonomy, not a CT-33 field."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-20. Package proposed (DEC-0380)."
+    sources: [EXT-2234, EXT-2245]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-20, honesty-envelope, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-20"
+
+  - id: DEC-0401
+    title: "QML-research AD-21 — Hypothesis identity is QML-local; host persists; not registry fp1"
+    statement: "A hypothesis is identified by research_ref = qmf-core fingerprint of exactly { class: qml-research-hypothesis, contract_format_version: RESEARCH_FORMAT_VERSION, body: <canonical Stage 0 content> }. The value is fp1-shaped (fp1:sha256:<hex>) so graduate_to_governed can consume it, and must not be registered as a qmf-registry kind, must not appear on the Artifact rail, and must not reuse a class already used by Bot / experiment / Citation envelopes. Occurrence / writer / created-at / seed snapshot_ref are excluded from the preimage. body is the canonical JSON qml.research returns (sorted keys; locators and meaning; not host markdown). Additive optional fields require a version bump; unknown version is unavailable dependency. A hypothesis exists only after an explicit QML authoring save that returns those bytes; viewing cited seed is not a save (DEC-0394). QML returns fingerprintable content only. The QML authoring composition root is a blob store keyed by research_ref: it persists only those canonical bytes under research_root. It is not daemon sqlite, not QMA AD-22 staging, not a new COMP store, not Stats, and not a second AD-4 include/exclude. Host-private files, if any, are caches of those bytes, never an identity basis. A second KnowledgeSource over this root stays deferred in v1 even though files exist. Restoring across qml format versions is an unavailable dependency refusal."
+    status: provisional
+    rationale: "Absorbed from architecture-QMX-2026-09-16 AD-21. Package proposed (DEC-0380)."
+    sources: [EXT-2235]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, ad-21, research_ref, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#ad-21"
+
+  - id: DEC-0402
+    title: "QML-research spine adopted as proposed (reuse existing applications; no new COMP; no new CT)"
+    statement: "The 2026-09-16 QMX QML research-expansion spine (architecture-QMX-2026-09-16, status draft/proposed) is absorbed into docs/ as DEC-0381 through DEC-0401, under operator-direct paradigm DEC-0380. Preflight verdict is reuse COMP-QML (Stage 0 types + Stage 1 authoring + graduation), COMP-QMA-CORE (CT-44), COMP-QMA-DAEMON (KnowledgeService / PlainFileLibrarySource / cite-copy), research-corpus pack (seed bind + AD-4 include/exclude), COMP-QMB (Artifact-rail queries), COMP-QMF-REGISTRY (kinds), COMP-QMA-WIRE (federated hit DTO / additive CT-40 family). No new component. No new contract id. No new depends_on edge. Parents QMF AD-1..41, QMB B-1..15, QML QL-1..10, NODE TN-1..25, QMA AD-1..29, CONNECT AD-1..5, Workbench AD-1..16 bind read-only. Local AD-1..AD-21 do not renumber those parents. Implementation authorization remains factory-pipeline-only. This umbrella is provisional until the operator accepts the package."
+    status: provisional
+    rationale: "Operator-directed documentation-factory change-mode absorption of a proposed architecture spine (2026-09-16). Operator rider forbids treating the package as accepted (DEC-0380)."
+    sources: [EXT-2213, EXT-2214, EXT-2222]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, spine-adoption, preflight, reuse, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0403
+    title: "Proposed parent amendments — QL-1 four-count, Workbench AD-3 commentary, QMA AD-19 empty-corpus factual refresh"
+    statement: "Three proposed parent amendments, not silent overrides. (1) QL-1 surface enumeration: three thin things becomes four — add Stage 0 research-candidate types on QML's own ladder (DEC-0395). Mechanism already legal via QL-7/QL-8 local-ladder path; the count is what needs amendment. (2) Workbench AD-3 commentary only: product discovery may federate Knowledge hits as a distinct class; kind roster unchanged; hypotheses still write no registry kinds (DEC-0381). (3) QMA AD-19 last sentence is a docs factual refresh: seed corpus is no longer empty (239 dictionary entries, LAYOUT-DEMO, schema locks); the read-only adapt-to-library law stands (EXT-2242). None of these silently override parent spine text."
+    status: provisional
+    rationale: "Spine Inherited Invariants proposed parent amendments. Operator package not accepted (DEC-0380)."
+    sources: [EXT-2244, EXT-2242, EXT-2229]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, parent-amendments, ql-1, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#inherited-invariants"
+
+  - id: DEC-0404
+    title: "QML-research cheap-veto register"
+    statement: "Cheap-veto assumptions, each individually overturnable without unwinding another call: (A1) source_id=strats remains the seed adapter freeze key because the research-corpus plugin already uses it; branding does not follow the key (DEC-0383). (A2) AD-4 include/exclude lists are the spine defaults (DEC-0384). (A3) six confidence dimension spellings freeze as listed in DEC-0383; first-slice unscored is corpus-owned default, not current adapter behaviour on integration@8510c03. (A4) QMA AD-19 empty-corpus sentence is docs factual refresh only (DEC-0403). (A5) FR-RES-* numbering is proposed; GAP-0064 records the PRD hole; GAP-0061 is not closed (DEC-0405)."
+    status: provisional
+    rationale: "Spine Open questions plus memlog assumptions. Package proposed (DEC-0380)."
+    sources: [EXT-2238, EXT-2241, EXT-2242]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, cheap-veto, assumptions, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#open-questions"
+
+  - id: DEC-0405
+    title: "FR-RES addendum recorded as proposed; GAP-0061 not closed"
+    statement: "REQUIREMENTS-ADDENDUM.md FR-RES-01 through FR-RES-25 and NFR-RES-01 through NFR-RES-08 are proposed identifiers for documentation-factory and epics. They do not rewrite prd-QMX-2026-08-21. They are a sibling hole to GAP-0061 (workbench FRs). First-distill FR-LIB-* ids are superseded; do not implement both sets. GAP-0064 records this PRD hole. Do not silently close GAP-0061."
+    status: provisional
+    rationale: "Spine open question on PRD addendum vs GAP-0061 sibling numbering. Operator: do not pretend PRD 2026-08-21 already had mill FRs."
+    sources: [EXT-2241]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, fr-res, gap-0064, gap-0061, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:REQUIREMENTS-ADDENDUM.md"
+
+  - id: DEC-0406
+    title: "Wiring inspect 8510c03 — graduate_to_governed exists; Stage 0 types do not; research-corpus is a stub"
+    statement: "On integration@8510c032496bb870824ecc5c4f807e8a4e4f167e: graduate_to_governed exists in qml/src/qml/conformance/registration.py; Stage 0 types (qml.research) do not exist; research-corpus plugin still registers source_id=strats against an in-memory two-file StratsCorpus stub, not the Stats tree; PlainFileLibrarySource exists (filesystem, skips hidden parts, currently hashes all other files including backend/strats.sqlite); qmb registryread library refuses strats and COMP_LIB_MINTED is False; qma-ui-contract is a stub (GAP-0081). Class/test existence is not end-to-end demonstration (DEC-0286 stands). Remaining connect work includes replacing the stub with PlainFileLibrarySource(root_path=Stats), AD-4 include/exclude in the plugin, qml.research types, and host research_root. Implementation authorization still arrives only through the factory pipeline. This inspect SHA is later than the workbench sitting's 1b451a8; do not overwrite that stamp — add this dated note."
+    status: provisional
+    rationale: "Architecture sitting consistency convention and evidence-summary inspect. Package proposed (DEC-0380)."
+    sources: [EXT-2237]
+    authority: rider
+    component: COMP-QML
+    tags: [qml-research, wiring, source-inspected, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:QML-EXPANSION.md"
+
+  - id: DEC-0407
+    title: "GAP-0073 layout trigger met upstream; hybrid indexing still deferred"
+    statement: "The GAP-0073 layout revisit trigger is met in the seed (239 dictionary entries, LAYOUT-DEMO, schema locks). Hybrid / semantic retrieval remains a separate irreversible index choice and stays deferred. v1 search is literal and locator-based. Ranked or semantic retrieval remains unsupported-capability."
+    status: provisional
+    rationale: "Spine Deferred table. Do not silently close GAP-0073."
+    sources: [EXT-2243]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [qml-research, gap-0073, provisional]
+    date: 2026-09-16
+    spine_ref: "SRC-19:ARCHITECTURE-SPINE.md#deferred"
+
+  - id: DEC-0408
+    title: "Dead: STRATS as a QMX language / second ontology"
+    statement: "Treating STRATS as QMX's language or as a lasting second ontology behind a two-rail Library facade is dead. The first distill LIBRARY-ADAPTATION.md carried that notion; the operator rejected it. Stats is seed corpus / import. Product language is QML research / hypothesis / dictionary entry / seed corpus. source_id=strats may remain the technical adapter key."
+    status: dead
+    rationale: "Operator-direct 2026-09-16 (DEC-0380) plus superseded first distill (EXT-2239)."
+    sources: [EXT-2239, EXT-2213]
+    component: COMP-QML
+    tags: [dead, strats-language, first-distill]
+    reason: "Operator ruled STRATS is not a QMX language; the mill is absorbed as QML Stage 0, not adapted-to as a second ontology."
+    date: 2026-09-16
+
+  - id: DEC-0409
+    title: "Dead: auto-mint CT-33/34 from DNA or graph"
+    statement: "Automatically assembling CT-33/CT-34 JSON from seed DNA, graph.yaml, or a hypothesis package is dead. Executable artifacts appear only when a human (or human-approved QML authoring) produces the two artifacts."
+    status: dead
+    rationale: "Operator rider plus spine AD-7. Aligns with Workbench AD-4 (QMA never assembles CT-33 JSON)."
+    sources: [EXT-2240, EXT-2221]
+    component: COMP-QML
+    tags: [dead, auto-mint]
+    reason: "Auto-mint from DNA/graph would skip human/QML authorship and collapse research into governed identity."
+    date: 2026-09-16
+
+  - id: DEC-0410
+    title: "Dead: git subtree or copy of Stats into the QMX repo"
+    statement: "Copying or subtree-ing the Stats seed corpus into QMX git is forbidden. QMX points root_path; QMA snapshots. Submodule is deferred until a remote host cannot receive a path."
+    status: dead
+    rationale: "Spine AD-2 plus QMA AD-19 no-write-back / no QMX fields in the corpus."
+    sources: [EXT-2240, EXT-2216]
+    component: COMP-QMA-DAEMON
+    tags: [dead, subtree, seed-absorb]
+    reason: "Absorbing the seed into QMX git would invert adapt-to-library and mix seed files with product source."
+    date: 2026-09-16
+
+  - id: DEC-0411
+    title: "Dead: Stage 0 graph as executor / run_slice / Graph Template"
+    statement: "Compiling a Stage 0 graph (Boolean / temporal / lifecycle operators, seed graph.yaml) into a QMB run_slice, a QMA Graph Template, a task graph, or an order adapter is dead. Graph is meaning on the hypothesis, not a runtime."
+    status: dead
+    rationale: "Spine AD-6 plus QL-2 (no third governed half) plus QMA AD-16 (no execution tool)."
+    sources: [EXT-2240, EXT-2220]
+    component: COMP-QML
+    tags: [dead, graph-executor]
+    reason: "A Stage 0 graph is research meaning; executing it would mint a third governed bot half and a QMA execution tool."
+    date: 2026-09-16
+
+  - id: DEC-0412
+    title: "Dead: hit_class strats or QmlCandidateHit as a product-Library DTO class"
+    statement: "Federated product-Library discovery does not grow hit_class strats or QmlCandidateHit. Frozen hits are KnowledgeHit and ArtifactHit only. Stage 0 hypotheses are found through the QML research surface, not the Library DTO."
+    status: dead
+    rationale: "Spine AD-1/AD-9 after the restart rejected the first-distill QmlCandidateHit additive."
+    sources: [EXT-2240, EXT-2215, EXT-2223]
+    component: COMP-QMA-WIRE
+    tags: [dead, hit-class, qml-candidate]
+    reason: "A third Library hit class would make hypotheses Library objects before CT-33 registration and brand STRATS as identity."
+    date: 2026-09-16
+
+  - id: DEC-0413
+    title: "Dead: fill GAP-0085 this increment to fit seed DNA roles"
+    statement: "Minting typed EntryMechanism / ExitMechanism / Filter / SessionRule / PositionRule / InvalidationRule nouns in this increment to fit seed eligible roles is dead. GAP-0085 stays deferred. Stage 0 already carries open roles and F/H holes. CT-34 enum stays level | trigger | confirmation | filter."
+    status: dead
+    rationale: "Operator rider: do not fill GAP-0085. Spine AD-16. Workbench DEC-0272 ownership stands; nouns still unruled."
+    sources: [EXT-2236, EXT-2230]
+    component: COMP-QML
+    tags: [dead, gap-0085]
+    reason: "Filling GAP-0085 now would mint governed mechanism nouns to fit a seed mill; Stage 0 already carries open roles without that mint."
+    date: 2026-09-16
+
+  - id: DEC-0414
+    title: "Workflows AD-1 — Construction kit is composition, not a sixth application"
+    statement: "Every new capability names an existing COMP-* owner or an explicit connect/extend of one. Minting a new application package or a permanent process besides qma-daemon, qmn, and QMB process-per-run children is a spine amendment. QMF stays toolbox (L7/L8). “Under QMF” never means one process or one database."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-1. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2248]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-1]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-1"
+
+  - id: DEC-0415
+    title: "Workflows AD-2 — Four discovery rails; Artifact Library kinds unchanged"
+    statement: "Product discovery concatenates typed hits. It is never a fourth store and never a door run. Frozen hit classes: 1. KnowledgeHit — {hit_class: knowledge, source_ref, snapshot_ref, locator} 2. ArtifactHit — {hit_class: artifact, fp1, kind} where kind ∈ Workbench AD-3 roster or query-hit tags saved-view \\| analysis.published 3. ContributionHit — {hit_class: contribution, plugin_id, point, qualified_id, package_id, package_version} from live published_contributions(). Identity is that tuple. Never fp1, never a registry kind, never ArtifactHit.kind. Pins store (qualified_id, package_version, availability_revision), not a descriptor digest. Invoke revalidates the pin (AD-30). Missing/disabled/uninstalled plugin ⇒ typed unavailable or tombstone, never a silent resolve to another version, never a stale fp1. A hit is not a grant. 4. Hypothesis listing stays on qml.research / research_ref and is refused on the facade - Occupancy none. Daemon never import qmb. QMB never opens daemon sqlite. Ranked/semantic search stays GAP-0073. Extra Artifact query-hit tags beyond saved-view \\| analysis.published are refused unless this spine is amended. Discovery listings must distinguish published vs configured vs granted vs reachable vs healthy (AD-15); a ContributionHit is not a grant. Pack contributes entries are {point, local_id} and expand to ContributionHit at enable. view:* is a wire DTO only (AD-17) — not a plugin contribution point and not a ContributionHit until a named GAP-0081 ui_view increment. DTO owner is COMP-QMA-WIRE (additive CT-40 family, no new CT number). Query owner of live..."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-2. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2249]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, ad-2]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0416
+    title: "Workflows AD-3 — Capability Operation Interface is the shared contract"
+    statement: "Every public operation publishes a versioned descriptor: stable id, owner COMP, input schema, output shape (value \\| artifact_ref \\| job_handle \\| event \\| stream), native cardinality (one \\| many in/out), empty_policy, configuration/defaults, declared operation dependencies, resource needs, documentation refs, validation class, units, version compatibility, effect class (none \\| read \\| append-evidence \\| mutate-config \\| place-run \\| external-egress), permission requests, execution placement, error/refusal shape, progress, and lifecycle verbs (start \\| query-state \\| cancel \\| await). Collection mapping is not on the descriptor — it lives on Graph Template edges (AD-5). Finite event ≠ persistent stream. Every public call carries an InvocationEnvelope (AD-24) binding contribution tuple, instance_id, config revision, grant snapshot, logical invocation/attempt ids, and effect-specific idempotency. Transport (in-process, CLI, wire, future RPC) is an implementation choice of the owner and is never a bypass of that envelope. Durable file handoffs cite schema, content fp1, source/run provenance and completeness — never a machine-local path as global id. Content fp1 applies to artifact bytes, not to contribution identity (AD-2 tuple). Manifests request; the host grants structured GrantRecords (AD-24). The only parameter authority is input_schema. Representative payloads in CONTRACTS.md are schema-complete or explicitly marked fragments; a fragment must not contradict this Rule."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-3. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2250]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-3]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-3"
+
+  - id: DEC-0417
+    title: "Workflows AD-4 — Four workflow layers stay distinct"
+    statement: "(1) Board layout is client-only. It MUST NOT be a field of product_session, Mission, Task Graph, Graph Template, or any sqlite row. Display alias only (Workbench AD-16). Editing the client layout writes nothing. (2) Graph Template — authored, versioned, stateless DAG; plugin-contributed. Compile identity is (qualified_id, version) from the plugin manifest at enable. Rebuild-on-load MUST NOT change bytes of an enabled (id, version); a byte change is a new version or a disable. Do not fingerprint templates onto the Artifact rail. (3) Task Graph — one Mission’s execution projection; persist edges: {from, to, mapping} and walk successors (connect/extend qma.daemon.taskgraph; today edges are dropped — that is a hole this AD binds closed). Nodes do not carry successor lists. (4) Ungoverned library call — import qmb / import qml on a controlled-room host; writes no Mission. A Stage 0 graph is none of these and is never compiled to a bot, Graph Template, or run_slice. A loop is node state, not a Skill; Loop stopping_condition is a typed stop (max-iterations / budget / predicate), not an opaque string. A Routine fires a compile; a schedule/webhook trigger is not the workflow definition. Selected-subgraph execution is MissionCompiler(template.qualified_id, template.version, node_ids) where node_ids is a non-empty induced DAG of that already-registered template version — not a live board scribble, not a board id. One compile → one Mission → one Task Graph whose graph_template_ref is the template qualified_id. After a semantic rewire, derived results are invalidated; reuse of prior ..."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-4. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2251]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-4]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-4"
+
+  - id: DEC-0418
+    title: "Workflows AD-5 — Mapping is explicit; no silent Cartesian"
+    statement: "Each port declares kind reference \\| data \\| event \\| control. Collection mapping is declared on the edge: one \\| zip \\| broadcast \\| keyed-join \\| cartesian. Cartesian requires an explicit flag. Empty collections skip or refuse per the operation’s declared empty-policy. Join algebra (unique keys, expected cardinality, watermark, late/missing/failed partitions, partial retry) is AD-26 and is not guessed from JSON shape. Conditional skip is a node kind, not dropped edges. Validate endpoints and cycles against DAG law (AD-6). Shared mini-app parameters are typed edges of this kind, not ambient globals."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-5. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2252]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-5]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-5"
+
+  - id: DEC-0419
+    title: "Workflows AD-6 — Graph Template topology is a DAG"
+    statement: "Registration refuses self-loops and any directed cycle (reuse the plugin-loader DFS already used for plugin requires). Pairwise reverse-edge checks are insufficient. Runtime Loops remain node state (iteration/budget/stop), not template cycles. This amends the inspected implementation hole; it does not revive graph-as-chat."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-6. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2253]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-6]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-6"
+
+  - id: DEC-0420
+    title: "Workflows AD-7 — Reuse QMA as the procedure runtime; extend in place"
+    statement: "Author in Graph Templates; instantiate via Mission Compiler (one template → one Mission); schedule via RoutineScheduler; place QMB work via place_procedure_step (run vs query occupancy unchanged). ExperimentSpec successors are lineage, not control-flow edges — CT-07 MUST NOT be walked as graph successors. Persist task_graph_state including edges: {from, to, mapping} in daemon sqlite (existing named projection, not a new store). Completing a predecessor and making successors ready is one sqlite transaction plus outbox (AD-26). Occupancy is not a separate table: it is the existing environment_lease + Workbench AD-8 door law, folded into task_graph_state. QMB does not write daemon occupancy; the daemon maps JobHandle ↔ lease using QMA AD-17 state vocabulary exactly (AD-26). Implement successor dispatch and daemon-evaluated node kinds (conditional, join, approval_gate) in qma.daemon.taskgraph. Skills remain knowledge; they never compile to Missions and never grant tools."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-7. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2254]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-7]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-7"
+
+  - id: DEC-0421
+    title: "Workflows AD-8 — Product sessions are authority overlays, not QMA Session"
+    statement: "product_session is a new journal-projected record kind, not a QMA Session and not a QMA Profile. Ids are psess:; QMA Session ids remain sess: and remain the execution container (execution_model + autonomy only). Cardinality is 1 product_session → many QMA Sessions. ProductSessionProfile is a closed enum {authoring, app-use}, immutable at create, and is not qma.core.ontology.Profile. scope_path does not gain a segment — product-session is a wire/header field beside it, never a permission key inside it. Durable fields: product_session_id, profile, principal, context_revision, app_instance_id (pointer to plugin-install instance row), granted_ops (array of grant_id referencing structured GrantRecords — AD-24; never a bare op-id string as the grant), selected_refs (typed {kind, id} only), optional private_notes JSON column (not a new store, not MemoryProvider, not Knowledge). Not durable: qma_session_id, tab attachment, UI layout. Closed selected_refs kinds: artifact fp1, research_ref, contribution (qualified_id, package_version), template (qualified_id, version), dataset/run/attempt refs, node-id sets citing a template. Forbidden in selected_refs: layout JSON, positions, widgets, json-render trees. Select/grant mutations are named wire commands that bump context_revision under compare-and-set on expected_revision (AD-29). Duplicate command_id returns the prior durable result. Reconnect resumes queries/events; it does not replay unacked intent. Tab change writes nothing. A dashboard/account filter is not a command target. Analysis access to an instrument is not execution perm..."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-8. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2255]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-8]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-8"
+
+  - id: DEC-0422
+    title: "Workflows AD-9 — Copilot discovers granted descriptors; prose is not authorization"
+    statement: "The copilot identity is one familiar product surface over QMA infrastructure. Tool availability = intersection of (published ContributionHits, host grants, product_session GrantRecords, health). Skills describe behavior; they do not grant. Skill authoring is separated from verification; the same model must not write the skill and certify it. Installation of a skill is not authoring. Hooks may veto/approve at existing QMA events; a model-authored hook cannot override a failed deterministic check or privilege gate. Cross-session retrieval is explicit, attributed, and cannot retarget actions. Explanations cite saved records/tool evidence, not fabricated recollection. Internal QMX context is structured schema, not screenshots as the default. MemoryProvider stays desk-scoped. Product-session private notes are the AD-8 JSON column (retention/export/deletion with the session row), not MemoryProvider, not Knowledge, not telemetry. RLM remains Analysis execution, not a product IDE."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-9. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2256]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-9]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-9"
+
+  - id: DEC-0423
+    title: "Workflows AD-10 — Four cross-app composition modes"
+    statement: "Supported modes, none compulsory: (1) consume another app’s saved artifact by fp1/content id; (2) invoke its exported operation through AD-3; (3) coordinate several apps via a Graph Template; (4) composite app that cites component contribution ids + artifact refs without merging code. A composite is an instance graph, not a new Library kind. Independent apps remain independently useful. Shared instances vs separately configured instances are explicit. Dependency diamonds pin versions per instance. Nested invocation does not union permissions or propagate the caller’s tools into the callee. Composite authority is the host-granted intersection, never a union of component requests. Bounded cycles of invocation require a recursion budget; template topology remains a DAG (AD-6). Partial failure does not silently substitute a different provider or account. A new venue protocol is a new VenueClientKind (refused in V1), not an extra account row."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-10. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2257]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-10]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-10"
+
+  - id: DEC-0424
+    title: "Workflows AD-11 — Default Book/BMS is not a ceiling; dummy Book is forbidden"
+    statement: "Dummy (mechanical): a CT-22/CT-27/CT-33, or an ATC PolicyPair, is dummy if minted solely to satisfy a required field, or if its policy is identity / no-op / unlimited / pass-through. Sentinel fps (NULL_BOOK, empty-object Book, mis_ref: null as a fake MIS) are dummy. Dummy is INVALID_INPUT at compile, register, validate, simulate, and seat. - Three config types, not optional fields on one. (1) ResolvedRunConfig — unchanged; book_fp1/bms_fp1/bot_fp1/fragments required; default path to governed evidence, node-paper, live, L17 seats. (2) AlternativeRunConfig — Book/BMS/bot keys absent, not null; complete second trading system defined by AD-23 (PolicyPair, command, admission, evidence, journey). When this composition is selected, QML authoring, QMB evaluation/optimization, optional MIS binding, QMN unattended host, and live adopt it — they do not stay secretly Book-shaped. Sequential paper-then-live and L17 human promote still apply. (3) UngovernedWorkConfig — those keys absent, not null; ungoverned qmb.run(), ordinary Python, data-ML, recipes, QMN sensing-only. Sensing-only is not a seat and is not class (2). - Alternative policy inside the default system remains a complete CT-22/CT-27 that still implements Book/BMS semantics (L36), evaluated by analysis.rerun of that fingerprint — not a wrapper around absent policy and not a projection. ATC is not that path. Compare Book vs ATC only on conserved measures both policies define; do not force ATC into the Book R vocabulary or relabel filtered trades as a rerun. MIS/SQS/KSA stay Book-door consumers unless an ATC PolicyPair names..."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-11. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2258]
+    authority: rider
+    component: COMP-QMF-RISK
+    tags: [workflows, ad-11]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-11"
+
+  - id: DEC-0425
+    title: "Workflows AD-12 — Data recipes wrap qmf-data; provider ≠ venue"
+    statement: "A recipe has two identities (AD-31). Definition identity is (recipe_def_id, recipe_def_version, recipe_def_hash) and is reviewable before any run. Output identity is the release fp1 (Workbench AD-13 derived-dataset law) plus CT-07 lineage to the definition and to CT-10/CT-12 inputs (COMP-QMB wrap of COMP-QMF-DATA). Display recipe_id is not computational identity. It is not a Library kind. CT-06 recipe kind is deferred until metadata-sharing is required. Recipes declare calendars, timezone, alignment, point-in-time/known-at policy, missing/late policy, units, adjustment, entitlements/licensing, environment/code pins, and output completeness. A new provider tomorrow must not rewrite yesterday’s pinned release. Provider name ≠ meaning; provider ≠ venue ≠ account ≠ instrument. Providers declare coverage, transport (file/API/SDK/CLI/webhook), historical vs poll vs stream, entitlements by credential reference, and quality/freshness. Preview ≠ export job ≠ live stream. Replay-to-live follows the stream protocol (AD-28). A stream subscription is not a trading permission. Source disagreement is preserved; production sensing feed is never silently swapped. Heterogeneous non-market facts do not widen CT-10 into untyped JSON: knowledge stays CT-44; session/product facts stay QMA; market/source facts stay CT-10. A new venue protocol is a new VenueClientKind, not an extra account."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-12. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2259]
+    authority: rider
+    component: COMP-QMB
+    tags: [workflows, ad-12]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-12"
+
+  - id: DEC-0426
+    title: "Workflows AD-13 — Identities stay separate"
+    statement: "Semantic identity is fp1 (artifacts), research_ref (hypotheses), (qualified_id, package_version) (contributions — not fp1), ExperimentSpec fp1 (coordinated continuity), composition_fp (node), instance_id (installed mini-app). Display names and Board layouts are UX. A saved runnable pins code, config, data release, model weights, environment and dependencies. Retry of an uncertain external action ≠ new experiment. Projection ≠ path-dependent rerun (Workbench AD-5). Three pack states stay distinct: installed (bytes present) ≠ enabled/activated (roster on) ≠ session-granted (AD-8 granted_ops). Published package ≠ activation on a trading account."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-13. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2260]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-13]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-13"
+
+  - id: DEC-0427
+    title: "Workflows AD-14 — Sequential handover; software rollback cannot undo fills"
+    statement: "Default replacement: develop → evaluate → non-real-money validate → explicit activation after stopped/flat-or-drained handover. The transition is the AD-25 fencing state machine: command-owner epoch, fencing token, typed positions/orders snapshot, residual disposition, predecessor acknowledgement, timeout/escalation, immutable completion evidence. Outstanding positions, UNKNOWN commands, shared-account concurrency are separate refusal/drain cases, not a boolean residual_positions string. A stale predecessor restart cannot recover command authority from local state. Two MIS/model versions may shadow or bind distinct consumers; one writer per role. Owner means software/control scope, not user money. Software rollback never reverses fills. GAP-0058 single-machine placement stays its own increment."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-14. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2261]
+    authority: rider
+    component: COMP-QMN
+    tags: [workflows, ad-14]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-14"
+
+  - id: DEC-0428
+    title: "Workflows AD-15 — Compute placement is preflight, not a toggle sticker"
+    statement: "States are distinct: available / configured / authorized / reachable / healthy. Training ≠ inference ≠ trading deployment. Expensive experiments must not starve protective trading actions. No cloud/Colab/provider is assumed; bind only through existing QMA ExecutionEnvironment / ComputeProvider ports. Cancellation, unknown outcome and checkpoint/resume are job-handle law. Browser/computer-use remain provisionable rungs (GAP-0070/0078) fail-closed until registered."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-15. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2262]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-15]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-15"
+
+  - id: DEC-0429
+    title: "Workflows AD-16 — Persistence owners stay split; new product records are not qmf-core"
+    statement: "Evidence: qmf-data rooms + CT-13 journals + registry sqlite + QMB JSONL ledger (including ATC rows tagged composition_class: alternative). Coordinated experiment identity: QMA Experiment sqlite. Hypotheses: QML research_root blobs. v1 daemon additions (complete list): (1) product_session journal projection (AD-8); (2) persist existing task_graph_state including edges and the AD-26 outbox; (3) mini-app instance rows in the existing plugin-install projection, keyed by instance_id ≠ plugin_id; (4) GrantRecord rows beside product_session (same sqlite, not a new store class). No other new sqlite. Change-request = staging kind change_request (AD-8). Recipe definition identity is AD-31; output identity remains release fp1 plus CT-07; CT-06 recipe kind deferred. Graph Templates rebuild from plugins but enabled (qualified_id, version) bytes are immutable. MemoryProvider remains optional per desk (GAP-0072). Logs are not evidence. Backup/restore stay application-owned using QMF primitives plus an application checkpoint manifest (AD-27) that records per-owner fences and restore order. Orphans, corruption, disk exhaustion and cross-store reconstruction are owner-specific: never invent a second evidence database; never silently merge divergent stores."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-16. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2263]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-16]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-16"
+
+  - id: DEC-0430
+    title: "Workflows AD-17 — UI host contracts now; chrome is GAP-0081"
+    statement: "The host is a client of qma-wire, QMB API/CLI, QMN three doors. Contribution descriptors (navigation, commands, rich views including editors, parameter forms, context providers, events, reconnect) are wire-owned DTOs defined in CONTRACTS §14 — not a v1 ui_view plugin point until a named GAP-0081 increment. The catalogue is not cards-only. JSON Render and MCP Apps are presentation adapters. They are not identity, not persistence, not a runtime, and not authority. The only parameter authority is AD-3 input_schema. The only invoke authority is AD-9 ∩ GrantRecord. A json-render catalog entry MUST name an existing AD-3 op_id and MUST NOT add/remove fields. Absence of a catalog entry is native/CLI using the same schema. MCP App HTML MUST NOT grant tools; the host intercepts every tool call and refuses if outside the session’s GrantRecords. Pack view:* is a wire DTO, not a plugin point, not a json-render runtime id, not an fp1. Native QMX panes remain first. UI mount/dispose must not start/kill durable backend work. Stale snapshot/cursor refuses invoke. Headless packs appear as reusable AD-3 steps without navigation. QMB remains the only operator CLI; QMA and QMN ship none. Do not pin @json-render/* in this sitting."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-17. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2264]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, ad-17]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-17"
+
+  - id: DEC-0431
+    title: "Workflows AD-18 — Packages export without private lineage or secrets"
+    statement: "A pack is versioned: manifest, contribution list, requested capabilities, compatibility range, migrations. Lifecycle is AD-30 (downloaded / installed / validated / enabled / disabled / uninstalled) with a transition journal, atomic roster publication, and QMA AD-21 down or forward_only migrations. Install / configure / enable / disable / validate / pin / rollback / dependency-removal / export / import are host operations. First-party trust in v1; custom packs are explicit operator enable. Missing dependency is a hard error at enable, not warning-and-continue (do not copy Hermes advisory-dep behaviour). Partial install rolls back to the last usable roster. Side-by-side versions allowed; running work stays pinned to the instance it started. exports_secrets: false is a request; an independent export scanner is the oracle and replaces secret values with typed refs."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-18. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2265]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-18]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-18"
+
+  - id: DEC-0432
+    title: "Workflows AD-19 — Mutation testing is a test-strength principle"
+    statement: "Behaviour oracles (BDD/journeys) come first. Then contract/integration, state-machine, fault-injection, and optional mutation testing of existing Python tests. mutmut (current docs 2026-09-18) requires os.fork — Windows execution is WSL only. Run only on disposable copies. Classify surviving/equivalent/invalid/timeout. Caliper-style skill evaluation is a later QMA adapter question, not a CLI assumption."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-19. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2266]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-19]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-19"
+
+  - id: DEC-0433
+    title: "Workflows AD-20 — Defaults and templates ship with a custom path"
+    statement: "Ship enough defaults (data preview, governed backtest door, library search, authoring vs app-use shells) that real work is possible. Custom granularity is operator-chosen: wrap notebooks/scripts as operations, or expose selected stages. Graph editing is not the only programming route (L9)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-20. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2267]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-20]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-20"
+
+  - id: DEC-0434
+    title: "Workflows AD-21 — Headless parity of operations"
+    statement: "Deep behaviour of an AD-3 operation is identical across that operation’s supported doors. Supported-door sets are per op_id and recorded in CONTRACTS §15. QMB remains the only operator CLI. QMA and QMN ship no operator CLI; their operations use library and qma-wire adapters, and may be invoked through QMB-owned orchestration when the owner is QMB. Unsupported door → typed unsupported_door, never a newly minted qma/qmn CLI. A useful log/progress panel is not a general shell."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-21. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2268]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, ad-21]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-21"
+
+  - id: DEC-0435
+    title: "Workflows AD-22 — Portfolio Manager is a label, not an identity rewrite"
+    statement: "Trading-floor Role display becomes Portfolio Manager. Keep desk_slug=pm and pm-coordination until a GAP-0083 migration sitting. Preserve BMAD Product Manager. Combining two bots’ equity streams stays deferred (F07 / Workbench AD-5)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-22. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2269]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, ad-22]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-22"
+
+  - id: DEC-0436
+    title: "Workflows AD-23 — Alternative Trading Composition is a complete second system"
+    statement: "Book/BMS is one specific portfolio accounting + risk + position-sizing implementation — the default, not the ceiling. An Alternative Trading Composition (ATC) is AlternativeRunConfig whose Book/BMS/bot keys are absent, not null. It MUST carry a PolicyPair of AccountingPolicy + RiskPolicy, both complete (the dummy test in AD-11 applies). AccountingPolicy declares cash identity, position identity, fill application, valuation marks, currency, and residual meaning. RiskPolicy declares limits, halt, sizing, UNKNOWN handling, and the override principal. Command binds venue, account, role, instrument, adapter capability, credential ref, and AD-25 owner epoch — a dashboard filter is not a target. Admission checks PolicyPair completeness, grants, health, sequential paper-then-live readiness, and L17 human promote before any live VenueClientKind. That promote is operating discipline already in the transcript (“do not replace a Book and trade tomorrow”), not a later architecture question. Adopt: QML authoring, QMB backtest/optimize, optional MIS/intelligence binding, QMN unattended host, and live bind to the selected composition version. A Book-shaped consumer must not silently remain when the composition is ATC. Evidence is QMB JSONL tagged composition_class: alternative plus CT-07 lineage to the PolicyPair hash; it is not a Book journal and not qmf-core. Compare with the default path only on conserved measures both policies define. End-to-end: author PolicyPair (optionally as a mini-app/workflow) → validate → simulate against pinned CT-10/replay → paper on node → fenced sequentia..."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-23. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2270]
+    authority: rider
+    component: COMP-QMF-RISK
+    tags: [workflows, ad-23]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-23"
+
+  - id: DEC-0437
+    title: "Workflows AD-24 — Invocation envelope and structured grants"
+    statement: "Every public call carries InvocationEnvelope: logical_invocation_id, monotonic attempt_id, op_id/op_version, contribution (qualified_id, package_version), instance_id, config_revision, optional caller/callee psess: refs, grant_id snapshot, effect_class, idempotency_key, reconcile_policy, input_hash. Ambiguous instance/config resolution refuses. Idempotency is effect-specific: none/read may retry; append-evidence dedupes on the key; mutate-config is CAS on config_revision; place-run treats logical_invocation_id as the run identity; external-egress MUST obtain a receipt or become unknown and MUST NOT blind-retry. reconcile_policy is query-then-decide \\| unknown-manual \\| never-retry. GrantRecord is immutable after mint: grant_id, principal, audience, contribution tuple, instance_id, config_revision, op_id/op_version, effect_class, parameter ceiling, account_scope (null unless granted), expires_at, optional revoked_at. product_session.granted_ops stores grant_ids. Upgrade, re-resolution, or a new package version cannot widen or retarget an existing grant; that requires an explicit re-grant that bumps context_revision."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-24. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2271]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, ad-24]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-24"
+
+  - id: DEC-0438
+    title: "Workflows AD-25 — Command-owner fencing for sequential deploy"
+    statement: "One command owner per (account, venue, role). Transition states, in order: idle → drain-requested → draining → (residuals-attributed \\| unknown-blocked) → predecessor-acked → fenced-activate → active → retired. Required records: command_owner_epoch, fencing_token (QMN issues venue tokens; QMB issues internal ATC-simulate tokens), account, venue kind, composition_fp, typed positions_snapshot and orders_snapshot, residual_disposition (flatten \\| transfer-to-successor \\| hold-manual), predecessor ack, timeout/escalation, immutable completion evidence. unknown-blocked is terminal for this attempt until operator reconcile; it is never an automatic retry. A process restart presenting a stale epoch or token is refused. Software rollback after a new-owner fill cannot unfill. This machine applies to the default Book path and to ATC (simulate tokens and, after paper-then-live + L17, venue tokens)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-25. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2272]
+    authority: rider
+    component: COMP-QMN
+    tags: [workflows, ad-25]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-25"
+
+  - id: DEC-0439
+    title: "Workflows AD-26 — Durable workflow: outbox, JobHandle parent vocab, join algebra"
+    statement: "Completing predecessor A and making successor B ready is one daemon-sqlite transaction: (1) persist A terminal, (2) persist successor eligibility at a revision, (3) write an outbox row per newly ready successor. The dispatcher reads the outbox, invokes B with AD-24 logical_invocation_id, and acks the outbox. Crash recovery replays unacked outbox rows; dispatch is idempotent on the envelope. No second scheduler. JobHandle reuses QMA AD-17 exactly: queued \\| running \\| done \\| failed \\| cancelled \\| aborted \\| unknown. Terminal = done/failed/cancelled/aborted. unknown is non-terminal and holds environment_lease. cancelled is explicit cancel; aborted is known environmental non-completion; timeout/lost supervisor is unknown, never failed or aborted. awaiting_approval is a Mission/Task gate, not a JobHandle state. Each handle records logical_run_id, attempt_id, artifact inventory with completeness complete \\| partial \\| missing \\| expired. First durable terminal wins a cancel/complete race; later commands are no-ops recorded against that terminal. Join algebra per AD-5 mapping: stable partition_id; expected cardinality; keyed-join unique keys (duplicate policy declared: refuse or first-wins); watermark all-expected \\| timeout \\| failed-aggregation; late arrival after watermark is late, not silently merged; partial retry re-invokes only failed partition_ids and reuses successful artifacts via their logical_invocation_id. Output order is sorted by partition_id unless the edge declares otherwise."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-26. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2273]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-26]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-26"
+
+  - id: DEC-0440
+    title: "Workflows AD-27 — Application checkpoint manifest, not a second evidence database"
+    statement: "COMP-QMA-DAEMON owns a CheckpointManifest (journal-projected, not a new store class) listing per-owner {owner, store, fence, content_hash} and a restore order: QMF rooms → QMB JSONL (including ATC) → QML blobs → artifact bytes → QMA sqlite projections. Each owner restores its own store using existing primitives (QMA AD-27 five-step for daemon projections; QMF backup for rooms). After restore, verify cross-store references. Missing/corrupt refs become orphan and are quarantined; they are never silently merged. External-effect reconcile hooks run after local restore; absence of acknowledgement is unknown, not proof of non-execution. UI disconnect, coordinator loss, and worker loss remain distinct (AD-15)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-27. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2274]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-27]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-27"
+
+  - id: DEC-0441
+    title: "Workflows AD-28 — Stream protocol: epoch, cutover, leases"
+    statement: "A subscription carries sub_id, channel, source_id (provider), optional venue_id (never the same field), epoch, monotonic sequence, event_time, receive_time, phase replay \\| cutover \\| live, cutover_watermark, cursor, bounded buffer, backpressure_policy (block \\| disconnect \\| spill-with-evidence), gap/duplicate/late events, heartbeat, consumer_id, and a reference count. Cutover is atomic at the watermark: events at-or-before are replay; after are live. Overload cannot silently drop market-driving events; the declared policy and loss evidence must be visible. Cancelling one consumer decrements the refcount; the shared upstream stays until refcount is 0. Replay provenance cannot be interpreted as a live command absent an explicit, granted policy. A stream subscription is not trading permission."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-28. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2275]
+    authority: rider
+    component: COMP-QMB
+    tags: [workflows, ad-28]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-28"
+
+  - id: DEC-0442
+    title: "Workflows AD-29 — Product-session CAS, reconnect, and change-request completeness"
+    statement: "Mutations are mutate(product_session_id, expected_revision, command_id, payload) → ok(new_revision, result) \\| conflict(current_revision) \\| duplicate(prior_result). Queries do not bump revision. Reconnect is a query from the client cursor; it never re-issues an unacked command without the original command_id. Change-request payload MUST include source psess:, source instance_id/config_revision, target refs, base hashes of those refs, context_revision at mint, request_hash, typed patch, validation result, conflict \\| rebase-required \\| valid, and — after authoring apply — apply evidence. App-use mints; authoring + operator principal applies; promote remains L17 and is not this path."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-29. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2276]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-29]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-29"
+
+  - id: DEC-0443
+    title: "Workflows AD-30 — Package lifecycle, atomic roster, pin/invoke, export oracle"
+    statement: "Pack states: downloaded → installed → validated → enabled ⇄ disabled → uninstalled. Each transition is journaled. Roster publication is atomic (stage, fsync, swap). Failed validation/migration restores the last usable roster. Migrations follow QMA AD-21 (down or forward_only with operator confirmation). Uninstall names dependants; in-flight pinned runs keep the bytes they started with. Session-granted is AD-8, not a pack state. Pin of a ContributionHit stores (qualified_id, package_version, availability_revision). Invoke revalidates; disabled/uninstalled → unavailable or tombstone, never another version. Export scanner is independent of the manifest: it must prove absence of secret values, private paths, and transcripts, and must rewrite remaining secrets to typed refs. Manifest exports_secrets: false without a passing scan is not evidence."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-30. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2277]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [workflows, ad-30]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-30"
+
+  - id: DEC-0444
+    title: "Workflows AD-31 — Recipe-definition identity and complete recipe schema"
+    statement: "RecipeDefinition identity is (recipe_def_id, recipe_def_version, recipe_def_hash). It is reviewable and pinnable before execution. A run produces a new output release fp1 (Workbench AD-13) with CT-07 lineage to the definition and to each input revision. Two runs of one definition are two releases, not two recipes. Display rename does not change recipe_def_hash. The definition schema includes inputs (provider, coverage, schema/roles, units, timezone/calendar, freshness, provenance, entitlement, licensing, revision), transforms (alignment, known-at/no-lookahead, missing/late policy, adjustment), split policy, environment/code pins, and output completeness. Preview ≠ export ≠ stream. Non-trading outputs need no CT-33/Book/QMN wrap (AD-11 class 3)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-18 AD-31. Operator rider 2026-09-19; OD-01 closed; package folded as ratified (AD-24..AD-31 with cheap-veto A1-A6)."
+    sources: [EXT-2278]
+    authority: rider
+    component: COMP-QMB
+    tags: [workflows, ad-31]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-31"
+
+
+  - id: DEC-0445
+    title: "Workflows construction-kit spine adopted in full (reuse existing applications; no sixth package)"
+    statement: "The 2026-09-18/19 QMX Workflows construction-kit spine (architecture-QMX-2026-09-18, candidate qmx-workflows-arch-2026-09-19-c) is adopted in full as DEC-0414 through DEC-0444. Paradigm is composition over hexagonal libraries and existing application-layer products: capability / extension / workflow / mini-app / widget; product_session psess: distinct from QMA Session sess:; ContributionHit never fp1; Alternative Trading Composition / PolicyPair; RecipeDefinition distinct from release fp1. Preflight reuse with no new COMP and no new CT (DEC-0446). Cheap-veto A1-A6 ride DEC-0447. L36 named amendment is DEC-0448. DEC-0389 two-class freeze is named-amended by DEC-0449 without superseding the rest of the mill package. Wiring honesty at 270e992 is DEC-0450. Dead list honors are DEC-0451. Parents QMF / QMB / QML / NODE / QMA / CONNECT / Workbench / mill bind read-only. Local AD-1..AD-31 do not renumber parents. ADR-0024 and SCN-0018..0022 are docs authority only. Implementation authorization remains factory-pipeline-only."
+    status: ratified
+    rationale: "Operator launched Documentation Factory after OD-01 closed; rider 2026-09-19 is authoritative. Package is ratified (not provisional); AD-24..AD-31 carry cheap-veto."
+    sources: [EXT-2279, EXT-2246, EXT-2247, EXT-2280]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, spine-adoption, umbrella, reuse]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0446
+    title: "Workflows preflight — reuse existing applications; no new COMP; no new CT"
+    statement: "Preflight verdict: reuse existing applications. new COMP: none. new CT: none. No new depends_on edge and no existing component's authority shrinks. Work owners: ContributionHit DTO + pin/tombstone = COMP-QMA-WIRE + COMP-QMA-DAEMON published_contributions() (amend DEC-0389 / extend CT-40); Operation descriptor + InvocationEnvelope + GrantRecord = COMP-QMA-CORE + COMP-QMA-WIRE; product_session CAS + authoring/app-use = COMP-QMA-DAEMON + COMP-QMA-WIRE (journal projection, not a new store class); DAG validator = COMP-QMA-DAEMON / COMP-QMA-CORE (closes hole under DEC-0312); Task Graph edges + outbox + JobHandle parent vocab = COMP-QMA-DAEMON (connect named task_graph_state); ATC PolicyPair / AlternativeRunConfig = COMP-QMB (eval/journal) + COMP-QML (author) + COMP-QMN (seat after paper+L17) + COMP-QMF-RISK (default shapes only); Data recipes = COMP-QMB wrap of COMP-QMF-DATA; Fencing sequential deploy = COMP-QMN (+ QMB simulate tokens); UI contribution DTOs = COMP-QMA-WIRE (chrome GAP-0081); Pack lifecycle / export scanner = COMP-QMA-DAEMON (connect QMA AD-21). Candidates refused: COMP-WF / COMP-LIB / sixth COMP; new CT-*; marketplace (DEC-0361); solver (DEC-0362); HMR (DEC-0366); QMA import qmb; dummy Book; sensing-as-ATC; hit_class strats; Stage 0 graph as executor (DEC-0411)."
+    status: ratified
+    rationale: "Architecture preflight recorded for ADR-0024. Matches workbench/QMA reuse pattern."
+    sources: [EXT-2280, EXT-2279]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, preflight, reuse, no-new-comp, no-new-ct]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0447
+    title: "Workflows cheap-veto register A1-A6"
+    statement: "Cheap-veto assumptions for AD-24..AD-31 machinery, each individually overturnable without unwinding another call: (A1) PolicyPair field catalogue (AccountingPolicy / RiskPolicy closed fields in CONTRACTS §11) — proceed; ATC class is operator-direct; field list is sitting machinery. (A2) AD-25 fencing state enum (idle…retired) — proceed. (A3) InvocationEnvelope full field set + effect-specific idempotency matrix — proceed. (A4) ContributionHit pin tuple (qualified_id, package_version, availability_revision) — proceed. (A5) Recipe definition identity (recipe_def_id, version, hash) — proceed; CT-06 kind still deferred. (A6) CheckpointManifest restore order — proceed. Not vetoable here: no sixth COMP; dummy Book INVALID_INPUT; sessions≠tabs; app-use cannot edit; QMN sole venue importer; L17; sequential paper-then-live; BDD=spec; mutmut optional. Focused Codex recheck of AD-23..AD-31 was skipped by operator process preference (GAP-0092); do not claim Codex approved those ADs."
+    status: ratified
+    rationale: "Workbench cheap-veto pattern for sitting machinery after operator-direct ATC class. Rider records the Codex skip."
+    sources: [EXT-2281, EXT-2246]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, cheap-veto, assumptions]
+    date: 2026-09-19
+    spine_ref: "SRC-22"
+
+  - id: DEC-0448
+    title: "L36 named amendment — Book/BMS are default implementations, not the ceiling"
+    statement: "L36 stays bot → Book → BMS → operator as the default authority chain. Book and BMS are the default implementations of accounting and risk/sizing roles, not the only implementations the framework may host. A complete alternative PolicyPair may occupy those roles without dummy records. Human L17 promote and sequential paper-then-live remain. QMN remains the only venue importer. Dummy Book/BMS (identity / no-op / unlimited / pass-through / sentinel fps) remains INVALID_INPUT."
+    status: ratified
+    rationale: "Operator-direct constitution work for this pass. Named amendment; do not rewrite parent Decision sections silently."
+    sources: [EXT-2282, EXT-2246, EXT-2247]
+    authority: rider
+    component: COMP-QMF-RISK
+    tags: [law, workflows, l36, book-bms, atc]
+    date: 2026-09-19
+    spine_ref: "SRC-22"
+
+  - id: DEC-0449
+    title: "Named amendment of DEC-0389 two-class freeze — ContributionHit added; rest of DEC-0389 stands"
+    statement: "DEC-0389's two-class Library discovery freeze is named-amended by Workflows AD-2 (DEC-0415): product discovery concatenates KnowledgeHit, ArtifactHit, and ContributionHit. ContributionHit identity is the live published_contributions() tuple and is never fp1 and never a registry kind. Pins store (qualified_id, package_version, availability_revision). The rest of DEC-0389 stands unchanged: occupancy none on the discovery path; no hit_class strats; no qml_candidate; hypotheses remain off the Library facade and are found through the QML research surface; daemon never import qmb; QMB never opens daemon sqlite; ranked/semantic search stays GAP-0073. Do not set DEC-0389 superseded_by. Leave DEC-0389 as provisional mill-package text; this amendment is the workflows-side correction of its two-class freeze only."
+    status: ratified
+    rationale: "Spine AD-2 explicitly names this as the amendment of mill/wire DEC-0389's two-class freeze. Whole-supersession would erase standing mill constraints the operator kept."
+    sources: [EXT-2283, EXT-2249]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, dec-0389, contribution-hit, amendment]
+    date: 2026-09-19
+    spine_ref: "SRC-21:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0450
+    title: "Wiring honesty @ 270e992 — inherit DEC-0286; ContributionHit and product_session not on wire"
+    statement: "Inherit DEC-0286: class/test existence is not end-to-end demonstration. On integration@270e992995c2378ca63cf6343254ef8140a8c97e this session reconfirmed federated discovery is still KnowledgeHit|ArtifactHit only; ContributionHit is proposed and not on the wire; product_session is absent; TaskGraph classes exist but the store is in-memory with edges dropped and outbox absent; Operation descriptor / InvocationEnvelope / GrantRecord are absent; AlternativeRunConfig / PolicyPair are not in code; QML→QMB→QMN cross-component integration is unsupported (P2-INT-001). Do not describe proposed connects as implemented. Do not use 8510c03 for absence claims. Implementation authorization still arrives only through the factory pipeline."
+    status: ratified
+    rationale: "Operator rider evidence-honesty pin plus inspect SHA for this fold."
+    sources: [EXT-2284]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [workflows, wiring, source-inspected, 270e992]
+    date: 2026-09-19
+    spine_ref: "SRC-22"
+
+  - id: DEC-0451
+    title: "Dead-list honors — marketplace, solver, HMR, sixth COMP, mill deaths stay dead"
+    statement: "This increment honors existing deaths and does not revive them: DEC-0084 / DEC-0085 / DEC-0086 stay dead; DEC-0361 marketplace, DEC-0362 solver, and DEC-0366 HMR stay dead; DEC-0408..DEC-0413 mill deaths stay dead. No hit_class strats. No qml_candidate hit class. Hypotheses stay off the Library facade. No COMP-WF / COMP-LIB / sixth application. No Stage 0 graph as workflow executor. No dummy Book. Sensing is not an Alternative Trading Composition."
+    status: ratified
+    rationale: "Rider dead-list section. This entry is ratified (honors deaths); it is not itself a dead entry."
+    sources: [EXT-2285, EXT-2246]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [workflows, dead-list, honors]
+    date: 2026-09-19
+    spine_ref: "SRC-22"
+
+  - id: DEC-0452
+    title: "kit AD-1 — Pack-and-grant is the SDK"
+    statement: "The SDK is the host contract a pack author gets: versioned operation descriptors (parent AD-3), parent AD-2 contribution points for operations only, GrantRecords as the only grant, InvocationEnvelope as the only invoke, listing axes (parent AD-15: published / configured / authorized / reachable / healthy — authorized is not a session GrantRecord), typed refusals. A pack manifest requests contributes (operations only), optional view:* wire DTOs (parent AD-17, not a contribution point), optional copilot_profile request blob (not a contribution point and not a grant), and requested_capabilities. Installing a pack does not grant. Enabling after validate still does not grant until GrantRecords exist for a session. Headless packs are first-class: they appear as reusable parent-AD-3 steps with no navigation and no copilot panel. Screen-kit and automation-kit are rejected as the center."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-1. Operator rider 2026-09-23; sitting accepted as the plan to fold."
+    sources: [EXT-2287, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, ad-1, sdk]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-1"
+
+  - id: DEC-0453
+    title: "kit AD-2 — Kit nouns span the platform; QMA is host not owner of every op"
+    statement: "Mini-app, widget, and workflow are kit nouns over the whole platform, not a QMA-only product. Bytes of a pack live in the plugin tree plus daemon install/instance rows. Execution of each op_id is owned by the COMP named on the descriptor. Display is a wire DTO consumed by a later UI host. A new idea that no existing COMP can execute is a named connect/extend of that COMP, not a kit rewrite and not a QMA-owned fake. Widgets never own invoke. Broker/venue stays QMN. Closed QMA store classes stay closed. QMA is host/runtime (plugins, product sessions, graph templates)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-2. Operator rider 2026-09-23."
+    sources: [EXT-2288, EXT-2286]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [pack-and-grant, ad-2, placement]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-2"
+
+  - id: DEC-0454
+    title: "kit AD-3 — One copilot capability; many sessions; in-app panel optional"
+    statement: "QuantMind/QMX Copilot is one product identity over QMA. Tool availability for every seat is parent AD-9 intersection (published ContributionHits intersect host grants intersect session GrantRecords intersect health). ProductSessionProfile remains authoring or app-use (parent AD-8). Authoring is the main/general seat (build, edit, version). App-use is the weaker seat (inspect, invoke granted ops, mint change_request, must not apply). A pack may omit a copilot profile. An instance may omit an in-app panel. Authoring with absent app_instance_id may not invoke. An invoke from that seat MUST carry envelope instance_id taken from a selected_refs kind instance_id; zero or many such refs is INVALID_INPUT. Nested invoke still does not union grants (parent AD-10). QMA sess: remains the engine run, not a third chat. Running work is not cancelled by panel dispose (parent AD-17). Reconnect resumes queries/events; it does not replay unacked intent. Context transfer is explicit selected_refs or change_request only. Headless packs remain valid."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-3. Operator rider 2026-09-23. Codex preserve 2026-09-23 maps onto this rule."
+    sources: [EXT-2289, EXT-2286]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [pack-and-grant, ad-3, copilot]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-3"
+
+  - id: DEC-0455
+    title: "kit AD-4 — Caller is user, agent, or workflow on one envelope"
+    statement: "Every public call carries parent AD-24 InvocationEnvelope including named-amendment caller_kind user | agent | workflow (DEC-0464). Widgets bind or display ops; they do not introduce a fifth composition mode. Many-to-many is Graph Template edges plus parent AD-10 modes (consume artifact, invoke op, coordinate, composite instance graph). Workflow-to-workflow at runtime is parent-AD-3 invoke of the callee template start / query-state / cancel / await (qualified_id plus version). That invoke creates one nested Mission / one Task Graph / one JobHandle (parent AD-7: one compile then one Mission). Occupancy and cancel follow that JobHandle. Include-at-author is a new versioned Graph Template, not a runtime merge. Merging two live Task Graphs is refused. Nested invoke depth is envelope call_depth against the host-registered recursion ceiling already implied by parent AD-10; exceeding it is INVALID_INPUT. This sitting mints no numeric ceiling. Partial failure does not silently substitute another instance, version, or account."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-4. Operator rider 2026-09-23."
+    sources: [EXT-2290, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, ad-4, caller-kind, nested-mission]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-4"
+
+  - id: DEC-0456
+    title: "kit AD-5 — Host observability is a relationship every pack inherits"
+    statement: "For every public operation and every Task Graph run the host MUST expose, headless: (1) parent AD-15 listing axes including healthy; (2) instance health() as the existing component typed-report (DEC-0112), distinct from pack published; (3) JobHandle in QMA AD-17 vocabulary; (4) typed refusal; (5) correlation_id join (never fp1); (6) harness-authored QMA telemetry (agents must not write it; OTel remains export-port only). Failure class is closed: grant | workflow | view | dependency | host. view means the wire DTO failed to mount, was stale, or was unhealthy — it is not an invoke. qma-daemon emits stdlib JSON-lines using QMN field names where they apply (ts, level, event, correlation_id) plus instance_id, op_id, logical_invocation_id, graph_run_id when present. How-it-failed is that log line plus JobHandle attempt_id plus typed refusal; no fourth store. QMB LogSink may remain; new daemon code does not invent a third logger product. Logs are not evidence (parent AD-16, DEC-0112). Mini-app typed failures, when first ids ship, live in that owning package's FAILURES.md — never on the QMN alert allow-list. Do not mint a fourth observability product. Do not extend qmn/FAILURES.md."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-5. Operator rider 2026-09-23. Inherited DEC-0112 / DEC-0200 / DEC-0322."
+    sources: [EXT-2291, EXT-2286]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [pack-and-grant, ad-5, observability]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-5"
+
+  - id: DEC-0457
+    title: "kit AD-6 — Default host retry; implementation repair is change-request"
+    statement: "Retry is host/SDK behaviour. Default on means: for effect none and read, the host retries until success, until typed retryability=NO, or until the host-registered attempt ceiling (registry row; this sitting does not mint a number — GAP-0108). It does not mean retry of every effect. Parent AD-24 / SCN-0021 remain the matrix: append-evidence dedupes; mutate-config is CAS (conflict is not a retry); place-run uses logical invocation identity (outbox replay is not a second dispatch); external-egress obtains a receipt or becomes unknown and MUST NOT blind-retry. reconcile_policy never-retry and unknown-manual win. Parent AD-25 unknown-blocked is never auto-retried. A pack may set attempts to zero. A pack MUST NOT exceed the host ceiling or the effect-class matrix. Implementation edits (code, graph, grants, account target) are change_request (parent AD-29): app-use may mint; authoring plus operator apply. Alerts never authorize. HMR and hot-apply stay dead."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-6. Operator rider 2026-09-23."
+    sources: [EXT-2292, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, ad-6, retry]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-6"
+
+  - id: DEC-0458
+    title: "kit AD-7 — Weak models operate through schemas, not prose"
+    statement: "Build and operate must work for a weaker/older model. Load-bearing surfaces are descriptors, GrantRecords, input_schema, typed refusals, and host-intercepted tool calls. Skills describe; they do not grant (parent AD-9). ContributionHit is not a grant. Hooks cannot override a failed privilege gate. MCP App HTML and json-render catalog entries cannot add ops or fields (parent AD-17). Model roster and prompt essays are not architecture."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-7. Operator rider 2026-09-23."
+    sources: [EXT-2293, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, ad-7, weak-models]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-7"
+
+  - id: DEC-0459
+    title: "kit AD-8 — Presentation adapters stay unpinned"
+    statement: "JSON Render is a catalog-constrained generative view. MCP Apps (SEP-1865-class: tool plus ui:// resource, sandboxed iframe, host-proxied tools/call) are an optional in-conversation or in-panel view. Native QMX panes remain first. Do not pin @json-render/* or @modelcontextprotocol/ext-apps in this increment. json-render catalog actions must name existing parent-AD-3 op_ids and must not add or remove fields. MCP App HTML cannot grant tools; the host intercepts. Chrome, handoff UX, and dashboard layout remain GAP-0081 / GAP-0100. Local kit AD-8 is this adapter rule; parent AD-8 is product_session (cite parent AD-8 vs kit AD-8)."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-8. Operator rider 2026-09-23. Parent AD-17 stands."
+    sources: [EXT-2294, EXT-2286]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [pack-and-grant, ad-8, adapters]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-8"
+
+  - id: DEC-0460
+    title: "kit AD-9 — Tested work graduates to a pack"
+    statement: "Daily idea path is: yap at authoring, then Graph Template (and/or ungoverned call), then runs with JobHandles, then pack export of those operations after validate. A Loop remains node state at runtime (parent AD-4). Packaging a loop exports the ops it calls; it does not mint a new loop engine. Graduation does not skip parent AD-18/AD-30 enable/validate."
+    status: ratified
+    rationale: "Absorbed from architecture-QMX-2026-09-23 AD-9. Operator rider 2026-09-23."
+    sources: [EXT-2295, EXT-2286]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [pack-and-grant, ad-9, graduation]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md#ad-9"
+
+  - id: DEC-0461
+    title: "Pack-and-grant kit spine adopted in full (reuse existing applications; no sixth package)"
+    statement: "The 2026-09-23 QMX pack-and-grant child spine (architecture-QMX-2026-09-23, local AD-1..AD-9) is adopted in full as DEC-0452 through DEC-0460. Parent architecture-QMX-2026-09-18 AD-1..AD-31 (DEC-0414..DEC-0444, ADR-0024) bind read-only. Local AD ids do not renumber parents. Named parent amendments are DEC-0463 (parent AD-8 / DEC-0421) and DEC-0464 (parent AD-24 / DEC-0437). Preflight reuse with no new COMP and no new CT (DEC-0462). Wiring honesty at 34c148b is DEC-0465. Dead-list honors are DEC-0466. Cheap-veto A7-A9 ride DEC-0467. ADR-0025 and SCN-0023..SCN-0027 are docs authority only. Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold or the 2026-09-19 Workflows fold."
+    status: ratified
+    rationale: "Operator launched Documentation Factory after accepting the sitting as the plan to fold; rider 2026-09-23 is authoritative."
+    sources: [EXT-2296, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, spine-adoption, umbrella, reuse]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0462
+    title: "Pack-and-grant preflight — reuse existing applications; no new COMP; no new CT"
+    statement: "Preflight verdict: reuse existing applications. new COMP: none. new CT: none. No new depends_on edge and no existing component's authority shrinks. Work owners: pack SDK optional copilot_profile = COMP-QMA-CORE plus COMP-QMA-DAEMON plugin lifecycle; authoring app_instance_id optional and selected_refs kind instance_id = COMP-QMA-DAEMON plus COMP-QMA-WIRE (named amend DEC-0421); envelope caller_kind = COMP-QMA-CORE plus COMP-QMA-WIRE (named amend DEC-0437); daemon JSON-lines plus diagnosis query = COMP-QMA-DAEMON plus COMP-QMA-WIRE; default host retry none/read = COMP-QMA-CORE effects plus COMP-QMA-DAEMON; nested Mission invoke = COMP-QMA-DAEMON; listing axes plus instance health() = COMP-QMA-DAEMON plus COMP-QMA-WIRE; views = COMP-QMA-WIRE DTOs (parent AD-17). Candidates refused: COMP-WF / sixth COMP; new CT-*; third ProductSessionProfile; merged live Task Graphs; json-render/MCP as identity; QMB/QML core fork; fourth observability product; extending qmn/FAILURES.md; HMR/hot-apply; app-use applying change_request."
+    status: ratified
+    rationale: "Architecture preflight recorded for ADR-0025. Matches Workflows reuse pattern."
+    sources: [EXT-2297, EXT-2296]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, preflight, reuse, no-new-comp, no-new-ct]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0463
+    title: "Named amendment of parent AD-8 / DEC-0421 — authoring app_instance_id optional; selected_refs kind instance_id"
+    statement: "DEC-0421 product_session law is named-amended: app_instance_id MAY be absent when ProductSessionProfile=authoring (main/home, nothing selected). It remains required when profile=app-use. Closed selected_refs kinds gain instance_id. Authoring with absent session instance may not invoke. An invoke from that seat MUST carry envelope instance_id taken from a selected_refs kind instance_id; zero or many such refs is INVALID_INPUT (ambiguous instance). Envelope instance_id remains required on every invoke. No third ProductSessionProfile. The rest of DEC-0421 stands: psess: vs sess:, sessions own context and grants, tabs do not, app-use may mint change_request and must not apply. Do not set DEC-0421 superseded_by."
+    status: ratified
+    rationale: "Spine named parent amendment. Whole-supersession would erase standing product_session constraints the operator kept."
+    sources: [EXT-2298, EXT-2289]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [pack-and-grant, parent-ad-8, amendment]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0464
+    title: "Named amendment of parent AD-24 / DEC-0437 — caller_kind user|agent|workflow"
+    statement: "DEC-0437 InvocationEnvelope law is named-amended: every public call carries closed caller_kind user | agent | workflow. Envelope instance_id remains required on every invoke. The rest of DEC-0437 stands: logical invocation/attempt ids, contribution tuple, effect-specific idempotency, GrantRecord immutability, upgrade cannot widen. Do not set DEC-0437 superseded_by. Do not mint a new CT number for caller_kind (additive CT-40 family annotation until a format mint under FEAT-0058)."
+    status: ratified
+    rationale: "Spine named parent amendment. Additive field; not a second invoke API."
+    sources: [EXT-2299, EXT-2290]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [pack-and-grant, parent-ad-24, amendment]
+    date: 2026-09-23
+    spine_ref: "SRC-24:ARCHITECTURE-SPINE.md"
+
+  - id: DEC-0465
+    title: "Wiring honesty @ 34c148b — inherit DEC-0286; connect/amend vs absent"
+    statement: "Inherit DEC-0286: class/test existence is not end-to-end demonstration. On integration@34c148b this session reconfirmed CONNECT (types/fixtures exist): InvocationEnvelope, GrantRecord, product_session / ProductSessionProfile, effect-class plus reconcile_policy, call_depth / parent_logical_invocation_id, Workflows 53-59 fixtures. AMEND: ProductSession.app_instance_id is required str; SELECTED_REF_KINDS lacks instance_id; envelope has no caller_kind. ABSENT as product surface: pack copilot_profile; qma-daemon stdlib JSON-lines operator logger; kit failure_class grant|workflow|view|dependency|host; default host retry loop; nested Mission invoke as first-class; CheckpointManifest. Parent freeze 270e992 still applies for ADR-0024 original Decision text (DEC-0450). Do not claim envelope/grant/product_session types are absent at 34c148b. Do not claim caller_kind, optional authoring instance, or daemon JSON-lines exist as wired product surface at 34c148b. Implementation authorization still arrives only through the factory pipeline."
+    status: ratified
+    rationale: "Operator rider evidence-honesty pin plus inspect SHA for this fold."
+    sources: [EXT-2460]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [pack-and-grant, wiring, source-inspected, 34c148b]
+    date: 2026-09-23
+    spine_ref: "SRC-25"
+
+  - id: DEC-0466
+    title: "Dead-list honors — screen-kit, automation-kit, third profile, live-graph merge, adapter-as-authority stay dead"
+    statement: "This increment honors existing deaths and does not revive them: DEC-0084 / DEC-0085 / DEC-0086 stay dead; DEC-0361 marketplace, DEC-0362 solver, and DEC-0366 HMR stay dead; DEC-0408..DEC-0413 mill deaths stay dead. Screen-kit and automation-kit as the center stay dead. Third ProductSessionProfile stays un-minted. Merging two live Task Graphs is refused. JSON Render and MCP Apps as identity, persistence, runtime, or authority stay dead. No COMP-WF / sixth application. No new CT. No QMB/QML core fork. No fourth observability product. No extending qmn/FAILURES.md onto mini-apps."
+    status: ratified
+    rationale: "Rider dead-list section. This entry is ratified (honors deaths); it is not itself a dead entry."
+    sources: [EXT-2461, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, dead-list, honors]
+    date: 2026-09-23
+    spine_ref: "SRC-25"
+
+  - id: DEC-0467
+    title: "Pack-and-grant cheap-veto register A7-A9"
+    statement: "Cheap-veto assumptions for kit sitting machinery, each individually overturnable without unwinding another call: (A7) diagnosis failure_class closed set grant | workflow | view | dependency | host — proceed; class is sitting law; spellings are machinery. (A8) daemon JSON-lines extra fields when present (instance_id, op_id, logical_invocation_id, graph_run_id) — proceed; required fields ts, level, event, correlation_id are operator-direct. (A9) host retry attempt ceiling is a registry row; this sitting mints no number (GAP-0108) — proceed. Not vetoable here: no sixth COMP; no new CT; no third profile; envelope instance_id required on invoke; nested live-graph merge refused; app-use cannot apply; no blind external-egress retry; logs are not journals; json-render/MCP unpinned; GAP-0081 chrome later."
+    status: ratified
+    rationale: "Workflows cheap-veto pattern for sitting machinery after operator-direct pack-and-grant class."
+    sources: [EXT-2462, EXT-2286]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, cheap-veto, assumptions]
+    date: 2026-09-23
+    spine_ref: "SRC-25"
+  - id: DEC-0468
+    title: "Pack-and-grant catalog correction — sitting law is features, not open gaps"
+    statement: "A catalog gap is an unanswered design question. architecture-QMX-2026-09-23 already decided kit AD-1 through AD-9. GAP-0101 through GAP-0108 are answered sitting law. Delivery is FEAT-0058 through FEAT-0063. Wiring honesty at 34c148b (DEC-0465) records connect versus absent as product surface; that honesty is not a gap. GAP-0101 caller_kind is DEC-0464 / kit AD-4. GAP-0102 authoring app_instance_id optional and selected_refs kind instance_id is DEC-0463. GAP-0103 optional copilot_profile is DEC-0452 / DEC-0454. GAP-0104 daemon JSON-lines is kit AD-5 / IMPLEMENTATION-SEQUENCE step 2 / FEAT-0059. GAP-0105 failure_class plus instance health() is DEC-0456. GAP-0106 default host retry none/read is DEC-0457. GAP-0107 nested Mission invoke is DEC-0455. GAP-0108 design is closed: the retry ceiling is a host-registered registry row; this sitting mints no number; FEAT-0060 must not invent a cap. GAP-0081 and GAP-0100 are out-of-scope as kit holes: the user interface is not designed; screens and a cutover dashboard are a later UI sitting; pack-and-grant contracts bind without chrome. Catalog IDs stay for history. GAP-0093 and GAP-0096 remain for a later operator look. Do not re-run architecture for sitting-answered rows. Do not write production code in the documentation-factory session."
+    status: ratified
+    rationale: "Operator-direct 2026-09-23. The fold had minted delivery-tracking rows as deferred gaps. Factory GAP rule is unknown design, not unimplemented inspect-SHA fields."
+    sources: [EXT-2463]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [pack-and-grant, gaps, operator-correction]
+    date: 2026-09-23
+    spine_ref: "SRC-26"
+
+  - id: DEC-0469
+    title: 'UI AD-2 — Host stack seed'
+    statement: 'Frontend seed is Svelte 5.57.1 + SvelteKit 2.70.3 + TypeScript 5.9 (Kit 2 peer) + Vite 8.3.0 + Tailwind CSS 4.3.3 + shadcn-svelte 1.7.0 (Rhea, MIT) + bits-ui 2.19.3 + @xyflow/svelte 1.6.6. Toolchain is Node.js >=22.12.0 <23.0.0 and pnpm with apps/qmx-ui/pnpm-lock.yaml recorded at an unexecuted isolated-scaffold gate. Root layout sets ssr=false; @sveltejs/adapter-static. SPA fallback is 200.html on a static host; a later Tauri template may use index.html. The SPA is served from a static origin, never from daemon port 8765. Refuse React/Next dashboard kits, Qt, SvelteKit 3 RC as a required pin, Tauri 3 alpha, and wrapping every primitive. Optional json-render 0.21.0 and @modelcontextprotocol/ext-apps 2.0.0 remain adapters not authority. Optional Lightweight Charts 5.2.1 for financial tape and LayerChart 2.5.0 for ordinary analytics.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2465, EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-2, stack]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-2'
+
+  - id: DEC-0470
+    title: 'UI AD-3 — Platform destinations stay independent'
+    statement: 'A persistent narrow platform rail holds destinations above a divider and opened-app icons below. Above, with zero opened apps: Home (work / attention / resume), Copilot (conversation workspace), Library, Authoring. Settings is chrome, not a fifth product destination. Home and Copilot may reuse SessionList / ConversationPane components; they are not the same destination or purpose. Authoring is independently reachable and uses the graph/code/ML family even with no app open. Mini-app interiors keep app nav above a dense widget canvas. Study-03 one three-column shell and LSE ML Studio as layout are refused. Home/Authoring use profile authoring; Copilot of an app-use panel uses app-use. No third profile.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2466, EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-3, rail]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-3'
+
+  - id: DEC-0471
+    title: 'UI AD-5 — Independent dimensions'
+    statement: 'Visual, headless, and mixed packs are independent. A pack may omit view:* and copilot_profile. Enable is not grant. Headless invoke stays a first-class door via qmb / CT-40. Chrome must not require a pane to run granted work.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-5, headless]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-5'
+
+  - id: DEC-0472
+    title: 'UI AD-6 — Three presentation lanes; native first'
+    statement: 'Three presentation lanes: native Svelte mounts, optional json-render catalog views, optional MCP Apps sandboxed views. Native panes are first. json-render and MCP Apps are adapters not authority, identity, persistence, or grant. Host-minted ActionContext binds every mounted view (DEC-0486).'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-6, lanes]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-6'
+
+  - id: DEC-0473
+    title: 'UI AD-7 — Composer splits content, tools, and target'
+    statement: 'Composer splits content, tools, and target. Tools come from parent AD-9 intersection. TargetPicker supplies bindActionContext for non-mount callers. Widgets never call the wire.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-7, composer]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-7'
+
+  - id: DEC-0474
+    title: 'UI AD-8 — Widgets bind and display; expand is explicit'
+    statement: 'Widgets bind and display. Expand/return is explicit layout change and must restore graph viewport. Widgets never own invoke. Unique invoke issuer is apps/qmx-ui/src/lib/host/dispatchInvoke.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-8, widgets]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-8'
+
+  - id: DEC-0475
+    title: 'UI AD-9 — Graph, code, and detail stay one family'
+    statement: 'Authoring/ML is one graph/code/detail family (VS Code image). Draft, immutable template version, pack instance, and JobHandle stay distinct (DEC-0487). LSE ML Studio UI is refused as layout.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2466]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-9, authoring]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-9'
+
+  - id: DEC-0476
+    title: 'UI AD-10 — Library is one chrome over typed hits'
+    statement: 'Library overlays typed hits and must not collapse kinds. Uploads become artifacts only after daemon PUT completeness (DEC-0488). Knowledge cite uses returned artifact fp1 plus provenance. Widget message-only refs are chrome until saved.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-10, library]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-10'
+
+  - id: DEC-0477
+    title: 'UI AD-11 — First-run is partial readiness'
+    statement: 'First-run is partial readiness. Splash then usable window. One provider failure does not block the shell. Clean-machine shell launch is not provider-ready. Secrets never enter the page.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2470]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-11, first-run]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-11'
+
+  - id: DEC-0478
+    title: 'UI AD-12 — Python daemon owns runtime; Tauri is optional later'
+    statement: 'Python qma-daemon owns runtime. v1 is browser plus host-supervised daemon. Tauri 2 is an optional later desktop shell, not required for protocol. Rust in Tauri must not become a second orchestrator. UI must not import qmb/qml/qmn.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2465]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-12, process]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-12'
+
+  - id: DEC-0479
+    title: 'UI AD-13 — Close, stop, cancel, and unknown are distinct'
+    statement: 'Panel dispose does not cancel JobHandle. Stop, cancel, and unknown are distinct chrome states. Cancelled display is not proof the worker stopped. Interrupt is not labelled cancelled.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-13, lifecycle]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-13'
+
+  - id: DEC-0480
+    title: 'UI AD-14 — Operations chrome consumes kit queries'
+    statement: 'Operations chrome consumes kit listing axes, instance health(), JobHandle snapshots, and diagnosis queries. It does not mint a fourth observability product. Logs are not journals. GAP-0100 dashboard-as-kit-hole is answered by this chrome consuming those queries.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2476]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-14, ops]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-14'
+
+  - id: DEC-0481
+    title: 'UI AD-15 — view:* stays a wire DTO; PackUiRequest is ingested request'
+    statement: 'This sitting does not mint a ui_view contribution point. Packs still contribute operations only. Navigation and views are versioned request DTOs ingested at enable (qmx.ui.pack_ui_request.v1). Read-back is addable query get_pack_ui_request keyed by enabled instance_id plus availability_revision. Optional PluginManifest.copilot_profile stays the Epic 60 / kit sibling field; the UI request references it and must not replace or forbid it. Published still does not grant.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2479, EXT-2464]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-15, pack-ui]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-15'
+
+  - id: DEC-0482
+    title: 'UI AD-16 — UI integration is a sibling of backend integration'
+    statement: 'New UI work lives on a dedicated integration stream cut from integration@34c148be. Do not reuse the old ui branch at af66288 as the app base. Combine only for a tested deployment candidate, then the operator promotes to main. User-facing implementation later requires Reticle act-and-wait/assert plus process evidence Reticle cannot supply.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2464]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-16, delivery]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-16'
+
+  - id: DEC-0483
+    title: 'UI AD-17 — Research charts keep provenance'
+    statement: 'Ordinary analytics charts use shadcn-svelte / LayerChart. Financial candlesticks use a dedicated host (lightweight-charts or successor) behind WidgetFrame. Missing, empty, truncated, and denied are distinct chrome states. Streaming plots consume stream doors; a stream subscription is not trading permission. Preview is not export.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2465]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-17, charts]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-17'
+
+  - id: DEC-0484
+    title: 'UI AD-18 — Chat send is mailbox, not invoke'
+    statement: 'Unique chat issuer is apps/qmx-ui/src/lib/host/dispatchChat. ConversationPane.send calls that function only and issues CT-40 send_message. It does not call dispatchInvoke. No instance_id is required. A mailbox send does not grant tools. Durable history is the QMA mailbox. Each stored operator product-chat message persists product_session_ref at write (QMA _ref law; ProductSession own identity remains product_session_id). Replies inherit that field. send_message and list_mailbox admit only when the connection operator principal equals that session durable principal, when the field is present. Pre-ack identity is the wire pair (producer_id, id).'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2467]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-18, chat]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-18'
+
+  - id: DEC-0485
+    title: 'UI AD-19 — v1 bootstrap owner is QMB CLI; pairing_proof is the bearer'
+    statement: 'v1 requires an externally running qma-daemon. Privileged owner is COMP-QMB (qmb host start|status|stop|pair|configure|rotate-control|recover-control) over local host-control. Until that command exists, UI Start local is a setup instruction, not a spawn. Unauthenticated bootstrap is HTTP POST /pair/start and /pair/confirm plus CORS OPTIONS on named daemon HTTP routes (OPTIONS never issues a proof). Issuance: a remembered Origin never authorizes a new pairing_proof; require fresh QMB confirm of that pending or authenticated POST /pair/renew. Authenticated CT-40 uses bearer pairing_proof. HTTP sends Authorization: Bearer pairing:<proof>. WebSocket sends WHATWG subprotocols qmx.ct40.v1 and qmx.pair.<proof>. Cookies are not the v1 proof. The daemon maps Origin plus proof hash to the bootstrapped operator principal.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2468, EXT-2469]
+    authority: rider
+    component: COMP-QMB
+    tags: [ui-host, ad-19, bootstrap]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-19'
+
+  - id: DEC-0486
+    title: 'UI AD-20 — Mounted views carry host-minted ActionContext'
+    statement: 'Each mount receives an immutable host ActionContext: psess, view_id, contribution tuple, instance_id, config_revision, grant_id, allowed_op_ids, account scope, snapshot cursor. Untrusted specs/frames supply only action name and schema-valid input. Matching GrantRecords: zero -> grant_id null (paint allowed, invoke refuses); one -> that record; two or more -> typed GRANT_AMBIGUOUS (no first-wins, no merge). dispatchInvoke intersects that context with parent AD-9.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-20, action-context]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-20'
+
+  - id: DEC-0487
+    title: 'UI AD-21 — Draft is not a runnable template'
+    statement: 'Distinct ids: editor draft/revision, immutable Graph Template (qualified_id, version), pack instance, JobHandle. The daemon is the sole durable editor_draft_id issuer. First save omits that id (optional client_draft_correlation); a supplied id on first save refuses. Subsequent saves require durable id plus expected_revision. Addable publish_editor_draft authorizes the draft, checks expected_revision, revalidates immutable fp1, and writes the local authoring-pack contribution. First Run: publish_editor_draft into the local authoring pack, enable that pack (parent AD-30 compile-at-enable), grant, select that instance, then dispatchInvoke. Distributable export is later. Run refuses a mutable draft. QMA AD-22 stays one RefinementProposal type.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-21, drafts]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-21'
+
+  - id: DEC-0488
+    title: 'UI AD-22 — Artifact ingest is daemon-owned'
+    statement: 'Uploads first possess bytes on the authenticated local daemon (HTTP PUT /artifacts/stage, not a JSON-RPC body). Completeness proof is daemon-recomputed fp1 plus byte count. Interrupted v1 uploads are refused; no resumable partial; no runnable incomplete ref. Remote execution requires explicit transfer_artifact only when the source daemon origin is recorded reachable TLS the destination can dial; default loopback is typed source_unreachable. Destination-authored transfer_complete is the verified completion ack. Invoke on that placement refuses until the ticket is complete. Home may attach before an instance exists. Silent local fallback is refused.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-22, artifacts]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-22'
+
+  - id: DEC-0489
+    title: 'UI AD-23 — Cancel has one host function'
+    statement: 'Unique issuer apps/qmx-ui/src/lib/host/dispatchCancel. CT-40 addable command cancel_job. Fields: handle_id, logical_run_id, attempt_id, command_id, expected_state. Authority: operator of the JobHandle immutable originating_product_session_ref when that field is present (UI admit). Headless/QMB admits omit the field; UI cancel_job is then unavailable and Story 36.5 remains the abort door. queued to running does not invalidate the same command_id. Already-terminal handle records a no-op. unknown is not cancellable. Not an InvocationEnvelope invoke. Not seed stop_run.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [ui-host, ad-23, cancel]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-23'
+
+  - id: DEC-0490
+    title: 'UI AD-24 — Command identity is per producer and per session'
+    statement: 'Cardinality: one producer_id per chrome tab or OS window. Two tabs of one psess: have two producer_ids. Wire command ids are unique per (producer_id, id). Product-session command_id values are unique per psess: across those tabs. Invocation idempotency_key is a third identity and applies only to dispatchInvoke.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2478]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [ui-host, ad-24, producer-id]
+    date: 2026-09-25
+    spine_ref: 'SRC-27:ARCHITECTURE-SPINE.md#ad-24'
+
+  - id: DEC-0491
+    title: 'backend AD-3 — Pairing issuance; Origin never sufficient'
+    statement: 'A remembered Origin never authorizes issuance of a new pairing proof. Every new pairing_proof requires exactly one of: (1) fresh privileged local-control confirmation of that pending request (qmb host pair <code> then POST /pair/confirm); or (2) authenticated renewal presenting an existing unexpired unrevoked pairing_proof matching that Origin (POST /pair/renew with Authorization: Bearer pairing:<proof>). Origin match remains required and is never sufficient.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2468, EXT-2469]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-3, issuance]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-3'
+
+  - id: DEC-0492
+    title: 'backend AD-4 — Pairing record versus pairing proof; origin-revoke barrier'
+    statement: 'pairing_proof is a bearer credential (RFC 6750). pairing_record_id is the nonsecret row identity. Journal projections pairing_pending and pairing_session store pairing_record_id, Origin, operator principal, proof_fp1, issued/expires/revoked, pending lineage — never the raw proof. Logs redact Authorization and qmx.pair.*. Confirm consumes once; lost confirm response requires re-pair. Renew rotates: new proof, old proof revoked, sockets on old proof closed. Expiry closes active WS. --session revokes that pairing_record_id only. --origin <origin> is an administrative barrier at journal_seq R: every pairing_session and pairing_pending for that Origin with journal_seq < R is revoked, including confirmed-unconsumed pendings and a renew that committed earlier. Origin-revoke is never discarded because a renew appended first. After R, /pair/renew and /pair/confirm of pre-R rows refuse; a new /pair/start after R is legal (re-pair). TTL is registry:pairing.session_ttl; this sitting mints no number; only qmb host configure pairing-ttl over host-control may write that row.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2469, EXT-2477]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-4, c2]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-4'
+
+  - id: DEC-0493
+    title: 'backend AD-5 — Unauthenticated bind is a named carve-out (AM-01)'
+    statement: 'Named amendment to QMA AD-5, QMA AD-15, QMA AD-24, and Epic 41 Story 41.4: unauthenticated HTTP is allowed only for POST /pair/start, POST /pair/confirm, and CORS OPTIONS on the AD-15 HTTP routes that declare CORS. OPTIONS never returns a pairing proof, never upgrades to WebSocket, and never returns artifact bytes. POST /pair/renew is authenticated. Every other HTTP method and every WebSocket still authenticates before protocol bytes. Browser-paired AuthenticatedWireSession carries principal_class=operator and pairing_record_id; it does not populate credential_ref. Machine/worker clients still present credential_ref. Cookies are refused. Authenticated ACAO is the exact paired Origin; credentials omit; never *.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [backend-delta, ad-5, am-01]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-5'
+
+  - id: DEC-0494
+    title: 'backend AD-6 — QMB owns process lifetime'
+    statement: 'Privileged verbs are qmb host start|status|stop|pair|configure|rotate-control|recover-control (COMP-QMB add) over local host-control. start sets QMA_DAEMON_ROOT, spawns python -m qma.daemon if the lock is free, and on an empty root (no local_operator row) runs first-operator bootstrap. A root that already has local_operator but is missing host_control is not empty: start may spawn if the lock is free and does not remint a principal. stop stops the local daemon: current host_control or, if that file is missing/unreadable, the OS owner of the root (narrow exception so a lost token can still reach recover). QMB never writes daemon sqlite. recover-control runs a one-shot daemon recover entry that acquires .daemon_writer, appends the journal, releases the lock, and exits; it does not bind port 8765.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2470]
+    authority: rider
+    component: COMP-QMB
+    tags: [backend-delta, ad-6, host]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-6'
+
+  - id: DEC-0495
+    title: 'backend AD-7 — Mailbox delivery stays Epic 46 with additive product_session_ref'
+    statement: 'send_message remains the seed command. Durable record is the CT-48 mailbox Envelope / journal message.* (Story 46.4 / FEAT-0045). Named amendment to QMA AD-20 / Story 46.4: operator product-chat Envelopes persist additive product_session_ref (pointer at the product-session projection; excluded from Envelope fp1). Quant/machine rows with no product conversation omit the field. When product_session_ref is present, send_message and list_mailbox admit only if the connection operator principal equals that session durable principal. Addable query list_mailbox is an authenticated HTTP GET snapshot. Collision: same pair plus same hash returns the prior result; same pair plus different hash refuses for journal lifetime (AM-12, mailbox sends only).'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2471]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-7, mailbox]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-7'
+
+  - id: DEC-0496
+    title: 'backend AD-8 — Cancel binds originating_product_session_ref at admit'
+    statement: 'Addable command cancel_job. handle_id is job_id. Named amendment to QMA AD-17 / parent AD-26 / Story 57.3 handle record (states unchanged): UI-originated admits store immutable originating_product_session_ref. Headless/QMB admits omit the field. UI cancel_job is unavailable when the field is absent; Story 36.5 remains the headless abort door. queued to running does not change the command_id hash. Nested children store the session that started that child, or omit the field if that admit was headless. Terminal is a recorded no-op. unknown is not cancellable.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-8, cancel]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-8'
+
+  - id: DEC-0497
+    title: 'backend AD-9 — Artifact ingest is authenticated PUT then explicit transfer'
+    statement: 'Initial possession is HTTP PUT /artifacts/stage on the authenticated daemon origin. Missing registry:artifact.stage_max_bytes refuses the PUT; this sitting mints no number. Completeness is daemon-recomputed fp1 plus byte count. Interrupted v1 PUT is refused and deleted. transfer_artifact issues artifact_transfer_ticket only when the source daemon origin is recorded reachable TLS that the destination environment network allowlist can dial. Default loopback is typed source_unreachable. Ticket binds dest machine credential_ref audience. Only that audience may GET /artifacts/<fp1> with X-QMX-Transfer-Ticket. Dest authors transfer_complete. Invoke on that placement refuses until complete. Daemon never dials in.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472, EXT-2477]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-9, artifacts]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-9'
+
+  - id: DEC-0498
+    title: 'backend AD-10 — PackUiRequest is ingested request, not a grant'
+    statement: 'Host ingests at most one qmx.ui.pack_ui_request.v1 document at enable. It is a versioned request DTO, not a contribution point. Optional PluginManifest.copilot_profile stays the Epic 60 sibling field. Read-back is addable query get_pack_ui_request keyed by enabled instance_id plus availability_revision. Nav items bind view_ids. Zero matching GrantRecords: paint, invoke refuses. One: that record. Two or more: GRANT_AMBIGUOUS. ActionContext remains host-minted and immutable.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2479]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-10, pack-ui]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-10'
+
+  - id: DEC-0499
+    title: 'backend AD-11 — Draft head is not AD-22 staging'
+    statement: 'Saved drafts are artifact-store bytes plus journal projection editor_draft_head. editor_revision is that content fp1. Daemon is the sole durable editor_draft_id issuer. First save_editor_draft omits editor_draft_id; optional client_draft_correlation makes lost-ack retry of the same fp1 return the same durable id. Reload-head is addable query get_editor_draft_head. publish_editor_draft checks ownership, expected_revision, reruns validation against immutable fp1, and writes the local authoring-pack contribution. Parent AD-30 enable remains compile identity. QMA AD-22 stays one RefinementProposal type (AM-07).'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-DAEMON
+    tags: [backend-delta, ad-11, drafts]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-11'
+
+  - id: DEC-0500
+    title: 'backend AD-13 — Compatibility is additive and honest'
+    statement: 'Same-major wire changes are additive. initialize advertises capabilities including pairing, list_mailbox, cancel_job, caller_kind, stage_artifact (meaning authenticated PUT /artifacts/stage exists), transfer_artifact, transfer_complete, pack_ui_request, get_pack_ui_request, save_editor_draft, get_editor_draft_head, publish_editor_draft. Missing capability yields typed mismatch; shell stays usable for surfaces that do not need it. Older clients ignore unknown fields. Client bits are not journals.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2474]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [backend-delta, ad-13, compat]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-13'
+
+  - id: DEC-0501
+    title: 'backend AD-14 — Reload, clone, and cold start are different recoveries'
+    statement: 'Browser home for pairing_proof / pairing_record_id / pending chat triple is memory plus sessionStorage only. localStorage, cookies, IndexedDB, and any other durable web store are forbidden for the proof. Same-tab reload may restore those values and reconnect with the same proof. Auxiliary/cloned tab copied storage is existing proof; the clone reconnects with a new live producer_id if the old is live. /pair/renew is not the clone path; it is an explicit rotate that closes sockets on the old proof. Cold start / closed tab: empty storage; /pair/renew impossible; new pair requires QMB confirm; selected psess: restores via list_mailbox; never auto-resend. Lost /pair/confirm response: proof unrecoverable; start a new pending.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2468]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [backend-delta, ad-14, recovery]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-14'
+
+  - id: DEC-0502
+    title: 'backend AD-15 — HTTP PUT is a byte channel on the daemon origin'
+    statement: 'Port 8765 carries: unauthenticated pairing POST plus CORS OPTIONS; authenticated HTTP GET snapshots (list_mailbox, get_pack_ui_request, get_editor_draft_head); authenticated HTTP PUT /artifacts/stage; authenticated HTTP GET /artifacts/<fp1> for machine transfer pull; authenticated JSON-RPC WebSocket; authenticated POST /pair/renew. Local host-control is a separate token-gated loopback channel under QMA_DAEMON_ROOT, not a second unauthenticated 8765 bind. PUT and artifact GET are byte channels, not invoke, not a BFF. SPA origin is not daemon origin.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [backend-delta, ad-15, http]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-15'
+
+  - id: DEC-0503
+    title: 'backend AD-17 — First operator is local host-control; lost-token recovery'
+    statement: 'Trust root is the OS user who owns QMA_DAEMON_ROOT plus a daemon-minted host_control token stored under that root with owner-only ACL. The channel is loopback-only and is not the CT-40 listener (named amendment of QMA AD-5 single inbound port). qmb host start on an empty root (no local_operator row) mints the first operator principal into journal projection local_operator and mints host_control; /pair/start and /pair/confirm refuse until qmb host configure pairing-ttl has written the registry row. A root that already has local_operator is never empty bootstrap, even if host_control is missing. Rotation while token is held: qmb host rotate-control. Lost-token recovery: daemon must be stopped; OS owner runs qmb host recover-control without presenting the lost token; one-shot daemon recover entry writes the journal; local_operator and journals preserved; does not remint a second principal; does not delete the data root. Live daemon with missing file: OS owner may stop without the token (DEC-0494), then recover. Other OS user refuses. Readable token file still present refuses recover-control (use rotate-control). Broker allowlist is not widened.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2470, EXT-2464]
+    authority: rider
+    component: COMP-QMB
+    tags: [backend-delta, ad-17, c1]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:ARCHITECTURE-SPINE.md#ad-17'
+
+  - id: DEC-0504
+    title: 'UI host plus backend-delta spines adopted in full (reuse; no sixth package)'
+    statement: 'The 2026-09-23/24 QMX UI host spine (architecture-QMX-UI-2026-09-23, local UI AD-1..AD-24) and the 2026-09-24 backend-delta spine (architecture-QMX-UI-BACKEND-2026-09-24, local backend AD-1..AD-17) are adopted as DEC-0469 through DEC-0503. Parent architecture-QMX-2026-09-18 AD-1..AD-31 (DEC-0414..DEC-0444, ADR-0024) and kit architecture-QMX-2026-09-23 AD-1..AD-9 (DEC-0452..DEC-0468, ADR-0025) bind read-only. Local AD ids do not renumber parents. Named inherited-contract amendments are AM-01..AM-17 recorded in those DECs and summarized by DEC-0506. Preflight reuse with no new COMP and no new CT is DEC-0505. Wiring honesty at 34c148be is DEC-0507. Dead-list honors are DEC-0508. GAP catalog restamp is DEC-0509. Cheap-veto A10-A14 ride DEC-0510. ADR-0026 and SCN-0028..SCN-0035 are docs authority only. Implementation authorization remains factory-pipeline-only. Do not rewrite the 2026-09-16 QML fold, the 2026-09-19 Workflows fold, or the 2026-09-23 pack-and-grant fold.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2464]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [ui-host, backend-delta, umbrella]
+    date: 2026-09-25
+    spine_ref: 'SRC-29'
+
+  - id: DEC-0505
+    title: 'UI plus backend-delta preflight — reuse existing applications; no new COMP; no new CT'
+    statement: "Preflight verdict: reuse existing applications. new COMP: none. new CT: none. No new depends_on edge and no existing component's authority shrinks. The Svelte host is a client of COMP-QMA-WIRE and is not COMP-UI. Work owners: chrome = UI lens docs over COMP-QMA-WIRE DTOs; qmb host / host_control / recover-control = COMP-QMB plus COMP-QMA-DAEMON; pairing = COMP-QMA-DAEMON plus COMP-QMA-WIRE plus COMP-QMB; mailbox field = COMP-QMA-DAEMON plus COMP-QMA-WIRE (delivery remains FEAT-0045); cancel field = COMP-QMA-DAEMON plus COMP-QMA-WIRE; artifacts/transfer = COMP-QMA-DAEMON plus COMP-QMA-WIRE; drafts/publish = COMP-QMA-DAEMON plus COMP-QMA-WIRE; PackUiRequest = COMP-QMA-DAEMON plus COMP-QMA-WIRE beside Epic 60. Candidates refused: COMP-UI / sixth COMP; new CT-*; third ProductSessionProfile; cookie login; ui_view contribution point; AD-22 as graph draft store; json-render/MCP as identity; QMB sqlite writer; reminting local_operator on recover; Origin-only issuance."
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2473]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [ui-host, preflight, reuse]
+    date: 2026-09-25
+    spine_ref: 'SRC-29'
+
+  - id: DEC-0506
+    title: 'Named inherited-contract amendments AM-01 through AM-17'
+    statement: 'Conflicts with inherited QMA / parent / kit / planned-epic contracts are named AM-01 through AM-17 in architecture-QMX-UI-BACKEND-2026-09-24/PARENT-AMENDMENT-MAP.md and bound by DEC-0491..DEC-0503. Do not silent-override. Do not whole-supersede DEC-0304, DEC-0319, DEC-0323, DEC-0421, DEC-0437, DEC-0463, or DEC-0464. Epic 60 PluginManifest.copilot_profile is not moved into PackUiRequest. Envelope instance_id remains required on invoke. QMA _ref exception list is unchanged; new pointers use _ref (product_session_ref, originating_product_session_ref). QMA AD-22 stays one RefinementProposal type.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2472]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [backend-delta, amendments]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:PARENT-AMENDMENT-MAP.md'
+
+  - id: DEC-0507
+    title: 'Wiring honesty @ 34c148be — inherit DEC-0286 and DEC-0465; UI/backend adds absent'
+    statement: 'Inherit DEC-0286 and DEC-0465. On integration@34c148be this session reconfirmed CONNECT: InvocationEnvelope, GrantRecord, product_session / ProductSessionProfile, view:* DTOs, JobHandle types plus in-memory store, mailbox Envelope types, later_commands. AMEND relative to this sitting: Envelope has no product_session_ref; JobHandle has no originating_product_session_ref. ABSENT as product surface: live CT-40 server (DaemonProcess discards TCP bytes); /pair/*; qmb host; pairing table; list_mailbox; cancel_job; PUT /artifacts/stage; transfer_artifact / transfer_complete; save_editor_draft / publish_editor_draft / get_editor_draft_head; get_pack_ui_request; host_control / recover-control; PluginManifest.copilot_profile; first-party Svelte/Tauri frontend. Do not claim those absences are open design gaps. Do not claim envelope/grant/product_session types are absent. Implementation authorization still arrives only through the factory pipeline.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2474]
+    authority: rider
+    component: COMP-QMA-WIRE
+    tags: [honesty, 34c148be]
+    date: 2026-09-25
+    spine_ref: 'SRC-28:START-HERE.md'
+
+  - id: DEC-0508
+    title: 'Dead-list honors — no COMP-UI, no cookie login, no ui_view, no AD-22 draft store'
+    statement: 'This increment honors existing deaths and does not revive them: DEC-0084 / DEC-0085 / DEC-0086 stay dead; DEC-0361 marketplace, DEC-0362 solver, and DEC-0366 HMR stay dead; DEC-0408..DEC-0413 mill deaths stay dead; DEC-0466 kit deaths stay dead. COMP-UI / sixth COMP stay un-minted. Cookie session and localStorage/IndexedDB pairing proof stay refused. ui_view contribution point stays un-minted. QMA AD-22 stays one RefinementProposal type. Study 01/02/03 as baseline stay rejected. LSE ML Studio as layout stays refused. Qt host stays refused. JSON Render and MCP Apps as identity, persistence, runtime, or authority stay dead. Origin-only issuance stays refused.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2475]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [dead-list, honors]
+    date: 2026-09-25
+    spine_ref: 'SRC-29'
+
+  - id: DEC-0509
+    title: 'UI catalog correction — GAP-0081 and GAP-0100 are answered sitting law'
+    statement: 'A catalog gap is an unanswered design question. architecture-QMX-UI-2026-09-23 designed chrome and observation surfaces. GAP-0081 and GAP-0100 are answered sitting law of this UI sitting. Delivery is FEAT-0064 through FEAT-0071. They remain out-of-scope as pack-and-grant kit holes (DEC-0468 still true for the kit). Wiring honesty at 34c148be (DEC-0507) records connect versus absent as product surface; that honesty is not a gap. qma-ui-contract types beyond a stub remain GAP-0114. UX-10 trading ticket chrome remains GAP-0113. CodeMirror versus Monaco remains GAP-0111. Tauri installer remains GAP-0112. Pairing TTL and artifact stage_max_bytes numbers remain GAP-0109 and GAP-0110. Do not re-run architecture for sitting-answered rows. Do not write production code in the documentation-factory session.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2476]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [gaps, catalog]
+    date: 2026-09-25
+    spine_ref: 'SRC-29'
+
+  - id: DEC-0510
+    title: 'UI plus backend-delta cheap-veto register A10-A14'
+    statement: 'Cheap-veto assumptions for sitting machinery, each individually overturnable without unwinding another call: (A10) registry:pairing.session_ttl exists; this sitting mints no duration — proceed. (A11) registry:artifact.stage_max_bytes exists; this sitting mints no number — proceed. (A12) shadcn-svelte Rhea compact is the working visual seed, not a brand freeze — proceed. (A13) Node.js >=22.12.0 <23.0.0 and pnpm lockfile at an unexecuted scaffold gate — proceed. (A14) product data root Windows %LOCALAPPDATA%\\QMX\\qma-daemon and the POSIX rows in HOST-LIFECYCLE.md — proceed. Not vetoable here: no sixth COMP; no new CT; Origin-never-sufficient issuance; no cookies/localStorage proof; no COMP-UI; Epic 60 copilot_profile stays a sibling field; recover-control does not remint a principal or wipe journals; QMB never writes daemon sqlite.'
+    status: ratified
+    rationale: 'Operator rider 2026-09-25; Codex PASS; sitting accepted as the plan to fold.'
+    sources: [EXT-2477]
+    authority: rider
+    component: COMP-QMA-CORE
+    tags: [cheap-veto]
+    date: 2026-09-25
+    spine_ref: 'SRC-29'
+

@@ -1,0 +1,28 @@
+Review Grok's QMX UI/full-application architecture candidate at
+
+  C:/Users/Mubarak/Desktop/QMX/_bmad-output/planning-artifacts/architecture/architecture-QMX-UI-2026-09-23/
+
+against the handoff packet at
+
+  C:/Users/Mubarak/Desktop/QMX/workroom/qmx-ui-architecture-handoff-2026-09-23/
+
+Give a focused readiness verdict for Documentation Factory: ready / ready after listed corrections / not ready because of named unresolved decisions.
+
+Do not start a whole backend code review.
+Do not implement.
+Do not run Documentation Factory.
+Do not start epics or coding.
+
+Entry file: START-HERE.md
+Spine: ARCHITECTURE-SPINE.md
+
+Codex questions from the handoff (05-RETURN-FOR-REVIEW.md):
+
+1. Does the proposed UI preserve the actual source layouts and latest ML/headless corrections?
+2. Are observations and existing implementation distinguished from proposals and historical claims?
+3. Can a user journey be traced through component state, an identified contract, its backend owner and recovery?
+4. Does the component/extension model allow evolution without duplicating core infrastructure or forcing all capabilities into one shape?
+5. Are local/remote lifecycle, version/authority boundaries, compatibility and installed-product behavior concrete enough to test?
+6. Can Documentation Factory ingest this without filling major behavioral or architectural holes from guesswork?
+
+Inspect pins recorded by Grok: main@92279dfe (dirty docs), integration@34c148be, ui@af66288 (not the UI app base).

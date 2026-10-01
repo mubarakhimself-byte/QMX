@@ -1,6 +1,7 @@
 {
   "backend": "a0e8769772e469bf54bd312cc1e27e7995e16c3b",
   "documentation": "c3e8ec5ef33d0b38cdf7f5dbdd48a6fc70ac33cf",
+  "documentation_roots": ["docs", "_docwork", "_bmad-output"],
   "ui_baseline": "f6ffaddf3f78c6c14d32daa136fadf15e7748c14",
   "remote": "https://github.com/MubarakHimself/QMX.git",
   "branch": "release/rc-2026-10-01",

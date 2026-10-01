@@ -1,14 +1,13 @@
 """One-off: apply the five cross-file carries the round-1 fix seats left out of scope."""
+import io
 import sys
-from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
 L = '_docwork/qma/'
 
 
 def patch(p, pairs, must=True):
-    path = Path(p)
-    s = path.read_text(encoding='utf-8')
+    s = io.open(p, encoding='utf-8').read()
     o = s
     for a, b in pairs:
         if a not in s:
@@ -18,7 +17,7 @@ def patch(p, pairs, must=True):
             continue
         s = s.replace(a, b)
     if s != o:
-        path.write_text(s, encoding='utf-8', newline='\n')
+        io.open(p, 'w', encoding='utf-8', newline='\n').write(s)
         print('patched', p)
 
 
@@ -53,8 +52,8 @@ patch(L + 'harvest/ledger-L3.yaml', [
 ])
 
 # 6. veto-register: the three job-spec-named variables the sitting declined
-p = Path(L + 'harvest/veto-register.md')
-s = p.read_text(encoding='utf-8')
+p = L + 'harvest/veto-register.md'
+s = io.open(p, encoding='utf-8').read()
 if 'Class 4' not in s:
     s = s.rstrip('\n') + '''
 
@@ -65,6 +64,6 @@ if 'Class 4' not in s:
 | SRC-15 (the AD-26 variable list) | `sticky limit` and `budget hint` | Removed from AD-26 by the sitting as unowned — no owning AD, subsystem, units or default (memlog "AD-26 VARIABLE LIST CORRECTED"); their roles are carried by `continuation.max_consecutive`, `continuation.budget` and `rlm.depth_cap`. Lands in DEC-0325; changelog row V12. | "Register a sticky limit / budget hint anyway — owning subsystem X, units Y, default Z." |
 | SRC-15 (the AD-26 variable list) | `journal retention` windows | The event journal is evidence — retained, backed up and never trimmed (AD-8, AD-23) — so it mints no retention or trim threshold; only the two bounded non-evidence streams (telemetry, mailbox delivery projection) carry retention/trim rows. Lands in DEC-0325; changelog row V12. | "Register a journal retention window anyway — the journal may be trimmed after N." |
 '''
-    p.write_text(s, encoding='utf-8', newline='\n')
+    io.open(p, 'w', encoding='utf-8', newline='\n').write(s)
     print('patched', p)
 print('carries applied')

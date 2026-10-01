@@ -1,14 +1,13 @@
 """One-off: apply the round-3 cross-file carries (dropped registry key max_in_flight_pinned_kinds; ct-49 refusals row)."""
+import io
 import sys
-from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
 L = 'C:/Users/Mubarak/Desktop/QMX/_docwork/qma/'
 
 
 def patch(p, pairs):
-    path = Path(p)
-    s = path.read_text(encoding='utf-8')
+    s = io.open(p, encoding='utf-8').read()
     o = s
     for a, b in pairs:
         if a not in s:
@@ -16,7 +15,7 @@ def patch(p, pairs):
             raise SystemExit(1)
         s = s.replace(a, b)
     if s != o:
-        path.write_text(s, encoding='utf-8', newline='\n')
+        io.open(p, 'w', encoding='utf-8', newline='\n').write(s)
         print('patched', p)
 
 

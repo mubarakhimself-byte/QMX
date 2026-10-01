@@ -3,9 +3,9 @@
 Usage: python make_stage_state_fragment.py --review "<text>" --orchestration "<text>" [--date 2026-08-30]
 """
 import argparse
+import io
 import re
 import sys
-from pathlib import Path
 
 import yaml
 
@@ -16,7 +16,7 @@ ap.add_argument('--orchestration', required=True)
 ap.add_argument('--date', default=None)
 a = ap.parse_args()
 
-src = Path('_docwork/qma/fragments/stage-state.md').read_text(encoding='utf-8')
+src = io.open('_docwork/qma/fragments/stage-state.md', encoding='utf-8').read()
 m = re.search(r'```yaml\n(.*?)```', src, re.S)
 block = m.group(1).rstrip('\n')
 entry = yaml.safe_load(block)[0]
@@ -36,10 +36,9 @@ def str_presenter(dumper, data):
 
 
 yaml.add_representer(str, str_presenter)
-Path('_docwork/qma/fragments/stage-state.yaml').write_text(
-    yaml.dump(frag, allow_unicode=True, sort_keys=False, width=100000),
-    encoding='utf-8', newline='\n')
+io.open('_docwork/qma/fragments/stage-state.yaml', 'w', encoding='utf-8', newline='\n').write(
+    yaml.dump(frag, allow_unicode=True, sort_keys=False, width=100000))
 # prove the appended file still parses
-target = Path('../QMX-qma/_docwork/stage_state.yaml').read_text(encoding='utf-8')
+target = io.open('../QMX-qma/_docwork/stage_state.yaml', encoding='utf-8').read()
 yaml.safe_load(target.rstrip('\n') + '\n' + text)
 print('fragments/stage-state.yaml written; append parses')
