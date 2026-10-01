@@ -13,12 +13,24 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
-from qmf.core import Fingerprint, Instant, Ok, Result, TypedRefusal, World, fingerprint, is_refusal
-from qmf.data.journal import DecisionOutcome, JournalEventType
+from qmf.core import (
+    Fingerprint,
+    Instant,
+    Ok,
+    Result,
+    TypedRefusal,
+    World,
+    WriteOutcome,
+    fingerprint,
+    is_refusal,
+)
+from qmf.data.journal import DecisionOutcome, JournalEvent, JournalEventType
 from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.observation import SourceObservation
 from qmf.data.splits import SegmentRole
 from qmf.data.store import JournalStore
+from qmf.data.store.receipts import StoreReceipt
+from qmf.data.store.rooms import RoomRole
 
 from qmb._refuse import invalid, policy, unavailable
 from qmb.config.alternative import (
@@ -489,6 +501,111 @@ def _validate_source(source: object) -> object:
     return expected
 
 
+def _validate_append_receipt(
+    receipt: object,
+    *,
+    expected_writer: JournalWriter,
+    expected_sequence: int,
+    expected_instant: Instant,
+    expected_payload: Mapping[str, object],
+    expected_outcome: DecisionOutcome,
+    expected_correlation_id: str,
+    store: JournalStore,
+) -> Result[tuple[JournalEvent, StoreReceipt]]:
+    """Bind the writer acknowledgment to a complete event and the stored raw row."""
+    if not isinstance(receipt, JournalAppendReceipt):
+        return invalid("journal_receipt", "record returns a typed JournalAppendReceipt")
+    event = receipt.event
+    store_receipt = receipt.store_receipt
+    if not isinstance(event, JournalEvent) or not isinstance(store_receipt, StoreReceipt):
+        return invalid(
+            "journal_receipt",
+            "an append receipt contains a typed JournalEvent and StoreReceipt",
+        )
+    if receipt.edge_receipts:
+        return policy("journal_receipt", "a single ATC decision has no unverified side writes")
+    event_matches = (
+        event.event_type is JournalEventType.DECISION
+        and event.writer == expected_writer.writer
+        and event.world is World.REPLAY
+        and event.sequence == expected_sequence
+        and event.instant == expected_instant
+        and event.outcome is expected_outcome
+        and _plain(event.payload) == _plain(expected_payload)
+        and event.correlation_id == expected_correlation_id
+    )
+    if not event_matches:
+        return policy(
+            "journal_event",
+            "the acknowledged event exactly matches the requested ATC decision",
+            event_sequence=event.sequence,
+            expected_sequence=expected_sequence,
+            event_correlation=event.correlation_id,
+            expected_correlation=expected_correlation_id,
+            event_type=event.event_type.value,
+            writer_matches=event.writer == expected_writer.writer,
+            world=event.world.value,
+            instant_matches=event.instant == expected_instant,
+            outcome=event.outcome.value if event.outcome is not None else None,
+            outcome_matches=event.outcome is expected_outcome,
+            payload_matches=_plain(event.payload) == _plain(expected_payload),
+        )
+    event_identity = fingerprint(event.fp1_identity())
+    if is_refusal(event_identity) or event_identity.value != event.fingerprint:
+        return policy("journal_event", "the acknowledged event fingerprint is complete")
+    if (
+        store_receipt.world is not World.REPLAY
+        or store_receipt.room_role is not RoomRole.JOURNAL
+        or store_receipt.engine != "jsonl"
+        or store_receipt.outcome not in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
+        or store_receipt.is_evidence_bearing is not True
+        or store_receipt.retained_forever is not True
+        or store_receipt.sequence is None
+        or isinstance(store_receipt.sequence, bool)
+        or not isinstance(store_receipt.sequence, int)
+        or store_receipt.sequence < 0
+        or isinstance(store_receipt.format_version, bool)
+        or not isinstance(store_receipt.format_version, int)
+        or store_receipt.format_version != 1
+    ):
+        return policy(
+            "store_receipt",
+            "the physical store receipt proves complete retained replay-journal evidence",
+        )
+    raw = store.read_stream(expected_writer.stream_name, for_world=World.REPLAY)
+    if is_refusal(raw):
+        return raw
+    physical_sequence = store_receipt.sequence
+    if physical_sequence >= len(raw.value):
+        return policy("store_receipt", "the physical sequence exists in the checked journal")
+    row = raw.value[physical_sequence]
+    row_fp = fingerprint(row)
+    persisted_event = JournalEvent.from_row(row)
+    if (
+        is_refusal(row_fp)
+        or row_fp.value != store_receipt.fingerprint
+        or is_refusal(persisted_event)
+        or persisted_event.value.fingerprint != event.fingerprint
+    ):
+        return policy(
+            "store_receipt",
+            "the physical receipt fingerprint identifies the acknowledged stored event row",
+        )
+    reopened = JournalReader(store).read_checked(
+        expected_writer.stream_name, for_world=World.REPLAY
+    )
+    if is_refusal(reopened):
+        return reopened
+    if not any(
+        stored.writer == event.writer
+        and stored.sequence == event.sequence
+        and stored.fingerprint == event.fingerprint
+        for stored in reopened.value
+    ):
+        return policy("journal_readback", "the checked journal reopens the acknowledged event")
+    return Ok((event, store_receipt))
+
+
 def execute_alternative_run(
     config_payload: object,
     recorded_source: object,
@@ -653,32 +770,46 @@ def execute_alternative_run(
         }
         if not checked.value.risk_accepted:
             payload["refusing_door"] = f"atc-policy:{config.policy_pair.policy_pair_id}"
+        expected_sequence = journal_writer.next_sequence
+        expected_outcome = (
+            DecisionOutcome.AUTHORIZED
+            if checked.value.risk_accepted
+            else DecisionOutcome.REFUSED_BY_DOOR
+        )
         appended = journal_writer.record(
             JournalEventType.DECISION,
             payload,
             instant=instant,
-            outcome=(
-                DecisionOutcome.AUTHORIZED
-                if checked.value.risk_accepted
-                else DecisionOutcome.REFUSED_BY_DOOR
-            ),
+            outcome=expected_outcome,
             correlation_id=config.composition_fp.value,
         )
         if is_refusal(appended):
             return appended
-        receipt: JournalAppendReceipt = appended.value
-        if receipt.event.writer != journal_writer.writer or receipt.event.world is not World.REPLAY:
-            return policy("journal", "persisted ATC decision matches its writer and replay world")
+        if not isinstance(appended, Ok):
+            return invalid("journal_receipt", "record returns a QMF Result")
+        validated_append = _validate_append_receipt(
+            appended.value,
+            expected_writer=journal_writer,
+            expected_sequence=expected_sequence,
+            expected_instant=instant,
+            expected_payload=payload,
+            expected_outcome=expected_outcome,
+            expected_correlation_id=config.composition_fp.value,
+            store=journal_store,
+        )
+        if is_refusal(validated_append):
+            return validated_append
+        event, store_receipt = validated_append.value
         references.append(
             ATCJournalReference(
                 frontier=instant,
-                event_fingerprint=receipt.event.fingerprint,
-                store_fingerprint=receipt.store_receipt.fingerprint,
-                sequence=receipt.event.sequence,
+                event_fingerprint=event.fingerprint,
+                store_fingerprint=store_receipt.fingerprint,
+                sequence=event.sequence,
                 output_fingerprint=output_fp.value,
             )
         )
-        expected_events[receipt.event.sequence] = receipt.event.fingerprint
+        expected_events[event.sequence] = event.fingerprint
         working_state = checked.value.accounting_state
         working_fp = state_after_fp.value
 

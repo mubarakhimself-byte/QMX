@@ -7,9 +7,11 @@ provider; the source observations and journal writes use real QMF persistence AP
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
+import pytest
 from qmb._refuse import invalid
 from qmb.config.alternative import (
     ADAPTER_INTERNAL_SIMULATE,
@@ -38,7 +40,7 @@ from qmf.core import (
 )
 from qmf.core.chrono import WriterId
 from qmf.data.journal import DecisionOutcome, JournalEventType
-from qmf.data.journal_producer import JournalReader, JournalWriter
+from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
 from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
@@ -349,3 +351,65 @@ def test_atc_refuses_stale_admission_and_old_command_owner_before_effects(
     )
     assert is_refusal(refused_epoch)
     assert writer.next_sequence == 0
+
+
+@pytest.mark.parametrize("ack", [None, "ack"])
+def test_atc_refuses_untyped_append_acknowledgments_without_attribute_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ack: object
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    monkeypatch.setattr(writer, "record", lambda *args, **kwargs: Ok(ack))
+    result = execute_alternative_run(
+        _config_payload(),
+        source,
+        _registry(),
+        initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+        expected_command_owner_epoch=18,
+        journal_writer=writer,
+        journal_store=journal,
+    )
+    assert is_refusal(result)
+    assert writer.next_sequence == 0
+    assert (
+        _ok(JournalReader(journal).read_checked(writer.stream_name, for_world=World.REPLAY)) == []
+    )
+
+
+@pytest.mark.parametrize("corrupt_metadata", [False, True])
+def test_atc_refuses_false_physical_receipt_for_a_real_append(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corrupt_metadata: bool
+) -> None:
+    source = _source(tmp_path)
+    journal, writer = _journal(tmp_path)
+    original_record = writer.record
+
+    def false_receipt(*args: object, **kwargs: object) -> Result[JournalAppendReceipt]:
+        actual = original_record(*args, **kwargs)
+        assert is_ok(actual)
+        changes: dict[str, object] = {"fingerprint": _ok(fingerprint({"unrelated": "artifact"}))}
+        if corrupt_metadata:
+            changes.update(
+                world=World.LIVE,
+                sequence=999,
+                is_evidence_bearing=False,
+                retained_forever=False,
+            )
+        false_store = replace(actual.value.store_receipt, **changes)
+        return Ok(replace(actual.value, store_receipt=false_store))
+
+    monkeypatch.setattr(writer, "record", false_receipt)
+    result = execute_alternative_run(
+        _config_payload(),
+        source,
+        _registry(),
+        initial_accounting_state={"cash_units": 2_000_000, "position_units": 0},
+        expected_command_owner_epoch=18,
+        journal_writer=writer,
+        journal_store=journal,
+    )
+    assert is_refusal(result)
+    assert writer.next_sequence == 1  # The append happened; its false acknowledgment was rejected.
+    reopened = _ok(JournalReader(journal).read_checked(writer.stream_name, for_world=World.REPLAY))
+    assert len(reopened) == 1
+    assert reopened[0].event_type is JournalEventType.DECISION
