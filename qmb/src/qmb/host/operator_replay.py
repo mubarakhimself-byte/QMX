@@ -16,6 +16,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from types import ModuleType
 from typing import cast
@@ -146,15 +147,25 @@ def execute_operator_replay(
         )
         if is_refusal(module):
             return module
-        entry = _entrypoint(module.value, binding.value.entrypoint)
-        if is_refusal(entry):
-            return entry
-        built = entry.value(selected_context, binding.value, *registry.value)
-        if is_refusal(built):
-            return built
-        inputs = _runtime_inputs(built.value, binding.value, registry.value)
-        if is_refusal(inputs):
-            return inputs
+        try:
+            entry = _entrypoint(module.value, binding.value.entrypoint)
+            if is_refusal(entry):
+                return entry
+            built = entry.value(selected_context, binding.value, *registry.value)
+            if is_refusal(built):
+                return built
+            inputs = _runtime_inputs(built.value, binding.value, registry.value)
+            if is_refusal(inputs):
+                return inputs
+        finally:
+            # Source lookup for pinned policy classes depends on their module
+            # remaining registered through _runtime_inputs. Remove only modules
+            # loaded from this temporary tree so repeated requests cannot reuse
+            # stale sibling imports.
+            for name, loaded_module in tuple(sys.modules.items()):
+                source_path = getattr(loaded_module, "__file__", None)
+                if isinstance(source_path, str) and Path(source_path).is_relative_to(builder_root):
+                    sys.modules.pop(name, None)
         from qmb.host.replay_execution import execute_recorded_replay_request  # noqa: PLC0415
 
         result = execute_recorded_replay_request(
@@ -176,6 +187,7 @@ def execute_operator_replay(
             return terminal_stamp
         return Ok(
             {
+                "class": "qmb-recorded-replay-result-v1",
                 "ct32_fp1": ct32.value.value,
                 "evidence_ref": result.value.request_ref.value,
                 "run_fp1": result.value.run_fp1.value,
@@ -459,9 +471,24 @@ def _runtime_inputs(
     if is_refusal(actual_policy):
         return actual_policy
     if dict(actual_policy.value) != dict(binding.policy_identity):
+        actual_policy_fp = fingerprint(actual_policy.value)
+        expected_policy_fp = fingerprint(binding.policy_identity)
+        actual_fp_value = (
+            actual_policy_fp.value.value if not is_refusal(actual_policy_fp) else None
+        )
+        expected_fp_value = (
+            expected_policy_fp.value.value if not is_refusal(expected_policy_fp) else None
+        )
         return policy(
             "policy_identity",
             "typed execution ports exactly match the operator's pinned runtime policy",
+            actual_fp1=actual_fp_value,
+            expected_fp1=expected_fp_value,
+            fields=[
+                key
+                for key in set(actual_policy.value) | set(binding.policy_identity)
+                if actual_policy.value.get(key) != binding.policy_identity.get(key)
+            ],
         )
     if config.keys.get(OPERATOR_BINDING_CONFIG_KEY) != binding.descriptor_fp1.value:
         return policy(
@@ -478,8 +505,8 @@ def _runtime_inputs(
         )
     for key, expected in (
         ("bot", binding.record_refs["bot"]),
-        ("book", binding.record_refs["book"]),
-        ("bms", binding.record_refs["bms"]),
+        ("book", registry[1].source_fp1),
+        ("bms", registry[2].source_fp1),
     ):
         actual = {
             "bot": config.bot_fp1,
@@ -538,19 +565,31 @@ def _runtime_policy_identity(
     execution_identity.pop("config_fp1", None)
     config_keys = dict(config.keys)
     config_keys.pop(OPERATOR_BINDING_CONFIG_KEY, None)
-    return Ok(
-        {
+    identity: dict[str, object] = {
             "class": "qmb-operator-replay-policy-v1",
             "builder_fp1": builder_fp1.value,
             "config_policy": {
                 "book_fp1": config.book_fp1.value,
                 "bms_fp1": config.bms_fp1.value,
+                "book_fragment_fp1": config.book_fragment_fp1.value,
+                "bms_fragment_fp1": config.bms_fragment_fp1.value,
                 "bot_fp1": config.bot_fp1.value,
+                "clock": config.clock,
+                "condition_preset_fp1": [item.value for item in config.condition_preset_fp1],
+                "data_provenance": config.data_provenance,
+                "format_version": config.format_version,
                 "keys": config_keys,
+                "world": config.world.value,
+                "starting_capital": (
+                    config.starting_capital.fp1_identity()
+                    if config.starting_capital is not None
+                    else None
+                ),
+                "seed_overridden": config.seed_overridden,
+                "fold_rating": config.fold_rating,
             },
             "execution": execution_identity,
             "book_admission": {
-                "binding_fp1": admission.binding.fingerprint.value,
                 "close_reasons": close_reasons,
                 "exit_logic_ref": exit_ref.value,
                 "exit_logic_module_source_fp1": exit_source.value,
@@ -569,7 +608,19 @@ def _runtime_policy_identity(
                 "lot_step": admission.lot_step.fp1_identity(),
             },
         }
-    )
+    normalized = _canonical_policy_graph(identity, "policy_identity")
+    if is_refusal(normalized):
+        return normalized
+    normalized_value: object = normalized.value
+    if not isinstance(normalized_value, Mapping):
+        return invalid("policy_identity", "derived operator policy identity is a mapping")
+    mapped_raw = cast(Mapping[object, object], normalized_value)
+    mapped: dict[str, object] = {}
+    for key, item in mapped_raw.items():
+        if not isinstance(key, str):
+            return invalid("policy_identity", "derived policy identity keys are strings")
+        mapped[key] = item
+    return Ok(mapped)
 
 
 def _typed_identity(value: object, field: str) -> Result[Mapping[str, object]]:
@@ -582,7 +633,59 @@ def _typed_identity(value: object, field: str) -> Result[Mapping[str, object]]:
         return invalid(field, "runtime policy identity evaluates successfully", error=str(exc))
     if not isinstance(raw, Mapping):
         return invalid(field, "runtime policy fp1 identity returns a mapping")
-    return Ok(cast(Mapping[str, object], raw))
+    normalized = _canonical_policy_graph(cast(Mapping[object, object], raw), field)
+    if is_refusal(normalized):
+        return normalized
+    normalized_value: object = normalized.value
+    if not isinstance(normalized_value, Mapping):
+        return invalid(field, "runtime policy identity normalizes to a mapping")
+    mapped_raw = cast(Mapping[object, object], normalized_value)
+    mapped: dict[str, object] = {}
+    for key, item in mapped_raw.items():
+        if not isinstance(key, str):
+            return invalid(field, "normalized policy identity keys are strings")
+        mapped[key] = item
+    return Ok(mapped)
+
+
+def _canonical_policy_graph(value: object, field: str) -> Result[object]:
+    """Project typed policy objects to stable JSON identity without hidden values."""
+    if isinstance(value, Fingerprint):
+        return Ok(value.value)
+    if value is None or type(value) in (str, int, bool):
+        return Ok(value)
+    if isinstance(value, float):
+        return invalid(field, "operator policy identity contains exact JSON values only")
+    if isinstance(value, Enum):
+        enum_value = value.value
+        if isinstance(enum_value, str):
+            return Ok(enum_value)
+        return invalid(field, "operator policy enums expose string identity values")
+    if isinstance(value, Mapping):
+        result: dict[str, object] = {}
+        for key, item in cast(Mapping[object, object], value).items():
+            if not isinstance(key, str):
+                return invalid(field, "operator policy identity keys are strings")
+            normalized = _canonical_policy_graph(item, field)
+            if is_refusal(normalized):
+                return normalized
+            result[key] = normalized.value
+        return Ok(result)
+    if isinstance(value, (tuple, list)):
+        result_items: list[object] = []
+        for item in cast("tuple[object, ...] | list[object]", value):
+            normalized = _canonical_policy_graph(item, field)
+            if is_refusal(normalized):
+                return normalized
+            result_items.append(normalized.value)
+        return Ok(result_items)
+    identity = getattr(value, "fp1_identity", None)
+    if callable(identity):
+        try:
+            return _canonical_policy_graph(identity(), field)
+        except Exception as exc:  # operator policy boundary
+            return invalid(field, "operator policy identity evaluates successfully", error=str(exc))
+    return invalid(field, "operator policy contains only values with canonical identity")
 
 
 def _require_pinned_implementation(
@@ -624,8 +727,10 @@ def _load_builder(root: Path, files: Mapping[str, str], entrypoint: str) -> Resu
     module = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(root))
     try:
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)
     except Exception as exc:  # operator-authored builder boundary
+        sys.modules.pop(module_name, None)
         return policy("operator_builder", "pinned runtime builder imports cleanly", error=str(exc))
     finally:
         sys.path.pop(0)

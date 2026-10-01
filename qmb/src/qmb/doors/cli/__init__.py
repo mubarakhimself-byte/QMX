@@ -1980,6 +1980,8 @@ def _format_ok(value: object) -> str:
         return json.dumps(_jsonable_payload(value.fp1_identity()), ensure_ascii=False)
     if isinstance(value, Mapping):
         mapping = cast("Mapping[str, object]", value)
+        if mapping.get("class") == "qmb-recorded-replay-result-v1":
+            return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         verb = mapping.get("verb")
         if verb in {
             "host.start",
