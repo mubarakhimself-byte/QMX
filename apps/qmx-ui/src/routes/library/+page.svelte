@@ -8,14 +8,15 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import * as Resizable from "$lib/components/ui/resizable";
+  import X from "@lucide/svelte/icons/x";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
   import PageHeader from "$lib/workbench/PageHeader.svelte";
   import EmptyState from "$lib/workbench/EmptyState.svelte";
   import { workbench } from "$lib/workbench/workbench.svelte";
+  import AssetCard, { type Asset } from "$lib/qmx/AssetCard.svelte";
+  import { DEMO_ASSETS } from "$lib/demo/assets";
   import { cn } from "$lib/utils";
 
   type Article = {
@@ -32,7 +33,7 @@
   // Hit kinds stay separate; each keeps its own actions (UI LIBRARY §5).
   const KINDS = [
     { id: "knowledge", label: "Knowledge", icon: BookOpen },
-    { id: "artifact", label: "Artifacts", icon: Package },
+    { id: "artifact", label: "Bots & models", icon: Package },
     { id: "contribution", label: "Apps & workflows", icon: Blocks },
   ] as const;
   let kind = $state<string>("knowledge");
@@ -43,6 +44,7 @@
   let query = $state("");
   let section = $state<string | null>(null);
   let openId = $state<number | null>(null);
+  let assetId = $state<string | null>(null);
 
   onMount(async () => {
     if (!demo) return;
@@ -57,22 +59,56 @@
     }
   });
 
+  /** Stable hue per section so cards are scannable by colour and label. */
+  const HUES = [
+    "--chart-1",
+    "--chart-2",
+    "--chart-3",
+    "--chart-4",
+    "--chart-5",
+  ];
   const sections = $derived.by(() => {
     const counts: Record<string, number> = {};
     for (const a of articles) counts[a.section] = (counts[a.section] ?? 0) + 1;
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   });
-  const hits = $derived.by(() => {
-    const q = query.trim().toLowerCase();
-    return articles.filter(
+  const hueOf = (s: string) =>
+    HUES[
+      Math.max(
+        0,
+        sections.findIndex(([n]) => n === s),
+      ) % HUES.length
+    ];
+  const q = $derived(query.trim().toLowerCase());
+  const hits = $derived(
+    articles.filter(
       (a) =>
         (!section || a.section === section) &&
         (!q ||
           a.title.toLowerCase().includes(q) ||
           a.summary.toLowerCase().includes(q)),
-    );
-  });
+    ),
+  );
   const open = $derived(articles.find((a) => a.id === openId));
+  const assets = $derived(
+    DEMO_ASSETS.filter((a: Asset) =>
+      kind === "artifact"
+        ? a.kind === "bot" || a.kind === "model"
+        : a.kind === "app" || a.kind === "workflow",
+    ).filter(
+      (a) =>
+        !q ||
+        a.name.toLowerCase().includes(q) ||
+        a.role.toLowerCase().includes(q),
+    ),
+  );
+  const chip = (on: boolean) =>
+    cn(
+      "flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
+      on
+        ? "bg-primary text-primary-foreground border-transparent"
+        : "hover:bg-muted",
+    );
 </script>
 
 <div class="flex h-full flex-col">
@@ -81,8 +117,8 @@
       class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
     >
       <FlaskConical class="text-warning size-3.5" />
-      Demo Library. Titles and short excerpts of MQL5 articles from your local catalog;
-      search runs in this window, not on the daemon.
+      Demo Library. MQL5 article titles and excerpts from your local catalog; bots,
+      models, apps and workflows are samples.
     </div>
   {/if}
   <PageHeader title="Library" subtitle="Everything QMX knows and has made">
@@ -97,150 +133,170 @@
     {/snippet}
   </PageHeader>
 
-  {#if kind !== "knowledge" || !demo}
+  {#if !demo}
     <EmptyState
       class="flex-1"
       icon={KINDS.find((k) => k.id === kind)?.icon}
-      title={`No ${KINDS.find((k) => k.id === kind)?.label.toLowerCase()}`}
+      title="Nothing here yet"
       description="Items appear here once QMX is connected to its daemon."
     />
   {:else}
-    <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-      <Resizable.Pane defaultSize={18} minSize={12} maxSize={28}>
-        <nav aria-label="Sections" class="bg-panel h-full overflow-auto p-2">
-          <p class="panel-label px-2 pb-1.5">Sections</p>
-          <ul class="flex flex-col text-sm">
-            <li>
-              <button
-                type="button"
-                class={cn(
-                  "hover:bg-muted flex w-full justify-between rounded-sm px-2 py-1",
-                  !section && "bg-muted",
-                )}
-                aria-current={!section ? "true" : undefined}
-                onclick={() => (section = null)}
-              >
-                All <span class="text-muted-foreground tabular"
-                  >{articles.length}</span
-                >
-              </button>
-            </li>
-            {#each sections as [name, n] (name)}
-              <li>
-                <button
-                  type="button"
-                  class={cn(
-                    "hover:bg-muted flex w-full justify-between gap-2 rounded-sm px-2 py-1 text-left",
-                    section === name && "bg-muted",
-                  )}
-                  aria-current={section === name ? "true" : undefined}
-                  onclick={() => (section = name)}
-                >
-                  <span class="truncate">{name}</span>
-                  <span class="text-muted-foreground tabular">{n}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </nav>
-      </Resizable.Pane>
-      <Resizable.Handle />
-      <Resizable.Pane defaultSize={42} minSize={28}>
-        <section aria-label="Results" class="flex h-full flex-col">
-          <div class="relative border-b p-2">
+    <div class="flex min-h-0 flex-1">
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="flex flex-col gap-2 px-4 pt-3 pb-2">
+          <div class="relative max-w-2xl">
             <Search
-              class="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2"
+              class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
             />
             <Input
               bind:value={query}
-              class="h-8 pl-8"
-              placeholder="Search titles and excerpts"
+              class="well h-9 border-0 pl-9"
+              placeholder={kind === "knowledge"
+                ? "Search titles and excerpts"
+                : "Search names and roles"}
               aria-label="Search the Library"
             />
           </div>
-          <p class="text-muted-foreground px-3 py-1.5 text-xs" role="status">
-            {#if loadState === "loading"}Loading…{:else if loadState === "failed"}Could
-              not load the demo catalog.{:else}{hits.length} articles{/if}
-          </p>
-          <ul class="min-h-0 flex-1 overflow-auto">
-            {#each hits.slice(0, 200) as a (a.id)}
-              <li>
+          {#if kind === "knowledge"}
+            <div
+              class="flex gap-1.5 overflow-x-auto pb-1"
+              role="group"
+              aria-label="Sections"
+            >
+              <button
+                type="button"
+                class={chip(!section)}
+                aria-pressed={!section}
+                onclick={() => (section = null)}
+              >
+                All <span class="num opacity-70">{articles.length}</span>
+              </button>
+              {#each sections as [name, n] (name)}
                 <button
                   type="button"
-                  class={cn(
-                    "hover:bg-muted/50 flex w-full flex-col gap-1 border-b px-3 py-2 text-left",
-                    openId === a.id && "bg-muted",
-                  )}
-                  aria-current={openId === a.id ? "true" : undefined}
-                  onclick={() => (openId = a.id)}
+                  class={chip(section === name)}
+                  aria-pressed={section === name}
+                  onclick={() => (section = section === name ? null : name)}
                 >
-                  <span class="text-sm leading-snug font-medium">{a.title}</span
-                  >
                   <span
-                    class="text-muted-foreground flex items-center gap-2 text-xs"
-                  >
-                    <span class="tabular">{a.published}</span>
-                    <Badge variant="secondary" class="h-4 px-1.5 text-[10px]"
-                      >{a.section}</Badge
-                    >
-                    {#if a.part}<span>Part {a.part}</span>{/if}
-                  </span>
-                  <span class="text-muted-foreground line-clamp-2 text-xs"
-                    >{a.summary}</span
-                  >
+                    class="size-2 rounded-full"
+                    style="background: var({hueOf(name)})"
+                  ></span>
+                  {name} <span class="num opacity-70">{n}</span>
                 </button>
-              </li>
-            {/each}
-          </ul>
-        </section>
-      </Resizable.Pane>
-      <Resizable.Handle />
-      <Resizable.Pane defaultSize={40} minSize={25}>
-        {#if open}
-          <article class="bg-panel flex h-full flex-col overflow-auto p-4">
-            <p class="panel-label">Knowledge · MQL5 article</p>
-            <h2 class="mt-1 text-lg leading-snug font-semibold">
-              {open.title}
-            </h2>
-            <p class="text-muted-foreground mt-1 text-xs">
-              {open.published} · {open.section}{open.series
-                ? ` · ${open.series}`
-                : ""}
-            </p>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onclick={() => workbench.addRef(open.title)}
-              >
-                <MessageSquarePlus /> Add to copilot
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                href={open.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink /> Open original
-              </Button>
+              {/each}
             </div>
-            <p class="panel-label mt-5">Excerpt</p>
-            <p class="mt-1 text-sm leading-relaxed">{open.summary}</p>
-            <p class="text-muted-foreground mt-5 text-xs">
-              A generated summary, key points and the full text come from the
-              daemon's Library once it is connected.
+          {/if}
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-auto px-4 pb-4">
+          {#if kind === "knowledge"}
+            <p class="text-muted-foreground mb-2 text-sm" role="status">
+              {#if loadState === "loading"}Loading…{:else if loadState === "failed"}Could
+                not load the demo catalog.{:else}{hits.length} articles{/if}
             </p>
-          </article>
-        {:else}
-          <EmptyState
-            class="bg-panel h-full"
-            icon={BookOpen}
-            title="Select an article"
-            description="Read its excerpt, add it to a copilot conversation, or open the original."
-          />
-        {/if}
-      </Resizable.Pane>
-    </Resizable.PaneGroup>
+            <ul
+              class="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3"
+              aria-label="Articles"
+            >
+              {#each hits.slice(0, 120) as a (a.id)}
+                <li>
+                  <button
+                    type="button"
+                    class={cn(
+                      "surface flex h-full w-full flex-col gap-2 overflow-hidden rounded-lg p-4 text-left transition-transform hover:-translate-y-0.5",
+                      openId === a.id && "ring-ring ring-2",
+                    )}
+                    aria-current={openId === a.id ? "true" : undefined}
+                    onclick={() => (openId = a.id)}
+                  >
+                    <span class="flex items-center gap-2 text-xs">
+                      <span
+                        class="h-3 w-1 rounded-full"
+                        style="background: var({hueOf(a.section)})"
+                      ></span>
+                      <span class="text-muted-foreground">{a.section}</span>
+                      {#if a.part}<span class="text-muted-foreground"
+                          >· Part {a.part}</span
+                        >{/if}
+                      <span class="num text-muted-foreground ml-auto"
+                        >{a.published}</span
+                      >
+                    </span>
+                    <span class="text-[15px] leading-snug font-semibold"
+                      >{a.title}</span
+                    >
+                    <span
+                      class="text-muted-foreground line-clamp-3 text-sm leading-relaxed"
+                      >{a.summary}</span
+                    >
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <ul
+              class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+              aria-label="Assets"
+            >
+              {#each assets as a (a.id)}
+                <li>
+                  <AssetCard
+                    asset={a}
+                    selected={assetId === a.id}
+                    onselect={() => (assetId = a.id)}
+                  />
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      </div>
+
+      {#if kind === "knowledge" && open}
+        <article
+          class="bg-panel flex w-[28rem] shrink-0 flex-col overflow-auto border-l p-5"
+        >
+          <div class="flex items-start gap-2">
+            <p class="panel-label">Knowledge · MQL5 article</p>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              class="ml-auto"
+              aria-label="Close article"
+              onclick={() => (openId = null)}
+            >
+              <X />
+            </Button>
+          </div>
+          <h2 class="mt-1 text-xl leading-snug font-semibold">{open.title}</h2>
+          <p class="text-muted-foreground mt-1 text-sm">
+            {open.published} · {open.section}{open.series
+              ? ` · ${open.series}`
+              : ""}
+          </p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <Button size="sm" onclick={() => workbench.addRef(open.title)}>
+              <MessageSquarePlus /> Add to copilot
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              href={open.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink /> Open original
+            </Button>
+          </div>
+          <p class="panel-label mt-6">Excerpt</p>
+          <p class="mt-1.5 text-[15px] leading-relaxed">{open.summary}</p>
+          <p class="text-muted-foreground mt-6 text-sm">
+            A generated summary, key points and the full text come from the
+            daemon's Library once it is connected.
+          </p>
+        </article>
+      {/if}
+    </div>
   {/if}
 </div>

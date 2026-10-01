@@ -26,6 +26,20 @@
   import CandleChart from "$lib/demo/CandleChart.svelte";
   import { demoCandles } from "$lib/demo/data";
   import { cn } from "$lib/utils";
+  import { page } from "$app/state";
+  import { resolve } from "$app/paths";
+  import Minimize2 from "@lucide/svelte/icons/minimize-2";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+
+  /** Focus hides sessions and preview; ?focus=1 opens straight into it. */
+  let focus = $state(page.url.searchParams.get("focus") === "1");
+  function popOut() {
+    window.open(
+      resolve("/copilot") + "?focus=1",
+      "qmx-copilot",
+      "popup,width=1280,height=900",
+    );
+  }
 
   // Work-area tabs are client-local preview hosts; opening one implies no grant.
   const WORK_TABS = [
@@ -115,63 +129,81 @@
       Demo conversation. Sample messages, tool calls and results; nothing was run.
     </div>
   {/if}
-  <PageHeader title="Copilot" subtitle="Conversation workspace" />
+  <PageHeader title="Copilot" subtitle="Conversation workspace">
+    {#snippet actions()}
+      <Button
+        variant={focus ? "secondary" : "ghost"}
+        size="sm"
+        aria-pressed={focus}
+        onclick={() => (focus = !focus)}
+      >
+        {#if focus}<Minimize2 /> Exit focus{:else}<Maximize2 /> Focus{/if}
+      </Button>
+      <Button variant="ghost" size="sm" onclick={popOut}>
+        <ExternalLink /> New window
+      </Button>
+    {/snippet}
+  </PageHeader>
 
   <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-    <Resizable.Pane defaultSize={18} minSize={14} maxSize={30}>
-      <aside
-        aria-label="Sessions"
-        class="bg-panel flex h-full flex-col gap-1.5 p-2"
-      >
-        <Button variant="outline" size="sm" class="justify-start" disabled>
-          <Plus /> New session
-        </Button>
-        <div class="relative">
-          <Search
-            class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-          />
-          <Input
-            placeholder="Search sessions"
-            aria-label="Search sessions"
-            class="h-8 pl-8"
-            disabled
-          />
-        </div>
-        {#if demo}
-          <ul class="flex flex-col gap-0.5">
-            {#each SESSIONS as s (s.id)}
-              <li>
-                <button
-                  type="button"
-                  class={cn(
-                    "hover:bg-muted flex w-full flex-col rounded-sm px-2 py-1.5 text-left",
-                    activeSession === s.id && "bg-muted",
-                  )}
-                  aria-current={activeSession === s.id ? "true" : undefined}
-                  onclick={() => (activeSession = s.id)}
-                >
-                  <span class="truncate text-sm">{s.title}</span>
-                  <span class="text-muted-foreground text-xs">{s.when}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <EmptyState
-            class="flex-1"
-            title="No sessions"
-            description="Sessions are kept by the daemon. Connect to see your history."
-          />
-        {/if}
-      </aside>
-    </Resizable.Pane>
-    <Resizable.Handle />
+    {#if !focus}
+      <Resizable.Pane defaultSize={18} minSize={14} maxSize={30}>
+        <aside
+          aria-label="Sessions"
+          class="bg-panel flex h-full flex-col gap-1.5 p-2"
+        >
+          <Button variant="outline" size="sm" class="justify-start" disabled>
+            <Plus /> New session
+          </Button>
+          <div class="relative">
+            <Search
+              class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+            />
+            <Input
+              placeholder="Search sessions"
+              aria-label="Search sessions"
+              class="h-8 pl-8"
+              disabled
+            />
+          </div>
+          {#if demo}
+            <ul class="flex flex-col gap-0.5">
+              {#each SESSIONS as s (s.id)}
+                <li>
+                  <button
+                    type="button"
+                    class={cn(
+                      "hover:bg-muted flex w-full flex-col rounded-sm px-2 py-1.5 text-left",
+                      activeSession === s.id && "bg-muted",
+                    )}
+                    aria-current={activeSession === s.id ? "true" : undefined}
+                    onclick={() => (activeSession = s.id)}
+                  >
+                    <span class="truncate text-sm">{s.title}</span>
+                    <span class="text-muted-foreground text-xs">{s.when}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <EmptyState
+              class="flex-1"
+              title="No sessions"
+              description="Sessions are kept by the daemon. Connect to see your history."
+            />
+          {/if}
+        </aside>
+      </Resizable.Pane>
+      <Resizable.Handle />
+    {/if}
 
     <Resizable.Pane defaultSize={46} minSize={30}>
-      <section aria-label="Conversation" class="flex h-full flex-col">
+      <section aria-label="Conversation" class="bg-panel flex h-full flex-col">
         <div class="min-h-0 flex-1 overflow-auto">
           {#if demo && activeSession === "s1"}
-            <div class="mx-auto flex max-w-3xl flex-col gap-4 p-4 text-sm">
+            <div
+              class="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-6 text-[15px] leading-relaxed"
+            >
               <div class="bg-muted ml-auto max-w-[85%] rounded-md px-3 py-2">
                 Backtest the EURUSD H1 gradient-boosting workflow on 2024–2026
                 and compare it with buy-and-hold.
@@ -179,12 +211,12 @@
               <div class="flex flex-col gap-2">
                 <details class="group rounded-md border">
                   <summary
-                    class="text-muted-foreground flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs"
+                    class="text-muted-foreground flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
                   >
                     <Wrench class="size-3.5" /> Used {TOOLS.length} tools
                   </summary>
                   <ul
-                    class="flex flex-col gap-1 border-t px-3 py-2 font-mono text-xs"
+                    class="flex flex-col gap-1.5 border-t px-3 py-2.5 font-mono text-[13px]"
                   >
                     {#each TOOLS as t (t.name)}
                       <li class="flex items-center gap-2">
@@ -206,7 +238,7 @@
                   breakouts; the 2025 Q2 chop accounts for the largest losing
                   streak.
                 </p>
-                <div class="overflow-hidden rounded-md border">
+                <div class="surface overflow-hidden rounded-lg">
                   <div
                     class="bg-panel flex h-8 items-center gap-1 border-b pr-1 pl-3"
                   >
@@ -268,11 +300,11 @@
                       </Tooltip.Root>
                     </div>
                   </div>
-                  <table class="tabular w-full text-xs">
+                  <table class="w-full text-sm">
                     <thead class="text-muted-foreground text-left">
                       <tr>
-                        <th class="px-3 py-1.5 font-medium">Metric</th>
-                        <th class="px-3 text-right font-medium">Strategy</th>
+                        <th class="px-4 py-2 font-medium">Metric</th>
+                        <th class="px-4 text-right font-medium">Strategy</th>
                         <th class="px-3 text-right font-medium"
                           >Buy &amp; hold</th
                         >
@@ -281,8 +313,8 @@
                     <tbody>
                       {#each RESULT as [m, s, b] (m)}
                         <tr class="border-t">
-                          <td class="px-3 py-1.5">{m}</td>
-                          <td class="px-3 text-right font-medium">{s}</td>
+                          <td class="px-4 py-2.5">{m}</td>
+                          <td class="num px-4 text-right font-medium">{s}</td>
                           <td class="text-muted-foreground px-3 text-right"
                             >{b}</td
                           >
@@ -312,48 +344,54 @@
             />
           {/if}
         </div>
-        <div class="mx-auto w-full max-w-3xl p-3">
+        <div class="mx-auto w-full max-w-4xl px-6 pb-5">
           <Composer
+            size={focus ? "lg" : "md"}
             refs={workbench.copilotRefs}
             onremoveref={(r) => workbench.removeRef(r)}
           />
         </div>
       </section>
     </Resizable.Pane>
-    <Resizable.Handle />
+    {#if !focus}
+      <Resizable.Handle />
 
-    <Resizable.Pane defaultSize={36} minSize={20}>
-      <Tabs.Root bind:value={workTab} class="flex h-full flex-col gap-0">
-        <div class="flex h-9 shrink-0 items-center border-b px-2">
-          <Tabs.List variant="line" aria-label="Work area">
-            {#each WORK_TABS as t (t.id)}
-              <Tabs.Trigger value={t.id}><t.icon />{t.label}</Tabs.Trigger>
-            {/each}
-          </Tabs.List>
-        </div>
-        {#each WORK_TABS as t (t.id)}
-          <Tabs.Content value={t.id} class="min-h-0 flex-1">
-            {#if t.id === "app" && previewing}
-              <div class="flex h-full flex-col p-2">
-                <WidgetFrame
-                  title="EURUSD · strategy period (demo)"
-                  class="flex-1"
-                  onclose={() => (previewing = false)}
-                >
-                  <CandleChart {candles} />
-                </WidgetFrame>
-              </div>
-            {:else}
-              <EmptyState
-                class="h-full"
-                icon={t.icon}
-                title={t.title}
-                description={t.text}
-              />
-            {/if}
-          </Tabs.Content>
-        {/each}
-      </Tabs.Root>
-    </Resizable.Pane>
+      <Resizable.Pane defaultSize={36} minSize={20}>
+        <Tabs.Root
+          bind:value={workTab}
+          class="bg-panel flex h-full flex-col gap-0"
+        >
+          <div class="flex h-9 shrink-0 items-center border-b px-2">
+            <Tabs.List variant="line" aria-label="Work area">
+              {#each WORK_TABS as t (t.id)}
+                <Tabs.Trigger value={t.id}><t.icon />{t.label}</Tabs.Trigger>
+              {/each}
+            </Tabs.List>
+          </div>
+          {#each WORK_TABS as t (t.id)}
+            <Tabs.Content value={t.id} class="min-h-0 flex-1">
+              {#if t.id === "app" && previewing}
+                <div class="flex h-full flex-col p-2">
+                  <WidgetFrame
+                    title="EURUSD · strategy period (demo)"
+                    class="flex-1"
+                    onclose={() => (previewing = false)}
+                  >
+                    <CandleChart {candles} />
+                  </WidgetFrame>
+                </div>
+              {:else}
+                <EmptyState
+                  class="h-full"
+                  icon={t.icon}
+                  title={t.title}
+                  description={t.text}
+                />
+              {/if}
+            </Tabs.Content>
+          {/each}
+        </Tabs.Root>
+      </Resizable.Pane>
+    {/if}
   </Resizable.PaneGroup>
 </div>

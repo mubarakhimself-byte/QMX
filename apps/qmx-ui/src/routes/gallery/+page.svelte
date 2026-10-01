@@ -1,210 +1,190 @@
 <script lang="ts">
-  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import PanelRight from "@lucide/svelte/icons/panel-right";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import PageHeader from "$lib/workbench/PageHeader.svelte";
   import WidgetFrame, {
     type WidgetState,
   } from "$lib/workbench/WidgetFrame.svelte";
-  import CopilotColumn from "$lib/workbench/CopilotColumn.svelte";
+  import StatTile from "$lib/workbench/StatTile.svelte";
+  import EmptyState from "$lib/workbench/EmptyState.svelte";
+  import Composer from "$lib/workbench/Composer.svelte";
+  import DataTable, { type Column } from "$lib/qmx/DataTable.svelte";
+  import AssetCard from "$lib/qmx/AssetCard.svelte";
+  import CandleChart from "$lib/demo/CandleChart.svelte";
+  import Sparkline from "$lib/demo/Sparkline.svelte";
+  import { CATALOG } from "$lib/qmx/catalog";
+  import { DEMO_ASSETS } from "$lib/demo/assets";
+  import { demoCandles } from "$lib/demo/data";
+  import { cn } from "$lib/utils";
 
-  // Design-review gallery: a sample mini-app shape. Not an installed app, no live data.
-  const NAV = ["Overview", "Signals", "Risk"];
-  let navTab = $state("Overview");
-  let copilotOpen = $state(true);
-  let expanded = $state<string | null>(null);
-
-  const SAMPLE_ROWS = [
-    ["Sample A", "1.000", "+0.4%"],
-    ["Sample B", "2.000", "−1.2%"],
-    ["Sample C", "3.000", "+2.1%"],
-    ["Sample D", "4.000", "−0.3%"],
+  // Component library: every catalog entry rendered live, with the spec the
+  // copilot reads. Sample content only.
+  let selected = $state(CATALOG[0].type);
+  const entry = $derived(CATALOG.find((c) => c.type === selected)!);
+  const groups = [...new Set(CATALOG.map((c) => c.group))];
+  const STATES: WidgetState[] = [
+    "ready",
+    "loading",
+    "empty",
+    "unavailable",
+    "failed",
+    "stale",
+    "reconnecting",
+    "unknown",
   ];
-  const SPARK = [8, 9, 7, 10, 12, 11, 13, 12, 15, 14, 16, 18, 17, 19];
-
-  const STATES: { title: string; state: WidgetState; reason?: string }[] = [
-    { title: "Loading widget", state: "loading" },
-    {
-      title: "Empty widget",
-      state: "empty",
-      reason: "No rows match this filter.",
-    },
-    {
-      title: "Unavailable widget",
-      state: "unavailable",
-      reason: "Market data provider is not configured.",
-    },
-    {
-      title: "Failed widget",
-      state: "failed",
-      reason: "Query refused: instrument not found.",
-    },
-    {
-      title: "Stale widget",
-      state: "stale",
-      reason: "Snapshot from 14:02. Live feed paused.",
-    },
-    { title: "Reconnecting widget", state: "reconnecting" },
-  ];
-
-  const sparkPath = $derived.by(() => {
-    const max = Math.max(...SPARK);
-    const min = Math.min(...SPARK);
-    return SPARK.map(
-      (v, i) =>
-        `${i === 0 ? "M" : "L"}${(i / (SPARK.length - 1)) * 100},${40 - ((v - min) / (max - min)) * 36 - 2}`,
-    ).join(" ");
-  });
+  const table = CATALOG.find((c) => c.type === "DataTable")!.example as {
+    columns: Column[];
+    rows: Record<string, string | number>[];
+  };
+  const candles = demoCandles(90, 1.08, 5);
 </script>
 
-{#snippet table()}
-  <table class="tabular w-full text-sm">
-    <thead class="text-muted-foreground text-left text-xs">
-      <tr
-        ><th class="py-1.5 font-medium">Item</th><th class="font-medium"
-          >Value</th
-        ><th class="text-right font-medium">Change</th></tr
-      >
-    </thead>
-    <tbody>
-      {#each SAMPLE_ROWS as [name, value, change] (name)}
-        <tr class="border-t">
-          <td class="py-1.5">{name}</td>
-          <td>{value}</td>
-          <td
-            class="text-right {change.startsWith('+')
-              ? 'text-success'
-              : 'text-destructive'}"
-          >
-            {change.startsWith("+") ? "▲" : "▼"}
-            {change}
-          </td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet chart()}
-  <div class="flex items-end gap-4">
-    <div>
-      <p class="text-muted-foreground text-xs">Sample value</p>
-      <p class="tabular text-xl font-semibold">19.00</p>
-      <p class="text-success text-xs">▲ +1.00 (+5.6%)</p>
-    </div>
-    <svg
-      viewBox="0 0 100 40"
-      preserveAspectRatio="none"
-      class="text-chart-1 h-16 flex-1"
-      aria-hidden="true"
-    >
-      <path
-        d={sparkPath}
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
-  </div>
-{/snippet}
-
-<svelte:head><title>Component gallery · QMX</title></svelte:head>
-
 <div class="flex h-full flex-col">
-  <div
-    class="bg-warning/15 text-foreground flex h-8 shrink-0 items-center gap-2 px-4 text-xs"
-  >
-    <FlaskConical class="text-warning size-3.5" />
-    Component gallery. Sample layout and sample numbers, not an installed app and
-    not market data.
-  </div>
-
-  <!-- Pack-declared app navigation (nav[]); omitted when a pack declares none. -->
-  <header class="flex h-11 shrink-0 items-center gap-3 border-b px-3">
-    <span class="text-sm font-semibold">Sample research app</span>
-    <Tabs.Root bind:value={navTab}>
-      <Tabs.List variant="line">
-        {#each NAV as n (n)}<Tabs.Trigger value={n}>{n}</Tabs.Trigger>{/each}
-      </Tabs.List>
-    </Tabs.Root>
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      class="ml-auto"
-      aria-label="Toggle app copilot"
-      aria-pressed={copilotOpen}
-      onclick={() => (copilotOpen = !copilotOpen)}
+  <PageHeader
+    title="Component library"
+    subtitle="The building blocks mini apps are composed from"
+  />
+  <div class="flex min-h-0 flex-1">
+    <nav
+      aria-label="Components"
+      class="bg-panel w-56 shrink-0 overflow-auto border-r p-2"
     >
-      <PanelRight />
-    </Button>
-  </header>
+      {#each groups as g (g)}
+        <p class="panel-label px-2 pt-3 pb-1">{g}</p>
+        <ul>
+          {#each CATALOG.filter((c) => c.group === g) as c (c.type)}
+            <li>
+              <button
+                type="button"
+                class={cn(
+                  "hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-sm",
+                  selected === c.type && "bg-muted font-medium",
+                )}
+                aria-current={selected === c.type ? "true" : undefined}
+                onclick={() => (selected = c.type)}>{c.type}</button
+              >
+            </li>
+          {/each}
+        </ul>
+      {/each}
+    </nav>
 
-  <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-    <Resizable.Pane defaultSize={72} minSize={45}>
-      <div class="h-full overflow-auto p-2">
-        {#if expanded}
-          <!-- Expand is a layout change with an explicit return, not a new destination. -->
-          <div class="flex h-full flex-col gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              class="self-start"
-              onclick={() => (expanded = null)}
-            >
-              <ArrowLeft /> Back to {navTab}
-            </Button>
-            <WidgetFrame
-              title={expanded}
-              class="flex-1"
-              onclose={() => (expanded = null)}
-            >
-              {@render chart()}
-              <div class="mt-4">{@render table()}</div>
-            </WidgetFrame>
+    <div class="min-h-0 flex-1 overflow-auto p-5">
+      <div class="mx-auto flex max-w-5xl flex-col gap-5">
+        <div>
+          <p class="panel-label">{entry.group}</p>
+          <h2 class="text-2xl font-semibold">{entry.type}</h2>
+          <p class="text-muted-foreground mt-1 max-w-3xl text-[15px]">
+            {entry.description}
+          </p>
+        </div>
+
+        <section aria-label="Preview" class="flex flex-col gap-3">
+          <p class="panel-label">Preview</p>
+          {#if selected === "WidgetFrame"}
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {#each STATES as s (s)}
+                <WidgetFrame
+                  title={s}
+                  state={s}
+                  reason={s === "ready" ? undefined : "Sample reason text."}
+                  class="h-44"
+                >
+                  <DataTable
+                    columns={table.columns}
+                    rows={table.rows.slice(0, 2)}
+                    dense
+                  />
+                </WidgetFrame>
+              {/each}
+            </div>
+          {:else if selected === "StatTile"}
+            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <StatTile
+                label="Paper equity"
+                value="$104,812"
+                hint="+$1,204 today"
+              />
+              <StatTile label="Open risk" value="1.9%" hint="of 5% limit" />
+              <StatTile label="No value yet" hint="Not connected" />
+            </div>
+          {:else if selected === "DataTable"}
+            <div class="surface rounded-lg p-4">
+              <DataTable columns={table.columns} rows={table.rows} />
+            </div>
+          {:else if selected === "CandleChart"}
+            <div class="surface h-80 rounded-lg p-3">
+              <CandleChart
+                {candles}
+                markers={[
+                  { time: candles[60].time, text: "Agent · sample signal" },
+                ]}
+              />
+            </div>
+          {:else if selected === "Sparkline"}
+            <div class="surface flex gap-6 rounded-lg p-4">
+              <Sparkline values={[3, 4, 3.5, 5, 6, 5.5, 7]} class="h-10 w-40" />
+              <Sparkline values={[7, 6, 6.5, 5, 4, 4.5, 3]} class="h-10 w-40" />
+            </div>
+          {:else if selected === "AssetCard"}
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {#each DEMO_ASSETS.slice(0, 8) as a (a.id)}<AssetCard
+                  asset={a}
+                />{/each}
+            </div>
+          {:else if selected === "EmptyState"}
+            <div class="surface rounded-lg">
+              <EmptyState
+                title="No jobs running"
+                description="Backtests and workflows in progress appear here."
+              />
+            </div>
+          {:else if selected === "Composer"}
+            <div class="max-w-2xl">
+              <Composer
+                placeholder="Ask about this app…"
+                refs={["EURUSD chart"]}
+              />
+            </div>
+          {/if}
+        </section>
+
+        <section aria-label="Props" class="flex flex-col gap-2">
+          <p class="panel-label">Props</p>
+          <div class="surface overflow-hidden rounded-lg">
+            <table class="w-full text-sm">
+              <thead class="text-muted-foreground text-left text-xs">
+                <tr
+                  ><th class="px-4 py-2 font-medium">Name</th><th
+                    class="font-medium">Type</th
+                  ><th class="px-4 font-medium">Description</th></tr
+                >
+              </thead>
+              <tbody>
+                {#each Object.entries(entry.props) as [name, p] (name)}
+                  <tr class="border-t">
+                    <td class="px-4 py-2 font-mono text-[13px]"
+                      >{name}{p.required ? "" : "?"}</td
+                    >
+                    <td class="text-muted-foreground font-mono text-[13px]"
+                      >{p.options ? p.options.join(" | ") : p.type}</td
+                    >
+                    <td class="px-4">{p.description}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
-        {:else}
-          <div
-            class="grid auto-rows-[minmax(11rem,auto)] gap-2 md:grid-cols-2 xl:grid-cols-3"
-          >
-            <WidgetFrame
-              title="Price summary"
-              class="xl:col-span-2"
-              onexpand={() => (expanded = "Price summary")}
-            >
-              {#snippet controls()}<Badge variant="secondary">SAMPLE</Badge
-                >{/snippet}
-              {@render chart()}
-            </WidgetFrame>
-            <WidgetFrame
-              title="Key figures"
-              onexpand={() => (expanded = "Key figures")}
-            >
-              {@render table()}
-            </WidgetFrame>
-            {#each STATES as s (s.title)}
-              <WidgetFrame title={s.title} state={s.state} reason={s.reason}>
-                {@render table()}
-              </WidgetFrame>
-            {/each}
-          </div>
-        {/if}
+        </section>
+
+        <section aria-label="Spec" class="flex flex-col gap-2">
+          <p class="panel-label">Spec the copilot reads</p>
+          <pre
+            class="surface overflow-auto rounded-lg p-4 font-mono text-[13px] leading-relaxed">{JSON.stringify(
+              { type: entry.type, props: entry.example },
+              null,
+              2,
+            )}</pre>
+        </section>
       </div>
-    </Resizable.Pane>
-    {#if copilotOpen}
-      <Resizable.Handle />
-      <Resizable.Pane defaultSize={28} minSize={20}>
-        <CopilotColumn
-          title="App copilot"
-          profile="app-use"
-          hint="Shown only for apps that declare a copilot profile. Its history is separate from the main Copilot."
-          placeholder="Ask about this app…"
-          onclose={() => (copilotOpen = false)}
-        />
-      </Resizable.Pane>
-    {/if}
-  </Resizable.PaneGroup>
+    </div>
+  </div>
 </div>

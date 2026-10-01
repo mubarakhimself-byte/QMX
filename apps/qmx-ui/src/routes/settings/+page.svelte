@@ -186,15 +186,16 @@
           </Card.Root>
           <Card.Root size="sm">
             <Card.Header>
-              <Card.Title>Component gallery</Card.Title>
+              <Card.Title>Component library</Card.Title>
               <Card.Description>
-                Every widget state and a sample mini-app layout, for design
-                review. Uses sample content, not live data.
+                Every QMX building block rendered live, with the spec the
+                copilot uses to compose mini apps. For design review. Uses
+                sample content, not live data.
               </Card.Description>
             </Card.Header>
             <Card.Footer>
               <Button size="sm" variant="outline" href="/gallery"
-                >Open gallery</Button
+                >Open library</Button
               >
             </Card.Footer>
           </Card.Root>

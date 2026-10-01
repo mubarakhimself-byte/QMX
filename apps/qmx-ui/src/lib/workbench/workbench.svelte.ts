@@ -22,6 +22,35 @@ export const DEMO_APPS: OpenedApp[] = [
   },
 ];
 
+/**
+ * Model and tool choices shown in the composer. The real lists come from
+ * the daemon's provider and tool registry; these are the demo defaults.
+ */
+export const MODELS = [
+  {
+    id: "opus",
+    label: "Opus 5.5",
+    note: "Most careful; long research and builds",
+  },
+  {
+    id: "sonnet",
+    label: "Sonnet 5.5",
+    note: "Fast and capable; everyday work",
+  },
+  {
+    id: "haiku",
+    label: "Haiku 4.5",
+    note: "Quickest; lookups and small edits",
+  },
+];
+export const TOOLS = [
+  { id: "get_candles", note: "Read price history" },
+  { id: "run_backtest", note: "Backtest a published workflow" },
+  { id: "library.search", note: "Search your Library" },
+  { id: "web.browse", note: "Open pages in the preview browser" },
+  { id: "build_app", note: "Compose a mini app from the component catalog" },
+];
+
 export const THEMES = ["ink", "cobalt", "ember", "plain"] as const;
 export type Theme = (typeof THEMES)[number];
 
@@ -39,6 +68,14 @@ function storedTheme(): Theme {
 class Workbench {
   /** Visual theme: a per-machine preference, never a daemon setting. */
   theme = $state<Theme>(storedTheme());
+  model = $state("opus");
+  tools = $state<string[]>(["get_candles", "run_backtest", "library.search"]);
+
+  toggleTool(id: string) {
+    this.tools = this.tools.includes(id)
+      ? this.tools.filter((t) => t !== id)
+      : [...this.tools, id];
+  }
 
   setTheme(t: Theme) {
     this.theme = t;

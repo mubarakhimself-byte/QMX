@@ -1,3 +1,8 @@
+<script lang="ts" module>
+  /** Markers drawn on the candles, e.g. agent signals (time = candle date). */
+  export type ChartMarker = { time: string; text: string };
+</script>
+
 <script lang="ts">
   import { onMount } from "svelte";
   import {
@@ -5,11 +10,15 @@
     CandlestickSeries,
     HistogramSeries,
     ColorType,
+    createSeriesMarkers,
     type IChartApi,
   } from "lightweight-charts";
   import type { Candle } from "./data";
 
-  let { candles }: { candles: Candle[] } = $props();
+  let {
+    candles,
+    markers = [],
+  }: { candles: Candle[]; markers?: ChartMarker[] } = $props();
   let el: HTMLDivElement;
 
   /**
@@ -58,6 +67,19 @@
       priceFormat: { type: "price", precision: 5, minMove: 0.00001 },
     });
     series.setData(candles);
+    if (markers.length) {
+      const agent = token("--info");
+      createSeriesMarkers(
+        series,
+        markers.map((m) => ({
+          time: m.time,
+          position: "belowBar" as const,
+          color: agent,
+          shape: "arrowUp" as const,
+          text: m.text,
+        })),
+      );
+    }
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: "",
       priceFormat: { type: "volume" },

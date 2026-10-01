@@ -85,6 +85,11 @@
   }
 
   const candles = demoCandles();
+  // DEMO agent signals: where the sample model would have entered.
+  const signals = [
+    { time: candles[candles.length - 34].time, text: "Agent · breakout 0.71" },
+    { time: candles[candles.length - 9].time, text: "Agent · breakout 0.66" },
+  ];
   const quotes = demoWatchlist();
   const last = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
@@ -115,7 +120,9 @@
           >O {last.open} · H {last.high} · L {last.low}</span
         >
       </div>
-      <div class="min-h-0 flex-1"><CandleChart {candles} /></div>
+      <div class="min-h-0 flex-1">
+        <CandleChart {candles} markers={signals} />
+      </div>
     </div>
   {:else if id === "watchlist"}
     <table class="num w-full text-sm">
