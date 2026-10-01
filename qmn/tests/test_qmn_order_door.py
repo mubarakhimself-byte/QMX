@@ -51,6 +51,8 @@ from qmn.order import (
     PARTIAL_ENTRY_REBASE_JOURNAL_KIND,
     POSITION_RISK_AMOUNT_FORMULA_ID,
     AuthorizedIntent,
+    NativeExecutionMap,
+    NativeExecutionMapping,
     PartialEntryRebaseJournal,
     PostAdmissionKind,
     admit_entry_at_book_door,
@@ -198,6 +200,22 @@ def _admit(**overrides: object) -> AuthorizedIntent:
     return _ok(admit_entry_at_book_door(**kwargs))
 
 
+def _native_map(authorized: AuthorizedIntent) -> NativeExecutionMap:
+    row = _ok(
+        NativeExecutionMapping.try_create(
+            authorized.admitted.execution_target,
+            authorized.admitted.instrument,
+            native_account_id=42,
+            native_symbol_id=7,
+        )
+    )
+    return _ok(
+        NativeExecutionMap.try_create(
+            (row,), registry_as_of_fingerprint=_fp("registry-as-of-native-map")
+        )
+    )
+
+
 def _position(authorized: AuthorizedIntent | None = None, filled: Quantity | None = None):
     auth = authorized or _admit()
     return _ok(
@@ -328,6 +346,7 @@ def test_place_order_quantity_is_book_derived_not_bot() -> None:
             account=_account(),
             session_epoch=_SESSION,
             ordering_ordinal=1,
+            native_execution_map=_native_map(authorized),
         )
     )
     assert command.kind is CommandKind.PLACE_ORDER
@@ -373,6 +392,9 @@ def test_command_identity_binds_instrument_and_trade_side() -> None:
             account=_account(),
             session_epoch=_SESSION,
             ordering_ordinal=10,
+            native_execution_map=_native_map(
+                _admit(intent=_entry(proposed_r=_r(1), direction=Direction.LONG))
+            ),
         )
     )
     short_command = _ok(
@@ -382,6 +404,9 @@ def test_command_identity_binds_instrument_and_trade_side() -> None:
             account=_account(),
             session_epoch=_SESSION,
             ordering_ordinal=10,
+            native_execution_map=_native_map(
+                _admit(intent=_entry(proposed_r=_r(1), direction=Direction.SHORT))
+            ),
         )
     )
     assert long_command.order_parameters is not None

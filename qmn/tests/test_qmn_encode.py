@@ -23,8 +23,10 @@ from qmf.core import (
     TypedRefusal,
     VenueId,
     World,
+    fingerprint,
     is_ok,
 )
+from qmf.risk.paper import ExecutionTarget
 from qmf.venue.capabilities import (
     CapabilityDeclaration,
     CapabilityField,
@@ -56,6 +58,7 @@ from qmf.venue.proto import (
     ProtoArtifact,
     compile_descriptor_set,
 )
+from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.venue import LiveCTraderClient, compound_command_acceptance_blocked
 from qmn.venue.live import LiveCTraderClient as LiveInModule
 
@@ -365,6 +368,27 @@ def test_live_translates_each_kind_onto_encode_symbols() -> None:
 def test_identity_bound_side_cannot_be_replaced_at_encoding() -> None:
     client = _client()
     venue = client.venue_id
+    account = _account(venue)
+    target = _ok(
+        ExecutionTarget.try_create(
+            account.role,
+            account.venue,
+            account.account_id,
+        )
+    )
+    mapping = _ok(
+        NativeExecutionMapping.try_create(
+            target,
+            _instrument(),
+            native_account_id=42,
+            native_symbol_id=1,
+        )
+    )
+    native_map = _ok(
+        NativeExecutionMap.try_create(
+            (mapping,), registry_as_of_fingerprint=_ok(fingerprint({"registry": "as-of-test"}))
+        )
+    )
     params = _ok(
         OrderParameters.try_create(
             OrderType.MARKET,
@@ -372,9 +396,21 @@ def test_identity_bound_side_cannot_be_replaced_at_encoding() -> None:
             _qty(),
             instrument=_instrument(),
             trade_side="buy",
+            native_account_id=42,
+            native_symbol_id=1,
+            native_mapping_fingerprint=native_map.fingerprint,
         )
     )
-    command = _ok(Command.place_order(venue, _account(venue), _SESSION, 1, params))
+    command = _ok(Command.place_order(venue, account, _SESSION, 1, params))
+    _ok(
+        client.bind_encode_context(
+            compiled=_compiled(),
+            ctid_trader_account_id=42,
+            symbol_id=1,
+            trade_side="buy",
+            native_execution_map=native_map,
+        )
+    )
     refused = client.encode_command(
         command,
         compiled=_compiled(),
@@ -385,6 +421,26 @@ def test_identity_bound_side_cannot_be_replaced_at_encoding() -> None:
     )
     assert isinstance(refused, TypedRefusal)
     assert refused.context["field"] == "trade_side"
+    wrong_type = client.encode_command(
+        command,
+        compiled=_compiled(),
+        declaration=_declaration(),
+        ctid_trader_account_id=42,
+        symbol_id=1,
+        trade_side=2.5,
+    )
+    assert isinstance(wrong_type, TypedRefusal)
+    assert wrong_type.context["field"] == "trade_side"
+    wrong_account = client.encode_command(
+        command,
+        compiled=_compiled(),
+        declaration=_declaration(),
+        ctid_trader_account_id=99_999,
+        symbol_id=888,
+        trade_side="buy",
+    )
+    assert isinstance(wrong_account, TypedRefusal)
+    assert wrong_account.context["field"] == "native_execution_ids"
 
 
 def test_live_encode_compound_keeps_ftr02_block() -> None:

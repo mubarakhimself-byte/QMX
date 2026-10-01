@@ -26,6 +26,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.risk.r_faces import RFaces
+from qmf.venue.commands import SubmissionOutcome, SubmissionResult
 
 from qmn.ledger._refuse import clean_token, invalid, policy
 from qmn.ledger.virtual import (
@@ -121,6 +122,7 @@ class BindingVirtualLedger:
     _records: list[LedgerRecord] = field(default_factory=list[LedgerRecord])
     _positions: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
     _by_ref: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
+    _pending_entries: dict[str, Fingerprint] = field(default_factory=dict[str, Fingerprint])
     _sequence: int = 0
 
     @property
@@ -158,6 +160,93 @@ class BindingVirtualLedger:
             return None
         return self._by_ref.get(position_ref.value)
 
+    def has_pending_entry(self, instrument: object) -> bool:
+        token = clean_token(instrument)
+        return token is not None and token in self._pending_entries
+
+    def abandon_unsubmitted_entry(
+        self, instrument: object, command_identity: object
+    ) -> Result[None]:
+        """Undo a reservation when batch construction fails before handoff."""
+        return self._release_entry(instrument, command_identity, terminal=False)
+
+    def reserve_entry(self, instrument: object, command_identity: object) -> Result[None]:
+        """Reserve one entry until its fill or a definitive no-fill terminal."""
+        token = clean_token(instrument)
+        if token is None or not isinstance(command_identity, Fingerprint):
+            return invalid(
+                "entry_reservation", "reservation requires instrument and command identity"
+            )
+        if self.has_open_virtual(token) or token in self._pending_entries:
+            return policy(
+                "entry_reservation",
+                "an open position or unresolved entry already occupies this binding/instrument",
+                instrument=token,
+            )
+        self._pending_entries[token] = command_identity
+        return Ok(None)
+
+    def release_terminal_no_fill(
+        self, instrument: object, command_identity: object
+    ) -> Result[None]:
+        """Release only the exact reservation after a definitive no-fill terminal."""
+        return self._release_entry(instrument, command_identity, terminal=True)
+
+    def observe_submission_outcome(
+        self, instrument: object, command_identity: object, submission: object
+    ) -> Result[None]:
+        """Apply only typed four-outcome semantics to an entry reservation.
+
+        UNKNOWN and accepted remain reserved. A definitive venue rejection or
+        local denial releases; fills release through ``fold_fill`` instead.
+        """
+        if not isinstance(submission, SubmissionResult):
+            return invalid(
+                "submission_outcome",
+                "entry reservation consumes a typed SubmissionResult",
+            )
+        if submission.command_fp1 != command_identity:
+            return policy(
+                "entry_reservation",
+                "submission result identity must match the reserved command",
+            )
+        if submission.outcome not in {
+            SubmissionOutcome.ACCEPTED_BY_VENUE,
+            SubmissionOutcome.REJECTED_BY_VENUE,
+            SubmissionOutcome.DENIED_LOCALLY,
+            SubmissionOutcome.UNKNOWN,
+        }:
+            return invalid(
+                "submission_outcome",
+                "entry reservation consumes the single-command four-outcome law",
+            )
+        if submission.outcome in {
+            SubmissionOutcome.REJECTED_BY_VENUE,
+            SubmissionOutcome.DENIED_LOCALLY,
+        }:
+            return self.release_terminal_no_fill(instrument, command_identity)
+        token = clean_token(instrument)
+        if token is None or self._pending_entries.get(token) != command_identity:
+            return policy("entry_reservation", "submission outcome must match the pending command")
+        return Ok(None)
+
+    def _release_entry(
+        self, instrument: object, command_identity: object, *, terminal: bool
+    ) -> Result[None]:
+        token = clean_token(instrument)
+        if token is None or not isinstance(command_identity, Fingerprint):
+            return invalid(
+                "entry_reservation", "release requires instrument and command identity"
+            )
+        if self._pending_entries.get(token) != command_identity:
+            return policy(
+                "entry_reservation",
+                "outcome does not match the pending command",
+                terminal=terminal,
+            )
+        del self._pending_entries[token]
+        return Ok(None)
+
     def book_capital(self) -> Money:
         """Period-open capital excluding unrealized P&L — sizing input only."""
         return self.realized_cash
@@ -194,6 +283,13 @@ class BindingVirtualLedger:
                 "fill",
                 "the risk-domain writer folds an AttributedFill joined by command identity",
                 given=repr(fill),
+            )
+        pending = self._pending_entries.get(fill.instrument)
+        if pending is not None and pending != fill.command_identity:
+            return policy(
+                "entry_reservation",
+                "attributed fill must match the unresolved entry command identity",
+                instrument=fill.instrument,
             )
         if fill.realized_cash is not None:
             refused = refuse_float_money(fill.realized_cash)
@@ -274,6 +370,8 @@ class BindingVirtualLedger:
         self._records.append(record)
         self._positions[position.instrument] = position
         self._by_ref[position.position_ref.value] = position
+        if pending == fill.command_identity:
+            self._pending_entries.pop(fill.instrument, None)
         return Ok(
             FoldFillResult(
                 record=record,

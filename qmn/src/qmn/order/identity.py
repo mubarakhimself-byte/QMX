@@ -9,21 +9,213 @@ identity blocks submission (DEC-0191, DEC-0224).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final, cast
 
-from qmf.core import Ok, RecordSink, RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Instrument,
+    Ok,
+    RecordSink,
+    RefusalCategory,
+    Result,
+    Retryability,
+    TypedRefusal,
+    fingerprint,
+    is_refusal,
+)
+from qmf.risk.paper import ExecutionTarget
 
 from qmn.venue import BindingOutcome, Command, CommandIdBindingRegistry
 
 __all__ = [
     "VENUE_CLIENT_ID_PREFIX",
     "CommandIdentityBinder",
+    "NativeExecutionMap",
+    "NativeExecutionMapping",
     "mint_venue_client_id",
 ]
 
 
 VENUE_CLIENT_ID_PREFIX: Final[str] = "qmn"
+
+
+@dataclass(frozen=True, slots=True)
+class NativeExecutionMapping:
+    """One immutable native-id row tied to a Book execution target."""
+
+    target: ExecutionTarget
+    instrument: Instrument
+    native_account_id: int
+    native_symbol_id: int
+
+    @classmethod
+    def try_create(
+        cls,
+        target: object,
+        instrument: object,
+        *,
+        native_account_id: object,
+        native_symbol_id: object,
+    ) -> Result[NativeExecutionMapping]:
+        if not isinstance(target, ExecutionTarget):
+            return _invalid("target", "a native row binds a typed ExecutionTarget")
+        if not isinstance(instrument, Instrument) or instrument.venue != target.venue_id:
+            return _invalid("instrument", "mapped instrument belongs to the target venue")
+        if (
+            isinstance(native_account_id, bool)
+            or not isinstance(native_account_id, int)
+            or native_account_id < 1
+        ):
+            return _invalid("native_account_id", "native account id is a positive integer")
+        if (
+            isinstance(native_symbol_id, bool)
+            or not isinstance(native_symbol_id, int)
+            or native_symbol_id < 1
+        ):
+            return _invalid("native_symbol_id", "native symbol id is a positive integer")
+        return Ok(
+            cls(
+                target=target,
+                instrument=instrument,
+                native_account_id=native_account_id,
+                native_symbol_id=native_symbol_id,
+            )
+        )
+
+    def identity(self) -> dict[str, object]:
+        return {
+            "account_id": self.target.account_id,
+            "instrument": {
+                "venue": self.instrument.venue.value,
+                "symbol": self.instrument.symbol,
+            },
+            "native_account_id": self.native_account_id,
+            "native_symbol_id": self.native_symbol_id,
+            "role": self.target.role.value,
+            "venue_id": self.target.venue_id.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class NativeExecutionMap:
+    """Frozen native mapping from one registry snapshot and optional binding epoch."""
+
+    registry_as_of_fingerprint: Fingerprint
+    binding_epoch: Fingerprint | None
+    mappings: tuple[NativeExecutionMapping, ...]
+    fingerprint: Fingerprint
+
+    @classmethod
+    def try_create(
+        cls,
+        mappings: object,
+        *,
+        registry_as_of_fingerprint: object,
+        binding_epoch: object = None,
+    ) -> Result[NativeExecutionMap]:
+        if not isinstance(registry_as_of_fingerprint, Fingerprint):
+            return _invalid(
+                "registry_as_of_fingerprint",
+                "native mappings cite the pinned registry as-of set",
+            )
+        if binding_epoch is not None and not isinstance(binding_epoch, Fingerprint):
+            return _invalid("binding_epoch", "native mappings cite a typed CT-28 binding epoch")
+        if isinstance(mappings, (str, bytes)) or not isinstance(mappings, Iterable):
+            return _invalid("mappings", "native execution mappings are an ordered collection")
+        rows: list[NativeExecutionMapping] = []
+        keys: set[tuple[str, str, str, str, str]] = set()
+        for item in cast("Iterable[object]", mappings):
+            if not isinstance(item, NativeExecutionMapping):
+                return _invalid(
+                    "mappings", "each native execution row is a NativeExecutionMapping"
+                )
+            if item.instrument.venue != item.target.venue_id:
+                return _invalid(
+                    "instrument", "mapped instrument venue matches its execution target"
+                )
+            if (
+                type(item.native_account_id) is not int
+                or item.native_account_id < 1
+                or type(item.native_symbol_id) is not int
+                or item.native_symbol_id < 1
+            ):
+                return _invalid("native_ids", "native account and symbol ids are positive integers")
+            key = (
+                item.target.role.value,
+                item.target.venue_id.value,
+                item.target.account_id,
+                item.instrument.venue.value,
+                item.instrument.symbol,
+            )
+            if key in keys:
+                return _invalid(
+                    "mappings", "native execution target/instrument mappings are unique"
+                )
+            keys.add(key)
+            rows.append(item)
+        if not rows:
+            return _invalid(
+                "mappings", "native execution map contains at least one resolved target"
+            )
+        content = {
+            "class": "qmn-native-execution-map",
+            "registry_as_of_fingerprint": registry_as_of_fingerprint.value,
+            "mappings": [
+                row.identity()
+                for row in sorted(
+                    rows,
+                    key=lambda row: (
+                        row.target.role.value,
+                        row.target.venue_id.value,
+                        row.target.account_id,
+                        row.instrument.venue.value,
+                        row.instrument.symbol,
+                    ),
+                )
+            ],
+            "format_version": 1,
+        }
+        if binding_epoch is not None:
+            content["binding_epoch"] = binding_epoch.value
+        fp = fingerprint(content)
+        if is_refusal(fp):
+            return fp
+        return Ok(
+            cls(
+                registry_as_of_fingerprint=registry_as_of_fingerprint,
+                binding_epoch=binding_epoch,
+                mappings=tuple(rows),
+                fingerprint=fp.value,
+            )
+        )
+
+    def resolve(
+        self, target: object, instrument: object
+    ) -> Result[NativeExecutionMapping]:
+        if not isinstance(target, ExecutionTarget) or not isinstance(instrument, Instrument):
+            return _invalid(
+                "target", "native mapping lookup uses an ExecutionTarget and Instrument"
+            )
+        for row in self.mappings:
+            if row.target == target and row.instrument == instrument:
+                return Ok(row)
+        return _invalid(
+            "native_execution_mapping",
+            "the pinned native map has no row for the exact admitted account, role, venue, "
+            "and instrument",
+            target=target.fp1_identity(),
+            instrument={"venue": instrument.venue.value, "symbol": instrument.symbol},
+        )
+
+
+def _invalid(field: str, reason: str, **extra: object) -> TypedRefusal:
+    return TypedRefusal(
+        category=RefusalCategory.INVALID_INPUT,
+        retryability=Retryability.NO,
+        context={"field": field, "reason": reason, **extra},
+    )
 
 
 def mint_venue_client_id(*, ordering_ordinal: object, session_epoch: object) -> Result[str]:

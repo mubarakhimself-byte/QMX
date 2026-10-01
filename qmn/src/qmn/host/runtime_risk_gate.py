@@ -129,6 +129,8 @@ from qmn.journal_dispatch import (
 from qmn.ledger import refuse_paper_pnl_to_treasury
 from qmn.order import (
     CommandStreamUnknownBoundary,
+    NativeExecutionMap,
+    NativeExecutionMapping,
     PostAdmissionKind,
     admit_entry_at_book_door,
     mint_ct29_from_frozen_r,
@@ -1017,6 +1019,21 @@ def _exercise_entry_preservation(fx: _Fixtures) -> Result[Mapping[str, object]]:
         account=account.value,
         session_epoch=_SESSION,
         ordering_ordinal=1,
+        native_execution_map=_unwrap(
+            NativeExecutionMap.try_create(
+                (
+                    _unwrap(
+                        NativeExecutionMapping.try_create(
+                            authorized.value.admitted.execution_target,
+                            authorized.value.admitted.instrument,
+                            native_account_id=42,
+                            native_symbol_id=7,
+                        )
+                    ),
+                ),
+                registry_as_of_fingerprint=_unwrap(_fp("registry-as-of-runtime-gate")),
+            )
+        ),
     )
     if is_refusal(command):
         return command

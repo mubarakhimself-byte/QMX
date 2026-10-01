@@ -22,11 +22,26 @@ from qmf.core import (
     UnitKind,
     ValueFactor,
     VenueId,
+    World,
     fingerprint,
     is_ok,
     is_refusal,
 )
 from qmf.core.chrono import CalendarIdentity
+from qmf.risk.binding import (
+    STATE_CARRY_COUNTERS,
+    BmsInstanceId,
+    BookBindingRecord,
+    BookBindingRequirements,
+    BookInstanceId,
+    CapabilityCheckResult,
+    PositionModel,
+    StateCarry,
+    StateCarryChoice,
+    VenueBindingProfile,
+    bind_time_capability_check,
+)
+from qmf.risk.control_rank import ControlActionKind, ControlRankRow, ControlRankTable
 from qmf.risk.door import (
     CitedEvidence,
     Direction,
@@ -38,6 +53,12 @@ from qmf.risk.door import (
 from qmf.risk.exit_policy import ExitPolicy
 from qmf.risk.footprint_requirements import FootprintRequirements
 from qmf.risk.paper import ExecutionTarget
+from qmf.venue.commands import (
+    CommandObservation,
+    JournalEvent,
+    SubmissionOutcome,
+    SubmissionResult,
+)
 from qml.conformance import (
     admit_ungoverned_tunnel,
     gate_registration,
@@ -55,6 +76,7 @@ from qml.protocol import (
     mint_state_scope,
 )
 from qmn.ledger import seed_binding_ledger
+from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
 from qmn.seats import (
@@ -212,6 +234,59 @@ def _layers(*, layer1: bool = True, layer2: bool = True, layer3: bool = True):
     )
 
 
+def _book_binding_record() -> BookBindingRecord:
+    venue = _venue()
+    account = "acct-1"
+    requirements = _ok(
+        BookBindingRequirements.try_create(
+            "USD", {"protective-stop-attachment"}, {"sqs-eurusd"}, {}
+        )
+    )
+    profile = _ok(
+        VenueBindingProfile.try_create(
+            {"protective-stop-attachment"}, PositionModel.HEDGING, "USD"
+        )
+    )
+    ranks = _ok(
+        ControlRankTable.try_create(
+            (
+                ControlRankRow(ControlActionKind.FLATTEN, 0),
+                ControlRankRow(ControlActionKind.DRAIN, 1),
+                ControlRankRow(ControlActionKind.SUSPEND_NEW, 2),
+                ControlRankRow(ControlActionKind.RESUME, 3),
+            )
+        )
+    )
+    capability_result: CapabilityCheckResult = _ok(
+        bind_time_capability_check(
+            requirements=requirements,
+            profile=profile,
+            bms_rank_table=ranks,
+            sensor_baselines_present={"sqs-eurusd"},
+            live_path_rung_baseline_present=True,
+            is_second_book_on_account=False,
+            overlapping_instrument_set=False,
+        )
+    )
+    state_carry = _ok(
+        StateCarry.try_create(dict.fromkeys(STATE_CARRY_COUNTERS, StateCarryChoice.RESET))
+    )
+    bms_version = _ok(fingerprint({"bms-version": "seat-test"}))
+    return _ok(
+        BookBindingRecord.try_create(
+            _ok(BookInstanceId.try_create("book-inst-seat-test")),
+            _ok(BmsInstanceId.derive(bms_version, account, venue, World.LIVE)),
+            venue,
+            account,
+            World.LIVE,
+            _ok(fingerprint({"book-version": "seat-test"})),
+            bms_version,
+            state_carry,
+            capability_result,
+        )
+    )
+
+
 def _exit_policy(family_id: str = "trend-follow") -> ExitPolicy:
     ref = _ok(ExitLogicRef.try_create("book.default.evidence_stop", {"style": "structure"}))
     return _ok(ExitPolicy.try_create({family_id: ref}, permitted_exit_intent_kinds=()))
@@ -228,8 +303,8 @@ def _propose(
     candidate: object = _MISSING,
     admission_layers: object | None = None,
     assignment: object = None,
-    binding_ref: object = "binding-live-1",
-    bms_instance_id: object = "bms-1",
+    binding_ref: object = _MISSING,
+    bms_instance_id: object = _MISSING,
     callback: object = None,
     hosted: object = None,
     tunnel: object = None,
@@ -240,6 +315,11 @@ def _propose(
     exit_policy: object | None = None,
     venue_capabilities: object = _VENUE_CAPS,
 ) -> Result[AdmittedNodeSeat]:
+    binding = _book_binding_record()
+    resolved_binding_ref = (
+        _ok(binding.fingerprint()).value if binding_ref is _MISSING else binding_ref
+    )
+    resolved_bms = binding.bms_instance_id.value if bms_instance_id is _MISSING else bms_instance_id
     bundle = world if world is not None else _world()
     layer2_factory = factory if isinstance(factory, FunctionFactory) else None
     ticket = _ok(_candidate(bundle, factory=layer2_factory)) if candidate is _MISSING else candidate
@@ -247,8 +327,8 @@ def _propose(
     return propose_node_seat(
         logic,
         seat_id="seat-alpha",
-        binding_ref=binding_ref,
-        bms_instance_id=bms_instance_id,
+        binding_ref=resolved_binding_ref,
+        bms_instance_id=resolved_bms,
         declaration=bundle["declaration"],
         containment=_containment(),
         candidate=ticket,
@@ -321,7 +401,14 @@ class _OffsetStopModule:
         return Price.try_create(value, entry_price.instrument, entry_price.scale)
 
 
-def _path(*, bms: str = "bms-1") -> BookPathContext:
+def _path(
+    *,
+    bms: str | None = None,
+    binding_record: BookBindingRecord | None = None,
+    ledger_epoch: object = None,
+) -> BookPathContext:
+    binding = binding_record if binding_record is not None else _book_binding_record()
+    epoch = _ok(binding.fingerprint())
     return BookPathContext(
         entry_price=_price(110_000),
         exit_logic_ref=_ok(
@@ -336,15 +423,33 @@ def _path(*, bms: str = "bms-1") -> BookPathContext:
         venue_id=_venue(),
         session_epoch="session-26-15",
         ordering_ordinal=0,
-        bms_instance_id=bms,
+        bms_instance_id=bms if bms is not None else binding.bms_instance_id.value,
         protective_stop_forms={"market": ENTRY_RELATIVE_FORM},
         position_ledger=_ok(
             seed_binding_ledger(
-                binding_epoch=_ok(fingerprint({"binding": bms})),
+                binding_epoch=ledger_epoch if ledger_epoch is not None else epoch,
                 seed=_ok(Money.try_create(100_000, "USD", 2)),
                 recorded_at=_instant(),
             )
         ),
+        native_execution_map=_ok(
+            NativeExecutionMap.try_create(
+                (
+                    _ok(
+                        NativeExecutionMapping.try_create(
+                            _ok(ExecutionTarget.try_create("demo", _venue(), "acct-1")),
+                            _instrument(),
+                            native_account_id=42,
+                            native_symbol_id=7,
+                        )
+                    ),
+                ),
+                registry_as_of_fingerprint=_ok(fingerprint({"registry": "seat-test"})),
+                binding_epoch=epoch,
+            )
+        ),
+        decision_at=_instant(),
+        binding_record=binding,
     )
 
 
@@ -496,7 +601,7 @@ def test_governed_proposal_records_every_named_proof() -> None:
     assert admitted.proof.candidate.ticket.layer1_passed is True
     assert admitted.proof.candidate.ticket.layer2_passed is True
     assert admitted.proof.admission_layers.all_passed is True
-    assert admitted.proof.bms_instance_id == "bms-1"
+    assert admitted.proof.bms_instance_id == _book_binding_record().bms_instance_id.value
     assert admitted.seat.assignment_is_canonical is True
     identity = admitted.proof.fp1_identity()
     assert identity["class"] == "seat-admission-proof"
@@ -520,12 +625,69 @@ def test_hosted_entry_crosses_book_bms_protection_and_order() -> None:
         )
     )
     assert receipt.hops == INTENT_PATH_HOPS
-    assert receipt.bms_instance_id == "bms-1"
+    assert receipt.bms_instance_id == admitted.proof.bms_instance_id
     assert len(receipt.authorized) == 1
     assert len(receipt.commands) == 1
     assert receipt.commands[0].kind is CommandKind.PLACE_ORDER
     assert receipt.authorized[0].requested_r == _r(1)
     assert not hasattr(receipt.authorized[0].admitted, "bot_quantity")
+def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() -> None:
+    admitted = _ok(_propose())
+    path = _path()
+    first = _ok(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+    duplicate = _refusal(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+    assert duplicate.context["field"] == "has_open_virtual_position"
+    command_id = _ok(first.commands[0].fingerprint())
+    unknown = SubmissionResult(
+        command_fp1=command_id,
+        kind=first.commands[0].kind,
+        outcome=SubmissionOutcome.UNKNOWN,
+        observation=CommandObservation(
+            command_fp1=command_id,
+            kind=first.commands[0].kind,
+            outcome=SubmissionOutcome.UNKNOWN,
+            receive_instant=_instant(),
+            detail="test UNKNOWN state",
+        ),
+        journal_event=JournalEvent.for_outcome(
+            command_id, first.commands[0].kind, SubmissionOutcome.UNKNOWN
+        ),
+    )
+    _ok(
+        path.position_ledger.observe_submission_outcome(
+            "EURUSD", command_id, unknown
+        )
+    )
+    still_unknown = _refusal(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+    assert still_unknown.context["field"] == "has_open_virtual_position"
+    rejected = SubmissionResult(
+        command_fp1=command_id,
+        kind=first.commands[0].kind,
+        outcome=SubmissionOutcome.REJECTED_BY_VENUE,
+        observation=CommandObservation(
+            command_fp1=command_id,
+            kind=first.commands[0].kind,
+            outcome=SubmissionOutcome.REJECTED_BY_VENUE,
+            receive_instant=_instant(),
+            venue_code="rejected",
+        ),
+        journal_event=JournalEvent.for_outcome(
+            command_id, first.commands[0].kind, SubmissionOutcome.REJECTED_BY_VENUE
+        ),
+    )
+    _ok(
+        path.position_ledger.observe_submission_outcome(
+            "EURUSD", command_id, rejected
+        )
+    )
+    _ok(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+
+
+def test_ledger_binding_epoch_must_match_admitted_binding() -> None:
+    admitted = _ok(_propose())
+    path = _path(ledger_epoch=_ok(fingerprint({"wrong-binding-epoch": True})))
+    refused = _refusal(dispatch_hosted_intents(admitted, (_entry(),), path=path))
+    assert refused.context["field"] == "binding_epoch"
 
 
 def test_bot_supplied_size_and_direct_ct19_refuse() -> None:

@@ -361,6 +361,9 @@ class OrderParameters:
     protective_stop_distance: PriceDelta | None = None
     instrument: Instrument | None = None
     trade_side: str | None = None
+    native_account_id: int | None = None
+    native_symbol_id: int | None = None
+    native_mapping_fingerprint: Fingerprint | None = None
 
     @classmethod
     def try_create(
@@ -374,6 +377,9 @@ class OrderParameters:
         protective_stop_distance: object = None,
         instrument: object = None,
         trade_side: object = None,
+        native_account_id: object = None,
+        native_symbol_id: object = None,
+        native_mapping_fingerprint: object = None,
     ) -> Result[OrderParameters]:
         """Validate and build :class:`OrderParameters`, returning value-or-refusal.
 
@@ -457,6 +463,40 @@ class OrderParameters:
             resolved_side = trade_side.strip().lower()
         if (resolved_instrument is None) != (resolved_side is None):
             return _invalid("execution_identity", "instrument and trade_side are supplied together")
+        native_identity_values = (
+            native_account_id,
+            native_symbol_id,
+            native_mapping_fingerprint,
+        )
+        resolved_native_account_id: int | None = None
+        resolved_native_symbol_id: int | None = None
+        resolved_native_mapping_fingerprint: Fingerprint | None = None
+        if any(value is not None for value in native_identity_values):
+            if (
+                isinstance(native_account_id, bool)
+                or not isinstance(native_account_id, int)
+                or native_account_id < 1
+            ):
+                return _invalid("native_account_id", "native account id is a positive integer")
+            if (
+                isinstance(native_symbol_id, bool)
+                or not isinstance(native_symbol_id, int)
+                or native_symbol_id < 1
+            ):
+                return _invalid("native_symbol_id", "native symbol id is a positive integer")
+            if not isinstance(native_mapping_fingerprint, Fingerprint):
+                return _invalid(
+                    "native_mapping_fingerprint",
+                    "native ids cite the immutable execution mapping fingerprint",
+                )
+            resolved_native_account_id = native_account_id
+            resolved_native_symbol_id = native_symbol_id
+            resolved_native_mapping_fingerprint = native_mapping_fingerprint
+            if resolved_instrument is None:
+                return _invalid(
+                    "execution_identity",
+                    "native IDs require the identity-bound instrument and trade side",
+                )
         return Ok(
             cls(
                 order_type=resolved_type,
@@ -467,6 +507,9 @@ class OrderParameters:
                 protective_stop_distance=protective,
                 instrument=resolved_instrument,
                 trade_side=resolved_side,
+                native_account_id=resolved_native_account_id,
+                native_symbol_id=resolved_native_symbol_id,
+                native_mapping_fingerprint=resolved_native_mapping_fingerprint,
             )
         )
 
@@ -478,7 +521,11 @@ class OrderParameters:
             "order_type": self.order_type.value,
             "time_in_force": self.time_in_force.value,
             "quantity": self.quantity.fp1_identity(),
-            "format_version": 2 if self.instrument is not None else CONTRACT_FORMAT_VERSION,
+            "format_version": (
+                3
+                if self.native_mapping_fingerprint is not None
+                else 2 if self.instrument is not None else CONTRACT_FORMAT_VERSION
+            ),
         }
         if self.limit_price is not None:
             content["limit_price"] = self.limit_price.fp1_identity()
@@ -492,6 +539,10 @@ class OrderParameters:
                 "symbol": self.instrument.symbol,
             }
             content["trade_side"] = self.trade_side
+        if self.native_mapping_fingerprint is not None:
+            content["native_account_id"] = self.native_account_id
+            content["native_symbol_id"] = self.native_symbol_id
+            content["native_mapping_fingerprint"] = self.native_mapping_fingerprint.value
         return content
 
 

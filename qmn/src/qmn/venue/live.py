@@ -65,6 +65,7 @@ from qmf.core import (
     is_ok,
     is_refusal,
 )
+from qmf.risk.paper import ExecutionTarget
 from qmf.venue.capabilities import CapabilityDeclaration, ErrorMap, ErrorMapResolution
 from qmf.venue.commands import (
     Command,
@@ -106,6 +107,7 @@ from qmf.venue.events import (
     VenueNativeIdentity,
 )
 
+from qmn.order.identity import NativeExecutionMap
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.venue.conformance import (
     compound_command_acceptance_blocked,
@@ -324,6 +326,7 @@ class LiveCTraderClient:
     _symbol_id: int | None = None
     _trade_side: str | None = None
     _volume: object | None = None
+    _native_execution_map: NativeExecutionMap | None = None
     _handed_off: dict[str, SubmissionResult] = field(default_factory=dict[str, SubmissionResult])
     _declared_lookback: Duration | None = None
     _reconcile_expected: object | None = None
@@ -780,6 +783,7 @@ class LiveCTraderClient:
         symbol_id: object = None,
         trade_side: object = None,
         volume: object = None,
+        native_execution_map: object = None,
     ) -> Result[bool]:
         """Inject Story 31.3 encode inputs. This client never compiles proto."""
         if compiled is None:
@@ -830,11 +834,20 @@ class LiveCTraderClient:
                 "close volume is an exact qmf-core Quantity; a binary float is refused",
                 given=repr(volume),
             )
+        if native_execution_map is not None and not isinstance(
+            native_execution_map, NativeExecutionMap
+        ):
+            return _invalid(
+                "native_execution_map",
+                "encode context binds a frozen NativeExecutionMap or omits it for legacy commands",
+                given=type(native_execution_map).__name__,
+            )
         self._compiled = compiled
         self._ctid_trader_account_id = ctid_trader_account_id
         self._symbol_id = resolved_symbol
         self._trade_side = resolved_side
         self._volume = volume
+        self._native_execution_map = native_execution_map
         return Ok(True)
 
     def encode_command(
@@ -879,6 +892,42 @@ class LiveCTraderClient:
                 command=command.account.fp1_identity(),
             )
         if command.kind is CommandKind.PLACE_ORDER:
+            params = command.order_parameters
+            if params is not None and params.native_mapping_fingerprint is not None:
+                native_map = self._native_execution_map
+                if (
+                    native_map is None
+                    or native_map.fingerprint != params.native_mapping_fingerprint
+                ):
+                    return _invalid(
+                        "native_mapping_fingerprint",
+                        "the client encode context must bind the exact native map "
+                        "fingerprint sealed in CT-19",
+                        command=params.native_mapping_fingerprint.value,
+                        bound=None if native_map is None else native_map.fingerprint.value,
+                    )
+                target = ExecutionTarget.try_create(
+                    command.account.role,
+                    command.account.venue,
+                    command.account.account_id,
+                )
+                if is_refusal(target):
+                    return target
+                mapped = native_map.resolve(target.value, params.instrument)
+                if is_refusal(mapped):
+                    return mapped
+                if (
+                    ctid_trader_account_id != mapped.value.native_account_id
+                    or symbol_id != mapped.value.native_symbol_id
+                ):
+                    return _invalid(
+                        "native_execution_ids",
+                        "wire native account and symbol ids must match the sealed command mapping",
+                        account_id=repr(ctid_trader_account_id),
+                        symbol_id=repr(symbol_id),
+                        expected_account_id=mapped.value.native_account_id,
+                        expected_symbol_id=mapped.value.native_symbol_id,
+                    )
             return encode_place_order(
                 command,
                 compiled=compiled,

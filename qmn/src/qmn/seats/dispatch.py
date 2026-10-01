@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core import Instant, Ok, Result, TypedRefusal, is_refusal
+from qmf.core import Fingerprint, Instant, Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.binding import BookBindingRecord
 from qmf.risk.door import EntryIntent
 
 from qmn.ledger.binding_ledger import BindingVirtualLedger
@@ -26,6 +27,7 @@ from qmn.order.door import (
     mint_place_order_from_authorized,
     reject_bot_supplied_final_size,
 )
+from qmn.order.identity import NativeExecutionMap
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.seats._refuse import invalid, policy
 from qmn.seats.admission import AdmittedNodeSeat
@@ -62,6 +64,9 @@ class BookPathContext:
     bms_instance_id: str
     protective_stop_forms: object
     position_ledger: object
+    native_execution_map: object
+    decision_at: object
+    binding_record: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +123,51 @@ def dispatch_hosted_intents(
             "hosted order admission requires its binding-scoped virtual position ledger",
             given=type(door.position_ledger).__name__,
         )
+    if not isinstance(door.native_execution_map, NativeExecutionMap):
+        return invalid(
+            "native_execution_map",
+            "hosted order admission requires its immutable registry-pinned native "
+            "account/symbol map",
+            given=type(door.native_execution_map).__name__,
+        )
+    if not isinstance(door.binding_record, BookBindingRecord):
+        return invalid(
+            "binding_record",
+            "hosted order admission resolves epoch from a typed CT-28 BookBindingRecord",
+            given=type(door.binding_record).__name__,
+        )
+    expected_epoch = door.binding_record.fingerprint()
+    if is_refusal(expected_epoch):
+        return expected_epoch
+    if (
+        admitted.value.binding_ref != expected_epoch.value.value
+        or admitted.value.proof.bms_instance_id != door.binding_record.bms_instance_id.value
+        or door.binding_record.venue_id != door.venue_id
+        or door.binding_record.account_id != getattr(door.account, "account_id", None)
+        or door.position_ledger.binding_epoch != expected_epoch.value
+    ):
+        return policy(
+            "binding_epoch",
+            "seat, Book/BMS context, and position ledger resolve to the exact CT-28 binding epoch",
+            admitted_binding_ref=admitted.value.binding_ref,
+        )
+    if door.native_execution_map.binding_epoch != expected_epoch.value:
+        return policy(
+            "native_execution_map",
+            "the native account/symbol map is explicitly pinned to the exact admitted "
+            "binding epoch",
+        )
+    if not isinstance(door.decision_at, Instant):
+        return invalid("decision_at", "order admission requires the current decision frontier")
+    if any(
+        record.recorded_at.value_ns > door.decision_at.value_ns
+        for record in door.position_ledger.records
+    ):
+        return policy(
+            "decision_frontier",
+            "the decision cannot precede a binding ledger record already folded into risk",
+            decision_at=door.decision_at.value_ns,
+        )
     if door.bms_instance_id != admitted.value.proof.bms_instance_id:
         return policy(
             "bms_instance_id",
@@ -154,6 +204,7 @@ def dispatch_hosted_intents(
         instrument_key = item.instrument.symbol
         if (
             door.position_ledger.has_open_virtual(instrument_key)
+            or door.position_ledger.has_pending_entry(instrument_key)
             or instrument_key in pending_in_batch
         ):
             return policy(
@@ -180,6 +231,7 @@ def dispatch_hosted_intents(
             account=door.account,
             session_epoch=door.session_epoch,
             ordering_ordinal=ordinal + index,
+            native_execution_map=door.native_execution_map,
         )
         if is_refusal(command):
             return command
@@ -192,6 +244,25 @@ def dispatch_hosted_intents(
         authorized.append(frozen.value)
         commands.append(command.value)
         pending_in_batch.add(instrument_key)
+    reserved: list[tuple[str, Fingerprint]] = []
+    for item, command in zip(items.value, commands, strict=True):
+        if not isinstance(item, EntryIntent):
+            for token, identity in reserved:
+                door.position_ledger.abandon_unsubmitted_entry(token, identity)
+            return invalid("intents", "entry reservation retains typed EntryIntent identity")
+        command_identity = command.fingerprint()
+        if is_refusal(command_identity):
+            for token, identity in reserved:
+                door.position_ledger.abandon_unsubmitted_entry(token, identity)
+            return command_identity
+        reservation = door.position_ledger.reserve_entry(
+            item.instrument.symbol, command_identity.value
+        )
+        if is_refusal(reservation):
+            for token, identity in reserved:
+                door.position_ledger.abandon_unsubmitted_entry(token, identity)
+            return reservation
+        reserved.append((item.instrument.symbol, command_identity.value))
     return Ok(
         SeatDispatchReceipt(
             authorized=tuple(authorized),

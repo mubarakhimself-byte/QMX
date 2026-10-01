@@ -65,6 +65,7 @@ from qmn.ledger.virtual import (
     mint_virtual_position,
     rebase_partial_entry,
 )
+from qmn.order.identity import NativeExecutionMap
 from qmn.venue import Command, OrderParameters, OrderType, TimeInForce
 
 __all__ = [
@@ -461,6 +462,7 @@ def mint_place_order_from_authorized(
     order_type: object = OrderType.MARKET,
     time_in_force: object = TimeInForce.GOOD_TILL_CANCEL,
     bot_quantity: object = None,
+    native_execution_map: object = None,
 ) -> Result[Command]:
     """Mint ``place_order`` from frozen R. Bot-supplied quantity is refused."""
     if not isinstance(authorized, AuthorizedIntent):
@@ -493,6 +495,15 @@ def mint_place_order_from_authorized(
             account=account.account_id,
             role=account.role.value,
         )
+    if not isinstance(native_execution_map, NativeExecutionMap):
+        return _invalid(
+            "native_execution_map",
+            "place_order requires the immutable native-id map pinned from the registry as-of set",
+            given=type(native_execution_map).__name__,
+        )
+    native = native_execution_map.resolve(target, authorized.admitted.instrument)
+    if is_refusal(native):
+        return native
     params = OrderParameters.try_create(
         order_type,
         time_in_force,
@@ -500,6 +511,9 @@ def mint_place_order_from_authorized(
         protective_stop_distance=authorized.faces.original_risk_distance,
         instrument=authorized.admitted.instrument,
         trade_side="buy" if authorized.admitted.direction.value == "long" else "sell",
+        native_account_id=native.value.native_account_id,
+        native_symbol_id=native.value.native_symbol_id,
+        native_mapping_fingerprint=native_execution_map.fingerprint,
     )
     if is_refusal(params):
         return params

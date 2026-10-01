@@ -6,14 +6,15 @@ deployed incident, a production composition path, or live trading exposure.
 
 ## Repairs and remaining limits
 
-- **QM 01:** Book-minted place-order parameters now use identity format 2 and
-  include the admitted instrument and buy/sell side. The venue encoder derives
-  side from that identity and refuses a contradictory side. The live client
-  checks command venue against its pinned venue and, when a session account is
-  bound, checks account id and role against that session. Historical format-1
-  parameter identity remains readable. The supplied native symbol id and
-  cTrader account id still have no pinned mapping object tying them to the
-  command's instrument/account; this part of the audit finding remains open.
+- **QM 01:** Book-minted place-order parameters include the admitted instrument,
+  buy/sell side, and (when minted through the Book door) native account/symbol
+  ids plus the immutable native-map fingerprint. The venue encoder derives side
+  from identity, refuses malformed explicit sides, and refuses native id
+  substitutions. The live client resolves the exact account/role/venue/instrument
+  row from the pinned native map. Historical format-1 parameter identity remains
+  readable. The runtime map must still be loaded from the approved registry
+  configuration at the product composition root before it can establish
+  production identity.
 - **QM 02:** Before a place-order command is minted, venue, account id, and role
   must exactly match the immutable target on the admitted intent. A mismatch
   refuses before submission. This checks the node-owned context against the
@@ -26,12 +27,15 @@ deployed incident, a production composition path, or live trading exposure.
   instrument venue. There is no snapshot-level expected consumer binding, so
   that additional comparison remains unavailable at this factory boundary.
 - **QM 05:** The Book door no longer defaults absent position state to false.
-  Hosted dispatch requires a binding virtual ledger, checks open positions by
-  instrument, and prevents duplicate same-instrument entries within one
-  dispatch batch. The current ledger has no decision-frontier stamp or durable
-  pending-order reservation lifecycle. Admission is therefore not safe to
-  describe as fully frontier-bound across concurrent or subsequent dispatches;
-  QM 05 remains open for those cases.
+  Hosted dispatch requires the exact CT-28 `BookBindingRecord`, resolves its
+  fingerprint as the binding epoch, and checks it against the admitted seat,
+  BMS, account, venue, virtual ledger, and native map. It rejects ledger records
+  newer than the supplied decision frontier, checks open positions, and reserves
+  an instrument across later dispatch calls using the same ledger. A matching
+  attributed fill clears that reservation; a typed accepted/UNKNOWN result keeps
+  it; typed rejected/denied outcomes release it. Reservations remain in-memory
+  and no durable recovery/replay stream or product outcome callback is wired
+  yet, so QM 05 remains open across process restart and composition lifecycle.
 
 The integrated proof is still open: no production Book/KSA caller of
 `consume_signal_snapshot` was established. `SeatDispatchReceipt.hops` still
@@ -57,15 +61,16 @@ The demo SQS baseline was accepted by a live snapshot and a future snapshot
 frontier was accepted at decision time. Result: **2 failed, 1 passed**. Those
 are the intended contract failures; both pass after the repair.
 
-Final targeted domain command:
+Latest targeted domain command:
 
 ```text
 uv run --no-sync pytest -q qmn/tests/test_qmn_mis_signal_snapshot.py qmn/tests/test_qmn_order_door.py qmn/tests/test_qmn_seat_tunnel.py qmn/tests/test_qmn_runtime_risk_gate.py qmn/tests/test_qmn_encode.py packages/qmf-venue/tests/test_commands_ct19.py packages/qmf-venue/tests/test_encode_ct19.py
 ```
 
-Result: **150 passed**. Static checks on the changed QMN and qmf-venue source
-and test files: Ruff passed; Pyright reported 0 errors, 0 warnings, and 0
-informations.
+Earlier bounded slice: **150 passed**. After the CT-28 and pending-reservation
+corrections, the focused command covering the seat tunnel, order door, live
+encoder, and CT-19 venue encoders reports **137 passed**. Ruff passed and
+Pyright reported 0 errors, 0 warnings, and 0 informations on the focused source.
 
 The broader command `uv run --no-sync pytest -q qmn/tests
 packages/qmf-venue/tests` reached **1,412 passed, 7 skipped, 1 failed**. Its

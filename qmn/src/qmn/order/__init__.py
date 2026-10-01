@@ -85,6 +85,8 @@ from qmn.order.fills import (
 from qmn.order.identity import (
     VENUE_CLIENT_ID_PREFIX,
     CommandIdentityBinder,
+    NativeExecutionMap,
+    NativeExecutionMapping,
     mint_venue_client_id,
 )
 from qmn.order.ordinal import (
@@ -181,6 +183,8 @@ __all__ = [
     "HeldProtectionAct",
     "HoldDisposition",
     "JournalSequenceCursor",
+    "NativeExecutionMap",
+    "NativeExecutionMapping",
     "OrderPath",
     "OrderPathSubmission",
     "OrderPathTerminalResolution",
