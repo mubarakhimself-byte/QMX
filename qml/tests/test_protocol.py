@@ -478,6 +478,17 @@ def test_canonical_but_mutable_custom_value_is_not_retained_as_evidence() -> Non
     refused = SeriesSample.try_create(PresenceState.PRESENT, instant, mutable)
     assert is_refusal(refused)
 
+    nested_mutable = MutableCanonical()
+    forged_price = Price(
+        123,
+        Instrument(VenueId("venue"), cast(str, nested_mutable)),
+        5,
+    )
+    nested_refusal = SeriesSample.try_create(
+        PresenceState.PRESENT, instant, forged_price
+    )
+    assert is_refusal(nested_refusal)
+
     # The supported QMF exact object path remains usable and immutable.
     exact_value = _r(1, 2)
     exact = _ok(SeriesSample.try_create(PresenceState.PRESENT, instant, exact_value))

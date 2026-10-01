@@ -9,10 +9,10 @@ qmf-structure (DEC-0171); presence states are named from
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from enum import StrEnum
+from dataclasses import dataclass, fields
+from enum import Enum, StrEnum
 from types import MappingProxyType
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from qmf.core import (
     Account,
@@ -30,6 +30,7 @@ from qmf.core import (
     PriceDelta,
     Quantity,
     TradingDate,
+    UnitKind,
     ValueFactor,
     Venue,
     VenueId,
@@ -142,11 +143,27 @@ def _freeze_exact_graph(value: object, field: str) -> Result[object]:
         return Ok(tuple(items))
     if value is None or type(value) in (str, int, bool):
         return Ok(value)
+    if type(value) in _QMF_IMMUTABLE_ENUMS and isinstance(value, Enum):
+        return Ok(value)
     # Only QMF's concrete immutable value objects cross this boundary. A custom
     # object with a canonical identity can still mutate after delivery, so
     # canonicalizability alone is not evidence immutability.
     if type(value) in _QMF_IMMUTABLE_VALUES:
-        return Ok(value)
+        try:
+            noun = cast(Any, value)
+            noun_fields = fields(noun)
+            field_values = {item.name: getattr(noun, item.name) for item in noun_fields}
+            if any(not item.init for item in noun_fields):
+                return invalid(field, "QMF evidence nouns expose reconstructable immutable fields")
+            frozen_fields: dict[str, object] = {}
+            for name, item in field_values.items():
+                frozen = _freeze_exact_graph(item, field)
+                if is_refusal(frozen):
+                    return frozen
+                frozen_fields[name] = frozen.value
+            return Ok(type(value)(**frozen_fields))
+        except (TypeError, ValueError, AttributeError):
+            return invalid(field, "QMF evidence nouns reconstruct from validated exact fields")
     return invalid(field, "unsupported canonical objects are not retained as immutable evidence")
 
 
@@ -173,6 +190,8 @@ _QMF_IMMUTABLE_VALUES = frozenset(
         VenueId,
     }
 )
+
+_QMF_IMMUTABLE_ENUMS = frozenset({AccountRole, UnitKind})
 
 
 def _parse_presence(value: object) -> Result[PresenceState]:
