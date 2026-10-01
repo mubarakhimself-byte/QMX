@@ -156,7 +156,7 @@
         {#if board.expanded}
           {@render frame(board.expanded, "h-full")}
         {:else}
-          <div class="grid auto-rows-[minmax(15rem,auto)] grid-cols-12 gap-3">
+          <div class="grid min-h-full grid-flow-row-dense auto-rows-[minmax(15rem,1fr)] grid-cols-12 gap-3">
             {#each board.shown as w (w.id)}
               {@render frame(
                 w.id,

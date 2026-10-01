@@ -22,7 +22,7 @@
     calendar: { id: "calendar", title: "Economic calendar", size: "md" },
     news: { id: "news", title: "News", size: "md" },
     book: { id: "book", title: "Book exposure", size: "lg" },
-    signals: { id: "signals", title: "Signal scanner", size: "lg" },
+    signals: { id: "signals", title: "Signal scanner", size: "md" },
   } as const;
   const board = new WidgetBoard({
     Overview: [W.chart, W.watchlist, W.metrics, W.calendar, W.news, W.signals],
