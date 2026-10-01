@@ -844,8 +844,13 @@ class _ConfiguredRootRecordSink:
 fixture_configured_root_record_sink = _ConfiguredRootRecordSink
 
 
-def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath(
+def _exercise_configured_decision_root(
     tmp_path: Path,
+    *,
+    after_root_ready: Callable[
+        [HostedDecisionRoot, object, JournalStore, dict[str, object]], None
+    ]
+    | None = None,
 ) -> None:
     evidence = EvidenceStore(tmp_path / "evidence")
     world = _ok(evidence.for_world(World.LIVE))
@@ -1059,6 +1064,9 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
             degraded_sensors=(),
         )
     )
+    if after_root_ready is not None:
+        after_root_ready(root, snapshot, world.journal, intent_state)
+        return
     wrong_environment = _refusal(
         root.run_slice(
             snapshot=demo_snapshot,
@@ -1399,6 +1407,15 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     current = ledger.position_by_ref(opened.position.position_ref)
     assert current is not None and current.status.value == "open"
     reopened.close()
+
+
+def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath(
+    tmp_path: Path,
+) -> None:
+    _exercise_configured_decision_root(tmp_path)
+
+
+fixture_exercise_configured_decision_root = _exercise_configured_decision_root
 
 
 @pytest.mark.parametrize("fake_value", [None, "ack"])
