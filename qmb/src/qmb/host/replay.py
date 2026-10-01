@@ -317,7 +317,6 @@ def read_recorded_replay_source(
             path = SlicePath.try_create(
                 stream_id,
                 (),
-                current=bid_price.value,
                 bid=bid_price.value,
                 ask=ask_price.value,
                 bar_start=event.value,
