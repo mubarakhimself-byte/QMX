@@ -17,12 +17,19 @@ from qmf.core import (
     Result,
     SinkAck,
     VenueId,
+    WriteOutcome,
     WriterId,
     fingerprint,
     is_refusal,
 )
-from qmf.data import JournalAppendReceipt, JournalEventType, JournalReader, JournalWriter
-from qmf.data.store import JournalStore
+from qmf.data import (
+    JournalAppendReceipt,
+    JournalEvent,
+    JournalEventType,
+    JournalReader,
+    JournalWriter,
+)
+from qmf.data.store import JournalStore, StoreReceipt
 from qmf.data.store.rooms import RoomRole
 from qmf.risk.binding import BookBindingRecord
 from qmf.risk.door import EntryIntent
@@ -164,17 +171,26 @@ class QmfHostedDecisionJournal:
                 "decision_transcript",
                 "the QMF root journal accepts decision transcripts and pre-dispatch order events",
             )
+        appended_at = cast(object, self.instant())
+        if not isinstance(appended_at, Instant):
+            return invalid("decision_journal", "the journal stamp is an exact Instant")
         appended = self.writer.record(
             event_type,
             dict(body),
-            instant=self.instant(),
+            instant=appended_at,
         )
         if is_refusal(appended):
             return appended
         if type(appended.value) is not JournalAppendReceipt:
             return policy("decision_journal", "QMF confirms a typed durable journal append")
-        event = appended.value.event
-        physical = appended.value.store_receipt
+        event_value: object = cast(object, appended.value.event)
+        physical_value: object = cast(object, appended.value.store_receipt)
+        if not isinstance(event_value, JournalEvent) or not isinstance(
+            physical_value, StoreReceipt
+        ):
+            return policy("decision_journal", "QMF receipt contains typed event and store records")
+        event = event_value
+        physical = physical_value
         row_fingerprint = fingerprint(event.to_row())
         if is_refusal(row_fingerprint):
             return row_fingerprint
@@ -186,12 +202,18 @@ class QmfHostedDecisionJournal:
             return expected_payload_fp
         if (
             event.event_type is not event_type
+            or event.instant != appended_at
+            or event.sequence != self.writer.next_sequence - 1
             or stored_payload_fp.value != expected_payload_fp.value
             or event.writer != self.writer.writer
             or event.world is not self.journal_store.world
             or physical.fingerprint != row_fingerprint.value
+            or physical.sequence != event.sequence
             or physical.world is not self.journal_store.world
             or physical.room_role is not RoomRole.JOURNAL
+            or physical.engine != "jsonl"
+            or physical.format_version != 1
+            or physical.outcome not in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
             or not physical.is_evidence_bearing
             or not physical.retained_forever
         ):

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
-from qmf.core import Instant, Result, World, WriterId, fingerprint, is_ok
-from qmf.data import JournalEventType, JournalReader, JournalWriter
+import pytest
+from qmf.core import Instant, Ok, Result, World, WriterId, fingerprint, is_ok
+from qmf.data import JournalAppendReceipt, JournalEventType, JournalReader, JournalWriter
 from qmf.data.store import JournalStore
 from qmf.data.store.engines.jsonl import jsonl_opener
 from qmn.ledger import EntryReservationEvent
@@ -63,6 +66,59 @@ def test_reservation_adapter_rejects_untyped_input(tmp_path: Path) -> None:
     )
     assert not is_ok(adapter.append({"class": "not-a-reservation"}))
     assert not is_ok(adapter.recover("opaque epoch"))
+    store.close()
+
+
+@pytest.mark.parametrize("damage", ["event", "store_receipt", "sequence"])
+def test_reservation_append_verifies_full_physical_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
+) -> None:
+    store = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer_id = _ok(WriterId.try_create("node-test", "risk", "entry-reservations", "boot-1"))
+    adapter = _ok(
+        QmfEntryReservationJournal.resume(
+            store,
+            writer_id,
+            stream_name="risk-reservations",
+            instant=lambda: _ok(Instant.try_create(1_800_000_000_000_000_000)),
+        )
+    )
+    epoch = _ok(fingerprint({"binding": "ct28-test"}))
+    identity = _ok(fingerprint({"command": "entry-test"}))
+    reservation = EntryReservationEvent(
+        binding_epoch=epoch,
+        sequence=1,
+        instrument="EURUSD",
+        command_identity=identity,
+        event="reserved",
+    )
+    original = cast("Callable[..., Result[JournalAppendReceipt]]", JournalWriter.record)
+
+    def damaged_record(
+        writer: JournalWriter, *args: object, **kwargs: object
+    ) -> Result[JournalAppendReceipt]:
+        result = original(writer, *args, **kwargs)
+        assert is_ok(result)
+        receipt = result.value
+        if damage == "event":
+            receipt = replace(receipt, event=None)  # type: ignore[arg-type]
+        elif damage == "store_receipt":
+            receipt = replace(receipt, store_receipt=None)  # type: ignore[arg-type]
+        else:
+            receipt = replace(
+                receipt,
+                store_receipt=replace(receipt.store_receipt, sequence=999),
+            )
+        return cast("Result[JournalAppendReceipt]", Ok(receipt))
+
+    monkeypatch.setattr(JournalWriter, "record", damaged_record)
+
+    refused = adapter.append(reservation.as_mapping())
+
+    assert not is_ok(refused)
+    assert refused.context["field"] == "reservation_journal"
     store.close()
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar, cast
@@ -1092,6 +1092,49 @@ def test_hosted_decision_sink_refuses_untyped_qmf_ack(
         return cast("Result[JournalAppendReceipt]", Ok(fake_value))
 
     monkeypatch.setattr(JournalWriter, "record", malformed_record)
+
+    refused = _refusal(journal.append({"class": DECISION_TRANSCRIPT_CLASS}))
+
+    assert refused.context["field"] == "decision_journal"
+
+
+@pytest.mark.parametrize("damage", ["event", "store_receipt", "sequence"])
+def test_hosted_decision_sink_verifies_full_physical_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
+) -> None:
+    evidence = EvidenceStore(tmp_path / "evidence")
+    world = _ok(evidence.for_world(World.LIVE))
+    writer_id = _ok(WriterId.try_create("node-test", "supervisor", "hosted", "boot-1"))
+    journal = _ok(
+        QmfHostedDecisionJournal.resume(
+            world.journal,
+            writer_id,
+            stream_name="hosted",
+            instant=_instant,
+        )
+    )
+    original = cast("Callable[..., Result[JournalAppendReceipt]]", JournalWriter.record)
+
+    def damaged_record(
+        writer: JournalWriter, *args: object, **kwargs: object
+    ) -> Result[JournalAppendReceipt]:
+        result = original(writer, *args, **kwargs)
+        assert is_ok(result)
+        receipt = result.value
+        if damage == "event":
+            receipt = replace(receipt, event=None)  # type: ignore[arg-type]
+        elif damage == "store_receipt":
+            receipt = replace(receipt, store_receipt=None)  # type: ignore[arg-type]
+        else:
+            receipt = replace(
+                receipt,
+                store_receipt=replace(receipt.store_receipt, sequence=999),
+            )
+        return cast("Result[JournalAppendReceipt]", Ok(receipt))
+
+    monkeypatch.setattr(JournalWriter, "record", damaged_record)
 
     refused = _refusal(journal.append({"class": DECISION_TRANSCRIPT_CLASS}))
 

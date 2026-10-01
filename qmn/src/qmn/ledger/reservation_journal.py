@@ -6,7 +6,17 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
-from qmf.core import Fingerprint, Instant, Ok, Result, SinkAck, WriterId, fingerprint, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Instant,
+    Ok,
+    Result,
+    SinkAck,
+    WriteOutcome,
+    WriterId,
+    fingerprint,
+    is_refusal,
+)
 from qmf.data import (
     JournalAppendReceipt,
     JournalEvent,
@@ -14,7 +24,7 @@ from qmf.data import (
     JournalReader,
     JournalWriter,
 )
-from qmf.data.store import JournalStore
+from qmf.data.store import JournalStore, StoreReceipt
 from qmf.data.store.rooms import RoomRole
 
 from qmn.ledger._refuse import invalid, policy
@@ -64,13 +74,16 @@ class QmfEntryReservationJournal:
         typed = EntryReservationEvent.from_mapping(cast("Mapping[str, object]", event))
         if is_refusal(typed):
             return typed
+        appended_at = cast(object, self.instant())
+        if not isinstance(appended_at, Instant):
+            return _corrupt_projection()
         persisted = self.writer.record(
             JournalEventType.DATA_QUALITY,
             {
                 "class": _STREAM_EVENT_CLASS,
                 "reservation": dict(typed.value.as_mapping()),
             },
-            instant=self.instant(),
+            instant=appended_at,
         )
         if is_refusal(persisted):
             return persisted
@@ -84,6 +97,8 @@ class QmfEntryReservationJournal:
             writer=self.writer.writer,
             event_type=JournalEventType.DATA_QUALITY,
             payload=expected_payload,
+            instant=appended_at,
+            expected_sequence=self.writer.next_sequence - 1,
         ):
             return _corrupt_projection()
         if type(persisted.value) is not JournalAppendReceipt:
@@ -120,6 +135,9 @@ class QmfEntryReservationJournal:
         initial = _project_reservations(events.value, self.writer.writer, binding_epoch)
         if is_refusal(initial):
             return initial
+        barrier_at = cast(object, self.instant())
+        if not isinstance(barrier_at, Instant):
+            return _corrupt_projection()
         barrier = self.writer.record(
             JournalEventType.DATA_QUALITY,
             {
@@ -133,7 +151,7 @@ class QmfEntryReservationJournal:
                     and event.payload.get("class") == _STREAM_EVENT_CLASS
                 ),
             },
-            instant=self.instant(),
+            instant=barrier_at,
         )
         if is_refusal(barrier):
             return barrier
@@ -149,6 +167,8 @@ class QmfEntryReservationJournal:
             writer=self.writer.writer,
             event_type=JournalEventType.DATA_QUALITY,
             payload=barrier_payload,
+            instant=barrier_at,
+            expected_sequence=self.writer.next_sequence - 1,
         ):
             return _corrupt_projection()
         if type(barrier.value) is not JournalAppendReceipt:
@@ -231,22 +251,34 @@ def _receipt_matches(
     writer: WriterId,
     event_type: JournalEventType,
     payload: Mapping[str, object],
+    instant: Instant,
+    expected_sequence: int,
 ) -> bool:
     if not isinstance(value, JournalAppendReceipt):
         return False
-    event = value.event
-    physical = value.store_receipt
+    event_value: object = cast(object, value.event)
+    physical_value: object = cast(object, value.store_receipt)
+    if not isinstance(event_value, JournalEvent) or not isinstance(physical_value, StoreReceipt):
+        return False
+    event = event_value
+    physical = physical_value
     row_fingerprint = fingerprint(event.to_row())
     if is_refusal(row_fingerprint):
         return False
     return (
         event.event_type is event_type
+        and event.instant == instant
+        and event.sequence == expected_sequence
         and event.payload == payload
         and event.writer == writer
         and event.world is journal.world
         and physical.fingerprint == row_fingerprint.value
+        and physical.sequence == event.sequence
         and physical.world is journal.world
         and physical.room_role is RoomRole.JOURNAL
+        and physical.engine == "jsonl"
+        and physical.format_version == 1
+        and physical.outcome in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
         and physical.is_evidence_bearing
         and physical.retained_forever
     )
