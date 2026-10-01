@@ -130,3 +130,23 @@ packaging/gate/coverage commit `c3821ea018641032adb7e10aa99c365664498807`, the
 bounded source changes are **approved**. The prior pending-commit wording above
 records the review sequence. Product build/install/launch/coverage/Windows
 acceptance limits remain as stated; source review cannot close those lanes.
+
+## Node deployment artifact review 16afbfde
+
+Actual `tools.build_release.archive(qmn/deploy,...)` produces **63 files** and passes installer node archive preflight with all four mandatory entries. No services installed or external deployment performed. Combined installer/gate/intake target **154 passed** (overlapping other reports).
+
+**Heldout failing negative:** after `_manifest` preflight, injected `EnvBuilder.create` replaces qmn-deploy.tar.gz with a valid tar containing only replacement.py. Installer later reopens that path, extracts unchecked replacement, reports success and leaves required node install.py absent. UI extraction uses retained bytes; node extraction must use the same verified bytes validated and checksum-bound before environment/pip work. Owner/root notified. This is a concrete acceptance bypass through artifact substitution, not a deployment action.
+
+Mandatory artifact inclusion and Ubuntu .venv->venv alias preserve existing node unit template paths. No claim of full QMN production readiness follows from installing stand-down deployment assets.
+
+## QA fixture 86dc5a27
+
+Independent diff approved: source-tree factory is included before logic identity mint, spawned child resolves actual manifest-bound factory, original pure-verdict parity assertions retained. Epic15 config helpers compute canonical fingerprint after construction; assertions unchanged. No production behavior or acceptance gate weakened.
+
+## Private installation snapshot correction
+
+Installer snapshot correction `88fa98073263e9a4569129c7572bb47a6182381a` is **approved for the bounded artifact-substitution finding**, following inspection of the final source. All listed artifacts are copied into a private temporary directory and compared to the already accepted digest inventory. The copied acceptance inventory is regenerated from the accepted record, and full archive/wheel/lock/resource preflight is repeated against that snapshot before creating the environment. Pip requirements/wheels, archive extraction, README, launcher, and source-manifest copying consume the snapshot.
+
+Independent held-out pre-snapshot control replaces `requirements.lock` after the initial `_manifest` returns. Installation refuses with “changed after preflight” before environment creation or destination creation. Independent post-snapshot control replaces **every** original listed artifact plus original `acceptance.json` during `EnvBuilder.create`; installation still supplies the original verified requirement bytes and all **14** original wheel byte sequences to mocked pip, and copies original README/launcher/source-manifest bytes. Every consumed pip artifact comes from the private directory. These are actual filesystem mutation controls with mocked environment/pip effects, not a claim of actual dependency installation.
+
+Combined independently run ATC/CT12/request/installer suites pass **140 tests in 3.07 seconds**. The installer portion contains its focused snapshot regressions. Actual new-bundle build/install remains a separate acceptance step; no Windows, provider, service deployment, or product economics acceptance is inferred.
