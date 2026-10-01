@@ -68,6 +68,80 @@ export const TOOLS = [
   { id: "build_app", note: "Compose a mini app from the component catalog" },
 ];
 
+/**
+ * What the copilot can reach (docs: published ∩ granted ∩ healthy). Each
+ * target lists its operations and where it stands on the five listing
+ * axes. Demo values; the daemon's listing replaces them.
+ */
+export const TARGETS = [
+  {
+    id: "research-fx",
+    name: "Research · FX",
+    kind: "Mini app",
+    ops: ["fx.quote", "fx.signals", "fx.correlation"],
+    axes: {
+      published: true,
+      configured: true,
+      granted: true,
+      reachable: true,
+      healthy: true,
+    },
+  },
+  {
+    id: "calendar-sync",
+    name: "Calendar sync",
+    kind: "Headless app",
+    ops: ["calendar.refresh", "calendar.windows"],
+    axes: {
+      published: true,
+      configured: true,
+      granted: true,
+      reachable: true,
+      healthy: true,
+    },
+  },
+  {
+    id: "lab",
+    name: "Backtest lab",
+    kind: "Mini app",
+    ops: ["qmb.backtest", "qmb.walk_forward", "qmb.robustness"],
+    axes: {
+      published: true,
+      configured: true,
+      granted: false,
+      reachable: true,
+      healthy: true,
+    },
+  },
+  {
+    id: "paper-node",
+    name: "Paper node",
+    kind: "Trading node",
+    ops: ["node.status", "node.journal"],
+    axes: {
+      published: true,
+      configured: true,
+      granted: true,
+      reachable: true,
+      healthy: true,
+    },
+  },
+  {
+    id: "live-node",
+    name: "Live node",
+    kind: "Trading node",
+    ops: ["node.status"],
+    axes: {
+      published: true,
+      configured: true,
+      granted: true,
+      reachable: false,
+      healthy: false,
+    },
+  },
+] as const;
+export type TargetId = (typeof TARGETS)[number]["id"];
+
 export const THEMES = [
   "ink",
   "cobalt",
@@ -103,6 +177,8 @@ class Workbench {
   /** Visual theme: a per-machine preference, never a daemon setting. */
   theme = $state<Theme>(storedTheme());
   model = $state("opus");
+  /** The app or node a message is aimed at; none = the copilot decides. */
+  target = $state<TargetId | null>(null);
   /** Default model per copilot profile; the daemon owns the real setting. */
   modelDefaults = $state<Record<string, string>>({
     copilot: "opus",

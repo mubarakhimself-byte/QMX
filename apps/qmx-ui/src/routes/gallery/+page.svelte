@@ -9,6 +9,10 @@
   import DataTable, { type Column } from "$lib/qmx/DataTable.svelte";
   import EntityCard from "$lib/qmx/EntityCard.svelte";
   import CandleChart from "$lib/demo/CandleChart.svelte";
+  import LineChart from "$lib/qmx/LineChart.svelte";
+  import TickerTape from "$lib/qmx/TickerTape.svelte";
+  import RunConsole from "$lib/qmx/RunConsole.svelte";
+  import { equityWalk } from "$lib/qmx/charts";
   import Sparkline from "$lib/demo/Sparkline.svelte";
   import { CATALOG } from "$lib/qmx/catalog";
   import { DEMO_ENTITIES } from "$lib/demo/assets";
@@ -127,6 +131,47 @@
           {:else if selected === "EntityCard"}
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {#each DEMO_ENTITIES as a (a.id)}<EntityCard entity={a} />{/each}
+            </div>
+          {:else if selected === "LineChart"}
+            <div class="surface h-64 rounded-lg p-4">
+              <LineChart
+                series={[
+                  {
+                    label: "Strategy",
+                    values: equityWalk(4, 90, 0.0015),
+                    color: "var(--chart-1)",
+                  },
+                  {
+                    label: "Benchmark",
+                    values: equityWalk(9, 90, 0.0005),
+                    color: "var(--muted-foreground)",
+                    dashed: true,
+                  },
+                ]}
+              />
+            </div>
+          {:else if selected === "TickerTape"}
+            <div class="surface overflow-hidden rounded-lg">
+              <TickerTape
+                items={[
+                  { sym: "EURUSD", px: "1.0883", chg: -0.4 },
+                  { sym: "BTC", px: "64,210", chg: 1.83 },
+                  { sym: "US500", px: "5531.6", chg: 0.57 },
+                  { sym: "XAUUSD", px: "2384.1", chg: -0.22 },
+                ]}
+              />
+            </div>
+          {:else if selected === "RunConsole"}
+            <div class="h-48">
+              <RunConsole
+                command="qmb backtest us500-trend"
+                lines={[
+                  "data verify US500 H4 ok",
+                  "fold 1/12 sharpe 1.21",
+                  "CT-32 written · confirmation",
+                ]}
+                status="done"
+              />
             </div>
           {:else if selected === "EmptyState"}
             <div class="surface rounded-lg">

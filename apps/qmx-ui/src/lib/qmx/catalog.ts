@@ -164,6 +164,78 @@ export const CATALOG: CatalogEntry[] = [
     example: { entity: "DEMO_ENTITIES[0]", compact: false },
   },
   {
+    type: "LineChart",
+    group: "Chart",
+    description:
+      "Several series on one shared axis with a legend: equity comparisons, training curves, Monte Carlo medians with a percentile band.",
+    props: {
+      series: {
+        type: "array",
+        description: "[{ label, values, color, dashed? }]",
+        required: true,
+      },
+      band: {
+        type: "object",
+        description: "Optional { path, color } shaded band.",
+      },
+    },
+    example: {
+      series: [
+        {
+          label: "Strategy",
+          values: [100, 101, 103, 102, 105],
+          color: "var(--chart-1)",
+        },
+      ],
+    },
+  },
+  {
+    type: "TickerTape",
+    group: "Data",
+    description:
+      "Scrolling price strip; pauses on hover and for reduced motion.",
+    props: {
+      items: {
+        type: "array",
+        description: "[{ sym, px, chg }]",
+        required: true,
+      },
+    },
+    example: {
+      items: [
+        { sym: "EURUSD", px: "1.0883", chg: -0.4 },
+        { sym: "BTC", px: "64,210", chg: 1.83 },
+      ],
+    },
+  },
+  {
+    type: "RunConsole",
+    group: "State",
+    description:
+      "Read-only output of a job (a preview, not a shell), with the command and its status.",
+    props: {
+      lines: {
+        type: "array",
+        description: "Output lines in order.",
+        required: true,
+      },
+      command: {
+        type: "string",
+        description: "The command or operation that produced it.",
+      },
+      status: {
+        type: "enum",
+        description: "Job status.",
+        options: ["queued", "running", "done", "failed"],
+      },
+    },
+    example: {
+      command: "qmb backtest us500-trend",
+      lines: ["fold 1/12 sharpe 1.21"],
+      status: "done",
+    },
+  },
+  {
     type: "EmptyState",
     group: "State",
     description:

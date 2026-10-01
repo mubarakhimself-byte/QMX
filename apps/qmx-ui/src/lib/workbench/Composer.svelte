@@ -11,9 +11,10 @@
   import LibraryBig from "@lucide/svelte/icons/library-big";
   import Upload from "@lucide/svelte/icons/upload";
   import LayoutPanelTop from "@lucide/svelte/icons/layout-panel-top";
+  import AtSign from "@lucide/svelte/icons/at-sign";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Button } from "$lib/components/ui/button";
-  import { workbench, MODELS, TOOLS } from "./workbench.svelte";
+  import { workbench, MODELS, TOOLS, TARGETS } from "./workbench.svelte";
   import { cn } from "$lib/utils";
 
   let {
@@ -38,6 +39,19 @@
     MODELS.find((m) => m.id === workbench.model) ?? MODELS[0],
   );
   const toolCount = $derived(workbench.tools.length);
+  const target = $derived(TARGETS.find((t) => t.id === workbench.target));
+  const AXES = [
+    "published",
+    "configured",
+    "granted",
+    "reachable",
+    "healthy",
+  ] as const;
+  /** Where a target falls short, in plain words. */
+  function gap(t: (typeof TARGETS)[number]): string | null {
+    const missing = AXES.find((a) => !t.axes[a]);
+    return missing ? `not ${missing}` : null;
+  }
   const chip =
     "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap";
 </script>
@@ -101,6 +115,56 @@
         <DropdownMenu.Label class="text-muted-foreground text-xs font-normal">
           Use the message-plus icon on any widget to attach it.
         </DropdownMenu.Label>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        class={chip}
+        aria-label={`Target: ${target?.name ?? "copilot decides"}`}
+      >
+        <AtSign class="size-4" />
+        {target?.name ?? "Target"}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" class="w-80">
+        <DropdownMenu.Label>Aim this message at</DropdownMenu.Label>
+        <DropdownMenu.RadioGroup
+          value={workbench.target ?? ""}
+          onValueChange={(v) =>
+            (workbench.target = (v || null) as typeof workbench.target)}
+        >
+          <DropdownMenu.RadioItem value="" closeOnSelect>
+            <span class="flex flex-col"
+              ><span>Let the copilot decide</span><span
+                class="text-muted-foreground text-xs"
+                >It picks from what you have granted</span
+              ></span
+            >
+          </DropdownMenu.RadioItem>
+          {#each TARGETS as t (t.id)}
+            {@const g = gap(t)}
+            <DropdownMenu.RadioItem
+              value={t.id}
+              closeOnSelect
+              disabled={!!g && g !== "not granted"}
+            >
+              <span class="flex min-w-0 flex-col">
+                <span class="flex items-center gap-2"
+                  >{t.name}<span class="text-muted-foreground text-xs"
+                    >{t.kind}</span
+                  ></span
+                >
+                <span
+                  class="text-muted-foreground truncate font-mono text-[11px]"
+                  >{t.ops.join(" · ")}</span
+                >
+                <span class={cn("text-xs", g ? "text-warning" : "text-success")}
+                  >{g ? `Can't use: ${g}` : "Ready"}</span
+                >
+              </span>
+            </DropdownMenu.RadioItem>
+          {/each}
+        </DropdownMenu.RadioGroup>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
 

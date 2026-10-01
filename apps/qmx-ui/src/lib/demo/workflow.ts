@@ -8,6 +8,10 @@ export type StepData = {
   kind: "Data" | "Feature" | "Model" | "Test" | "Output";
   label: string;
   detail: string;
+  /** Tiny preview of the step's last output (values 0..1). */
+  preview?: number[];
+  /** Last run of the published version. */
+  status?: "ok" | "warn" | "stale";
 };
 
 type Step = StepData & {
@@ -106,12 +110,82 @@ export const DEMO_STEPS: Step[] = [
   },
 ];
 
+const wave = (seed: number, n = 24) =>
+  Array.from(
+    { length: n },
+    (_, i) =>
+      0.5 + 0.35 * Math.sin(i / 3 + seed) + 0.1 * Math.sin(i * 1.7 + seed * 2),
+  );
+const PREVIEWS: Record<string, number[]> = {
+  src: wave(1),
+  feat: wave(2),
+  label: [0.38, 0.41, 0.21],
+  model: Array.from(
+    { length: 24 },
+    (_, i) => 0.9 - 0.6 * (1 - Math.exp(-i / 6)),
+  ),
+  bt: Array.from({ length: 24 }, (_, i) => 0.2 + i * 0.03 + 0.05 * Math.sin(i)),
+  out: wave(5),
+};
+
+/** Operations the palette offers (from published contributions in the real app). */
+export const PALETTE: {
+  group: StepData["kind"];
+  items: { label: string; detail: string }[];
+}[] = [
+  {
+    group: "Data",
+    items: [
+      { label: "MT5 bars", detail: "Symbol, timeframe, range" },
+      { label: "Dataset from Library", detail: "Any stored dataset" },
+      { label: "Economic calendar", detail: "Events and news windows" },
+    ],
+  },
+  {
+    group: "Feature",
+    items: [
+      { label: "Indicators", detail: "ATR, RSI, moving averages" },
+      { label: "Labels", detail: "Triple barrier, fixed horizon" },
+      { label: "Regime", detail: "From a regime model" },
+    ],
+  },
+  {
+    group: "Model",
+    items: [
+      { label: "Gradient boosting", detail: "LightGBM / XGBoost" },
+      { label: "Hidden Markov model", detail: "Regimes" },
+      { label: "Rules", detail: "Plain entry and exit rules" },
+    ],
+  },
+  {
+    group: "Test",
+    items: [
+      { label: "Backtest", detail: "qmb backtest" },
+      { label: "Walk-forward", detail: "qmb walk-forward" },
+      { label: "Monte Carlo", detail: "qmb robustness" },
+    ],
+  },
+  {
+    group: "Output",
+    items: [
+      { label: "Report", detail: "Save to Library" },
+      { label: "Alert", detail: "Notify on a condition" },
+    ],
+  },
+];
+
 export const demoNodes = (): Node[] =>
   DEMO_STEPS.map((s) => ({
     id: s.id,
     type: "step",
     position: { x: s.x, y: s.y },
-    data: { kind: s.kind, label: s.label, detail: s.detail },
+    data: {
+      kind: s.kind,
+      label: s.label,
+      detail: s.detail,
+      preview: PREVIEWS[s.id],
+      status: s.id === "label" ? "warn" : "ok",
+    },
   }));
 
 export const demoEdges = (): Edge[] =>
