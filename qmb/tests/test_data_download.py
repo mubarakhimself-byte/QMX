@@ -9,7 +9,9 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypeVar
+from typing import Callable, Protocol, TypeVar, cast
+
+import pytest
 
 from click.testing import CliRunner
 from qmb.data import (
@@ -52,6 +54,31 @@ from qmf.data.journal_producer import JournalReader
 from qmf.data.source_boundary import SourceObservationBoundary
 
 T = TypeVar("T")
+
+
+class _Process(Protocol):
+    @property
+    def exitcode(self) -> int | None: ...
+
+    def start(self) -> None: ...
+
+    def join(self, timeout: float | None = None) -> None: ...
+
+
+class _Queue(Protocol):
+    def get(self, block: bool = True, timeout: float | None = None) -> object: ...
+
+    def put(self, value: object) -> None: ...
+
+
+class _ForkContext(Protocol):
+    def Barrier(self, parties: int) -> object: ...
+
+    def Queue(self) -> _Queue: ...
+
+    def Process(
+        self, *, target: Callable[..., object], args: tuple[object, ...]
+    ) -> _Process: ...
 
 _HOUR = datetime(2024, 1, 15, 10, tzinfo=timezone.utc)
 _HOUR_NS = int(_HOUR.timestamp() * 1_000_000_000)
@@ -216,7 +243,9 @@ def test_download_once_admits_ct10_bid_ask_and_license() -> None:
         assert progress.samples[-1].date_reached_ns == _END_NS
 
 
-def test_download_refuses_unknown_ct10_admission_ack(tmp_path: Path, monkeypatch) -> None:
+def test_download_refuses_unknown_ct10_admission_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = "EURUSD/2024/00/15/10h_ticks.bi5"
     transport = _FixtureTransport({path: _bi5((0, 110260, 110250))})
     root = tmp_path / "rooms"
@@ -224,7 +253,11 @@ def test_download_refuses_unknown_ct10_admission_ack(tmp_path: Path, monkeypatch
     evidence = resources["store"]
     assert isinstance(evidence, EvidenceStore)
     boundary = SourceObservationBoundary(evidence)
-    monkeypatch.setattr(boundary, "admit", lambda _observation: Ok(None))
+
+    def unknown_ack(_observation: object) -> Result[object]:
+        return Ok(None)
+
+    monkeypatch.setattr(boundary, "admit", unknown_ack)
     resources["boundary"] = boundary
 
     result = download(resources)
@@ -279,7 +312,7 @@ def test_ct15_resume_initialization_is_serialized_in_process() -> None:
 
 
 def test_ct15_two_process_downloads_share_one_authority_sequence(tmp_path: Path) -> None:
-    context = multiprocessing.get_context("fork")
+    context = cast(_ForkContext, multiprocessing.get_context("fork"))
     ready = context.Barrier(2)
     results = context.Queue()
     workers = [

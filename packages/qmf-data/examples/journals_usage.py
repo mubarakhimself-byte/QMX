@@ -249,6 +249,9 @@ class _FlakyStream:
     def rebuild_index(self) -> None:
         self._inner.rebuild_index()
 
+    def refresh_and_sync_prefix(self) -> None:
+        self._inner.refresh_and_sync_prefix()
+
     def release(self) -> None:
         self._inner.release()
 

@@ -277,6 +277,27 @@ def download(
     if isinstance(receive, bool) or not isinstance(receive, int):
         receive = request.end_ns
 
+    # Finish provider-side validation for the whole request before opening any
+    # world-scoped QMF rooms. A refusal from any requested symbol must leave no
+    # intake namespace or partial raw archive behind.
+    fetched_batches: list[tuple[str, tuple[ProviderRecord, ...]]] = []
+    for symbol in request.symbols:
+        fetched = port.fetch(
+            ProviderFetchRequest(
+                source=port.source,
+                symbol=symbol,
+                start_ns=request.start_ns,
+                end_ns=request.end_ns,
+                resolution=request.resolution,
+                side=request.side,
+                revision=request.revision,
+                license_tag=request.license_tag.value,
+            )
+        )
+        if is_refusal(fetched):
+            return fetched
+        fetched_batches.append((symbol, fetched.value))
+
     # CT-15 owns normalization. QMF's per-world CT-13 stream is the durable key
     # authority; the application-local file is never consulted for deduplication.
     if evidence is None:
@@ -304,20 +325,7 @@ def download(
     windows: list[Mapping[str, object]] = []
     total = len(request.symbols)
     sequence = 0
-    for index, symbol in enumerate(request.symbols):
-        fetch_req = ProviderFetchRequest(
-            source=port.source,
-            symbol=symbol,
-            start_ns=request.start_ns,
-            end_ns=request.end_ns,
-            resolution=request.resolution,
-            side=request.side,
-            revision=request.revision,
-            license_tag=request.license_tag.value,
-        )
-        fetched = port.fetch(fetch_req)
-        if is_refusal(fetched):
-            return fetched
+    for index, (symbol, fetched_records) in enumerate(fetched_batches):
         window_meta: dict[str, object] = {
             "venue": request.venue,
             "symbol": symbol,
@@ -355,7 +363,7 @@ def download(
             return market_data
         covered_event_ns: list[int] = []
         batch_keys: dict[IntakeKey, ProviderRecord] = {}
-        for record in fetched.value:
+        for record in fetched_records:
             record_sequence = sequence
             sequence += 1
             key = IntakeKey.try_create(record.source, record.source_native_id, record.revision)
