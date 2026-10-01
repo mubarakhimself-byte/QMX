@@ -46,3 +46,37 @@ ef5c0ef8989ea6b580c50a5887713756b65f93903e32e60f942ec7cfe3c00eb9 review_retry5_p
 ```
 
 Execution and the coordinator were notified before corrective editing. These are FAIL findings on the original held bytes; later repairs require a new exact hash review.
+
+## Corrected retry5 re-review — FAIL, 2026-10-01
+
+This is a separate bounded review of Execution's explicit latest hold. The earlier corrective session/grants hashes `34e146…`/`376ae6…` were superseded before this active diagnostic; this review uses hydration-first `f843b2…`/`92da64…`. All five hashes below matched diagnostic entry/exit and the final report census. No source/test edits or commits.
+
+**P1 remains at the shared public continuation boundary.** The normal process now refuses a changed-input duplicate start and a fresh attempt 2 before executor/acceptance effects. Its accepted journal event retains a canonical `binding_fp1`. However, `product_session.py:1262`, `1876-1989`, `2198-2356` retain/hydrate only grant, fingerprint and attempt, rather than a reconstructable complete accepted authority binding. `dispatch_public_call` at `2470-2585` evaluates the accepted logical/grant exception and dispatches the newly validated request without comparing that request with the original accepted binding or requiring authorized persisted progression.
+
+The finite control first obtains a genuine validated BoundInvocation using the shared dispatcher and official stores, computes the same descriptor/envelope/validated-payload fingerprint body as `process.py:2867`, accepts attempt 1, revokes the grant, physically closes journal/SQLite, then reopens both. Direct `record_retry_attempt` for 1→2 with the original fingerprint succeeds. Duplicate 1→2, skip 2→4, reset 1→2 and wrong-fingerprint 2→3 refuse. The same-input shared dispatch positive then executes `run-1` with input hash `fp1:sha256:29ccb612dd33e32a291b4542c3b52fc7eacc516e93d4197a3053e53b77aea31b`. A changed-input dispatch also executes `run-different` with its correctly recomputed hash `fp1:sha256:f16400f2d421f8caa5d8cb7e80ad64fbdb2fe46cea5c6cb710d155b4787ecefc`, on the same accepted logical/grant. Both supplied attempt 3 without an accepted attempt-3 event. Each reaches its callback; this is not an invalid supplied hash.
+
+The accepted journal contains exactly attempt-1 accept and attempt-2 retry payloads with fingerprint, grant, logical id and moment. The full body in the diagnostic result is independently reconstructed diagnostic data, not persisted product evidence. In a second service using the reopened SQLite projection without journal proof, direct retry correctly refuses, but shared dispatch of `run-legacy-different` still executes under the same revoked grant. Thus the missing-proof refusal is not enforced at every continuation entrypoint.
+
+**Correction required:** persist the complete accepted authority binding (including approved session/context/grant and original validated full input) and reconstruct/revalidate it on physical readback. Gate every public continuation/helper before executor effects on exact accepted-work equality and persisted next-attempt authority. Legacy insufficient-proof state must receive a scoped typed refusal at dispatch too. The process-only duplicate-start fix and matching caller-supplied fingerprint do not establish that shared contract. The original P2 fresh higher-attempt/unchecked direct progression is corrected in the exercised controls; that does not resolve this P1.
+
+**Validation:** from `qmx-agents/packages/qma-daemon`, `uv run --no-sync python -m pytest -q -p no:cacheprovider tests/test_product_session_host_retry.py tests/test_product_session_grants.py tests/test_j_kit_06_host_retry.py` — **17 passed in 0.73s**. Diagnostic command: `uv run --no-sync python /workspace/qmx-independent-review-archive/qma-qmb-local-authority-diagnostics/review_retry5_public_identity_corrected.py` — exit 0, observed outcomes retained. Healthy normal attempt-1 executes once; fresh normal attempt-2 produces invalid-input with zero executor/accepted events; changed normal duplicate start refuses with only the original call/event. These meaningful positives/refusers distinguish the fixed process path from the residual shared continuation failure.
+
+Latest source binding, paths relative to the daemon package:
+
+```text
+5e4fb10a04bf644122130e75c50dd5f13dac527d70719c55494747e489bb08c4 examples/product_session_grants_usage.py
+e21661f28b850d095e4135fab7814f6951b9a55c5338ce1ca3b0a588daedc58f src/qma/daemon/process.py
+f843b2f2d228e4e7134085c54ef826441dbd6b236109a154df6d173b068eaab7 src/qma/daemon/sessions/product_session.py
+92da644d05f7c72fcca9f3f872f660b64f64a292fed6e47cf82ff7c4d467e93b tests/test_product_session_grants.py
+0b85491a0290ca040d9ebcdf79d759b5ef5f22249b3059f60b815e5740636480 tests/test_product_session_host_retry.py
+```
+
+Archived program/results/argv/source notes:
+
+```text
+1c07ec9a8f149cecc331142bcb6852ba2a51965daee9420b7ad2c7f75dbc214c review_retry5_public_identity_corrected.py
+2f83b2a0012f232a7ff661fcbcc4e75af8d216068f77336cde99282a96288241 review_retry5_public_identity_corrected.results.json
+4861db3e07e89f22dbb39ac4395bab5ff705651f784881969a6715d4822defe6 review_retry5_public_identity_corrected.notes.json
+```
+
+Execution and the coordinator received the residual finding before any repair. No complete coupled QMA persistence/normal publisher, provider, restart concurrency, security or release acceptance is implied. Any corrective source changes require release of this hold and a new exact frozen re-review; earlier FAIL evidence remains intact.
