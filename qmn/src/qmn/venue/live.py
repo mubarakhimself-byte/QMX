@@ -1152,6 +1152,8 @@ class LiveCTraderClient:
         venue_time_raw: object = None,
         venue_time_unit: object = "milliseconds",  # mock-data-scan: allow - wire time-unit default
         revision: object = 0,
+        response_account_id: object = None,
+        response_session_epoch: object = None,
         lifecycle_kind: object = None,
         fill_price_wire: object = None,
         fill_price_is_execution_double: object = False,
@@ -1234,6 +1236,10 @@ class LiveCTraderClient:
             "monotonic_ns": monotonic.value_ns,
             "boot_epoch": monotonic.boot_epoch_id,
             "session_epoch": self._session_epoch,
+            "venue_id": self._venue_id.value,
+            "trader_account_id": self._ctid_trader_account_id,
+            "response_account_id": response_account_id,
+            "response_session_epoch": response_session_epoch,
             "venue_instant_ns": venue_instant.value_ns if venue_instant is not None else None,
             "interpreted": False,
         }
@@ -1255,6 +1261,8 @@ class LiveCTraderClient:
             venue_instant=venue_instant,
             revision=revision,
             instrument=instrument,
+            response_account_id=response_account_id,
+            response_session_epoch=response_session_epoch,
         )
         if is_refusal(persisted):
             return persisted
@@ -1287,6 +1295,8 @@ class LiveCTraderClient:
 
         record = decoded.value
         record["verbatim_recorded"] = True
+        if not isinstance(persisted.value, bool):
+            record["intake_receipt"] = persisted.value
         record["journal_mapping"] = dict(mapping.as_mapping())
         record["receive_wall_time_ns"] = receive_wall.value_ns
         record["venue_instant_ns"] = venue_instant.value_ns if venue_instant is not None else None
@@ -1305,7 +1315,9 @@ class LiveCTraderClient:
         venue_instant: Instant | None,
         revision: object,
         instrument: object,
-    ) -> Result[bool]:
+        response_account_id: object,
+        response_session_epoch: object,
+    ) -> Result[object]:
         """Emit verbatim wire + journal mapping before any scale conversion."""
         if self._intake is not None:
             stream_id = native_id
@@ -1328,7 +1340,7 @@ class LiveCTraderClient:
             )
             if is_refusal(recorded):
                 return recorded
-            return Ok(True)
+            return Ok(recorded.value)
         if self._connection_manager is not None:
             obs = self._connection_manager.emit_command_observation(dict(verbatim))
             if is_refusal(obs):

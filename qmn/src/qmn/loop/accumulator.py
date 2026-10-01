@@ -41,6 +41,7 @@ from qmn.loop.kinds import (
 )
 
 __all__ = [
+    "AccumulatorWriteReceipt",
     "RecordingAccumulator",
     "clear_first_writer_registry",
     "first_writer_for",
@@ -49,6 +50,14 @@ __all__ = [
 
 
 _REGISTRY: Final[MutableMapping[str, str]] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class AccumulatorWriteReceipt:
+    """Exact observation and CT-13 sink acknowledgments for one pushed row."""
+
+    observation: SinkAck
+    journal: SinkAck
 
 
 def stream_key(venue_id: VenueId, account: Account) -> str:
@@ -221,11 +230,41 @@ class RecordingAccumulator:
         coalesce_key: object = None,
         closed: object = True,
     ) -> Result[InboundObservation]:
+        """Record and enqueue one inbound observation, discarding internal sink receipts."""
+        recorded = self.push_with_receipt(
+            observation_id=observation_id,
+            stream_id=stream_id,
+            receive_wall=receive_wall,
+            payload=payload,
+            kind=kind,
+            observation_class=observation_class,
+            venue_instant=venue_instant,
+            coalesce_key=coalesce_key,
+            closed=closed,
+        )
+        if is_refusal(recorded):
+            return recorded
+        return Ok(recorded.value[0])
+
+    def push_with_receipt(
+        self,
+        *,
+        observation_id: object,
+        stream_id: object,
+        receive_wall: object,
+        payload: object,
+        kind: object = None,
+        observation_class: object = None,
+        venue_instant: object = None,
+        coalesce_key: object = None,
+        closed: object = True,
+    ) -> Result[tuple[InboundObservation, AccumulatorWriteReceipt]]:
         """Record then enqueue one inbound observation as foldable.
 
         Order is mandatory: observation-sink emit and WriterId journal append
         happen before the observation becomes foldable. A sibling write path
-        does not exist on this object.
+        does not exist on this object. This result transfers the exact two sink
+        acknowledgments to governed intake without retaining them in a cache.
         """
         klass: ObservationClass
         if observation_class is None:
@@ -285,7 +324,7 @@ class RecordingAccumulator:
         overflow = self._enqueue(obs)
         if is_refusal(overflow):
             return overflow
-        return Ok(obs)
+        return Ok((obs, recorded.value))
 
     def pull_foldable(self) -> tuple[InboundObservation, ...]:
         """Drain every foldable observation for the pending frontier close."""
@@ -419,7 +458,7 @@ class RecordingAccumulator:
                 return Ok(True)
         return Ok(False)
 
-    def _record_and_journal(self, obs: InboundObservation) -> Result[bool]:
+    def _record_and_journal(self, obs: InboundObservation) -> Result[AccumulatorWriteReceipt]:
         event_type = _journal_event_type(obs)
         if is_refusal(event_type):
             return event_type
@@ -439,6 +478,8 @@ class RecordingAccumulator:
         emitted = self.observation_sink.emit(MappingProxyType(dict(record)))
         if is_refusal(emitted):
             return emitted
+        if type(emitted.value) is not SinkAck:
+            return _invalid("observation_sink", "raw observation sink returns exact SinkAck")
         journal_row: dict[str, object] = {
             "event_type": event_type.value,
             "kind": "accumulator-journal",
@@ -449,12 +490,15 @@ class RecordingAccumulator:
             "sequence_hint": self._receive_seq + 1,
             **identity,
         }
+        journal_row["_observation_ack"] = emitted.value
         if obs.venue_instant is not None:
             journal_row["venue_instant_ns"] = obs.venue_instant.value_ns
         appended = self.journal_sink.append(MappingProxyType(dict(journal_row)))
         if is_refusal(appended):
             return appended
-        return Ok(True)
+        if type(appended.value) is not SinkAck:
+            return _invalid("journal_sink", "CT-13 journal sink returns exact SinkAck")
+        return Ok(AccumulatorWriteReceipt(observation=emitted.value, journal=appended.value))
 
     def _writer_fields(self) -> Mapping[str, object]:
         return MappingProxyType(

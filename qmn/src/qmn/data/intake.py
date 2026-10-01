@@ -19,7 +19,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core import Instant, Ok, Result, TypedRefusal, World, is_refusal
+from qmf.core import Instant, Ok, Result, SinkAck, TypedRefusal, World, is_refusal
 
 from qmn.data._refuse import clean_token, invalid, policy
 from qmn.data.mapping import (
@@ -27,7 +27,7 @@ from qmn.data.mapping import (
     journal_event_for_kind,
     refuse_observation_journal_type,
 )
-from qmn.loop.accumulator import RecordingAccumulator, first_writer_for
+from qmn.loop.accumulator import AccumulatorWriteReceipt, RecordingAccumulator, first_writer_for
 from qmn.loop.kinds import InboundObservation
 
 __all__ = [
@@ -97,6 +97,8 @@ class LiveIntakeReceipt:
     journal_event_type: str
     foldable: bool
     raw_payload: Mapping[str, object]
+    observation_ack: SinkAck | None = None
+    journal_ack: SinkAck | None = None
 
     def as_mapping(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -283,6 +285,8 @@ class GovernedLiveIntake:
                     journal_event_type=prior.journal_event_type,
                     foldable=False,
                     raw_payload=prior.raw_payload,
+                    observation_ack=prior.observation_ack,
+                    journal_ack=prior.journal_ack,
                 )
             )
 
@@ -303,7 +307,7 @@ class GovernedLiveIntake:
             body.setdefault("kind", kind_token)
             body.setdefault("wire_kind", kind_token)
 
-        pushed = self.accumulator.push(
+        pushed = self.accumulator.push_with_receipt(
             observation_id=observation_id,
             stream_id=stream_id,
             receive_wall=receive_wall,
@@ -314,14 +318,19 @@ class GovernedLiveIntake:
         )
         if is_refusal(pushed):
             return pushed
+        observation, persisted = pushed.value
+        if type(persisted) is not AccumulatorWriteReceipt:
+            return invalid("write_receipt", "governed intake retains the exact paired sink ACKs")
 
         receipt = LiveIntakeReceipt(
-            observation=pushed.value,
+            observation=observation,
             outcome=outcome,
             identity=ident,
             journal_event_type=journal_type.value,
             foldable=True,
             raw_payload=MappingProxyType(dict(raw)),
+            observation_ack=persisted.observation,
+            journal_ack=persisted.journal,
         )
         self._ledger[ident.key] = receipt
         self._native_revision[ident.native_key] = ident.revision
