@@ -29,6 +29,7 @@ from qmf.data import JournalWriter
 from qmf.data.store import EvidenceStore, JournalStore
 
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
+from qmn.host.configured_runtime import assess_configured_runtime
 from qmn.time.clock import VpsClock
 
 __all__ = [
@@ -267,7 +268,9 @@ def main() -> int:
         print(f"qmn supervisor refused configuration: {dict(configured.context)}", file=sys.stderr)
         return 2
     root, state, bind_host, bind_port = configured.value
-    del root, state
+    deployment_path = os.environ.get("QMN_DEPLOYMENT_CONFIG")
+    configured_runtime_reason = "no operator-pinned deployment configuration is installed"
+    del state
 
     stopped = False
 
@@ -289,7 +292,7 @@ def main() -> int:
                     "process": "alive",
                     "state": "stand-down-alive",
                     "trading": "unavailable",
-                    "reason": "production venue adapter is not composed",
+                    "reason": configured_runtime_reason,
                 }
             else:
                 status = 404
@@ -327,6 +330,20 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    if deployment_path is not None:
+        assessment = assess_configured_runtime(deployment_path, qmx_root=root)
+        if is_refusal(assessment):
+            configured_runtime_reason = str(
+                assessment.context.get(
+                    "reason",
+                    assessment.context.get("field", "configured runtime preflight refused"),
+                )
+            )
+        else:
+            configured_runtime_reason = (
+                assessment.value.stand_down_reason
+                or "configured runtime is not authorized for activation"
+            )
     ready = notify_ready()
     if is_refusal(ready):
         server.server_close()

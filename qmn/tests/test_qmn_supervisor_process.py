@@ -23,7 +23,13 @@ def _port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _launch(root: Path, state: Path, port: int) -> subprocess.Popen[bytes]:
+def _launch(
+    root: Path,
+    state: Path,
+    port: int,
+    *,
+    deployment_file: Path | None = None,
+) -> subprocess.Popen[bytes]:
     env = os.environ.copy()
     env.update(
         {
@@ -32,6 +38,8 @@ def _launch(root: Path, state: Path, port: int) -> subprocess.Popen[bytes]:
             "QMN_EVIDENCE_BIND": f"127.0.0.1:{port}",
         }
     )
+    if deployment_file is not None:
+        env["QMN_DEPLOYMENT_CONFIG"] = str(deployment_file)
     return subprocess.Popen(
         [sys.executable, "-m", "qmn.host.supervise"],
         env=env,
@@ -113,3 +121,29 @@ def test_supervisor_fails_actionably_without_configured_directories(tmp_path: Pa
     )
     assert completed.returncode == 2
     assert "qmx_root" in completed.stderr
+
+
+def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    deployment = tmp_path / "deployment.json"
+    deployment.write_text("{}", encoding="utf-8")
+    port = _port()
+    process = _launch(tmp_path, state, port, deployment_file=deployment)
+    try:
+        _wait_status(port, process)
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                raise AssertionError(f"invalid deployment unexpectedly returned {response.status}")
+        except HTTPError as response:
+            assert response.code == 503
+            readiness = json.loads(response.read())
+            assert readiness["trading"] == "unavailable"
+            assert "versioned configured-runtime fields" in readiness["reason"]
+    finally:
+        process.terminate()
+        _stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 0
+        assert stderr is not None and b"RuntimeWarning" not in stderr
