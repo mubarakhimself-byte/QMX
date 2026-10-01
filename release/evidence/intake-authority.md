@@ -54,3 +54,11 @@ uv run --no-sync python -m pyright packages/qmf-data/src/qmf/data/intake_authori
 ```
 
 Independent Sol retest and the full release install/gate suite remain pending.
+
+
+Root integration validation after `be314578`:
+`uv run --no-sync pytest packages/qmf-data/tests -q` — PASS, 556 tests in
+4.99 seconds. Exact output `/workspace/qmx-qmf-data-post-intake.log`.
+QMF data product sources remained identical to the reviewed CT15 correction;
+other application integration was still in progress. This broadens the
+bounded data regression evidence, not whole-release acceptance.
