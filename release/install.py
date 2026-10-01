@@ -1,13 +1,15 @@
 """Install the checksum-bound QMX bundle into a non-editable private environment.
 
-Run with CPython 3.14. Runtime downloads use the hash-pinned requirements;
-developer/factory tools are not installed as product prerequisites.
+Run with CPython 3.14. Offline bundles install their hash-pinned runtime
+wheel closure; legacy online resolution requires the explicit --allow-online
+option. Developer/factory tools are not product prerequisites.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -22,7 +24,7 @@ import zipfile
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from stat import S_ISLNK
-from typing import cast
+from typing import Any, cast
 
 PRODUCT_DISTRIBUTIONS = frozenset(
     {
@@ -52,10 +54,22 @@ REQUIRED_ARTIFACTS = frozenset(
         "README.md",
         "source-manifest.json",
         "pack-resources.json",
+        "runtime_wheels.py",
     }
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
+_RUNTIME_FILES = {"runtime-wheels.tar.gz", "runtime-wheelhouse.json"}
+_HELPER_PATH = Path(__file__).with_name("runtime_wheels.py")
+_HELPER_SPEC = importlib.util.spec_from_file_location("qmx_runtime_wheels", _HELPER_PATH)
+if _HELPER_SPEC is None or _HELPER_SPEC.loader is None:
+    raise RuntimeError("The runtime wheel validation helper is unavailable")
+_RUNTIME_HELPER = importlib.util.module_from_spec(_HELPER_SPEC)
+_HELPER_SPEC.loader.exec_module(_RUNTIME_HELPER)
+
+
+def _runtime_helper() -> Any:
+    return _RUNTIME_HELPER
 
 
 def _manifest(bundle: Path) -> tuple[dict[str, object], dict[str, str]]:
@@ -100,7 +114,89 @@ def _manifest(bundle: Path) -> tuple[dict[str, object], dict[str, str]]:
     _validate_lock(bundle / "requirements.lock")
     _validate_ui_archive(bundle / "ui.tar.gz")
     _validate_qmn_archive(bundle / "qmn-deploy.tar.gz")
+    _validate_runtime_closure(bundle, artifacts)
     return record, artifacts
+
+
+def _validate_runtime_closure(bundle: Path, artifacts: Mapping[str, str]) -> None:
+    present = set(artifacts) & _RUNTIME_FILES
+    if present and present != _RUNTIME_FILES:
+        raise RuntimeError("Offline runtime closure requires both archive and inventory")
+    if not present:
+        return
+    helper = _runtime_helper()
+    try:
+        raw = json.loads((bundle / "runtime-wheelhouse.json").read_text(encoding="utf-8"))
+        lock_text = (bundle / "requirements.lock").read_text(encoding="utf-8")
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("Runtime wheel inventory or requirements lock is malformed") from error
+    if not isinstance(raw, dict):
+        raise RuntimeError("Runtime wheel inventory must be an object")
+    inventory = cast(Mapping[str, object], raw)
+    if inventory.get("class") != helper.RUNTIME_CLASS:
+        raise RuntimeError("Runtime wheel inventory class is unsupported")
+    target = inventory.get("target")
+    if not isinstance(target, Mapping):
+        raise RuntimeError("Runtime wheel inventory target is malformed")
+    try:
+        glibc = helper.validate_runtime_target(
+            target=cast(Mapping[str, object], target), running=True
+        )
+        wheels = helper.validate_inventory_requirements(
+            inventory=inventory, lock_text=lock_text, glibc=glibc
+        )
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(f"Runtime wheel closure preflight failed: {error}") from error
+
+    total_size = 0
+    try:
+        with tarfile.open(bundle / "runtime-wheels.tar.gz", mode="r:gz") as archive:
+            members = archive.getmembers()
+            names: list[str] = []
+            for member in members:
+                name = member.name
+                if (
+                    not member.isfile()
+                    or not name
+                    or Path(name).name != name
+                    or "/" in name
+                    or "\\" in name
+                    or name in names
+                    or not name.endswith(".whl")
+                ):
+                    raise RuntimeError(f"Runtime wheel archive has an unsafe member: {name!r}")
+                if member.size < 0 or member.size > 512 * 1024 * 1024:
+                    raise RuntimeError(f"Runtime wheel archive member has an unsafe size: {name}")
+                total_size += member.size
+                names.append(name)
+            expected_names = sorted(str(entry["filename"]) for entry in wheels.values())
+            if sorted(names) != expected_names or total_size > 2 * 1024 * 1024 * 1024:
+                raise RuntimeError("Runtime wheel archive does not match its exact inventory")
+            with tempfile.TemporaryDirectory(prefix="qmx-runtime-preflight-") as temporary:
+                extracted = Path(temporary)
+                for member in members:
+                    destination = extracted / member.name
+                    source = archive.extractfile(member)
+                    if source is None:
+                        raise RuntimeError("Runtime wheel archive member cannot be read")
+                    data = source.read(512 * 1024 * 1024 + 1)
+                    if len(data) != member.size:
+                        raise RuntimeError(f"Runtime wheel archive size mismatch: {member.name}")
+                    destination.write_bytes(data)
+                    actual = helper.wheel_metadata(destination)
+                    entry = wheels[actual["distribution"]]
+                    if (
+                        member.name != entry["filename"]
+                        or hashlib.sha256(data).hexdigest() != entry["sha256"]
+                        or actual["distribution"] != entry["distribution"]
+                        or actual["version"] != entry["version"]
+                        or actual["tags"] != entry["tags"]
+                    ):
+                        raise RuntimeError(
+                            f"Runtime wheel differs from locked inventory: {member.name}"
+                        )
+    except (OSError, tarfile.TarError, KeyError, ValueError) as error:
+        raise RuntimeError("Runtime wheel archive is malformed") from error
 
 
 def _require_product_inventory(bundle: Path, artifacts: Mapping[str, str]) -> None:
@@ -317,7 +413,7 @@ def _validate_archive(path: Path, *, label: str, required_files: set[str]) -> No
         raise RuntimeError(f"The {label} archive has no required file {missing[0]}")
 
 
-def install(bundle: Path, destination: Path) -> None:
+def install(bundle: Path, destination: Path, *, allow_online: bool = False) -> None:
     """Preflight the complete bundle before creating a clean environment."""
     if sys.version_info[:2] != (3, 14):
         raise RuntimeError("QMX requires CPython 3.14; use that interpreter to install")
@@ -326,6 +422,13 @@ def install(bundle: Path, destination: Path) -> None:
             "Use a new destination to preserve an existing installation and its data"
         )
     record, artifacts = _manifest(bundle)
+    offline = bool(set(artifacts) & _RUNTIME_FILES)
+    if not offline and not allow_online:
+        raise RuntimeError(
+            "This bundle has no offline runtime closure; pass --allow-online explicitly"
+        )
+    if offline and allow_online:
+        raise RuntimeError("--allow-online cannot override a bundle's pinned offline closure")
     # Installation may launch pip or other environment setup. Bind every input
     # to a private verified snapshot before those effects, not late bundle reads.
     with tempfile.TemporaryDirectory(prefix="qmx-verified-") as temporary:
@@ -346,23 +449,31 @@ def _install_verified(
     wheels = sorted(str(bundle / name) for name in artifacts if name.endswith(".whl"))
     ui_bytes = (bundle / "ui.tar.gz").read_bytes()
 
+    offline = _RUNTIME_FILES.issubset(artifacts)
+    runtime_wheel_dir: Path | None = None
+    if offline:
+        runtime_wheel_dir = bundle / "runtime-wheelhouse"
+        runtime_wheel_dir.mkdir()
+        with tarfile.open(bundle / "runtime-wheels.tar.gz", mode="r:gz") as runtime_archive:
+            for member in runtime_archive.getmembers():
+                source = runtime_archive.extractfile(member)
+                if source is None:
+                    raise RuntimeError("Verified runtime wheel cannot be read")
+                (runtime_wheel_dir / member.name).write_bytes(source.read())
+
     venv.EnvBuilder(with_pip=True).create(destination / "venv")
     scripts = destination / "venv" / ("Scripts" if os.name == "nt" else "bin")
     python = scripts / ("python.exe" if os.name == "nt" else "python")
-    subprocess.run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--require-hashes",
-            "-r",
-            str(bundle / "requirements.lock"),
-        ],
-        check=True,
-    )
-    subprocess.run([str(python), "-m", "pip", "install", "--no-deps", *wheels], check=True)
-    subprocess.run([str(python), "-m", "pip", "check"], check=True)
+    pip_prefix = [str(python), "-m", "pip"]
+    if offline:
+        pip_prefix.append("--isolated")
+    runtime_command = [*pip_prefix, "install", "--require-hashes"]
+    if runtime_wheel_dir is not None:
+        runtime_command.extend(["--no-index", "--find-links", str(runtime_wheel_dir)])
+    runtime_command.extend(["-r", str(bundle / "requirements.lock")])
+    subprocess.run(runtime_command, check=True)
+    subprocess.run([*pip_prefix, "install", "--no-deps", *wheels], check=True)
+    subprocess.run([*pip_prefix, "check"], check=True)
     with tarfile.open(fileobj=io.BytesIO(ui_bytes), mode="r:gz") as assets:
         assets.extractall(destination / "ui", filter="data")
     with tarfile.open(bundle / "qmn-deploy.tar.gz", mode="r:gz") as assets:
@@ -383,5 +494,14 @@ def _install_verified(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("destination", type=Path)
+    parser.add_argument(
+        "--allow-online",
+        action="store_true",
+        help="allow hash-pinned package-index downloads when the bundle has no offline closure",
+    )
     args = parser.parse_args()
-    install(Path(__file__).resolve().parent, args.destination.resolve())
+    install(
+        Path(__file__).resolve().parent,
+        args.destination.resolve(),
+        allow_online=args.allow_online,
+    )

@@ -83,3 +83,26 @@ These are in-memory/local metadata correctness probes; no installed product or s
 - Native Windows: NOT RUN. This optional closure supports Linux x86_64 CPython 3.14 only.
 - Broader security verification: PENDING / unavailable in the separate lane as reported by the coordinator. This ordinary packaging review provides no complete security approval.
 - Required factory/static/QA controls and final fail-closed release acceptance remain required. Linux local tests, successful packaging and installation do not fill missing execution, provider or security acceptance lanes.
+
+## Corrected six-path independent re-review — PASS, bounded
+
+Reviewed 2026-10-01 against the following frozen file hashes, verified both before and after execution. This append supersedes the two prior validator findings for this exact snapshot; the original report remains as historical evidence. No product/test edits or commits by reviewer.
+
+| File | SHA256 |
+| --- | --- |
+| `tools/build_release.py` | `af750ddd0734b56723b24d7031851ce3a2a8e9a67e2da9e2bbbaa39a2611a2ae` |
+| `release/install.py` | `84a53d7544455b3ccdeb23d11a62bdf83b317b3bb561dcdfbca9dd1f8b93a921` |
+| `release/README.md` | `d5bf64a19369c64e991b6bf24bec32b20990606abd64600ea3a01fb6fd734cce` |
+| `release/runtime_wheels.py` | `2332a76bddd610b1569b0adf29fb7125d6d3dd21ac442ea2aeb378caafc3b842` |
+| `tools/tests/test_release_install.py` | `1c7981ec31057586cc6332bb049772d323796b99637823496d944cf760bc3992` |
+| `tools/tests/test_runtime_wheel_closure.py` | `7e99c8976dc14cc569a336ee6cff20f8a5c77050791d4e0bf2a25d673cbde991` |
+
+`uv run --no-sync pytest -q -p no:cacheprovider tools/tests/test_release_install.py tools/tests/test_runtime_wheel_closure.py`: **26 passed in 0.26s**. New controls cover compressed platform parsing, missing WHEEL tag refusal, duplicate filename and duplicate normalized distribution.
+
+`PYTHONPATH=/workspace/QMX-release uv run --no-sync python /workspace/qmx-runtime-closure-corrected-independent.py`: **PASS**. Exact program and structured results are retained outside the repository in `/workspace/qmx-runtime-closure-corrected-independent.py` and `/workspace/qmx-runtime-closure-corrected-independent.json`. An initial invocation omitted PYTHONPATH and failed at importing the repository module; no review probe ran in that invocation.
+
+- **Prior duplicate-inventory finding closed.** Source uses a separate filename set and checks the normalized distribution key before insertion. Actual 24-wheel inventory plus an exact duplicate refuses; the same distribution under a different filename and case/hyphen alias also refuses. Each was exercised through the actual installer function using a temporary copy of the labeled mixed installer fixture, with its outer inventory checksum correctly updated. Both raise the duplicate error before creating the destination and before any venv or subprocess call (zero calls). The venv/subprocess sentinels are explicit refuser controls, not real installation evidence.
+- **Prior compressed-tag finding closed.** Each filename tag field expands with Cartesian product. Every expanded filename tag must appear exactly in WHEEL; extra WHEEL compatibility aliases are allowed. The valid compressed 2.34/2.17 platform fixture matches independent `packaging.utils.parse_wheel_filename`, and actual `_runtime_closure` now declares its correct minimum glibc 2.17. Existing SQLAlchemy/TZData WHEEL aliases remain accepted.
+- **Actual 24-wheel closure retained.** Two fresh local `_runtime_closure` outputs against `/workspace/qmx-runtime-wheelhouse` and the published requirements lock are byte-identical. Each actual wheel is independently filename/METADATA/version/hash checked; exact active distribution inventory remains 24. Both artifact hashes match the initial successful real-wheel review: archive `6075b48e2fd7ee5d6279438c01cac311911cb249d4cec0d8e8d4d19386f7b60f`, inventory `400a94f6bf30054856c3d34a1a69ca687d3af698d49886976e2c333764cce499`. The actual supported target remains Linux x86_64 CPython 3.14, glibc floor 2.34.
+
+**No remaining finding in this bounded correction review.** This approves only the listed six-path packaging correction and the observed closure/helper behavior. The coordinator-owned offline Ubuntu installation combines corrected helper with old `1c4c73b1` product wheels; it is an installer harness, not final-candidate evidence. Full two-build/two-install reproducibility from one final immutable SHA, native Windows, broader security, all required factory/static/QA and release acceptance lanes remain pending.

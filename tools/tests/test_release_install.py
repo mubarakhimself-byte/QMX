@@ -69,6 +69,7 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
     (path / "requirements.lock").write_text(lock)
     (path / "launcher.py").write_text("pass\n")
     (path / "install.py").write_text("pass\n")
+    (path / "runtime_wheels.py").write_text("# test helper\n")
     packs = {"qma/packs/default.json": "b" * 64}
     (path / "pack-resources.json").write_text(json.dumps(packs))
     ui = _archive(
@@ -97,6 +98,7 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
         "qmn-deploy.tar.gz",
         "README.md",
         "source-manifest.json",
+        "runtime_wheels.py",
     )
     for name in required:
         artifacts[name] = hashlib.sha256((path / name).read_bytes()).hexdigest()
@@ -265,7 +267,7 @@ def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
 
     extra.unlink()
     destination = tmp_path / "install"
-    installer.install(bundle, destination)
+    installer.install(bundle, destination, allow_online=True)
 
     assert len(environments) == 1
     assert len(calls) == 3
@@ -282,6 +284,20 @@ def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
     assert (destination / "installed-artifacts.json").is_file()
 
 
+def test_legacy_online_install_requires_explicit_opt_in_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path / "bundle")
+    calls, environments = _mock_environment(monkeypatch)
+    destination = tmp_path / "install"
+
+    with pytest.raises(RuntimeError, match="--allow-online explicitly"):
+        installer.install(bundle, destination)
+
+    assert not destination.exists()
+    assert not calls and not environments
+
+
 @pytest.mark.parametrize("unsafe_name", ["../escape.py", "/escape.py", "C:/escape.py"])
 def test_node_archive_unsafe_paths_refuse_before_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, unsafe_name: str
@@ -294,7 +310,7 @@ def test_node_archive_unsafe_paths_refuse_before_environment(
     (bundle / "acceptance.json").write_text(json.dumps(record))
     _, environments = _mock_environment(monkeypatch)
     with pytest.raises(RuntimeError, match="unsafe path"):
-        installer.install(bundle, tmp_path / "installed")
+        installer.install(bundle, tmp_path / "installed", allow_online=True)
     assert environments == []
     assert not (tmp_path / "installed").exists()
 
@@ -305,7 +321,7 @@ def test_node_assets_and_template_interpreter_alias_are_installed(
     bundle = _bundle(tmp_path / "bundle")
     _mock_environment(monkeypatch)
     destination = tmp_path / "installed"
-    installer.install(bundle, destination)
+    installer.install(bundle, destination, allow_online=True)
     assert (destination / "qmn/deploy/systemd/templates/qmn.service.in").is_file()
     assert (destination / "README.md").is_file()
     assert json.loads((destination / "source-manifest.json").read_text())["backend"] == "a" * 40
@@ -345,7 +361,7 @@ def test_bundle_replacement_after_preflight_cannot_change_installed_assets(
 
     monkeypatch.setattr(installer.venv.EnvBuilder, "create", replace_bundle_during_create)
     destination = tmp_path / "installed"
-    installer.install(bundle, destination)
+    installer.install(bundle, destination, allow_online=True)
     assert (destination / "qmn/deploy/install.py").is_file()
     assert not (destination / "qmn/deploy/replacement.py").exists()
     assert (destination / "launcher.py").read_text() == "pass\n"
@@ -367,6 +383,6 @@ def test_bundle_replacement_before_snapshot_refuses_before_environment(
 
     monkeypatch.setattr(installer, "_manifest", replace_after_manifest)
     with pytest.raises(RuntimeError, match="changed after preflight"):
-        installer.install(bundle, tmp_path / "installed")
+        installer.install(bundle, tmp_path / "installed", allow_online=True)
     assert environments == []
     assert not (tmp_path / "installed").exists()

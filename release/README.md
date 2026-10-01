@@ -19,9 +19,26 @@ product source and an existing nonempty output directory.
 python3.14 tools/build_release.py /absolute/path/qmx-bundle
 ```
 
+To include a portable offline runtime closure for Linux x86_64 with CPython
+3.14, pass a directory containing the exact wheels matching the exported
+root and nested locks:
+
+```sh
+python3.14 tools/build_release.py /absolute/path/qmx-bundle \
+  --runtime-wheelhouse /absolute/path/locked-wheelhouse
+```
+
+The builder records only marker-active locked distributions, verifies each
+wheel's package name, version, platform tags and per-package lock hash, and
+creates a deterministic `runtime-wheels.tar.gz` with a checksum-bound
+`runtime-wheelhouse.json`. The supported offline target is Linux x86_64,
+CPython 3.14, at or above the glibc floor declared by that inventory. It does
+not include the source wheelhouse inventory or local cache paths.
+
 The bundle includes all 14 product wheels and source distributions, the UI
-archive, node deployment assets, hash-pinned third-party runtime requirements, pack resource
-inventory, installer and launcher. Factory tooling is not a runtime dependency.
+archive, node deployment assets, hash-pinned third-party runtime requirements,
+pack resource inventory, installer and launcher. Factory tooling is not a
+runtime dependency.
 Build a second empty destination from the same commit and compare the hashes
 in the two `acceptance.json` artifact inventories to test reproducibility.
 The candidate is a full Git SHA; source refs are recorded in
@@ -35,11 +52,22 @@ Run the installer with CPython 3.14 and a new destination:
 python3.14 /absolute/path/qmx-bundle/install.py /absolute/path/qmx-install
 ```
 
+When the bundle has an offline runtime closure, installation verifies the
+inventory and every wheel against the exported lock before creating the
+destination, then installs with `--require-hashes --no-index --find-links`
+from the verified private extraction. Native Windows is outside this closure
+and remains NOT RUN. A bundle without the optional closure retains the legacy
+hash-pinned online install mode, which must be selected explicitly:
+
+```sh
+python3.14 /absolute/path/qmx-bundle/install.py /absolute/path/qmx-install \
+  --allow-online
+```
+
 The installer validates inventory, checksums, wheel metadata, runtime lock and
 UI archive before creating the private environment. It installs locked runtime
 dependencies, installs bundled product wheels without resolving unrelated
-packages of the same name, and runs `pip check`. The bundled lock still requires
-access to its runtime package index; this is not an offline dependency cache.
+packages of the same name, and runs `pip check`.
 Installation preserves an existing destination by refusing to overwrite it.
 
 On Windows use `py -3.14` for the installer and `venv\Scripts\python.exe` /
