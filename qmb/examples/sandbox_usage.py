@@ -42,7 +42,14 @@ T = TypeVar("T")
 
 _CLEAN = {
     "research_bot/__init__.py": "",
-    "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
+    "research_bot/factory.py": (
+        "class Callback:\n"
+        "    def on_instant(self, evidence):\n"
+        "        return ()\n"
+        "\n"
+        "def factory(*, declaration, assignment, read_surfaces):\n"
+        "    return Callback()\n"
+    ),
 }
 
 

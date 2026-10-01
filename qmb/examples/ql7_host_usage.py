@@ -68,7 +68,14 @@ _SEVERITY = "workspace-declared"
 _SEED = Money(value=1_000_000, currency="USD", scale=2)
 _SOURCE = {
     "research_bot/__init__.py": "",
-    "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
+    "research_bot/factory.py": (
+        "class Callback:\n"
+        "    def on_instant(self, evidence):\n"
+        "        return ()\n"
+        "\n"
+        "def factory(*, declaration, assignment, read_surfaces):\n"
+        "    return Callback()\n"
+    ),
 }
 _DEFAULTS = {
     "account_id": "acct-replay",
