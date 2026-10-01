@@ -15,9 +15,16 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core import Fingerprint, Instant, Ok, Result, TypedRefusal, is_refusal
+from qmf.core import Account, Fingerprint, Instant, Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.binding import BookBindingRecord
-from qmf.risk.door import EntryIntent, ExitIntent, ExitKind
+from qmf.risk.door import (
+    EntryIntent,
+    ExitIntent,
+    ExitKind,
+    ExitLogicModule,
+    evaluate_exit_intent,
+)
+from qmf.risk.exit_policy import ExitPolicy, resolve_exit_policy_entry
 from qmf.risk.paper import ExecutionTarget
 
 from qmn.ledger.binding_ledger import BindingVirtualLedger
@@ -78,6 +85,7 @@ class BookPathContext:
     decision_at: object
     binding_record: object
     native_exit_authority: object = None
+    exit_policy: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,7 +241,9 @@ def dispatch_hosted_intents(
         if is_refusal(blocked):
             return blocked
         if isinstance(item, ExitIntent):
-            exited = authorize_native_exit_intent(item, door, ordering_ordinal=ordinal + index)
+            exited = authorize_native_exit_intent(
+                item, door, seat=admitted.value, ordering_ordinal=ordinal + index
+            )
             if is_refusal(exited):
                 return exited
             commands.append(exited.value[0])
@@ -311,9 +321,21 @@ def dispatch_hosted_intents(
 
 
 def authorize_native_exit_intent(
-    intent: ExitIntent, door: BookPathContext, *, ordering_ordinal: int
+    intent: ExitIntent,
+    door: BookPathContext,
+    *,
+    seat: object,
+    ordering_ordinal: int,
+    persist_projection: bool = True,
 ) -> Result[tuple[Command, NativePositionAttribution]]:
-    """Resolve and persist the native subject before minting a full-close command."""
+    """Resolve a native close subject; optionally persist its CT-13 projection."""
+    if type(persist_projection) is not bool:
+        return invalid("persist_projection", "projection mode is an exact bool")
+    if type(seat) is not AdmittedNodeSeat:
+        return invalid("seat", "native close is dispatched only for a fully admitted node seat")
+    evaluated = evaluate_exit_intent(intent)
+    if is_refusal(evaluated):
+        return evaluated
     if intent.kind is not ExitKind.CLOSE_FULL:
         return policy(
             "exit_intent",
@@ -335,6 +357,51 @@ def authorize_native_exit_intent(
         return policy("virtual_position", "exit intent targets an existing virtual position")
     if position.status is not VirtualPositionStatus.OPEN:
         return policy("virtual_position", "exit intent targets an open virtual position")
+    binding_record = door.binding_record
+    if type(binding_record) is not BookBindingRecord:
+        return invalid("binding_record", "native close requires the active CT-28 Book binding")
+    epoch = binding_record.fingerprint()
+    if is_refusal(epoch):
+        return epoch
+    candidate = seat.proof.candidate
+    declaration = candidate.declaration
+    family_id = declaration.strategy_family_id.value
+    account = door.account
+    if type(account) is not Account:
+        return invalid("account", "native close uses the exact bound Book account")
+    if (
+        seat.binding_ref != epoch.value.value
+        or seat.proof.bms_instance_id != binding_record.bms_instance_id.value
+        or door.bms_instance_id != seat.proof.bms_instance_id
+        or binding_record.venue_id != door.venue_id
+        or binding_record.account_id != account.account_id
+        or ledger.binding_epoch != epoch.value
+        or position.binding_epoch != epoch.value
+        or position.bot_id != candidate.fingerprint.value
+        or intent.reason_code.book_family != family_id
+        or intent.kind.value not in declaration.permitted_exit_intents
+    ):
+        return policy(
+            "book_exit_identity",
+            "CT-28, BMS, open virtual position, selected Bot, family and declared exit kind agree",
+        )
+    policy_record = door.exit_policy
+    if type(policy_record) is not ExitPolicy:
+        return invalid("exit_policy", "native close requires the Book's typed ExitPolicy")
+    if intent.kind not in policy_record.permitted_exit_intent_kinds:
+        return policy("exit_policy", "the Book ExitPolicy permits this exact exit kind")
+    resolved_policy = resolve_exit_policy_entry(policy_record, family_id)
+    if is_refusal(resolved_policy):
+        return resolved_policy
+    if (
+        type(door.exit_logic_ref) is not type(resolved_policy.value.entry)
+        or door.exit_logic_ref != resolved_policy.value.entry
+        or not isinstance(door.module, ExitLogicModule)
+    ):
+        return policy(
+            "exit_logic_ref",
+            "the Book executes the selected family ExitPolicy entry through its typed module",
+        )
     ref = intent.virtual_position_ref.value
     evidence = authority.evidence_by_position_ref.get(ref)
     command_binding = authority.binding_by_position_ref.get(ref)
@@ -347,6 +414,19 @@ def authorize_native_exit_intent(
         )
     if type(authority.target) is not ExecutionTarget:
         return invalid("target", "native exit authority carries an exact execution target")
+    if type(door.decision_at) is not Instant:
+        return invalid("decision_at", "native exit requires the current typed decision frontier")
+    if (
+        authority.target.venue_id != door.venue_id
+        or authority.target.account_id != account.account_id
+        or authority.target.role != account.role
+        or command_binding.account_id != authority.target.account_id
+        or command_binding.session_epoch != door.session_epoch
+    ):
+        return policy(
+            "native_exit_identity",
+            "native target, Book account, venue, role and opening session match exactly",
+        )
     native_map = door.native_execution_map
     if type(native_map) is not NativeExecutionMap:
         return invalid(
@@ -380,6 +460,13 @@ def authorize_native_exit_intent(
     )
     if is_refusal(resolved):
         return resolved
+    if resolved.value.source_frontier_ns > door.decision_at.value_ns:
+        return policy(
+            "native_exit_frontier",
+            "native close decision is not earlier than checked opening fill and readback evidence",
+            source_frontier_ns=resolved.value.source_frontier_ns,
+            decision_at_ns=door.decision_at.value_ns,
+        )
     command = Command.close_position(
         door.venue_id,
         door.account,
@@ -390,14 +477,15 @@ def authorize_native_exit_intent(
     )
     if is_refusal(command):
         return command
-    persisted = write_native_position_attribution(
-        journal=authority.journal,
-        writer=authority.projection_writer,
-        instant=door.decision_at,
-        attribution=resolved.value,
-    )
-    if is_refusal(persisted):
-        return persisted
+    if persist_projection:
+        persisted = write_native_position_attribution(
+            journal=authority.journal,
+            writer=authority.projection_writer,
+            instant=door.decision_at,
+            attribution=resolved.value,
+        )
+        if is_refusal(persisted):
+            return persisted
     return Ok((command.value, resolved.value))
 
 

@@ -60,6 +60,8 @@ from qmf.risk.door import (
     Direction,
     EntryIntent,
     EvidenceSlot,
+    ExitIntent,
+    ExitKind,
     ExitLogicRef,
     ReasonCode,
 )
@@ -96,8 +98,10 @@ from qmn.host.decision_root import (
 )
 from qmn.journal_dispatch import RecordingJournalSink
 from qmn.ledger import (
+    AttributedFill,
     EntryReservationEvent,
     EntryReservationRecovery,
+    NativePositionEvidence,
     QmfEntryReservationJournal,
     seed_binding_ledger,
 )
@@ -132,6 +136,7 @@ from qmn.seats import (
     UNGOVERNED_TUNNEL_NAMES,
     AdmittedNodeSeat,
     BookPathContext,
+    NativeExitAuthority,
     SeatContainment,
     SeatTransitionStream,
     cite_governed_seat_occurrence,
@@ -148,10 +153,12 @@ from qmn.seats import (
 )
 from qmn.venue import (
     Command,
+    CommandIdBindingRegistry,
     CommandKind,
     ConformanceDouble,
     OrderParameters,
     OrderType,
+    QmfCommandIdBindingJournal,
     TimeInForce,
     VenueClientKind,
 )
@@ -945,7 +952,22 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
         )
     )
     _ok(order_path.open_sequencer())
-    admitted = _ok(_propose(factory=FunctionFactory(logic=lambda _evidence: (_entry(),))))
+    bot_world = _world()
+    bot_world["declaration"] = replace(
+        cast(BotDefinition, bot_world["declaration"]),
+        permitted_exit_intents=(ExitKind.CLOSE_FULL.value,),
+    )
+    exit_logic = _ok(ExitLogicRef.try_create("book.default.evidence_stop", {"style": "structure"}))
+    exit_policy = _ok(
+        ExitPolicy.try_create(
+            {"trend-follow": exit_logic},
+            permitted_exit_intent_kinds=(ExitKind.CLOSE_FULL,),
+        )
+    )
+    intent_state: dict[str, object] = {}
+    factory = FunctionFactory(logic=lambda _evidence: intent_state.get("intents", (_entry(),)))
+    admitted = _ok(_propose(factory=factory, world=bot_world, exit_policy=exit_policy))
+    path = replace(path, exit_policy=exit_policy)
     native_map = cast(NativeExecutionMap, path.native_execution_map)
     altered_row = replace(native_map.mappings[0], native_symbol_id=999)
     stale_native_map = replace(native_map, mappings=(altered_row, *native_map.mappings[1:]))
@@ -1084,6 +1106,299 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     final_result = cast("Mapping[str, object]", final_results[0])
     assert final_result.get("outcome") == "accepted-by-venue"
     assert ledger.has_pending_entry("EURUSD") is True
+
+    opening_command = transcript.dispatch.commands[0]
+    opening_fp = _ok(opening_command.fingerprint())
+    bind_writer_id = _ok(WriterId.try_create("node-test", "risk", "command-id-bindings", "boot-1"))
+    bind_journal = _ok(
+        QmfCommandIdBindingJournal.resume(
+            world.journal,
+            bind_writer_id,
+            instant=lambda: Ok(_instant()),
+            authorized_writers=(bind_writer_id,),
+        )
+    )
+    registry = _ok(CommandIdBindingRegistry.try_create(bind_journal))
+    _ok(
+        registry.bind_before_submission(
+            opening_command,
+            venue_client_id="native-client-1",
+            injective_total=False,
+        )
+    )
+    command_binding = registry.binding_for("native-client-1")
+    assert command_binding is not None
+    faces = transcript.dispatch.authorized[0].faces
+    quantity = transcript.dispatch.authorized[0].admitted_quantity
+    opened = _ok(
+        ledger.fold_fill(
+            fill=AttributedFill(
+                command_identity=opening_fp,
+                venue_native_id="native-deal-1",
+                instrument="EURUSD",
+                quantity=quantity,
+                realized_cash=None,
+                recorded_at=_instant(),
+            ),
+            bot_id=admitted.proof.candidate.fingerprint.value,
+            admission_identity=_ok(fingerprint(transcript.dispatch.authorized[0].fp1_identity())),
+            faces=faces,
+            admitted_quantity=quantity,
+            entry_terminal=True,
+        )
+    )
+    native_writer_id = _ok(
+        WriterId.try_create("node-test", "venue", "native-observations", "boot-1")
+    )
+    native_writer = _ok(
+        JournalWriter.resume(world.journal, native_writer_id, stream_name="native-observations")
+    )
+    lineage = {
+        "positionId": 44,
+        "accountId": 42,
+        "symbolId": 7,
+        "clientOrderId": "native-client-1",
+        "orderId": 101,
+        "dealId": 201,
+        "sessionEpoch": path.session_epoch,
+    }
+    fill_event = _ok(
+        native_writer.record(
+            JournalEventType.FILL,
+            {"raw_payload": lineage},
+            instant=_instant(),
+        )
+    )
+    readback_event = _ok(
+        native_writer.record(
+            JournalEventType.DATA_QUALITY,
+            {"raw_payload": {"positions": [lineage]}},
+            instant=_instant(_NS + 2),
+        )
+    )
+    evidence_pair = NativePositionEvidence(
+        fill_event=fill_event.event,
+        readback_event=readback_event.event,
+        fill_stream="native-observations",
+        readback_stream="native-observations",
+    )
+    projection_writer_id = _ok(
+        WriterId.try_create("node-test", "risk", "native-projections", "boot-1")
+    )
+    projection_writer = _ok(
+        JournalWriter.resume(world.journal, projection_writer_id, stream_name="native-projections")
+    )
+    target = _ok(ExecutionTarget.try_create("demo", _venue(), _account().account_id))
+    authority = NativeExitAuthority(
+        journal=world.journal,
+        authorized_writers=(native_writer_id,),
+        command_binding_journal=bind_journal,
+        evidence_by_position_ref={opened.position.position_ref.value: evidence_pair},
+        binding_by_position_ref={opened.position.position_ref.value: command_binding},
+        target=target,
+        composition_fp=_ok(fingerprint({"composition": "native-exit-root-test"})),
+        position_model=PositionModel.HEDGING,
+        binding_id="binding-native-test",
+        projection_writer=projection_writer,
+        subject_present_at_submission=True,
+        subject_observations=(),
+    )
+    exit_path = replace(path, native_exit_authority=authority)
+    exit_intent = _ok(
+        ExitIntent.try_create(
+            ExitKind.CLOSE_FULL,
+            _ok(ReasonCode.try_create("risk-cut", "trend-follow")),
+            opened.position.position_ref,
+        )
+    )
+    other_world = _world()
+    other_declaration = cast(BotDefinition, other_world["declaration"])
+    other_logic = _ok(mint_logic_identity("research-bot", "2.0.0", _SOURCE))
+    other_world["logic"] = other_logic
+    other_world["declaration"] = replace(
+        other_declaration,
+        permitted_exit_intents=(ExitKind.CLOSE_FULL.value,),
+        logic_reference=other_logic,
+    )
+    other_seat = _ok(_propose(factory=factory, world=other_world, exit_policy=exit_policy))
+    foreign_account = _ok(Account.try_create("foreign-account", _venue(), AccountRole.DEMO))
+    exit_refusals = (
+        (
+            admitted,
+            replace(exit_path, account=foreign_account),
+            "binding_epoch",
+        ),
+        (
+            admitted,
+            replace(exit_path, bms_instance_id="foreign-bms"),
+            "bms_instance_id",
+        ),
+        (
+            other_seat,
+            exit_path,
+            "book_exit_identity",
+        ),
+        (
+            admitted,
+            replace(
+                exit_path,
+                exit_logic_ref=_ok(ExitLogicRef.try_create("book.foreign.exit", {})),
+            ),
+            "exit_logic_ref",
+        ),
+        (
+            admitted,
+            replace(exit_path, module=object()),
+            "exit_logic_ref",
+        ),
+        (
+            admitted,
+            replace(
+                exit_path,
+                native_exit_authority=replace(
+                    authority,
+                    binding_by_position_ref={
+                        opened.position.position_ref.value: replace(
+                            command_binding, session_epoch="foreign-session"
+                        )
+                    },
+                ),
+            ),
+            "native_exit_identity",
+        ),
+        (
+            admitted,
+            replace(exit_path, decision_at=_instant()),
+            "native_exit_frontier",
+        ),
+        (
+            admitted,
+            replace(
+                exit_path,
+                native_exit_authority=replace(
+                    authority,
+                    evidence_by_position_ref={},
+                    binding_by_position_ref={},
+                ),
+            ),
+            "native_evidence",
+        ),
+    )
+    before_denied_decisions = _ok(
+        JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
+    )
+    before_denied_projections = _ok(
+        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
+    )
+    before_denied_ordinal = ordinal_store.high_water
+    before_denied_ledger = ledger.records
+    before_denied_venue = _ok(client.observations())
+    for rejected_seat, rejected_path, expected_field in exit_refusals:
+        refused_exit = _refusal(
+            dispatch_hosted_intents(rejected_seat, (exit_intent,), path=rejected_path)
+        )
+        assert refused_exit.context["field"] == expected_field
+        assert not _ok(
+            JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
+        )
+    intent_state["intents"] = (exit_intent,)
+    denied_policy = _ok(
+        ExitPolicy.try_create({"trend-follow": exit_logic}, permitted_exit_intent_kinds=())
+    )
+    missing_book_binding = _refusal(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=replace(exit_path, binding_record=None),
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    assert missing_book_binding.context["field"] == "binding_record"
+    denied_root = _ok(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=replace(exit_path, exit_policy=denied_policy),
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    denied = _refusal(
+        denied_root.run_slice(
+            snapshot=snapshot,
+            decision_at=_instant(),
+            stream=SeatTransitionStream(),
+            cancel=CancelToken(),
+            probe=_drive_probe(),
+        )
+    )
+    assert denied.context["field"] == "exit_policy"
+    after_denied_decisions = _ok(
+        JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
+    )
+    after_denied_projections = _ok(
+        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
+    )
+    assert after_denied_decisions == before_denied_decisions
+    assert after_denied_projections == before_denied_projections == []
+    assert ordinal_store.high_water == before_denied_ordinal
+    assert ledger.records == before_denied_ledger
+    assert _ok(client.observations()) == before_denied_venue
+    exit_root = _ok(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=exit_path,
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    exit_transcript = _ok(
+        exit_root.run_slice(
+            snapshot=snapshot,
+            decision_at=_instant(_NS + 2),
+            stream=SeatTransitionStream(),
+            cancel=CancelToken(),
+            probe=_drive_probe(),
+        )
+    )
+    assert exit_transcript.dispatch.commands[0].kind is CommandKind.CLOSE_POSITION
+    assert exit_transcript.dispatch.commands[0].subject_reference == "44"
+    assert (
+        exit_transcript.dispatch.exit_attributions[0].virtual_position_ref
+        == opened.position.position_ref
+    )
+    close_submission = exit_transcript.submissions[0]
+    assert not isinstance(close_submission, OrderPathTerminalResolution)
+    assert close_submission.result.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE
+    world.journal.close()
+    reopened = JournalStore(
+        World.LIVE,
+        journal_dir=tmp_path / "evidence" / "live" / "journal",
+        open_stream=jsonl_opener(),
+    )
+    reopened_decisions = _ok(
+        JournalReader(reopened).read_checked("hosted-decisions", for_world=World.LIVE)
+    )
+    assert any(
+        event.payload.get("class") == "qmn-hosted-decision-transcript"
+        and "exit_attributions" in cast("Mapping[str, object]", event.payload.get("dispatch", {}))
+        for event in reopened_decisions
+    )
+    reopened_projection = _ok(
+        JournalReader(reopened).read_checked("native-projections", for_world=World.LIVE)
+    )
+    assert len(reopened_projection) == 1
+    current = ledger.position_by_ref(opened.position.position_ref)
+    assert current is not None and current.status.value == "open"
+    reopened.close()
 
 
 @pytest.mark.parametrize("fake_value", [None, "ack"])

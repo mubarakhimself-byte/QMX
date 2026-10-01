@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import TypeVar
 
 import pytest
 from qmf.core import (
@@ -30,7 +30,6 @@ from qmf.data import JournalEventType, JournalWriter
 from qmf.data.journal_producer import JournalReader
 from qmf.data.store import JournalStore, jsonl_opener
 from qmf.risk.binding import PositionModel
-from qmf.risk.door import ExitIntent, ExitKind, ReasonCode
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.r_faces import RFaces
 from qmf.venue import CommandIdBinding, CommandIdBindingRegistry
@@ -44,11 +43,6 @@ from qmn.ledger import (
     write_native_position_attribution,
 )
 from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
-from qmn.seats.dispatch import (
-    BookPathContext,
-    NativeExitAuthority,
-    authorize_native_exit_intent,
-)
 from qmn.venue import CloseScope, Command, QmfCommandIdBindingJournal
 
 T = TypeVar("T")
@@ -381,148 +375,3 @@ def test_fresh_binding_registry_uses_reopened_ct13_collision_authority(tmp_path:
         injective_total=False,
     )
     assert is_refusal(conflict)
-
-
-def test_hosted_exit_intent_mints_native_pid_close_after_projection(tmp_path: Path) -> None:
-    fixture = _native_fixture(tmp_path)
-    projection_writer_id = _writer("risk", "native-projections")
-    projection_writer = _ok(
-        JournalWriter.resume(
-            fixture.journal,
-            projection_writer_id,
-            stream_name="native-projections",
-        )
-    )
-    authority = NativeExitAuthority(
-        journal=fixture.journal,
-        authorized_writers=(_writer("venue", "native-observations"),),
-        command_binding_journal=fixture.binding_journal,
-        evidence_by_position_ref={fixture.position.position_ref.value: fixture.evidence},
-        binding_by_position_ref={fixture.position.position_ref.value: fixture.command_binding},
-        target=fixture.target,
-        composition_fp=_fp("composition"),
-        position_model=PositionModel.HEDGING,
-        binding_id="binding-1",
-        projection_writer=projection_writer,
-        subject_present_at_submission=True,
-        subject_observations=(),
-    )
-    path = BookPathContext(
-        entry_price=None,
-        exit_logic_ref=None,
-        module=None,
-        book_resolved_requested_r=None,
-        r_unit_price=None,
-        value_factor=None,
-        money_scale=None,
-        account=_ok(
-            Account.try_create(
-                fixture.target.account_id, fixture.target.venue_id, fixture.target.role
-            )
-        ),
-        venue_id=fixture.target.venue_id,
-        session_epoch="session-1",
-        ordering_ordinal=42,
-        bms_instance_id="bms-1",
-        protective_stop_forms=None,
-        position_ledger=fixture.ledger,
-        native_execution_map=fixture.native_map,
-        decision_at=_instant(5),
-        binding_record=None,
-        native_exit_authority=authority,
-    )
-    intent = _ok(
-        ExitIntent.try_create(
-            ExitKind.CLOSE_FULL,
-            _ok(ReasonCode.try_create("risk-cut", "fixture-book")),
-            fixture.position.position_ref,
-        )
-    )
-
-    command, attribution = _ok(authorize_native_exit_intent(intent, path, ordering_ordinal=42))
-
-    assert command.kind.value == "close_position"
-    assert command.subject_reference == "44"
-    assert attribution.native_position_id == "44"
-    rows = _ok(
-        JournalReader(fixture.journal).read_checked("native-projections", for_world=World.LIVE)
-    )
-    assert len(rows) == 1
-    payload = rows[0].payload
-    assert isinstance(payload, Mapping)
-    attribution_payload = payload.get("attribution")
-    assert isinstance(attribution_payload, Mapping)
-    assert cast("Mapping[str, object]", attribution_payload).get("native_position_id") == "44"
-    remained_open = fixture.ledger.position_by_ref(fixture.position.position_ref)
-    assert remained_open is not None and remained_open.status.value == "open"
-    fixture.journal.close()
-    reopened = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
-    reopened_rows = _ok(
-        JournalReader(reopened).read_checked("native-projections", for_world=World.LIVE)
-    )
-    assert len(reopened_rows) == 1
-    reopened_payload = reopened_rows[0].payload
-    assert isinstance(reopened_payload, Mapping)
-    reopened_attribution = reopened_payload.get("attribution")
-    assert isinstance(reopened_attribution, Mapping)
-    assert cast("Mapping[str, object]", reopened_attribution).get("native_position_id") == "44"
-    reopened.close()
-
-
-def test_hosted_exit_intent_refuses_without_independent_native_evidence(tmp_path: Path) -> None:
-    fixture = _native_fixture(tmp_path)
-    projection_writer = _ok(
-        JournalWriter.resume(
-            fixture.journal,
-            _writer("risk", "native-projections"),
-            stream_name="native-projections",
-        )
-    )
-    authority = NativeExitAuthority(
-        journal=fixture.journal,
-        authorized_writers=(_writer("venue", "native-observations"),),
-        command_binding_journal=fixture.binding_journal,
-        evidence_by_position_ref={},
-        binding_by_position_ref={},
-        target=fixture.target,
-        composition_fp=_fp("composition"),
-        position_model=PositionModel.HEDGING,
-        binding_id="binding-1",
-        projection_writer=projection_writer,
-    )
-    path = BookPathContext(
-        entry_price=None,
-        exit_logic_ref=None,
-        module=None,
-        book_resolved_requested_r=None,
-        r_unit_price=None,
-        value_factor=None,
-        money_scale=None,
-        account=_ok(
-            Account.try_create(
-                fixture.target.account_id, fixture.target.venue_id, fixture.target.role
-            )
-        ),
-        venue_id=fixture.target.venue_id,
-        session_epoch="session-1",
-        ordering_ordinal=42,
-        bms_instance_id="bms-1",
-        protective_stop_forms=None,
-        position_ledger=fixture.ledger,
-        native_execution_map=fixture.native_map,
-        decision_at=_instant(5),
-        binding_record=None,
-        native_exit_authority=authority,
-    )
-    intent = _ok(
-        ExitIntent.try_create(
-            ExitKind.CLOSE_FULL,
-            _ok(ReasonCode.try_create("risk-cut", "fixture-book")),
-            fixture.position.position_ref,
-        )
-    )
-    assert is_refusal(authorize_native_exit_intent(intent, path, ordering_ordinal=42))
-    assert (
-        _ok(JournalReader(fixture.journal).read_checked("native-projections", for_world=World.LIVE))
-        == []
-    )

@@ -55,6 +55,7 @@ from qmn.seats.dispatch import (
     BookPathContext,
     NativeExitAuthority,
     SeatDispatchReceipt,
+    authorize_native_exit_intent,
     dispatch_hosted_intents,
 )
 from qmn.seats.host import drive_governed_seat
@@ -107,6 +108,7 @@ class HostedDecisionTranscript:
                 "binding_epoch": self.binding_epoch.value,
                 "class": DECISION_TRANSCRIPT_CLASS,
                 "decision_at_ns": self.decision_at.value_ns,
+                "dispatch": dict(self.dispatch.as_mapping()),
                 "executed_stages": list(self.executed_stages),
                 "effective_ksa_level": self.effective_ksa_level.value,
                 "ksa_epoch_fingerprints": [fp.value for fp in self.ksa_epoch_fingerprints],
@@ -467,6 +469,22 @@ class HostedDecisionRoot:
                 "non-GREEN KSA state blocks new hosted entry admission",
                 level=effective_level.value.value,
             )
+        # Native close admission can refuse on Book policy or source identity.
+        # Resolve it without writing the projection before consuming an ordinal;
+        # dispatch_hosted_intents repeats the check and persists only after an
+        # ordinal has been reserved for a command that may reach OrderPath.
+        for index, intent in enumerate(intents.value):
+            if not isinstance(intent, ExitIntent):
+                continue
+            preflight = authorize_native_exit_intent(
+                intent,
+                path,
+                seat=self.seat,
+                ordering_ordinal=index,
+                persist_projection=False,
+            )
+            if is_refusal(preflight):
+                return preflight
         for intent in intents.value:
             if isinstance(intent, ExitIntent):
                 continue
@@ -528,7 +546,11 @@ class HostedDecisionRoot:
             dispatch=receipt.value,
             command_fingerprints=tuple(command_fingerprints),
             submissions=(),
-            executed_stages=stages,
+            executed_stages=(
+                (*stages, "native_exit_attribution_persisted")
+                if receipt.value.exit_attributions
+                else stages
+            ),
         )
         persisted = self.decision_journal.append(provisional.as_mapping())
         if is_refusal(persisted):
@@ -589,7 +611,11 @@ class HostedDecisionRoot:
             dispatch=receipt.value,
             command_fingerprints=provisional.command_fingerprints,
             submissions=tuple(submissions),
-            executed_stages=(*stages, "ct19_order_path_resolved"),
+            executed_stages=(
+                (*stages, "native_exit_attribution_persisted", "ct19_order_path_resolved")
+                if receipt.value.exit_attributions
+                else (*stages, "ct19_order_path_resolved")
+            ),
         )
         persisted_result = self.decision_journal.append(completed.as_mapping())
         if is_refusal(persisted_result):
