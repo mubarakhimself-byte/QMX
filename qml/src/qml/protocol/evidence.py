@@ -14,9 +14,27 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core.chrono import Instant
-from qmf.core.exact import ExactRational
-from qmf.core.fingerprint import canonical_bytes
+from qmf.core import (
+    Account,
+    AccountRole,
+    CalendarIdentity,
+    CivilDate,
+    Duration,
+    ExactRational,
+    Fingerprint,
+    Instant,
+    Instrument,
+    Interval,
+    Money,
+    Price,
+    PriceDelta,
+    Quantity,
+    TradingDate,
+    ValueFactor,
+    Venue,
+    VenueId,
+    WriterId,
+)
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 
 from qml._refuse import clean_token, invalid
@@ -122,12 +140,39 @@ def _freeze_exact_graph(value: object, field: str) -> Result[object]:
                 return frozen
             items.append(frozen.value)
         return Ok(tuple(items))
-    if value is None or isinstance(value, (str, int, bool, ExactRational)):
+    if value is None or type(value) in (str, int, bool):
         return Ok(value)
-    encoded = canonical_bytes(value)
-    if is_refusal(encoded):
-        return invalid(field, "evidence contains only canonical exact immutable values")
-    return Ok(value)
+    # Only QMF's concrete immutable value objects cross this boundary. A custom
+    # object with a canonical identity can still mutate after delivery, so
+    # canonicalizability alone is not evidence immutability.
+    if type(value) in _QMF_IMMUTABLE_VALUES:
+        return Ok(value)
+    return invalid(field, "unsupported canonical objects are not retained as immutable evidence")
+
+
+_QMF_IMMUTABLE_VALUES = frozenset(
+    {
+        ExactRational,
+        Fingerprint,
+        Money,
+        Price,
+        PriceDelta,
+        Quantity,
+        ValueFactor,
+        Instant,
+        Duration,
+        Interval,
+        CivilDate,
+        TradingDate,
+        CalendarIdentity,
+        WriterId,
+        Account,
+        AccountRole,
+        Instrument,
+        Venue,
+        VenueId,
+    }
+)
 
 
 def _parse_presence(value: object) -> Result[PresenceState]:

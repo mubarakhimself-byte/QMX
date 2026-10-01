@@ -458,14 +458,30 @@ def test_typed_and_mapped_evidence_revalidate_presence_and_nested_exact_values()
         declared_keys=keys,
     )
     assert is_refusal(nested_float)
-
-    invalid_fold = StructureFold(
-        "primary", instant, geometry={"nested": {"price": 1.5}}
-    )
+    invalid_fold = StructureFold("primary", instant, geometry={"nested": {"price": 1.5}})
     folded = collect_evidence(
         {"primary": _surface(instant, invalid_fold)}, instant, declared_keys=keys
     )
     assert is_refusal(folded)
+
+
+def test_canonical_but_mutable_custom_value_is_not_retained_as_evidence() -> None:
+    class MutableCanonical:
+        def __init__(self) -> None:
+            self.amount = 1
+
+        def fp1_identity(self) -> dict[str, object]:
+            return {"amount": self.amount}
+
+    instant = _instant(_NS)
+    mutable = MutableCanonical()
+    refused = SeriesSample.try_create(PresenceState.PRESENT, instant, mutable)
+    assert is_refusal(refused)
+
+    # The supported QMF exact object path remains usable and immutable.
+    exact_value = _r(1, 2)
+    exact = _ok(SeriesSample.try_create(PresenceState.PRESENT, instant, exact_value))
+    assert exact.value == exact_value
 
 
 # --- AC: zero-or-more CT-23 intents; advisory stop; no Book full-loss --------
