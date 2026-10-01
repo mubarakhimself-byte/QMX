@@ -1,0 +1,9 @@
+# User-authorized checkpoint push verification
+
+Recovery source commit: `28633f72f4fd629ef036be32f94ddfb59a4f3b1d`. Metadata commit and verified remote head: `01fed525af621173cf58929801d9b58fc316d870`. Dedicated branch: `qmx-work-release-checkpoint-2026-10-01`, repository `https://github.com/MubarakHimself/QMX.git`.
+
+Exact push: `git push -u origin refs/heads/qmx-work-release-checkpoint-2026-10-01:refs/heads/qmx-work-release-checkpoint-2026-10-01`, exit 0, new branch created. Independent remote read `git ls-remote --heads origin refs/heads/qmx-work-release-checkpoint-2026-10-01` returned exactly the metadata SHA above. No force, merge, PR, release publication or deployment. Protected local refs matched `checkpoint-working-source.json`; original main worktree and release worktree were clean immediately after push verification, before resumed edits. The original local `release/rc-2026-10-01` branch is preserved.
+
+Sixty explicit relevant source/test/evidence paths were staged; no stage-all command. Checkpoint records deliberately failing Study-ingress test and partial, untested admission artifact helper as unfinished. Virtual environments, caches, bundles, credentials, machine-local diagnostics/raw logs and Claude UI edits were excluded. High-confidence key/PAT/API-key patterns on checkpoint paths yielded zero flags. Subsequent full tracked-file scan flagged only the deliberate malformed `key.pem` test string with content `abc` in `test_pack_lifecycle_fixture.py` export-refusal control; it is not a usable private key. No secret value was printed or used. These scans do not certify full security.
+
+The user explicitly requested this checkpoint push and continuation. Repairs resumed locally after verification; this authorization does not launch automatic later pushes or merges. `CHECKPOINT.md` and `CHECKPOINT_REF.json` provide recovery and resume instructions; candidate acceptance remains incomplete.
