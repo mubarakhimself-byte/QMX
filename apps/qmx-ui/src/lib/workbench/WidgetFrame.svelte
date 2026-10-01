@@ -98,7 +98,7 @@
   aria-label={title}
   data-state={state}
   class={cn(
-    "bg-panel text-card-foreground flex min-h-0 flex-col overflow-hidden rounded-md border",
+    "surface text-card-foreground flex min-h-0 flex-col overflow-hidden rounded-lg",
     className,
   )}
 >

@@ -22,7 +22,33 @@ export const DEMO_APPS: OpenedApp[] = [
   },
 ];
 
+export const THEMES = ["ink", "cobalt", "ember", "plain"] as const;
+export type Theme = (typeof THEMES)[number];
+
+function storedTheme(): Theme {
+  try {
+    const t = localStorage.getItem("qmx.theme");
+    return (THEMES as readonly string[]).includes(t ?? "")
+      ? (t as Theme)
+      : "ink";
+  } catch {
+    return "ink";
+  }
+}
+
 class Workbench {
+  /** Visual theme: a per-machine preference, never a daemon setting. */
+  theme = $state<Theme>(storedTheme());
+
+  setTheme(t: Theme) {
+    this.theme = t;
+    try {
+      localStorage.setItem("qmx.theme", t);
+    } catch {
+      /* storage unavailable: theme lasts for this window only */
+    }
+  }
+
   connection = $state<ConnectionState>("not-bound");
   /** Instances come from the daemon listing; empty until a transport exists. */
   openedApps = $state<OpenedApp[]>([]);

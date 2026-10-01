@@ -7,7 +7,7 @@
   }: { label: string; value?: string | number; hint?: string } = $props();
 </script>
 
-<div class="bg-panel flex min-w-0 flex-col gap-0.5 rounded-md border px-3 py-2">
+<div class="surface flex min-w-0 flex-col gap-0.5 rounded-lg px-3 py-2.5">
   <span class="panel-label truncate">{label}</span>
   <span class="tabular text-lg leading-tight font-semibold">
     {value ?? "—"}

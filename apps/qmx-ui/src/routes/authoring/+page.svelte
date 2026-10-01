@@ -222,7 +222,7 @@
 
 <style>
   :global(.svelte-flow) {
-    --xy-background-color: var(--background);
+    --xy-background-color: transparent;
     --xy-background-pattern-color: color-mix(
       in oklch,
       var(--muted-foreground) 35%,

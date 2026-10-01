@@ -118,7 +118,7 @@
       <div class="min-h-0 flex-1"><CandleChart {candles} /></div>
     </div>
   {:else if id === "watchlist"}
-    <table class="tabular w-full text-xs">
+    <table class="num w-full text-sm">
       <tbody>
         {#each quotes as q (q.symbol)}
           <tr class="border-b last:border-0">
@@ -127,13 +127,15 @@
               ><Sparkline values={q.spark} class="h-5 w-full" /></td
             >
             <td class="text-right">{q.last.toFixed(q.last > 100 ? 2 : 4)}</td>
-            <td class="w-16 text-right">{@render sign(q.change)}%</td>
+            <td class="w-24 text-right whitespace-nowrap"
+              >{@render sign(q.change)}%</td
+            >
           </tr>
         {/each}
       </tbody>
     </table>
   {:else if id === "metrics"}
-    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
       {#each DEMO_METRICS as [k, v] (k)}
         <div class="flex justify-between border-b pb-1.5">
           <dt class="text-muted-foreground">{k}</dt>
@@ -142,7 +144,7 @@
       {/each}
     </dl>
   {:else if id === "calendar"}
-    <div class="flex flex-col gap-2 text-xs">
+    <div class="flex flex-col gap-2 text-sm">
       {#each DEMO_CALENDAR as day (day.day)}
         <div>
           <p class="panel-label mb-1">{day.day}</p>
@@ -150,8 +152,8 @@
             <tbody>
               {#each day.events as e (e.time + e.event)}
                 <tr class="border-b last:border-0">
-                  <td class="text-muted-foreground w-11 py-1">{e.time}</td>
-                  <td class="w-10 font-medium">{e.ccy}</td>
+                  <td class="text-muted-foreground w-14 py-1">{e.time}</td>
+                  <td class="w-12 font-medium">{e.ccy}</td>
                   <td class="truncate">{e.event}</td>
                   <td class="w-14 text-right">
                     <span
@@ -175,7 +177,7 @@
       {/each}
     </div>
   {:else if id === "news"}
-    <ul class="flex flex-col text-xs">
+    <ul class="flex flex-col text-sm">
       {#each DEMO_NEWS as n (n.title)}
         <li class="flex gap-2 border-b py-1.5 last:border-0">
           <span class="bg-muted h-fit rounded-sm px-1 text-[10px] font-medium"
@@ -187,7 +189,7 @@
       {/each}
     </ul>
   {:else if id === "book"}
-    <table class="tabular w-full text-xs">
+    <table class="num w-full text-sm">
       <thead class="text-muted-foreground text-left">
         <tr
           ><th class="pb-1 font-medium">Symbol</th><th class="font-medium"
@@ -217,7 +219,7 @@
       </tbody>
     </table>
   {:else if id === "signals"}
-    <table class="tabular w-full text-xs">
+    <table class="num w-full text-sm">
       <thead class="text-muted-foreground text-left">
         <tr
           ><th class="pb-1 font-medium">Symbol</th><th class="font-medium"

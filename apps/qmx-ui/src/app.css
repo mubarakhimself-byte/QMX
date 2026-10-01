@@ -3,6 +3,8 @@
 @import "$lib/tokens.css";
 @import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "$lib/themes.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -12,7 +14,7 @@
   }
 
   html {
-    font-size: 14px;
+    font-size: 15px;
     @apply font-sans;
   }
 
@@ -159,6 +161,11 @@
 
 @layer utilities {
   .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Numbers that traders scan: monospaced and tabular. */
+  .num {
+    font-family: "JetBrains Mono Variable", ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
   }
 }

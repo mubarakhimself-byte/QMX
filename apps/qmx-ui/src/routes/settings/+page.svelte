@@ -5,11 +5,44 @@
   import { Separator } from "$lib/components/ui/separator";
   import PageHeader from "$lib/workbench/PageHeader.svelte";
   import { cn } from "$lib/utils";
-  import { workbench } from "$lib/workbench/workbench.svelte";
+  import { workbench, type Theme } from "$lib/workbench/workbench.svelte";
+
+  const THEME_CHOICES: {
+    id: Theme;
+    label: string;
+    note: string;
+    swatch: string[];
+  }[] = [
+    {
+      id: "ink",
+      label: "Ink",
+      note: "Charcoal and old gold",
+      swatch: ["#0d0e10", "#e0b062", "#9fd8d0"],
+    },
+    {
+      id: "cobalt",
+      label: "Cobalt",
+      note: "Electric blue",
+      swatch: ["#05082e", "#6f7bff", "#7ee2ff"],
+    },
+    {
+      id: "ember",
+      label: "Ember",
+      note: "Dark red and orange",
+      swatch: ["#120a08", "#ff9a62", "#ffd28a"],
+    },
+    {
+      id: "plain",
+      label: "Plain",
+      note: "No background, solid panels",
+      swatch: ["#252525", "#e5e5e5", "#8a8a8a"],
+    },
+  ];
 
   // Settings scopes (UI EXPERIENCE §7): global, app, session, instance.
   const SCOPES = [
     { id: "connection", label: "Connection" },
+    { id: "appearance", label: "Appearance" },
     { id: "global", label: "General" },
     { id: "apps", label: "Apps" },
     { id: "sessions", label: "Copilot sessions" },
@@ -82,6 +115,51 @@
               <Button size="sm" disabled>Pair</Button>
               <Button size="sm" variant="outline" disabled>Check again</Button>
             </Card.Footer>
+          </Card.Root>
+        {:else if scope === "appearance"}
+          <Card.Root size="sm">
+            <Card.Header>
+              <Card.Title>Theme</Card.Title>
+              <Card.Description>
+                Glass panels over an ink map of fractal price paths. Trading
+                screens always use a plain background.
+              </Card.Description>
+            </Card.Header>
+            <Card.Content>
+              <div
+                class="grid grid-cols-2 gap-2"
+                role="radiogroup"
+                aria-label="Theme"
+              >
+                {#each THEME_CHOICES as t (t.id)}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={workbench.theme === t.id}
+                    class={cn(
+                      "hover:bg-muted flex items-center gap-3 rounded-lg border p-3 text-left",
+                      workbench.theme === t.id && "border-ring bg-muted",
+                    )}
+                    onclick={() => workbench.setTheme(t.id)}
+                  >
+                    <span class="flex -space-x-1.5">
+                      {#each t.swatch as c (c)}
+                        <span
+                          class="ring-background size-5 rounded-full ring-2"
+                          style="background: {c}"
+                        ></span>
+                      {/each}
+                    </span>
+                    <span>
+                      <span class="block text-sm font-medium">{t.label}</span>
+                      <span class="text-muted-foreground block text-xs"
+                        >{t.note}</span
+                      >
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            </Card.Content>
           </Card.Root>
         {:else if scope === "developer"}
           <Card.Root size="sm">

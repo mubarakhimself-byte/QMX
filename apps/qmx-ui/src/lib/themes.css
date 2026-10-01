@@ -1,0 +1,162 @@
+/*
+ * QMX themes: glass panels over an ink background (operator ruling
+ * 2026-10-01). Each theme overrides the dark tokens; `.glass` on <html>
+ * turns on translucent, blurred panels. Trading surfaces opt out of the
+ * decorative background (see InkBackground).
+ */
+
+.dark.theme-ink {
+  --background: #0d0e10;
+  --foreground: #ece8df;
+  --panel: rgba(26, 25, 23, 0.58);
+  --card: rgba(30, 29, 27, 0.62);
+  --card-foreground: #ece8df;
+  --popover: #1b1a18;
+  --popover-foreground: #ece8df;
+  --primary: #e0b062;
+  --primary-foreground: #1a1205;
+  --secondary: rgba(255, 245, 225, 0.07);
+  --secondary-foreground: #ece8df;
+  --muted: rgba(255, 245, 225, 0.07);
+  --muted-foreground: #a8a194;
+  --accent: rgba(255, 245, 225, 0.09);
+  --accent-foreground: #f4efe6;
+  --border: rgba(255, 240, 210, 0.09);
+  --input: rgba(255, 240, 210, 0.13);
+  --ring: #e0b062;
+  --success: #7fcf9a;
+  --destructive: #e2735f;
+  --warning: #e0b062;
+  --info: #9fd8d0;
+  --chart-1: #e0b062;
+  --chart-2: #9fd8d0;
+  --chart-3: #b7c48a;
+  --chart-4: #d99a7a;
+  --chart-5: #a99ad6;
+  --sidebar: rgba(18, 17, 16, 0.62);
+  --sidebar-border: rgba(255, 240, 210, 0.08);
+  --glow: #8a6a2e;
+  --ink: #d6b46e;
+}
+
+.dark.theme-cobalt {
+  --background: #05082e;
+  --foreground: #eef0ff;
+  --panel: rgba(18, 24, 92, 0.5);
+  --card: rgba(22, 30, 104, 0.55);
+  --card-foreground: #eef0ff;
+  --popover: #10165a;
+  --popover-foreground: #eef0ff;
+  --primary: #e9ecff;
+  --primary-foreground: #0a0f45;
+  --secondary: rgba(200, 210, 255, 0.09);
+  --secondary-foreground: #eef0ff;
+  --muted: rgba(200, 210, 255, 0.09);
+  --muted-foreground: #aab1e6;
+  --accent: rgba(200, 210, 255, 0.12);
+  --accent-foreground: #ffffff;
+  --border: rgba(200, 210, 255, 0.13);
+  --input: rgba(200, 210, 255, 0.18);
+  --ring: #7ee2ff;
+  --success: #7ef0c0;
+  --destructive: #ff8a9a;
+  --warning: #ffd27a;
+  --info: #7ee2ff;
+  --chart-1: #7ee2ff;
+  --chart-2: #7ef0c0;
+  --chart-3: #b4b9ff;
+  --chart-4: #ffd27a;
+  --chart-5: #ff8a9a;
+  --sidebar: rgba(8, 12, 60, 0.6);
+  --sidebar-border: rgba(200, 210, 255, 0.12);
+  --glow: #2433ff;
+  --ink: #6f7bff;
+}
+
+.dark.theme-ember {
+  --background: #120a08;
+  --foreground: #f3e9e4;
+  --panel: rgba(38, 20, 16, 0.55);
+  --card: rgba(44, 24, 19, 0.6);
+  --card-foreground: #f3e9e4;
+  --popover: #2a1712;
+  --popover-foreground: #f3e9e4;
+  --primary: #ff9a62;
+  --primary-foreground: #2a0f05;
+  --secondary: rgba(255, 220, 200, 0.07);
+  --secondary-foreground: #f3e9e4;
+  --muted: rgba(255, 220, 200, 0.07);
+  --muted-foreground: #bba49b;
+  --accent: rgba(255, 220, 200, 0.1);
+  --accent-foreground: #fff4ee;
+  --border: rgba(255, 210, 190, 0.09);
+  --input: rgba(255, 210, 190, 0.14);
+  --ring: #ff9a62;
+  --success: #8fd6a0;
+  --destructive: #ff7a6a;
+  --warning: #ffd28a;
+  --info: #ffd28a;
+  --chart-1: #ff9a62;
+  --chart-2: #8fd6a0;
+  --chart-3: #ffd28a;
+  --chart-4: #e88aa8;
+  --chart-5: #b0a0e0;
+  --sidebar: rgba(26, 13, 10, 0.62);
+  --sidebar-border: rgba(255, 210, 190, 0.08);
+  --glow: #a3361d;
+  --ink: #ff8c64;
+}
+
+/* Glass: translucent panels blur the ink background behind them. */
+.glass .bg-panel,
+.glass .bg-sidebar,
+.glass .bg-card,
+.glass .surface {
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* A floating surface: hairline edge, top highlight, soft drop shadow. */
+.surface {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 14px 34px rgb(0 0 0 / 0.38),
+    0 2px 6px rgb(0 0 0 / 0.25);
+}
+
+/* Pressed-in well (neumorphic) for inputs and segmented controls. */
+.well {
+  background: rgb(0 0 0 / 0.22);
+  box-shadow:
+    inset 2px 2px 6px rgb(0 0 0 / 0.45),
+    inset -1px -1px 2px rgb(255 255 255 / 0.05);
+}
+
+/* Quiet scrollbars that match the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
+    transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--muted-foreground) 55%,
+    transparent
+  );
+}
