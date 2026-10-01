@@ -1,5 +1,4 @@
 <script lang="ts">
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
@@ -7,7 +6,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
-  import WidgetFrame from "$lib/workbench/WidgetFrame.svelte";
+  import MiniAppShell from "$lib/workbench/MiniAppShell.svelte";
+  import { WidgetBoard } from "$lib/workbench/board.svelte";
   import CandleChart from "$lib/demo/CandleChart.svelte";
   import TickerTape from "$lib/qmx/TickerTape.svelte";
   import { demoCandles } from "$lib/demo/data";
@@ -16,7 +16,7 @@
   // DEMO trading node. Follows docs/components/trading-node.md: modes
   // paper|live, Book-level routing, KSA levels, stand-down, two-act
   // promotion/activation. The UI only displays and requests; the node
-  // decides. No decorative background on this surface.
+  // decides. No decorative background on this surface (route /trade).
   const NODES = [
     { id: "paper", name: "Paper node", where: "This machine", mode: "Paper" },
     { id: "live", name: "Live node", where: "VPS · London", mode: "Live" },
@@ -115,241 +115,238 @@
   const candles = demoCandles(120, 5420, 17);
   const disabledTitle =
     "The node decides; this needs a connected node and your confirmation.";
+
+  const W = {
+    chart: { id: "chart", title: "US500 · H4 · IDX-L", size: "xl", tall: true },
+    protection: {
+      id: "protection",
+      title: "Protection",
+      size: "md",
+      tall: true,
+    },
+    positions: { id: "positions", title: "Positions and orders", size: "xl" },
+    books: { id: "books", title: "Books", size: "md" },
+    waiting: { id: "waiting", title: "Waiting for you", size: "md" },
+    windows: { id: "windows", title: "News windows", size: "md" },
+    fills: { id: "fills", title: "Fills", size: "md" },
+  } as const;
+  const board = new WidgetBoard({
+    Overview: [
+      W.chart,
+      W.protection,
+      W.positions,
+      W.books,
+      W.waiting,
+      W.windows,
+      W.fills,
+    ],
+    Risk: [W.protection, W.books, W.positions, W.windows],
+  });
 </script>
 
 <svelte:head><title>Trading node · QMX</title></svelte:head>
 
-<div class="bg-background flex h-full flex-col">
-  <div class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs">
-    <FlaskConical class="text-warning size-3.5" />
-    Demo trading node. Sample positions and prices; no orders can be placed from this
-    window.
-  </div>
-  <TickerTape items={TICKER} label="Live prices (sample)" />
+{#snippet header()}
+  <Tabs.Root bind:value={node}>
+    <Tabs.List>
+      {#each NODES as n (n.id)}<Tabs.Trigger value={n.id}>{n.name}</Tabs.Trigger
+        >{/each}
+    </Tabs.List>
+  </Tabs.Root>
+  <span class="text-muted-foreground text-sm"
+    >{NODES.find((n) => n.id === node)?.where}</span
+  >
+  <span class="text-muted-foreground ml-4 flex items-center gap-1.5 text-sm">
+    <HeartPulse class="text-success size-4" /> Heartbeat 2s · 38 ms
+  </span>
+  <span class="flex items-center gap-2 rounded-md border px-2.5 py-0.5 text-sm">
+    <span class="bg-success size-2 rounded-full"></span>Protection {level}
+  </span>
+{/snippet}
 
-  <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
-    <Tabs.Root bind:value={node}>
-      <Tabs.List>
-        {#each NODES as n (n.id)}<Tabs.Trigger value={n.id}
-            >{n.name}</Tabs.Trigger
-          >{/each}
-      </Tabs.List>
-    </Tabs.Root>
-    <Badge
-      variant="outline"
-      class={node === "live" ? "text-success" : "text-warning"}
-      >{node === "live" ? "LIVE" : "PAPER"}</Badge
-    >
-    <span class="text-muted-foreground text-sm"
-      >{NODES.find((n) => n.id === node)?.where}</span
-    >
-    <span
-      class="text-muted-foreground ml-auto flex items-center gap-1.5 text-sm"
-    >
-      <HeartPulse class="text-success size-4" /> Heartbeat 2s ago
-    </span>
-    <span class="flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm">
-      <span class="bg-success size-2 rounded-full"></span>Protection {level}
-    </span>
-  </header>
+{#snippet strip()}<TickerTape
+    items={TICKER}
+    label="Live prices (sample)"
+  />{/snippet}
 
-  <div class="min-h-0 flex-1 overflow-auto p-3">
-    <div class="grid grid-cols-12 gap-3">
-      <WidgetFrame
-        title="US500 · H4 · IDX-L"
-        class="col-span-12 h-80 xl:col-span-8"
+{#snippet body(id: string)}
+  {#if id === "chart"}
+    <CandleChart
+      precision={1}
+      {candles}
+      markers={[
+        { time: candles[candles.length - 6].time, text: "Entry · US500 Trend" },
+      ]}
+    />
+  {:else if id === "protection"}
+    <ol class="flex flex-col gap-1">
+      {#each LEVELS as l (l.id)}
+        <li
+          class={cn(
+            "flex items-center gap-3 rounded-md px-2.5 py-1.5",
+            l.id === level && "bg-muted",
+          )}
+        >
+          <span class={cn("size-2.5 rounded-full", l.tone)}></span>
+          <span class="num w-16 text-sm font-semibold">{l.id}</span>
+          <span class="text-muted-foreground text-sm">{l.effect}</span>
+          {#if l.id === level}<span class="ml-auto text-xs">current</span>{/if}
+        </li>
+      {/each}
+    </ol>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        aria-disabled="true"
+        class="aria-disabled:opacity-60"
+        title={disabledTitle}
+        onclick={(e) => e.preventDefault()}
       >
-        <CandleChart
-          precision={1}
-          {candles}
-          markers={[
-            {
-              time: candles[candles.length - 6].time,
-              text: "Entry · US500 Trend",
-            },
-          ]}
-        />
-      </WidgetFrame>
-
-      <WidgetFrame title="Protection" class="col-span-12 xl:col-span-4">
-        <ol class="flex flex-col gap-1">
-          {#each LEVELS as l (l.id)}
-            <li
-              class={cn(
-                "flex items-center gap-3 rounded-md px-2.5 py-1.5",
-                l.id === level && "bg-muted",
-              )}
-            >
-              <span class={cn("size-2.5 rounded-full", l.tone)}></span>
-              <span class="num w-16 text-sm font-semibold">{l.id}</span>
-              <span class="text-muted-foreground text-sm">{l.effect}</span>
-              {#if l.id === level}<span class="ml-auto text-xs">current</span
-                >{/if}
-            </li>
-          {/each}
-        </ol>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            aria-disabled="true"
-            class="aria-disabled:opacity-60"
-            title={disabledTitle}
-            onclick={(e) => e.preventDefault()}
-          >
-            <ShieldAlert /> Escalate…
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            aria-disabled="true"
-            class="aria-disabled:opacity-60"
-            title={disabledTitle}
-            onclick={(e) => e.preventDefault()}
-          >
-            Flatten all…
-          </Button>
-        </div>
-        <p class="text-muted-foreground mt-2 text-xs">
-          Automatic changes only escalate. Coming back down is your Resume.
-        </p>
-      </WidgetFrame>
-
-      <WidgetFrame title="Positions" class="col-span-12 xl:col-span-8">
-        <table class="w-full text-sm">
-          <thead class="text-muted-foreground text-left text-xs">
-            <tr
-              ><th class="pb-1.5 font-medium">Symbol</th><th class="font-medium"
-                >Side</th
-              ><th class="text-right font-medium">Lots</th><th
-                class="text-right font-medium">Entry</th
-              ><th class="text-right font-medium">Last</th><th
-                class="text-right font-medium">P&amp;L</th
-              ><th class="pl-4 font-medium">Book · bot</th></tr
-            >
-          </thead>
-          <tbody>
-            {#each POSITIONS as p (p.sym)}
-              <tr class="border-t">
-                <td class="py-2 font-medium">{p.sym}</td><td>{p.side}</td>
-                <td class="num text-right">{p.lots.toFixed(2)}</td><td
-                  class="num text-right">{p.entry}</td
-                ><td class="num text-right">{p.last}</td>
-                <td class="num text-success text-right">+${p.pnl.toFixed(2)}</td
-                >
-                <td class="text-muted-foreground pl-4">{p.book} · {p.bot}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-        <p class="text-muted-foreground mt-3 text-xs">Working orders</p>
-        <table class="w-full text-sm">
-          <tbody>
-            {#each ORDERS as o (o.sym + o.type)}
-              <tr class="border-t">
-                <td class="py-2 font-medium">{o.sym}</td><td
-                  >{o.type} {o.side}</td
-                ><td class="num text-right">{o.lots.toFixed(2)}</td><td
-                  class="num text-right">{o.price}</td
-                ><td class="text-muted-foreground pl-4">{o.book} · {o.note}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </WidgetFrame>
-
-      <WidgetFrame title="Books" class="col-span-12 xl:col-span-4">
-        <ul class="flex flex-col gap-2">
-          {#each BOOKS as b (b.book)}
-            <li class="well flex items-center gap-3 rounded-lg p-3">
-              <span class="min-w-0 flex-1">
-                <span class="flex items-center gap-2 text-sm font-medium"
-                  >{b.book}<Badge
-                    variant="outline"
-                    class="h-4 px-1.5 text-[10px]">{b.mode}</Badge
-                  ></span
-                >
-                <span class="text-muted-foreground block text-xs"
-                  >{b.bots} · seat {b.seat} · exposure {b.exposure}</span
-                >
-              </span>
-              <span
-                class={cn(
-                  "num text-sm",
-                  b.pnl > 0 ? "text-success" : "text-muted-foreground",
-                )}>{b.pnl > 0 ? "+$" + b.pnl.toFixed(2) : "$0.00"}</span
-              >
-            </li>
-          {/each}
-        </ul>
-        <p class="text-muted-foreground mt-2 text-xs">
-          Sizing comes from the book, never from a bot.
-        </p>
-      </WidgetFrame>
-
-      <WidgetFrame
-        title="Waiting for you"
-        class="col-span-12 lg:col-span-6 xl:col-span-4"
+        <ShieldAlert /> Escalate…
+      </Button>
+      <Button
+        size="sm"
+        variant="destructive"
+        aria-disabled="true"
+        class="aria-disabled:opacity-60"
+        title={disabledTitle}
+        onclick={(e) => e.preventDefault()}
       >
-        <div class="flex flex-col gap-2">
-          <div class="well rounded-lg p-3">
-            <p class="flex items-center gap-2 text-sm font-medium">
-              <ShieldCheck class="text-warning size-4" /> Promote EURUSD H1 GBM
-            </p>
-            <p class="text-muted-foreground mt-1 text-xs">
-              Signed card: bot v7 (fp1:9c41…e2a0) into book FX-L at 0.5% risk.
-              Evidence: 2 confirmation runs.
-            </p>
-            <div class="mt-2 flex gap-2">
-              <Button
-                size="sm"
-                aria-disabled="true"
-                class="aria-disabled:opacity-60"
-                title={disabledTitle}
-                onclick={(e) => e.preventDefault()}>Review and sign…</Button
-              >
-            </div>
-          </div>
-          <p class="text-muted-foreground text-xs">
-            Promotion and activation are two separate acts. Activation takes
-            effect at the next day boundary.
-          </p>
-        </div>
-      </WidgetFrame>
-
-      <WidgetFrame
-        title="News windows"
-        class="col-span-12 lg:col-span-6 xl:col-span-4"
-      >
-        <ul class="flex flex-col text-sm">
-          {#each WINDOWS as w (w.event)}
-            <li class="flex items-center gap-3 border-b py-2 last:border-0">
-              <Clock class="text-muted-foreground size-4 shrink-0" />
-              <span class="min-w-0 flex-1"
-                ><span class="block">{w.event}</span><span
-                  class="text-muted-foreground text-xs"
-                  >No new entries {w.span}</span
-                ></span
-              >
-              <span class="num text-muted-foreground text-xs">{w.at}</span>
-            </li>
-          {/each}
-        </ul>
-      </WidgetFrame>
-
-      <WidgetFrame title="Fills" class="col-span-12 xl:col-span-4">
-        <ul class="flex flex-col text-sm">
-          {#each FILLS as f (f.time)}
-            <li
-              class="grid grid-cols-[6.5rem_1fr_auto] gap-2 border-b py-2 last:border-0"
-            >
-              <span class="num text-muted-foreground text-xs">{f.time}</span>
-              <span>{f.side} {f.lots.toFixed(2)} {f.sym}</span>
-              <span class="num">{f.price}</span>
-            </li>
-          {/each}
-        </ul>
-      </WidgetFrame>
+        Flatten all…
+      </Button>
     </div>
-  </div>
-</div>
+    <p class="text-muted-foreground mt-2 text-xs">
+      Automatic changes only escalate; coming back down is your Resume. Flatten:
+      you always; book policy and the protection authority by pre-declared
+      rules.
+    </p>
+  {:else if id === "positions"}
+    <table class="w-full text-sm">
+      <thead class="text-muted-foreground text-left text-xs">
+        <tr>
+          <th class="pb-1.5 font-medium">Symbol</th><th class="font-medium"
+            >Side</th
+          >
+          <th class="text-right font-medium">Lots</th><th
+            class="text-right font-medium">Entry</th
+          >
+          <th class="text-right font-medium">Last</th><th
+            class="text-right font-medium">P&amp;L</th
+          >
+          <th class="pl-4 font-medium">Book · bot</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each POSITIONS as p (p.sym)}
+          <tr class="border-t">
+            <td class="py-2 font-medium">{p.sym}</td><td>{p.side}</td>
+            <td class="num text-right">{p.lots.toFixed(2)}</td>
+            <td class="num text-right">{p.entry}</td>
+            <td class="num text-right">{p.last}</td>
+            <td class="num text-success text-right">+${p.pnl.toFixed(2)}</td>
+            <td class="text-muted-foreground pl-4">{p.book} · {p.bot}</td>
+          </tr>
+        {/each}
+        {#each ORDERS as o (o.sym + o.type)}
+          <tr class="border-t">
+            <td class="py-2 font-medium">{o.sym}</td><td>{o.type} {o.side}</td>
+            <td class="num text-right">{o.lots.toFixed(2)}</td>
+            <td class="num text-right">{o.price}</td><td></td>
+            <td class="text-muted-foreground text-right text-xs">working</td>
+            <td class="text-muted-foreground pl-4">{o.book} · {o.note}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {:else if id === "books"}
+    <ul class="flex flex-col gap-2">
+      {#each BOOKS as b (b.book)}
+        <li class="well flex items-center gap-3 rounded-lg p-3">
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2 text-sm font-medium">
+              {b.book}<Badge variant="outline" class="h-4 px-1.5 text-[10px]"
+                >{b.mode}</Badge
+              >
+            </span>
+            <span class="text-muted-foreground block text-xs"
+              >{b.bots} · seat {b.seat} · exposure {b.exposure}</span
+            >
+          </span>
+          <span
+            class={cn(
+              "num text-sm",
+              b.pnl > 0 ? "text-success" : "text-muted-foreground",
+            )}
+          >
+            {b.pnl > 0 ? "+$" + b.pnl.toFixed(2) : "$0.00"}
+          </span>
+        </li>
+      {/each}
+    </ul>
+    <p class="text-muted-foreground mt-2 text-xs">
+      Sizing comes from the book, never from a bot.
+    </p>
+  {:else if id === "waiting"}
+    <div class="well rounded-lg p-3">
+      <p class="flex items-center gap-2 text-sm font-medium">
+        <ShieldCheck class="text-warning size-4" /> Promote EURUSD H1 GBM
+      </p>
+      <p class="text-muted-foreground mt-1 text-xs">
+        Signed card: bot v7 (fp1:9c41…e2a0) into book FX-L at 0.5% risk.
+        Evidence: 2 confirmation runs.
+      </p>
+      <Button
+        size="sm"
+        class="mt-2 aria-disabled:opacity-60"
+        aria-disabled="true"
+        title={disabledTitle}
+        onclick={(e) => e.preventDefault()}
+      >
+        Review and sign…
+      </Button>
+    </div>
+    <p class="text-muted-foreground mt-2 text-xs">
+      Promotion and activation are two separate acts. Activation takes effect at
+      the next day boundary.
+    </p>
+  {:else if id === "windows"}
+    <ul class="flex flex-col text-sm">
+      {#each WINDOWS as w (w.event)}
+        <li class="flex items-center gap-3 border-b py-2 last:border-0">
+          <Clock class="text-muted-foreground size-4 shrink-0" />
+          <span class="min-w-0 flex-1">
+            <span class="block">{w.event}</span>
+            <span class="text-muted-foreground text-xs"
+              >No new entries {w.span}</span
+            >
+          </span>
+          <span class="num text-muted-foreground text-xs">{w.at}</span>
+        </li>
+      {/each}
+    </ul>
+  {:else if id === "fills"}
+    <ul class="flex flex-col text-sm">
+      {#each FILLS as f (f.time)}
+        <li
+          class="grid grid-cols-[6.5rem_1fr_auto] gap-2 border-b py-2 last:border-0"
+        >
+          <span class="num text-muted-foreground text-xs">{f.time}</span>
+          <span>{f.side} {f.lots.toFixed(2)} {f.sym}</span>
+          <span class="num">{f.price}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+{/snippet}
+
+<MiniAppShell
+  {board}
+  name="Trading node"
+  badge="DEMO"
+  tone={node === "live" ? "live" : "paper"}
+  demoNote="Demo trading node. Sample positions and prices; no orders can be placed from this window."
+  headerExtra={header}
+  {strip}
+  widget={body}
+/>

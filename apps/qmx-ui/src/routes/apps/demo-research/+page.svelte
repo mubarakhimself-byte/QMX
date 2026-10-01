@@ -1,17 +1,6 @@
 <script lang="ts">
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import Pencil from "@lucide/svelte/icons/pencil";
-  import Check from "@lucide/svelte/icons/check";
-  import Plus from "@lucide/svelte/icons/plus";
-  import PanelRight from "@lucide/svelte/icons/panel-right";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import WidgetFrame from "$lib/workbench/WidgetFrame.svelte";
-  import CopilotColumn from "$lib/workbench/CopilotColumn.svelte";
-  import { workbench } from "$lib/workbench/workbench.svelte";
+  import MiniAppShell from "$lib/workbench/MiniAppShell.svelte";
+  import { WidgetBoard } from "$lib/workbench/board.svelte";
   import CandleChart from "$lib/demo/CandleChart.svelte";
   import Sparkline from "$lib/demo/Sparkline.svelte";
   import {
@@ -23,66 +12,23 @@
     DEMO_METRICS,
   } from "$lib/demo/data";
   import { cn } from "$lib/utils";
-  import { SvelteSet } from "svelte/reactivity";
 
-  // DEMO: a sample research mini-app. Its views and widgets stand in for a
+  // DEMO: a sample research mini app. Its views and widgets stand in for a
   // pack's PackUiRequest nav[] and views[]; all numbers are sample data.
-  type WidgetId =
-    | "chart"
-    | "watchlist"
-    | "metrics"
-    | "calendar"
-    | "news"
-    | "book"
-    | "signals";
-  const TITLES: Record<WidgetId, string> = {
-    chart: "EURUSD · Daily",
-    watchlist: "Watchlist",
-    metrics: "Strategy metrics",
-    calendar: "Economic calendar",
-    news: "News",
-    book: "Book exposure",
-    signals: "Signal scanner",
-  };
-  const SPAN: Partial<Record<WidgetId, string>> = {
-    chart: "xl:col-span-2 xl:row-span-2",
-  };
-  const VIEWS: Record<string, WidgetId[]> = {
-    Overview: ["chart", "watchlist", "metrics", "calendar", "news"],
-    Signals: ["signals", "chart", "news"],
-    Risk: ["book", "metrics", "calendar"],
-  };
-
-  let view = $state("Overview");
-  let layout = $state<Record<string, WidgetId[]>>(structuredClone(VIEWS));
-  const minimized = new SvelteSet<WidgetId>();
-  let expanded = $state<WidgetId | null>(null);
-  let editing = $state(false);
-  let copilotOpen = $state(true);
-
-  const shown = $derived(layout[view]);
-  const addable = $derived(
-    (Object.keys(TITLES) as WidgetId[]).filter((id) => !shown.includes(id)),
-  );
-
-  function close(id: WidgetId) {
-    layout[view] = layout[view].filter((w) => w !== id);
-    if (expanded === id) expanded = null;
-  }
-  function add(id: WidgetId) {
-    layout[view] = [...layout[view], id];
-  }
-  function toggleMin(id: WidgetId) {
-    if (minimized.has(id)) minimized.delete(id);
-    else minimized.add(id);
-  }
-  function toggleExpand(id: WidgetId) {
-    expanded = expanded === id ? null : id;
-  }
-  function mention(id: WidgetId) {
-    workbench.addRef(TITLES[id]);
-    copilotOpen = true;
-  }
+  const W = {
+    chart: { id: "chart", title: "EURUSD · Daily", size: "xl", tall: true },
+    watchlist: { id: "watchlist", title: "Watchlist", size: "md" },
+    metrics: { id: "metrics", title: "Strategy metrics", size: "md" },
+    calendar: { id: "calendar", title: "Economic calendar", size: "md" },
+    news: { id: "news", title: "News", size: "md" },
+    book: { id: "book", title: "Book exposure", size: "lg" },
+    signals: { id: "signals", title: "Signal scanner", size: "lg" },
+  } as const;
+  const board = new WidgetBoard({
+    Overview: [W.chart, W.watchlist, W.metrics, W.calendar, W.news, W.signals],
+    Signals: [W.signals, W.chart, W.news],
+    Risk: [W.book, W.metrics, W.calendar],
+  });
 
   const candles = demoCandles();
   // DEMO agent signals: where the sample model would have entered.
@@ -108,7 +54,7 @@
   </span>
 {/snippet}
 
-{#snippet body(id: WidgetId)}
+{#snippet body(id: string)}
   {#if id === "chart"}
     <div class="flex h-full min-h-56 flex-col gap-1">
       <div class="flex items-baseline gap-3">
@@ -262,112 +208,14 @@
 
 <svelte:head><title>Research (demo) · QMX</title></svelte:head>
 
-<div class="flex h-full flex-col">
-  <div class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs">
-    <FlaskConical class="text-warning size-3.5" />
-    Demo app. Sample numbers, not market data, and nothing here is saved.
-  </div>
-
-  <header class="flex h-10 shrink-0 items-center gap-3 border-b px-3">
-    <span class="text-sm font-semibold">Research</span>
-    <Badge variant="outline" class="h-4 px-1.5 text-[10px]">DEMO</Badge>
-    <Tabs.Root bind:value={view} onValueChange={() => (expanded = null)}>
-      <Tabs.List variant="line">
-        {#each Object.keys(VIEWS) as v (v)}<Tabs.Trigger value={v}
-            >{v}</Tabs.Trigger
-          >{/each}
-      </Tabs.List>
-    </Tabs.Root>
-    <div class="ml-auto flex items-center gap-1">
-      <Button
-        variant={editing ? "secondary" : "ghost"}
-        size="sm"
-        aria-pressed={editing}
-        onclick={() => (editing = !editing)}
-      >
-        {#if editing}<Check /> Done{:else}<Pencil /> Edit layout{/if}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Toggle app copilot"
-        aria-pressed={copilotOpen}
-        onclick={() => (copilotOpen = !copilotOpen)}
-      >
-        <PanelRight />
-      </Button>
-    </div>
-  </header>
-
-  <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-    <Resizable.Pane defaultSize={74} minSize={45}>
-      <div class="relative h-full overflow-auto p-2">
-        {#if expanded}
-          <WidgetFrame
-            title={TITLES[expanded]}
-            class="h-full"
-            expanded
-            onexpand={() => toggleExpand(expanded!)}
-            onmessage={() => mention(expanded!)}
-          >
-            {@render body(expanded)}
-          </WidgetFrame>
-        {:else}
-          <div
-            class="grid auto-rows-[minmax(13rem,auto)] gap-2 md:grid-cols-2 xl:grid-cols-3"
-          >
-            {#each shown as id (id)}
-              <WidgetFrame
-                title={TITLES[id]}
-                class={cn(
-                  !minimized.has(id) && SPAN[id],
-                  minimized.has(id) && "h-fit",
-                  editing && "outline-ring/40 outline-1 outline-dashed",
-                )}
-                minimized={minimized.has(id)}
-                onmessage={() => mention(id)}
-                onminimize={() => toggleMin(id)}
-                onexpand={() => toggleExpand(id)}
-                onclose={editing ? () => close(id) : undefined}
-              >
-                {@render body(id)}
-              </WidgetFrame>
-            {/each}
-          </div>
-          {#if editing && addable.length}
-            <div class="absolute right-4 bottom-4">
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  {#snippet child({ props })}
-                    <Button {...props} size="sm"><Plus /> Add widget</Button>
-                  {/snippet}
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  {#each addable as id (id)}
-                    <DropdownMenu.Item onclick={() => add(id)}
-                      >{TITLES[id]}</DropdownMenu.Item
-                    >
-                  {/each}
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </div>
-          {/if}
-        {/if}
-      </div>
-    </Resizable.Pane>
-    {#if copilotOpen}
-      <Resizable.Handle />
-      <Resizable.Pane defaultSize={26} minSize={20} maxSize={40}>
-        <CopilotColumn
-          title="App copilot"
-          profile="app-use"
-          hint="Use the message-plus icon on a widget to add it here as context."
-          placeholder="Ask about this app…"
-          refs={workbench.copilotRefs}
-          onremoveref={(r) => workbench.removeRef(r)}
-          onclose={() => (copilotOpen = false)}
-        />
-      </Resizable.Pane>
-    {/if}
-  </Resizable.PaneGroup>
-</div>
+<MiniAppShell
+  {board}
+  name="Research"
+  badge="DEMO"
+  demoNote="Demo app. Sample numbers, not market data, and nothing here is saved."
+  copilot={{
+    hint: "Use the message-plus icon on a widget to add it here as context.",
+    placeholder: "Ask about this app…",
+  }}
+  widget={body}
+/>

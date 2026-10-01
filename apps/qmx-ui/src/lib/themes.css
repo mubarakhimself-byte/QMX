@@ -310,3 +310,17 @@
     transparent
   );
 }
+
+/* Mode tones used for the whole-frame border on trading surfaces. */
+:root {
+  --tone-paper: #f0a03a;
+  --tone-live: #4c8dff;
+}
+
+/* Calm overlay between the ink background and dense content. */
+.scrim {
+  background: color-mix(in oklab, var(--background) 72%, transparent);
+}
+:root.theme-paper .scrim {
+  background: color-mix(in oklab, var(--background) 80%, transparent);
+}
