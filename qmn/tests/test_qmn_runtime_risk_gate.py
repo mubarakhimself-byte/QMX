@@ -61,6 +61,9 @@ def _inputs(**overrides: object) -> RuntimeRiskGateInputs:
     return RuntimeRiskGateInputs(**kwargs)  # type: ignore[arg-type]
 
 
+fixture_runtime_risk_inputs = _inputs
+
+
 def test_surface_markers_and_closed_contract_roster() -> None:
     assert RUNTIME_RISK_GATE_SURFACE == "qmn.host.runtime_risk_gate"
     assert PAPER_PROFIT_IS_PROOF is False
