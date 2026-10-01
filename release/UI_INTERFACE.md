@@ -61,8 +61,13 @@ consumes an explicitly registered, unit-kinded policy objective and the same
 generation barrier/reopen discipline; an unavailable objective is a typed
 refusal. No default financial score, fraction, leverage basis or cost convention
 may be inferred from an example policy name. Both composition classes require
-actual worker acceptance, held environment lease, terminal evidence, cancellation
-and restart/reconnect checks, and second-pack reuse of the common host runtime.
+actual worker acceptance under the current dispatcher Task lease, terminal
+evidence, cancellation and restart/reconnect checks, and second-pack reuse of
+the common host runtime. The accepted dispatched outbox must match the current
+Task, mission, owner and TaskLedger attempt. Public invocation identity is
+independent of Task identity. For `qmb.backtest.run`, QMB owns the compute leg;
+QMA records no EnvironmentLease for that leg. Historical registration provenance
+is retained but cannot substitute for current dispatch authority.
 
 ## Published UI baseline evidence boundary
 
