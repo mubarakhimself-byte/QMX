@@ -633,7 +633,7 @@ def bot_definition_kind_contract() -> Result[FieldSetKind]:
     The dated Bot-kind mint itself is defined-unwired on declaration helpers
     (CT-33 wiring_status, DEC-0173; operator ruling OR-06 2026-08-27): no
     install/register wiring ships in ``qml.declaration``. Records reach
-    qmf-registry through the QML/host composition root under the AD-25
+    qmf-registry through the QMB composition root under the AD-25
     root-mints pattern. QMB runs the candidates and does not author them.
     """
     return FieldSetKind.try_create(

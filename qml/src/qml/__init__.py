@@ -98,7 +98,6 @@ from qml.declaration import (
     branches_from_edge,
     confluence_kind_contract,
     continues_performance_edge,
-    install_confluence_kind,
     mint_bot_definition,
     mint_confluence,
     parse_leg_role,
@@ -106,7 +105,6 @@ from qml.declaration import (
     parse_parameter_type,
     parse_ui_flag,
     promote_tuned_assignment,
-    register_confluence,
     resolve_confluence_at_layer1,
 )
 from qml.families import (
@@ -190,7 +188,6 @@ from qml.generation import (
     trails_connect_wave,
     write_ownership_is_qml_host,
 )
-from qml.host import HOST_MINTS_CT06_ENVELOPE, HostMintedCandidate, mint_generation_envelope
 from qml.logic import (
     LOGIC_REFERENCE_CLASS,
     LogicIdentity,
@@ -260,7 +257,6 @@ __all__ = [
     "GAP_0085_WRITE_OWNER",
     "GENERATION_EPIC",
     "GENERATOR_ALGORITHM_UNRULED",
-    "HOST_MINTS_CT06_ENVELOPE",
     "HOST_MINTS_MECHANISM_VOCABULARY",
     "KIND_BOT_DEFINITION",
     "KIND_CONFLUENCE",
@@ -325,7 +321,6 @@ __all__ = [
     "GraduationEdge",
     "HardConstraintFilter",
     "Horizon",
-    "HostMintedCandidate",
     "HostedBot",
     "Layer1Verdict",
     "Layer2Observations",
@@ -383,13 +378,11 @@ __all__ = [
     "generate_golden_slice",
     "graduate_mill_to_governed",
     "graduate_to_governed",
-    "install_confluence_kind",
     "lint_declaration",
     "lint_prediction",
     "mint_bot_definition",
     "mint_confluence",
     "mint_footprint",
-    "mint_generation_envelope",
     "mint_logic_identity",
     "mint_mechanism_vocabulary",
     "mint_producer_template",
@@ -414,7 +407,6 @@ __all__ = [
     "refuse_qml_dsl",
     "refuse_random_condition_schema",
     "refuse_spawn_as_graduation",
-    "register_confluence",
     "report_completeness",
     "resolve_confluence_at_layer1",
     "resolve_family_at_layer1",

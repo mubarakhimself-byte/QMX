@@ -39,7 +39,7 @@ def test_import_usage_example_runs_clean() -> None:
 def test_family_usage_example_runs_clean() -> None:
     completed = _run_example("family_usage.py")
     assert completed.returncode == 0, completed.stderr
-    assert "family mint ok" in completed.stdout
+    assert "family content ok" in completed.stdout
     assert "two sandboxes deduplicate: True" in completed.stdout
     assert "unresolvable family at Layer 1: unavailable dependency" in completed.stdout
 
@@ -103,7 +103,7 @@ def test_generation_usage_example_runs_clean() -> None:
     completed = _run_example("generation_usage.py")
     assert completed.returncode == 0, completed.stderr
     assert "parameter variation is search, not generation" in completed.stdout
-    assert "qml authors; host mints CT-06; qmb does not author" in completed.stdout
+    assert "qml returns fingerprintable generation content; the QMB host owns CT-06 receipts" in completed.stdout
     assert "dsl and RandomCondition schema refused" in completed.stdout
     assert "generation ownership ok" in completed.stdout
 

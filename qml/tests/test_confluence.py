@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TypeVar
 
-from qmf.core.chrono import CalendarIdentity, Instant, WriterId
+from qmf.core.chrono import CalendarIdentity
 from qmf.core.exact import ExactRational, UnitKind
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
-from qmf.registry import FieldSetKind, KindRegistry, Registrar, RegistrationRecord
+from qmf.registry import FieldSetKind
 from qml.declaration import (
     CONFLUENCE_KIND_FORMAT_VERSION,
     FORBIDDEN_CONDITION_FIELDS,
@@ -20,10 +20,8 @@ from qml.declaration import (
     ConfluenceOrdering,
     LegRole,
     confluence_kind_contract,
-    install_confluence_kind,
     mint_confluence,
     parse_leg_role,
-    register_confluence,
     resolve_confluence_at_layer1,
 )
 from qml.footprint import (
@@ -36,7 +34,6 @@ from qml.footprint import (
 import qml
 
 _REPO = Path(__file__).resolve().parents[2]
-_CREATED_NS = 1_700_000_000_000_000_000
 
 T = TypeVar("T")
 
@@ -44,20 +41,6 @@ T = TypeVar("T")
 def _ok(result: Result[T]) -> T:
     assert is_ok(result), result
     return result.value
-
-
-def _writer(machine: str = "node-a") -> WriterId:
-    return _ok(WriterId.try_create(machine, "authoring", KIND_CONFLUENCE, "boot-1"))
-
-
-def _instant(ns: int = _CREATED_NS) -> Instant:
-    return _ok(Instant.try_create(ns))
-
-
-def _registrar() -> Registrar:
-    registry = KindRegistry()
-    assert is_ok(install_confluence_kind(registry))
-    return Registrar(registry)
 
 
 def _period(n: int = 20) -> ExactRational:
@@ -420,57 +403,14 @@ def test_changed_leg_role_binding_parameter_cite_or_order_mints_new_fp() -> None
     assert _ok(ordered.fingerprint_content()) != base_fp
 
 
-def test_host_stamped_records_deduplicate_across_sandboxes() -> None:
-    legs = [_leg("level", tag="zone")]
-    registrar = _registrar()
-    a = _ok(
-        register_confluence(
-            legs,
-            registrar=registrar,
-            writer=_writer("node-a"),
-            sequence=0,
-            created_at=_instant(_CREATED_NS),
-        )
-    )
-    b = _ok(
-        register_confluence(
-            legs,
-            registrar=registrar,
-            writer=_writer("node-b"),
-            sequence=0,
-            created_at=_instant(_CREATED_NS + 1_000),
-        )
-    )
-    assert a.record.kind == KIND_CONFLUENCE
-    assert a.record.stable_id == b.record.stable_id
-    assert a.outcome.value == "stored"
-    assert b.outcome.value == "idempotent"
-    sandbox_a = _ok(
-        RegistrationRecord.try_create(
-            KIND_CONFLUENCE,
-            1,
-            [],
-            _ok(mint_confluence(legs)).body(),
-            _writer("node-a"),
-            0,
-            _instant(_CREATED_NS),
-        )
-    )
-    sandbox_b = _ok(
-        RegistrationRecord.try_create(
-            KIND_CONFLUENCE,
-            1,
-            [],
-            _ok(mint_confluence(legs)).body(),
-            _writer("node-b"),
-            99,
-            _instant(_CREATED_NS + 500),
-        )
-    )
-    assert sandbox_a.writer != sandbox_b.writer
-    assert sandbox_a.created_at != sandbox_b.created_at
-    assert sandbox_a.stable_id == sandbox_b.stable_id
-    assert not isinstance(_ok(mint_confluence(legs)), RegistrationRecord)
+def test_qml_exposes_fingerprintable_confluence_content_only() -> None:
+    import qml.declaration.confluence as declaration_confluence
+
+    content = _ok(mint_confluence([_leg("level", tag="zone")]))
+    assert _ok(content.fingerprint_content()).value.startswith("fp1:sha256:")
+    for module in (qml, declaration_confluence):
+        assert not hasattr(module, "register_confluence")
+        assert not hasattr(module, "install_confluence_kind")
 
 
 # --- AC: invalid role / missing cite; unresolvable is unavailable ------------
@@ -584,13 +524,6 @@ def test_completeness_walker_accepts_typed_confluence_legs() -> None:
     report = _ok(report_completeness(footprint, confluence.completeness_legs()))
     assert report.complete is True
 
-
-def test_install_kind_refuses_a_non_registry_and_a_redefinition() -> None:
-    assert is_refusal(install_confluence_kind("nope"))
-    registry = KindRegistry()
-    assert is_ok(install_confluence_kind(registry))
-    again = install_confluence_kind(registry)
-    assert is_refusal(again)
 
 
 def test_duplicate_display_ordinals_are_invalid() -> None:

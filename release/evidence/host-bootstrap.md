@@ -151,3 +151,25 @@ git diff --check
 ```
 
 Results: QMA daemon suite passed 1026 tests with 2 skips; qma-wire passed 244 tests; the four touched runtime modules passed strict Pyright; Ruff and whitespace checks passed. The public lifecycle test covers two instances sharing the same op, real ProductSession grants, daemon restart, exact `get_job` recovery, and refusal to read through the other instance's session. The running-to-queued correction is intentionally truthful until a worker bridge supplies an actual accepted execution and lease.
+
+## QML receipt boundary and durable no-op audit follow-up (2026-10-01)
+
+QML now returns content and conformance verdicts only. CT-06 kind installation, Registrar writes, and generation receipt stamping live at `qmb.host.bot_registration`; the existing QMB research-store path imports that owner. Family and confluence examples now demonstrate pure content identity. The QML package surface no longer exports stamp APIs. The Epic-11 scanner reflects OR-04: structural seed homes are intent rather than a build allowlist, while generation, research, and host helpers remain under AD-15 purity checks. Negative tests verify failed conformance does not reach the Registrar and that QML rejects an injected Registrar without calling it.
+
+The JobHandle projection now parses full snapshots through `JobHandle.from_payload` and rejects changes to immutable job, owner, task, logical-run, attempt, and originating-session fields. Both terminal no-op handling and the CT-40 terminal `cancel_job` branch persist the updated `later_commands` snapshot through the existing `task_graph_state` projection. A restart test composes a daemon SQLite projection, completes a job, records an authenticated terminal cancel no-op, reloads the projection, and confirms the same terminal handle and command audit are restored.
+
+Commands and results:
+
+```sh
+uv run --project qml pytest -q qml/tests
+uv run --project qmb pytest -q qmb/tests/test_bot_registration.py qmb/tests/test_research_host_store.py
+uv run --project qa pytest -q qa/tests/epic_11/test_a_scaffold.py qa/tests/epic_11/test_f_bot.py
+uv run --project qmx-agents/packages/qma-daemon pytest -q qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py qmx-agents/packages/qma-daemon/tests/test_cancel_job.py qmx-agents/packages/qma-daemon/tests/test_job_handle_parent_vocab.py
+uv run --project qmx-agents/packages/qma-daemon pyright qmx-agents/packages/qma-daemon/src/qma/daemon/envs/jobs.py qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/projection.py qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py
+uv run --project qmx-agents/packages/qma-daemon ruff check qmx-agents/packages/qma-daemon/src/qma/daemon/envs/jobs.py qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/projection.py qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py
+uv run --project qmb pyright qmb/src/qmb/host/bot_registration.py qmb/tests/test_bot_registration.py
+uv run --project qmb ruff check qmb/src/qmb/host/bot_registration.py qmb/src/qmb/host/__init__.py qmb/src/qmb/host/research_store.py qmb/tests/test_bot_registration.py
+git diff --check
+```
+
+Results: QML 329 passed; focused QMB receipt and research-store tests 7 passed; Epic-11 purity and Bot tests 26 passed; QMA task-graph, cancel, and terminal-state tests 25 passed. Strict Pyright reported zero errors for touched daemon and QMB registration files; Ruff and `git diff --check` passed. These checks do not establish worker execution or provider calls.

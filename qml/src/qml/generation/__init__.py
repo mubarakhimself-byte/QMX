@@ -2,7 +2,7 @@
 
 Search varies declared CT-33 parameters (QMB optimize/sweep) and writes trial
 ledger lines citing the same bot ``fp1``. Generation, when it ships, authors
-new CT-33/CT-34 content and/or logic-source bytes via QML. The QML/host
+new CT-33/CT-34 content and/or logic-source bytes via QML. The QMB host
 composition root mints the CT-06 envelope. QMB runs the candidates — it does
 not author them.
 
@@ -427,7 +427,7 @@ def author_new_structure(
 ) -> Result[AuthoredStructure]:
     """Author new CT-33/CT-34 content and/or logic-source bytes (FR-W38).
 
-    QML authors. The host mints the CT-06 envelope. QMB does not author.
+    QML returns content. The QMB composition root stamps the CT-06 envelope.
     """
     blocked = refuse_qml_dsl(dsl)
     if is_refusal(blocked):

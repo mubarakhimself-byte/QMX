@@ -45,11 +45,9 @@ from qml.declaration.confluence import (
     ConfluenceOrdering,
     LegRole,
     confluence_kind_contract,
-    install_confluence_kind,
     mint_confluence,
     parse_leg_role,
     parse_ordering,
-    register_confluence,
     resolve_confluence_at_layer1,
 )
 from qml.declaration.parameters import (
@@ -104,7 +102,6 @@ __all__ = [
     "branches_from_edge",
     "confluence_kind_contract",
     "continues_performance_edge",
-    "install_confluence_kind",
     "mint_bot_definition",
     "mint_confluence",
     "parse_leg_role",
@@ -112,7 +109,6 @@ __all__ = [
     "parse_parameter_type",
     "parse_ui_flag",
     "promote_tuned_assignment",
-    "register_confluence",
     "resolve_confluence_at_layer1",
 ]
 

@@ -18,6 +18,7 @@ from types import MappingProxyType
 from typing import Final, cast
 
 from qma.core.ontology import ActorId
+from qma.core.ports.jobs import JobHandle
 from qma.core.ports.qmb import (
     QMB_OCCUPANCY_QUERY,
     QMB_OCCUPANCY_RUN,
@@ -942,6 +943,10 @@ class TaskGraphStateService:
 
     def record_job_handle(self, payload: Mapping[str, object]) -> Result[None]:
         """Persist an exact JobHandle snapshot on its existing Task Graph row."""
+        admitted = JobHandle.from_payload(payload)
+        if is_refusal(admitted):
+            return admitted
+        canonical = dict(admitted.value.to_payload())
         task_id = payload.get("task_id")
         job_id = payload.get("job_id")
         owner = payload.get("owner")
@@ -965,6 +970,28 @@ class TaskGraphStateService:
         previous = slots.get(task_id)
         slot = dict(cast("Mapping[str, object]", previous)) if isinstance(previous, Mapping) else {}
         previous_handle = slot.get("job_handle")
+        if isinstance(previous_handle, Mapping):
+            previous_payload = cast("Mapping[str, object]", previous_handle)
+            immutable_fields = (
+                "job_id",
+                "owner",
+                "task_id",
+                "logical_run_id",
+                "attempt_id",
+                "originating_product_session_ref",
+            )
+            changed = {
+                field: {"previous": previous_payload.get(field), "given": canonical.get(field)}
+                for field in immutable_fields
+                if previous_payload.get(field) != canonical.get(field)
+            }
+            if changed:
+                return policy_rejection(
+                    "job_handle",
+                    "a durable JobHandle cannot change its immutable identity fields",
+                    task_id=task_id,
+                    changes=changed,
+                )
         if (
             isinstance(previous_handle, Mapping)
             and cast("Mapping[str, object]", previous_handle).get("job_id") != job_id
@@ -976,7 +1003,7 @@ class TaskGraphStateService:
             )
         slot.setdefault("door", "run")
         slot.setdefault("consumes_environment", False)
-        slot["job_handle"] = dict(payload)
+        slot["job_handle"] = canonical
         slots[task_id] = slot
         occupancy["slots"] = slots
         persisted = self.persist(graph, occupancy=occupancy)

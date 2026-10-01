@@ -1,17 +1,14 @@
-"""Story 38.1 — search stays QMB; generation write-ownership is QML/host."""
+"""Story 38.1 — QML returns content; QMB owns registration receipts."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import TypeVar
 
-from qmf.core.chrono import CalendarIdentity, Instant, WriterId
+from qmf.core.chrono import CalendarIdentity
 from qmf.core.exact import UnitKind
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
-from qmf.registry import KindRegistry, Registrar, RegistrationRecord
-from qml.conformance import evaluate_ticket
-from qml.declaration import KIND_BOT_DEFINITION
 from qml.footprint import ProducerBinding, mint_footprint
 from qml.generation import (
     ACT_GENERATION,
@@ -32,13 +29,6 @@ from qml.generation import (
     refuse_qml_dsl,
     refuse_random_condition_schema,
 )
-from qml.host import (
-    HOST_MINTS_CT06_ENVELOPE,
-    install_bot_domain_kinds,
-    mint_ct06_envelope,
-    mint_generation_envelope,
-    register_bot_definition,
-)
 
 import qml
 from qml import host
@@ -47,7 +37,6 @@ T = TypeVar("T")
 
 _REPO = Path(__file__).resolve().parents[2]
 _QMB_SRC = _REPO / "qmb" / "src" / "qmb"
-_CREATED_NS = 1_700_000_000_000_000_000
 _SOURCE: dict[str, str] = {
     "research_bot/__init__.py": "",
     "research_bot/bot.py": "def on_instant(self, instant):\n    return ()\n",
@@ -57,14 +46,6 @@ _SOURCE: dict[str, str] = {
 def _ok(result: Result[T]) -> T:
     assert is_ok(result), result
     return result.value
-
-
-def _writer(kind: str, machine: str = "node-a") -> WriterId:
-    return _ok(WriterId.try_create(machine, "authoring", kind, "boot-1"))
-
-
-def _instant(ns: int = _CREATED_NS) -> Instant:
-    return _ok(Instant.try_create(ns))
 
 
 def _pinned(tag: str) -> ProducerBinding:
@@ -108,16 +89,6 @@ def _legs(tag: str = "zone") -> list[dict[str, object]]:
     return [{"role": "level", "producer_binding": _pinned(tag)}]
 
 
-def _ticket() -> object:
-    return _ok(evaluate_ticket(layer1_passed=True, layer2_passed=True))
-
-
-def _host() -> Registrar:
-    registry = KindRegistry()
-    _ok(install_bot_domain_kinds(registry))
-    return Registrar(registry)
-
-
 def _author(*, lookback: int = 20, tag: str = "zone") -> AuthoredStructure:
     authored = _ok(
         author_new_structure(
@@ -141,7 +112,6 @@ def test_search_and_generation_are_different_acts() -> None:
     assert ActKind.SEARCH is not ActKind.GENERATION
     assert QMB_AUTHORS_CANDIDATES is False
     assert QMB_RUNS_CANDIDATES is True
-    assert HOST_MINTS_CT06_ENVELOPE is True
     assert GENERATOR_ALGORITHM_UNRULED is True
     assert RANDOM_CONDITION_DONOR_SHAPE == "donor-shape-not-schema"
 
@@ -194,59 +164,6 @@ def test_qml_authors_new_ct33_ct34_and_logic_bytes() -> None:
     assert changed_logic.logic.source_manifest != logic_fp
 
 
-def test_host_mints_ct06_envelope_and_qmb_does_not_author() -> None:
-    authored = _author()
-    assert authored.bot is not None
-    registrar = _host()
-    minted = _ok(
-        mint_generation_envelope(
-            authored,
-            registrar=registrar,
-            created_at=_instant(),
-            ticket=_ticket(),
-            bot_writer=_writer("bot-definition"),
-            confluence_writer=_writer("confluence"),
-        )
-    )
-    assert minted.qmb_authors is False
-    assert minted.host_mints_envelope is True
-    assert minted.confluence is not None
-    assert minted.bot is not None
-    assert minted.bot.record.kind == KIND_BOT_DEFINITION
-    assert minted.bot_fp1() == minted.bot.record.stable_id
-    assert "writer" not in authored.bot.identity_payload()
-    assert minted.bot.record.writer.role == "authoring"
-    envelope = _ok(
-        mint_ct06_envelope(
-            kind=KIND_BOT_DEFINITION,
-            body=authored.bot,
-            registrar=registrar,
-            writer=_writer("bot-definition", "node-b"),
-            sequence=1,
-            created_at=_instant(_CREATED_NS + 1),
-            ticket=_ticket(),
-        )
-    )
-    assert envelope.record.stable_id == minted.bot.record.stable_id
-
-
-def test_bot_kind_envelope_without_ticket_is_policy_rejection() -> None:
-    authored = _author()
-    assert authored.bot is not None
-    registrar = _host()
-    refused = register_bot_definition(
-        authored.bot,
-        registrar=registrar,
-        writer=_writer("bot-definition"),
-        sequence=0,
-        created_at=_instant(),
-        ticket=None,
-    )
-    assert is_refusal(refused)
-    assert refused.category is RefusalCategory.POLICY_REJECTION
-    assert refused.context["field"] == "ticket"
-
-
 def test_declaration_surface_still_has_no_bot_kind_install_register() -> None:
     import qml.declaration
     import qml.declaration.bot
@@ -254,8 +171,13 @@ def test_declaration_surface_still_has_no_bot_kind_install_register() -> None:
     for module in (qml.declaration, qml.declaration.bot):
         assert not hasattr(module, "install_bot_definition_kind")
         assert not hasattr(module, "register_bot_definition")
-    assert hasattr(host, "register_bot_definition")
-    assert hasattr(host, "install_bot_definition_kind")
+    assert not hasattr(host, "register_bot_definition")
+    assert not hasattr(host, "install_bot_definition_kind")
+    assert not hasattr(host, "mint_ct06_envelope")
+    assert not hasattr(host, "mint_generation_envelope")
+    for module in (qml, host, qml.declaration, qml.declaration.confluence):
+        assert not hasattr(module, "register_confluence")
+        assert not hasattr(module, "install_confluence_kind")
 
 
 def test_identical_content_is_not_generation() -> None:
@@ -362,12 +284,15 @@ def test_qma_does_not_assemble_ct33() -> None:
     assert hits == []
 
 
-def test_host_stamped_generation_records_are_not_stamped_by_qml_content() -> None:
+def test_generation_content_has_no_occurrence_facts_or_registrar_injection() -> None:
+    import inspect
+
     authored = _author()
     assert authored.bot is not None
     payload = authored.bot.identity_payload()
     assert "writer" not in payload
     assert "sequence" not in payload
     assert "created_at" not in payload
-    assert not isinstance(authored.bot, RegistrationRecord)
+    parameters = inspect.signature(author_new_structure).parameters
+    assert not {"registrar", "writer", "sequence", "created_at"}.intersection(parameters)
     assert qml.__version__ not in str(payload)

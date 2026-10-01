@@ -1,7 +1,7 @@
 """Registration gate — both conformance layers, or no Bot kind mint (QL-8).
 
 Bot kind mints only on a full Layer-1 + Layer-2 pass (DEC-0178, FM-4). Returns
-fingerprintable content plus the verdict; the host stamps CT-06. Conformance
+fingerprintable content plus the verdict; the QMB host stamps CT-06. Conformance
 gates CT-32 / CT-28 citation, never tunnel entry. Graduation adds a
 ``promoted-from`` edge; ``max_acceptable_complexity_score`` is a stated drop.
 

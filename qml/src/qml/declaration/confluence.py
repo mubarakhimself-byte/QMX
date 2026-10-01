@@ -20,13 +20,7 @@ from typing import Final, cast
 from qmf.core.exact import ExactRational
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, is_ok, is_refusal
-from qmf.registry import (
-    FieldSetKind,
-    KindRegistry,
-    Registrar,
-    RegistrationReceipt,
-    RegistrationRecord,
-)
+from qmf.registry import FieldSetKind, RegistrationRecord
 
 from qml._refuse import invalid, unavailable, unsupported
 from qml.footprint import ProducerBinding, ProducerBindingForm
@@ -42,11 +36,9 @@ __all__ = [
     "ConfluenceOrdering",
     "LegRole",
     "confluence_kind_contract",
-    "install_confluence_kind",
     "mint_confluence",
     "parse_leg_role",
     "parse_ordering",
-    "register_confluence",
     "resolve_confluence_at_layer1",
 ]
 
@@ -560,8 +552,8 @@ def mint_confluence(
 ) -> Result[Confluence]:
     """Mint fingerprintable CT-34 confluence content (DEC-0175).
 
-    The dated CT-06 envelope is stamped by a host composition root via
-    :func:`register_confluence`. This helper never invents a WriterId, sequence,
+    The dated CT-06 envelope is stamped by the QMB composition root. This
+    helper never invents a WriterId, sequence,
     or created-at. Reuse of the same content never mints a new fingerprint.
     """
     if isinstance(legs, Mapping) and _LEGS_FIELD in cast("Mapping[str, object]", legs):
@@ -587,57 +579,6 @@ def confluence_kind_contract() -> Result[FieldSetKind]:
         CONFLUENCE_KIND_FORMAT_VERSION,
         required_fields=(_LEGS_FIELD,),
         optional_fields=(_ORDER_FIELD,),
-    )
-
-
-def install_confluence_kind(registry: object) -> Result[FieldSetKind]:
-    """Register the confluence kind on a host :class:`KindRegistry`."""
-    if not isinstance(registry, KindRegistry):
-        return invalid(
-            "registry",
-            "the confluence kind installs on a CT-06 KindRegistry",
-            given=type(registry).__name__,
-        )
-    contract = confluence_kind_contract()
-    if is_refusal(contract):
-        return contract
-    installed = registry.register(contract.value)
-    if is_refusal(installed):
-        return installed
-    return Ok(contract.value)
-
-
-def register_confluence(
-    legs: object,
-    *,
-    registrar: object,
-    writer: object,
-    sequence: object,
-    created_at: object,
-    order_significance: object = None,
-    at_birth_parent_refs: object = (),
-) -> Result[RegistrationReceipt]:
-    """Stamp fingerprintable confluence content onto a host CT-06 :class:`Registrar`.
-
-    The host supplies writer, sequence, and created-at (AD-25 root-mints). The
-    kind must already be installed on the registrar's :class:`KindRegistry`.
-    """
-    if not isinstance(registrar, Registrar):
-        return invalid(
-            "registrar",
-            "a host composition root stamps the dated CT-06 record through a Registrar",
-            given=type(registrar).__name__,
-        )
-    content = mint_confluence(legs, order_significance=order_significance)
-    if is_refusal(content):
-        return content
-    return registrar.register(
-        kind=KIND_CONFLUENCE,
-        body=content.value.body(),
-        writer=writer,
-        sequence=sequence,
-        created_at=created_at,
-        at_birth_parent_refs=at_birth_parent_refs,
     )
 
 

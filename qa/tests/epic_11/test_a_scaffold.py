@@ -22,8 +22,8 @@ from qml.logic import mint_logic_identity
 
 QML_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "qml"))
 QML_SRC = os.path.join(QML_ROOT, "src", "qml")
-# OR-04 settles the AC-text omission: ``logic`` is the legitimate Story-11.3
-# seed-of-intent home. The impure ``host`` home is not legitimate in this wheel.
+# OR-04: these are the original structural seed homes, not an allowlist; any
+# additional home remains subject to QML's package-wide purity/dependency gates.
 SRC_HOMES = ("declaration", "families", "footprint", "protocol", "conformance", "logic")
 ROOT_HOMES = ("examples", "tests")
 
@@ -88,18 +88,15 @@ def test_a2_operator_ruled_module_homes_are_present() -> None:
         assert os.path.isdir(os.path.join(QML_ROOT, home)), f"missing root home: {home}"
 
 
-def test_a2_no_source_module_home_beyond_the_operator_ruled_set() -> None:
-    """A2/OR-04: the package contains exactly the operator-ruled homes.
-
-    ``logic`` stays; a reintroduced impure ``host`` home or any other extra fails.
-    """
-    src_dirs = {
+def test_a2_structural_seed_is_not_a_build_allowlist() -> None:
+    """A2/OR-04: the module list is seed intent; extra homes still face hard gates."""
+    actual = {
         name
         for name in os.listdir(QML_SRC)
         if os.path.isdir(os.path.join(QML_SRC, name)) and name != "__pycache__"
     }
-    extra = src_dirs - set(SRC_HOMES)
-    assert extra == set(), f"module homes beyond the named seven: {sorted(extra)}"
+    assert set(SRC_HOMES) <= actual
+    assert {"generation", "host", "research"} <= actual
 
 
 # --- A4 import legality (AR-60) ---------------------------------------------
@@ -182,22 +179,32 @@ def test_a5_no_qml_module_spawns_thread_process_or_does_io() -> None:
 
 
 def test_a5_epic11_authoring_homes_are_pure() -> None:
-    """A5 (AD-15): the Epic-11 authoring homes themselves are pure (no I/O, no process).
+    """QML authoring and host helpers stay pure; impure composition lives in QMB.
 
-    Scoped to the CT-33/CT-34/footprint/logic authoring surface Epic 11 owns.
-    Counter-case: an authoring module doing I/O or spawning a process.
+    The directory list in QML docs is a seed of intent (OR-04/DEC-0184), not a
+    build allowlist. These exercised authoring/research/graduation helpers are
+    still governed by AD-15. CT-06 receipt stamping belongs in QMB.
     """
-    epic11_homes = ("declaration", "families", "footprint", "logic", "protocol")
+    pure_homes = (
+        "declaration",
+        "families",
+        "footprint",
+        "generation",
+        "host",
+        "logic",
+        "protocol",
+        "research",
+    )
     offenders: dict[str, list[str]] = {}
     for path in _iter_module_files():
         rel = os.path.relpath(path, QML_SRC)
-        if not any(rel.startswith(home + os.sep) for home in epic11_homes):
+        if not any(rel.startswith(home + os.sep) for home in pure_homes):
             continue
         with open(path, encoding="utf-8") as fh:
             hits = _ambient_offenders(fh.read())
         if hits:
             offenders[rel] = hits
-    assert offenders == {}, f"AD-15 impurity in an Epic-11 authoring home: {offenders}"
+    assert offenders == {}, f"AD-15 impurity in a QML pure home: {offenders}"
 
 
 def test_a3_conformance_package_is_pure() -> None:

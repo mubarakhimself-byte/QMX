@@ -1,9 +1,9 @@
 """Strategy-family keying token (QL-6).
 
-A family is an opaque operator-minted id plus a dated CT-06 metadata record —
-the same machinery as ``instrument_class``, under the addable-kinds law, with no
-new CT number. QML returns fingerprintable content; a host composition root
-stamps writer / sequence / created-at onto the registry record (DEC-0171,
+A family is an opaque operator-minted id plus fingerprintable CT-06 metadata
+content — the same machinery as ``instrument_class``, under the addable-kinds
+law, with no new CT number. QML returns content; a host composition root owns
+stamping writer / sequence / created-at onto the registry record (DEC-0171,
 DEC-0176). Constraining stays the Book's job.
 """
 
@@ -19,9 +19,6 @@ from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.registry import (
     FieldSetKind,
-    KindRegistry,
-    Registrar,
-    RegistrationReceipt,
     RegistrationRecord,
 )
 
@@ -36,9 +33,7 @@ __all__ = [
     "FamilyKeyedSurface",
     "StrategyFamilyId",
     "StrategyFamilyRecord",
-    "install_strategy_family_kind",
     "mint_strategy_family",
-    "register_strategy_family",
     "resolve_family_at_layer1",
     "strategy_family_kind_contract",
     "validate_family_body",
@@ -160,8 +155,8 @@ class StrategyFamilyRecord:
 def mint_strategy_family(family_id: object) -> Result[StrategyFamilyRecord]:
     """Mint fingerprintable strategy-family metadata content (DEC-0176).
 
-    The dated CT-06 envelope is stamped by a host composition root via
-    :func:`register_strategy_family`. This helper never invents a WriterId,
+    The dated CT-06 envelope is stamped by the QMB composition root. This
+    helper never invents a WriterId,
     sequence, or created-at.
     """
     return StrategyFamilyRecord.try_create(family_id)
@@ -180,23 +175,6 @@ def strategy_family_kind_contract() -> Result[FieldSetKind]:
         required_fields=(FAMILY_ID_FIELD,),
         optional_fields=(),
     )
-
-
-def install_strategy_family_kind(registry: object) -> Result[FieldSetKind]:
-    """Register the strategy-family kind on a host :class:`KindRegistry`."""
-    if not isinstance(registry, KindRegistry):
-        return invalid(
-            "registry",
-            "the strategy-family kind installs on a CT-06 KindRegistry",
-            given=type(registry).__name__,
-        )
-    contract = strategy_family_kind_contract()
-    if is_refusal(contract):
-        return contract
-    installed = registry.register(contract.value)
-    if is_refusal(installed):
-        return installed
-    return Ok(contract.value)
 
 
 def validate_family_body(body: object) -> Result[Mapping[str, object]]:
@@ -227,37 +205,6 @@ def validate_family_body(body: object) -> Result[Mapping[str, object]]:
     if is_refusal(token):
         return token
     return Ok(admitted.value)
-
-
-def register_strategy_family(
-    family_id: object,
-    *,
-    registrar: object,
-    writer: object,
-    sequence: object,
-    created_at: object,
-) -> Result[RegistrationReceipt]:
-    """Stamp fingerprintable family content onto a host CT-06 :class:`Registrar`.
-
-    The host supplies writer, sequence, and created-at (AD-25 root-mints). The
-    kind must already be installed on the registrar's :class:`KindRegistry`.
-    """
-    if not isinstance(registrar, Registrar):
-        return invalid(
-            "registrar",
-            "a host composition root stamps the dated CT-06 record through a Registrar",
-            given=type(registrar).__name__,
-        )
-    content = mint_strategy_family(family_id)
-    if is_refusal(content):
-        return content
-    return registrar.register(
-        kind=KIND_STRATEGY_FAMILY,
-        body=content.value.body(),
-        writer=writer,
-        sequence=sequence,
-        created_at=created_at,
-    )
 
 
 def resolve_family_at_layer1(

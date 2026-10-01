@@ -26,17 +26,12 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from qmf.core.chrono import Instant, WriterId
 from qmf.core.exact import ExactRational, UnitKind
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import Result, TypedRefusal, is_ok
-from qmf.registry import KindRegistry, Registrar
 from qml.declaration import (
-    KIND_CONFLUENCE,
     LEG_ROLES,
-    install_confluence_kind,
     mint_confluence,
-    register_confluence,
     resolve_confluence_at_layer1,
 )
 from qml.footprint import ProducerBinding
@@ -45,24 +40,11 @@ import qml
 
 T = TypeVar("T")
 
-_CREATED_NS = 1_700_000_000_000_000_000
-
 
 def _unwrap(result: Result[T], what: str) -> T:
     if is_ok(result):
         return result.value
     raise AssertionError(f"expected {what} to construct, got {result}")
-
-
-def _writer(machine: str) -> WriterId:
-    return _unwrap(
-        WriterId.try_create(machine, "authoring", KIND_CONFLUENCE, "boot-1"),
-        "writer",
-    )
-
-
-def _instant(ns: int = _CREATED_NS) -> Instant:
-    return _unwrap(Instant.try_create(ns), "created-at")
 
 
 def _pinned(tag: str) -> ProducerBinding:
@@ -72,12 +54,6 @@ def _pinned(tag: str) -> ProducerBinding:
 
 def _lookback(n: int) -> ExactRational:
     return _unwrap(ExactRational.try_create(n, 1, UnitKind.COUNT), "lookback")
-
-
-def _host_registrar() -> Registrar:
-    registry = KindRegistry()
-    _unwrap(install_confluence_kind(registry), "install confluence kind")
-    return Registrar(registry)
 
 
 def roles_and_one_or_more_legs() -> int:
@@ -178,28 +154,7 @@ def reuse_across_bots_mints_no_new_confluence() -> bool:
     assert fp == _unwrap(second.fingerprint_content(), "fp-again")
     assert fp.value.startswith("fp1:sha256:")
     assert qml.__version__ not in first.identity_payload().values()
-    registrar = _host_registrar()
-    a = _unwrap(
-        register_confluence(
-            legs,
-            registrar=registrar,
-            writer=_writer("node-a"),
-            sequence=0,
-            created_at=_instant(),
-        ),
-        "sandbox-a",
-    )
-    b = _unwrap(
-        register_confluence(
-            legs,
-            registrar=registrar,
-            writer=_writer("node-b"),
-            sequence=0,
-            created_at=_instant(_CREATED_NS + 1_000),
-        ),
-        "sandbox-b",
-    )
-    assert a.record.stable_id == b.record.stable_id
+    assert not hasattr(qml, "register_confluence")
     changed = _unwrap(
         mint_confluence(
             [
@@ -210,7 +165,7 @@ def reuse_across_bots_mints_no_new_confluence() -> bool:
         "changed role",
     )
     assert _unwrap(changed.fingerprint_content(), "changed fp") != fp
-    return a.record.stable_id == b.record.stable_id
+    return fp == _unwrap(second.fingerprint_content(), "fp-again")
 
 
 def refusals_and_conditions_live_in_logic() -> TypedRefusal:

@@ -10,8 +10,14 @@ from typing import cast
 from qma.core.ontology import ActorId, DeskSlug, Goal, Quant, RoleName
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration
 from qma.core.ports.qmb import QMB_OCCUPANCY_QUERY, QMB_OCCUPANCY_RUN, qmb_opens_daemon_sqlite
-from qma.core.vocabulary.enums import EdgeMapping, ExecutionEnvironmentKind, NodeKind
+from qma.core.vocabulary.enums import (
+    EdgeMapping,
+    ExecutionEnvironmentKind,
+    JobHandleState,
+    NodeKind,
+)
 from qma.daemon.envs import ExecutionEnvironmentRegistry
+from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.envs.registry import EnvironmentLease
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
@@ -310,6 +316,61 @@ def test_dispatcher_materialize_writes_sqlite_when_bound(tmp_path: Path) -> None
         assert is_ok(restored)
         assert restored.value.successor_ids("prepare") == ("survey",)
         _ = owner
+    finally:
+        process.close()
+
+
+def test_terminal_job_noop_audit_survives_projection_restart(tmp_path: Path) -> None:
+    owner, compiled = _compile()
+    process = _compose(tmp_path, boot="boot-57-1-job-noop")
+    try:
+        dispatcher = TaskGraphDispatcher(durable=process.task_graphs)
+        dispatcher.materialize(compiled.task_graph, mission=compiled.mission)
+        task_id = compiled.task_graph.ready_tasks()[0].id
+        service = JobHandleService(dispatcher=dispatcher, durable=process.task_graphs)
+        submitted = service.submit(
+            owner=owner.actor_id,
+            task_id=task_id,
+            job_id="job:terminal-noop-restart",
+            logical_run_id="run:terminal-noop-restart",
+            originating_product_session_ref="psess:terminal-noop-restart",
+        )
+        assert is_ok(submitted), submitted
+        rewritten = dict(submitted.value.to_payload())
+        rewritten["logical_run_id"] = "run:rewritten"
+        refused = process.task_graphs.record_job_handle(rewritten)
+        assert is_refusal(refused), "durable identity must not be rewritten on the same Task"
+        assert is_ok(service.start(submitted.value.job_id))
+        completed = service.complete(submitted.value.job_id, JobHandleState.DONE)
+        assert is_ok(completed), completed
+        noop = service.cancel_from_product_session(
+            {
+                "handle_id": submitted.value.job_id,
+                "logical_run_id": submitted.value.logical_run_id,
+                "attempt_id": submitted.value.attempt_id,
+                "command_id": "cancel:durable-noop",
+                "expected_state": "done",
+            },
+            principal_class="operator",
+            operator_principal="principal:local-operator",
+            originating_session_principal="principal:local-operator",
+            producer_id="tab:durable-noop",
+            wire_id="wire:durable-noop",
+        )
+        assert is_ok(noop), noop
+        assert noop.value.state is JobHandleState.DONE
+        assert noop.value.later_commands[0]["noop"] is True
+
+        process.task_graphs.drop_memory_cache()
+        assert is_ok(process.task_graphs.reload())
+        restarted = JobHandleService(durable=process.task_graphs)
+        recovered = restarted.restore_durable_jobs()
+        assert is_ok(recovered), recovered
+        restored = restarted.handle_for(submitted.value.job_id)
+        assert restored is not None
+        assert restored.state is JobHandleState.DONE
+        assert restored.originating_product_session_ref == "psess:terminal-noop-restart"
+        assert restored.later_commands == noop.value.later_commands
     finally:
         process.close()
 

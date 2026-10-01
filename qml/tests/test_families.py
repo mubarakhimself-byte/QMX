@@ -8,7 +8,7 @@ from typing import TypeVar
 from qmf.core.chrono import Instant, WriterId
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
-from qmf.registry import FieldSetKind, KindRegistry, Registrar, RegistrationRecord
+from qmf.registry import FieldSetKind, RegistrationRecord
 from qml.families import (
     FAMILY_ID_FIELD,
     FAMILY_KEYED_SURFACES,
@@ -18,9 +18,7 @@ from qml.families import (
     FamilyKeyedSurface,
     StrategyFamilyId,
     StrategyFamilyRecord,
-    install_strategy_family_kind,
     mint_strategy_family,
-    register_strategy_family,
     resolve_family_at_layer1,
     strategy_family_kind_contract,
     validate_family_body,
@@ -47,13 +45,6 @@ def _instant(ns: int = _CREATED_NS) -> Instant:
     return _ok(Instant.try_create(ns))
 
 
-def _registrar() -> Registrar:
-    registry = KindRegistry()
-    assert is_ok(install_strategy_family_kind(registry))
-    return Registrar(registry)
-
-
-# --- AC: opaque id + dated CT-06 record, no new CT number -------------------
 
 
 def test_kind_is_ct06_addable_strategy_family_not_a_new_ct() -> None:
@@ -93,73 +84,8 @@ def test_mint_returns_fingerprintable_content_never_a_stamped_record() -> None:
     assert fp.value.startswith("fp1:sha256:")
 
 
-def test_host_stamped_records_deduplicate_across_sandboxes() -> None:
-    registrar = _registrar()
-    a = _ok(
-        register_strategy_family(
-            "trend-follow",
-            registrar=registrar,
-            writer=_writer("node-a"),
-            sequence=0,
-            created_at=_instant(_CREATED_NS),
-        )
-    )
-    b = _ok(
-        register_strategy_family(
-            "trend-follow",
-            registrar=registrar,
-            writer=_writer("node-b"),
-            sequence=0,
-            created_at=_instant(_CREATED_NS + 1_000),
-        )
-    )
-    assert a.record.kind == KIND_STRATEGY_FAMILY
-    assert a.record.body[FAMILY_ID_FIELD] == "trend-follow"
-    assert a.record.stable_id == b.record.stable_id
-    assert a.outcome.value == "stored"
-    assert b.outcome.value == "idempotent"
-    # Idempotent re-write returns the first stored occurrence facts (DEC-0108).
-    assert b.record.writer == a.record.writer
-    body = {"family_id": "trend-follow"}
-    sandbox_a = _ok(
-        RegistrationRecord.try_create(
-            KIND_STRATEGY_FAMILY, 1, [], body, _writer("node-a"), 0, _instant(_CREATED_NS)
-        )
-    )
-    sandbox_b = _ok(
-        RegistrationRecord.try_create(
-            KIND_STRATEGY_FAMILY,
-            1,
-            [],
-            body,
-            _writer("node-b"),
-            99,
-            _instant(_CREATED_NS + 1_000),
-        )
-    )
-    assert sandbox_a.writer != sandbox_b.writer
-    assert sandbox_a.created_at != sandbox_b.created_at
-    assert sandbox_a.stable_id == sandbox_b.stable_id
 
 
-def test_register_refuses_when_kind_is_not_installed() -> None:
-    bare = register_strategy_family(
-        "trend-follow",
-        registrar=Registrar(KindRegistry()),
-        writer=_writer(),
-        sequence=0,
-        created_at=_instant(),
-    )
-    assert is_refusal(bare)
-    assert bare.category is RefusalCategory.INVALID_INPUT
-    not_a_registrar = register_strategy_family(
-        "trend-follow",
-        registrar="nope",
-        writer=_writer(),
-        sequence=0,
-        created_at=_instant(),
-    )
-    assert is_refusal(not_a_registrar)
 
 
 def test_different_family_ids_derive_different_fingerprints() -> None:
@@ -252,18 +178,20 @@ def test_layer1_never_silently_passes_a_blank_or_non_catalog() -> None:
     assert bad_catalog.category is RefusalCategory.INVALID_INPUT
 
 
-def test_layer1_resolves_host_stamped_registration_records() -> None:
-    registrar = _registrar()
-    receipt = _ok(
-        register_strategy_family(
-            "trend-follow",
-            registrar=registrar,
-            writer=_writer(),
-            sequence=0,
-            created_at=_instant(),
+def test_layer1_reads_a_host_stamped_registration_record() -> None:
+    content = _ok(mint_strategy_family("trend-follow"))
+    record = _ok(
+        RegistrationRecord.try_create(
+            KIND_STRATEGY_FAMILY,
+            STRATEGY_FAMILY_KIND_FORMAT_VERSION,
+            (),
+            content.body(),
+            _writer(),
+            0,
+            _instant(),
         )
     )
-    found = resolve_family_at_layer1("trend-follow", [receipt.record])
+    found = resolve_family_at_layer1("trend-follow", [record])
     assert is_ok(found)
     assert found.value.family_id.value == "trend-follow"
     other_kind = _ok(
@@ -280,7 +208,6 @@ def test_layer1_resolves_host_stamped_registration_records() -> None:
     skipped = resolve_family_at_layer1("trend-follow", [other_kind])
     assert is_refusal(skipped)
     assert skipped.category is RefusalCategory.UNAVAILABLE_DEPENDENCY
-
 
 def test_layer1_accepts_mapping_catalog_and_body_mappings() -> None:
     content = _ok(mint_strategy_family("scalper"))
@@ -304,13 +231,11 @@ def test_layer1_refuses_a_matching_record_that_carries_authority() -> None:
     assert stuffed.category is RefusalCategory.POLICY_REJECTION
 
 
-def test_install_kind_refuses_a_non_registry_and_a_redefinition() -> None:
-    assert is_refusal(install_strategy_family_kind("nope"))
-    registry = KindRegistry()
-    assert is_ok(install_strategy_family_kind(registry))
-    again = install_strategy_family_kind(registry)
-    assert is_refusal(again)
+def test_qml_family_surface_is_content_only() -> None:
+    import qml.families
 
+    assert not hasattr(qml.families, "install_strategy_family_kind")
+    assert not hasattr(qml.families, "register_strategy_family")
 
 def test_strategy_family_id_rejects_blank_and_keeps_verbatim() -> None:
     made = StrategyFamilyId.try_create(" trend-follow")
@@ -322,16 +247,6 @@ def test_strategy_family_id_rejects_blank_and_keeps_verbatim() -> None:
     assert is_refusal(StrategyFamilyRecord.try_create(None))
     assert is_refusal(StrategyFamilyRecord.try_from_body({"family_id": "  "}))
     assert is_ok(StrategyFamilyRecord.try_from_body({"family_id": "scalper"}))
-    registrar = _registrar()
-    assert is_refusal(
-        register_strategy_family(
-            "",
-            registrar=registrar,
-            writer=_writer(),
-            sequence=0,
-            created_at=_instant(),
-        )
-    )
 
 
 def test_layer1_skips_non_family_catalog_items() -> None:

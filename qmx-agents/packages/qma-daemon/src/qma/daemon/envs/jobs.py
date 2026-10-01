@@ -769,7 +769,17 @@ class JobHandleService:
                 "noop": True,
             }
             recorded_handle = handle.record_later_command(no_op)
-            self._store.put(recorded_handle)
+            with self._store.atomic():
+                if not self._store.compare_and_put(handle, recorded_handle):
+                    return policy_rejection(
+                        "job_handle",
+                        "terminal JobHandle changed while recording cancel_job no-op",
+                        job_id=job_id,
+                    )
+                persisted = self._persist_job_handle_snapshot(recorded_handle)
+                if is_refusal(persisted):
+                    self._store.put(handle)
+                    return persisted
             self._append_stream(
                 job_id,
                 "cancel_job_noop",
@@ -1211,8 +1221,13 @@ class JobHandleService:
         no_op = dict(command)
         no_op.update({"terminal_state": current.state.value, "noop": True})
         recorded_handle = current.record_later_command(no_op)
-        if not self._store.compare_and_put(current, recorded_handle):
-            return failure
+        with self._store.atomic():
+            if not self._store.compare_and_put(current, recorded_handle):
+                return failure
+            persisted = self._persist_job_handle_snapshot(recorded_handle)
+            if is_refusal(persisted):
+                self._store.put(current)
+                return persisted
         self._append_stream(
             current.job_id,
             "cancel_job_noop",
@@ -1266,7 +1281,13 @@ class JobHandleService:
                 "terminal_state": handle.state.value,
             }
         )
-        self._store.put(recorded)
+        with self._store.atomic():
+            if not self._store.compare_and_put(handle, recorded):
+                return invalid_input("job_handle", "terminal JobHandle changed during no-op audit")
+            persisted = self._persist_job_handle_snapshot(recorded)
+            if is_refusal(persisted):
+                self._store.put(handle)
+                return persisted
         self._append_stream(
             handle.job_id,
             "terminal_noop",
@@ -1278,6 +1299,18 @@ class JobHandleService:
             },
         )
         return Ok(recorded)
+
+    def _persist_job_handle_snapshot(
+        self,
+        handle: JobHandle,
+    ) -> Result[None]:
+        """Fold no-op audit metadata into the same durable JobHandle projection."""
+        if self._durable is None:
+            return Ok(None)
+        persisted = self._durable.record_job_handle(handle.to_payload())
+        if is_refusal(persisted):
+            return persisted
+        return Ok(None)
 
     def _append_stream(self, job_id: str, kind: str, body: Mapping[str, object]) -> None:
         self._streams.setdefault(job_id, []).append(

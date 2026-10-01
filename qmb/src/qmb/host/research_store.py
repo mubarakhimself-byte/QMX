@@ -16,8 +16,9 @@ from typing import Final
 from qmf.core.fingerprint import Fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qml._refuse import invalid, policy
-from qml.host import mint_ct06_envelope, mint_generation_envelope
 from qml.research.stage0 import Hypothesis, SavedHypothesis, save_authored_hypothesis
+
+from qmb.host.bot_registration import mint_ct06_envelope, mint_generation_envelope
 
 __all__ = [
     "QMA_BINDS_SECOND_CT44_OVER_RESEARCH_ROOT_V1",
