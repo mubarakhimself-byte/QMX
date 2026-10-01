@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -178,8 +178,12 @@ def build(context, binding, port, book_fragment, bms_fragment):
 '''
 
 
-def _context_payload(request_ref: Fingerprint, split_fp: Fingerprint) -> dict[str, object]:
-    spec = _ok(fingerprint({"class": "registered-experiment-spec-test"}))
+def _context_payload(
+    request_ref: Fingerprint,
+    split_fp: Fingerprint,
+    experiment_spec_fp1: Fingerprint | None = None,
+) -> dict[str, object]:
+    spec = experiment_spec_fp1 or _ok(fingerprint({"class": "registered-experiment-spec-test"}))
     return {
         "job_id": "job-cli-replay",
         "attempt_id": 1,
@@ -269,9 +273,13 @@ def _persist_registry(root: Path, records: tuple[object, ...]) -> None:
     persistence.close()
 
 
-def test_installed_qmb_cli_executes_registered_replay_to_durable_economic_result(
+def prepare_operator_replay_runtime(
     tmp_path: Path,
-) -> None:
+    experiment_spec_fp1: Fingerprint | None = None,
+    *,
+    register_experiment: Callable[[Fingerprint], Fingerprint] | None = None,
+) -> tuple[dict[str, str], dict[str, Path], Fingerprint]:
+    """Build a persisted registered-replay runtime for QMA transport integration tests."""
     fixture = make_recorded_replay_fixture(tmp_path / "data")
     request = _ok(
         ReplayInputRequest.try_create(
@@ -300,7 +308,13 @@ def test_installed_qmb_cli_executes_registered_replay_to_durable_economic_result
         "journal": tmp_path / "journal",
         "terminal_ledger": tmp_path / "ledger",
     }
-    payload = _context_payload(request_ref, fixture.expected_split_fp1)
+    if register_experiment is not None:
+        registered_spec_fp1 = register_experiment(fixture.expected_split_fp1)
+    elif experiment_spec_fp1 is not None:
+        registered_spec_fp1 = experiment_spec_fp1
+    else:
+        raise ValueError("provide an existing spec identity or register against the CT12 split")
+    payload = _context_payload(request_ref, fixture.expected_split_fp1, registered_spec_fp1)
     from qmb.host.qma_cli import decode_qma_backtest_context
 
     env = _environment(payload, tmp_path / "runtime")
@@ -345,6 +359,14 @@ def test_installed_qmb_cli_executes_registered_replay_to_durable_economic_result
     )
     binding_directory.mkdir(parents=True)
     (binding_directory / "operator-binding.json").write_text(json.dumps(body), encoding="utf-8")
+    return env, roots, request_ref
+
+
+def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
+    tmp_path: Path,
+) -> None:
+    experiment_spec_fp1 = _ok(fingerprint({"class": "registered-experiment-spec-test"}))
+    env, roots, request_ref = prepare_operator_replay_runtime(tmp_path, experiment_spec_fp1)
     cli = Path(sys.executable).with_name("qmb")
     environment = os.environ.copy()
     environment.update(env)
