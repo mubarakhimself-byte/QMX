@@ -19,11 +19,7 @@ import inspect
 import tempfile
 from pathlib import Path
 
-from qmf.core.chrono import WriterId
-from qmf.core.refusal import is_ok, is_refusal
-from qmf.data.journal import JournalEventType
-from qmf.data.journal_producer import JournalReader
-
+import qmf.data.store.engines.jsonl as jsonl_engine
 from _e18 import (
     NS,
     FakeAdapter,
@@ -35,12 +31,20 @@ from _e18 import (
     scan_raw_observations,
     store_at,
 )
-
 from qmb.data.catalog import list_data
 from qmb.data.download import download, parse_download_request
 from qmb.data.gap_check import gap_check
 from qmb.data.ports import PROVIDER_ADAPTER_METHODS, ProviderAdapter
 from qmb.data.verify import verify
+from qmf.core.chrono import Instant, WriterId
+from qmf.core.fingerprint import World
+from qmf.core.refusal import Ok, is_ok, is_refusal
+from qmf.data.ingest import IntakeKey
+from qmf.data.intake_authority import IntakeAuthority
+from qmf.data.journal import JournalEventType
+from qmf.data.journal_producer import JournalReader
+from qmf.data.observation import SourceObservation
+from qmf.data.source_boundary import SourceObservationBoundary
 
 _DATA = Path(__file__).resolve().parents[3] / "qmb" / "src" / "qmb" / "data"
 
@@ -120,6 +124,147 @@ def test_t18_1a_ct15_authority_is_qmf_checked_ct13_evidence() -> None:
         assert complete.payload["observation_fingerprint"] == rows[0]["fingerprint"]
 
 
+def _authority_observation(*, receive_wall_time: int = NS + 1) -> SourceObservation:
+    writer = ok(WriterId.try_create("qmb", "data", "download", "boot-ct15"))
+    return ok(
+        SourceObservation.try_create(
+            event_time=Instant(value_ns=NS),
+            known_at=Instant(value_ns=NS),
+            source="fixture-provider",
+            source_native_id="stable-intake-key",
+            revision="r1",
+            receive_wall_time=Instant(value_ns=receive_wall_time),
+            writer=writer,
+            sequence=0,
+            world=World.REPLAY,
+        )
+    )
+
+
+def test_t18_1a_stale_resume_handles_share_canonical_reservation_state() -> None:
+    """Same-store handles serialize and refresh one key despite receive metadata changes."""
+    with tempfile.TemporaryDirectory() as d:
+        evidence = store_at(Path(d) / "rooms")
+        world_store = ok(evidence.for_world(World.REPLAY))
+        writer = ok(WriterId.try_create("qmb", "data", "download", "boot-ct15"))
+        first = ok(IntakeAuthority.resume(world_store.journal, writer))
+        stale_handle = ok(IntakeAuthority.resume(world_store.journal, writer))
+        key = ok(IntakeKey.try_create("fixture-provider", "stable-intake-key", "r1"))
+        original = _authority_observation(receive_wall_time=NS + 1)
+        changed_receipt = _authority_observation(receive_wall_time=NS + 999)
+        reserved = ok(first.reserve(key, original, instant=Instant(value_ns=NS + 2)))
+        reused = ok(stale_handle.reserve(key, changed_receipt, instant=Instant(value_ns=NS + 3)))
+        assert reserved.observation.fingerprint == original.fingerprint
+        assert reused.observation.fingerprint == original.fingerprint
+        assert reused.observation.receive_wall_time == original.receive_wall_time
+        events = ok(
+            JournalReader(world_store.journal).read_checked(
+                "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+            )
+        )
+        intents = [
+            event
+            for event in events
+            if event.payload.get("class") == "qmf-ct15-intake-key"
+            and event.payload.get("action") == "intent"
+        ]
+        assert len(intents) == 1
+
+
+def test_t18_1a_ct15_authority_rejects_partitioned_stream_names() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        evidence = store_at(Path(d) / "rooms")
+        world_store = ok(evidence.for_world(World.REPLAY))
+        writer = ok(WriterId.try_create("qmb", "data", "download", "boot-ct15"))
+        for stream_name in ("one", "two"):
+            result = IntakeAuthority.resume(world_store.journal, writer, stream_name=stream_name)
+            assert is_refusal(result)
+            assert result.category.value == "policy rejection"
+
+
+def test_t18_1a_ct15_visible_uncertain_intent_needs_durable_recovery_barrier(
+    monkeypatch,
+) -> None:
+    """Visible CT-13 bytes cannot authorize reuse until a later fsync succeeds."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d) / "rooms"
+        evidence = store_at(root)
+        world_store = ok(evidence.for_world(World.REPLAY))
+        writer = ok(WriterId.try_create("qmb", "data", "download", "boot-ct15"))
+        authority = ok(IntakeAuthority.resume(world_store.journal, writer))
+        key = ok(IntakeKey.try_create("fixture-provider", "stable-intake-key", "r1"))
+        original = _authority_observation()
+        original_fsync = jsonl_engine.os.fsync
+        fsync_calls = 0
+
+        def fail_intent_fsync(fd: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if (
+                fsync_calls == 2
+            ):  # Reserve barrier succeeds; the intent line is visible but unsynced.
+                raise OSError("injected CT-13 fsync failure")
+            original_fsync(fd)
+
+        monkeypatch.setattr(jsonl_engine.os, "fsync", fail_intent_fsync)
+        refused_intent = authority.reserve(key, original, instant=Instant(value_ns=NS + 2))
+        assert is_refusal(refused_intent)
+        visible = ok(
+            JournalReader(world_store.journal).read_checked(
+                "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+            )
+        )
+        assert any(event.payload.get("action") == "intent" for event in visible)
+        world_store.journal.close()
+
+        def fail_all_fsync(_fd: int) -> None:
+            raise OSError("injected persistent CT-13 fsync failure")
+
+        monkeypatch.setattr(jsonl_engine.os, "fsync", fail_all_fsync)
+        reopening = store_at(root)
+        reopening_world = ok(reopening.for_world(World.REPLAY))
+        failed_recovery = IntakeAuthority.resume(reopening_world.journal, writer)
+        assert is_refusal(failed_recovery)
+        reopening_world.journal.close()
+
+        monkeypatch.setattr(jsonl_engine.os, "fsync", original_fsync)
+        recovered_store = store_at(root)
+        recovered_world = ok(recovered_store.for_world(World.REPLAY))
+        recovered = ok(IntakeAuthority.resume(recovered_world.journal, writer))
+        reservation = ok(recovered.reserve(key, original, instant=Instant(value_ns=NS + 3)))
+        assert reservation.observation.fingerprint == original.fingerprint
+        assert reservation.complete is False
+
+
+def test_t18_1a_download_does_not_complete_on_unknown_ct10_ack(monkeypatch) -> None:
+    """Ok(None) from CT-10 is not proof that the raw row was retained."""
+    with tempfile.TemporaryDirectory() as d:
+        dest = Path(d) / "rooms"
+        evidence = store_at(dest)
+        world_store = ok(evidence.for_world(World.REPLAY))
+        boundary = SourceObservationBoundary(evidence)
+        monkeypatch.setattr(boundary, "admit", lambda _observation: Ok(None))
+        result = download(
+            download_resources(dest),
+            adapter=FakeAdapter((provider_record("EURUSD#ack", NS),)),
+            store=evidence,
+            boundary=boundary,
+        )
+        assert is_refusal(result)
+        assert scan_raw_observations(evidence) == ()
+        events = ok(
+            JournalReader(world_store.journal).read_checked(
+                "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+            )
+        )
+        actions = [
+            event.payload.get("action")
+            for event in events
+            if event.payload.get("class") == "qmf-ct15-intake-key"
+        ]
+        assert actions == ["intent"]
+
+
 # --- T18-1b  request assembly + explicit reproducible end (RQ2) ---------------
 def test_t18_1b_request_assembled_from_fields() -> None:
     parsed = parse_download_request(
@@ -176,9 +321,9 @@ def test_t18_1d_port_surface_and_fetch_is_called() -> None:
 
 
 def test_t18_1d_dukascopy_adapter_one_is_a_provider_adapter() -> None:
-    from qmf.core.identity import Instrument
-    from qmf.core import VenueId
     from qmb.data.dukascopy import DukascopyProviderAdapter
+    from qmf.core import VenueId
+    from qmf.core.identity import Instrument
 
     class _NullTransport:
         def fetch_hour(self, key, /):
@@ -332,11 +477,14 @@ def test_t18_1i_uncertain_ct10_ack_recovers_through_qmf_authority(monkeypatch) -
                 "ct15-intake-authority", for_world="replay", expected_start=0
             )
         )
-        assert sum(
-            event.event_type is JournalEventType.DATA_QUALITY
-            and event.payload.get("class") == "qmf-ct15-intake-key"
-            for event in events
-        ) == 2
+        assert (
+            sum(
+                event.event_type is JournalEventType.DATA_QUALITY
+                and event.payload.get("class") == "qmf-ct15-intake-key"
+                for event in events
+            )
+            == 2
+        )
         assert {event.payload.get("action") for event in events} >= {"intent", "complete"}
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from qmf.core.chrono import WriterId
-from qmf.core.fingerprint import World
+from qmf.core.fingerprint import World, WriteOutcome
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.data.dukascopy import PERSONAL_USE_LICENSE, LicenseTag, parse_license_tag
 from qmf.data.ingest import (
@@ -27,8 +27,10 @@ from qmf.data.ingest import (
 )
 from qmf.data.intake_authority import IntakeAuthority
 from qmf.data.observation import MarketDataContext, SourceObservation
-from qmf.data.source_boundary import SourceObservationBoundary
+from qmf.data.source_boundary import ObservationReceipt, SourceObservationBoundary
 from qmf.data.store import EvidenceStore
+from qmf.data.store.receipts import StoreReceipt
+from qmf.data.store.rooms import RoomRole
 
 from qmb._refuse import clean_token, invalid, unavailable
 from qmb.data.catalog import persist_coverage_windows
@@ -396,6 +398,14 @@ def download(
                 stored = ingest.submit(canonical_observation, gate)
                 if is_refusal(stored):
                     return stored
+                verified = _verify_observation_admission(
+                    stored.value,
+                    canonical_observation,
+                    gate,
+                    request.world,
+                )
+                if is_refusal(verified):
+                    return verified
                 admitted += 1
                 covered_event_ns.append(canonical_observation.event_time.value_ns)
                 appended = authority.value.complete(
@@ -507,6 +517,70 @@ def _observation_for_archive(
         receive_monotonic_diagnostic=observation.receive_monotonic_diagnostic,
         correction_of=observation.correction_of,
     )
+
+
+def _verify_observation_admission(
+    receipt: object,
+    observation: SourceObservation,
+    boundary: SourceObservationBoundary,
+    world: World,
+) -> Result[ObservationReceipt]:
+    """Require a complete CT-10 acknowledgment and read its exact retained row back."""
+    if not isinstance(receipt, ObservationReceipt):
+        return invalid(
+            "observation_receipt",
+            "CT-15 completion requires a typed CT-10 ObservationReceipt",
+        )
+    archive_value: object = cast(object, receipt.archive)
+    if not isinstance(archive_value, StoreReceipt):
+        return invalid(
+            "observation_receipt",
+            "a CT-10 acknowledgment contains the typed immutable archive StoreReceipt",
+        )
+    archive = archive_value
+    archive_sequence: object = cast(object, archive.sequence)
+    archive_format: object = cast(object, archive.format_version)
+    if (
+        receipt.observation_fingerprint != observation.fingerprint
+        or archive.world is not world
+        or archive.room_role is not RoomRole.IMMUTABLE_RAW_ARCHIVE
+        or archive.is_evidence_bearing is not True
+        or archive.retained_forever is not True
+        or archive.outcome not in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
+        or archive.engine != "parquet"
+        or archive_sequence is not None
+        or receipt.is_correction is not observation.is_correction
+        or receipt.correction_of != observation.correction_of
+        or isinstance(archive_format, bool)
+        or not isinstance(archive_format, int)
+        or archive_format != 1
+    ):
+        return invalid(
+            "observation_receipt",
+            "the archive acknowledgment binds complete retained evidence for this CT-10 row",
+        )
+    reopened = boundary.read(
+        archive.fingerprint,
+        in_world=world,
+        for_world=world,
+    )
+    if is_refusal(reopened):
+        return reopened
+    reopened_value: object = cast(object, reopened.value)
+    if not isinstance(reopened_value, SourceObservation):
+        return invalid(
+            "observation_receipt",
+            "the archive fingerprint resolves to a typed SourceObservation",
+        )
+    if (
+        reopened_value.fingerprint != observation.fingerprint
+        or reopened_value.fp1_identity() != observation.fp1_identity()
+    ):
+        return invalid(
+            "observation_receipt",
+            "the archive fingerprint reopens the exact normalized CT-10 observation",
+        )
+    return Ok(receipt)
 
 
 class _IngestBridge:

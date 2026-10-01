@@ -10,21 +10,33 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Final, cast
 
-from qmf.core import Instant, Ok, Result, WriterId, fingerprint, is_refusal
+from qmf.core import Instant, Ok, Result, WriteOutcome, WriterId, fingerprint, is_refusal
 from qmf.data.ingest import IntakeKey
-from qmf.data.journal import JournalEventType
-from qmf.data.journal_producer import JournalReader, JournalWriter
+from qmf.data.journal import JournalEvent, JournalEventType
+from qmf.data.journal_producer import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.observation import SourceObservation
 from qmf.data.store import JournalStore
+from qmf.data.store.receipts import StoreReceipt
 from qmf.data.store.refusals import invalid_input, policy_rejection
+from qmf.data.store.rooms import RoomRole
 
 __all__ = ["IntakeAuthority", "IntakeReservation"]
 
 _EVENT_CLASS: Final[str] = "qmf-ct15-intake-key"
+_RECOVERY_CLASS: Final[str] = "qmf-ct15-recovery-barrier"
 _INTENT: Final[str] = "intent"
 _COMPLETE: Final[str] = "complete"
+_AUTHORITY_STREAM: Final[str] = "ct15-intake-authority"
+_COORDINATORS_LOCK = RLock()
+_COORDINATORS: dict[
+    tuple[int, str],
+    tuple[
+        JournalStore, WriterId, JournalWriter, dict[IntakeKey, tuple[str, IntakeReservation]], RLock
+    ],
+] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +52,9 @@ class IntakeAuthority:
     """QMF-owned durable mapping from a CT-15 key to a canonical CT-10 identity."""
 
     writer: JournalWriter
+    _journal: JournalStore
     _keys: dict[IntakeKey, tuple[str, IntakeReservation]] = field(default_factory=lambda: {})
+    _lock: RLock = field(default_factory=RLock)
 
     @classmethod
     def resume(
@@ -50,45 +64,58 @@ class IntakeAuthority:
         *,
         stream_name: str = "ct15-intake-authority",
     ) -> Result[IntakeAuthority]:
-        """Validate the checked CT-13 stream and resume its single writer/high-water."""
+        """Validate, durably barrier, and resume the one canonical CT-15 authority stream."""
+        if stream_name != _AUTHORITY_STREAM:
+            return policy_rejection(
+                "stream_name",
+                "CT-15 canonical-key uniqueness uses the fixed authority stream",
+                expected=_AUTHORITY_STREAM,
+                given=stream_name,
+            )
+        coordinator_key = (id(journal), _AUTHORITY_STREAM)
+        with _COORDINATORS_LOCK:
+            existing = _COORDINATORS.get(coordinator_key)
+            if existing is not None:
+                shared_journal, _shared_writer_id, shared_writer, shared_keys, shared_lock = (
+                    existing
+                )
+                if shared_journal is not journal:
+                    return policy_rejection(
+                        "journal",
+                        "a cached CT-15 coordinator belongs to the exact journal object",
+                    )
+                return Ok(
+                    cls(
+                        writer=shared_writer,
+                        _journal=journal,
+                        _keys=shared_keys,
+                        _lock=shared_lock,
+                    )
+                )
         events = JournalReader(journal).read_checked(
-            stream_name, for_world=journal.world, expected_start=0
+            _AUTHORITY_STREAM, for_world=journal.world, expected_start=0
         )
         if is_refusal(events):
             return events
-        keys: dict[IntakeKey, tuple[str, IntakeReservation]] = {}
-        for event in events.value:
-            if event.event_type is not JournalEventType.DATA_QUALITY:
-                continue
-            payload = event.payload
-            if payload.get("class") != _EVENT_CLASS:
-                continue
-            parsed = _parse_event(payload, journal.world)
-            if is_refusal(parsed):
-                return parsed
-            action, key, fact_fp, observation_fp, observation = parsed.value
-            current = keys.get(key)
-            if action == _INTENT:
-                if observation is None:
-                    return _inconsistent_key(key)
-                if current is not None:
-                    if (
-                        current[0] != fact_fp
-                        or current[1].observation.fingerprint != observation.fingerprint
-                    ):
-                        return _inconsistent_key(key)
-                    continue
-                keys[key] = (fact_fp, IntakeReservation(observation, complete=False))
-            else:
-                if current is None or current[0] != fact_fp:
-                    return _inconsistent_key(key)
-                if current[1].observation.fingerprint.value != observation_fp:
-                    return _inconsistent_key(key)
-                keys[key] = (fact_fp, IntakeReservation(current[1].observation, complete=True))
-        resumed = JournalWriter.resume(journal, writer_id, stream_name=stream_name)
+        keys = _rebuild_keys(events.value, journal.world)
+        if is_refusal(keys):
+            return keys
+        resumed = JournalWriter.resume(journal, writer_id, stream_name=_AUTHORITY_STREAM)
         if is_refusal(resumed):
             return resumed
-        return Ok(cls(writer=resumed.value, _keys=keys))
+        barrier = _persist_recovery_barrier(journal, resumed.value, events.value)
+        if is_refusal(barrier):
+            return barrier
+        shared = (journal, writer_id, resumed.value, keys.value, RLock())
+        _COORDINATORS[coordinator_key] = shared
+        return Ok(
+            cls(
+                writer=resumed.value,
+                _journal=journal,
+                _keys=keys.value,
+                _lock=shared[4],
+            )
+        )
 
     def reserve(
         self,
@@ -104,26 +131,39 @@ class IntakeAuthority:
         reuses the original CT-10 value, while changed source facts under the same
         CT-15 key are refused.
         """
-        valid = _validate_key_observation(key, observation, self.writer.world)
-        if is_refusal(valid):
-            return valid
-        fact_fp = _fact_fingerprint(observation)
-        if is_refusal(fact_fp):
-            return fact_fp
-        prior = self._keys.get(key)
-        if prior is not None:
-            if prior[0] != fact_fp.value:
-                return _changed_fact(key, prior[0], fact_fp.value)
-            return Ok(prior[1])
+        with self._lock:
+            valid = _validate_key_observation(key, observation, self.writer.world)
+            if is_refusal(valid):
+                return valid
+            fact_fp = _fact_fingerprint(observation)
+            if is_refusal(fact_fp):
+                return fact_fp
+            refreshed = self._refresh_and_barrier(instant)
+            if is_refusal(refreshed):
+                return refreshed
+            prior = self._keys.get(key)
+            if prior is not None:
+                if prior[0] != fact_fp.value:
+                    return _changed_fact(key, prior[0], fact_fp.value)
+                return Ok(prior[1])
 
-        persisted = self.writer.record_data_quality(
-            _intent_payload(key, observation, fact_fp.value), instant=instant
-        )
-        if is_refusal(persisted):
-            return persisted
-        reservation = IntakeReservation(observation, complete=False)
-        self._keys[key] = (fact_fp.value, reservation)
-        return Ok(reservation)
+            persisted = self.writer.record_data_quality(
+                _intent_payload(key, observation, fact_fp.value), instant=instant
+            )
+            if is_refusal(persisted):
+                return persisted
+            if not _complete_journal_ack(
+                cast(object, persisted.value),
+                self._journal,
+                self.writer,
+                expected_payload=_intent_payload(key, observation, fact_fp.value),
+            ):
+                return policy_rejection(
+                    "journal_ack", "CT-15 intent has a complete durable CT-13 acknowledgment"
+                )
+            reservation = IntakeReservation(observation, complete=False)
+            self._keys[key] = (fact_fp.value, reservation)
+            return Ok(reservation)
 
     def complete(
         self,
@@ -133,27 +173,31 @@ class IntakeAuthority:
         instant: Instant,
     ) -> Result[None]:
         """Persist explicit completion after CT-10 admission and its acknowledgement."""
-        valid = _validate_key_observation(key, observation, self.writer.world)
-        if is_refusal(valid):
-            return valid
-        fact_fp = _fact_fingerprint(observation)
-        if is_refusal(fact_fp):
-            return fact_fp
-        prior = self._keys.get(key)
-        if prior is None or prior[0] != fact_fp.value:
-            return _inconsistent_key(key)
-        if prior[1].observation.fingerprint != observation.fingerprint:
-            return policy_rejection(
-                "intake_identity",
-                "completion must acknowledge the exact CT-10 observation retained by its intent",
-                source=key.source,
-                source_native_id=key.source_native_id,
-                revision=key.revision,
-            )
-        if prior[1].complete:
-            return Ok(None)
-        persisted = self.writer.record_data_quality(
-            {
+        with self._lock:
+            valid = _validate_key_observation(key, observation, self.writer.world)
+            if is_refusal(valid):
+                return valid
+            fact_fp = _fact_fingerprint(observation)
+            if is_refusal(fact_fp):
+                return fact_fp
+            refreshed = self._refresh_and_barrier(instant)
+            if is_refusal(refreshed):
+                return refreshed
+            prior = self._keys.get(key)
+            if prior is None or prior[0] != fact_fp.value:
+                return _inconsistent_key(key)
+            if prior[1].observation.fingerprint != observation.fingerprint:
+                return policy_rejection(
+                    "intake_identity",
+                    "completion must acknowledge the exact CT-10 observation retained "
+                    "by its intent",
+                    source=key.source,
+                    source_native_id=key.source_native_id,
+                    revision=key.revision,
+                )
+            if prior[1].complete:
+                return Ok(None)
+            payload = {
                 "class": _EVENT_CLASS,
                 "action": _COMPLETE,
                 "complete": True,
@@ -162,16 +206,200 @@ class IntakeAuthority:
                 "revision": key.revision,
                 "fact_fingerprint": fact_fp.value,
                 "observation_fingerprint": observation.fingerprint.value,
-            },
-            instant=instant,
+            }
+            persisted = self.writer.record_data_quality(payload, instant=instant)
+            if is_refusal(persisted):
+                return persisted
+            if not _complete_journal_ack(
+                cast(object, persisted.value), self._journal, self.writer, expected_payload=payload
+            ):
+                return policy_rejection(
+                    "journal_ack", "CT-15 completion has a complete durable CT-13 acknowledgment"
+                )
+            self._keys[key] = (
+                fact_fp.value,
+                IntakeReservation(observation, complete=True),
+            )
+            return Ok(None)
+
+    def _refresh_and_barrier(self, instant: Instant) -> Result[None]:
+        if self.writer.is_blocked:
+            recovered = self.writer.retry_blocked()
+            if is_refusal(recovered):
+                return recovered
+        events = JournalReader(self._journal).read_checked(
+            _AUTHORITY_STREAM, for_world=self._journal.world, expected_start=0
         )
-        if is_refusal(persisted):
-            return persisted
-        self._keys[key] = (
-            fact_fp.value,
-            IntakeReservation(observation, complete=True),
+        if is_refusal(events):
+            return events
+        rebuilt = _rebuild_keys(events.value, self._journal.world)
+        if is_refusal(rebuilt):
+            return rebuilt
+        self._keys.clear()
+        self._keys.update(rebuilt.value)
+        return _persist_recovery_barrier(self._journal, self.writer, events.value, instant=instant)
+
+
+def _rebuild_keys(
+    events: list[JournalEvent], world: object
+) -> Result[dict[IntakeKey, tuple[str, IntakeReservation]]]:
+    keys: dict[IntakeKey, tuple[str, IntakeReservation]] = {}
+    for event in events:
+        if event.event_type is not JournalEventType.DATA_QUALITY:
+            continue
+        payload = event.payload
+        if payload.get("class") == _RECOVERY_CLASS:
+            if payload != {
+                "class": _RECOVERY_CLASS,
+                "durable_prefix": True,
+            }:
+                return policy_rejection(
+                    "ct15_recovery_barrier",
+                    "a CT-15 recovery barrier explicitly covers the durable prefix",
+                )
+            continue
+        if payload.get("class") != _EVENT_CLASS:
+            continue
+        parsed = _parse_event(payload, world)
+        if is_refusal(parsed):
+            return parsed
+        action, key, fact_fp, observation_fp, observation = parsed.value
+        current = keys.get(key)
+        if action == _INTENT:
+            if observation is None:
+                return _inconsistent_key(key)
+            if current is not None:
+                if (
+                    current[0] != fact_fp
+                    or current[1].observation.fingerprint != observation.fingerprint
+                ):
+                    return _inconsistent_key(key)
+                continue
+            keys[key] = (fact_fp, IntakeReservation(observation, complete=False))
+        else:
+            if current is None or current[0] != fact_fp:
+                return _inconsistent_key(key)
+            if current[1].observation.fingerprint.value != observation_fp:
+                return _inconsistent_key(key)
+            keys[key] = (fact_fp, IntakeReservation(current[1].observation, complete=True))
+    return Ok(keys)
+
+
+def _persist_recovery_barrier(
+    journal: JournalStore,
+    writer: JournalWriter,
+    events: list[JournalEvent],
+    *,
+    instant: Instant | None = None,
+) -> Result[None]:
+    """Fsync a new barrier before any previously visible intent is reusable."""
+    barrier_instant = instant
+    if barrier_instant is None:
+        barrier_instant = Instant(
+            value_ns=max((event.instant.value_ns for event in events), default=0)
         )
-        return Ok(None)
+    payload = {
+        "class": _RECOVERY_CLASS,
+        "durable_prefix": True,
+    }
+    appended = writer.record_data_quality(payload, instant=barrier_instant)
+    if is_refusal(appended):
+        return appended
+    if not _complete_journal_ack(
+        cast(object, appended.value),
+        journal,
+        writer,
+        expected_payload=payload,
+        expected_instant=barrier_instant,
+    ):
+        return policy_rejection(
+            "ct15_recovery_barrier",
+            "the CT-13 recovery barrier is durably acknowledged and reopened",
+        )
+    return Ok(None)
+
+
+def _complete_journal_ack(
+    receipt: object,
+    journal: JournalStore,
+    writer: JournalWriter,
+    *,
+    expected_payload: Mapping[str, object],
+    expected_instant: Instant | None = None,
+) -> bool:
+    if not isinstance(receipt, JournalAppendReceipt):
+        return False
+    event_value: object = cast(object, receipt.event)
+    store_receipt_value: object = cast(object, receipt.store_receipt)
+    if not isinstance(event_value, JournalEvent) or not isinstance(
+        store_receipt_value, StoreReceipt
+    ):
+        return False
+    event = event_value
+    store_receipt = store_receipt_value
+    if receipt.edge_receipts:
+        return False
+    if (
+        event.event_type is not JournalEventType.DATA_QUALITY
+        or event.writer != writer.writer
+        or event.world is not journal.world
+        or event.sequence != writer.next_sequence - 1
+        or (expected_instant is not None and event.instant != expected_instant)
+        or _thaw(event.payload) != _thaw(expected_payload)
+    ):
+        return False
+    event_fp = fingerprint(event.fp1_identity())
+    if is_refusal(event_fp) or event_fp.value != event.fingerprint:
+        return False
+    sequence_value: object = cast(object, store_receipt.sequence)
+    format_value: object = cast(object, store_receipt.format_version)
+    if (
+        store_receipt.world is not journal.world
+        or store_receipt.room_role is not RoomRole.JOURNAL
+        or store_receipt.engine != "jsonl"
+        or store_receipt.outcome not in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
+        or store_receipt.is_evidence_bearing is not True
+        or store_receipt.retained_forever is not True
+        or isinstance(sequence_value, bool)
+        or not isinstance(sequence_value, int)
+        or sequence_value < 0
+        or isinstance(format_value, bool)
+        or not isinstance(format_value, int)
+        or format_value != 1
+    ):
+        return False
+    raw = journal.read_stream(writer.stream_name, for_world=journal.world)
+    if is_refusal(raw) or sequence_value >= len(raw.value):
+        return False
+    row = raw.value[sequence_value]
+    row_fp = fingerprint(row)
+    persisted = JournalEvent.from_row(row)
+    if (
+        is_refusal(row_fp)
+        or row_fp.value != store_receipt.fingerprint
+        or is_refusal(persisted)
+        or persisted.value.fingerprint != event.fingerprint
+    ):
+        return False
+    checked = JournalReader(journal).read_checked(
+        writer.stream_name, for_world=journal.world, expected_start=0
+    )
+    return not is_refusal(checked) and any(
+        candidate.writer == event.writer
+        and candidate.sequence == event.sequence
+        and candidate.fingerprint == event.fingerprint
+        for candidate in checked.value
+    )
+
+
+def _thaw(value: object) -> object:
+    if isinstance(value, Mapping):
+        entries = cast("Mapping[object, object]", value)
+        return {key: _thaw(item) for key, item in entries.items()}
+    if isinstance(value, (tuple, list)):
+        items = cast("list[object] | tuple[object, ...]", value)
+        return [_thaw(item) for item in items]
+    return value
 
 
 def _intent_payload(

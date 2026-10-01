@@ -31,6 +31,7 @@ from qmb.data import (
 from qmb.doors.cli import invoke_data, main
 from qmf.core import (
     Instrument,
+    Ok,
     RefusalCategory,
     Result,
     Retryability,
@@ -44,6 +45,9 @@ from qmf.core import (
 from qmf.core.exact import RoundingMode
 from qmf.data import DUKASCOPY_SOURCE, EvidenceStore
 from qmf.data.dukascopy import PERSONAL_USE_LICENSE, DukascopyHourKey
+from qmf.data.journal import JournalEventType
+from qmf.data.journal_producer import JournalReader
+from qmf.data.source_boundary import SourceObservationBoundary
 
 T = TypeVar("T")
 
@@ -194,6 +198,35 @@ def test_download_once_admits_ct10_bid_ask_and_license() -> None:
         assert progress.samples
         assert progress.samples[-1].percent == 100
         assert progress.samples[-1].date_reached_ns == _END_NS
+
+
+def test_download_refuses_unknown_ct10_admission_ack(tmp_path: Path, monkeypatch) -> None:
+    path = "EURUSD/2024/00/15/10h_ticks.bi5"
+    transport = _FixtureTransport({path: _bi5((0, 110260, 110250))})
+    root = tmp_path / "rooms"
+    resources = _resources(root, transport)
+    evidence = resources["store"]
+    assert isinstance(evidence, EvidenceStore)
+    boundary = SourceObservationBoundary(evidence)
+    monkeypatch.setattr(boundary, "admit", lambda _observation: Ok(None))
+    resources["boundary"] = boundary
+
+    result = download(resources)
+
+    assert is_refusal(result)
+    world_store = _ok(evidence.for_world(World.REPLAY))
+    events = _ok(
+        JournalReader(world_store.journal).read_checked(
+            "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+        )
+    )
+    actions = [
+        event.payload.get("action")
+        for event in events
+        if event.event_type is JournalEventType.DATA_QUALITY
+        and event.payload.get("class") == "qmf-ct15-intake-key"
+    ]
+    assert actions == ["intent"]
 
 
 def test_overlapping_rerun_is_idempotent_overwrite_appends_revision() -> None:
