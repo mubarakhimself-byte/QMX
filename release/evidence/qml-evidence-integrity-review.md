@@ -166,3 +166,12 @@ Observed source hashes:
 - `qml/src/qml/declaration/bot.py`: `83f9280912a83bcd17f6169c942758cf36248456a34ece6fdbf7e7b589c1c61a`
 
 The same finite nominal boundary also admits kind_format_version=True, 0, or string "1"; equivalent body mappings with contract_format_version set to those values typed-refuse. These belong to the same official CT33 field-revalidation correction, not a new Layer1 requirement. Owner notified.
+
+
+### Nominal Bot correction review — residual finite schema bypasses
+
+Held initial hashes bot.py `31ff1f5b51a7f77baf4750259ebf7bc7338ad650f172921b7bf5653e5fda3839`, factory.py `786af6ee5eba38a82eaf6844a65493998a14fc000fc2ca4f6beddeb42cd0c903`, new nominal test `6ebbfac494e6875e266b7ca71d5e11f625584f0639f9a9cb5cf3b2ca863afdb8`. Original logic=None and nominal bool/zero/string format cases are repaired. Scoped nominal/protocol tests independently pass **27 in0.48s**. Footprint=None and parameter_space=(None,) typed-refuse. Approval remains blocked by two finite schema mismatches.
+
+Actual wrapped header bypass: p=valid.identity_payload(); p['contract_format_version']=True; p['body']['format_version']=1. Public construct_bot returns Ok and initializes the counting factory. Header version is only copied when body lacks a version, so malformed mandatory header is hidden. Validate every supplied header version independently and reject inconsistent header/body versions.
+
+Actual nested nominal ParameterSpec bypass: copy the existing exact-integer COUNT parameter with unit_kind=True or default=True, then place it into an otherwise genuine nominal Bot. construct_bot with canonical lookback=5 returns Ok and initializes the factory. Equivalent public body parameter mappings typed-refuse with zero factory calls. ParameterSpec.try_create currently returns nominal objects unchecked, so calling outer Bot.try_create is insufficient. This is the same mandatory unit/default schema boundary, not a new Layer1 registry requirement or an arbitrary cosmetic-input quota. Owner/root notified of the precise extra validator home. No product/test edits.
