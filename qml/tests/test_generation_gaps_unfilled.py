@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import ast
 import os
-import re
 import stat
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
+import pytest
+import yaml
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from qml.declaration import LEG_ROLES, LegRole
@@ -203,15 +204,146 @@ def test_ct34_filter_role_is_not_the_gap_0085_filter_noun() -> None:
     assert nested.context["gap"] == "GAP-0085"
 
 
-def test_ct33_ct34_contracts_do_not_mint_mechanism_nouns() -> None:
-    contracts = (
-        _CONTRACTS / "ct-33-bot-definition.yaml",
-        _CONTRACTS / "ct-34-confluence.yaml",
+def _reject_duplicate_keys(node: yaml.Node) -> None:
+    if isinstance(node, yaml.MappingNode):
+        keys: set[str] = set()
+        for key, value in node.value:
+            assert isinstance(key, yaml.ScalarNode) and key.tag == "tag:yaml.org,2002:str"
+            assert key.value not in keys, f"duplicate YAML key: {key.value}"
+            keys.add(key.value)
+            _reject_duplicate_keys(value)
+    elif isinstance(node, yaml.SequenceNode):
+        for value in node.value:
+            _reject_duplicate_keys(value)
+
+
+def _assert_approved_contract_schema(
+    text: str, kind: str, fields: set[str], enum_headers: set[str] | None = None
+) -> None:
+    """Check schema declarations; governance denials are not new typed fields."""
+    # PyYAML's compose stub omits its Node return type; narrow that one boundary.
+    document_node = cast(
+        "yaml.Node | None",
+        yaml.compose(text, Loader=yaml.SafeLoader),  # pyright: ignore[reportUnknownMemberType]
     )
-    for path in contracts:
-        text = _read_contained(path, contain_within=_CONTRACTS)
-        for noun in GAP_0085_NOUNS:
-            assert re.search(rf"\b{re.escape(noun)}\b", text) is None, f"{path.name} minted {noun}"
+    assert document_node is not None
+    _reject_duplicate_keys(document_node)
+    document: object = yaml.safe_load(text)
+    assert isinstance(document, dict)
+    schema: object = cast("dict[str, object]", document)["schema"]
+    assert isinstance(schema, dict)
+    schema = cast("dict[str, object]", schema)
+    assert set(schema) == {"type", "fields", "enums", "units", "nullability"}
+    assert schema["type"] == kind
+    headers: dict[str, set[str]] = {}
+    for key in ("fields", "enums"):
+        declarations = schema[key]
+        assert isinstance(declarations, list)
+        entries = cast("list[object]", declarations)
+        parsed: list[str] = []
+        for declaration in entries:
+            assert isinstance(declaration, str) and ":" in declaration
+            parsed.append(declaration.split(":", 1)[0])
+        assert len(parsed) == len(set(parsed))
+        headers[key] = set(parsed)
+    assert headers["fields"] == fields
+    assert headers["enums"] == (set() if enum_headers is None else enum_headers)
+    if kind == "confluence" and enum_headers:
+        enums = cast("list[str]", schema["enums"])
+        roles = next(value for value in enums if value.startswith("leg role:"))
+        assert roles.split(":", 1)[1].split("—", 1)[0].strip() == (
+            "level | trigger | confirmation | filter"
+        )
+
+
+def test_ct33_ct34_contracts_do_not_mint_mechanism_nouns() -> None:
+    _assert_approved_contract_schema(
+        _read_contained(_CONTRACTS / "ct-33-bot-definition.yaml", contain_within=_CONTRACTS),
+        "bot-definition",
+        {
+            "contract_format_version",
+            "bot_definition_fingerprint",
+            "strategy_family_id",
+            "confluence_set",
+            "parameter_space",
+            "canonical_assignment",
+            "footprint.stream_set",
+            "footprint.required_calendars",
+            "footprint.producer_bindings",
+            "footprint.warm_up_horizon",
+            "permitted_exit_intents",
+            "logic_reference",
+            "version_graph",
+        },
+        {
+            "parameter type",
+            "unit-kind (per parameter)",
+            "producer binding form",
+            "permitted exit-intent kinds (a subset, possibly empty)",
+            "ui flag (per declared configurable variable)",
+            "refusal categories on this contract's Layer-1 registration paths, per registry",
+        },
+    )
+    _assert_approved_contract_schema(
+        _read_contained(_CONTRACTS / "ct-34-confluence.yaml", contain_within=_CONTRACTS),
+        "confluence",
+        {
+            "contract_format_version",
+            "confluence_fingerprint",
+            "legs",
+            "leg.role",
+            "leg.producer_binding",
+            "leg.declared_parameters",
+            "leg.confluence_ref",
+            "display_ordinal",
+            "order_significance",
+        },
+        {
+            "leg role",
+            "producer binding form",
+            "ordering",
+            "refusal categories on this contract's paths, per registry",
+        },
+    )
+    assert set(LEG_ROLES) == {"level", "trigger", "confirmation", "filter"}
+
+
+@pytest.mark.parametrize("noun", sorted(GAP_0085_NOUNS))
+def test_contract_schema_detector_rejects_minted_mechanism(noun: str) -> None:
+    text = (
+        "constraints: ['No typed mechanism nouns Entry/Exit/Filter/Session']\n"
+        '\nschema:\n  type: confluence\n  fields:\n    - "legs: existing"\n'
+        "  enums: []\n  units: []\n  nullability:\nprovenance_note: unchanged\n"
+    )
+    _assert_approved_contract_schema(text, "confluence", {"legs"})
+    with pytest.raises(AssertionError):
+        _assert_approved_contract_schema(
+            text.replace("  enums:", f'    - "{noun}: typed mechanism"\n  enums:'),
+            "confluence",
+            {"legs"},
+        )
+    with pytest.raises(AssertionError):
+        _assert_approved_contract_schema(
+            text.replace("type: confluence", f"type: {noun}"), "confluence", {"legs"}
+        )
+    with pytest.raises(AssertionError):
+        _assert_approved_contract_schema(
+            text.replace("  enums: []", f"  {noun}: typed mechanism\n  enums: []"),
+            "confluence",
+            {"legs"},
+        )
+    with pytest.raises(AssertionError):
+        _assert_approved_contract_schema(
+            text.replace("  enums: []", f'  enums:\n    - "{noun}: typed mechanism"'),
+            "confluence",
+            {"legs"},
+        )
+    with pytest.raises(AssertionError):
+        _assert_approved_contract_schema(
+            text.replace("type: confluence", f"type: confluence\n  type: {noun}"),
+            "confluence",
+            {"legs"},
+        )
 
 
 def test_decided_default_algorithm_is_refused_as_unruled() -> None:
