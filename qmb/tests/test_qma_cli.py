@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from click.testing import CliRunner
 from qmb.doors.cli import main
@@ -83,15 +84,24 @@ def test_delegated_envelope_rejects_duplicate_keys_and_bool_integer_aliases() ->
     )
 
 
-def test_actual_cli_entry_does_not_fall_back_to_legacy_spawn() -> None:
+def test_actual_cli_entry_dispatches_to_operator_binding_without_legacy_fallback(
+    tmp_path: Path,
+) -> None:
     payload = _payload()
+    runtime_root = tmp_path / "runtime"
+    binding_dir = runtime_root / str(payload["experiment_spec_fp1"]).replace(":", "-")
+    binding_dir = binding_dir / str(payload["evidence_ref"]).replace(":", "-")
+    binding_dir.mkdir(parents=True)
+    (binding_dir / "operator-binding.json").write_text("{}", encoding="utf-8")
+    env = _environ(payload)
+    env["QMB_REPLAY_RUNTIME_ROOT"] = str(runtime_root)
     result = CliRunner().invoke(
         main,
         ["backtest", "run"],
-        env=_environ(payload),
+        env=env,
     )
     assert result.exit_code == 1
-    assert "operator_runtime" in result.output
+    assert "operator_binding" in result.output
     assert "orchestrator" not in result.output
 
 

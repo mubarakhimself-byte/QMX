@@ -315,17 +315,23 @@ def backtest_run(
                 ),
             )
             return
-        from qmb._refuse import unavailable  # noqa: PLC0415
+        runtime_root = os.environ.get("QMB_REPLAY_RUNTIME_ROOT")
+        if runtime_root is None:
+            from qmb._refuse import unavailable  # noqa: PLC0415
+
+            _transport(
+                ctx,
+                unavailable(
+                    "operator_runtime",
+                    "the QMB process has no operator-owned replay runtime root",
+                ),
+            )
+            return
+        from qmb.host.operator_replay import execute_operator_replay  # noqa: PLC0415
 
         _transport(
             ctx,
-            unavailable(
-                "operator_runtime",
-                "the validated QMA placement has no resolved operator replay binding",
-                experiment_spec_fp1=delegated.value.experiment_spec_fp1.value,
-                evidence_ref=delegated.value.evidence_ref.value,
-                split_manifest_fp1=delegated.value.split_manifest_fp1.value,
-            ),
+            execute_operator_replay(runtime_root=runtime_root, context=delegated.value),
         )
         return
     payload = _payload(ctx, output_root=output_root)
