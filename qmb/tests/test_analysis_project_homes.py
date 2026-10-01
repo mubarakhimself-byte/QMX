@@ -27,9 +27,6 @@ from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from test_analysis_project import (
     _durable_ct29 as _durable_source,  # pyright: ignore[reportPrivateUsage]
 )
-from test_analysis_project import (
-    _paired_result,  # pyright: ignore[reportPrivateUsage]
-)
 
 import qmb
 
@@ -199,8 +196,7 @@ def test_mixed_permitted_and_forbidden_predicate_still_refuses() -> None:
 
 def test_ungoverned_home_is_a_return_value_only(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_source(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, _trades, artifact = _durable_source(tmp_path, as_of)
     view = _ok(project(**_project_args(artifact, source, as_of)))
     assert view.home == "ungoverned"
     assert view.durable is False
@@ -228,8 +224,7 @@ def test_ungoverned_home_is_a_return_value_only(tmp_path: Path) -> None:
 
 def test_governed_home_writes_json_sidecar_in_source_run_dir(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    trusted_source, trades = _durable_source(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=trusted_source, trades=trades)
+    trusted_source, _trades, artifact = _durable_source(tmp_path, as_of)
     run_dir = tmp_path / "source-run"
     run_dir.mkdir()
     other = tmp_path / "new-run"
@@ -264,8 +259,7 @@ def test_governed_home_writes_json_sidecar_in_source_run_dir(tmp_path: Path) -> 
 
 def test_coordinated_home_and_sqlite_are_epic_36(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_source(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, _trades, artifact = _durable_source(tmp_path, as_of)
     refused = project(
             **_project_args(artifact, source, as_of),
         home="coordinated",
@@ -289,8 +283,7 @@ def test_coordinated_home_and_sqlite_are_epic_36(tmp_path: Path) -> None:
 
 def test_door_and_cli_forward_homes_and_forbidden_axes(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_source(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, trades, artifact = _durable_source(tmp_path, as_of)
     library = project(**_project_args(artifact, source, as_of), home="ungoverned")
     door = invoke_analysis_project(
         **_project_args(artifact, source, as_of),

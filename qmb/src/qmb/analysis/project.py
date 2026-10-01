@@ -237,6 +237,10 @@ class CT29ProjectionSource:
     writer: WriterId
     binding_epoch: Fingerprint
     result_label: ExitResultLabel
+    run_config: object
+    replay_request: object
+    terminal_ledger_root: object
+    ledger_role: str
 
     @classmethod
     def try_create(
@@ -247,7 +251,14 @@ class CT29ProjectionSource:
         writer: object,
         binding_epoch: object,
         result_label: object,
+        run_config: object = None,
+        replay_request: object = None,
+        terminal_ledger_root: object = None,
+        ledger_role: object = None,
     ) -> Result[CT29ProjectionSource]:
+        from qmb.host.replay_request import ResolvedReplayRequest  # noqa: PLC0415
+        from qmb.ledger.line import RUN_ROLES  # noqa: PLC0415
+
         if not isinstance(journal_reader, JournalReader):
             return invalid(
                 "journal_reader", "projection resolves CT-29 through a configured QMF reader"
@@ -261,7 +272,28 @@ class CT29ProjectionSource:
             return invalid("binding_epoch", "projection pins the CT-28 replay binding fingerprint")
         if not isinstance(result_label, ExitResultLabel):
             return invalid("result_label", "projection pins the CT-29 replay result label")
-        return Ok(cls(journal_reader, name, writer, binding_epoch, result_label))
+        if not isinstance(run_config, ResolvedRunConfig):
+            return invalid("run_config", "projection pins the resolved CT-28/Book run config")
+        if not isinstance(replay_request, ResolvedReplayRequest):
+            return invalid("replay_request", "projection pins the resolved CT-10/CT-12 source")
+        if not isinstance(terminal_ledger_root, (str, Path)):
+            return invalid("terminal_ledger_root", "projection pins the operator ledger root")
+        role = clean_token(ledger_role)
+        if role is None or role not in RUN_ROLES:
+            return invalid("ledger_role", "projection pins a declared QMB terminal ledger role")
+        return Ok(
+            cls(
+                journal_reader,
+                name,
+                writer,
+                binding_epoch,
+                result_label,
+                run_config,
+                replay_request,
+                terminal_ledger_root,
+                role,
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -468,9 +500,12 @@ def project(
     if is_refusal(source):
         return source
     ct32_fp, identity, trade_refs, input_fps = source.value
+    as_of_config = config
+    if as_of_config is None and isinstance(source_ct29, CT29ProjectionSource):
+        as_of_config = source_ct29.run_config
     as_of_identity = _resolve_as_of(
         as_of,
-        config=config,
+        config=as_of_config,
         source_ct32=source_ct32,
         input_fps=input_fps,
         identity=identity,
@@ -481,6 +516,8 @@ def project(
         source_ct29,
         trade_refs=trade_refs,
         source_identity=identity,
+        source_ct32_fingerprint=ct32_fp,
+        input_fingerprints=input_fps,
     )
     if is_refusal(ct29):
         return ct29
@@ -941,6 +978,8 @@ def _resolve_source_ct29(
     *,
     trade_refs: tuple[str, ...],
     source_identity: dict[str, object] | None,
+    source_ct32_fingerprint: Fingerprint,
+    input_fingerprints: tuple[Fingerprint, ...],
 ) -> Result[tuple[str, tuple[object, ...]]]:
     if not trade_refs or len(trade_refs) != 1:
         return invalid(
@@ -978,6 +1017,86 @@ def _resolve_source_ct29(
         return invalid(
             "source_ct32", "durable CT-29 resolution requires the stored CT-32 identity"
         )
+    from qmb.host.replay_request import ResolvedReplayRequest  # noqa: PLC0415
+    from qmb.orchestrator.ledger import read_merge_view  # noqa: PLC0415
+
+    config = source.run_config
+    request = source.replay_request
+    if not isinstance(config, ResolvedRunConfig) or not isinstance(
+        request, ResolvedReplayRequest
+    ):
+        return invalid("source_lineage", "projection requires resolved config and request values")
+    config_stamp = fingerprint(config.fp1_identity())
+    if is_refusal(config_stamp):
+        return config_stamp
+    if (
+        config_stamp.value != config.fingerprint
+        or not input_fingerprints
+        or input_fingerprints[0] != config.fingerprint
+        or config.world.value != source.result_label.world.value
+        or config.binding_fp1 != source.binding_epoch
+        or config.replay_binding is None
+        or config.replay_binding.fingerprint != source.binding_epoch
+        or config.book_fp1 != config.replay_binding.record.book_definition_fingerprint
+        or config.bms_fp1 != config.replay_binding.record.bms_definition_fingerprint
+    ):
+        return policy(
+            "source_lineage", "the CT-32 config, replay binding, Book, and BMS identities agree"
+        )
+    source_stamp = fingerprint(request.source.fp1_identity())
+    if is_refusal(source_stamp):
+        return source_stamp
+    if (
+        source_stamp.value != request.source.fingerprint
+        or request.source.world is not config.world
+        or request.source.split_fp1 != request.split_fp1
+    ):
+        return policy(
+            "source_lineage", "the resolved replay request matches its pinned CT-10/CT-12 source"
+        )
+    expected_data = config.keys.get("data_fingerprint")
+    expected_split = config.keys.get("split_fingerprint")
+    if (
+        (expected_data is not None and expected_data != request.source.fingerprint.value)
+        or (expected_split is not None and expected_split != request.split_fp1.value)
+    ):
+        return policy("source_lineage", "CT-32 data and split refs match the resolved source")
+    expected_label = source_identity.get("result_label")
+    ledger_view = read_merge_view(
+        source.terminal_ledger_root,
+        world=config.world,
+        role=source.ledger_role,
+    )
+    if is_refusal(ledger_view):
+        return ledger_view
+    matching_lines = tuple(
+        line for line in ledger_view.value if line.run_id == config.fingerprint
+    )
+    if len(matching_lines) != 1:
+        return policy(
+            "terminal_line",
+            "the operator ledger contains exactly one terminal line for this run config",
+            matching_lines=len(matching_lines),
+        )
+    terminal_line = matching_lines[0]
+    line_stamp = fingerprint(terminal_line.fp1_identity())
+    if is_refusal(line_stamp):
+        return line_stamp
+    terminal_label_stamp = fingerprint(terminal_line.result_label)
+    expected_label_stamp = fingerprint(expected_label)
+    if is_refusal(terminal_label_stamp):
+        return terminal_label_stamp
+    if is_refusal(expected_label_stamp):
+        return expected_label_stamp
+    if (
+        terminal_line.run_id != config.fingerprint
+        or terminal_line.world is not config.world
+        or terminal_line.ct32_fingerprint != source_ct32_fingerprint
+        or terminal_label_stamp.value != expected_label_stamp.value
+    ):
+        return policy(
+            "terminal_line", "the durable terminal line binds this exact CT-32 label and config"
+        )
     raw_result_label = source_identity.get("result_label")
     result_label_body = (
         cast("Mapping[str, object]", raw_result_label)
@@ -1005,6 +1124,15 @@ def _resolve_source_ct29(
     )
     if is_refusal(recovery):
         return recovery
+    if any(
+        position.binding_epoch != source.binding_epoch
+        or position.opening_bot_id != config.bot_fp1.value
+        for position in recovery.value.positions
+    ):
+        return policy(
+            "position_lineage",
+            "every CT-13 position belongs to this CT-28 epoch and selected CT-33 Bot",
+        )
     projected: list[ClosedTrade] = []
     for record in recovery.value.exit_records:
         side = recovery.value.position_sides.get(record.virtual_position_ref.value)

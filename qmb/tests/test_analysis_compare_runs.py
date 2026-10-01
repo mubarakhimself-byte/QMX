@@ -40,9 +40,6 @@ from test_analysis_project import (
 from test_analysis_project import (
     _durable_ct29 as _durable_source,  # pyright: ignore[reportPrivateUsage]
 )
-from test_analysis_project import (
-    _paired_result,  # pyright: ignore[reportPrivateUsage]
-)
 
 import qmb
 
@@ -190,8 +187,7 @@ def test_compare_runs_reads_cited_fields_and_mints_nothing(tmp_path: Path) -> No
 
 def test_projection_has_no_b4_role_inherits_world_never_confirmed(tmp_path: Path) -> None:
     as_of = _projection_at(hour=0)
-    source, trades = _durable_source(tmp_path, (_projection_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, _trades, artifact = _durable_source(tmp_path, as_of)
     view = _ok(
         project(
             source_ct32=artifact,

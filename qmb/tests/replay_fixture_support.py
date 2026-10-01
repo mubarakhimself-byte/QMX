@@ -8,10 +8,13 @@ fixture double; prices, request/source bytes, and CT-13 writes use QMF storage.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from itertools import pairwise
 from pathlib import Path
 from typing import TypeVar, cast
 
+from qmb._refuse import invalid
+from qmb.analysis import CT29ProjectionSource
 from qmb.config import (
     STARTING_CAPITAL_KEY,
     ReplayBinding,
@@ -36,6 +39,7 @@ from qmb.execution import (
 from qmb.execution.fill import FILL_BASIS_OPTIMISTIC_EXACT
 from qmb.host.book_handler import BookAdmissionContext
 from qmb.host.replay import PinnedInstrumentPriceMetadata
+from qmb.host.replay_execution import execute_recorded_replay_request
 from qmb.host.replay_request import (
     ReplayInputRequest,
     persist_replay_request,
@@ -44,9 +48,12 @@ from qmb.host.replay_request import (
 from qmb.optimize import ReplayTrialBindings
 from qmb.optimize.sampler import ProposedTrial
 from qmb.orchestrator.ledger import LedgerSink
+from qmb.results.ct29 import CT29ClosedTrade
+from qmb.results.ct32 import PerformanceResult
 from qmb.runloop import STREAM_SET_KEY
 from qmf.core import (
     AccountRole,
+    CalendarIdentity,
     ExactRational,
     Instrument,
     Ok,
@@ -63,8 +70,9 @@ from qmf.core.exact import Money
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.data.journal_producer import JournalReader, JournalWriter
 from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
+from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
-from qmf.data.splits import SegmentRole
+from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
 from qmf.data.store import EvidenceStore, JournalStore, jsonl_opener
 from qmf.registry import RegistrationRecord
 from qml.declaration.bot import BotDefinition
@@ -128,7 +136,13 @@ def _observation_at(side: str, sequence: int, event_ns: int, price: int) -> Sour
     )
 
 
-def _entry_source_tree() -> dict[str, str]:
+def _entry_source_tree(entry_instants: tuple[int, ...]) -> dict[str, str]:
+    allowed = ", ".join(str(value) for value in entry_instants)
+    codes = tuple(
+        "breakout" if index == 0 else f"breakout-{index}"
+        for index in range(len(entry_instants))
+    )
+    code_rows = ", ".join(repr(code) for code in codes)
     return {
         "research_bot/__init__.py": "",
         "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
@@ -137,19 +151,21 @@ def _entry_source_tree() -> dict[str, str]:
             "from qmf.core import Instrument, PriceDelta, VenueId\n"
             "from qmf.risk.door import Direction, EntryIntent, ReasonCode\n"
             "from qmf.risk.paper import ExecutionTarget\n"
-            "def _entry():\n"
+            "def _entry(code):\n"
             "    venue = VenueId('replay-venue')\n"
             "    instrument = Instrument(venue, 'EURUSD')\n"
             "    target_venue = VenueId('venue-replay')\n"
             "    target = ExecutionTarget.try_create('demo', target_venue, 'acct-replay').value\n"
-            "    reason = ReasonCode.try_create('breakout', 'family').value\n"
+            "    reason = ReasonCode.try_create(code, 'family').value\n"
             "    stop = PriceDelta.try_create(500, instrument, 5).value\n"
             "    return EntryIntent.try_create(instrument, Direction.LONG, reason, target, "
             "advisory_stop_proposal=stop).value\n"
             "def _logic(evidence):\n"
-            "    if evidence.evaluation_instant.value_ns != 1700000000000000000:\n"
+            f"    instants = ({allowed},)\n"
+            f"    codes = ({code_rows},)\n"
+            "    if evidence.evaluation_instant.value_ns not in instants:\n"
             "        return ()\n"
-            "    return (_entry(),)\n"
+            "    return (_entry(codes[instants.index(evidence.evaluation_instant.value_ns)]),)\n"
             "factory = FunctionFactory(logic=_logic)\n"
         ),
     }
@@ -316,6 +332,10 @@ class RecordedReplayFixture:
             },
             order_policy_by_code={
                 "entry:family:breakout": BookOrderPolicy(OrderType.MARKET),
+                **{
+                    f"entry:family:breakout-{index}": BookOrderPolicy(OrderType.MARKET)
+                    for index in range(1, 64)
+                },
                 "exit:family:protective_stop": stop_policy,
             },
             journal_writer=writer,
@@ -359,23 +379,201 @@ class RecordedReplayFixture:
         return result
 
 
+
+@dataclass(frozen=True, slots=True)
+class ProjectionReplayFixture:
+    source: CT29ProjectionSource
+    performance_result: PerformanceResult
+    closed_trades: tuple[CT29ClosedTrade, ...]
+
+
+def build_projection_replay(
+    root: Path,
+    *,
+    registry_as_of: Instant,
+    entry_offsets_hours: tuple[int, ...] = (0,),
+    entry_start_ns: int = STUDY_FIXTURE_EPOCH_NS,
+) -> Result[ProjectionReplayFixture]:
+    """Run a real selected-bot replay and return its checked CT13/CT32 lineage."""
+    fixture = make_recorded_replay_fixture(
+        root,
+        slippage_adapter=SLIPPAGE_ADAPTER_ZERO,
+        entry_offsets_hours=entry_offsets_hours,
+        entry_start_ns=entry_start_ns,
+    )
+    request = ReplayInputRequest.try_create(
+        split=fixture.split,
+        split_role=SegmentRole.TRAIN,
+        archive_fingerprints=fixture.archive_fingerprints,
+        stream_id="primary",
+        price_metadata=fixture.price_metadata,
+        bot_identity=fixture.declaration.identity_payload(),
+        source_tree=fixture.source_tree,
+        assignment={"lookback": 20, "sma_period": 20},
+        state_scope=fixture.state_scope.to_mapping(),
+        state_bound=256,
+        conformance_timeout_seconds=30,
+    )
+    if is_refusal(request):
+        return request
+    request_ref = persist_replay_request(request_root=fixture.request_root, request=request.value)
+    if is_refusal(request_ref):
+        return request_ref
+    resolved = resolve_replay_request(
+        request_root=fixture.request_root,
+        request_ref=request_ref.value,
+        split=fixture.split,
+        expected_split_fp1=fixture.expected_split_fp1,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
+    )
+    if is_refusal(resolved):
+        return resolved
+    book_fragment, bms_fragment, port, _ = study_fixture_fragments_with_bot(fixture.bot_record)
+    config = compile_run_config(
+        port,
+        book_fragment=book_fragment,
+        bms_fragment=bms_fragment,
+        run_spec={
+            "bot": fixture.bot_record.stable_id,
+            STARTING_CAPITAL_KEY: study_fixture_seed(),
+            "lookback": 20,
+            "sma_period": 20,
+            STREAM_SET_KEY: (resolved.value.source.stream_id,),
+            "registry_as_of": registry_as_of,
+        },
+        workspace_defaults={
+            **study_fixture_defaults(),
+            **fixture._workspace_defaults(  # pyright: ignore[reportPrivateUsage]
+                fixture.slippage_adapter
+            ),
+        },
+    )
+    if is_refusal(config):
+        return config
+    binding = config.value.replay_binding
+    if binding is None:
+        return invalid("binding", "projection fixture config carries its minted CT-28 binding")
+    bound = bind_execution_ports(config.value)
+    if is_refusal(bound):
+        return bound
+    journal = JournalStore(
+        World.REPLAY,
+        journal_dir=root / "projection-ct13",
+        open_stream=jsonl_opener(),
+    )
+    writer_id = WriterId.try_create("qmb-projection-fixture", "replay", "positions", "boot-1")
+    if is_refusal(writer_id):
+        return writer_id
+    writer = JournalWriter(journal, writer_id.value, stream_name="positions")
+    reader = JournalReader(journal)
+    admission = fixture._admission(  # pyright: ignore[reportPrivateUsage]
+        binding, writer, reader
+    )
+    if is_refusal(admission):
+        return admission
+    admitted = replace(admission.value, opening_bot_id=config.value.bot_fp1.value)
+    terminal_ledger = make_trial_ledger(root / "projection-terminal")
+    executed = execute_recorded_replay_request(
+        request=resolved.value,
+        expected_request_ref=request_ref.value,
+        request_root=fixture.request_root,
+        raw_store_root=fixture.raw_store_root,
+        holdout_months=18,
+        expected_split_fp1=fixture.expected_split_fp1,
+        config=config.value,
+        bound_execution=bound.value,
+        admission=admitted,
+        journal_reader=reader,
+        terminal_ledger=terminal_ledger,
+    )
+    if is_refusal(executed):
+        return executed
+    result_label = admitted.result_label
+    descriptor = CT29ProjectionSource.try_create(
+        journal_reader=reader,
+        stream_name="positions",
+        writer=writer_id.value,
+        binding_epoch=binding.fingerprint,
+        result_label=result_label,
+        run_config=config.value,
+        replay_request=resolved.value,
+        terminal_ledger_root=terminal_ledger.root,
+        ledger_role="confirmation",
+    )
+    if is_refusal(descriptor):
+        return descriptor
+    return Ok(
+        ProjectionReplayFixture(
+            source=descriptor.value,
+            performance_result=executed.value.performance_result,
+            closed_trades=tuple(executed.value.closed_trades),
+        )
+    )
+
+
+def _projection_split(entry_start_ns: int):
+    """A local CT-12 train window spanning the deliberately separated frontiers."""
+    calendar = _ok(CalendarIdentity.try_create("analysis-fixture-calendar", "v1", "2025a"))
+    boundaries = tuple(
+        _ok(Instant.try_create(entry_start_ns + hours * 3_600_000_000_000))
+        for hours in (72, 144, 216)
+    )
+    segments = _ok(SplitManifest.default_split_segments(boundaries))
+    split = _ok(
+        SplitManifest.try_create(
+            calendar_identity=calendar,
+            segments=segments,
+            seal_boundary=_ok(SplitBoundary.try_create(boundaries[-1])),
+            purge_width=0,
+            embargo_width=0,
+            world=World.REPLAY,
+        )
+    )
+    return split, _ok(HoldoutSeal.from_manifest(split, 18))
+
+
 def make_recorded_replay_fixture(
     root: Path,
     *,
     slippage_adapter: str = SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
+    entry_offsets_hours: tuple[int, ...] = (0,),
+    entry_start_ns: int = STUDY_FIXTURE_EPOCH_NS,
 ) -> RecordedReplayFixture:
     """Persist CT-10 and retain CT-12 pins for assignment-specific durable requests."""
+    if (
+        not entry_offsets_hours
+        or any(type(offset) is not int or offset < 0 for offset in entry_offsets_hours)
+        or tuple(sorted(set(entry_offsets_hours))) != entry_offsets_hours
+        or any(right - left < 1 for left, right in pairwise(entry_offsets_hours))
+    ):
+        raise ValueError("projection fixture entry offsets are ordered unique non-negative hours")
     store_root = root / "ct10-room"
-    split, seal = study_fixture_split()
+    if entry_start_ns == STUDY_FIXTURE_EPOCH_NS and entry_offsets_hours == (0,):
+        split, seal = study_fixture_split()
+    else:
+        split, seal = _projection_split(entry_start_ns)
     boundary = SourceObservationBoundary(EvidenceStore(store_root, seal=seal))
-    observations: tuple[SourceObservation, ...] = (
-        _observation_at("bid", 0, STUDY_FIXTURE_EPOCH_NS, 1_09500),
-        _observation_at("ask", 1, STUDY_FIXTURE_EPOCH_NS, 1_09520),
-        _observation_at("bid", 2, STUDY_FIXTURE_EPOCH_NS + 1, 1_09500),
-        _observation_at("ask", 3, STUDY_FIXTURE_EPOCH_NS + 1, 1_09520),
-        _observation_at("bid", 4, STUDY_FIXTURE_EPOCH_NS + 2, 1_09000),
-        _observation_at("ask", 5, STUDY_FIXTURE_EPOCH_NS + 2, 1_09020),
+    entry_instants = tuple(
+        entry_start_ns + offset * 3_600_000_000_000 for offset in entry_offsets_hours
     )
+    frontiers = tuple(
+        instant + phase
+        for instant in entry_instants
+        for phase in (0, 1, 2)
+    )
+    observation_rows: list[SourceObservation] = []
+    for frontier_index, event_ns in enumerate(frontiers):
+        is_stop = frontier_index % 3 == 2
+        bid = 1_09000 if is_stop else 1_09500
+        ask = 1_09020 if is_stop else 1_09520
+        observation_rows.extend(
+            (
+                _observation_at("bid", frontier_index * 2, event_ns, bid),
+                _observation_at("ask", frontier_index * 2 + 1, event_ns, ask),
+            )
+        )
+    observations = tuple(observation_rows)
     refs = tuple(
         _ok(boundary.admit(observation)).archive.fingerprint.value for observation in observations
     )
@@ -395,7 +593,7 @@ def make_recorded_replay_fixture(
             metadata_fp1=_ok(fingerprint(metadata_identity)),
         )
     )
-    source_tree = _entry_source_tree()
+    source_tree = _entry_source_tree(entry_instants)
     declaration = _entry_bot_definition(source_tree)
     bot_record = study_fixture_record("bot-definition", declaration.body())
     scope: BotStateScope = study_fixture_scope(declaration)

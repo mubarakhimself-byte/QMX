@@ -6,20 +6,12 @@ from pathlib import Path
 from typing import TypeVar, cast
 
 from qmb.analysis import CT29ProjectionSource, cite_projection, project
-from qmb.host.book_handler import read_replay_positions
-from qmb.results.ct29 import read_ct29_closed_trades
-from qmb.results.measures import ClosedTrade
-from qmf.core import Instant, Result, WriterId, fingerprint, is_ok, is_refusal
-from qmf.risk.door import Direction, EntryIntent, ExitIntent, ExitKind, ReasonCode
+from qmb.results.ct32 import PerformanceResult
+from qmf.core import Result, WriterId, fingerprint, is_ok, is_refusal
+from replay_fixture_support import ProjectionReplayFixture, build_projection_replay
 from test_analysis_project import (
     _at,  # pyright: ignore[reportPrivateUsage]
-    _result,  # pyright: ignore[reportPrivateUsage]
     _trade,  # pyright: ignore[reportPrivateUsage]
-)
-from test_book_handler import (
-    _handler,  # pyright: ignore[reportPrivateUsage]
-    _instrument,  # pyright: ignore[reportPrivateUsage]
-    _path,  # pyright: ignore[reportPrivateUsage]
 )
 
 T = TypeVar("T")
@@ -30,78 +22,20 @@ def _ok(result: Result[T]) -> T:
     return result.value
 
 
-def _durable_close(tmp_path: Path) -> tuple[CT29ProjectionSource, ClosedTrade]:
-    handler, bot, reader, writer = _handler(tmp_path)
-    opened_at = _ok(Instant.try_create(1_700_000_000_000_000_000))
-    closed_at = _ok(Instant.try_create(opened_at.value_ns + 1_000_000_000))
-    entry = _ok(
-        EntryIntent.try_create(
-            _instrument(),
-            Direction.LONG,
-            _ok(ReasonCode.try_create("breakout", "family")),
-            handler.admission.execution_target,
-        )
+def _durable_close(tmp_path: Path) -> tuple[CT29ProjectionSource, PerformanceResult]:
+    built: Result[ProjectionReplayFixture] = build_projection_replay(
+        tmp_path, registry_as_of=_at(hour=0)
     )
-    bot.proposals = (entry,)
-    _ok(handler.bind_paths(((opened_at, _path(110_000, 110_100, 109_900)),)))
-    resting = _ok(handler.mint_intents("eurusd", opened_at))[0]
-    _ok(handler.execute_resting(resting, None, opened_at))
-    opened = handler.receipts[-1].position
-    assert opened is not None
-    close_intent = _ok(
-        ExitIntent.try_create(
-            ExitKind.CLOSE_FULL,
-            _ok(ReasonCode.try_create("target", "family")),
-            opened.position_ref,
-        )
-    )
-    bot.proposals = (close_intent,)
-    _ok(handler.bind_paths(((closed_at, _path(110_000, 110_100, 109_800)),)))
-    closing = _ok(handler.mint_intents("eurusd", closed_at))[0]
-    _ok(handler.execute_resting(closing, None, closed_at))
-    recovered = _ok(
-        read_replay_positions(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            binding_epoch=opened.binding_epoch,
-            result_label=handler.admission.result_label,
-        )
-    )
-    trades = _ok(
-        read_ct29_closed_trades(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            record_resolver=recovered.record_resolver,
-            position_sides=recovered.position_sides,
-            binding_epoch=opened.binding_epoch,
-            result_label=handler.admission.result_label,
-        )
-    )
-    assert len(trades) == 1
-    source = _ok(
-        CT29ProjectionSource.try_create(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            binding_epoch=opened.binding_epoch,
-            result_label=handler.admission.result_label,
-        )
-    )
-    return source, trades[0].closed_trade
+    execution = _ok(built)
+    assert len(execution.closed_trades) == 1
+    return execution.source, execution.performance_result
 
 
 def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_reference_only(
     tmp_path: Path,
 ) -> None:
+    source, artifact = _durable_close(tmp_path)
     as_of = _at(hour=0)
-    source, original = _durable_close(tmp_path)
-    artifact = _result(registry_as_of=as_of, trades=(original,))
-    artifact = replace(
-        artifact,
-        trade_event_references=(f"ct-13:ct-29:{source.binding_epoch.value}",),
-    )
     predicate = {"max_trades": 1}
     positive = project(
         source_ct32=artifact,
@@ -133,16 +67,18 @@ def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_referen
         source_ct32=artifact,
         source_ct29={
             "source_ct29": artifact.trade_event_references[0],
-            "records": (original,),
+            "records": (),
         },
         predicate=predicate,
         as_of=as_of,
     )
     assert is_refusal(mapped_substitution)
-    foreign_metrics = replace(
-        _result(registry_as_of=as_of, trades=(_trade(hour=18, pnl=999999),)),
-        trade_event_references=artifact.trade_event_references,
+    foreign_config_fp = _ok(fingerprint({"foreign": "run-config"}))
+    foreign_label = replace(
+        artifact.result_label,
+        input_fingerprints=(foreign_config_fp, *artifact.result_label.input_fingerprints[1:]),
     )
+    foreign_metrics = replace(artifact, result_label=foreign_label)
     assert is_refusal(
         project(
             source_ct32=foreign_metrics,
@@ -158,6 +94,10 @@ def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_referen
             writer=source.writer,
             binding_epoch=source.binding_epoch,
             result_label=source.result_label,
+            run_config=source.run_config,
+            replay_request=source.replay_request,
+            terminal_ledger_root=source.terminal_ledger_root,
+            ledger_role=source.ledger_role,
         )
     )
     assert is_refusal(
@@ -178,6 +118,10 @@ def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_referen
             writer=foreign_writer,
             binding_epoch=source.binding_epoch,
             result_label=source.result_label,
+            run_config=source.run_config,
+            replay_request=source.replay_request,
+            terminal_ledger_root=source.terminal_ledger_root,
+            ledger_role=source.ledger_role,
         )
     )
     assert is_refusal(
@@ -191,6 +135,10 @@ def test_projection_resolves_only_durable_ct29_rows_and_saved_view_stays_referen
             writer=source.writer,
             binding_epoch=wrong_binding,
             result_label=source.result_label,
+            run_config=source.run_config,
+            replay_request=source.replay_request,
+            terminal_ledger_root=source.terminal_ledger_root,
+            ledger_role=source.ledger_role,
         )
     )
     assert is_refusal(

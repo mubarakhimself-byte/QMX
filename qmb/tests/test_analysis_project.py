@@ -6,7 +6,6 @@ import ast
 import inspect
 import json
 import textwrap
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeVar, cast
@@ -28,25 +27,14 @@ from qmb.doors.cli import (
     main,
 )
 from qmb.doors.cli import tree as cli_tree
-from qmb.host.book_handler import read_replay_positions
-from qmb.results import ClosedTrade, TradeSide, mint_run_performance_result
-from qmb.results.ct29 import read_ct29_closed_trades
-from qmb.runloop import STREAM_SET_KEY, SilentSliceHandler, SliceObservation, run
+from qmb.results import ClosedTrade, TradeSide
+from qmb.runloop import STREAM_SET_KEY
 from qmf.core.chrono import Instant
-from qmf.core.exact import ExactRational, Money, UnitKind
+from qmf.core.exact import Money
 from qmf.core.fingerprint import World, fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
-from qmf.risk.door import Direction, EntryIntent, ExitIntent, ExitKind, ReasonCode
 from qmf.risk.performance import PerformanceResult
-from test_book_handler import (
-    _handler as _book_handler,  # pyright: ignore[reportPrivateUsage]
-)
-from test_book_handler import (
-    _instrument as _book_instrument,  # pyright: ignore[reportPrivateUsage]
-)
-from test_book_handler import (
-    _path as _book_path,  # pyright: ignore[reportPrivateUsage]
-)
+from replay_fixture_support import build_projection_replay
 
 import qmb
 
@@ -80,10 +68,6 @@ def _trade(*, hour: int, pnl: int = 100, day: int = 15) -> ClosedTrade:
     )
 
 
-def _obs(stream_id: str, ns: int = _NS) -> SliceObservation:
-    return _ok(SliceObservation.try_create(stream_id, _instant(ns), True))
-
-
 def _config(*, registry_as_of: Instant) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "analysis-project-cfg", "as_of": registry_as_of.value_ns}))
     return ResolvedRunConfig(
@@ -102,132 +86,46 @@ def _config(*, registry_as_of: Instant) -> ResolvedRunConfig:
     )
 
 
-def _result(
-    *,
-    registry_as_of: Instant,
-    trades: tuple[ClosedTrade, ...] = (),
-) -> PerformanceResult:
-    config = _config(registry_as_of=registry_as_of)
-    outcome = _ok(
-        run(
-            slices=((_obs("eurusd", _NS),), (_obs("eurusd", _NS + 1),)),
-            config=config,
-            handler=SilentSliceHandler(),
-        )
-    )
-    return _ok(
-        mint_run_performance_result(
-            config,
-            evidence_range=outcome.evidence_range,
-            stream_order=outcome.stream_order,
-            slice_count=2,
-            filled_count=0,
-            resting_count=0,
-            data_points_processed=2,
-            outcome_identity=outcome.fp1_identity(),
-            trades=trades,
-        )
-    )
-
-
-def _paired_result(
-    *,
-    registry_as_of: Instant,
-    source: CT29ProjectionSource,
-    trades: tuple[ClosedTrade, ...],
-) -> PerformanceResult:
-    artifact = _result(registry_as_of=registry_as_of, trades=trades)
-    return replace(
-        artifact,
-        trade_event_references=(f"ct-13:ct-29:{source.binding_epoch.value}",),
-    )
-
-
 def _durable_ct29(
     tmp_path: Path,
-    closes_at: tuple[Instant, ...],
-) -> tuple[CT29ProjectionSource, tuple[ClosedTrade, ...]]:
-    """Build provider-free actual Book fills/closes and reopen their CT-13 authority."""
-    handler, bot, reader, writer = _book_handler(tmp_path)
-    paths: list[tuple[Instant, object]] = []
-    for close_at in closes_at:
-        opened_at = _instant(close_at.value_ns - 1_000_000_000)
-        paths.extend(
-            (
-                (opened_at, _book_path(110_000, 110_100, 109_900)),
-                (close_at, _book_path(110_000, 110_100, 109_800)),
-            )
-        )
-    _ok(handler.bind_paths(tuple(paths)))
-    for index, close_at in enumerate(closes_at):
-        opened_at = _instant(close_at.value_ns - 1_000_000_000)
-        bot.proposals = (
-            _ok(
-                EntryIntent.try_create(
-                    _book_instrument(),
-                    Direction.LONG,
-                    _ok(ReasonCode.try_create("breakout", "family")),
-                    handler.admission.execution_target,
-                    proposed_r=_ok(ExactRational.try_create(index + 1, 1, UnitKind.R_MULTIPLE)),
-                )
-            ),
-        )
-        entry_token = _ok(handler.mint_intents("eurusd", opened_at))[0]
-        _ok(handler.execute_resting(entry_token, None, opened_at))
-        position = handler.receipts[-1].position
-        assert position is not None
-        bot.proposals = (
-            _ok(
-                ExitIntent.try_create(
-                    ExitKind.CLOSE_FULL,
-                    _ok(ReasonCode.try_create("target", "family")),
-                    position.position_ref,
-                )
-            ),
-        )
-        exit_token = _ok(handler.mint_intents("eurusd", close_at))[0]
-        _ok(handler.execute_resting(exit_token, None, close_at))
-    recovery = _ok(
-        read_replay_positions(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            binding_epoch=handler.admission.binding.fingerprint,
-            result_label=handler.admission.result_label,
+    registry_as_of: Instant,
+    *,
+    entry_offsets_hours: tuple[int, ...] = (0,),
+    entry_start_ns: int = _NS,
+) -> tuple[CT29ProjectionSource, tuple[ClosedTrade, ...], PerformanceResult]:
+    """Run a selected Bot over persisted CT-10/12 and reopen the CT13/CT32 result."""
+    execution = _ok(
+        build_projection_replay(
+            tmp_path,
+            registry_as_of=registry_as_of,
+            entry_offsets_hours=entry_offsets_hours,
+            entry_start_ns=entry_start_ns,
         )
     )
-    closed = _ok(
-        read_ct29_closed_trades(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            record_resolver=recovery.record_resolver,
-            position_sides=recovery.position_sides,
-            binding_epoch=handler.admission.binding.fingerprint,
-            result_label=handler.admission.result_label,
-        )
-    )
-    source = _ok(
-        CT29ProjectionSource.try_create(
-            journal_reader=reader,
-            stream_name="positions",
-            writer=writer,
-            binding_epoch=handler.admission.binding.fingerprint,
-            result_label=handler.admission.result_label,
-        )
-    )
-    return source, tuple(item.closed_trade for item in closed)
+    trades = tuple(item.closed_trade for item in execution.closed_trades)
+    return execution.source, trades, execution.performance_result
+
+
+def _closed_datetime(trades: tuple[ClosedTrade, ...]) -> datetime:
+    assert trades
+    return datetime.fromtimestamp(trades[0].closed_at.value_ns / 1_000_000_000, tz=timezone.utc)
 
 
 def test_project_returns_canonical_json_and_fp1_of_that_json(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_ct29(tmp_path, (_at(hour=10), _at(hour=18)))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, trades, artifact = _durable_ct29(
+        tmp_path,
+        as_of,
+        entry_offsets_hours=(0, 8),
+        entry_start_ns=_at(day=15, hour=10).value_ns,
+    )
+    closed_at = _closed_datetime(trades)
+    hour_window = {"start": closed_at.hour, "end": closed_at.hour + 1}
     view = _ok(
         project(
             source_ct32=artifact,
             source_ct29=source,
-            predicate={"hours": {"start": 8, "end": 16}},
+            predicate={"hours": hour_window},
             as_of=as_of,
         )
     )
@@ -236,7 +134,12 @@ def test_project_returns_canonical_json_and_fp1_of_that_json(tmp_path: Path) -> 
     assert body["method"] == qmb.METHOD_PROJECTION == "projection"
     assert body["source_ct32"] == _ok(artifact.fingerprint()).value
     assert body["source_ct29"] == artifact.trade_event_references[0]
-    assert body["predicate"] == {"hours": {"end": 16, "start": 8}}
+    assert body["predicate"] == {
+        "hours": {
+            "end": _closed_datetime(trades).hour + 1,
+            "start": _closed_datetime(trades).hour,
+        }
+    }
     assert body["as_of"] == as_of.fp1_identity()
     assert "trades" not in body
     assert "trade_list" not in body
@@ -257,8 +160,7 @@ def test_project_returns_canonical_json_and_fp1_of_that_json(tmp_path: Path) -> 
 def test_as_of_is_source_registry_as_of_never_query_time(tmp_path: Path) -> None:
     as_of = _at(hour=0)
     later = _at(hour=12)
-    source, trades = _durable_ct29(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, _trades, artifact = _durable_ct29(tmp_path, as_of)
     ok = _ok(
         project(
             source_ct32=artifact,
@@ -282,8 +184,8 @@ def test_as_of_is_source_registry_as_of_never_query_time(tmp_path: Path) -> None
         source_ct29=source,
         predicate={"max_trades": 1},
     )
-    # Config Instant is recoverable from the PerformanceResult only via as_of/config.
-    assert is_refusal(missing)
+    assert is_ok(missing), missing
+    assert missing.value.as_of == as_of.fp1_identity()
     via_config = _ok(
         project(
             source_ct32=artifact,
@@ -297,16 +199,19 @@ def test_as_of_is_source_registry_as_of_never_query_time(tmp_path: Path) -> None
 
 def test_permitted_predicates_filter_the_ct29_stream(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_ct29(
+    source, trades, artifact = _durable_ct29(
         tmp_path,
-        (_at(hour=10, day=15), _at(hour=18, day=15), _at(hour=10, day=16)),
+        as_of,
+        entry_offsets_hours=(0, 8, 24),
+        entry_start_ns=_at(day=15, hour=10).value_ns,
     )
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    closed_at = _closed_datetime(trades)
+    hour_window = {"start": closed_at.hour, "end": closed_at.hour + 1}
     hours = _ok(
         project(
             source_ct32=artifact,
             source_ct29=source,
-            predicate={"hours": {"start": 8, "end": 16}},
+            predicate={"hours": hour_window},
             as_of=as_of,
         )
     )
@@ -315,7 +220,7 @@ def test_permitted_predicates_filter_the_ct29_stream(tmp_path: Path) -> None:
         project(
             source_ct32=artifact,
             source_ct29=source,
-            predicate={"days": ["wednesday"]},
+            predicate={"days": [closed_at.strftime("%A").casefold()]},
             as_of=as_of,
         )
     )
@@ -324,14 +229,14 @@ def test_permitted_predicates_filter_the_ct29_stream(tmp_path: Path) -> None:
         project(
             source_ct32=artifact,
             source_ct29=source,
-            predicate={"session": {"start": 8, "end": 16, "name": "london"}},
+            predicate={"session": {**hour_window, "name": "source-hour"}},
             as_of=as_of,
         )
     )
     assert session.matched_count == 2
     predicate = cast("dict[str, object]", session.body()["predicate"])
     window = cast("dict[str, object]", predicate["session"])
-    assert window["name"] == "london"
+    assert window["name"] == "source-hour"
     capped = _ok(
         project(
             source_ct32=artifact,
@@ -367,8 +272,7 @@ def test_no_ct32_ledger_spec_or_occupancy_and_claim_class_is_projection(
     tmp_path: Path,
 ) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_ct29(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, trades, artifact = _durable_ct29(tmp_path, as_of)
     ledger: list[object] = []
     view = _ok(
         project(
@@ -444,8 +348,7 @@ def test_no_ct32_ledger_spec_or_occupancy_and_claim_class_is_projection(
 
 def test_citation_without_json_body_and_copied_trade_list_are_refused(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_ct29(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, _trades, artifact = _durable_ct29(tmp_path, as_of)
     view = _ok(
         project(
             source_ct32=artifact,
@@ -486,8 +389,7 @@ def test_citation_without_json_body_and_copied_trade_list_are_refused(tmp_path: 
 
 def test_python_api_and_cli_are_thin_doors(tmp_path: Path) -> None:
     as_of = _at(hour=0)
-    source, trades = _durable_ct29(tmp_path, (_at(hour=10),))
-    artifact = _paired_result(registry_as_of=as_of, source=source, trades=trades)
+    source, trades, artifact = _durable_ct29(tmp_path, as_of)
     library = project(
         source_ct32=artifact,
         source_ct29=source,
