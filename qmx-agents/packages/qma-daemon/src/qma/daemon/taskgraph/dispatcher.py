@@ -337,6 +337,15 @@ class TaskGraphDispatcher:
     def ledgers(self) -> TaskLedgerStore:
         return self._ledgers
 
+    def dispatch_lease_for(self, task_id: str) -> DispatchLease | None:
+        """Return the currently retained Task dispatch authority, if any."""
+        return self._store.lease_for(task_id)
+
+    def task_for(self, task_id: str) -> TaskRecord | None:
+        """Resolve the current Task projection used with retained dispatch authority."""
+        located = self._store.find_task(task_id)
+        return None if located is None else located[1]
+
     def materialize(
         self,
         graph: TaskGraph,

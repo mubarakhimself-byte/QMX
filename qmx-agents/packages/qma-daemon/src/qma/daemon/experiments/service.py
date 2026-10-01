@@ -467,6 +467,45 @@ class ExperimentSpecService:
             )
         )
 
+    def validate_coordinated_run(
+        self,
+        *,
+        spec_fp1: object,
+        dispatch_lease: DispatchLease,
+        model_deployment_ref: object,
+    ) -> Result[None]:
+        """Validate run author and deployment provenance before QMB is spawned."""
+        resolved = self.resolve(spec_fp1)
+        if is_refusal(resolved):
+            return resolved
+        if dispatch_lease != resolved.value.dispatch_lease:
+            return policy_rejection(
+                "dispatch_lease",
+                "coordinated execution requires the Experiment's registering Task lease",
+                spec_fp1=resolved.value.spec.spec_fp1,
+                task_id=dispatch_lease.task_id,
+            )
+        if not isinstance(model_deployment_ref, str) or not model_deployment_ref.strip():
+            return invalid_input(
+                "model_deployment_ref",
+                "coordinated execution uses a deployment recorded on the Experiment Ledger",
+            )
+        if not any(
+            entry.model_deployment_ref == model_deployment_ref.strip()
+            for entry in resolved.value.ledger.entries
+        ):
+            return policy_rejection(
+                "model_deployment_ref",
+                "deployment must be present in the registered Experiment Ledger",
+                spec_fp1=resolved.value.spec.spec_fp1,
+            )
+        admitted = admit_experiment_evidence_body(
+            {"workbench_lane": EXPERIMENT_LEDGER_WORKBENCH_LANE}
+        )
+        if is_refusal(admitted):
+            return admitted
+        return Ok(None)
+
     def record_coordinated_run(
         self,
         *,

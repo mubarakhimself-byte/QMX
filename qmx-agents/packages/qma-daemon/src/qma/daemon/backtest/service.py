@@ -12,6 +12,7 @@ records without spawning and is not a working integration.
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -604,6 +605,18 @@ class BacktestingService:
                     spec_fp1=request.experiment_spec_fp1,
                 )
             split_manifest_fp1 = resolved.value.spec.data_ref
+            if dispatch_lease is None:
+                return invalid_input(
+                    "dispatch_lease",
+                    "coordinated QMB placement requires the registered Experiment lease",
+                )
+            validated = self._experiments.validate_coordinated_run(
+                spec_fp1=request.experiment_spec_fp1,
+                dispatch_lease=dispatch_lease,
+                model_deployment_ref=model_deployment_ref,
+            )
+            if is_refusal(validated):
+                return validated
         if self._tools.get(QMB_BACKTEST_TOOL_ID) is None:
             installed = self.install()
             if is_refusal(installed):
@@ -702,6 +715,22 @@ class BacktestingService:
             return completed
         self._release_terminal()
         return completed
+
+    def wait_and_observe(self, job_id: str, *, timeout: float = 10.0) -> Result[JobHandle]:
+        """Observe the actual QMB child exit instead of accepting a caller state."""
+        waiter = getattr(self._transport, "wait", None)
+        if not callable(waiter):
+            return invalid_input("transport", "QMB transport has no process wait capability")
+        try:
+            exit_code = waiter(job_id, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return self._jobs.observe_lost_certainty(job_id, trigger="qmb_process_timeout")
+        if exit_code is None:
+            return invalid_input("job_id", "QMB process exit is not available", given=job_id)
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            return invalid_input("exit_code", "QMB process wait returns an integer exit code")
+        terminal = JobHandleState.DONE if exit_code == 0 else JobHandleState.FAILED
+        return self.observe_outcome(job_id, terminal)
 
     def cancel(
         self,

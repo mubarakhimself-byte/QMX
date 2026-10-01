@@ -48,13 +48,14 @@ from qma.core.ports.paper import (
 )
 from qma.core.ports.qmb import (
     ANALYSIS_BACKTEST_PLUGIN_ID,
+    QMB_BACKTEST_TOOL_ID,
     QMB_OWNED_CONCERNS,
     refuse_qmb_import_edge,
     refuse_qmb_owned_concern,
 )
 from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.refusals import NoEnvironment
-from qma.core.vocabulary.enums import PrincipalClass
+from qma.core.vocabulary.enums import PrincipalClass, TaskMissionState
 from qma.daemon.artifacts import (
     ArtifactStore,
     DestControlHandle,
@@ -2895,9 +2896,7 @@ class DaemonProcess:
         if unknown:
             return _jsonrpc_refusal(
                 req_id,
-                invalid_input(
-                    "params", "unknown open_product_session fields", fields=unknown
-                ),
+                invalid_input("params", "unknown open_product_session fields", fields=unknown),
             )
         instance_id = params.get("instance_id")
         qualified_id = params.get("qualified_id")
@@ -3040,9 +3039,7 @@ class DaemonProcess:
         if unknown:
             return _jsonrpc_refusal(
                 req_id,
-                invalid_input(
-                    "params", "unknown grant_product_session fields", fields=unknown
-                ),
+                invalid_input("params", "unknown grant_product_session fields", fields=unknown),
             )
         session_ref = params.get("product_session_ref")
         expected_revision = params.get("expected_revision")
@@ -3281,17 +3278,49 @@ class DaemonProcess:
             environment_kind = environment_ref.removeprefix("env:")
             if self._runtime_composition.environments.declaration(environment_kind) is None:
                 return NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
-            return TypedRefusal(
-                category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
-                retryability=Retryability.AFTER_CONDITION,
-                context={
-                    "reason": "QMB durable replay request adapter is not available",
-                    "experiment_spec_fp1": cast("str", spec_fp1),
-                    "split_manifest_fp1": resolved.value.spec.data_ref,
-                    "evidence_ref": evidence_ref,
-                    "originating_product_session_ref": originating_product_session_ref,
-                },
+            invocation_task_id = bound.envelope.logical_invocation_id
+            accepted_lease = self.task_dispatcher.dispatch_lease_for(invocation_task_id)
+            accepted_task = self.task_dispatcher.task_for(invocation_task_id)
+            if (
+                accepted_lease is None
+                or accepted_task is None
+                or accepted_task.state is not TaskMissionState.RUNNING
+                or accepted_lease.owner != owner.actor_id
+                or accepted_task.owner != owner.actor_id
+                or accepted_lease != resolved.value.dispatch_lease
+                or resolved.value.spec.environment_ref != environment_ref
+            ):
+                return policy_rejection(
+                    "dispatch_lease",
+                    "QMB execution requires the current accepted Task dispatch lease",
+                    task_id=invocation_task_id,
+                )
+            ledger_entries = resolved.value.ledger.entries
+            if not ledger_entries:
+                return TypedRefusal(
+                    category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                    retryability=Retryability.AFTER_CONDITION,
+                    context={
+                        "reason": (
+                            "registered ExperimentSpec has no deployment-authored ledger entry"
+                        ),
+                        "experiment_spec_fp1": cast("str", spec_fp1),
+                    },
+                )
+            placement = self.backtesting.invoke(
+                QMB_BACKTEST_TOOL_ID,
+                owner=owner.actor_id,
+                task_id=invocation_task_id,
+                environment_ref=environment_ref,
+                experiment_spec_fp1=resolved.value.spec.spec_fp1,
+                evidence_ref=evidence_ref,
+                dispatch_lease=resolved.value.dispatch_lease,
+                model_deployment_ref=ledger_entries[-1].model_deployment_ref,
+                originating_product_session_ref=originating_product_session_ref,
             )
+            if is_refusal(placement):
+                return placement
+            return Ok(cast("object", placement.value))
         if op_id != "qmb.analysis.project":
             return TypedRefusal(
                 category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
