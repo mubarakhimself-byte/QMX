@@ -446,6 +446,25 @@ class StructureFold:
             if is_refusal(frozen_geometry):
                 return frozen_geometry
             geo = cast("Mapping[str, object]", frozen_geometry.value)
+        fold_identity: dict[str, object] = {
+            "kind": "structure_fold",
+            "producer_key": key,
+            "knowable_at": known.value.fp1_identity(),
+            "geometry": dict(geo),
+        }
+        if observed.value is not None:
+            fold_identity["observed_at"] = observed.value.fp1_identity()
+        if confirmed.value is not None:
+            fold_identity["confirmed_at"] = confirmed.value.fp1_identity()
+        if invalidated.value is not None:
+            fold_identity["invalidated_at"] = invalidated.value.fp1_identity()
+        serializable = fingerprint(fold_identity)
+        if is_refusal(serializable):
+            return invalid(
+                "geometry",
+                "structure folds must have an existing canonical fingerprint representation",
+                cause=dict(serializable.context),
+            )
         return Ok(
             cls(
                 producer_key=key,

@@ -511,6 +511,19 @@ def test_immutable_values_without_sample_identity_are_refused() -> None:
         refused = SeriesSample.try_create(PresenceState.PRESENT, instant, value)
         assert is_refusal(refused)
 
+    refused_fold = StructureFold.try_create(
+        "primary", instant, geometry={"date": civil_date}
+    )
+    assert is_refusal(refused_fold)
+    # Typed construction paths pass through the same canonical-identity gate.
+    forged_fold = StructureFold("primary", instant, geometry={"date": civil_date})
+    typed_refusal = FootprintEvidence.try_create(
+        instant,
+        structure_folds={"primary": forged_fold},
+        declared_keys={"primary"},
+    )
+    assert is_refusal(typed_refusal)
+
 
 # --- AC: zero-or-more CT-23 intents; advisory stop; no Book full-loss --------
 
