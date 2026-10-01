@@ -1,6 +1,6 @@
 # UI / daemon integration map
 
-Read-only source exploration at backend a0e8769772e469bf54bd312cc1e27e7995e16c3b + UI f6ffaddf3f78c6c14d32daa136fadf15e7748c14. This maps existing APIs and missing composition; it is not a claim that added runtime handlers exist.
+Source exploration began at backend a0e8769772e469bf54bd312cc1e27e7995e16c3b + UI f6ffaddf3f78c6c14d32daa136fadf15e7748c14. The current additive CT-40 handlers and payloads are documented below.
 
 ## Existing browser transport
 
@@ -8,13 +8,13 @@ Read-only source exploration at backend a0e8769772e469bf54bd312cc1e27e7995e16c3b
 
 JSON-RPC initialize negotiates capability families and unique `producer_id`. Preserve IDs across retry of accepted commands. Typed refusal is a real failure, never a recorded successful call. Track producer/id, product_session_ref, instance/revision/config/grant, operation, correlation and job/run/attempt/artifact identity.
 
-Existing `DaemonProcess._dispatch_paired_ct40` handlers: initialize, save_editor_draft, publish_editor_draft, get_editor_draft_head, get_pack_ui_request, transfer_artifact, transfer_complete, cancel_job, send_message. Drafts require authenticated operator and negotiated capabilities. Immutable publication is distinct from enabled instance and grant. Draft CAS conflict must be visible and recoverable. `send_message` produces durable mailbox acknowledgement, not model completion. Closing a tab does not cancel work.
+`DaemonProcess._dispatch_paired_ct40` handlers include initialize, save_editor_draft, publish_editor_draft, get_editor_draft_head, get_pack_ui_request, transfer_artifact, transfer_complete, cancel_job, send_message, open_product_session, grant_product_session, start_mission, and launch_task. Drafts require authenticated operator and negotiated capabilities. Immutable publication is distinct from enabled instance and grant. Draft CAS conflict must be visible and recoverable. `send_message` produces durable mailbox acknowledgement, not model completion. Closing a tab does not cancel work.
 
 ## Source gaps requiring backend composition
 
-`start_mission` and `launch_task` currently pass only the artifact gate and then return method-not-found. A generic `invoke_operation` handler is not currently mounted. Do not invent assumed success or a browser-only execution authority.
+The public invocation handlers use ProductSessionService dispatch and the trusted daemon adapter; no generic `invoke_operation` method is mounted.
 
-Existing host/library APIs to expose through the same authenticated wire authority: ProductSessionService open/bind/reconnect/grant/dispatch_public_call; daemon mount_pack_ui_view/press_pack_ui_action/unmount_pack_ui_view; roster enable/disable published authoring contributions. Root implementation must provide the real trusted executor callback. Agree final additive method names and payloads with backend owner before frontend binding.
+The authenticated lifecycle uses ProductSessionService open/reconnect/grant/dispatch_public_call and derives grants from live session and roster state. Pack chrome continues to use mount_pack_ui_view/press_pack_ui_action/unmount_pack_ui_view APIs.
 
 ## Minimal trusted runtime reuse
 
@@ -29,3 +29,13 @@ Browser reload and daemon restart restore drafts/publications/results without ge
 Windows desktop mini-app acceptance is separate from QMN: current ratified node placement remains Ubuntu systemd/unix powers. Single-machine QMN placement GAP-0058 is open. Do not present unverified Windows node controls as ready.
 
 Useful test references: tests/test_product_session_grants.py, test_product_session_chrome.py, test_nested_mission.py, test_nested_mission_widget.py, test_editor_draft.py, test_epic72_pack_ui.py, test_mailbox_lost_ack.py, test_pairing_listener.py, test_qmb_backtesting_door.py under qmx-agents/packages/qma-daemon.
+
+## Backend additive wire contract (2026-10-01)
+
+The daemon now exposes the ratified operator ProductSession lifecycle over the authenticated CT-40 connection. These are addable `qma-wire` commands; they do not add a grant authority or let a caller name a principal, contribution revision, config revision, effect class, or host executor.
+
+`open_product_session` accepts `{instance_id, qualified_id, package_version}`. The daemon requires an authenticated `operator`, resolves that exact enabled contribution on the exact enabled instance, and resolves that instance's owner/environment/config revision from the operator-owned `qmb_bindings` row. It creates an `app-use` `ProductSession` whose principal is derived from the connection, whose instance and selected ref are that instance, and returns the durable session payload including `product_session_id` and `context_revision`.
+
+`grant_product_session` accepts `{product_session_ref, expected_revision, op_id, op_version, parameter_ceiling: {allow_keys: [...]}, expires_at}`. The daemon requires an authenticated operator and operator-owned session, compares `expected_revision` with the current session context revision, resolves the versioned published operation descriptor, bounds every ceiling key by its declared required/optional input keys, and derives contribution, instance, config revision, principal, audience, and effect class from that durable session and descriptor before calling the existing ProductSessionService host-grant path. Only operation adapters declared for that enabled contribution point are grantable. A successful new grant appends the grant id and advances `context_revision`; a stale retry refuses. The response includes the immutable `GrantRecord` and updated `context_revision` so clients can safely issue the next CAS.
+
+`start_mission` and `launch_task` continue to take `{product_session_ref, envelope, payload}`. The envelope's caller session must equal the supplied session reference; its contribution, instance, config revision, operation version, effect class, input hash, and grant id are checked against the live enabled roster, descriptor, and durable GrantRecord before the trusted host adapter runs. For QMB replay, `run_fp1` resolves an already registered CT-47 `ExperimentSpec`; CT-47 `data_ref` remains the split/source identity and is not treated as a request-file reference. QMB request execution is unavailable until the separate durable request envelope and its source pins are resolved through the QMB adapter. Owner/environment are resolved only from the matching operator binding. A compiled Task Graph or accepted JobHandle remains distinct from actual task completion evidence.

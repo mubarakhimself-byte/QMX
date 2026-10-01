@@ -28,6 +28,7 @@ import struct
 import subprocess
 import sys
 import threading
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,7 +74,7 @@ from qma.daemon.artifacts import (
     refuse_interrupted_stage_put,
 )
 from qma.daemon.backtest.service import BacktestingService
-from qma.daemon.bootstrap_config import backtest_binding
+from qma.daemon.bootstrap_config import backtest_binding, backtest_binding_for_instance
 from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.bus.mailbox_query import (
     LIST_MAILBOX_HTTP_PATH,
@@ -2555,6 +2556,10 @@ class DaemonProcess:
             return self._dispatch_transfer_complete(connection, request, req_id)
         if method == WireCommand.CANCEL_JOB.value:
             return self._dispatch_cancel_job(connection, request, req_id)
+        if method == WireCommand.OPEN_PRODUCT_SESSION.value:
+            return self._dispatch_open_product_session(connection, request, req_id)
+        if method == WireCommand.GRANT_PRODUCT_SESSION.value:
+            return self._dispatch_grant_product_session(connection, request, req_id)
         if method in {WireCommand.START_MISSION.value, WireCommand.LAUNCH_TASK.value}:
             gated = self._gate_live_invoke(method, request, req_id)
             if gated is not None:
@@ -2723,7 +2728,12 @@ class DaemonProcess:
         execution: list[object] = []
 
         def execute(bound: BoundInvocation) -> None:
-            execution.append(self._execute_bound_product_operation(bound))
+            execution.append(
+                self._execute_bound_product_operation(
+                    bound,
+                    originating_product_session_ref=session_ref,
+                )
+            )
 
         dispatched = self._product_sessions.dispatch_public_call(
             session_ref,
@@ -2755,7 +2765,303 @@ class DaemonProcess:
         )
         return _jsonrpc_result(req_id, payload_out)
 
-    def _execute_bound_product_operation(self, bound: BoundInvocation) -> Result[object]:
+    def _dispatch_open_product_session(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object]:
+        """Open an operator-owned app-use session on an enabled, bound instance."""
+        authorized = connection.authorize_command(WireCommand.OPEN_PRODUCT_SESSION.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        if connection.principal_class is not PrincipalClass.OPERATOR:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("principal_class", "ProductSession opening requires operator"),
+            )
+        raw = request.get("params")
+        if not isinstance(raw, Mapping):
+            return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
+        params = cast("Mapping[str, object]", raw)
+        instance_id = params.get("instance_id")
+        qualified_id = params.get("qualified_id")
+        package_version = params.get("package_version")
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (instance_id, qualified_id, package_version)
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input(
+                    "contribution", "instance_id, qualified_id and package_version are required"
+                ),
+            )
+        loaded = next(
+            (
+                self.roster.loader.get(plugin_id)
+                for plugin_id in self.roster.loader.loaded_ids()
+                if (candidate := self.roster.loader.get(plugin_id)) is not None
+                and candidate.instance_id == instance_id
+            ),
+            None,
+        )
+        if loaded is None:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("instance_id", "instance is not enabled on the live roster"),
+            )
+        published = next(
+            (
+                row
+                for row in loaded.published
+                if row.qualified_id == qualified_id
+                and row.package_version == package_version
+                and row.availability == "enabled"
+            ),
+            None,
+        )
+        if published is None:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("contribution", "contribution is not enabled for this instance"),
+            )
+        binding = backtest_binding_for_instance(self.root, loaded.instance_id)
+        if is_refusal(binding):
+            return _jsonrpc_refusal(req_id, binding)
+        if self._mailboxes.quant_for(binding.value[0]) is None:
+            return _jsonrpc_refusal(
+                req_id,
+                TypedRefusal(
+                    category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                    retryability=Retryability.AFTER_CONDITION,
+                    context={
+                        "reason": "operator QMB binding owner has no registered Quant record",
+                        "owner_actor_id": binding.value[0].value,
+                    },
+                ),
+            )
+        environment_kind = binding.value[1].removeprefix("env:")
+        if self._runtime_composition.environments.declaration(environment_kind) is None:
+            return _jsonrpc_refusal(
+                req_id, NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
+            )
+        # The instance owns one durable app-use session. Returning it makes an
+        # open retry after a lost response or browser reload idempotent.
+        existing = self._product_sessions.session_for_instance(loaded.instance_id)
+        if not is_refusal(existing):
+            current = existing.value
+            if (
+                current.principal != PrincipalClass.OPERATOR.value
+                or dict(current.context.contribution.to_payload())
+                != {
+                    "qualified_id": published.qualified_id,
+                    "package_version": published.package_version,
+                }
+                or current.context.config_revision != binding.value[2]
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "product_session",
+                        "the instance already has a session with different bindings",
+                    ),
+                )
+            return _jsonrpc_result(req_id, current.to_payload())
+        if existing.context.get("field") != "tab":
+            return _jsonrpc_refusal(req_id, existing)
+        stamp = self._journal.stamp_durable()
+        if is_refusal(stamp):
+            return _jsonrpc_refusal(req_id, stamp)
+        session_id = f"psess:{uuid.uuid4().hex}"
+        minted = self._product_sessions.mint(
+            product_session_id=session_id,
+            profile="app-use",
+            principal=PrincipalClass.OPERATOR.value,
+            contribution={
+                "qualified_id": published.qualified_id,
+                "package_version": published.package_version,
+            },
+            instance_id=loaded.instance_id,
+            app_instance_id=loaded.instance_id,
+            config_revision=binding.value[2],
+            as_of=format_utc_iso_z(Instant(value_ns=stamp.value.recorded_at)),
+            selected_refs=[{"kind": "instance_id", "id": loaded.instance_id}],
+        )
+        if is_refusal(minted):
+            return _jsonrpc_refusal(req_id, minted)
+        return _jsonrpc_result(req_id, minted.value.to_payload())
+
+    def _dispatch_grant_product_session(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+    ) -> dict[str, object]:
+        """Mint a bounded grant after checking the operator's expected revision."""
+        authorized = connection.authorize_command(WireCommand.GRANT_PRODUCT_SESSION.value)
+        if is_refusal(authorized):
+            return _jsonrpc_refusal(req_id, authorized)
+        if connection.principal_class is not PrincipalClass.OPERATOR:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("principal_class", "ProductSession grants require operator"),
+            )
+        raw = request.get("params")
+        if not isinstance(raw, Mapping):
+            return _jsonrpc_refusal(req_id, invalid_input("params", "expected object"))
+        params = cast("Mapping[str, object]", raw)
+        session_ref = params.get("product_session_ref")
+        expected_revision = params.get("expected_revision")
+        op_id = params.get("op_id")
+        op_version = params.get("op_version")
+        ceiling = params.get("parameter_ceiling")
+        expires_at = params.get("expires_at")
+        if not isinstance(session_ref, str) or not session_ref.startswith("psess:"):
+            return _jsonrpc_refusal(
+                req_id, invalid_input("product_session_ref", "expected psess: id")
+            )
+        loaded_session = self._product_sessions.get(session_ref)
+        if is_refusal(loaded_session):
+            return _jsonrpc_refusal(req_id, loaded_session)
+        session = loaded_session.value
+        if session.principal != PrincipalClass.OPERATOR.value:
+            return _jsonrpc_refusal(
+                req_id, policy_rejection("principal", "session is not operator-owned")
+            )
+        if (
+            not isinstance(expected_revision, int)
+            or isinstance(expected_revision, bool)
+            or expected_revision != session.context_revision
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "expected_revision",
+                    "ProductSession changed; reload before granting",
+                    expected_revision=expected_revision,
+                    current_revision=session.context_revision,
+                ),
+            )
+        loaded_pack = next(
+            (
+                self.roster.loader.get(plugin_id)
+                for plugin_id in self.roster.loader.loaded_ids()
+                if (candidate := self.roster.loader.get(plugin_id)) is not None
+                and candidate.instance_id == session.context.instance_id
+            ),
+            None,
+        )
+        if loaded_pack is None:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("instance_id", "session instance is not enabled"),
+            )
+        session_contribution = dict(session.context.contribution.to_payload())
+        published = next(
+            (
+                row
+                for row in loaded_pack.published
+                if row.qualified_id == session_contribution.get("qualified_id")
+                and row.package_version == session_contribution.get("package_version")
+                and row.availability == "enabled"
+            ),
+            None,
+        )
+        if published is None:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("contribution", "session contribution is not enabled"),
+            )
+        if (
+            not isinstance(op_id, str)
+            or not isinstance(op_version, int)
+            or isinstance(op_version, bool)
+        ):
+            return _jsonrpc_refusal(
+                req_id, invalid_input("operation", "op_id and op_version are required")
+            )
+        descriptor = next(
+            (
+                item
+                for item in public_operation_descriptors()
+                if item.door_key == (op_id, op_version)
+            ),
+            None,
+        )
+        if descriptor is None:
+            return _jsonrpc_refusal(
+                req_id, policy_rejection("operation", "operation has no published descriptor")
+            )
+        required_point = {
+            "qma.procedure.start": "graph_template",
+            "qmb.backtest.run": "tool",
+            "qmb.analysis.project": "tool",
+        }.get(op_id)
+        expected_contribution = {
+            "qma.procedure.start": published.qualified_id,
+            "qmb.backtest.run": "analysis-backtest:qmb",
+            "qmb.analysis.project": "analysis-backtest:qmb",
+        }.get(op_id)
+        if (
+            required_point is None
+            or published.point != required_point
+            or published.qualified_id != expected_contribution
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "operation",
+                    "operation adapter is not declared by this enabled contribution",
+                    op_id=op_id,
+                    contribution=published.qualified_id,
+                    point=published.point,
+                ),
+            )
+        if not isinstance(ceiling, Mapping) or not isinstance(ceiling.get("allow_keys"), list):
+            return _jsonrpc_refusal(
+                req_id, invalid_input("parameter_ceiling", "allow_keys array required")
+            )
+        allowed = ceiling.get("allow_keys")
+        accepted_keys = set(descriptor.configuration.required_keys) | set(
+            descriptor.configuration.optional_keys
+        )
+        if any(not isinstance(key, str) or key not in accepted_keys for key in allowed):
+            return _jsonrpc_refusal(
+                req_id, policy_rejection("parameter_ceiling", "ceiling exceeds operation schema")
+            )
+        if not set(descriptor.configuration.required_keys).issubset(set(allowed)):
+            return _jsonrpc_refusal(
+                req_id,
+                invalid_input("parameter_ceiling", "ceiling must include required operation keys"),
+            )
+        binding = backtest_binding(
+            self.root, session.context.instance_id or "", session.context.config_revision
+        )
+        if is_refusal(binding):
+            return _jsonrpc_refusal(req_id, binding)
+        grant = self._product_sessions.host_grant(
+            session_ref,
+            expected_context_revision=expected_revision,
+            op_id=descriptor.op_id,
+            op_version=descriptor.version,
+            effect_class=descriptor.effect_class.value,
+            parameter_ceiling={"allow_keys": list(allowed)},
+            expires_at=expires_at,
+            scope_path=(),
+        )
+        if is_refusal(grant):
+            return _jsonrpc_refusal(req_id, grant)
+        grant_payload = dict(grant.value.to_payload())
+        grant_payload["context_revision"] = expected_revision + 1
+        return _jsonrpc_result(req_id, grant_payload)
+
+    def _execute_bound_product_operation(
+        self,
+        bound: BoundInvocation,
+        *,
+        originating_product_session_ref: str | None = None,
+    ) -> Result[object]:
         """Trusted operation adapter; payload fields never supply owner or environment."""
         op_id = bound.envelope.op_id
         if op_id == "qma.procedure.start":
@@ -2794,16 +3100,47 @@ class DaemonProcess:
                 goal=procedure_id.strip(),
             )
         if op_id == "qmb.backtest.run":
+            binding = backtest_binding(
+                self.root, bound.instance.instance_id, bound.instance.config_revision
+            )
+            if is_refusal(binding):
+                return binding
+            owner_id, environment_ref = binding.value
+            owner = self._mailboxes.quant_for(owner_id)
+            if owner is None:
+                return TypedRefusal(
+                    category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                    retryability=Retryability.AFTER_CONDITION,
+                    context={
+                        "reason": "QMB binding owner has no registered Quant record",
+                        "owner_actor_id": owner_id.value,
+                    },
+                )
+            payload = bound.validated_payload
+            if "owner_actor_id" in payload or "environment_ref" in payload:
+                return policy_rejection(
+                    "payload", "QMB owner and environment are operator-bound fields"
+                )
+            spec_fp1 = payload.get("run_fp1")
+            resolved = self.experiments.resolve(spec_fp1)
+            if is_refusal(resolved):
+                return resolved
+            if not isinstance(resolved.value.spec.data_ref, str):
+                return invalid_input(
+                    "data_ref",
+                    "CT-47 ExperimentSpec must reference its split/source identity",
+                )
+            environment_kind = environment_ref.removeprefix("env:")
+            if self._runtime_composition.environments.declaration(environment_kind) is None:
+                return NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
             return TypedRefusal(
                 category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
                 retryability=Retryability.AFTER_CONDITION,
                 context={
-                    "reason": (
-                        "the published qmb.backtest.run payload omits the recorded "
-                        "evidence_ref required by the existing QMB door"
-                    ),
-                    "op_id": op_id,
-                    "instance_id": bound.instance.instance_id,
+                    "reason": "QMB durable replay request adapter is not available",
+                    "experiment_spec_fp1": cast("str", spec_fp1),
+                    "split_manifest_fp1": resolved.value.spec.data_ref,
+                    "originating_product_session_ref": originating_product_session_ref,
                 },
             )
         if op_id != "qmb.analysis.project":

@@ -221,7 +221,7 @@ def test_initialize_and_family_schemas_load() -> None:
         assert isinstance(enum_obj, list)
         return cast(list[object], enum_obj)
 
-    assert len(_name_enum("command")) == 14
+    assert len(_name_enum("command")) == 16
     assert "transfer_artifact" in _name_enum("command")
     assert "cancel_job" in _name_enum("command")
     assert "transfer_complete" in _name_enum("command")

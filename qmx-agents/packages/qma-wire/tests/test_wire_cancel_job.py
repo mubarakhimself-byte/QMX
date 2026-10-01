@@ -32,7 +32,7 @@ def _payload(**overrides: object) -> dict[str, object]:
 def test_cancel_job_is_addable_ct40_not_a_seed_alias() -> None:
     assert CANCEL_JOB_COMMAND == WireCommand.CANCEL_JOB.value == "cancel_job"
     assert CANCEL_JOB_COMMAND in WIRE_COMMANDS
-    assert ADDABLE_COMMAND_COUNT == 5
+    assert ADDABLE_COMMAND_COUNT == 7
     assert "stop_run" in WIRE_COMMANDS
     assert CANCEL_JOB_COMMAND != "stop_run"
 

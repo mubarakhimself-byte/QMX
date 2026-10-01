@@ -62,7 +62,14 @@ def test_ownership_and_closed_human_gate_list() -> None:
     # No silent additions beyond the AD-24 list and its seed aliases.
     extras = HUMAN_GATE_COMMANDS - _REQUIRED_HUMAN_GATES
     assert extras == frozenset(
-        {"install_enable_plugin", "approve_hook_action", "transfer_artifact", "cancel_job"}
+        {
+            "install_enable_plugin",
+            "approve_hook_action",
+            "transfer_artifact",
+            "cancel_job",
+            "open_product_session",
+            "grant_product_session",
+        }
     )
     assert frozenset({"mailbox.delivery", "telemetry"}) == DAEMON_JOB_TRIM_STREAMS
 

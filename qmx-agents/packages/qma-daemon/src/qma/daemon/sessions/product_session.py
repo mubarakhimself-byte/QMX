@@ -1988,6 +1988,7 @@ class ProductSessionService:
         self,
         product_session_id: object,
         *,
+        expected_context_revision: object | None = None,
         issuer: object = _HOST_ISSUER,
         grant_id: object | None = None,
         principal: object | None = None,
@@ -2013,6 +2014,21 @@ class ProductSessionService:
         if is_refusal(loaded):
             return loaded
         session = loaded.value
+        next_context_revision = session.context_revision
+        if expected_context_revision is not None:
+            expected = _require_int(
+                "expected_revision", expected_context_revision, minimum=0
+            )
+            if is_refusal(expected):
+                return expected
+            if expected.value != session.context_revision:
+                return policy_rejection(
+                    "expected_revision",
+                    "ProductSession changed; reload before granting",
+                    expected_revision=expected.value,
+                    current_revision=session.context_revision,
+                )
+            next_context_revision += 1
         if audience is None:
             audience = session.product_session_id
         elif looks_like_chrome_id(audience):
@@ -2066,7 +2082,11 @@ class ProductSessionService:
         if self._grant_store is not None:
             self._grant_store.put_grant(record, journal_seq=journal_seq, recorded_at=recorded_at)
         if record.grant_id not in session.granted_ops:
-            session = replace(session, granted_ops=(*session.granted_ops, record.grant_id))
+            session = replace(
+                session,
+                granted_ops=(*session.granted_ops, record.grant_id),
+                context_revision=next_context_revision,
+            )
             persisted = self._persist_session(
                 session,
                 event=PRODUCT_SESSION_GRANT_MINTED_EVENT,

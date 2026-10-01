@@ -23,6 +23,8 @@
         "transfer_artifact",
         "transfer_complete",
         "cancel_job",
+        "open_product_session",
+        "grant_product_session",
         "save_editor_draft",
         "publish_editor_draft"
       ]
@@ -61,6 +63,56 @@
                 "enum": ["queued", "running", "done", "failed", "cancelled", "aborted", "unknown"],
                 "description": "Observed state only; excluded from stable cancel command identity."
               }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "name": { "const": "open_product_session" } },
+        "required": ["name"]
+      },
+      "then": {
+        "required": ["args"],
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["instance_id", "qualified_id", "package_version"],
+            "properties": {
+              "instance_id": { "type": "string", "minLength": 1 },
+              "qualified_id": { "type": "string", "minLength": 1 },
+              "package_version": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "name": { "const": "grant_product_session" } },
+        "required": ["name"]
+      },
+      "then": {
+        "required": ["args"],
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["product_session_ref", "expected_revision", "op_id", "op_version", "parameter_ceiling", "expires_at"],
+            "properties": {
+              "product_session_ref": { "type": "string", "minLength": 7 },
+              "expected_revision": { "type": "integer", "minimum": 0 },
+              "op_id": { "type": "string", "minLength": 1 },
+              "op_version": { "type": "integer", "minimum": 1 },
+              "parameter_ceiling": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["allow_keys"],
+                "properties": { "allow_keys": { "type": "array", "items": { "type": "string" } } }
+              },
+              "expires_at": { "type": "string", "minLength": 1 }
             }
           }
         }

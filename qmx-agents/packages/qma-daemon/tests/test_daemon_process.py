@@ -14,8 +14,9 @@ from types import SimpleNamespace
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.operations import public_operation_descriptors
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
+from qma.core.ports.execution import ExecutionEnvironmentDeclaration
 from qma.core.ports.qmb import ANALYSIS_BACKTEST_PLUGIN_ID, QMB_BACKTEST_TOOL_ID
-from qma.core.vocabulary.enums import PrincipalClass
+from qma.core.vocabulary.enums import ExecutionEnvironmentKind
 from qma.daemon.backtest import BacktestingService, CliQmbDoorTransport
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import (
@@ -242,6 +243,14 @@ def test_procedure_start_compiles_registered_template_for_registered_quant(
             name="Quant alpha",
         )
         assert is_ok(process._mailboxes.open_for_quant(quant))
+        assert is_ok(
+            process.execution_environments.register_declaration(
+                ExecutionEnvironmentDeclaration.isolated(
+                    ExecutionEnvironmentKind.LOCAL,
+                    provider_ref="local-ct40-test",
+                )
+            )
+        )
         template = GraphTemplate(
             qualified_id="research-corpus:host-start",
             version="1.0.0",
@@ -291,53 +300,14 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             "qualified_id": published.qualified_id,
             "package_version": published.package_version,
         }
-        session_id = "psess:ct40-positive"
-        session = process.product_sessions.mint(
-            product_session_id=session_id,
-            profile="app-use",
-            principal=PrincipalClass.OPERATOR.value,
-            contribution=contribution,
-            instance_id=loaded.instance_id,
-            app_instance_id=loaded.instance_id,
-            config_revision=2,
-            as_of="2026-10-01T00:00:00Z",
-            selected_refs=[{"kind": "instance_id", "id": loaded.instance_id}],
-        )
-        assert is_ok(session), session
         descriptor = next(
             item
             for item in public_operation_descriptors()
             if item.op_id == "qma.procedure.start" and item.version == 1
         )
-        grant = process.product_sessions.host_grant(
-            session_id,
-            op_id=descriptor.op_id,
-            op_version=descriptor.version,
-            effect_class=descriptor.effect_class.value,
-            parameter_ceiling={"allow_keys": ["procedure_id"]},
-            expires_at="2099-01-01T00:00:00Z",
-        )
-        assert is_ok(grant), grant
         request_payload = {"procedure_id": "research-corpus:survey"}
         input_hash = compute_input_hash(request_payload, descriptor=descriptor)
         assert is_ok(input_hash), input_hash
-        envelope = {
-            "logical_invocation_id": "inv:ct40-positive",
-            "attempt_id": 1,
-            "op_id": descriptor.op_id,
-            "op_version": descriptor.version,
-            "contribution": contribution,
-            "instance_id": loaded.instance_id,
-            "config_revision": 2,
-            "grant_id": grant.value.grant_id,
-            "effect_class": descriptor.effect_class.value,
-            "idempotency_key": "idem:ct40-positive",
-            "reconcile_policy": "query-then-decide",
-            "input_hash": input_hash.value,
-            "call_depth": 0,
-            "caller_kind": "user",
-            "caller_session_ref": session_id,
-        }
         actor = ActorId.mint(DeskSlug.RESEARCH, "alpha")
         assert is_ok(actor)
         quant = Quant(
@@ -348,6 +318,26 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             name="Quant alpha",
         )
         assert is_ok(process._mailboxes.open_for_quant(quant))
+        assert is_ok(
+            process.execution_environments.register_declaration(
+                ExecutionEnvironmentDeclaration.isolated(
+                    ExecutionEnvironmentKind.LOCAL,
+                    provider_ref="local-ct40-public-test",
+                )
+            )
+        )
+        second_loaded = process.roster.loader.get("analysis-backtest")
+        assert second_loaded is not None
+        second_published = next(
+            row
+            for row in second_loaded.published
+            if row.point == "graph_template"
+            and row.qualified_id == "analysis-backtest:procedure"
+        )
+        second_contribution = {
+            "qualified_id": second_published.qualified_id,
+            "package_version": second_published.package_version,
+        }
         (tmp_path / "operator-config.json").write_text(
             json.dumps(
                 {
@@ -356,7 +346,12 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
                             "owner_actor_id": actor.value.value,
                             "environment_ref": "env:local",
                             "config_revision": 2,
-                        }
+                        },
+                        second_loaded.instance_id: {
+                            "owner_actor_id": actor.value.value,
+                            "environment_ref": "env:local",
+                            "config_revision": 2,
+                        },
                     }
                 }
             ),
@@ -382,12 +377,116 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert initialized is not None and "error" not in initialized, initialized
-        response = process._dispatch_paired_ct40(
+        opened = process._dispatch_paired_ct40(
             connection,
             json.dumps(
                 {
                     "jsonrpc": "2.0",
                     "id": 2,
+                    "method": "open_product_session",
+                    "params": {
+                        "instance_id": loaded.instance_id,
+                        "qualified_id": published.qualified_id,
+                        "package_version": published.package_version,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert opened is not None and "error" not in opened, opened
+        opened_result = opened.get("result")
+        assert isinstance(opened_result, dict)
+        session_id = opened_result.get("product_session_id")
+        assert isinstance(session_id, str)
+        reopened = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 20,
+                    "method": "open_product_session",
+                    "params": {
+                        "instance_id": loaded.instance_id,
+                        "qualified_id": published.qualified_id,
+                        "package_version": published.package_version,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert reopened is not None and "error" not in reopened
+        assert reopened["result"]["product_session_id"] == session_id
+        granted = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "grant_product_session",
+                    "params": {
+                        "product_session_ref": session_id,
+                        "expected_revision": opened_result["context_revision"],
+                        "op_id": descriptor.op_id,
+                        "op_version": descriptor.version,
+                        "parameter_ceiling": {"allow_keys": ["procedure_id"]},
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert granted is not None and "error" not in granted, granted
+        grant_result = granted.get("result")
+        assert isinstance(grant_result, dict)
+        assert grant_result["context_revision"] == 1
+        assert process.product_sessions.get(session_id).value.context_revision == 1
+        stale_grant = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 21,
+                    "method": "grant_product_session",
+                    "params": {
+                        "product_session_ref": session_id,
+                        "expected_revision": 0,
+                        "op_id": descriptor.op_id,
+                        "op_version": descriptor.version,
+                        "parameter_ceiling": {"allow_keys": ["procedure_id"]},
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert stale_grant is not None and "error" in stale_grant
+        envelope = {
+            "logical_invocation_id": "inv:ct40-positive",
+            "attempt_id": 1,
+            "op_id": descriptor.op_id,
+            "op_version": descriptor.version,
+            "contribution": contribution,
+            "instance_id": loaded.instance_id,
+            "config_revision": 2,
+            "grant_id": grant_result["grant_id"],
+            "effect_class": descriptor.effect_class.value,
+            "idempotency_key": "idem:ct40-positive",
+            "reconcile_policy": "query-then-decide",
+            "input_hash": input_hash.value,
+            "call_depth": 0,
+            "caller_kind": "user",
+            "caller_session_ref": session_id,
+        }
+        response = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
                     "method": "start_mission",
                     "params": {
                         "product_session_ref": session_id,
@@ -405,6 +504,112 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         job_id = result.get("job_id")
         assert isinstance(job_id, str)
         assert process.jobs.handle_for(job_id) is not None
+
+        second_open = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "open_product_session",
+                    "params": {
+                        "instance_id": second_loaded.instance_id,
+                        "qualified_id": second_published.qualified_id,
+                        "package_version": second_published.package_version,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert second_open is not None and "error" not in second_open, second_open
+        second_session = second_open["result"]["product_session_id"]
+        second_grant = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "grant_product_session",
+                    "params": {
+                        "product_session_ref": second_session,
+                        "expected_revision": 0,
+                        "op_id": descriptor.op_id,
+                        "op_version": descriptor.version,
+                        "parameter_ceiling": {"allow_keys": ["procedure_id"]},
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert second_grant is not None and "error" not in second_grant, second_grant
+        assert second_grant["result"]["context_revision"] == 1
+        # A tool operation is not declared by this pack's graph-template contribution.
+        foreign_grant = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 22,
+                    "method": "grant_product_session",
+                    "params": {
+                        "product_session_ref": second_session,
+                        "expected_revision": 0,
+                        "op_id": "qmb.backtest.run",
+                        "op_version": 1,
+                        "parameter_ceiling": {"allow_keys": ["run_fp1"]},
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert foreign_grant is not None and "error" in foreign_grant
+        assert second_session != session_id
+        second_payload = {"procedure_id": second_published.qualified_id}
+        second_input_hash = compute_input_hash(second_payload, descriptor=descriptor)
+        assert is_ok(second_input_hash), second_input_hash
+        second_envelope = {
+            "logical_invocation_id": "inv:ct40-second-pack",
+            "attempt_id": 1,
+            "op_id": descriptor.op_id,
+            "op_version": descriptor.version,
+            "contribution": second_contribution,
+            "instance_id": second_loaded.instance_id,
+            "config_revision": 2,
+            "grant_id": second_grant["result"]["grant_id"],
+            "effect_class": descriptor.effect_class.value,
+            "idempotency_key": "idem:ct40-second-pack",
+            "reconcile_policy": "query-then-decide",
+            "input_hash": second_input_hash.value,
+            "call_depth": 0,
+            "caller_kind": "user",
+            "caller_session_ref": second_session,
+        }
+        second_started = process._dispatch_paired_ct40(
+            connection,
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "start_mission",
+                    "params": {
+                        "product_session_ref": second_session,
+                        "envelope": second_envelope,
+                        "payload": second_payload,
+                    },
+                }
+            ).encode(),
+            session_key="prid:ct40positive",
+            connection_token=connection_token,
+        )
+        assert second_started is not None and "error" not in second_started
+        second_job_id = second_started["result"]["job_id"]
+        assert second_job_id != job_id
+        assert process.jobs.handle_for(second_job_id) is not None
 
         forged = dict(envelope)
         forged["logical_invocation_id"] = "inv:ct40-forged"

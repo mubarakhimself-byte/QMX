@@ -83,6 +83,8 @@ HUMAN_GATE_COMMANDS: Final[frozenset[str]] = frozenset(
         "mission.set_approval_route",
         "variable.set",
         "human_gate.answer",
+        "open_product_session",
+        "grant_product_session",
         # Seed packet aliases that fall under the AD-24 list (DEC-0304 nouns).
         "install_enable_plugin",
         "approve_hook_action",

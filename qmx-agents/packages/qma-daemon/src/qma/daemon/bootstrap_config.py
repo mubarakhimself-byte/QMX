@@ -43,6 +43,26 @@ def backtest_binding(
     daemon_root: Path | str, instance_id: str, config_revision: int
 ) -> Result[tuple[ActorId, str]]:
     """Resolve an operator-owned QMB actor/environment mapping for an exact instance revision."""
+    resolved = backtest_binding_for_instance(daemon_root, instance_id)
+    if is_refusal(resolved):
+        return resolved
+    owner, environment_ref, bound_revision = resolved.value
+    if bound_revision != config_revision:
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "reason": "operator QMB binding does not match exact config revision",
+                "instance_id": instance_id,
+            },
+        )
+    return Ok((owner, environment_ref))
+
+
+def backtest_binding_for_instance(
+    daemon_root: Path | str, instance_id: str
+) -> Result[tuple[ActorId, str, int]]:
+    """Resolve the operator-owned binding and its current revision for session opening."""
     path = Path(daemon_root) / CONFIG_NAME
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -66,12 +86,13 @@ def backtest_binding(
                 "instance_id": instance_id,
             },
         )
-    if row.get("config_revision") != config_revision:
+    revision = row.get("config_revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
         return TypedRefusal(
             category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
             retryability=Retryability.AFTER_CONDITION,
             context={
-                "reason": "operator QMB binding does not match exact config revision",
+                "reason": "operator QMB binding has no valid nonnegative config revision",
                 "instance_id": instance_id,
             },
         )
@@ -88,4 +109,4 @@ def backtest_binding(
                 "instance_id": instance_id,
             },
         )
-    return Ok((actor.value, environment_ref.strip()))
+    return Ok((actor.value, environment_ref.strip(), revision))
