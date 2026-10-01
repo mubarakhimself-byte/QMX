@@ -110,10 +110,11 @@ def test_process_spawn_only_at_composition_root():
     impure conformance sandbox runner relocated out of the pure qml wheel
     (OR-04 / FC-17; docs/components/qml.md Hosting seed).
     """
+    # ADR-0026/DEC-0494 explicitly permits QMB host start to spawn QMA.
     spawners: list[str] = []
     for path in _pyfiles(SRC):
         rel = str(path.relative_to(SRC)).replace("\\", "/")
-        if rel.startswith(("orchestrator/", "host/")):
+        if rel.startswith(("orchestrator/", "host/")) or rel == "doors/cli/host.py":
             continue
         body = _text(path)
         for token in ("import subprocess", "import multiprocessing", "import threading"):

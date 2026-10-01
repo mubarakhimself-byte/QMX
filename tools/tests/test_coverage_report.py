@@ -18,6 +18,7 @@ import pytest
 
 FileEntry = dict[str, dict[str, int]]
 Report = dict[str, dict[str, FileEntry]]
+SUMMARY_COUNTERS = ("covered_lines", "num_statements", "covered_branches", "num_branches")
 
 
 def _file(
@@ -159,7 +160,7 @@ def test_windows_backslash_paths_are_matched() -> None:
 def test_main_passes_on_clean_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     report_path = tmp_path / "coverage.json"
     report_path.write_text(json.dumps(_clean_report()), encoding="utf-8")
-    assert cov.main(report_path) == 0
+    assert cov.main(report_path, expected_packages=()) == 0
     assert "clean" in capsys.readouterr().out
 
 
@@ -168,7 +169,7 @@ def test_main_fails_on_breached_report(tmp_path: Path, capsys: pytest.CaptureFix
     report["files"]["packages/qmf-core/src/qmf/core/exact.py"] = _file(10, 10, 1, 8)
     report_path = tmp_path / "coverage.json"
     report_path.write_text(json.dumps(report), encoding="utf-8")
-    assert cov.main(report_path) == 1
+    assert cov.main(report_path, expected_packages=()) == 1
     out = capsys.readouterr().out
     assert "FAIL" in out
     assert "exact.py" in out
@@ -196,13 +197,250 @@ def test_main_fails_closed_on_malformed_report(
 ) -> None:
     report_path = tmp_path / "coverage.json"
     report_path.write_text("{not json", encoding="utf-8")
-    assert cov.main(report_path) == 1
+    assert cov.main(report_path, expected_packages=()) == 1
     assert "FAIL" in capsys.readouterr().out
 
 
-def test_real_workspace_report_passes_when_present() -> None:
-    # If a prior `poe test` produced coverage.json, the enforcer must accept it.
-    if not cov.REPORT_PATH.is_file():
-        pytest.skip("coverage.json not present (run `poe test` first)")
-    report: Any = json.loads(cov.REPORT_PATH.read_text(encoding="utf-8"))
+@pytest.mark.parametrize("report", [None, [], 7, "text", {}, {"files": []}, {"files": {}}])
+def test_invalid_document_shapes_fail_closed(report: object) -> None:
+    assert cov.evaluate(report)
+
+
+@pytest.mark.parametrize("path", ["", 42])
+def test_invalid_file_paths_fail_closed(path: object) -> None:
+    report: Any = _clean_report()
+    report["files"][path] = _file(10, 10, 8, 8)
+    assert any("file paths" in violation for violation in cov.evaluate(report))
+
+
+@pytest.mark.parametrize("field", SUMMARY_COUNTERS)
+@pytest.mark.parametrize("value", [None, True, False, -1, 1.5, "8", [], {}])
+def test_invalid_summary_counters_fail_closed(field: str, value: object) -> None:
+    report: Any = _clean_report()
+    path = "packages/qmf-core/src/qmf/core/exact.py"
+    report["files"][path]["summary"][field] = value
+    assert any(field in violation for violation in cov.evaluate(report))
+
+
+@pytest.mark.parametrize("field", SUMMARY_COUNTERS)
+def test_missing_summary_counters_fail_closed(field: str) -> None:
+    report = _clean_report()
+    del report["files"]["packages/qmf-core/src/qmf/core/exact.py"]["summary"][field]
+    assert any(field in violation for violation in cov.evaluate(report))
+
+
+@pytest.mark.parametrize("info", [None, [], {}, {"summary": []}, {"summary": None}])
+def test_invalid_file_summaries_fail_closed(info: object) -> None:
+    report: Any = _clean_report()
+    report["files"]["packages/qmf-data/src/qmf/data/bad.py"] = info
+    assert any("bad.py" in violation for violation in cov.evaluate(report))
+
+
+@pytest.mark.parametrize(
+    "covered,total", [("covered_lines", "num_statements"), ("covered_branches", "num_branches")]
+)
+def test_covered_counter_cannot_exceed_total(covered: str, total: str) -> None:
+    report = _clean_report()
+    summary = report["files"]["packages/qmf-core/src/qmf/core/exact.py"]["summary"]
+    summary[covered] = summary[total] + 1
+    assert any("exceeds" in violation for violation in cov.evaluate(report))
+
+
+def test_empty_package_does_not_pass_as_one_hundred_percent() -> None:
+    report = _clean_report()
+    report["files"]["packages/qmf-data/src/qmf/data/__init__.py"] = _file(0, 0, 0, 0)
+    assert any("qmf-data: no measurable" in violation for violation in cov.evaluate(report))
+
+
+def test_empty_file_in_nonempty_package_is_valid() -> None:
+    report = _clean_report()
+    report["files"]["packages/qmf-core/src/qmf/core/__init__.py"] = _file(0, 0, 0, 0)
     assert cov.evaluate(report) == []
+
+
+@pytest.mark.parametrize("suffix", cov.FULL_BRANCH_MODULES)
+def test_zero_contract_branches_are_not_evidence_of_full_coverage(suffix: str) -> None:
+    report = _clean_report()
+    report["files"][f"packages/qmf-core/src/{suffix}"] = _file(10, 10, 0, 0)
+    assert any("no measured branches" in violation for violation in cov.evaluate(report))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "packages/qmf-data/tests/test_data.py",
+        "packages/qmf-data/examples/demo.py",
+        "packages/qmf-data/build.py",
+        "notpackages/qmf-data/src/padding.py",
+        "packages/qmf-data/src/../tests/test_data.py",
+        "tests/packages/qmf-data/src/padding.py",
+    ],
+)
+def test_non_source_cannot_inflate_package_coverage(path: str) -> None:
+    report = _clean_report()
+    report["files"]["packages/qmf-data/src/qmf/data/__init__.py"] = _file(1, 10, 0, 0)
+    report["files"][path] = _file(1000, 1000, 1000, 1000)
+    assert any(
+        "qmf-data" in violation and "per-package floor" in violation
+        for violation in cov.evaluate(report)
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/qmf/core/exact.py",
+        "packages/qmf-core/tests/qmf/core/exact.py",
+        "packages/qmf-data/src/qmf/core/exact.py",
+        "packages/qmf-core/src/notqmf/core/exact.py",
+    ],
+)
+def test_contract_suffix_spoof_cannot_replace_actual_module(path: str) -> None:
+    report = _clean_report()
+    del report["files"]["packages/qmf-core/src/qmf/core/exact.py"]
+    report["files"][path] = _file(10, 10, 8, 8)
+    assert any(
+        "exact.py" in violation and "not measured" in violation
+        for violation in cov.evaluate(report)
+    )
+
+
+@pytest.mark.parametrize("prefix,separator", [("/home/runner/QMX/", "/"), ("C:/work/QMX/", "\\")])
+def test_absolute_paths_remain_portable(prefix: str, separator: str) -> None:
+    report = _clean_report()
+    report["files"] = {
+        (prefix + path).replace("/", separator): info for path, info in report["files"].items()
+    }
+    assert cov.evaluate(report) == []
+
+
+def test_duplicate_path_alias_cannot_overwrite_uncovered_contract() -> None:
+    report = _clean_report()
+    path = "packages/qmf-core/src/qmf/core/exact.py"
+    report["files"][path] = _file(10, 10, 1, 8)
+    report["files"]["/work/QMX/" + path] = _file(10, 10, 8, 8)
+    assert any("duplicate source path" in violation for violation in cov.evaluate(report))
+
+
+def test_expected_inventory_detects_entirely_omitted_package() -> None:
+    violations = cov.evaluate(_clean_report(), {"qmf-core", "qmf-data", "qmf-risk"})
+    assert any("qmf-risk: package was not measured" in violation for violation in violations)
+
+
+def test_workspace_inventory_is_derived_from_manifests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for path in ("packages/qmf-core", "extensions/qmf-custom", "qml"):
+        directory = tmp_path / path
+        directory.mkdir(parents=True)
+        (directory / "pyproject.toml").write_text(
+            f'[project]\nname = "{directory.name}"\n', encoding="utf-8"
+        )
+    monkeypatch.setattr(cov, "ROOT", tmp_path)
+    assert cov.workspace_packages() == {"qmf-core", "qmf-custom", "qml"}
+
+
+def test_empty_workspace_inventory_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cov, "ROOT", tmp_path)
+    with pytest.raises(ValueError, match="inventory is empty"):
+        cov.workspace_packages()
+
+
+def test_path_dot_alias_cannot_pad_package() -> None:
+    report = _clean_report()
+    report["files"]["packages/qmf-core/src/./qmf/core/exact.py"] = _file(10, 10, 8, 8)
+    assert any("duplicate source path" in violation for violation in cov.evaluate(report))
+
+
+def test_main_uses_workspace_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cov, "workspace_packages", lambda: {"qmf-risk"})
+    report_path = tmp_path / "coverage.json"
+    report_path.write_text(json.dumps(_clean_report()), encoding="utf-8")
+    assert cov.main(report_path) == 1
+    assert "qmf-risk: package was not measured" in capsys.readouterr().out
+
+
+def test_main_fails_closed_when_inventory_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def broken_inventory() -> set[str]:
+        raise ValueError("broken manifest")
+
+    monkeypatch.setattr(cov, "workspace_packages", broken_inventory)
+    report_path = tmp_path / "coverage.json"
+    report_path.write_text(json.dumps(_clean_report()), encoding="utf-8")
+    assert cov.main(report_path) == 1
+    assert "could not read workspace inventory" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("document", ["null", "[]", "true", "123", '{"files": []}'])
+def test_main_fails_cleanly_on_valid_json_with_wrong_shape(
+    document: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    report_path = tmp_path / "coverage.json"
+    report_path.write_text(document, encoding="utf-8")
+    assert cov.main(report_path, expected_packages=()) == 1
+    assert "FAIL" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("path", ["qmn/deploy/switch.py", "C:\\work\\QMX\\qmn\\deploy\\switch.py"])
+def test_operational_deployment_code_counts_toward_qmn_floor(path: str) -> None:
+    report = _clean_report()
+    report["files"]["qmn/src/qmn/__init__.py"] = _file(100, 100, 0, 0)
+    report["files"][path] = _file(0, 100, 0, 0)
+    assert any("qmn" in v and "per-package floor" in v for v in cov.evaluate(report))
+
+
+def test_operational_deployment_and_runtime_share_one_floor() -> None:
+    report = _clean_report()
+    report["files"]["qmn/src/qmn/__init__.py"] = _file(100, 100, 0, 0)
+    report["files"]["qmn/deploy/switch.py"] = _file(60, 100, 0, 0)
+    assert cov.evaluate(report) == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "qmn/deploy/tests/test_switch.py",
+        "qmn/deploy/examples/sample.py",
+        "qmn/examples/padding.py",
+        "notqmn/deploy/switch.py",
+        "qmn/deployment/switch.py",
+        "qmn/deploy/../tests/test_switch.py",
+    ],
+)
+def test_nonoperational_paths_cannot_pad_qmn_coverage(path: str) -> None:
+    report = _clean_report()
+    report["files"]["qmn/src/qmn/__init__.py"] = _file(10, 100, 0, 0)
+    report["files"][path] = _file(1000, 1000, 1000, 1000)
+    assert any("qmn" in v and "per-package floor" in v for v in cov.evaluate(report))
+
+
+def test_omitted_source_fails_even_when_package_is_present() -> None:
+    report = _clean_report()
+    assert any(
+        "worker.py: source file was not measured" in item
+        for item in cov.evaluate(report, (), {"qmb/src/qmb/orchestrator/worker.py"})
+    )
+
+
+def test_untracked_source_cannot_pad_tracked_inventory() -> None:
+    report = _clean_report()
+    sources = set(report["files"])
+    report["files"]["qmb/src/fake.py"] = _file(9999, 9999, 9999, 9999)
+    assert any(
+        "outside the tracked inventory" in item for item in cov.evaluate(report, (), sources)
+    )
+
+
+def test_unrelated_absolute_checkout_is_not_candidate(tmp_path: Path) -> None:
+    report = _clean_report()
+    sources = set(report["files"])
+    report["files"] = {"/unrelated/" + path: info for path, info in report["files"].items()}
+    assert any(
+        "outside the candidate" in item for item in cov.evaluate(report, (), sources, tmp_path)
+    )

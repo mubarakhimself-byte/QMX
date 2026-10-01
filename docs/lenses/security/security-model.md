@@ -182,3 +182,16 @@ There is **no execution tool at any account role, "paper only" included**, and t
 Browser pairing is a named AM-01 carve-out of the unauthenticated-bind law (DEC-0493). Origin never issues a new `pairing_proof` (DEC-0491). HTTP presents `Authorization: Bearer pairing:<proof>`; WebSocket presents `qmx.pair.<proof>` (DEC-0485). Allowed homes are in-memory plus `sessionStorage` (same-tab reload may restore; closed-tab cold start does not) (DEC-0501). Cookies, `localStorage`, and IndexedDB are forbidden homes. Journal stores `proof_fp1`, never the raw proof. `pairing_record_id` is the nonsecret journal identity; logs and `qmb host status` may show it; `Authorization` never carries `pairing:<id>` (DEC-0492). `qmb host pair revoke --origin <origin>` is a creating-event `journal_seq < R` barrier for that Origin, including a renew that committed earlier; `--session <pairing_record_id>` revokes that row only; after R a new `/pair/start` is legal (DEC-0492).
 
 `host_control` is a daemon-minted owner-only token under `QMA_DAEMON_ROOT` (DEC-0503). It is not CT-40 and not a broker `cred://`. The Credential Broker allowlist is not widened. Running-daemon host-control verbs require the current token except `qmb host stop` when the file is missing or unreadable, allowed only for the OS owner of the root (DEC-0494). Lost-token recovery is `qmb host recover-control` on a stopped daemon by that OS owner without presenting the lost token: QMB is the door; a one-shot daemon recover entry acquires `.daemon_writer`, appends `host_control_fp1`, releases the lock, exits with the listener down, does not bind 8765, is not AM-01 HTTP; QMB never writes daemon sqlite; `local_operator` and journals are preserved (DEC-0494, DEC-0503). Absent at `integration@34c148be` (DEC-0507).
+
+
+### QMN V1 seat containment limit (GAP-0054, deferred)
+
+V1 has no hardened OS-level memory or security confinement for bot seats.
+GAP-0054 remains deferred (DEC-0204, DEC-0260); this release does not close it.
+Compensating controls are the `ql-8-static-scan`, capability starvation,
+host process isolation of the Layer-2 conformance runner, the cooperative
+callback deadline and memory ceiling, automatic quarantine, the slice-progress
+watch and supervised restart of last resort. These controls do not establish
+an OS memory cap or a sandbox security guarantee. A non-returning callback
+requires the host-level last-resort path; ordinary cooperative checks cannot
+interrupt arbitrary Python. Separate security verification remains incomplete.

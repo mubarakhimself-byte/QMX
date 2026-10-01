@@ -126,3 +126,8 @@ No severity tiers, paging targets, notification channels, incident commander, re
 ## Recovery completion
 
 An incident is not resolved merely because a process responds. Library conformance evidence is required where defined. The venue reconciliation shape is ratified (DEC-0137), and the node's verdict vocabulary is FOUR — `reconciled` \| `drift` \| `unknown` \| `out-of-lookback` — replacing the three-verdict baseline everywhere the node speaks (DEC-0258); on outage recovery, recovered fills commit through evidence before a session reports healthy — even a no-gap reconnect emits correlation evidence; but **when reconciliation runs and what a verdict triggers are node/BMS authority** (DEC-0142, DEC-0195). The risk-journal handoff is ratified as read-time projections joined through the command record's content fingerprint but stays **defined-unwired** (DEC-0145); backup completion, restore validation, closure, and sign-off rules remain unresolved; CT-25 and CT-14 cannot be treated as completed operational evidence paths. [DEC-0045] [DEC-0096]
+
+
+QMN V1 seat containment retains deferred GAP-0054. See the security-model
+seat-containment limit for the existing compensating controls and their bounds;
+this release does not claim hardened OS confinement or completed security review.

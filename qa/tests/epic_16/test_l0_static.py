@@ -48,7 +48,7 @@ def _is_dunder(name: str) -> bool:
     return name.startswith("__") and name.endswith("__")
 
 
-def _scan_thin(tree: ast.AST) -> list[str]:
+def _scan_thin(tree: ast.AST, *, host_lifecycle: bool = False) -> list[str]:
     """Return thin-door violations found in one parsed door module."""
     hits: list[str] = []
     for node in ast.walk(tree):
@@ -60,13 +60,13 @@ def _scan_thin(tree: ast.AST) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 root = alias.name.split(".")[0]
-                if root in _HTTP_MODULES:
+                if root in _HTTP_MODULES and not (host_lifecycle and root == "socket"):
                     hits.append(f"http-import {alias.name} @L{node.lineno}")
                 if root in _STORE_MODULES:
                     hits.append(f"store-import {alias.name} @L{node.lineno}")
         if isinstance(node, ast.ImportFrom) and node.module:
             root = node.module.split(".")[0]
-            if root in _HTTP_MODULES:
+            if root in _HTTP_MODULES and not (host_lifecycle and root == "socket"):
                 hits.append(f"http-import {node.module} @L{node.lineno}")
             if root in _STORE_MODULES:
                 hits.append(f"store-import {node.module} @L{node.lineno}")
@@ -130,7 +130,9 @@ def test_t16_0_thin_no_logic_no_cache_no_identity_no_http() -> None:
     for path in _door_pyfiles():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         rel = path.relative_to(ROOT)
-        offenders += [f"{rel}: {h}" for h in _scan_thin(tree)]
+        offenders += [f"{rel}: {h}" for h in _scan_thin(
+            tree, host_lifecycle=path == DOORS_SRC / "cli" / "host.py",
+        )]
         offenders += [f"{rel}: {h}" for h in _scan_module_globals(tree)]
     assert offenders == [], "thin-door violations: " + "; ".join(offenders)
 
@@ -221,8 +223,18 @@ def test_t16_6_b_mcp_door_imports_no_http_stack() -> None:
                 imported.append(node.module)
     for name in imported:
         root = name.split(".")[0]
-        if root in _HTTP_MODULES:
+        if root in _HTTP_MODULES and not (host_lifecycle and root == "socket"):
             offenders.append(name)
     assert offenders == [], f"MCP door imports HTTP/transport stack: {offenders}"
     # The scaffold imports the library (qmb) — a sibling over the same library.
     assert any(n.startswith("qmb") for n in imported)
+
+
+def test_host_lifecycle_exception_is_socket_only() -> None:
+    """DEC-0494 host control does not authorize domain HTTP, stores or identity."""
+    tree = ast.parse("import socket\nimport requests\nimport sqlite3\n")
+    assert any("socket" in hit for hit in _scan_thin(tree))
+    hits = _scan_thin(tree, host_lifecycle=True)
+    assert not any("socket" in hit for hit in hits)
+    assert any("requests" in hit for hit in hits)
+    assert any("sqlite3" in hit for hit in hits)

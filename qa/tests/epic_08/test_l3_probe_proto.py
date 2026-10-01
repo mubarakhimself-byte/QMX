@@ -253,7 +253,7 @@ def _module_imports(path: Path) -> set[str]:
 
 def test_l3_014_qmf_venue_imports_only_qmf_core_and_protobuf():
     """AR-06/AR-42/AR-43: qmf-venue imports only qmf-core (plus google.protobuf, in the
-    proto module only); no other roster package is imported."""
+    qmf-venue distribution only); no other roster package is imported."""
     forbidden_roots = ("qmf.registry", "qmf.data", "qmf.risk", "qmf.structure",
                        "qmf.indicators", "qmf.calendar")
     for py in VENUE_SRC.glob("*.py"):
@@ -261,8 +261,8 @@ def test_l3_014_qmf_venue_imports_only_qmf_core_and_protobuf():
         for imp in imports:
             for bad in forbidden_roots:
                 assert not imp.startswith(bad), f"{py.name} imports {imp}"
-        if "google.protobuf" in {i.split(".")[0] + "." + i.split(".")[1] for i in imports if "." in i}:
-            assert py.name == "proto.py", "google.protobuf may be imported only by proto.py"
+        # DEC-0141 scopes protobuf to the qmf-venue distribution.
+        # Encoding modules share the pinned compiled protocol; core stays clean.
 
 
 def test_l3_014_nothing_imports_qmf_venue_and_core_stays_clean():

@@ -488,7 +488,7 @@ lint = "ruff check packages extensions qml qmb qmn tools"
 # python -m: direct `pyright` console script can be blocked by host App Control.
 types = "python -m pyright"
 # python -m: direct `pytest` console script can be blocked by host App Control.
-test = "python -m pytest packages extensions qml qmb qmn --cov=qmf --cov=qml --cov=qmb --cov=qmn --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
+test = "python -m pytest packages extensions qml qmb qmn --cov=packages/qmf-core/src --cov=packages/qmf-data/src --cov=packages/qmf-registry/src --cov=packages/qmf-indicators/src --cov=packages/qmf-structure/src --cov=packages/qmf-risk/src --cov=packages/qmf-venue/src --cov=extensions/qmf-calendar-forex/src --cov=qml/src --cov=qmb/src --cov=qmn/src --cov=qmn/deploy --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
 qa-verify = "python qa/run_qa_verify.py"
 # Mechanical per-package + contract-module enforcement on top of the aggregate floor
 # above: reads the coverage.json `test` writes and fails the gate if any package drops
@@ -533,7 +533,15 @@ sequence = ["check", "build-all", "isolated-build"]
 default_item_type = "ref"
 
 [tool.poe.tasks.check-release]
-# Tier 3 — ship. Tier 2 today; the clean-install smoke on both tier-1 OSes is
-# added once a remote exists (AR-23: Ubuntu tier-1 stays untested until then).
-sequence = ["check-integration"]
+# Tier 3 requires explicit same-candidate product evidence, including native Windows.
+# The evidence gate refuses absent, stale, skipped or incomplete product checks.
+sequence = ["check-integration", "release-evidence"]
 default_item_type = "ref"
+
+[tool.poe.tasks.release-evidence]
+cmd = "python tools/release_gate.py release/acceptance.json"
+
+[tool.coverage.run]
+# Coverage 7 subprocess support instruments actual worker entrypoints. Source
+# roots are explicit in poe test; tests/examples never pad the product floor.
+patch = ["subprocess"]
