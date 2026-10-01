@@ -122,3 +122,20 @@ Verification:
 ```
 
 Results before the current review fixes: ProductSession/process focused tests passed 17; all qma-wire tests passed 244; QMB CLI host tests passed 45; Ruff passed. The current public CT-40 regression opens/reopens and grants through the live dispatcher, verifies stale CAS and undeclared-operation refusal, and dispatches the same operation id through two distinct enabled instances to different templates. Focused tests are being rerun for this revision. The separate installed lifecycle report in `/workspace/qmx-lifecycle-candidate-smoke.log` covers candidate `480d`; these follow-up changes still require a rebuilt-bundle repeat.
+
+## Durable JobHandle recovery (2026-10-01)
+
+JobHandle snapshots are folded into the existing `task_graph_state` occupancy slot under the owning persisted Task Graph. The daemon writes each state transition through the existing `task.graph_materialized` journal event and SQLite projection, then loads those exact snapshots during composition. Startup validates JobHandle payloads through `JobHandleStore.restore`, verifies each handle's task identity and owner against the persisted task, and calls the existing `recover_after_restart` path. Unresolved in-flight handles become `UNKNOWN`; known queued handles remain queued. No separate SQLite table or store was added.
+
+The public CT-40 process regression submits missions through authenticated sessions and grants, closes the daemon, composes a second process over the same root, and verifies both exact job ids are recovered as `UNKNOWN`. Cancel remains refused for an unknown handle under CT-46's operator-resolution rule. This proves daemon restart recovery and fail-closed status; it does not prove worker execution or successful cancellation of an unresolved job. The current mission compiler path still lacks an accepted worker/environment execution lease, so task execution and lease-backed restart reconciliation remain incomplete.
+
+Verification:
+
+```sh
+cd qmx-agents && uv run --package qma-daemon pytest packages/qma-daemon/tests/test_daemon_process.py::test_public_ct40_start_mission_uses_minted_product_session_grant -q
+cd qmx-agents && uv run --package qma-daemon pytest packages/qma-daemon/tests/test_daemon_process.py packages/qma-daemon/tests/test_nested_mission.py -q
+cd qmx-agents && uv run --package qma-daemon ruff check packages/qma-daemon/src/qma/daemon/taskgraph/projection.py packages/qma-daemon/src/qma/daemon/envs/jobs.py packages/qma-daemon/src/qma/daemon/composition.py packages/qma-daemon/src/qma/daemon/process.py packages/qma-daemon/tests/test_daemon_process.py
+git diff --check
+```
+
+Results: focused restart regression passed; daemon-process and nested-mission suites passed 16 tests; Ruff and whitespace checks passed. Commit: `8f98fa0d`.
