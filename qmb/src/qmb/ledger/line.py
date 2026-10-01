@@ -305,6 +305,7 @@ def mint_completed_line(
     *,
     outcome_identity: object,
     ct32_fingerprint: object,
+    performance_result: object = None,
     role: object = ROLE_CONFIRMATION,
     factory_sandbox: object = False,
     sweep_coordinates: object = None,
@@ -349,7 +350,34 @@ def mint_completed_line(
     artifact = _mint_ct32(config, outcome)
     if is_refusal(artifact):
         return artifact
-    reproduced = artifact.value.fingerprint()
+    selected_artifact = artifact.value
+    if performance_result is not None:
+        if not isinstance(performance_result, PerformanceResult):
+            return invalid(
+                "performance_result",
+                "a governed terminal line consumes the typed CT-32 result",
+                given=repr(type(performance_result).__name__),
+            )
+        baseline = artifact.value
+        label_matches = (
+            performance_result.result_label.fp1_identity() == baseline.result_label.fp1_identity()
+        )
+        period_matches = performance_result.period.fp1_identity() == baseline.period.fp1_identity()
+        population_matches = (
+            performance_result.population.fp1_identity() == baseline.population.fp1_identity()
+        )
+        role_matches = performance_result.account_binding_role is baseline.account_binding_role
+        if not (label_matches and period_matches and population_matches and role_matches):
+            return policy(
+                "performance_result",
+                "the recorded CT-32 label, period, and population match the resolved run-config",
+                label_matches=label_matches,
+                period_matches=period_matches,
+                population_matches=population_matches,
+                role_matches=role_matches,
+            )
+        selected_artifact = performance_result
+    reproduced = selected_artifact.fingerprint()
     if is_refusal(reproduced):
         return reproduced
     if reproduced.value != stamped.value:
@@ -370,8 +398,8 @@ def mint_completed_line(
     lane = _as_workbench_lane(workbench_lane)
     if is_refusal(lane):
         return lane
-    label = _label_payload(artifact.value.result_label, factory_sandbox=factory_sandbox)
-    measures = tuple(item.fp1_identity() for item in artifact.value.measure_set)
+    label = _label_payload(selected_artifact.result_label, factory_sandbox=factory_sandbox)
+    measures = tuple(item.fp1_identity() for item in selected_artifact.measure_set)
     return _build_line(
         run_id=config.fingerprint,
         role=parsed_role.value,
