@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -65,7 +66,7 @@ def _config(**keys: object) -> ResolvedRunConfig:
     stamp = _unwrap(fingerprint({"n": "ct32-artifact-example", "keys": sorted(keys)}), "stamp")
     payload: dict[str, object] = {STREAM_SET_KEY: ("eurusd", "gbpusd")}
     payload.update(keys)
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -78,6 +79,9 @@ def _config(**keys: object) -> ResolvedRunConfig:
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 

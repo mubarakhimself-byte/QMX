@@ -17,6 +17,7 @@ Shows the things R-RPT-21/22/24 / R-RPT-2/9 / B-10 pin down:
 from __future__ import annotations
 
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -71,7 +72,7 @@ def _obs(stream_id: str, ns: int = _NS) -> SliceObservation:
 
 def _config() -> ResolvedRunConfig:
     stamp = _unwrap(fingerprint({"n": "downstream-reads-example"}), "stamp")
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -84,6 +85,9 @@ def _config() -> ResolvedRunConfig:
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 

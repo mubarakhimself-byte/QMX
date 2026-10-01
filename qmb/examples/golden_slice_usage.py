@@ -15,6 +15,7 @@ Shows the things AR-58 / B-2 / B-5 / FM-11 pin down:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TypeVar
 
 from qmb.config import ResolvedRunConfig
@@ -59,7 +60,7 @@ def _obs(stream_id: str, ns: int = _NS) -> SliceObservation:
 
 def _config() -> ResolvedRunConfig:
     stamp = _unwrap(fingerprint({"n": "golden-example"}), "stamp")
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -72,6 +73,9 @@ def _config() -> ResolvedRunConfig:
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 

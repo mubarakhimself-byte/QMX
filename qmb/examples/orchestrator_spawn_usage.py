@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -68,7 +69,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(tag: str) -> ResolvedRunConfig:
     stamp = _unwrap(fingerprint({"n": "orch-example", "tag": tag}), "stamp")
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -81,6 +82,9 @@ def _config(tag: str) -> ResolvedRunConfig:
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 

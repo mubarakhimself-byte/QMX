@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -42,7 +43,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "study-stop", "tag": tag}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -56,6 +57,7 @@ def _config(*, tag: str) -> ResolvedRunConfig:
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def _sink(tmp_path: Path, *, slot: object = 0) -> qmb.LedgerSink:

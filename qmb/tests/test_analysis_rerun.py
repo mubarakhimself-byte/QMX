@@ -7,6 +7,7 @@ import inspect
 import json
 import textwrap
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -88,7 +89,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _ok(fingerprint({"n": "analysis-rerun-cfg", "tag": tag}))
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -102,6 +103,7 @@ def _config(*, tag: str) -> ResolvedRunConfig:
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def _source_ct32(*, tag: str = "source") -> PerformanceResult:

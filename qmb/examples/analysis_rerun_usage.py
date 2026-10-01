@@ -17,6 +17,7 @@ Shows the things Story 35.3 / FR-W25 / FR-W11 / SCN-0016 pin down:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
@@ -78,7 +79,7 @@ def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
 
 def _config(*, tag: str) -> ResolvedRunConfig:
     stamp = _unwrap(fingerprint({"n": "analysis-rerun-example", "tag": tag}), "fp")
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -91,6 +92,9 @@ def _config(*, tag: str) -> ResolvedRunConfig:
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 
@@ -185,12 +189,8 @@ def main() -> None:
                 BOOK_CONTRACT_FORMAT_VERSION,
                 "USD",
                 {
-                    "admission_bar": _section(
-                        "admission_bar", _money_variable("bar_floor", 1)
-                    ),
-                    "money_rules": _section(
-                        "money_rules", _money_variable("loss_floor", 800_000)
-                    ),
+                    "admission_bar": _section("admission_bar", _money_variable("bar_floor", 1)),
+                    "money_rules": _section("money_rules", _money_variable("loss_floor", 800_000)),
                     "exit_policy": _section("exit_policy", _money_variable("q", 100)),
                 },
             ),

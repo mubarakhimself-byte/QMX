@@ -6,11 +6,13 @@ import ast
 import inspect
 import json
 import textwrap
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from qmb.analysis import compare_runs, project, rerun
 from qmb.config import ResolvedRunConfig
@@ -75,7 +77,7 @@ def _config(*, tag: str, registry_as_of: Instant | None = None) -> ResolvedRunCo
     keys: dict[str, object] = {STREAM_SET_KEY: ("eurusd",)}
     if registry_as_of is not None:
         keys["registry_as_of"] = registry_as_of
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -89,6 +91,7 @@ def _config(*, tag: str, registry_as_of: Instant | None = None) -> ResolvedRunCo
         fingerprint=stamp,
         binding_fp1=stamp,
     )
+    return replace(config, fingerprint=_ok(fingerprint(config.fp1_identity())))
 
 
 def _slices() -> tuple[tuple[SliceObservation, ...], ...]:
@@ -266,12 +269,59 @@ def test_rerun_b4_role_is_the_role_of_that_run(tmp_path: Path) -> None:
     assert readout.b4_role is None
 
 
+def _reject_duplicate_contract_keys(node: yaml.Node) -> None:
+    if isinstance(node, yaml.MappingNode):
+        keys: set[str] = set()
+        for key, value in node.value:
+            assert isinstance(key, yaml.ScalarNode) and key.tag == "tag:yaml.org,2002:str"
+            assert key.value not in keys, f"duplicate YAML key: {key.value}"
+            keys.add(key.value)
+            _reject_duplicate_contract_keys(value)
+    elif isinstance(node, yaml.SequenceNode):
+        for value in node.value:
+            _reject_duplicate_contract_keys(value)
+
+
+def _assert_ct32_schema_has_no_workbench_fields(contract: str) -> None:
+    # The compose stub lacks its Node return annotation; narrow that boundary.
+    parsed = cast(
+        "yaml.Node | None",
+        yaml.compose(contract, Loader=yaml.SafeLoader),  # pyright: ignore[reportUnknownMemberType]
+    )
+    assert parsed is not None
+    _reject_duplicate_contract_keys(parsed)
+    document: object = yaml.safe_load(contract)
+    assert isinstance(document, dict)
+    schema: object = cast("dict[str, object]", document)["schema"]
+    assert isinstance(schema, dict)
+    schema = cast("dict[str, object]", schema)
+    assert schema["type"] == "performance-result"
+    fields = schema["fields"]
+    assert isinstance(fields, list)
+    headers: list[str] = []
+    for field in cast("list[object]", fields):
+        assert isinstance(field, str) and ":" in field
+        headers.append(field.split(":", 1)[0])
+    assert len(headers) == len(set(headers))
+    assert set(headers) == {
+        "result_label",
+        "population",
+        "population_edge",
+        "period",
+        "measure_set",
+        "suppression_accounting",
+        "veto_accounting",
+        "baseline_pointer",
+        "metric_contract_format_version",
+    }
+    assert "analysis_method" not in schema and "workbench_lane" not in schema
+
+
 def test_ct32_and_b4_gain_no_workbench_fields() -> None:
     contract = (_REPO / "docs" / "contracts" / "ct-32-performance-result.yaml").read_text(
         encoding="utf-8"
     )
-    assert "analysis_method" not in contract
-    assert "workbench_lane" not in contract
+    _assert_ct32_schema_has_no_workbench_fields(contract)
     for field in _BANNED_SHAPE_FIELDS:
         assert field not in ResultLabel.__dataclass_fields__
         assert field not in PerformanceResult.__dataclass_fields__
@@ -280,6 +330,23 @@ def test_ct32_and_b4_gain_no_workbench_fields() -> None:
     assert "workbench_lane" not in PerformanceResult.__dataclass_fields__
     assert "analysis_method" not in qmb.ledger_identity()
     assert "analysis_method" not in qmb.result_identity()
+
+
+@pytest.mark.parametrize("field", ["analysis_method", "workbench_lane"])
+def test_ct32_schema_detector_refuses_injected_workbench_field(field: str) -> None:
+    contract = (_REPO / "docs/contracts/ct-32-performance-result.yaml").read_text()
+    with pytest.raises(AssertionError):
+        _assert_ct32_schema_has_no_workbench_fields(
+            contract.replace("  enums:", f'    - "{field}: string"\n  enums:')
+        )
+    with pytest.raises(AssertionError):
+        _assert_ct32_schema_has_no_workbench_fields(
+            contract.replace("  fields:", f"  {field}: string\n  fields:")
+        )
+    with pytest.raises(AssertionError):
+        _assert_ct32_schema_has_no_workbench_fields(
+            contract.replace("  fields:\n", f'  fields:\n    - "{field}: string"\n  fields:\n')
+        )
 
 
 def test_f07_synthetic_portfolio_is_refused_as_deferred(tmp_path: Path) -> None:

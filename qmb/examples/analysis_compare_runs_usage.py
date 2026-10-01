@@ -18,6 +18,7 @@ Shows the things Story 35.5 / FR-W26 / FR-W28 / FR-W21 / SCN-0016 pin down:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -78,7 +79,7 @@ def _config(*, tag: str, registry_as_of: Instant | None = None) -> ResolvedRunCo
     keys: dict[str, object] = {STREAM_SET_KEY: ("eurusd",)}
     if registry_as_of is not None:
         keys["registry_as_of"] = registry_as_of
-    return ResolvedRunConfig(
+    config = ResolvedRunConfig(
         format_version=1,
         book_fp1=stamp,
         bms_fp1=stamp,
@@ -91,6 +92,9 @@ def _config(*, tag: str, registry_as_of: Instant | None = None) -> ResolvedRunCo
         world=World.REPLAY,
         fingerprint=stamp,
         binding_fp1=stamp,
+    )
+    return replace(
+        config, fingerprint=_unwrap(fingerprint(config.fp1_identity()), "config fingerprint")
     )
 
 
