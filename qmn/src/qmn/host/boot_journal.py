@@ -11,11 +11,22 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
-from qmf.core import Fingerprint, Ok, Result, World, WriterId, is_refusal
-from qmf.core.chrono import Instant
-from qmf.data import JournalEvent, JournalWriter
+from qmf.core import (
+    Fingerprint,
+    Ok,
+    Result,
+    World,
+    WriteOutcome,
+    WriterId,
+    canonical_bytes,
+    fingerprint,
+    is_refusal,
+)
+from qmf.core.chrono import DisplayTime, Instant
+from qmf.data import JournalAppendReceipt, JournalEvent, JournalEventType, JournalWriter
 from qmf.data.journal_producer import JournalReader
-from qmf.data.store import JournalStore
+from qmf.data.store import JournalStore, StoreReceipt
+from qmf.data.store.rooms import RoomRole
 
 from qmn.host._refuse import invalid, policy, unavailable
 from qmn.host.boot_ceremony import (
@@ -41,6 +52,7 @@ class QmfBootAttemptJournalSink:
     instant: Callable[[], Result[Instant]]
     _latest: BootAttemptRecord | None = None
     _latest_event: JournalEvent | None = None
+    _uncertain: bool = False
 
     @classmethod
     def resume(
@@ -75,11 +87,14 @@ class QmfBootAttemptJournalSink:
                 instant=cast("Callable[[], Result[Instant]]", instant),
                 _latest=state.value[0],
                 _latest_event=state.value[1],
+                _uncertain=False,
             )
         )
 
     def append(self, record: BootAttemptRecord, /) -> Result[BootAttemptRecord]:
         """Durably write the initial doors-bound attempt before later boot work."""
+        if self._uncertain:
+            return unavailable("boot_journal", "reopen checked CT-13 after uncertain append ACK")
         if self._latest is not None:
             return policy("boot_attempt", "one supervisor epoch records its attempt once")
         if (
@@ -93,6 +108,8 @@ class QmfBootAttemptJournalSink:
 
     def amend(self, record: BootAttemptRecord, /) -> Result[BootAttemptRecord]:
         """Append a same-attempt stage amendment with a pointer to its prior CT-13 row."""
+        if self._uncertain:
+            return unavailable("boot_journal", "reopen checked CT-13 after uncertain append ACK")
         previous = self._latest
         if previous is None or self._latest_event is None:
             return invalid("boot_attempt", "stage amend follows a durable initial attempt")
@@ -152,21 +169,108 @@ class QmfBootAttemptJournalSink:
             payload=payload,
         )
         if is_refusal(written):
+            self._uncertain = True
             return written
-        event = written.value.event
-        if event.world is not World.LIVE:
-            return invalid("journal_receipt", "append receipt retains the exact live CT-13 event")
-        if event.writer != self.writer.writer or event.sequence != self.writer.next_sequence - 1:
+        written_value: object = cast(object, written.value)
+        if type(written_value) is not JournalAppendReceipt:
+            self._uncertain = True
+            return invalid("journal_receipt", "append acknowledgement is a typed QMF receipt")
+        receipt = written_value
+        event_value: object = cast(object, receipt.event)
+        store_value: object = cast(object, receipt.store_receipt)
+        edges_value: object = cast(object, receipt.edge_receipts)
+        if type(event_value) is not JournalEvent or type(store_value) is not StoreReceipt:
+            self._uncertain = True
             return policy(
-                "journal_receipt", "append receipt matches writer and logical journal sequence"
+                "journal_receipt", "typed receipt contains event and physical store receipt"
             )
+        event = event_value
+        event_writer: object = cast(object, event.writer)
+        event_instant: object = cast(object, event.instant)
+        event_world: object = cast(object, event.world)
+        event_identity: object = cast(object, event.fingerprint)
+        event_type: object = cast(object, event.event_type)
+        event_payload: object = cast(object, event.payload)
+        store_world: object = cast(object, store_value.world)
+        store_role: object = cast(object, store_value.room_role)
+        store_outcome: object = cast(object, store_value.outcome)
+        expected_payload = dict(payload)
+        expected_payload["control_action_subtype"] = (
+            _BOOT_ATTEMPT_SUBTYPE if initial else _BOOT_AMEND_SUBTYPE
+        )
+        store_receipt = store_value
+        if (
+            type(event_type) is not JournalEventType
+            or event_type is not JournalEventType.CONTROL_ACTION
+            or type(event_writer) is not WriterId
+            or type(event.sequence) is not int
+            or type(event_instant) is not Instant
+            or type(event_world) is not World
+            or event_world is not World.LIVE
+            or type(event_identity) is not Fingerprint
+            or not isinstance(event_payload, Mapping)
+            or (event.correlation_id is not None and type(event.correlation_id) is not str)
+            or (event.display_time is not None and type(event.display_time) is not DisplayTime)
+            or not _same_mapping_bytes(
+                cast("Mapping[str, object]", event_payload), expected_payload
+            )
+            or event_writer != self.writer.writer
+            or event.sequence != self.writer.next_sequence - 1
+            or event_instant != at.value
+            or event.outcome is not None
+            or type(edges_value) is not tuple
+            or edges_value != ()
+            or type(store_world) is not World
+            or store_world is not World.LIVE
+            or type(store_role) is not RoomRole
+            or store_role is not RoomRole.JOURNAL
+            or type(store_receipt.engine) is not str
+            or store_receipt.engine != "jsonl"
+            or store_receipt.is_evidence_bearing is not True
+            or store_receipt.retained_forever is not True
+            or type(store_receipt.format_version) is not int
+            or store_receipt.format_version != 1
+            or store_receipt.engine_major is not None
+            or store_receipt.rebuild_calendar_identity is not None
+            or store_receipt.rebuild_tzdata_version is not None
+            or type(store_receipt.sequence) is not int
+            or store_receipt.sequence < 0
+            or type(store_outcome) is not WriteOutcome
+            or type(store_receipt.fingerprint) is not Fingerprint
+            or store_outcome not in {WriteOutcome.STORED, WriteOutcome.IDEMPOTENT}
+        ):
+            self._uncertain = True
+            return policy(
+                "journal_receipt", "receipt binds exact live event and physical JSONL append"
+            )
+        recomputed = fingerprint(event.fp1_identity())
+        if is_refusal(recomputed) or recomputed.value != event_identity:
+            self._uncertain = True
+            return policy("journal_receipt", "receipt event carries its recomputed fp1 identity")
         checked = JournalReader(self.journal_store).read_checked(_BOOT_STREAM, for_world=World.LIVE)
         if is_refusal(checked):
+            self._uncertain = True
             return checked
         matches = tuple(item for item in checked.value if item.fingerprint == event.fingerprint)
-        if len(matches) != 1 or matches[0] != event:
+        if len(matches) != 1 or not _same_event_bytes(matches[0], event):
+            self._uncertain = True
             return unavailable(
                 "journal_readback", "boot stage is independently visible in checked CT-13"
+            )
+        row_identity = fingerprint(event.to_row())
+        raw_rows = self.journal_store.read_stream(_BOOT_STREAM, for_world=World.LIVE)
+        if is_refusal(row_identity) or is_refusal(raw_rows):
+            self._uncertain = True
+            return unavailable("journal_readback", "physical CT-13 row is readable after append")
+        physical_index = store_receipt.sequence
+        if (
+            row_identity.value != store_receipt.fingerprint
+            or physical_index >= len(raw_rows.value)
+            or not _same_mapping_bytes(raw_rows.value[physical_index], event.to_row())
+        ):
+            self._uncertain = True
+            return policy(
+                "journal_receipt", "physical receipt index and fingerprint identify exact row bytes"
             )
         self._latest = record
         self._latest_event = event
@@ -274,3 +378,24 @@ def _stage_index(value: str) -> int | None:
         return BOOT_STAGES.index(value)
     except ValueError:
         return None
+
+
+def _same_event_bytes(left: JournalEvent, right: JournalEvent) -> bool:
+    """Compare the complete checked row, including fields excluded from fp1."""
+    left_row = canonical_bytes(left.to_row())
+    right_row = canonical_bytes(right.to_row())
+    return (
+        not is_refusal(left_row)
+        and not is_refusal(right_row)
+        and left_row.value == right_row.value
+    )
+
+
+def _same_mapping_bytes(left: object, right: Mapping[str, object]) -> bool:
+    left_row = canonical_bytes(left)
+    right_row = canonical_bytes(dict(right))
+    return (
+        not is_refusal(left_row)
+        and not is_refusal(right_row)
+        and left_row.value == right_row.value
+    )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -384,3 +385,91 @@ def test_failed_stand_down_journal_write_is_not_reported_as_persisted(
     )
     assert is_refusal(refused)
     journal.close()
+
+
+@pytest.mark.parametrize(
+    "corruption", ["missing-store", "foreign-engine", "wrong-index", "bool-event-sequence"]
+)
+def test_boot_attempt_refuses_untrusted_append_ack_without_advancing_memory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corruption: str,
+) -> None:
+    journal = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer = _writer()
+    sink_result = QmfBootAttemptJournalSink.resume(journal, writer, instant=_instant)
+    assert is_ok(sink_result)
+    sink = sink_result.value
+    actual_record = JournalWriter.record_control_action
+
+    def corrupt_ack(
+        self: JournalWriter,
+        subtype: str,
+        *,
+        instant: Instant,
+        payload: Mapping[str, object],
+    ) -> object:
+        actual = actual_record(self, subtype, instant=instant, payload=payload)
+        assert is_ok(actual)
+        receipt = actual.value
+        if corruption == "missing-store":
+            forged = replace(receipt, store_receipt=None)
+        elif corruption == "foreign-engine":
+            forged_store = replace(receipt.store_receipt, engine="foreign")
+            forged = replace(receipt, store_receipt=forged_store)
+        elif corruption == "wrong-index":
+            forged_store = replace(receipt.store_receipt, sequence=999)
+            forged = replace(receipt, store_receipt=forged_store)
+        else:
+            forged_event = replace(receipt.event, sequence=False)
+            forged = replace(receipt, event=forged_event)
+        return Ok(forged)
+
+    monkeypatch.setattr(JournalWriter, "record_control_action", corrupt_ack)
+    refused = sink.append(_record(writer, "doors_bound"))
+    assert is_refusal(refused)
+    assert is_refusal(sink.amend(_record(writer, "preflight")))
+    journal.close()
+    monkeypatch.undo()
+
+    reopened = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    recovered = QmfBootAttemptJournalSink.resume(reopened, writer, instant=_instant)
+    assert is_ok(recovered)
+    assert is_ok(recovered.value.amend(_record(writer, "preflight")))
+    reopened.close()
+
+
+def test_boot_attempt_unknown_ack_requires_reopen_and_recovers_actual_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    journal = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer = _writer()
+    sink_result = QmfBootAttemptJournalSink.resume(journal, writer, instant=_instant)
+    assert is_ok(sink_result)
+    actual_record = JournalWriter.record_control_action
+
+    def write_then_unknown(
+        self: JournalWriter,
+        subtype: str,
+        *,
+        instant: Instant,
+        payload: Mapping[str, object],
+    ) -> object:
+        actual = actual_record(self, subtype, instant=instant, payload=payload)
+        assert is_ok(actual)
+        return Ok(None)
+
+    monkeypatch.setattr(JournalWriter, "record_control_action", write_then_unknown)
+    refused = sink_result.value.append(_record(writer, "doors_bound"))
+    assert is_refusal(refused)
+    assert is_refusal(sink_result.value.amend(_record(writer, "preflight")))
+    journal.close()
+
+    reopened = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    recovered = QmfBootAttemptJournalSink.resume(reopened, writer, instant=_instant)
+    assert is_ok(recovered)
+    assert is_refusal(recovered.value.append(_record(writer, "doors_bound")))
+    events = JournalReader(reopened).read_checked("boot-lifecycle", for_world=World.LIVE)
+    assert is_ok(events)
+    assert len(events.value) == 1
+    reopened.close()
