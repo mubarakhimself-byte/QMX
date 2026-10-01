@@ -488,6 +488,12 @@ def test_canonical_but_mutable_custom_value_is_not_retained_as_evidence() -> Non
         PresenceState.PRESENT, instant, forged_price
     )
     assert is_refusal(nested_refusal)
+    forged_instrument = Instrument(VenueId("venue"), cast(str, {"venue": "v", "symbol": "EURUSD"}))
+    malformed_price = Price(123, forged_instrument, 5)
+    malformed_refusal = SeriesSample.try_create(
+        PresenceState.PRESENT, instant, malformed_price
+    )
+    assert is_refusal(malformed_refusal)
 
     # The supported QMF exact object path remains usable and immutable.
     exact_value = _r(1, 2)

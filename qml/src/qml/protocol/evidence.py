@@ -8,7 +8,7 @@ qmf-structure (DEC-0171); presence states are named from
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from enum import Enum, StrEnum
 from types import MappingProxyType
@@ -152,16 +152,27 @@ def _freeze_exact_graph(value: object, field: str) -> Result[object]:
         try:
             noun = cast(Any, value)
             noun_fields = fields(noun)
-            field_values = {item.name: getattr(noun, item.name) for item in noun_fields}
             if any(not item.init for item in noun_fields):
                 return invalid(field, "QMF evidence nouns expose reconstructable immutable fields")
-            frozen_fields: dict[str, object] = {}
-            for name, item in field_values.items():
-                frozen = _freeze_exact_graph(item, field)
+            frozen_values: list[object] = []
+            for item in noun_fields:
+                frozen = _freeze_exact_graph(getattr(noun, item.name), field)
                 if is_refusal(frozen):
                     return frozen
-                frozen_fields[name] = frozen.value
-            return Ok(type(value)(**frozen_fields))
+                frozen_values.append(frozen.value)
+            candidate_creator = getattr(type(value), "try_create", None)
+            if not callable(candidate_creator):
+                return invalid(
+                    field,
+                    "QMF evidence nouns expose a validating try_create constructor",
+                )
+            creator = cast(Callable[..., Result[object]], candidate_creator)
+            recreated = creator(*frozen_values)
+            if is_refusal(recreated):
+                return recreated
+            if type(recreated.value) is not type(value):
+                return invalid(field, "QMF noun validation preserves its exact concrete value type")
+            return Ok(recreated.value)
         except (TypeError, ValueError, AttributeError):
             return invalid(field, "QMF evidence nouns reconstruct from validated exact fields")
     return invalid(field, "unsupported canonical objects are not retained as immutable evidence")
