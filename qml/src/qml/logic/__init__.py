@@ -219,12 +219,22 @@ def resolve_logic_at_layer1(reference: object, catalog: object) -> Result[LogicI
     if is_refusal(items):
         return items
     key = _identity_key(wanted.value)
+    matches: list[LogicIdentity] = []
     for item in items.value:
         extracted = _extract_logic(item)
-        if extracted is None or is_refusal(extracted):
+        if extracted is None:
+            continue
+        if is_refusal(extracted):
+            if _logic_distribution_version(item) == (
+                wanted.value.distribution,
+                wanted.value.version,
+            ):
+                return extracted
             continue
         if _identity_key(extracted.value) == key:
-            return extracted
+            matches.append(extracted.value)
+    if matches:
+        return Ok(matches[0])
     return unavailable(
         "logic_reference",
         "the cited logic distribution does not resolve; an unresolvable logic "
@@ -353,7 +363,7 @@ def _identity_key(item: LogicIdentity) -> tuple[str, str, str]:
 
 def _extract_logic(item: object) -> Result[LogicIdentity] | None:
     if isinstance(item, LogicIdentity):
-        return Ok(item)
+        return LogicIdentity.try_from_payload(item)
     if isinstance(item, Mapping):
         mapping = cast("Mapping[str, object]", item)
         body = mapping.get("body")
@@ -366,4 +376,24 @@ def _extract_logic(item: object) -> Result[LogicIdentity] | None:
         ):
             return None
         return LogicIdentity.try_from_payload(mapping)
+    return None
+
+
+def _logic_distribution_version(item: object) -> tuple[object, object] | None:
+    """Read only the lookup prefix needed to surface malformed matching entries."""
+    if isinstance(item, LogicIdentity):
+        return (item.distribution, item.version)
+    if not isinstance(item, Mapping):
+        return None
+    mapping = cast("Mapping[str, object]", item)
+    nested = mapping.get("logic_reference")
+    if isinstance(nested, (LogicIdentity, Mapping)):
+        return _logic_distribution_version(cast("object", nested))
+    body = mapping.get("body")
+    if isinstance(body, Mapping) and (
+        _DISTRIBUTION_FIELD not in mapping and _MANIFEST_FIELD not in mapping
+    ):
+        return _logic_distribution_version(cast("object", body))
+    if _DISTRIBUTION_FIELD in mapping or _VERSION_FIELD in mapping:
+        return (mapping.get(_DISTRIBUTION_FIELD), mapping.get(_VERSION_FIELD))
     return None

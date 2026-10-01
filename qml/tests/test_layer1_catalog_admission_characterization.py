@@ -268,6 +268,28 @@ def test_confluence_registration_stable_id_is_checked_and_exact_duplicate_is_ide
     assert refused.context["journal"] is True
 
 
+def test_matching_malformed_logic_identity_refuses_in_either_catalog_order() -> None:
+    world = _recording_world()
+    valid = cast(LogicIdentity, world["logic"])
+    malformed = LogicIdentity(valid.distribution, valid.version, cast(Fingerprint, None))
+    outcomes: list[Result[Layer1Verdict]] = []
+    for catalog in ([malformed, valid], [valid, malformed]):
+        outcomes.append(_lint(world, logic_catalog=catalog))
+    for result in outcomes:
+        assert is_refusal(result)
+        assert result.context["field"] == "source_tree"
+        assert result.context["journal"] is True
+
+
+def test_distinct_valid_logic_sources_and_exact_duplicates_coexist() -> None:
+    world = _recording_world()
+    valid = cast(LogicIdentity, world["logic"])
+    other = _ok(mint_logic_identity(valid.distribution, valid.version, {"other.py": "pass\n"}))
+    assert is_ok(_lint(world, logic_catalog=[valid, valid]))
+    assert is_ok(_lint(world, logic_catalog=[other, valid]))
+    assert is_ok(_lint(world, logic_catalog=[valid, other]))
+
+
 def test_conflicting_duplicate_family_metadata_is_not_catalog_order_dependent() -> None:
     world = _recording_world()
     valid_record = cast(RegistrationRecord, world["family_record"])
