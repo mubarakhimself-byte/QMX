@@ -259,6 +259,11 @@ class MissionCompiler:
     def templates(self) -> GraphTemplateCatalog:
         return self._templates
 
+    @property
+    def known_quant_actor_ids(self) -> frozenset[str]:
+        """Canonical Quant identities registered with this compiler."""
+        return frozenset(self._known_quants)
+
     def remember_quant(self, actor_id: ActorId | str) -> None:
         token = actor_id.value if isinstance(actor_id, ActorId) else actor_id
         self._known_quants.add(token)

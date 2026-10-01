@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
+from qma.core.ontology import ActorId
 from qma.daemon.plugins.packs import research_corpus_plugin_load_config
+from qmf.core import Ok, RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
 
 CONFIG_NAME = "operator-config.json"
 
@@ -34,3 +37,55 @@ def load_plugin_load_configs(daemon_root: Path | str) -> dict[str, dict[str, obj
             f'{config_path} requires non-empty string "research_corpus_root_path"'
         )
     return research_corpus_plugin_load_config(Path(corpus_root))
+
+
+def backtest_binding(
+    daemon_root: Path | str, instance_id: str, config_revision: int
+) -> Result[tuple[ActorId, str]]:
+    """Resolve an operator-owned QMB actor/environment mapping for an exact instance revision."""
+    path = Path(daemon_root) / CONFIG_NAME
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "reason": "operator QMB binding configuration is unavailable",
+                "error": str(exc),
+            },
+        )
+    rows = raw.get("qmb_bindings") if isinstance(raw, dict) else None
+    row = rows.get(instance_id) if isinstance(rows, dict) else None
+    if not isinstance(row, Mapping):
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "reason": "no operator QMB binding exists for enabled instance",
+                "instance_id": instance_id,
+            },
+        )
+    if row.get("config_revision") != config_revision:
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "reason": "operator QMB binding does not match exact config revision",
+                "instance_id": instance_id,
+            },
+        )
+    actor = ActorId.try_create(row.get("owner_actor_id"))
+    if is_refusal(actor):
+        return actor
+    environment_ref = row.get("environment_ref")
+    if not isinstance(environment_ref, str) or not environment_ref.strip():
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "reason": "operator QMB binding has no declared environment_ref",
+                "instance_id": instance_id,
+            },
+        )
+    return Ok((actor.value, environment_ref.strip()))

@@ -65,3 +65,29 @@ def test_entrypoint_reads_operator_owned_research_root(tmp_path: Path) -> None:
     assert load_plugin_load_configs(daemon_root) == {
         "research-corpus": {"root_path": str(corpus_root)}
     }
+
+
+def test_qmb_binding_is_operator_owned_and_exact_revision(tmp_path: Path) -> None:
+    from qma.daemon.bootstrap_config import backtest_binding
+    from qmf.core import is_ok, is_refusal
+
+    (tmp_path / "operator-config.json").write_text(
+        json.dumps(
+            {
+                "qmb_bindings": {
+                    "pack:analysis-backtest": {
+                        "owner_actor_id": "quant:research/alpha",
+                        "environment_ref": "env:local",
+                        "config_revision": 3,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    resolved = backtest_binding(tmp_path, "pack:analysis-backtest", 3)
+    assert is_ok(resolved)
+    assert resolved.value[0].value == "quant:research/alpha"
+    assert resolved.value[1] == "env:local"
+    assert is_refusal(backtest_binding(tmp_path, "pack:analysis-backtest", 4))
+    assert is_refusal(backtest_binding(tmp_path, "pack:another-instance", 3))

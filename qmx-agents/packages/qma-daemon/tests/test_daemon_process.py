@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import runpy
 import sqlite3
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
 from qma.core.ports.qmb import ANALYSIS_BACKTEST_PLUGIN_ID, QMB_BACKTEST_TOOL_ID
 from qma.daemon.backtest import BacktestingService, CliQmbDoorTransport
@@ -20,6 +23,7 @@ from qma.daemon.process import (
     SIXTH_APPLICATION_MINTED,
     DaemonProcess,
 )
+from qma.daemon.taskgraph.records import GraphTemplate
 from qma.wire.listener import DEFAULT_BIND_HOST, ListenerBindConfig
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER
@@ -217,6 +221,54 @@ def test_process_module_does_not_import_qmb() -> None:
     assert after == before
     assert "import qmb" not in inspect.getsource(proc)
     assert "from qmb" not in inspect.getsource(proc)
+
+
+def test_procedure_start_compiles_registered_template_for_registered_quant(
+    tmp_path: Path,
+) -> None:
+    process = _compose(tmp_path)
+    try:
+        actor = ActorId.mint(DeskSlug.RESEARCH, "alpha")
+        assert is_ok(actor)
+        quant = Quant(
+            actor_id=actor.value,
+            desk=DeskSlug.RESEARCH,
+            quant_slug="alpha",
+            role=RoleName.RESEARCHER,
+            name="Quant alpha",
+        )
+        assert is_ok(process._mailboxes.open_for_quant(quant))
+        template = GraphTemplate(
+            qualified_id="research-corpus:host-start",
+            version="1.0.0",
+            nodes=({"id": "work", "kind": "task", "intent": "complete the requested work"},),
+        )
+        assert is_ok(process.nested_mission_host.register_template(template))
+        (tmp_path / "operator-config.json").write_text(
+            json.dumps(
+                {
+                    "qmb_bindings": {
+                        "instance:one": {
+                            "owner_actor_id": actor.value.value,
+                            "environment_ref": "env:local",
+                            "config_revision": 2,
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        bound = SimpleNamespace(
+            envelope=SimpleNamespace(op_id="qma.procedure.start", logical_invocation_id="inv:one"),
+            instance=SimpleNamespace(instance_id="instance:one", config_revision=2),
+            validated_payload={"procedure_id": "research-corpus:host-start"},
+        )
+        launched = process._execute_bound_product_operation(bound)
+        assert is_ok(launched), launched
+        assert launched.value.owner.actor_id == actor.value
+        assert process.jobs.handle_for(launched.value.handle.job_id) is not None
+    finally:
+        process.close()
 
 
 def test_example_script() -> None:
