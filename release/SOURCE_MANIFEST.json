@@ -10,16 +10,17 @@
   "remote": "https://github.com/MubarakHimself/QMX.git",
   "branch": "release/rc-2026-10-01",
   "worktree": "/workspace/QMX-release",
-  "published_delta": "All three current published refs match audit pins; fetch succeeded 2026-10-01",
+  "published_delta": "All three current published refs match audit pins; initial fetch and refresh succeeded 2026-10-01; /workspace/qmx-published-ref-refresh.log",
   "ui_owner": "Claude in user's separate session; integration pending reviewed contribution",
   "workflow": "User-authorized attended Codex implementation and independent Sol review; operator merges only",
   "resolved_from_documentation": {
     "windows_target": "Windows 11 x86-64; docs/architecture/stack.md; native installation/recovery not tested",
-    "intake_identity": "QMF data owns CT-15 source/native-ID/revision; application owns acquisition checkpoint/retry metadata, docs/components/qmf-data.md and CT-15"
+    "intake_identity": "QMF data owns CT-15 source/native-ID/revision; application owns acquisition checkpoint/retry metadata, docs/components/qmf-data.md and CT-15",
+    "qml_scope": "Current task authorizes product repair; ratified rider preserves QML Stage 0/Stage 1 direction. ADR-0023 remains provisional. OR-04 module homes describe seed intent; OR-06 keeps stamped registration at host composition root. See release/evidence/qml-authority-review.md."
   },
   "pending": [
     "native Windows installation and recovery execution",
-    "QML proposed research/host distribution boundary (ADR-0023 remains proposed)",
+    "QML stamped-registration host relocation and independent verification",
     "reviewed Claude UI contribution",
     "security verification",
     "external provider connectivity",
