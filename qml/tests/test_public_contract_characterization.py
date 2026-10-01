@@ -5,11 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TypeVar, cast
 
-from qmf.core.chrono import CalendarIdentity, Instant
+from qmf.core.chrono import CalendarIdentity, Instant, WriterId
 from qmf.core.exact import ExactRational, UnitKind
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import Result, TypedRefusal, is_ok, is_refusal
+from qml.conformance import graduate_mill_to_governed, lint_declaration, run_layer2_suite
 from qml.declaration import mint_bot_definition, mint_confluence
+from qml.families import mint_strategy_family
 from qml.footprint import (
     ProducerBinding,
     mint_footprint,
@@ -17,15 +19,21 @@ from qml.footprint import (
     report_completeness,
     resolve_template,
 )
+from qml.generation import ActKind, author_new_structure, classify_parameter_search
+from qml.host import stamp_promoted_from_edge
 from qml.logic import mint_logic_identity
 from qml.protocol import (
+    PROTOCOL_FORMAT_VERSION,
     FootprintEvidence,
+    FunctionFactory,
     HostedBot,
     MappingReadSurface,
     PresenceState,
     construct_bot,
+    mint_state_scope,
     resolve_assignment,
 )
+from qml.research import DictionaryCite, mint_hypothesis, save_hypothesis
 
 T = TypeVar("T")
 _BASE_NS = 1_800_000_000_000_000_000
@@ -394,3 +402,136 @@ def test_resolved_template_retains_budget_and_foreign_source_identity() -> None:
     base_fp = _ok(resolved.fingerprint_content())
     assert base_fp != _ok(changed_instrument.fingerprint_content())
     assert base_fp != _ok(changed_calendar.fingerprint_content())
+
+
+def test_parameter_search_then_new_source_graduates_with_saved_research_lineage() -> None:
+    producer = _ok(
+        ProducerBinding.try_create(_ok(fingerprint({"producer": "research-sma"})))
+    )
+    confluence_leg = {"role": "level", "producer_binding": producer}
+    footprint = _ok(
+        mint_footprint(
+            [
+                {
+                    "instrument_role": "primary",
+                    "bar_specs": [{"kind": "time-interval", "seconds": 60}],
+                    "stream_role": "trading",
+                }
+            ],
+            [_ok(CalendarIdentity.try_create("research-calendar", "v1", "2026a"))],
+            [producer],
+        )
+    )
+    parameter_space = [
+        {
+            "name": "lookback",
+            "type": "exact integer",
+            "bounds": {"min": 1, "max": 20},
+            "step": 1,
+            "default": 5,
+            "unit_kind": UnitKind.COUNT,
+            "ui": "ui-editable",
+        }
+    ]
+    original_source = {
+        "research_bot/__init__.py": "",
+        "research_bot/bot.py": "def on_instant(self, evidence):\n    return ()\n",
+    }
+    original_logic = _ok(mint_logic_identity("fixture-family", "1.0.0", original_source))
+    family = _ok(mint_strategy_family("fixture-family"))
+    original_confluence = _ok(mint_confluence([confluence_leg]))
+    original = _ok(
+        mint_bot_definition(
+            strategy_family_id=family.family_id.value,
+            confluence_set=[original_confluence],
+            parameter_space=parameter_space,
+            footprint=footprint,
+            permitted_exit_intents=(),
+            logic_reference=original_logic,
+        )
+    )
+    original_fp = _ok(original.fingerprint_content())
+    search = classify_parameter_search(
+        bot_fp1=original_fp,
+        trial_bot_fp1s=[original_fp, original_fp],
+    )
+    assert is_ok(search) and search.value is ActKind.SEARCH
+
+    revised_source = {
+        **original_source,
+        "research_bot/bot.py": (
+            "def on_instant(self, evidence):\n"
+            "    # Explicitly revised research candidate.\n"
+            "    return ()\n"
+        ),
+    }
+    authored = _ok(
+        author_new_structure(
+            strategy_family_id=family.family_id.value,
+            confluence_legs=[confluence_leg],
+            parameter_space=parameter_space,
+            footprint=footprint,
+            logic_source=revised_source,
+            logic_version="1.1.0",
+            parent_bot_fp1=original_fp,
+        )
+    )
+    assert authored.act is ActKind.GENERATION
+    assert authored.bot is not None and authored.logic is not None
+    revised = authored.bot
+    revised_fp = _ok(revised.fingerprint_content())
+    assert revised_fp != original_fp
+    assert is_refusal(
+        classify_parameter_search(bot_fp1=original_fp, trial_bot_fp1s=[original_fp, revised_fp])
+    )
+
+    layer1 = lint_declaration(
+        revised,
+        family_catalog=[family],
+        confluence_catalog=[authored.confluence],
+        producer_catalog=[producer],
+        logic_catalog=[authored.logic],
+    )
+    assert is_ok(layer1), layer1
+    state_scope = _ok(
+        mint_state_scope(
+            os="fixture-os",
+            logic_identity=revised.logic_reference,
+            protocol_format_version=PROTOCOL_FORMAT_VERSION,
+            arithmetic_reference_build="fixture-arithmetic",
+        )
+    )
+    layer2 = run_layer2_suite(
+        declaration=revised,
+        factory=FunctionFactory(logic=lambda evidence: ()),
+        source_tree=revised_source,
+        state_scope=state_scope,
+        state_bound=128,
+    )
+    assert is_ok(layer2), layer2
+
+    hypothesis = _ok(
+        mint_hypothesis(
+            hypothesis_class="entry_hypothesis",
+            origin="idea",
+            dictionary_cites=[DictionaryCite("dictionary/structure.md", "swing-level")],
+            title="swing level candidate",
+        )
+    )
+    saved_hypothesis = _ok(save_hypothesis(hypothesis))
+    graduation = _ok(
+        graduate_mill_to_governed(
+            layer1=layer1.value,
+            layer2=layer2.value,
+            hypothesis=saved_hypothesis,
+        )
+    )
+    stamped = _ok(
+        stamp_promoted_from_edge(
+            graduation=graduation,
+            writer=_ok(WriterId.try_create("qml-fixture", "authoring", "lineage", "boot-1")),
+        )
+    )
+    assert stamped.edge_type.value == "promoted-from"
+    assert stamped.from_ref == revised_fp
+    assert stamped.to_ref == saved_hypothesis.research_ref
