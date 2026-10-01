@@ -11,6 +11,7 @@ from qmf.core import (
     Instant,
     Instrument,
     Interval,
+    Ok,
     RefusalCategory,
     TradingDate,
     VenueId,
@@ -386,6 +387,33 @@ def test_resolve_series_derives_seal_position_from_rows_not_just_the_window(
     assert is_refusal(resolved)
     assert resolved.category is RefusalCategory.POLICY_REJECTION
     assert resolved.context.get("boundary") == "split-governed research door"
+
+
+def test_raw_store_guard_uses_known_at_when_event_time_is_before_seal(
+    tmp_path: Path,
+) -> None:
+    seal = _instant_seal(boundary_ns=1_000, world=World.LIVE)
+    store = EvidenceStore(tmp_path / "store", seal=seal)
+    bundle = store.for_world(World.LIVE)
+    assert is_ok(bundle)
+    raw = bundle.value.append_store.append_raw(
+        [{"t": 500, "known_at_ns": 1_000, "price": 42}]
+    )
+    assert is_ok(raw)
+
+    # Simulate an adapter that derives only event time. The shared append-store
+    # guard must still account for the persisted knowledge time before returning bytes.
+    earlier_event = Instant.try_create(500)
+    assert is_ok(earlier_event)
+    refused = bundle.value.append_store.read_raw_self_guarded(
+        raw.value.fingerprint,
+        for_world=World.LIVE,
+        boundary="raw archive",
+        derive_position=lambda _rows: Ok(earlier_event.value),
+    )
+    assert is_refusal(refused)
+    assert refused.category is RefusalCategory.POLICY_REJECTION
+    assert refused.context.get("boundary") == "raw archive"
 
 
 def test_facade_seal_guards_the_research_door_even_when_the_store_has_no_seal(

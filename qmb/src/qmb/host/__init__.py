@@ -14,6 +14,13 @@ from qmb.host.adapter import (
     construct_conformant_bot,
     drive_instant,
 )
+from qmb.host.replay_request import (
+    REPLAY_REQUEST_FORMAT_VERSION,
+    ReplayInputRequest,
+    ResolvedReplayRequest,
+    persist_replay_request,
+    resolve_replay_request,
+)
 from qmb.host.runner import (
     FACTORY_KIND_SILENT,
     FACTORY_KIND_SOURCE,
@@ -28,6 +35,7 @@ from qmb.host.runner import (
 __all__ = [
     "FACTORY_KIND_SILENT",
     "FACTORY_KIND_SOURCE",
+    "REPLAY_REQUEST_FORMAT_VERSION",
     "V1_DEFERRED_OS_CONFINEMENT",
     "V1_ENFORCEMENT_MECHANISMS",
     "V1_OUT_OF_SCOPE",
@@ -35,8 +43,12 @@ __all__ = [
     "FactorySpec",
     "FunctionFactory",
     "HostedBot",
+    "ReplayInputRequest",
+    "ResolvedReplayRequest",
     "construct_conformant_bot",
     "drive_instant",
+    "persist_replay_request",
+    "resolve_replay_request",
     "run_sandbox",
     "v1_enforcement_identity",
 ]

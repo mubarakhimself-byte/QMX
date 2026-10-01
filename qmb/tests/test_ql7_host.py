@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from qmb.config import (
     ASSIGNMENT_IS_CANONICAL_KEY,
@@ -20,6 +20,12 @@ from qmb.config import (
 )
 from qmb.doors import api
 from qmb.host import run_sandbox as public_run_sandbox
+from qmb.host.replay import PinnedInstrumentPriceMetadata, read_recorded_replay_source
+from qmb.host.replay_request import (
+    ReplayInputRequest,
+    persist_replay_request,
+    resolve_replay_request,
+)
 from qmb.host.sandbox import run_sandbox
 from qmb.ledger import (
     CANONICAL_ASSIGNMENT_CANONICAL,
@@ -36,7 +42,9 @@ from qmf.core.fingerprint import World, fingerprint
 from qmf.core.identity import Instrument, VenueId
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
+from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
+from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
 from qmf.data.store import EvidenceStore
 from qmf.registry import RegistrationRecord
 from qmf.risk.door import Direction, EntryIntent, ReasonCode
@@ -54,6 +62,7 @@ from qml.footprint import ProducerBinding, mint_footprint, mint_producer_templat
 from qml.logic import mint_logic_identity
 from qml.protocol import (
     PROTOCOL_FORMAT_VERSION,
+    BotStateScope,
     FunctionFactory,
     MappingReadSurface,
     PresenceState,
@@ -353,7 +362,7 @@ def _present(instant: Instant) -> dict[str, object]:
     }
 
 
-def _scope(declaration: BotDefinition) -> object:
+def _scope(declaration: BotDefinition) -> BotStateScope:
     return _ok(
         mint_state_scope(
             os="windows-11",
@@ -607,3 +616,117 @@ def test_layer2_under_qmb_hosting_passes_verdict_through_unchanged() -> None:
     assert qmb.construct_conformant_bot is api.construct_conformant_bot
     assert qmb.drive_instant is api.drive_instant
     assert qmb.fold_canonical_assignment is api.fold_canonical_assignment
+
+
+def test_durable_request_resolves_registered_split_and_manifest_bound_bot(
+    tmp_path: Path,
+) -> None:
+    declaration = _definition()
+    calendar = _calendar()
+    first = _instant(_CREATED_NS + 1_000_000_000)
+    second = _instant(_CREATED_NS + 2_000_000_000)
+    third = _instant(_CREATED_NS + 3_000_000_000)
+    segments = _ok(SplitManifest.default_split_segments((first, second, third)))
+    seal_boundary = _ok(SplitBoundary.try_create(_instant(1_800_000_000_000_000_000)))
+    split = _ok(
+        SplitManifest.try_create(
+            calendar_identity=calendar,
+            segments=segments,
+            seal_boundary=seal_boundary,
+            purge_width=0,
+            embargo_width=0,
+            world=World.REPLAY,
+        )
+    )
+    seal = _ok(HoldoutSeal.from_manifest(split, 12))
+    venue = _ok(VenueId.try_create("venue-ic"))
+    instrument = _ok(Instrument.try_create(venue, "EURUSD"))
+    metadata_identity = {"instrument": instrument.fp1_identity(), "price_scale": 5}
+    metadata = _ok(
+        PinnedInstrumentPriceMetadata.try_create(
+            instrument=instrument,
+            price_scale=5,
+            metadata_identity=metadata_identity,
+            metadata_fp1=_ok(fingerprint(metadata_identity)),
+        )
+    )
+    store_root = tmp_path / "source-room"
+    source_boundary = SourceObservationBoundary(EvidenceStore(store_root, seal=seal))
+    writer = _writer("request-source")
+    receipt_refs: list[str] = []
+    for sequence, side, price in ((1, "bid", 1_234_500), (2, "ask", 1_234_520)):
+        observation = _ok(
+            SourceObservation.try_create(
+                event_time=_instant(),
+                known_at=_instant(),
+                source="request-fixture",
+                source_native_id=side,
+                revision="1",
+                receive_wall_time=_instant(),
+                writer=writer,
+                sequence=sequence,
+                world=World.REPLAY,
+                foreign_money=_ok(ForeignMoney.try_create(price, 5)),
+                market_data=_ok(
+                    MarketDataContext.try_create(
+                        venue="venue-ic",
+                        symbol="EURUSD",
+                        resolution="tick",
+                        side=side,
+                        license_tag="local-fixture",
+                        provenance={"fixture": "request"},
+                    )
+                ),
+            )
+        )
+        receipt_refs.append(_ok(source_boundary.admit(observation)).archive.fingerprint.value)
+    request = _ok(
+        ReplayInputRequest.try_create(
+            split=split,
+            split_role=SegmentRole.TRAIN,
+            archive_fingerprints=receipt_refs,
+            stream_id="primary",
+            price_metadata=metadata,
+            bot_identity=declaration.identity_payload(),
+            source_tree=_SOURCE,
+            assignment=declaration.canonical_assignment(),
+            state_scope=_scope(declaration).to_mapping(),
+            state_bound=256,
+            conformance_timeout_seconds=30,
+        )
+    )
+    request_ref = _ok(
+        persist_replay_request(
+            request_root=tmp_path / "request-root",
+            request=request,
+        )
+    )
+    resolved = _ok(
+        resolve_replay_request(
+            request_root=tmp_path / "request-root",
+            request_ref=request_ref,
+            split=split,
+            expected_split_fp1=split.fingerprint,
+            raw_store_root=store_root,
+            holdout_months=12,
+        )
+    )
+    assert resolved.request_ref == request_ref
+    assert resolved.split_fp1 == split.fingerprint
+    assert (
+        resolved.source.fingerprint
+        == _ok(
+            read_recorded_replay_source(
+                store_root=store_root,
+                archive_fingerprints=receipt_refs,
+                stream_id="primary",
+                instrument_metadata=metadata,
+                split_manifest=split,
+                split_role=SegmentRole.TRAIN,
+                holdout_seal=seal,
+            )
+        ).fingerprint
+    )
+    resolved_declaration = cast("BotDefinition", resolved.hosted.declaration)
+    assert resolved_declaration.fingerprint_content() == declaration.fingerprint_content()
+    assert "golden_slice_fingerprint" in resolved.conformance_verdict.fp1_identity()

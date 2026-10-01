@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from qmf.core import (
     CalendarIdentity,
     CivilDate,
@@ -160,6 +162,14 @@ def test_ct10_source_obeys_ct12_purge_zone() -> None:
     near_boundary = partition_source_observation(manifest, _source_observation(1_050, 1_050))
     assert is_refusal(near_boundary)
     assert near_boundary.context.get("field") == "record"
+
+
+def test_ct10_source_refuses_stale_manifest_fingerprint() -> None:
+    manifest = _manifest(purge_ns=0, embargo_ns=0)
+    forged = replace(manifest, embargo_width=Duration(value_ns=1))
+    result = partition_source_observation(forged, _source_observation(400, 500))
+    assert is_refusal(result)
+    assert result.context.get("field") == "manifest"
 
 
 def test_boundary_accepts_int_nanoseconds() -> None:

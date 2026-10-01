@@ -8,6 +8,7 @@ from typing import TypeVar, cast
 
 import pytest
 from qmb.host.replay import PinnedInstrumentPriceMetadata, read_recorded_replay_source
+from qmb.host.replay_request import persist_replay_request, resolve_replay_request
 from qmf.core.chrono import CalendarIdentity, Instant, WriterId
 from qmf.core.exact import Price
 from qmf.core.fingerprint import World, fingerprint
@@ -254,6 +255,25 @@ def test_replay_source_binds_ct12_role_and_refuses_holdout_reads(tmp_path: Path)
     )
     assert is_refusal(sealed)
     assert sealed.context["field"] == "seal"
+
+
+def test_replay_request_requires_a_validated_envelope_and_existing_content_ref(
+    tmp_path: Path,
+) -> None:
+    rejected_write = persist_replay_request(request_root=tmp_path / "requests", request={})
+    assert is_refusal(rejected_write)
+    request_ref = _ok(fingerprint({"class": "missing-replay-request"}))
+    manifest, _ = _split()
+    missing = resolve_replay_request(
+        request_root=tmp_path / "requests",
+        request_ref=request_ref,
+        split=manifest,
+        expected_split_fp1=manifest.fingerprint,
+        raw_store_root=tmp_path / "qmf-room",
+        holdout_months=12,
+    )
+    assert is_refusal(missing)
+    assert missing.context["field"] == "request_ref"
 
 
 def _observation_at(

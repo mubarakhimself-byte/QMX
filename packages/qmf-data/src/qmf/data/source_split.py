@@ -8,7 +8,7 @@ the source-observation contract without relabeling the fact.
 
 from __future__ import annotations
 
-from qmf.core import Ok, Result
+from qmf.core import Ok, Result, fingerprint, is_refusal
 from qmf.data.observation import SourceObservation
 from qmf.data.splits import SegmentRole, SplitManifest
 from qmf.data.store.refusals import invalid_input, policy_rejection
@@ -29,6 +29,15 @@ def partition_source_observation(manifest: object, observation: object) -> Resul
     if not isinstance(observation, SourceObservation):
         return invalid_input(
             "observation", "source admission accepts an immutable CT-10 SourceObservation"
+        )
+    stamped = fingerprint(manifest.fp1_identity())
+    if is_refusal(stamped):
+        return stamped
+    if stamped.value != manifest.fingerprint:
+        return policy_rejection(
+            "manifest", "CT-12 fields recompute to the cited manifest fingerprint",
+            expected=manifest.fingerprint.value,
+            actual=stamped.value.value,
         )
     if manifest.world is not observation.world:
         return policy_rejection(

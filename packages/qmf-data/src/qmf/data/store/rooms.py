@@ -277,6 +277,10 @@ def derive_content_position(rows: Sequence[object]) -> int | None:
             continue
         mapping = cast("Mapping[str, object]", row)
         _consider(mapping.get("t"))
+        # CT-10 raw source rows distinguish event time from knowledge time. The
+        # latest known-at value must participate in the seal so callers cannot
+        # understate a late-arriving fact with its earlier event time.
+        _consider(mapping.get("known_at_ns"))
         partition = mapping.get("partition")
         if isinstance(partition, Mapping):
             _consider(cast("Mapping[str, object]", partition).get("window_end_ns"))
