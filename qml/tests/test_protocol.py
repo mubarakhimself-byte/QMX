@@ -7,9 +7,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TypeVar, cast, get_args
 
-from qmf.core.chrono import CalendarIdentity, DataDrivenClock, Instant
+from qmf.core.chrono import CalendarIdentity, CivilDate, DataDrivenClock, Instant, WriterId
 from qmf.core.exact import ExactRational, Price, PriceDelta, UnitKind
-from qmf.core.fingerprint import fingerprint
+from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.identity import Instrument, VenueId
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from qmf.risk.door import Direction, EntryIntent, ExitIntent, ExitKind, ReasonCode
@@ -499,6 +499,17 @@ def test_canonical_but_mutable_custom_value_is_not_retained_as_evidence() -> Non
     exact_value = _r(1, 2)
     exact = _ok(SeriesSample.try_create(PresenceState.PRESENT, instant, exact_value))
     assert exact.value == exact_value
+
+
+def test_immutable_values_without_sample_identity_are_refused() -> None:
+    instant = _instant()
+    fingerprint_value = _ok(Fingerprint.try_create("fp1:sha256:" + "ab" * 32))
+    writer = _ok(WriterId.try_create("node-a", "qmb", "evidence", "boot-1"))
+    civil_date = _ok(CivilDate.try_create(2026, 10, 1))
+
+    for value in (fingerprint_value, writer, civil_date):
+        refused = SeriesSample.try_create(PresenceState.PRESENT, instant, value)
+        assert is_refusal(refused)
 
 
 # --- AC: zero-or-more CT-23 intents; advisory stop; no Book full-loss --------

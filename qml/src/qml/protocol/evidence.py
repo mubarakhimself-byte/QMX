@@ -36,6 +36,7 @@ from qmf.core import (
     VenueId,
     WriterId,
 )
+from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 
 from qml._refuse import clean_token, invalid
@@ -269,6 +270,26 @@ class SeriesSample:
         frozen_value = _freeze_exact_graph(value, "value")
         if is_refusal(frozen_value):
             return frozen_value
+        # A frozen object is useful as governed evidence only when the existing
+        # canonical serializer can represent it in the sample identity. Do not
+        # invent projections for otherwise immutable QMF nouns which lack one.
+        identity: dict[str, object] = {
+            "presence": state.value.value,
+            "knowable_at": instant.value.fp1_identity(),
+        }
+        if frozen_value.value is not None:
+            identity["value"] = (
+                frozen_value.value.fp1_identity()
+                if isinstance(frozen_value.value, ExactRational)
+                else frozen_value.value
+            )
+        serializable = fingerprint(identity)
+        if is_refusal(serializable):
+            return invalid(
+                "value",
+                "sample values must have an existing canonical fingerprint representation",
+                cause=dict(serializable.context),
+            )
         if state.value is PresenceState.PRESENT:
             if value is None:
                 return invalid(
