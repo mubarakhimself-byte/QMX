@@ -7,6 +7,7 @@ from pathlib import Path
 
 from qma.core.ontology import ActorId, DeskSlug
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration
+from qma.core.ports.jobs import JobHandle
 from qma.core.ports.qmb import (
     ANALYSIS_BACKTEST_PLUGIN_ID,
     QMB_BACKTEST_TOOL_ID,
@@ -25,7 +26,8 @@ from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.plugins import DaemonPluginContext
 from qma.daemon.sessions.product_session import ProductSessionService
 from qma.daemon.tools import ToolRegistry
-from qmf.core import is_ok, is_refusal
+from qmf.core import Result, is_ok, is_refusal
+from qmf.data.store.refusals import invalid_input
 
 
 def _owner() -> ActorId:
@@ -217,6 +219,119 @@ def test_one_qmb_job_per_environment_further_job_refused() -> None:
         evidence_ref="evidence:recorded-4",
     )
     assert is_ok(retry)
+
+
+def test_real_exit_observer_projects_exit_and_retains_unknown_wait_failure() -> None:
+    class ExitingTransport(RecordingQmbDoorTransport):
+        def __init__(self, exit_code: object) -> None:
+            super().__init__()
+            self.exit_code = exit_code
+
+        def wait(self, job_id: str, *, timeout: float = 10.0) -> object:
+            del job_id, timeout
+            return self.exit_code
+
+    def with_transport(transport: ExitingTransport) -> BacktestingService:
+        service = BacktestingService(
+            tools=ToolRegistry(),
+            jobs=JobHandleService(),
+            environments=_envs(ExecutionEnvironmentKind.DOCKER),
+            transport=transport,
+        )
+        assert is_ok(service.install())
+        return service
+
+    service = with_transport(ExitingTransport(0))
+    placed = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="observer-known-exit",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-observer-known",
+        evidence_ref="evidence:observer-known",
+    )
+    assert is_ok(placed)
+    job_id = placed.value.handle.job_id
+    assert service.wait_for_observers(timeout=2.0)
+    completed = service.jobs.handle_for(job_id)
+    assert completed is not None
+    assert completed.state is JobHandleState.DONE
+    assert service.observer_failure_for(job_id) is None
+
+    failed_service = with_transport(ExitingTransport(None))
+    failed = failed_service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="observer-lost-exit",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-observer-lost",
+        evidence_ref="evidence:observer-lost",
+    )
+    assert is_ok(failed)
+    failed_job = failed.value.handle.job_id
+    assert failed_service.wait_for_observers(timeout=2.0)
+    unknown = failed_service.jobs.handle_for(failed_job)
+    assert unknown is not None
+    assert unknown.state is JobHandleState.UNKNOWN
+    assert failed_service.observer_failure_for(failed_job) is not None
+
+
+def test_real_exit_observer_retries_transient_terminal_projection_refusal() -> None:
+    class FailOnceJobs(JobHandleService):
+        def __init__(self) -> None:
+            super().__init__()
+            self.completion_calls = 0
+
+        def complete(
+            self,
+            job_id: str,
+            state: JobHandleState | str,
+            *,
+            writer: str = "daemon",
+        ) -> Result[JobHandle]:
+            self.completion_calls += 1
+            if self.completion_calls == 1:
+                return invalid_input("job_handle", "transient ledger append refusal")
+            return super().complete(job_id, state, writer=writer)
+
+    class ExitingTransport(RecordingQmbDoorTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.wait_calls = 0
+
+        def wait(self, job_id: str, *, timeout: float = 10.0) -> int:
+            del job_id, timeout
+            self.wait_calls += 1
+            if self.wait_calls > 1:
+                raise RuntimeError("known child exit must not be waited a second time")
+            return 0
+
+    jobs = FailOnceJobs()
+    transport = ExitingTransport()
+    service = BacktestingService(
+        tools=ToolRegistry(),
+        jobs=jobs,
+        environments=_envs(ExecutionEnvironmentKind.DOCKER),
+        transport=transport,
+    )
+    assert is_ok(service.install())
+    placed = service.invoke(
+        QMB_BACKTEST_TOOL_ID,
+        owner=_owner(),
+        task_id="observer-retry-terminal-write",
+        environment_ref="env:docker",
+        experiment_spec_fp1="fp1:spec-observer-retry",
+        evidence_ref="evidence:observer-retry",
+    )
+    assert is_ok(placed)
+    job_id = placed.value.handle.job_id
+    assert service.wait_for_observers(timeout=3.0)
+    handle = jobs.handle_for(job_id)
+    assert handle is not None
+    assert handle.state is JobHandleState.DONE
+    assert jobs.completion_calls >= 2
+    assert transport.wait_calls == 1
+    assert service.observer_failure_for(job_id) is None
 
 
 def test_unbound_environment_and_wrong_tool_are_refused() -> None:

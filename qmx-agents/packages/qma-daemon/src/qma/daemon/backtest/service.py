@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -382,6 +383,8 @@ class BacktestingService:
         self._artifact_root = Path(artifact_root) if artifact_root is not None else None
         self._occupancy: dict[str, str] = {}
         self._observers: list[threading.Thread] = []
+        self._observer_lock = threading.RLock()
+        self._observer_failures: dict[str, object] = {}
 
     @property
     def plugin_id(self) -> str:
@@ -674,7 +677,6 @@ class BacktestingService:
             )
             return receipt
         self._occupancy = admitted.value
-        self._start_exit_observer(minted.value.job_id)
         if self._experiments is not None and dispatch_lease is not None:
             recorded = self._experiments.record_coordinated_run(
                 spec_fp1=request.experiment_spec_fp1,
@@ -684,7 +686,9 @@ class BacktestingService:
                 ct32_ref=ct32_ref,
             )
             if is_refusal(recorded):
+                self._start_exit_observer(minted.value.job_id)
                 return recorded
+        self._start_exit_observer(minted.value.job_id)
         return Ok(
             QmbPlacement(
                 handle=minted.value,
@@ -706,18 +710,30 @@ class BacktestingService:
         state: JobHandleState | str,
     ) -> Result[JobHandle]:
         """Record a known QMB-owned outcome onto the QMA JobHandle and free occupancy."""
-        handle = self._jobs.handle_for(job_id)
-        if handle is None:
-            return invalid_input("job_id", "unknown qmb job", given=job_id)
-        if handle.state is JobHandleState.QUEUED:
-            started = self._jobs.start(job_id)
-            if is_refusal(started):
-                return started
-        completed = self._jobs.complete(job_id, state, writer="qmb_outcome")
-        if is_refusal(completed):
+        with self._observer_lock:
+            handle = self._jobs.handle_for(job_id)
+            if handle is None:
+                return invalid_input("job_id", "unknown qmb job", given=job_id)
+            if handle.is_terminal:
+                current_state = handle.state.value
+                given_state = state.value if isinstance(state, JobHandleState) else state
+                if current_state == given_state:
+                    return Ok(handle)
+                return policy_rejection(
+                    "job_state",
+                    "one observed QMB child outcome cannot replace a terminal JobHandle",
+                    current=current_state,
+                    given=given_state,
+                )
+            if handle.state is JobHandleState.QUEUED:
+                started = self._jobs.start(job_id)
+                if is_refusal(started):
+                    return started
+            completed = self._jobs.complete(job_id, state, writer="qmb_outcome")
+            if is_refusal(completed):
+                return completed
+            self._release_terminal()
             return completed
-        self._release_terminal()
-        return completed
 
     def wait_and_observe(self, job_id: str, *, timeout: float = 10.0) -> Result[JobHandle]:
         """Observe the actual QMB child exit instead of accepting a caller state."""
@@ -742,16 +758,54 @@ class BacktestingService:
             return
 
         def observe() -> None:
+            known_exit_code: int | None = None
             while True:
-                try:
-                    exit_code = waiter(job_id, timeout=0.25)
-                except subprocess.TimeoutExpired:
-                    continue
-                if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                if known_exit_code is None:
+                    try:
+                        exit_code = waiter(job_id, timeout=0.25)
+                    except subprocess.TimeoutExpired:
+                        continue
+                    except Exception as exc:  # transport/plugin boundary
+                        with self._observer_lock:
+                            self._observer_failures[job_id] = invalid_input(
+                                "qmb_wait",
+                                "child wait failed before a terminal code was observed",
+                                error=str(exc),
+                            )
+                            self._start_observation_if_queued(job_id)
+                            certainty = self._jobs.observe_lost_certainty(
+                                job_id, trigger="lost_supervisor"
+                            )
+                            if is_refusal(certainty):
+                                self._observer_failures[job_id] = certainty
+                        return
+                    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                        with self._observer_lock:
+                            self._observer_failures[job_id] = invalid_input(
+                                "exit_code", "child wait must return a process exit code"
+                            )
+                            self._start_observation_if_queued(job_id)
+                            certainty = self._jobs.observe_lost_certainty(
+                                job_id, trigger="lost_supervisor"
+                            )
+                            if is_refusal(certainty):
+                                self._observer_failures[job_id] = certainty
+                        return
+                    known_exit_code = exit_code
+                terminal = (
+                    JobHandleState.DONE if known_exit_code == 0 else JobHandleState.FAILED
+                )
+                observed = self.observe_outcome(job_id, terminal)
+                if is_ok(observed):
+                    with self._observer_lock:
+                        self._observer_failures.pop(job_id, None)
                     return
-                terminal = JobHandleState.DONE if exit_code == 0 else JobHandleState.FAILED
-                self.observe_outcome(job_id, terminal)
-                return
+                with self._observer_lock:
+                    self._observer_failures[job_id] = observed
+                    current = self._jobs.handle_for(job_id)
+                    if current is None or current.is_terminal:
+                        return
+                time.sleep(0.25)
 
         observer = threading.Thread(
             target=observe,
@@ -761,11 +815,44 @@ class BacktestingService:
         self._observers.append(observer)
         observer.start()
 
+    def _start_observation_if_queued(self, job_id: str) -> None:
+        """Move the submitted handle through its started state before resolution."""
+        handle = self._jobs.handle_for(job_id)
+        if handle is not None and handle.state is JobHandleState.QUEUED:
+            started = self._jobs.start(job_id)
+            if is_refusal(started):
+                self._observer_failures[job_id] = started
+
+    def observer_failure_for(self, job_id: str) -> object | None:
+        """Return the retained transport/projection failure for a child observer."""
+        with self._observer_lock:
+            return self._observer_failures.get(job_id)
+
+    def wait_for_observers(self, *, timeout: float = 10.0) -> bool:
+        """Join owned exit observers; useful for bounded shutdown and tests."""
+        if isinstance(timeout, bool) or timeout < 0:
+            return False
+        deadline = time.monotonic() + timeout
+        for observer in tuple(self._observers):
+            remaining = max(0.0, deadline - time.monotonic())
+            observer.join(remaining)
+        return all(not observer.is_alive() for observer in self._observers)
+
     def cancel(
         self,
         job_id: str,
         *,
         writer: str = COORDINATED_CANCEL_AUTHORITY,
+    ) -> Result[JobHandle]:
+        """Serialize cancellation against the real-child exit observer."""
+        with self._observer_lock:
+            return self._cancel_locked(job_id, writer=writer)
+
+    def _cancel_locked(
+        self,
+        job_id: str,
+        *,
+        writer: str,
     ) -> Result[JobHandle]:
         """JobHandle.cancel only. Production door maps it to QMB abort."""
         mapped = False
