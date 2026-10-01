@@ -2,23 +2,21 @@
 
 B1 dated CT-06 record; B2 no authority; B3 keys the ratified qmf-risk exit_policy
 law; B4 unresolvable family -> unavailable dependency (R-009). Effects observed
-through a real ``Registrar`` sink and the real qmf-risk ``ExitPolicy`` surface,
+through a real host-owned ``Registrar`` guard and the qmf-risk ``ExitPolicy`` surface,
 both owned by the test.
 """
 
 from __future__ import annotations
 
 import helpers as H
-
+from qmb.host.bot_registration import install_strategy_family_kind, register_strategy_family
 from qmf.registry import KindRegistry, Registrar
 from qmf.risk.door import ExitLogicRef
 from qmf.risk.exit_policy import ExitPolicy, ExitPolicyResolution, resolve_exit_policy_entry
 from qml.families import (
     FORBIDDEN_AUTHORITY_FIELDS,
     KIND_STRATEGY_FAMILY,
-    install_strategy_family_kind,
     mint_strategy_family,
-    register_strategy_family,
     resolve_family_at_layer1,
     validate_family_body,
 )
