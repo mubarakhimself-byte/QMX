@@ -97,6 +97,7 @@ def build(destination: Path, ui_build: Path) -> None:
     nested_lock = run([uv, *export, "--project", "qmx-agents", "--all-packages"])
     (destination / "requirements.lock").write_text(root_lock + "\n" + nested_lock)
     shutil.copyfile(ROOT / "release/launcher.py", destination / "launcher.py")
+    shutil.copyfile(ROOT / "release/install.py", destination / "install.py")
     archive(ui_build, destination / "ui.tar.gz")
     packs = ROOT / "qmx-agents/packages/qma-daemon/src/qma/daemon/bundled_packs"
     if not packs.is_dir():

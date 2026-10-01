@@ -223,7 +223,7 @@ def test_t16_6_b_mcp_door_imports_no_http_stack() -> None:
                 imported.append(node.module)
     for name in imported:
         root = name.split(".")[0]
-        if root in _HTTP_MODULES and not (host_lifecycle and root == "socket"):
+        if root in _HTTP_MODULES:
             offenders.append(name)
     assert offenders == [], f"MCP door imports HTTP/transport stack: {offenders}"
     # The scaffold imports the library (qmb) — a sibling over the same library.
