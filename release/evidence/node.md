@@ -41,8 +41,11 @@ deployed incident, a production composition path, or live trading exposure.
   it; typed rejected/denied outcomes release it. The ledger now journals
   admission, submission outcome, and attributed-fill reservation transitions
   before updating reservation state, and fails closed after an append refusal or
-  uncertain acknowledgment. Recovery rejects incomplete streams and requires a
-  supplied committed high-water matching the recovered prefix. However, the
+  uncertain acknowledgment. The QMF adapter requires a typed CT-13 append receipt,
+  checks its physical-row fingerprint and journal/readback, and accepts recovered
+  transition rows only from the configured host/risk/stream writer principal
+  across boot epochs. Recovery rejects incomplete streams and requires a supplied
+  committed high-water matching the recovered prefix. However, the
   QMN `QmfEntryReservationJournal` adapter now uses QMF's resumed CT-13 writer
   and checked reader to append and recover the typed transition stream. The
   production composition still has not wired this adapter to an actual Book/KSA
@@ -65,7 +68,12 @@ recovers QMF reservation state, runs hosted dispatch and the OrderPath, and
 persists both pre-dispatch and terminal transcript rows. The KSA levels come
 from a checked CT-13 projection with pinned global/stream epochs, configured
 writer identities, internally folded CT-30 escalations, and source fingerprints
-included in the transcript. The conformance test uses a local QMF store and
+included in the transcript. Epoch witnesses are keyed by exact scope, epoch id,
+and fingerprint; a global witness cannot satisfy a stream epoch with a colliding
+token. Root-open recomputes the native-map fingerprint to reject altered rows
+with a stale fingerprint. Snapshot and SQS environments must match the exact
+Book account role, and SQS venue/instrument keys must match the Book target. The
+conformance test uses a local QMF store and
 `ConformanceDouble`; it is not a live execution proof. The actual process entry
 point still does not compose this root because production registry/provider
 configuration, native boot proof, and venue adapter wiring are unavailable.
@@ -99,9 +107,10 @@ The command reports **133 passed**. A separate checked-journal adapter and
 supervised-process verification command reports **47 passed** across the
 adapter, seat tunnel, order path, and supervisor process tests. After adding the
 configured local MIS/Book/CT-30/KSA/OrderPath composition, the node-focused
-command reports **53 passed** across that root, KSA projection, adapter, seat
-tunnel, order path, and supervisor lifecycle tests. Scoped Ruff and formatting
-checks passed; Pyright reported 0 errors, 0 warnings, and 0 informations.
+command reports **68 passed** across that root, KSA projection, adapter, seat
+tunnel, order path, supervisor lifecycle, and time tests. Scoped Ruff and
+formatting checks passed, the ambient scan is clean, and Pyright reported 0
+errors, 0 warnings, and 0 informations.
 
 The broader command `uv run --no-sync pytest -q qmn/tests
 packages/qmf-venue/tests` reached **1,412 passed, 7 skipped, 1 failed**. Its

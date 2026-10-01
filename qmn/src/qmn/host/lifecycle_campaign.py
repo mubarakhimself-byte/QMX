@@ -45,13 +45,7 @@ from qmn.data import (
     refuse_live_bucket_tonight,
 )
 from qmn.host._refuse import invalid, policy
-from qmn.host.boot_ceremony import (
-    CompositionFingerprintInputs,
-    InMemoryBootAttemptSink,
-    PreflightFacts,
-    run_boot_ceremony,
-)
-from qmn.host.supervise import (
+from qmn.host._supervision import (
     CommandFate,
     CrashLoopFold,
     LifecycleState,
@@ -61,6 +55,12 @@ from qmn.host.supervise import (
     StandDownTrigger,
     SupervisionConfig,
     admit_under_lifecycle,
+)
+from qmn.host.boot_ceremony import (
+    CompositionFingerprintInputs,
+    InMemoryBootAttemptSink,
+    PreflightFacts,
+    run_boot_ceremony,
 )
 from qmn.loop import CycleBand, entry_side_refused, protection_enactable
 from qmn.observability import (

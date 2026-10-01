@@ -36,7 +36,7 @@ def _launch(root: Path, state: Path, port: int) -> subprocess.Popen[bytes]:
         [sys.executable, "-m", "qmn.host.supervise"],
         env=env,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
 
 
@@ -78,7 +78,9 @@ def test_supervisor_module_runs_stand_down_and_survives_restart(tmp_path: Path) 
                 assert readiness["trading"] == "unavailable"
         finally:
             process.terminate()
-            assert process.wait(timeout=5) == 0
+            _stdout, stderr = process.communicate(timeout=5)
+            assert process.returncode == 0
+            assert stderr is not None and b"RuntimeWarning" not in stderr
 
     evidence = EvidenceStore(state / "evidence")
     live = evidence.for_world(World.LIVE)

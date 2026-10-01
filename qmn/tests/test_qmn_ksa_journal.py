@@ -39,6 +39,7 @@ def _projection(
     *,
     include_epochs: bool = True,
     authorize_writer: bool = True,
+    same_epoch_id: bool = False,
 ) -> KsaJournalProjection:
     evidence = EvidenceStore(tmp_path / "evidence")
     world_store = _ok(evidence.for_world(World.LIVE))
@@ -47,10 +48,18 @@ def _projection(
     global_scope = KsaEnforcementScope.global_scope()
     stream_scope = _ok(KsaEnforcementScope.stream(_venue_id(), "acct-1"))
     global_epoch = _ok(
-        mint_level_epoch(epoch_id="global-1", scope=global_scope, opened_at=_instant())
+        mint_level_epoch(
+            epoch_id="shared" if same_epoch_id else "global-1",
+            scope=global_scope,
+            opened_at=_instant(),
+        )
     )
     stream_epoch = _ok(
-        mint_level_epoch(epoch_id="stream-1", scope=stream_scope, opened_at=_instant())
+        mint_level_epoch(
+            epoch_id="shared" if same_epoch_id else "stream-1",
+            scope=stream_scope,
+            opened_at=_instant(),
+        )
     )
     epochs = (global_epoch, stream_epoch) if include_epochs else (global_epoch,)
     for epoch in epochs:
@@ -147,3 +156,13 @@ def test_other_binding_scope_cannot_supply_stream_ksa_state(tmp_path: Path) -> N
 
     assert is_refusal(folded)
     assert folded.context["field"] == "ksa_scope"
+
+
+def test_epoch_witness_is_scoped_even_when_epoch_tokens_collide(tmp_path: Path) -> None:
+    projection = _projection(tmp_path, include_epochs=False, same_epoch_id=True)
+    scope = _ok(KsaEnforcementScope.stream(_venue_id(), "acct-1"))
+
+    folded = projection.levels(expected_stream_scope=scope)
+
+    assert is_refusal(folded)
+    assert folded.context["field"] == "ksa_epoch_witness"

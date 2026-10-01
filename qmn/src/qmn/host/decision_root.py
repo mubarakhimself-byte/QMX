@@ -18,10 +18,12 @@ from qmf.core import (
     SinkAck,
     VenueId,
     WriterId,
+    fingerprint,
     is_refusal,
 )
-from qmf.data import JournalEventType, JournalWriter
+from qmf.data import JournalAppendReceipt, JournalEventType, JournalReader, JournalWriter
 from qmf.data.store import JournalStore
+from qmf.data.store.rooms import RoomRole
 from qmf.risk.binding import BookBindingRecord
 from qmf.risk.door import EntryIntent
 
@@ -169,11 +171,45 @@ class QmfHostedDecisionJournal:
         )
         if is_refusal(appended):
             return appended
+        if type(appended.value) is not JournalAppendReceipt:
+            return policy("decision_journal", "QMF confirms a typed durable journal append")
+        event = appended.value.event
+        physical = appended.value.store_receipt
+        row_fingerprint = fingerprint(event.to_row())
+        if is_refusal(row_fingerprint):
+            return row_fingerprint
+        stored_payload_fp = fingerprint(event.payload)
+        expected_payload_fp = fingerprint(body)
+        if is_refusal(stored_payload_fp):
+            return stored_payload_fp
+        if is_refusal(expected_payload_fp):
+            return expected_payload_fp
+        if (
+            event.event_type is not event_type
+            or stored_payload_fp.value != expected_payload_fp.value
+            or event.writer != self.writer.writer
+            or event.world is not self.journal_store.world
+            or physical.fingerprint != row_fingerprint.value
+            or physical.world is not self.journal_store.world
+            or physical.room_role is not RoomRole.JOURNAL
+            or not physical.is_evidence_bearing
+            or not physical.retained_forever
+        ):
+            return policy(
+                "decision_journal", "the append receipt identifies the exact CT-13 journal event"
+            )
+        checked = JournalReader(self.journal_store).read_checked(
+            self.writer.stream_name, for_world=self.journal_store.world
+        )
+        if is_refusal(checked):
+            return checked
+        if not any(row.fingerprint == event.fingerprint for row in checked.value):
+            return policy("decision_journal", "the complete decision event reads back from CT-13")
         return Ok(
             SinkAck(
                 {
                     "complete": True,
-                    "fingerprint": appended.value.event.fingerprint.value,
+                    "fingerprint": event.fingerprint.value,
                 }
             )
         )
@@ -265,6 +301,18 @@ class HostedDecisionRoot:
         epoch = path.binding_record.fingerprint()
         if is_refusal(epoch):
             return epoch
+        rebuilt_native_map = NativeExecutionMap.try_create(
+            path.native_execution_map.mappings,
+            registry_as_of_fingerprint=path.native_execution_map.registry_as_of_fingerprint,
+            binding_epoch=epoch.value,
+        )
+        if is_refusal(rebuilt_native_map):
+            return rebuilt_native_map
+        if rebuilt_native_map.value.fingerprint != path.native_execution_map.fingerprint:
+            return policy(
+                "native_execution_map",
+                "native mappings reproduce the pinned immutable map fingerprint",
+            )
         if (
             seat.binding_ref != epoch.value.value
             or path.position_ledger.binding_epoch != epoch.value
@@ -310,6 +358,15 @@ class HostedDecisionRoot:
             return invalid("snapshot", "the Book and KSA consume a typed MIS SignalSnapshot")
         if not isinstance(decision_at, Instant):
             return invalid("decision_at", "the configured root receives its recorded Instant")
+        account = cast("Account", self.path.account)
+        expected_environment = account.role.value
+        if snapshot.environment != expected_environment:
+            return policy(
+                "snapshot_environment",
+                "MIS snapshot and SQS baseline environment match the exact Book account role",
+                expected=expected_environment,
+                given=snapshot.environment,
+            )
         book_snapshot = consume_signal_snapshot(
             snapshot,
             consumer=GovernedConsumer.BOOK_DOOR,
@@ -376,6 +433,9 @@ class HostedDecisionRoot:
                 or reading.readiness is not ProducerReadiness.OK
                 or reading.hard_block
                 or reading.score is None
+                or reading.baseline_key.venue != self.path.venue_id
+                or reading.baseline_key.environment != expected_environment
+                or reading.baseline_key.instrument != intent.instrument
             ):
                 return policy(
                     "sqs",

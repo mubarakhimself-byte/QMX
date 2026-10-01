@@ -39,7 +39,7 @@ from qmn.bench.harness import collect_provenance, peak_rss_bytes
 from qmn.bench.schema import BenchLifecycle, DeploymentProvenance
 from qmn.doors.library import DoorRuntime, enact_power, read_status
 from qmn.host._refuse import invalid, policy
-from qmn.host.supervise import (
+from qmn.host._supervision import (
     ASYNC_ALLOWED_SURFACES,
     DOMAIN_BACKGROUND_THREADS_ALLOWED,
     EVENT_LOOP_COUNT,

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar, cast
 
+import pytest
 from qmb.runloop import CancelToken, ScriptedLimitProbe
 from qmf.core import (
     Account,
@@ -36,7 +38,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.chrono import CalendarIdentity
-from qmf.data import JournalReader, JournalWriter
+from qmf.data import JournalAppendReceipt, JournalReader, JournalWriter
 from qmf.data.store import EvidenceStore
 from qmf.risk.binding import (
     STATE_CARRY_COUNTERS,
@@ -86,6 +88,7 @@ from qml.protocol import (
     mint_state_scope,
 )
 from qmn.host.decision_root import (
+    DECISION_TRANSCRIPT_CLASS,
     HostedDecisionRoot,
     OrderPathTiming,
     QmfHostedDecisionJournal,
@@ -925,6 +928,22 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     )
     _ok(order_path.open_sequencer())
     admitted = _ok(_propose(factory=FunctionFactory(logic=lambda _evidence: (_entry(),))))
+    native_map = cast(NativeExecutionMap, path.native_execution_map)
+    altered_row = replace(native_map.mappings[0], native_symbol_id=999)
+    stale_native_map = replace(native_map, mappings=(altered_row, *native_map.mappings[1:]))
+    stale_path = replace(path, native_execution_map=stale_native_map)
+    stale_root = _refusal(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=stale_path,
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    assert stale_root.context["field"] == "native_execution_map"
     root = _ok(
         HostedDecisionRoot.try_open(
             seat=admitted,
@@ -936,7 +955,7 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
             timing_for=timing_for,
         )
     )
-    sqs_key = _ok(sqs_baseline_key(_venue(), "live", _instrument()))
+    sqs_key = _ok(sqs_baseline_key(_venue(), "demo", _instrument()))
     sqs = _ok(
         SqsReading.try_create(
             sqs_key,
@@ -963,13 +982,53 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     snapshot = _ok(
         mint_signal_snapshot(
             frontier_instant=frontier,
-            environment="live",
+            environment="demo",
             feed_state=CanonicalFeedState.LIVE,
             producers=(sqs_slot, feed_slot),
             decision_freshness_bound=_duration(5_000_000_000),
             degraded_sensors=(),
         )
     )
+    demo_sqs_key = _ok(sqs_baseline_key(_venue(), "live", _instrument()))
+    demo_sqs = _ok(
+        SqsReading.try_create(
+            demo_sqs_key,
+            readiness=ProducerReadiness.OK,
+            labeler_version="sqs-test-v1",
+            score=_ok(ExactRational.try_create(1, 1, UnitKind.DIMENSIONLESS_RATIO)),
+            hard_block=False,
+        )
+    )
+    demo_snapshot = _ok(
+        mint_signal_snapshot(
+            frontier_instant=frontier,
+            environment="live",
+            feed_state=CanonicalFeedState.LIVE,
+            producers=(
+                _ok(
+                    ProducerSlot.try_create(
+                        "sqs",
+                        readiness=ProducerReadiness.OK,
+                        labeler_version="sqs-test-v1",
+                        sqs=demo_sqs,
+                    )
+                ),
+                feed_slot,
+            ),
+            decision_freshness_bound=_duration(5_000_000_000),
+            degraded_sensors=(),
+        )
+    )
+    wrong_environment = _refusal(
+        root.run_slice(
+            snapshot=demo_snapshot,
+            decision_at=_instant(),
+            stream=SeatTransitionStream(),
+            cancel=CancelToken(),
+            probe=_drive_probe(),
+        )
+    )
+    assert wrong_environment.context["field"] == "snapshot_environment"
     transcript = _ok(
         root.run_slice(
             snapshot=snapshot,
@@ -1007,6 +1066,36 @@ def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath
     final_result = cast("Mapping[str, object]", final_results[0])
     assert final_result.get("outcome") == "accepted-by-venue"
     assert ledger.has_pending_entry("EURUSD") is True
+
+
+@pytest.mark.parametrize("fake_value", [None, "ack"])
+def test_hosted_decision_sink_refuses_untyped_qmf_ack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_value: object,
+) -> None:
+    evidence = EvidenceStore(tmp_path / "evidence")
+    world = _ok(evidence.for_world(World.LIVE))
+    writer_id = _ok(WriterId.try_create("node-test", "supervisor", "hosted", "boot-1"))
+    journal = _ok(
+        QmfHostedDecisionJournal.resume(
+            world.journal,
+            writer_id,
+            stream_name="hosted",
+            instant=_instant,
+        )
+    )
+
+    def malformed_record(
+        _writer: JournalWriter, *_args: object, **_kwargs: object
+    ) -> Result[JournalAppendReceipt]:
+        return cast("Result[JournalAppendReceipt]", Ok(fake_value))
+
+    monkeypatch.setattr(JournalWriter, "record", malformed_record)
+
+    refused = _refusal(journal.append({"class": DECISION_TRANSCRIPT_CLASS}))
+
+    assert refused.context["field"] == "decision_journal"
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:

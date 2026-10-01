@@ -107,11 +107,15 @@ class KsaJournalProjection:
         events = self.reader.read_checked(self.stream_name, for_world=self.world)
         if is_refusal(events):
             return events
-        epoch_fps: set[str] = set()
+        epoch_fps: set[tuple[str, str, str]] = set()
         records: list[KsaEscalationRecord] = []
         source_fps: list[Fingerprint] = []
         expected_epochs = (self.global_epoch, self.stream_epoch)
         expected_epoch_ids = {epoch.epoch_id for epoch in expected_epochs}
+        expected_epoch_refs = {
+            (epoch.scope.token(), epoch.epoch_id, _epoch_fp(epoch) or "")
+            for epoch in expected_epochs
+        }
         for event in events.value:
             if event.event_type is not JournalEventType.CONTROL_ACTION:
                 continue
@@ -129,7 +133,7 @@ class KsaJournalProjection:
                         and payload.get("scope") == epoch.scope.token()
                         and payload.get("epoch_fp1") == _epoch_fp(epoch)
                     ):
-                        epoch_fps.add(epoch.epoch_id)
+                        epoch_fps.add((epoch.scope.token(), epoch.epoch_id, _epoch_fp(epoch) or ""))
                         source_fps.append(event.fingerprint)
                 continue
             if body_class != KSA_ESCALATION_CLASS and kind != "ksa-escalation":
@@ -140,11 +144,22 @@ class KsaJournalProjection:
                 return policy("ksa_writer", "CT-30 escalation is written by a configured authority")
             epoch_id = payload.get("level_epoch_id")
             scope_token = payload.get("scope")
-            if epoch_id not in expected_epoch_ids:
+            if not isinstance(epoch_id, str):
+                return invalid("ksa_record", "CT-30 escalation identifies a string level epoch")
+            epoch = next(
+                (
+                    row
+                    for row in expected_epochs
+                    if row.epoch_id == epoch_id and row.scope.token() == scope_token
+                ),
+                None,
+            )
+            if epoch is None:
+                if epoch_id in expected_epoch_ids:
+                    return policy("ksa_scope", "CT-30 escalation scope matches its pinned epoch")
                 continue
-            epoch = next(row for row in expected_epochs if row.epoch_id == epoch_id)
-            if scope_token != epoch.scope.token():
-                return policy("ksa_scope", "CT-30 escalation scope matches its pinned epoch")
+            if (epoch.scope.token(), epoch.epoch_id, _epoch_fp(epoch) or "") not in epoch_fps:
+                return unavailable("ksa_epoch_witness", "escalation references a witnessed epoch")
             issued_at = event.instant
             minted = mint_escalation(
                 level=payload.get("level"),
@@ -160,7 +175,7 @@ class KsaJournalProjection:
                 return minted
             records.append(minted.value)
             source_fps.append(event.fingerprint)
-        if not {epoch.epoch_id for epoch in expected_epochs}.issubset(epoch_fps):
+        if not expected_epoch_refs.issubset(epoch_fps):
             return unavailable(
                 "ksa_epoch_witness",
                 "checked CT-13 stream contains both configured KSA level epoch identities",

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from qmf.core import Instant, Result, World, WriterId, fingerprint, is_ok
-from qmf.data import JournalReader
+from qmf.data import JournalEventType, JournalReader, JournalWriter
 from qmf.data.store import JournalStore
 from qmf.data.store.engines.jsonl import jsonl_opener
 from qmn.ledger import EntryReservationEvent
@@ -64,3 +64,52 @@ def test_reservation_adapter_rejects_untyped_input(tmp_path: Path) -> None:
     assert not is_ok(adapter.append({"class": "not-a-reservation"}))
     assert not is_ok(adapter.recover("opaque epoch"))
     store.close()
+
+
+def test_recovery_refuses_reservation_rows_from_an_unconfigured_writer(tmp_path: Path) -> None:
+    rogue_store = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    rogue_writer_id = _ok(
+        WriterId.try_create("rogue", "attacker", "entry-reservations", "boot-rogue")
+    )
+    rogue_writer = _ok(
+        JournalWriter.resume(rogue_store, rogue_writer_id, stream_name="risk-reservations")
+    )
+    epoch = _ok(fingerprint({"binding": "ct28-test"}))
+    identity = _ok(fingerprint({"command": "entry-test"}))
+    reserved = EntryReservationEvent(
+        binding_epoch=epoch,
+        sequence=1,
+        instrument="EURUSD",
+        command_identity=identity,
+        event="reserved",
+    )
+    _ok(
+        rogue_writer.record(
+            JournalEventType.DATA_QUALITY,
+            {
+                "class": "qmn-entry-reservation-journal",
+                "reservation": dict(reserved.as_mapping()),
+            },
+            instant=_ok(Instant.try_create(1_800_000_000_000_000_000)),
+        )
+    )
+    rogue_store.close()
+
+    reopened = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    trusted_writer_id = _ok(
+        WriterId.try_create("node-test", "risk", "entry-reservations", "boot-trusted")
+    )
+    adapter = _ok(
+        QmfEntryReservationJournal.resume(
+            reopened,
+            trusted_writer_id,
+            stream_name="risk-reservations",
+            instant=lambda: _ok(Instant.try_create(1_800_000_000_000_000_000)),
+        )
+    )
+
+    recovery = adapter.recover(epoch)
+
+    assert not is_ok(recovery)
+    assert recovery.context["field"] == "reservation_writer"
+    reopened.close()
