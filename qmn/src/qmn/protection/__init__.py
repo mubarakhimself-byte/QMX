@@ -80,6 +80,12 @@ from qmn.protection.ksa import (
     scope_covers_stream,
     stream_blocked_by_escalation,
 )
+from qmn.protection.ksa_journal import (
+    KSA_EPOCH_CLASS,
+    KSA_ESCALATION_CLASS,
+    KsaFoldEvidence,
+    KsaJournalProjection,
+)
 from qmn.protection.windows import (
     DEAD_ZONE_KINDS,
     NEWS_CALENDAR_MAX_STALENESS_VARIABLE,
@@ -112,6 +118,8 @@ __all__ = [
     "EFFECT_MATRIX_BLANK_EFFECTS",
     "KSA_EFFECT_KINDS",
     "KSA_EFFECT_MATRIX_REGISTRY_KEY",
+    "KSA_EPOCH_CLASS",
+    "KSA_ESCALATION_CLASS",
     "KSA_LEVELS",
     "KSA_TRIGGER_CLASSES",
     "LEVEL_RANK",
@@ -139,6 +147,8 @@ __all__ = [
     "KsaEffectMatrixCell",
     "KsaEnforcementScope",
     "KsaEscalationRecord",
+    "KsaFoldEvidence",
+    "KsaJournalProjection",
     "KsaLevel",
     "KsaTriggerClass",
     "LevelEpoch",

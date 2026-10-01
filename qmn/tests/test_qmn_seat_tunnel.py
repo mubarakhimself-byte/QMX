@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TypeVar, cast
 
 from qmb.runloop import CancelToken, ScriptedLimitProbe
@@ -18,6 +19,7 @@ from qmf.core import (
     Instrument,
     JournalSink,
     Money,
+    MonotonicReading,
     Ok,
     Price,
     Quantity,
@@ -28,11 +30,14 @@ from qmf.core import (
     ValueFactor,
     VenueId,
     World,
+    WriterId,
     fingerprint,
     is_ok,
     is_refusal,
 )
 from qmf.core.chrono import CalendarIdentity
+from qmf.data import JournalReader, JournalWriter
+from qmf.data.store import EvidenceStore
 from qmf.risk.binding import (
     STATE_CARRY_COUNTERS,
     BmsInstanceId,
@@ -80,12 +85,39 @@ from qml.protocol import (
     construct_bot,
     mint_state_scope,
 )
+from qmn.host.decision_root import (
+    HostedDecisionRoot,
+    OrderPathTiming,
+    QmfHostedDecisionJournal,
+)
 from qmn.journal_dispatch import RecordingJournalSink
-from qmn.ledger import EntryReservationEvent, EntryReservationRecovery, seed_binding_ledger
+from qmn.ledger import (
+    EntryReservationEvent,
+    EntryReservationRecovery,
+    QmfEntryReservationJournal,
+    seed_binding_ledger,
+)
 from qmn.ledger.binding_ledger import BindingVirtualLedger
+from qmn.mis import (
+    CanonicalFeedState,
+    ProducerReadiness,
+    ProducerSlot,
+    SqsReading,
+    mint_signal_snapshot,
+    sqs_baseline_key,
+)
+from qmn.order import (
+    CommandIdentityBinder,
+    CommandOrdinalStore,
+    ConnectionCommandPacer,
+    OrderPath,
+    OrderPathTerminalResolution,
+)
 from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
+from qmn.protection.ksa import KsaEnforcementScope, mint_level_epoch
+from qmn.protection.ksa_journal import KSA_EPOCH_CLASS, KsaJournalProjection
 from qmn.seats import (
     ADMISSION_LAYER_NAMES,
     FORBIDDEN_SEAT_SURFACE_KEYS,
@@ -110,7 +142,15 @@ from qmn.seats import (
     scan_production_src_for_ungoverned_tunnel,
     ungoverned_tunnel_names_in_tree,
 )
-from qmn.venue import Command, CommandKind, OrderParameters, OrderType, TimeInForce
+from qmn.venue import (
+    Command,
+    CommandKind,
+    ConformanceDouble,
+    OrderParameters,
+    OrderType,
+    TimeInForce,
+    VenueClientKind,
+)
 
 T = TypeVar("T")
 
@@ -769,6 +809,204 @@ def test_reservation_append_requires_explicit_complete_true_ack() -> None:
         assert refused.context["field"] == "reservation_journal"
         assert not ledger.has_pending_entry("EURUSD")
         assert not ledger.reservation_admission_ready
+
+
+class _ConfiguredRootRecordSink:
+    def write(self, _record: object, /) -> Result[SinkAck]:
+        return Ok(SinkAck())
+
+
+def test_configured_decision_root_replays_mis_book_ksa_reservation_and_orderpath(
+    tmp_path: Path,
+) -> None:
+    evidence = EvidenceStore(tmp_path / "evidence")
+    world = _ok(evidence.for_world(World.LIVE))
+    reservation_writer_id = _ok(
+        WriterId.try_create("node-test", "risk", "entry-reservations", "boot-1")
+    )
+    reservation_journal = _ok(
+        QmfEntryReservationJournal.resume(
+            world.journal,
+            reservation_writer_id,
+            stream_name="entry-reservations",
+            instant=_instant,
+        )
+    )
+    binding = _book_binding_record()
+    binding_epoch = _ok(binding.fingerprint())
+    recovered = _ok(reservation_journal.recover(binding_epoch))
+    path = _path(
+        binding_record=binding,
+        reservation_recovery=recovered,
+        reservation_journal=reservation_journal,
+    )
+    ledger = cast(BindingVirtualLedger, path.position_ledger)
+
+    decision_writer_id = _ok(
+        WriterId.try_create("node-test", "supervisor", "hosted-decisions", "boot-1")
+    )
+    decision_journal = _ok(
+        QmfHostedDecisionJournal.resume(
+            world.journal,
+            decision_writer_id,
+            stream_name="hosted-decisions",
+            instant=_instant,
+        )
+    )
+    global_scope = KsaEnforcementScope.global_scope()
+    stream_scope = _ok(KsaEnforcementScope.stream(_venue(), _account().account_id))
+    global_epoch = _ok(
+        mint_level_epoch(epoch_id="global-epoch-1", scope=global_scope, opened_at=_instant())
+    )
+    stream_epoch = _ok(
+        mint_level_epoch(epoch_id="stream-epoch-1", scope=stream_scope, opened_at=_instant())
+    )
+    ksa_writer_id = _ok(WriterId.try_create("node-test", "risk", "ksa-state", "boot-1"))
+    ksa_writer = _ok(JournalWriter.resume(world.journal, ksa_writer_id, stream_name="ksa-state"))
+    for epoch in (global_epoch, stream_epoch):
+        _ok(
+            ksa_writer.record_control_action(
+                "ksa-level-epoch",
+                instant=_instant(),
+                payload={
+                    "class": KSA_EPOCH_CLASS,
+                    "epoch_fp1": _ok(fingerprint(epoch.fp1_identity())).value,
+                    "epoch_id": epoch.epoch_id,
+                    "scope": epoch.scope.token(),
+                },
+            )
+        )
+    ksa_projection = _ok(
+        KsaJournalProjection.try_create(
+            reader=JournalReader(world.journal),
+            world=World.LIVE,
+            stream_name="ksa-state",
+            global_epoch=global_epoch,
+            stream_epoch=stream_epoch,
+            authorized_writers=frozenset({ksa_writer_id}),
+        )
+    )
+    record_sink = _ConfiguredRootRecordSink()
+    ordinal_store = _ok(CommandOrdinalStore.try_create(_venue(), _account(), record_sink))
+    _ok(ordinal_store.recover(0))
+    binder = _ok(CommandIdentityBinder.try_create(record_sink, injective_total=False))
+    pacer = _ok(
+        ConnectionCommandPacer.try_create(
+            local_queue_bound=_duration(5_000_000_000),
+            protective_reserve_capacity=2,
+            general_capacity=1,
+        )
+    )
+    client = _ok(ConformanceDouble.try_create(World.LIVE, _venue()))
+    assert client.kind is VenueClientKind.CONFORMANCE
+    _ok(client.open_session(_account()))
+    _ok(client.verify_capabilities())
+
+    def timing_for(_command: object) -> Result[OrderPathTiming]:
+        return Ok(
+            OrderPathTiming(
+                enqueued_at=_ok(MonotonicReading.try_create(100, "boot-1")),
+                now_mono=_ok(MonotonicReading.try_create(200, "boot-1")),
+                handed_off_at=_instant(),
+            )
+        )
+
+    order_path = _ok(
+        OrderPath.try_create(
+            ordinal_store=ordinal_store,
+            binder=binder,
+            pacer=pacer,
+            client=client,
+            forms_per_order_type={"market": ENTRY_RELATIVE_FORM},
+            submission_deadline_duration=_duration(5_000_000_000),
+            command_journal=decision_journal,
+            position_ledger=ledger,
+        )
+    )
+    _ok(order_path.open_sequencer())
+    admitted = _ok(_propose(factory=FunctionFactory(logic=lambda _evidence: (_entry(),))))
+    root = _ok(
+        HostedDecisionRoot.try_open(
+            seat=admitted,
+            path=path,
+            order_path=order_path,
+            reservation_journal=reservation_journal,
+            ksa_projection=ksa_projection,
+            decision_journal=decision_journal,
+            timing_for=timing_for,
+        )
+    )
+    sqs_key = _ok(sqs_baseline_key(_venue(), "live", _instrument()))
+    sqs = _ok(
+        SqsReading.try_create(
+            sqs_key,
+            readiness=ProducerReadiness.OK,
+            labeler_version="sqs-test-v1",
+            score=_ok(ExactRational.try_create(1, 1, UnitKind.DIMENSIONLESS_RATIO)),
+            hard_block=False,
+        )
+    )
+    sqs_slot = _ok(
+        ProducerSlot.try_create(
+            "sqs", readiness=ProducerReadiness.OK, labeler_version="sqs-test-v1", sqs=sqs
+        )
+    )
+    feed_slot = _ok(
+        ProducerSlot.try_create(
+            "feed_state",
+            readiness=ProducerReadiness.OK,
+            labeler_version="feed-test-v1",
+            marker_detail="canonical",
+        )
+    )
+    frontier = _instant(_NS - 1_000_000_000)
+    snapshot = _ok(
+        mint_signal_snapshot(
+            frontier_instant=frontier,
+            environment="live",
+            feed_state=CanonicalFeedState.LIVE,
+            producers=(sqs_slot, feed_slot),
+            decision_freshness_bound=_duration(5_000_000_000),
+            degraded_sensors=(),
+        )
+    )
+    transcript = _ok(
+        root.run_slice(
+            snapshot=snapshot,
+            decision_at=_instant(),
+            stream=SeatTransitionStream(),
+            cancel=CancelToken(),
+            probe=_drive_probe(),
+        )
+    )
+
+    assert transcript.snapshot_fingerprint == _ok(snapshot.fingerprint())
+    assert transcript.dispatch.commands[0].kind is CommandKind.PLACE_ORDER
+    assert len(transcript.submissions) == 1
+    submission = transcript.submissions[0]
+    assert not isinstance(submission, OrderPathTerminalResolution)
+    assert submission.result.outcome is SubmissionOutcome.ACCEPTED_BY_VENUE
+    assert len(transcript.ksa_epoch_fingerprints) == 2
+    assert len(transcript.ksa_event_fingerprints) == 2
+    assert transcript.executed_stages[:3] == (
+        "mis_snapshot_consumed_by_book",
+        "mis_snapshot_consumed_by_ksa",
+        "governed_seat_callback_completed",
+    )
+    checked = _ok(
+        JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
+    )
+    decision_rows = [
+        event.payload
+        for event in checked
+        if event.payload.get("class") == "qmn-hosted-decision-transcript"
+    ]
+    assert len(decision_rows) == 2
+    final_results = decision_rows[-1].get("order_results")
+    assert isinstance(final_results, (list, tuple)) and final_results
+    final_result = cast("Mapping[str, object]", final_results[0])
+    assert final_result.get("outcome") == "accepted-by-venue"
+    assert ledger.has_pending_entry("EURUSD") is True
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:

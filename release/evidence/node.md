@@ -11,8 +11,13 @@ deployed incident, a production composition path, or live trading exposure.
   ids plus the immutable native-map fingerprint. The venue encoder derives side
   from identity, refuses malformed explicit sides, and refuses native id
   substitutions. The live client resolves the exact account/role/venue/instrument
-  row from the pinned native map. Historical format-1 parameter identity remains
-  readable. The runtime map must still be loaded from the approved registry
+  row from the pinned native map. Identity version 1 remains the legacy
+  unbound-parameter shape; version 2 adds the instrument and side; version 3
+  adds native account/symbol ids and the native-map fingerprint. Readers must
+  preserve each historical version's original canonical fields when replaying
+  old commands; they must not synthesize missing IDs or reinterpret a v1/v2
+  identity as v3. New Book orders require the v3 identity. The runtime map must
+  still be loaded from the approved registry
   configuration at the product composition root before it can establish
   production identity.
 - **QM 02:** Before a place-order command is minted, venue, account id, and role
@@ -54,12 +59,18 @@ supports systemd notify/watchdog and OS stop. This establishes a provider-free
 supervised process lifecycle, not a completed boot ceremony, trading readiness,
 or the full QMN decision composition.
 
-The integrated proof is still open: no production Book/KSA caller of
-`consume_signal_snapshot` was established. `SeatDispatchReceipt.hops` still
-describes the declared route and does not prove BMS capital, SQS, KSA, or
-position enforcement ran. Replay still does not reapply a complete admission
-transcript. Do not use this record to claim a complete recorded-frontier through
-order-path proof.
+An opt-in configured Book root now joins the Book and KSA consumers on the same
+fresh MIS snapshot, checks SQS at that frontier, checks a CT-28 binding epoch,
+recovers QMF reservation state, runs hosted dispatch and the OrderPath, and
+persists both pre-dispatch and terminal transcript rows. The KSA levels come
+from a checked CT-13 projection with pinned global/stream epochs, configured
+writer identities, internally folded CT-30 escalations, and source fingerprints
+included in the transcript. The conformance test uses a local QMF store and
+`ConformanceDouble`; it is not a live execution proof. The actual process entry
+point still does not compose this root because production registry/provider
+configuration, native boot proof, and venue adapter wiring are unavailable.
+`SeatDispatchReceipt.hops` remains route metadata and is not counted as replay
+proof. QMN full decision replay through a production composition remains open.
 
 The trading node remains the ratified Ubuntu/systemd node. Windows placement is
 not established by this work; no Windows service or installed Windows
@@ -86,8 +97,11 @@ uv run --no-sync pytest -q qmn/tests/test_qmn_seat_tunnel.py qmn/tests/test_qmn_
 
 The command reports **133 passed**. A separate checked-journal adapter and
 supervised-process verification command reports **47 passed** across the
-adapter, seat tunnel, order path, and supervisor process tests. Ruff passed and
-Pyright reported 0 errors, 0 warnings, and 0 informations on those scoped files.
+adapter, seat tunnel, order path, and supervisor process tests. After adding the
+configured local MIS/Book/CT-30/KSA/OrderPath composition, the node-focused
+command reports **53 passed** across that root, KSA projection, adapter, seat
+tunnel, order path, and supervisor lifecycle tests. Scoped Ruff and formatting
+checks passed; Pyright reported 0 errors, 0 warnings, and 0 informations.
 
 The broader command `uv run --no-sync pytest -q qmn/tests
 packages/qmf-venue/tests` reached **1,412 passed, 7 skipped, 1 failed**. Its
