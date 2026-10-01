@@ -11,10 +11,13 @@ from qmf.core import (
     TemporalOrder,
     TradingDate,
     World,
+    WriterId,
     fingerprint,
     is_ok,
     is_refusal,
 )
+from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
+from qmf.data.source_split import partition_source_observation
 from qmf.data.splits import (
     CONTRACT_FORMAT_VERSION,
     DEFAULT_SPLIT_ROLES,
@@ -88,6 +91,37 @@ def _manifest(
     return built.value
 
 
+def _source_observation(
+    event_ns: int, known_ns: int, *, world: World = World.REPLAY
+) -> SourceObservation:
+    writer = WriterId.try_create("split-test", "data", "market", "boot-1")
+    money = ForeignMoney.try_create(100, 2)
+    market = MarketDataContext.try_create(
+        venue="venue",
+        symbol="EURUSD",
+        resolution="tick",
+        side="bid",
+        license_tag="test",
+        provenance={"source": "fixture"},
+    )
+    assert is_ok(writer) and is_ok(money) and is_ok(market)
+    built = SourceObservation.try_create(
+        event_time=_instant(event_ns),
+        known_at=_instant(known_ns),
+        source="split-test",
+        source_native_id=f"{event_ns}-{known_ns}",
+        revision="1",
+        receive_wall_time=_instant(known_ns),
+        writer=writer.value,
+        sequence=event_ns,
+        world=world,
+        foreign_money=money.value,
+        market_data=market.value,
+    )
+    assert is_ok(built)
+    return built.value
+
+
 # --- SplitBoundary ----------------------------------------------------------
 
 
@@ -99,6 +133,33 @@ def test_boundary_from_trading_date_and_instant() -> None:
     instant = _instant_boundary(1_000)
     assert instant.kind == "instant"
     assert instant.calendar_identity is None
+
+
+def test_ct10_sources_partition_by_event_and_knowledge_time_without_relabeling() -> None:
+    manifest = _manifest(purge_ns=0, embargo_ns=25)
+    train = partition_source_observation(manifest, _source_observation(400, 500))
+    validation = partition_source_observation(manifest, _source_observation(990, 1_010))
+    assert is_ok(train) and train.value is SegmentRole.TRAIN
+    assert is_ok(validation) and validation.value is SegmentRole.VALIDATION
+
+
+def test_ct10_source_straddle_and_world_mismatch_refuse() -> None:
+    manifest = _manifest(purge_ns=0, embargo_ns=25)
+    straddled = partition_source_observation(manifest, _source_observation(900, 1_050))
+    wrong_world = partition_source_observation(
+        manifest, _source_observation(400, 500, world=World.LIVE)
+    )
+    assert is_refusal(straddled)
+    assert straddled.context.get("field") == "observation"
+    assert is_refusal(wrong_world)
+    assert wrong_world.context.get("field") == "world"
+
+
+def test_ct10_source_obeys_ct12_purge_zone() -> None:
+    manifest = _manifest(purge_ns=100, embargo_ns=100)
+    near_boundary = partition_source_observation(manifest, _source_observation(1_050, 1_050))
+    assert is_refusal(near_boundary)
+    assert near_boundary.context.get("field") == "record"
 
 
 def test_boundary_accepts_int_nanoseconds() -> None:

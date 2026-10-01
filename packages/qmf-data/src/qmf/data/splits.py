@@ -757,14 +757,14 @@ class SplitManifest:
                 "boundaries; a trading-date split is placed by the calendar extension",
                 boundary_kind=self.boundary_kind,
             )
-        knowledge_index = self._instant_segment_index(record.knowledge_time)
+        knowledge_index = self.instant_segment_index(record.knowledge_time)
         if knowledge_index is None:
             return invalid_input(
                 "knowledge_time",
                 "the record's knowledge time falls beyond the split's last segment boundary",
                 knowledge_ns=record.knowledge_time.value_ns,
             )
-        observed_index = self._instant_segment_index(record.observed_at)
+        observed_index = self.instant_segment_index(record.observed_at)
         if observed_index != knowledge_index:
             gap = record.knowledge_time.value_ns - record.observed_at.value_ns
             if self.embargo_width.value_ns < gap:
@@ -783,7 +783,7 @@ class SplitManifest:
             # below governs the complementary case — a record that sits cleanly inside one
             # segment but brushes a boundary — so it is not re-applied here (DEC-0131).
             return Ok(self.segments[knowledge_index].role)
-        purged = self._purge_zone_refusal(record.knowledge_time, knowledge_index)
+        purged = self.purge_zone_refusal(record.knowledge_time, knowledge_index)
         if purged is not None:
             return purged
         return Ok(self.segments[knowledge_index].role)
@@ -813,7 +813,7 @@ class SplitManifest:
             )
         return None
 
-    def _instant_segment_index(self, instant: Instant) -> int | None:
+    def instant_segment_index(self, instant: Instant) -> int | None:
         """The index of the first segment whose instant boundary is strictly after ``instant``.
 
         ``None`` when ``instant`` is at or after the last segment's boundary (beyond the
@@ -825,7 +825,7 @@ class SplitManifest:
                 return index
         return None
 
-    def _purge_zone_refusal(
+    def purge_zone_refusal(
         self, knowledge_time: Instant, knowledge_index: int
     ) -> TypedRefusal | None:
         """A ``policy rejection`` if ``knowledge_time`` sits within ``purge_width`` of an

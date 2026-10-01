@@ -19,7 +19,10 @@ from qmf.core.fingerprint import Fingerprint, World, fingerprint
 from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.data.observation import SourceObservation
+from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
+from qmf.data.source_split import partition_source_observation
+from qmf.data.splits import SegmentRole, SplitManifest
 from qmf.data.store import EvidenceStore
 from qml.protocol import MappingReadSurface
 
@@ -57,6 +60,8 @@ class RecordedReplaySource:
     read_surfaces: Mapping[str, MappingReadSurface]
     execution_paths: tuple[SlicePath, ...]
     price_metadata_fp1: Fingerprint | None
+    split_fp1: Fingerprint | None
+    split_role: SegmentRole | None
     fingerprint: Fingerprint
 
     def fp1_identity(self) -> dict[str, object]:
@@ -68,6 +73,9 @@ class RecordedReplaySource:
         }
         if self.price_metadata_fp1 is not None:
             identity["price_metadata_fp1"] = self.price_metadata_fp1.value
+        if self.split_fp1 is not None and self.split_role is not None:
+            identity["split_fp1"] = self.split_fp1.value
+            identity["split_role"] = self.split_role.value
         return identity
 
 
@@ -132,6 +140,9 @@ def read_recorded_replay_source(
     archive_fingerprints: object,
     stream_id: object,
     instrument_metadata: object = None,
+    split_manifest: object = None,
+    split_role: object = None,
+    holdout_seal: object = None,
     world: object = World.REPLAY,
 ) -> Result[RecordedReplaySource]:
     """Read explicit CT-10 archive receipts and materialize bitemporal replay input.
@@ -139,7 +150,7 @@ def read_recorded_replay_source(
     ``archive_fingerprints`` are the raw-archive receipt fingerprints returned by
     ``SourceObservationBoundary.admit``. The reader resolves each through the
     QMF-owned boundary, verifies world and observation identities, then builds
-    quote snapshots only from matching bid/ask observations. Corrections are
+    quote pairs only from matching bid/ask observations. Corrections are
     refused until the governed correction-resolution fold is available.
     """
     if isinstance(world, str):
@@ -160,12 +171,38 @@ def read_recorded_replay_source(
             "instrument_metadata",
             "execution prices require explicit fingerprint-verified instrument metadata",
         )
+    if split_manifest is not None or split_role is not None or holdout_seal is not None:
+        if not isinstance(split_manifest, SplitManifest):
+            return invalid("split_manifest", "governed replay uses the registered CT-12 manifest")
+        if not isinstance(split_role, SegmentRole):
+            return invalid("split_role", "governed replay names one CT-12 segment role")
+        if not isinstance(holdout_seal, HoldoutSeal):
+            return invalid(
+                "holdout_seal", "governed replay wires the configured CT-12 holdout seal"
+            )
+        if split_manifest.world is not World.REPLAY:
+            return policy("world", "CT-12 split world matches replay materialization")
+        if (
+            holdout_seal.world is not World.REPLAY
+            or holdout_seal.calendar_identity != split_manifest.calendar_identity
+            or holdout_seal.seal_boundary != split_manifest.seal_boundary
+        ):
+            return policy(
+                "holdout_seal",
+                "the configured holdout seal carries this CT-12 manifest's calendar, "
+                "boundary, and world",
+            )
+    elif world is World.REPLAY:
+        # Lower-level source inspection remains available to explicitly ungoverned
+        # callers; the production request loader always supplies all CT-12 pins.
+        pass
     if isinstance(archive_fingerprints, (str, bytes)) or not isinstance(
         archive_fingerprints, Sequence
     ):
         return invalid("archive_fingerprints", "a replay source cites archive receipt fingerprints")
 
-    reader = SourceObservationBoundary(EvidenceStore(Path(store_root)))
+    configured_seal = holdout_seal if isinstance(holdout_seal, HoldoutSeal) else None
+    reader = SourceObservationBoundary(EvidenceStore(Path(store_root), seal=configured_seal))
     observations: list[SourceObservation] = []
     seen: set[str] = set()
     for index, ref in enumerate(cast("Sequence[object]", archive_fingerprints)):
@@ -185,6 +222,19 @@ def read_recorded_replay_source(
             return policy(
                 "world", "a QMB replay source contains only replay observations", index=index
             )
+        if isinstance(split_manifest, SplitManifest):
+            selected_role = cast("SegmentRole", split_role)
+            partition = partition_source_observation(split_manifest, item)
+            if is_refusal(partition):
+                return partition
+            if partition.value is not selected_role:
+                return policy(
+                    "split_role",
+                    "every pinned CT-10 source receipt belongs to the requested CT-12 role",
+                    expected=selected_role.value,
+                    actual=partition.value.value,
+                    observation=item.fingerprint.value,
+                )
         if item.correction_of is not None:
             return policy(
                 "correction_of",
@@ -326,16 +376,20 @@ def read_recorded_replay_source(
                 return path
             execution_paths.append(path.value)
         cumulative.append(
-            _freeze_evidence({
-                "presence": "present",
-                "knowable_at": knowable.value,
-                "value": dict(quote_value),
-            })
+            _freeze_evidence(
+                {
+                    "presence": "present",
+                    "knowable_at": knowable.value,
+                    "value": dict(quote_value),
+                }
+            )
         )
-        surface_payload = _freeze_evidence({
-            "kind": "series",
-            "samples": list(cumulative),
-        })
+        surface_payload = _freeze_evidence(
+            {
+                "kind": "series",
+                "samples": list(cumulative),
+            }
+        )
         frames[knowable_ns] = surface_payload
         previous_frontier = knowable_ns
         observation = SliceObservation.try_create(stream_id, knowable.value, True)
@@ -356,6 +410,9 @@ def read_recorded_replay_source(
         "stream_id": stream_id,
         "world": World.REPLAY.value,
     }
+    if isinstance(split_manifest, SplitManifest):
+        identity["split_fp1"] = split_manifest.fingerprint.value
+        identity["split_role"] = cast("SegmentRole", split_role).value
     if instrument_metadata is not None:
         identity["price_metadata_fp1"] = instrument_metadata.fingerprint.value
     stamped = fingerprint(identity)
@@ -370,10 +427,14 @@ def read_recorded_replay_source(
             read_surfaces=MappingProxyType({stream_id: built_surface.value}),
             execution_paths=tuple(execution_paths),
             price_metadata_fp1=(
-                None
-                if instrument_metadata is None
-                else instrument_metadata.fingerprint
+                None if instrument_metadata is None else instrument_metadata.fingerprint
             ),
+            split_fp1=(
+                None
+                if not isinstance(split_manifest, SplitManifest)
+                else split_manifest.fingerprint
+            ),
+            split_role=(None if not isinstance(split_role, SegmentRole) else split_role),
             fingerprint=stamped.value,
         )
     )

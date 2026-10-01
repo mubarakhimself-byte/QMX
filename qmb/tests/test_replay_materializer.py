@@ -8,13 +8,15 @@ from typing import TypeVar, cast
 
 import pytest
 from qmb.host.replay import PinnedInstrumentPriceMetadata, read_recorded_replay_source
-from qmf.core.chrono import Instant, WriterId
+from qmf.core.chrono import CalendarIdentity, Instant, WriterId
 from qmf.core.exact import Price
 from qmf.core.fingerprint import World, fingerprint
 from qmf.core.identity import Instrument, VenueId
 from qmf.core.refusal import Result, is_ok, is_refusal
 from qmf.data.observation import ForeignMoney, MarketDataContext, SourceObservation
+from qmf.data.seal import HoldoutSeal
 from qmf.data.source_boundary import SourceObservationBoundary
+from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
 from qmf.data.store import EvidenceStore
 
 T = TypeVar("T")
@@ -57,6 +59,30 @@ def _observation(side: str, sequence: int, price: int) -> SourceObservation:
     )
 
 
+def _split() -> tuple[SplitManifest, HoldoutSeal]:
+    calendar = _ok(CalendarIdentity.try_create("fixture-calendar", "v1", "2025a"))
+    segments = _ok(
+        SplitManifest.default_split_segments(
+            (
+                _instant(_NS + 1_000),
+                _instant(_NS + 2_000),
+                _instant(_NS + 3_000),
+            )
+        )
+    )
+    manifest = _ok(
+        SplitManifest.try_create(
+            calendar_identity=calendar,
+            segments=segments,
+            seal_boundary=_ok(SplitBoundary.try_create(_instant(_NS + 3_000))),
+            purge_width=0,
+            embargo_width=0,
+            world=World.REPLAY,
+        )
+    )
+    return manifest, _ok(HoldoutSeal.from_manifest(manifest, 12))
+
+
 def test_replay_source_reads_persisted_ct10_bid_ask_and_builds_asof_surface(
     tmp_path: Path,
 ) -> None:
@@ -94,9 +120,7 @@ def test_replay_source_reads_persisted_ct10_bid_ask_and_builds_asof_surface(
     assert source.fingerprint.value.startswith("fp1:sha256:")
     with pytest.raises(TypeError):
         cast("dict[str, object]", quote["bid"])["amount"] = 1
-    next_frame = cast(
-        "Mapping[str, object]", _ok(source.read_surfaces["eurusd"].at(_instant()))
-    )
+    next_frame = cast("Mapping[str, object]", _ok(source.read_surfaces["eurusd"].at(_instant())))
     next_sample = cast("Sequence[object]", next_frame["samples"])[0]
     next_quote = cast("Mapping[str, object]", cast("Mapping[str, object]", next_sample)["value"])
     assert cast("Mapping[str, object]", next_quote["bid"])["amount"] == 1_234_500
@@ -170,3 +194,84 @@ def test_replay_prices_require_and_use_pinned_instrument_metadata(tmp_path: Path
     )
     assert is_refusal(wrong)
     assert wrong.context["field"] == "instrument_metadata"
+
+
+def test_replay_source_binds_ct12_role_and_refuses_holdout_reads(tmp_path: Path) -> None:
+    store = EvidenceStore(tmp_path / "qmf-room")
+    boundary = SourceObservationBoundary(store)
+    refs = tuple(
+        _ok(boundary.admit(_observation(side, index, price))).archive.fingerprint.value
+        for index, (side, price) in enumerate((("bid", 1_234_500), ("ask", 1_234_520)))
+    )
+    manifest, seal = _split()
+    accepted = _ok(
+        read_recorded_replay_source(
+            store_root=tmp_path / "qmf-room",
+            archive_fingerprints=refs,
+            stream_id="eurusd",
+            split_manifest=manifest,
+            split_role=SegmentRole.TRAIN,
+            holdout_seal=seal,
+        )
+    )
+    assert accepted.split_fp1 == manifest.fingerprint
+    assert accepted.split_role is SegmentRole.TRAIN
+    assert accepted.fp1_identity()["split_fp1"] == manifest.fingerprint.value
+
+    rejected = read_recorded_replay_source(
+        store_root=tmp_path / "qmf-room",
+        archive_fingerprints=refs,
+        stream_id="eurusd",
+        split_manifest=manifest,
+        split_role=SegmentRole.VALIDATION,
+        holdout_seal=seal,
+    )
+    assert is_refusal(rejected)
+    assert rejected.context["field"] == "split_role"
+
+    late_boundary = SourceObservationBoundary(EvidenceStore(tmp_path / "sealed-room", seal=seal))
+    late_refs = tuple(
+        _ok(
+            late_boundary.admit(
+                _observation_at(
+                    side,
+                    index,
+                    price,
+                    event_ns=_NS + 3_000,
+                    known_ns=_NS + 3_000,
+                )
+            )
+        ).archive.fingerprint.value
+        for index, (side, price) in enumerate((("bid", 1_234_500), ("ask", 1_234_520)))
+    )
+    sealed = read_recorded_replay_source(
+        store_root=tmp_path / "sealed-room",
+        archive_fingerprints=late_refs,
+        stream_id="eurusd",
+        split_manifest=manifest,
+        split_role=SegmentRole.SEALED_TEST,
+        holdout_seal=seal,
+    )
+    assert is_refusal(sealed)
+    assert sealed.context["field"] == "seal"
+
+
+def _observation_at(
+    side: str, sequence: int, price: int, *, event_ns: int, known_ns: int
+) -> SourceObservation:
+    item = _observation(side, sequence, price)
+    return _ok(
+        SourceObservation.try_create(
+            event_time=_instant(event_ns),
+            known_at=_instant(known_ns),
+            source="local-recorded-fixture",
+            source_native_id=f"fixture-{side}-{sequence}",
+            revision="1",
+            receive_wall_time=_instant(known_ns),
+            writer=item.writer,
+            sequence=sequence,
+            world=World.REPLAY,
+            foreign_money=item.foreign_money,
+            market_data=item.market_data,
+        )
+    )

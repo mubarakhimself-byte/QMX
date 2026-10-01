@@ -226,6 +226,7 @@ from qmf.data.seal import (
     ReadBoundary,
 )
 from qmf.data.source_boundary import ObservationReceipt, SourceObservationBoundary
+from qmf.data.source_split import partition_source_observation
 from qmf.data.splits import (
     DEFAULT_SPLIT_ROLES,
     KnowledgeKind,
@@ -398,6 +399,7 @@ __all__ = [
     "link_revision",
     "migrate_evidence",
     "offer_for_governed_evidence",
+    "partition_source_observation",
     "read_binding",
     "read_bot_seat",
     "read_command_fingerprint",

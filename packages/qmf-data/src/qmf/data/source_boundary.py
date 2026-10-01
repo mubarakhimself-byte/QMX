@@ -34,8 +34,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from qmf.core import Fingerprint, Ok, Result, Retryability, is_refusal
+from qmf.core import Fingerprint, Instant, Ok, Result, Retryability, is_refusal
 from qmf.data.observation import SourceObservation
+from qmf.data.seal import ReadBoundary
 from qmf.data.store import EvidenceStore, StoreReceipt
 from qmf.data.store.refusals import invalid_input, storage_failure
 
@@ -128,7 +129,12 @@ class SourceObservationBoundary:
         world_store = self._store.for_world(in_world)
         if is_refusal(world_store):
             return world_store
-        rows = world_store.value.append_store.read_raw(archive_fingerprint, for_world=for_world)
+        rows = world_store.value.append_store.read_raw_self_guarded(
+            archive_fingerprint,
+            for_world=for_world,
+            boundary=ReadBoundary.RAW_ARCHIVE.value,
+            derive_position=_source_knowledge_position,
+        )
         if is_refusal(rows):
             return rows
         materialized = rows.value
@@ -140,3 +146,21 @@ class SourceObservationBoundary:
                 context={"rows": len(materialized), "fingerprint": repr(archive_fingerprint)},
             )
         return SourceObservation.from_row(materialized[0])
+
+
+def _source_knowledge_position(rows: list[dict[str, object]]) -> Result[object]:
+    """Derive a raw CT-10 read position from its bitemporal knowledge timestamp."""
+    if len(rows) != 1:
+        return storage_failure(
+            "a source-observation artifact must contain one row before seal enforcement",
+            retryability=Retryability.NO,
+            context={"rows": len(rows)},
+        )
+    instant = Instant.try_create(rows[0].get("known_at_ns"))
+    if is_refusal(instant):
+        return storage_failure(
+            "a source-observation artifact has a valid known_at_ns for seal enforcement",
+            retryability=Retryability.NO,
+            context={"known_at_ns": repr(rows[0].get("known_at_ns"))},
+        )
+    return Ok(instant.value)
