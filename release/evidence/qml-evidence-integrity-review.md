@@ -137,3 +137,12 @@ Exact reviewed SHA256:
 - `qml/tests/test_layer1_catalog_admission_characterization.py`: `576a42d1e56f4c8ccded57ab67db996961e20e4f478694933e6fc512307224f8`
 
 Bounded catalog admission approval only; the owner broad coverage remains below 80%, with no floor waiver or full candidate approval.
+
+
+### Logic catalog targeted diagnosis — typed duplicate admission defect
+
+Wrong mapping-key substitution is already refused: the resolver ignores keys and compares actual distribution/version/source-manifest content. A genuine foreign source with the cited distribution/version under that distribution map key does not pass public Layer1 lint. There is no equivalent of the repaired confluence key shortcut here.
+
+Actual ordinary public constructor reproduction using `_recording_world` from catalog characterization: valid=world['logic']; malformed=LogicIdentity(valid.distribution, valid.version, None). Public lint with logic_catalog=[malformed,valid] raises AttributeError; [valid,malformed] admits. `_extract_logic` returns a nominal typed object without revalidation, and resolve_logic_at_layer1 returns the first valid match. Require finite typed revalidation and candidate census so a malformed claimed duplicate cannot depend on catalog ordering. Preserve distinct valid versions/source tuples: distribution alone is not logic identity. Owner/root notified; no product or test edits.
+
+FunctionFactory and construct_bot accept an injected factory and do not expose a registered-factory catalog resolver; Layer1 lint is a separate public function. Therefore this catalog diagnosis does not claim that construct_bot independently verifies arbitrary factory bytes or registry provenance, nor does it manufacture a new factory registry requirement. Actual factory initialization ordering requires a host composition that invokes the existing gate before constructing it.
