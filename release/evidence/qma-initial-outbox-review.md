@@ -75,3 +75,38 @@ All three findings were delivered to root and Execution owner. A later optional 
 All local programs and command/result/source identity notes are preserved in `/workspace/qmx-independent-review-archive/qma-qmb-local-authority-diagnostics/`; `SHA256.json` binds every archived file. Exact inline diagnostics are now `review_initial_extra.py`, `review_migration_schema_snapshot.py`, `review_migration_lock_and_schema_attempt.py` (retained fixture-error attempt), and `review_migration_view_in_progress.py` (source-drift observation). `REVIEW_ARGV_SOURCE_NOTES.json` preserves original argv, environment and results. Prior four retained programs remain intact.
 
 **Pending:** a fresh frozen-source correction review; broader coupled journal/SQLite/ledger/ExperimentSpec/JobHandle persistence; normal installed entrypoint; complete current worker/terminal proof; provider and security lanes. The 44 local test positives do not waive the three held-source failures or constitute release acceptance.
+
+## Frozen seven-path correction re-review — PASS, bounded
+
+Independent GPT 6.1 Sol ordinary local persistence re-review on 2026-10-01. These hashes matched before and after test/regression/static execution. This append closes the three prior held-snapshot P1 findings for this exact new freeze; prior FAIL evidence remains historical. No product/test edits, commits, new probe programs, security tests or provider calls.
+
+| Path | SHA256 |
+| --- | --- |
+| `qmx-agents/packages/qma-daemon/src/qma/daemon/persistence/task_graph_outbox_migration.py` | `f3ab8931d0458ab6d6ffa6d27c370c35d970ae725f55add3b11bb4a077e4d79d` |
+| `qmx-agents/packages/qma-daemon/tests/test_task_graph_outbox.py` | `d9031b7c5d9fc6f5678aa3f03b3673cb909f75525c14ed6e859128fdc3927e2e` |
+| `qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/outbox.py` | `74a7b63072446d7af2eda14db4e13d292a96b6ada6ecbd10e5222331e3d42529` |
+| `qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/projection.py` | `1fdab39b139fcd9639df1e60352170da8b453e969c2dc6e605b46fd1925e54d9` |
+| `qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/dispatcher.py` | `fdecc716ced2546df82cab47dc57d580b1defe0b76733ad8ed28c4fbecad3f49` |
+| `qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/__init__.py` | `f0480d74ef389964ef94207c1bc9ba06fb3365cbc42739f34e8402baeddd0c73` |
+| `qa/integration/test_qma_registered_replay.py` | `03952c1de521a4242e32d657ca267936da8c55062e21d4a5409230d17b770668` |
+
+Cwd `/workspace/QMX-release`; `PYTHONPATH=qmx-agents/packages/qma-core/src:qmx-agents/packages/qma-daemon/src:qmx-agents/packages/qma-wire/src`; test command uses `PATH=/workspace/QMX-release/.venv/bin:$PATH`:
+
+```sh
+.venv/bin/python -m pytest -q -p no:cacheprovider qmx-agents/packages/qma-daemon/tests/test_task_graph_outbox.py qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py qmx-agents/packages/qma-daemon/tests/test_procedure_door_successors.py qa/integration/test_qma_registered_replay.py
+```
+
+**47 passed in 27.90s.** This is this scoped latest-source suite, not a rerun or approval of the owner’s broader earlier 86-test snapshot. Existing generic non-operation Tasks still dispatch through predecessor/state-edge controls. The real registered replay integration compiles the operation root via normal MissionCompiler and lets public dispatch create its outbox automatically.
+
+The following unchanged archived programs each ran as `.venv/bin/python /workspace/qmx-independent-review-archive/qma-qmb-local-authority-diagnostics/<program>` with the above PYTHONPATH and exited 0:
+
+- `review_initial_outbox.py`: valid actual compiled root gives one row/lease; boolean operation version and foreign Task Mission refuse with zero rows/leases.
+- `review_initial_extra.py`: present boolean operation id and coherent foreign graph/Tasks versus the genuine materialized Mission now both refuse with zero outbox rows, zero dispatch lease and zero environment lease. The three operation/Mission failures are closed. Source distinguishes absent operation inputs from present malformed declarations and joins Mission id, graph id/template, owner and the Task/node set before publication/placement.
+- `review_outbox_migration.py`: normal and `source#part.sqlite` migration succeed with original source bytes unchanged and retained ordinary table rows; pending WAL refuses with no outputs.
+- `review_migration_schema_snapshot.py`: the same actual post-backup `CREATE INDEX preserved_note_idx` WAL-only change now refuses even though the main SHA remains unchanged. Only source→backup occurs; backup remains the original schema, no destination is created. The schema-only snapshot failure is closed.
+
+Static migration review confirms actual source-root `DaemonWriterLock` acquisition, URI-safe read-only SQLite opens, main SHA plus full user-table-row and sqlite_master object census recheck after backup and before successful return, exact backup/source schema-and-record equality, and preservation checks after disposable dry-run and actual destination transform. Both transformed copies derive solely from the verified backup. Source remains unchanged; verified backup and original restore path remain available on refusal. Layout 2 retains the existing outbox rows and changes nullable predecessor plus explicit marker only; unrelated schema loss refuses instead of receiving success. Existing old-startup refusal, five parent step receipt, scratch cleanup, transactional rollback, receiver/reopen and row/schema drift controls all pass.
+
+`CORRECTED_REVIEW_ARGV_SOURCE_NOTES.json` in the existing diagnostic archive binds exact argv, environment, programs, results and this seven-file freeze. Existing archived scripts and original notes verified against their prior SHA manifest before reuse; updated `SHA256.json` binds the new notes as well. No earlier diagnostics were overwritten.
+
+**No remaining finding in this bounded correction review.** Broader coupled journal/SQLite/ledger/ExperimentSpec/JobHandle persistence, complete normal worker/terminal proof, Book coupling, final installed entrypoint, provider/security and final immutable-candidate factory/static/QA/release acceptance remain separate and pending. Corrected INITIAL publication and SQLite-copy migration do not fill those lanes.
