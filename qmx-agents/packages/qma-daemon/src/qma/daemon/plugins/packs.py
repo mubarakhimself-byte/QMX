@@ -13,6 +13,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -89,7 +90,15 @@ def research_corpus_plugin_load_config(
 
 
 def default_plugins_root() -> Path:
-    """Resolve ``qmx-agents/plugins`` from this module or a parent walk."""
+    """Resolve an explicit pack root or the mandatory installed pack bundle."""
+    configured = os.environ.get("QMA_DAEMON_PLUGINS_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    bundled = Path(__file__).resolve().parent.parent / "bundled_packs"
+    if (bundled / "research-corpus" / "manifest.json").is_file():
+        return bundled
+    # Editable source development remains supported; installed builds must
+    # carry bundled_packs and never depend on checkout ancestry.
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "plugins"

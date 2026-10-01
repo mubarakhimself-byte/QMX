@@ -8,10 +8,10 @@ not pool, rotate, or masquerade accounts.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Final
 
 from qma.core.ports.model import (
     AUTH_MODE_NONE,
@@ -24,6 +24,7 @@ from qma.core.ports.model import (
 from qma.core.vocabulary.enums import ModelClass
 from qma.daemon.proxy.local_proxy import format_bind_address
 from qmf.core import Ok, Result
+from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
 
 __all__ = [
@@ -104,7 +105,7 @@ class OpenCodexDeployment:
     """
 
     record: DeploymentRecord
-    _handler: Any = None
+    test_handler: Callable[..., str] | None = None
 
     def __post_init__(self) -> None:
         if self.record.adapter != OPENCODEX_ADAPTER:
@@ -155,10 +156,17 @@ class OpenCodexDeployment:
         host = self.record.bind_host or _DEFAULT_LOOPBACK
         port = self.record.bind_port
         bind = format_bind_address(host, port)
-        if self._handler is not None:
-            content = str(self._handler(prompt=prompt, bind=bind, request=request))
-        else:
-            content = f"opencodex:{self.record.deployment_id}:{prompt}"
+        if self.test_handler is None:
+            return TypedRefusal(
+                category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                retryability=Retryability.AFTER_CONDITION,
+                context={
+                    "deployment_id": self.record.deployment_id,
+                    "bind_address": bind,
+                    "reason": "OpenCodex transport is not configured",
+                },
+            )
+        content = str(self.test_handler(prompt=prompt, bind=bind, request=request))
         return Ok(
             OpenCodexCallResult(
                 deployment_id=self.record.deployment_id,

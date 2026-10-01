@@ -59,6 +59,11 @@ def test_opencodex_sits_behind_deployment_not_broker() -> None:
 
     deployment = OpenCodexDeployment(record=record)
     assert deployment.behind_credential_broker is False
+    unavailable = deployment.call(
+        ModelClassRequest(model_class=ModelClass.WORKHORSE_GENERAL), prompt="ping"
+    )
+    assert is_refusal(unavailable)
+    assert unavailable.category.value == "unavailable dependency"
 
     registry = DeploymentRegistry()
     assert is_ok(registry.register(record))
@@ -272,7 +277,10 @@ def test_milestone_harness_opencodex_over_wire_preserves_provenance() -> None:
     )
     assert is_ok(registry.register(record))
     router = ModelRouter(registry)
-    deployment = OpenCodexDeployment(record=record)
+    deployment = OpenCodexDeployment(
+        record=record,
+        test_handler=lambda *, prompt, bind, request: f"fixture:{prompt}:{bind}",
+    )
 
     # OpenCodex refuses a crossed secret.
     assert is_refusal(
