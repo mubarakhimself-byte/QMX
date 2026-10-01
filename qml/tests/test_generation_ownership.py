@@ -167,6 +167,7 @@ def test_qml_authors_new_ct33_ct34_and_logic_bytes() -> None:
 def test_declaration_surface_still_has_no_bot_kind_install_register() -> None:
     import qml.declaration
     import qml.declaration.bot
+    import qml.declaration.confluence
 
     for module in (qml.declaration, qml.declaration.bot):
         assert not hasattr(module, "install_bot_definition_kind")
