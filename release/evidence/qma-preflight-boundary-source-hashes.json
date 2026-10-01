@@ -1,0 +1,11 @@
+{
+  "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "a7c3344861a22cea6220799b945b5c44aa7b9883816df22221e71585d0dde5df",
+  "qmx-agents/packages/qma-daemon/src/qma/daemon/experiments/service.py": "2f9923d4f5ba499acaced9ce1e3baf8b2543f848b082d1465b361eb0f7725d0e",
+  "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py": "c6848a2cf402666efd6e3917f6141d2fb19e9d2fcfd67243d812f6ed9d12e575",
+  "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py": "cfe404ebbd76dd29b8ead423f17647a61af2b6ad5c05d430604a96e7825dabd0",
+  "qmx-agents/packages/qma-daemon/tests/test_experiment_spec_persistence.py": "2dfc458d326dd1a05139f19256ed83861d9a73984d0b0518c2b4dee8975a4fa0",
+  "qmx-agents/packages/qma-daemon/tests/test_daemon_experiment_spec.py": "c384765e47befd0db79f15b873136e5ae79dc7d03d6ee628d3ca0e6d39130bf6",
+  "qa/integration/test_qma_registered_replay.py": "6f918c798406a91169dd2681d8f06e11e9b50f9a976f6ea2eeeae7435c73e3f0",
+  "qmb/src/qmb/doors/cli/__init__.py": "138035d74b2bd3a0cb6323c33ec5bc74e018028c3b91993aa25240e3f44dbc53",
+  "qmb/src/qmb/host/operator_replay.py": "5f3b567c0e62dff2f806f3ca2aa2c1d52f28b9f752f8234c5b95f9d57b5955c0"
+}
