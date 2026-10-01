@@ -312,6 +312,7 @@ def test_public_operations_publish_complete_descriptors() -> None:
     assert ids == {
         "qmb.analysis.project",
         "qmb.backtest.run",
+        "qmb.optimize.run",
         "qma.procedure.start",
         "qmn.evidence.query",
         "qml.research.browse",
@@ -328,6 +329,7 @@ def test_door_matrix_is_keyed_by_op_id_and_version() -> None:
     matrix = door_matrix(descriptors)
     assert ("qmb.analysis.project", 1) in matrix
     assert ("qmb.backtest.run", 1) in matrix
+    assert ("qmb.optimize.run", 1) in matrix
     for key in matrix:
         assert isinstance(key, tuple)
         assert len(key) == 2
@@ -337,14 +339,28 @@ def test_door_matrix_is_keyed_by_op_id_and_version() -> None:
         assert not isinstance(op_id, str) or not op_id.startswith("COMP-")
     project = descriptor_for(descriptors, op_id="qmb.analysis.project", version=1)
     run = descriptor_for(descriptors, op_id="qmb.backtest.run", version=1)
-    assert project is not None and run is not None
+    optimize = descriptor_for(descriptors, op_id="qmb.optimize.run", version=1)
+    assert project is not None and run is not None and optimize is not None
     assert project.owner == run.owner == "COMP-QMB"
     assert "evidence_ref" in run.configuration.optional_keys
+    assert optimize.owner == "COMP-QMB"
+    assert optimize.effect_class is EffectClass.PLACE_RUN
+    assert optimize.resource_needs.occupancy == "run"
+    assert optimize.resource_needs.requires_environment is True
+    assert optimize.configuration.required_keys == ("run_fp1",)
+    assert set(optimize.configuration.optional_keys) == {"as_of", "evidence_ref"}
     project_adapters = {door.adapter for door in project.supported_doors}
     run_adapters = {door.adapter for door in run.supported_doors}
+    optimize_adapters = {door.adapter for door in optimize.supported_doors}
     assert project_adapters != run_adapters
     assert DoorAdapter.QMN_RUN_SLICE in run_adapters
     assert DoorAdapter.QMN_RUN_SLICE not in project_adapters
+    assert optimize_adapters == {
+        DoorAdapter.LIBRARY,
+        DoorAdapter.QMB_CLI,
+        DoorAdapter.QMA_WIRE,
+    }
+    assert DoorAdapter.QMN_RUN_SLICE not in optimize_adapters
     summary = owner_door_summary(descriptors)
     assert "COMP-QMB" in summary
     # Owner union is a summary only: it is not the per-op supported set.
