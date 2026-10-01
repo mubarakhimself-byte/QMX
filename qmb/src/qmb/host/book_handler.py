@@ -1193,6 +1193,16 @@ def _sum_quantities(values: tuple[Quantity, ...]) -> Result[Quantity]:
     return Quantity.try_create(scaled.numerator, unit, scale)
 
 
+def _same_quantity(left: Quantity, right: Quantity) -> bool:
+    """Compare amount and unit, ignoring only equivalent storage scale."""
+    return (
+        type(left) is Quantity
+        and type(right) is Quantity
+        and left.unit == right.unit
+        and left.as_fraction() == right.as_fraction()
+    )
+
+
 def _scale_money(amount: Money, numerator: Fraction, denominator: Fraction) -> Result[Money]:
     if denominator <= 0:
         return invalid("quantity", "planned quantity is positive")
@@ -1760,7 +1770,7 @@ class BookExecutionSliceHandler:
             return total_quantity
         if total_quantity.value.as_fraction() > pending.planned_quantity.as_fraction():
             return policy("entry_quantity", "actual cumulative fills never exceed admitted plan")
-        partial = total_quantity.value != pending.planned_quantity
+        partial = not _same_quantity(total_quantity.value, pending.planned_quantity)
         lineage_ref: Fingerprint | None = None
         if partial:
             risk_amount = _scale_money(
@@ -2006,7 +2016,7 @@ class BookExecutionSliceHandler:
                 position
                 for position in self._positions.values()
                 if position.direction is cash.position.direction
-                and position.quantity == cash.position.quantity
+                and _same_quantity(position.quantity, cash.position.quantity)
             ]
             pending_candidates: list[tuple[_PendingEntry, Quantity]] = []
             for entry in pending_eligible:
@@ -2015,7 +2025,7 @@ class BookExecutionSliceHandler:
                     return quantity
                 if (
                     entry.intent.direction is cash.position.direction
-                    and quantity.value == cash.position.quantity
+                    and _same_quantity(quantity.value, cash.position.quantity)
                 ):
                     pending_candidates.append((entry, quantity.value))
             if len(candidates) + len(pending_candidates) != 1:
@@ -2481,7 +2491,7 @@ class BookExecutionSliceHandler:
                     entry_ticket=pending.ticket,
                 )
             )
-        if fill.value.fill.quantity != remaining_quantity.value:
+        if not _same_quantity(fill.value.fill.quantity, remaining_quantity.value):
             return policy("fill_quantity", "a full replay fill equals the exact remaining quantity")
         if pending.fills:
             stable_ref = _replay_position_ref(pending.ticket, context.binding.fingerprint)
@@ -2579,7 +2589,7 @@ class BookExecutionSliceHandler:
                 "partial-close state is not yet supported; CT-29 is not minted",
             )
         actual_fill = evaluated.value.fill
-        if actual_fill.quantity != position.quantity:
+        if not _same_quantity(actual_fill.quantity, position.quantity):
             return policy("quantity", "close fill quantity equals the complete virtual position")
         price = _fill_price(actual_fill)
         if is_refusal(price):
