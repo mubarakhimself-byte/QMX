@@ -1,0 +1,10 @@
+{
+  "branch": "qmx-work-release-checkpoint-2026-10-01",
+  "continued_work": "Continue existing task locally after this checkpoint; no automatic push/merge/release",
+  "push_authorization": "User checkpoint nudge: commit relevant work and push dedicated working branch, no protected refs/force/merge/release",
+  "remote": "https://github.com/MubarakHimself/QMX.git",
+  "resume_document": "release/CHECKPOINT.md",
+  "scope": "Recovery checkpoint, includes known failing/unreviewed/incomplete source; not release acceptance",
+  "source_checkpoint_commit": "28633f72f4fd629ef036be32f94ddfb59a4f3b1d",
+  "source_manifest": "release/evidence/checkpoint-working-source.json"
+}
