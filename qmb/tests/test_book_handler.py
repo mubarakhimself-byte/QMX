@@ -1005,7 +1005,7 @@ def test_recorded_rollover_financing_is_journaled_and_netted_at_close(tmp_path: 
     assert record is not None
     finance = [component for component in record.cost_components if component.name == "financing"]
     assert len(finance) == 1
-    assert finance[0].amount == _ok(Money.try_create(-100, "USD", 2))
+    assert finance[0].amount == _ok(Money.try_create(100, "USD", 2))
     expected_net = record.realized_pnl
     for component in record.cost_components:
         expected_net = _ok(expected_net.subtract(component.amount))
@@ -1020,10 +1020,22 @@ def test_recorded_rollover_financing_is_journaled_and_netted_at_close(tmp_path: 
         )
     )
     assert len(recovered.positions[0].financing_costs) == 1
+    assert (
+        recovered.positions[0].financing_costs[0].amount.as_fraction()
+        == _ok(Money.try_create(100, "USD", 2)).as_fraction()
+    )
 
 
+@pytest.mark.parametrize(
+    ("cash_per_unit", "expected_cost", "expected_net_minor", "expected_r_num"),
+    ((-100, 200, -20_600, -103), (100, -200, -20_200, -101)),
+)
 def test_partial_exposure_rollover_is_actual_quantity_once_and_nets_at_stop(
     tmp_path: Path,
+    cash_per_unit: int,
+    expected_cost: int,
+    expected_net_minor: int,
+    expected_r_num: int,
 ) -> None:
     opened_at = _ok(Instant.try_create(1_700_000_000_000_000_000))
     partial_at = _ok(Instant.try_create(opened_at.value_ns + 1_000_000_000))
@@ -1036,7 +1048,11 @@ def test_partial_exposure_rollover_is_actual_quantity_once_and_nets_at_stop(
         )
     )
     calendar = _RecordedRolloverCalendar(rollover.value_ns, trading_date)
-    rate = _ok(SwapRate.try_create("eurusd", Direction.LONG, _ok(Money.try_create(-100, "USD", 2))))
+    rate = _ok(
+        SwapRate.try_create(
+            "eurusd", Direction.LONG, _ok(Money.try_create(cash_per_unit, "USD", 2))
+        )
+    )
     calibration = _ok(
         SwapCalibration.try_create(
             "replay-broker",
@@ -1111,11 +1127,12 @@ def test_partial_exposure_rollover_is_actual_quantity_once_and_nets_at_stop(
     assert record is not None
     finance = tuple(item for item in record.cost_components if item.name == "financing")
     assert len(finance) == 1
-    assert finance[0].amount == _ok(Money.try_create(-200, "USD", 2))
-    expected_net = record.realized_pnl
-    for component in record.cost_components:
-        expected_net = _ok(expected_net.subtract(component.amount))
-    assert _ok(record.net_realized_pnl()) == expected_net
+    assert finance[0].amount == _ok(Money.try_create(expected_cost, "USD", 2))
+    assert record.realized_pnl == _ok(Money.try_create(-20_000, "USD", 2))
+    assert _ok(record.net_realized_pnl()) == _ok(Money.try_create(expected_net_minor, "USD", 2))
+    assert _ok(record.realized_r()) == _ok(
+        ExactRational.try_create(expected_r_num, 100, UnitKind.R_MULTIPLE)
+    )
 
     recovered = _ok(
         read_replay_positions(
@@ -1130,6 +1147,10 @@ def test_partial_exposure_rollover_is_actual_quantity_once_and_nets_at_stop(
     assert recovered.positions[0].closed is True
     assert len(recovered.positions[0].financing_costs) == 1
     assert len(recovered.positions[0].financing_rollovers) == 1
+    assert (
+        recovered.positions[0].financing_costs[0].amount.as_fraction()
+        == _ok(Money.try_create(expected_cost, "USD", 2)).as_fraction()
+    )
 
 
 def test_unpersistable_open_does_not_advance_memory_and_recovers_from_ct13(

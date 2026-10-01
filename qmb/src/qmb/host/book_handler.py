@@ -578,6 +578,9 @@ def read_replay_positions(
                 return amount
             if component.value.amount != amount.value:
                 return policy("financing_event", "cost component amount matches cash amount")
+            cost = _book_financing_cost(component.value, amount.value)
+            if is_refusal(cost):
+                return cost
             if position is not None:
                 if position.closed:
                     return invalid("financing_event", "cash event names one prior open position")
@@ -587,7 +590,7 @@ def read_replay_positions(
                     )
                 positions[raw_position] = replace(
                     position,
-                    financing_costs=(*position.financing_costs, component.value),
+                    financing_costs=(*position.financing_costs, cost.value),
                     financing_rollovers=(*position.financing_rollovers, rollover_ref.value),
                 )
             else:
@@ -613,7 +616,7 @@ def read_replay_positions(
                     return invalid(
                         "financing_event", "one partial position is charged once per date"
                     )
-                costs.append(component.value)
+                costs.append(cost.value)
                 dates.append(rollover_ref.value)
             continue
         raw_entry_ref = event.payload.get("replay_entry_fill_ref")
@@ -1382,6 +1385,29 @@ def _aggregate_cost_components(
     return Ok(tuple(grouped.values()))
 
 
+def _book_financing_cost(
+    cash_component: CostComponent, cash_amount: Money
+) -> Result[CostComponent]:
+    """Convert signed financing cash flow to CT-29's subtractive cost convention."""
+    if cash_component.amount != cash_amount:
+        return policy(
+            "financing_component",
+            "the QMF financing component exactly witnesses signed cash flow",
+        )
+    inverse_cash = Money.try_create(
+        -cash_amount.value,
+        cash_amount.currency,
+        cash_amount.scale,
+    )
+    if is_refusal(inverse_cash):
+        return inverse_cash
+    return CostComponent.try_create(
+        cash_component.name,
+        inverse_cash.value,
+        cash_component.source,
+    )
+
+
 @dataclass(slots=True)
 class BookExecutionSliceHandler:
     """QMB replay `SliceHandler` for a selected QL-7 bot and one Book policy."""
@@ -2010,6 +2036,9 @@ class BookExecutionSliceHandler:
                 if is_refusal(stable_ref):
                     return stable_ref
                 virtual_position_ref = stable_ref.value.value
+            cost = _book_financing_cost(cash.component, cash.amount)
+            if is_refusal(cost):
+                return cost
             journaled = self._record_transition(
                 {
                     "binding_epoch": self.admission.binding.fingerprint.value,
@@ -2024,7 +2053,7 @@ class BookExecutionSliceHandler:
             if position_candidate is not None:
                 self._positions[position_candidate.position_ref.value] = replace(
                     position_candidate,
-                    financing_costs=(*position_candidate.financing_costs, cash.component),
+                    financing_costs=(*position_candidate.financing_costs, cost.value),
                     financing_rollovers=(*position_candidate.financing_rollovers, rollover_ref),
                 )
             else:
@@ -2032,7 +2061,7 @@ class BookExecutionSliceHandler:
                     return invalid("financing_attribution", "cash event has one typed position")
                 self._pending_entries[pending_candidate.ticket.value] = replace(
                     pending_candidate,
-                    financing_costs=(*pending_candidate.financing_costs, cash.component),
+                    financing_costs=(*pending_candidate.financing_costs, cost.value),
                     financing_rollovers=(*pending_candidate.financing_rollovers, rollover_ref),
                 )
         stopped = self._evaluate_protective_stops(frontier)
