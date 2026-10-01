@@ -33,6 +33,7 @@ from qmf.venue.blocking import (
     UnknownGate,
     is_risk_reducing,
 )
+from qmf.venue.capabilities import CloseScope
 from qmf.venue.commands import (
     BindingOutcome,
     Command,
@@ -71,6 +72,11 @@ from qmf.venue.events import (
 )
 from qmf.venue.observation import REQUIRED_CONNECTION_CHECKS
 
+from qmn.venue.command_binding_journal import (
+    COMMAND_ID_BINDING_RECORD_CLASS,
+    COMMAND_ID_BINDING_RECORD_VERSION,
+    QmfCommandIdBindingJournal,
+)
 from qmn.venue.conformance import (
     CONFORMANCE_CASES,
     INJECTED_COMMAND_FAULTS,
@@ -151,6 +157,8 @@ from qmn.venue.verify import (
 __all__ = [
     "ASYNC_CONFORMANCE_EXEMPTION",
     "ASYNC_EXEMPTION_MODULE",
+    "COMMAND_ID_BINDING_RECORD_CLASS",
+    "COMMAND_ID_BINDING_RECORD_VERSION",
     "COMPANION_SOURCE_IMPLEMENTATION_FORBIDDEN",
     "CONFORMANCE_CASES",
     "CT13_SEVEN_EVENT_TYPES",
@@ -173,6 +181,7 @@ __all__ = [
     "AdmissionResult",
     "BindingOutcome",
     "BindingRevalidationState",
+    "CloseScope",
     "Command",
     "CommandIdBinding",
     "CommandIdBindingRegistry",
@@ -198,6 +207,7 @@ __all__ = [
     "PositionModel",
     "ProtectionAmendment",
     "ProtectionSide",
+    "QmfCommandIdBindingJournal",
     "ReceiveFrontier",
     "Reconciliation",
     "ReconciliationReadback",

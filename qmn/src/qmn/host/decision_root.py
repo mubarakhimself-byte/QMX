@@ -32,7 +32,7 @@ from qmf.data import (
 from qmf.data.store import JournalStore, StoreReceipt
 from qmf.data.store.rooms import RoomRole
 from qmf.risk.binding import BookBindingRecord
-from qmf.risk.door import EntryIntent
+from qmf.risk.door import EntryIntent, ExitIntent
 
 from qmn.host._refuse import invalid, policy
 from qmn.ledger import BindingVirtualLedger, QmfEntryReservationJournal
@@ -51,7 +51,12 @@ from qmn.protection.ksa import (
 )
 from qmn.protection.ksa_journal import KsaJournalProjection
 from qmn.seats.admission import AdmittedNodeSeat
-from qmn.seats.dispatch import BookPathContext, SeatDispatchReceipt, dispatch_hosted_intents
+from qmn.seats.dispatch import (
+    BookPathContext,
+    NativeExitAuthority,
+    SeatDispatchReceipt,
+    dispatch_hosted_intents,
+)
 from qmn.seats.host import drive_governed_seat
 
 __all__ = [
@@ -437,12 +442,6 @@ class HostedDecisionRoot:
         )
         if is_refusal(effective_level):
             return effective_level
-        if effective_level.value is not KsaLevel.GREEN:
-            return policy(
-                "ksa_level",
-                "non-GREEN KSA state blocks new hosted entry admission",
-                level=effective_level.value.value,
-            )
         snapshot_fingerprint = snapshot.fingerprint()
         if is_refusal(snapshot_fingerprint):
             return snapshot_fingerprint
@@ -459,14 +458,18 @@ class HostedDecisionRoot:
         )
         if is_refusal(intents):
             return intents
-        if any(not isinstance(intent, EntryIntent) for intent in intents.value):
+        if (
+            any(isinstance(intent, EntryIntent) for intent in intents.value)
+            and effective_level.value is not KsaLevel.GREEN
+        ):
             return policy(
-                "intents",
-                "this Book decision composition dispatches only governed EntryIntent values",
+                "ksa_level",
+                "non-GREEN KSA state blocks new hosted entry admission",
+                level=effective_level.value.value,
             )
         for intent in intents.value:
-            if not isinstance(intent, EntryIntent):
-                return invalid("intent", "hosted entry callback returned a typed EntryIntent")
+            if isinstance(intent, ExitIntent):
+                continue
             reading = snapshot.sqs_for(intent.instrument)
             if (
                 reading is None
@@ -544,11 +547,30 @@ class HostedDecisionRoot:
                 return invalid(
                     "order_path_timing", "each command has typed wall and monotonic stamps"
                 )
+            subject_present: object = None
+            subject_observations: object = None
+            if command.kind.value == "close_position":
+                authority = self.path.native_exit_authority
+                if type(authority) is not NativeExitAuthority:
+                    return policy(
+                        "native_exit_authority",
+                        "native close submission requires current subject-terminal observations",
+                    )
+                subject_present = authority.subject_present_at_submission
+                subject_observations = authority.subject_observations
+                if type(subject_present) is not bool or subject_observations is None:
+                    return policy(
+                        "subject_terminal",
+                        "native close requires explicit pre-handoff subject presence "
+                        "and observations",
+                    )
             result = self.order_path.submit_authorized(
                 command,
                 enqueued_at=timing.value.enqueued_at,
                 now_mono=timing.value.now_mono,
                 handed_off_at=timing.value.handed_off_at,
+                subject_present_at_submission=subject_present,
+                subject_observations=subject_observations,
             )
             if is_refusal(result):
                 return result

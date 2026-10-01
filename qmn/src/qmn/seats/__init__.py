@@ -66,6 +66,7 @@ from qmn.seats.containment_limit import (
 from qmn.seats.dispatch import (
     INTENT_PATH_HOPS,
     BookPathContext,
+    NativeExitAuthority,
     SeatDispatchReceipt,
     dispatch_hosted_intents,
     dispatch_seat_intents,
@@ -129,6 +130,7 @@ __all__ = [
     "GovernedSeatHandler",
     "GovernedSeatState",
     "LimitHonestyRecord",
+    "NativeExitAuthority",
     "QuarantineTrigger",
     "SeatAdmissionProof",
     "SeatContainment",

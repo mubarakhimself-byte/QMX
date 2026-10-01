@@ -35,6 +35,14 @@ from qmn.ledger.epoch import (
     require_epoch_state_carry,
     validate_state_carry_declaration,
 )
+from qmn.ledger.native_position import (
+    NATIVE_POSITION_ATTRIBUTION_CLASS,
+    NATIVE_POSITION_ATTRIBUTION_VERSION,
+    NativePositionAttribution,
+    NativePositionEvidence,
+    resolve_native_position_attribution,
+    write_native_position_attribution,
+)
 from qmn.ledger.reservation_journal import QmfEntryReservationJournal
 from qmn.ledger.treasury import (
     TREASURY_BOUNDARY_KINDS,
@@ -74,6 +82,8 @@ __all__ = [
     "EXECUTION_QUALITY_SHORT_FILL",
     "LEDGER_RECORD_KINDS",
     "LEDGER_SURFACE",
+    "NATIVE_POSITION_ATTRIBUTION_CLASS",
+    "NATIVE_POSITION_ATTRIBUTION_VERSION",
     "POSITION_KIND_VENUE",
     "POSITION_KIND_VIRTUAL",
     "TREASURY_BOUNDARY_KINDS",
@@ -88,6 +98,8 @@ __all__ = [
     "FoldFillResult",
     "LedgerRecord",
     "LedgerRecordKind",
+    "NativePositionAttribution",
+    "NativePositionEvidence",
     "PartialEntryRebase",
     "PositionKind",
     "PositionModelKind",
@@ -116,9 +128,11 @@ __all__ = [
     "refuse_paper_pnl_to_treasury",
     "refuse_top_up_short_fill",
     "require_epoch_state_carry",
+    "resolve_native_position_attribution",
     "seed_binding_ledger",
     "sum_virtual_quantities",
     "validate_state_carry_declaration",
+    "write_native_position_attribution",
 ]
 
 LEDGER_SURFACE: Final[str] = "qmn.ledger"

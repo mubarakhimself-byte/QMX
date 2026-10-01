@@ -17,9 +17,17 @@ from typing import Final, cast
 
 from qmf.core import Fingerprint, Instant, Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.binding import BookBindingRecord
-from qmf.risk.door import EntryIntent
+from qmf.risk.door import EntryIntent, ExitIntent, ExitKind
+from qmf.risk.paper import ExecutionTarget
 
 from qmn.ledger.binding_ledger import BindingVirtualLedger
+from qmn.ledger.native_position import (
+    NativePositionAttribution,
+    NativePositionEvidence,
+    resolve_native_position_attribution,
+    write_native_position_attribution,
+)
+from qmn.ledger.virtual import VirtualPosition, VirtualPositionStatus
 from qmn.order.door import (
     BOT_SIZE_FIELDS,
     AuthorizedIntent,
@@ -32,12 +40,14 @@ from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.seats._refuse import invalid, policy
 from qmn.seats.admission import AdmittedNodeSeat
 from qmn.seats.host import GovernedSeat, drive_governed_seat
-from qmn.venue import Command
+from qmn.venue import CloseScope, Command, CommandIdBinding
 
 __all__ = [
     "INTENT_PATH_HOPS",
     "BookPathContext",
+    "NativeExitAuthority",
     "SeatDispatchReceipt",
+    "authorize_native_exit_intent",
     "dispatch_hosted_intents",
     "dispatch_seat_intents",
     "refuse_bot_constructed_ct19",
@@ -67,6 +77,26 @@ class BookPathContext:
     native_execution_map: object
     decision_at: object
     binding_record: object
+    native_exit_authority: object = None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeExitAuthority:
+    """Host-owned, checked-evidence inputs for resolving one native close subject."""
+
+    journal: object
+    authorized_writers: object
+    command_binding_journal: object
+    evidence_by_position_ref: Mapping[str, NativePositionEvidence]
+    binding_by_position_ref: Mapping[str, CommandIdBinding]
+    target: object
+    composition_fp: object
+    position_model: object
+    binding_id: object
+    projection_writer: object
+    netting_partition: object = None
+    subject_present_at_submission: object = None
+    subject_observations: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +108,7 @@ class SeatDispatchReceipt:
     hops: tuple[str, ...]
     bms_instance_id: str
     seat_id: str
+    exit_attributions: tuple[NativePositionAttribution, ...] = ()
 
     def as_mapping(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -86,6 +117,7 @@ class SeatDispatchReceipt:
                 "command_count": len(self.commands),
                 "hops": list(self.hops),
                 "intent_count": len(self.authorized),
+                "exit_attributions": [item.identity() for item in self.exit_attributions],
                 "seat_id": self.seat_id,
             }
         )
@@ -186,6 +218,8 @@ def dispatch_hosted_intents(
         return items
     authorized: list[AuthorizedIntent] = []
     commands: list[Command] = []
+    exit_attributions: list[NativePositionAttribution] = []
+    entry_reservations: list[tuple[str, Fingerprint]] = []
     pending_in_batch: set[str] = set()
     ordinal = door.ordering_ordinal
     if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0:
@@ -198,6 +232,13 @@ def dispatch_hosted_intents(
         blocked = _refuse_sizing_or_ct19(item)
         if is_refusal(blocked):
             return blocked
+        if isinstance(item, ExitIntent):
+            exited = authorize_native_exit_intent(item, door, ordering_ordinal=ordinal + index)
+            if is_refusal(exited):
+                return exited
+            commands.append(exited.value[0])
+            exit_attributions.append(exited.value[1])
+            continue
         if not isinstance(item, EntryIntent):
             return policy(
                 "intents",
@@ -249,17 +290,14 @@ def dispatch_hosted_intents(
         authorized.append(frozen.value)
         commands.append(command.value)
         pending_in_batch.add(instrument_key)
-    reservations: list[tuple[str, Fingerprint]] = []
-    for item, command in zip(items.value, commands, strict=True):
-        if not isinstance(item, EntryIntent):
-            return invalid("intents", "entry reservation retains typed EntryIntent identity")
-        command_identity = command.fingerprint()
+        command_identity = command.value.fingerprint()
         if is_refusal(command_identity):
             return command_identity
-        reservations.append((item.instrument.symbol, command_identity.value))
-    reserved = door.position_ledger.reserve_entries(tuple(reservations))
-    if is_refusal(reserved):
-        return reserved
+        entry_reservations.append((item.instrument.symbol, command_identity.value))
+    if entry_reservations:
+        reserved = door.position_ledger.reserve_entries(tuple(entry_reservations))
+        if is_refusal(reserved):
+            return reserved
     return Ok(
         SeatDispatchReceipt(
             authorized=tuple(authorized),
@@ -267,8 +305,100 @@ def dispatch_hosted_intents(
             hops=INTENT_PATH_HOPS,
             bms_instance_id=door.bms_instance_id,
             seat_id=admitted.value.seat_id,
+            exit_attributions=tuple(exit_attributions),
         )
     )
+
+
+def authorize_native_exit_intent(
+    intent: ExitIntent, door: BookPathContext, *, ordering_ordinal: int
+) -> Result[tuple[Command, NativePositionAttribution]]:
+    """Resolve and persist the native subject before minting a full-close command."""
+    if intent.kind is not ExitKind.CLOSE_FULL:
+        return policy(
+            "exit_intent",
+            "tighten-protective-stop needs the separately admitted protection path; "
+            "it cannot be converted to a market close",
+        )
+    authority = door.native_exit_authority
+    if type(authority) is not NativeExitAuthority:
+        return policy(
+            "native_exit_authority",
+            "a hosted close requires host-pinned CT-13 fill/readback and durable "
+            "CT-19 binding authority",
+        )
+    ledger = door.position_ledger
+    if type(ledger) is not BindingVirtualLedger:
+        return invalid("position_ledger", "native exit resolves through a binding virtual ledger")
+    position = ledger.position_by_ref(intent.virtual_position_ref)
+    if not isinstance(position, VirtualPosition):
+        return policy("virtual_position", "exit intent targets an existing virtual position")
+    if position.status is not VirtualPositionStatus.OPEN:
+        return policy("virtual_position", "exit intent targets an open virtual position")
+    ref = intent.virtual_position_ref.value
+    evidence = authority.evidence_by_position_ref.get(ref)
+    command_binding = authority.binding_by_position_ref.get(ref)
+    if (
+        type(evidence) is not NativePositionEvidence
+        or type(command_binding) is not CommandIdBinding
+    ):
+        return policy(
+            "native_evidence", "the virtual position has exact host-pinned native evidence"
+        )
+    if type(authority.target) is not ExecutionTarget:
+        return invalid("target", "native exit authority carries an exact execution target")
+    native_map = door.native_execution_map
+    if type(native_map) is not NativeExecutionMap:
+        return invalid(
+            "native_execution_map", "native exit resolves through an immutable native map"
+        )
+    mappings = tuple(
+        mapping
+        for mapping in native_map.mappings
+        if mapping.target == authority.target and mapping.instrument.symbol == position.instrument
+    )
+    if len(mappings) != 1:
+        return policy(
+            "native_execution_map", "the position resolves one exact target/instrument row"
+        )
+    resolved = resolve_native_position_attribution(
+        journal=authority.journal,
+        authorized_writers=authority.authorized_writers,
+        evidence=evidence,
+        command_binding=command_binding,
+        command_binding_journal=authority.command_binding_journal,
+        ledger=door.position_ledger,
+        position_ref=intent.virtual_position_ref,
+        target=authority.target,
+        instrument=mappings[0].instrument,
+        native_map=native_map,
+        binding_epoch=ledger.binding_epoch,
+        composition_fp=authority.composition_fp,
+        position_model=authority.position_model,
+        binding_id=authority.binding_id,
+        netting_partition=authority.netting_partition,
+    )
+    if is_refusal(resolved):
+        return resolved
+    command = Command.close_position(
+        door.venue_id,
+        door.account,
+        door.session_epoch,
+        ordering_ordinal,
+        CloseScope.ACCOUNT_BINDING,
+        resolved.value.native_position_id,
+    )
+    if is_refusal(command):
+        return command
+    persisted = write_native_position_attribution(
+        journal=authority.journal,
+        writer=authority.projection_writer,
+        instant=door.decision_at,
+        attribution=resolved.value,
+    )
+    if is_refusal(persisted):
+        return persisted
+    return Ok((command.value, resolved.value))
 
 
 def dispatch_seat_intents(
@@ -342,7 +472,7 @@ def _as_path(value: object) -> Result[BookPathContext]:
 def _as_intent_sequence(value: object) -> Result[tuple[object, ...]]:
     if value is None:
         return Ok(())
-    if isinstance(value, (Command, EntryIntent)):
+    if isinstance(value, (Command, EntryIntent, ExitIntent)):
         return Ok((value,))
     if isinstance(value, Mapping):
         return Ok((cast("object", value),))
