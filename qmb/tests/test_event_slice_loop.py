@@ -15,6 +15,8 @@ from qmb.runloop import (
     ExecutionDisposition,
     FrontierClock,
     RestingIntent,
+    RestingTerminalCause,
+    RestingTerminalDisposition,
     SilentSliceHandler,
     SliceObservation,
     StreamSet,
@@ -84,7 +86,7 @@ class _RecordingHandler:
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool | ExecutionDisposition]:
+    ) -> Result[bool | ExecutionDisposition | RestingTerminalDisposition]:
         del observation, frontier
         self.calls.append((SUBPHASES[2], intent.stream_id))
         return Ok(True)
@@ -126,7 +128,7 @@ class _PartialSequenceHandler(_RecordingHandler):
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool | ExecutionDisposition]:
+    ) -> Result[bool | ExecutionDisposition | RestingTerminalDisposition]:
         del intent, observation, frontier
         return Ok(next(self.dispositions))
 
@@ -148,9 +150,40 @@ class _MalformedDispositionHandler(_RecordingHandler):
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool | ExecutionDisposition]:
+    ) -> Result[bool | ExecutionDisposition | RestingTerminalDisposition]:
         del intent, observation, frontier
         return Ok(self.value)
+
+
+class _TerminalOutcomeHandler(_RecordingHandler):
+    def __init__(self, terminal: object, verification: object = Ok(None)) -> None:
+        super().__init__()
+        self.terminal = terminal
+        self.verification = verification
+        self.verified: list[tuple[str, str]] = []
+
+    def execute_resting(
+        self,
+        intent: RestingIntent,
+        observation: SliceObservation | None,
+        frontier: Instant,
+    ) -> Result[bool | ExecutionDisposition | RestingTerminalDisposition]:
+        del observation, frontier
+        self.calls.append((SUBPHASES[2], intent.stream_id))
+        return Ok(self.terminal)  # type: ignore[arg-type]
+
+    def verify_resting_terminal(
+        self, intent: RestingIntent, terminal: RestingTerminalDisposition
+    ) -> object:
+        self.verified.append((intent.intent_id, terminal.intent_id))
+        return self.verification
+
+    def mint_intents(self, stream_id: str, frontier: Instant) -> Result[object]:
+        del frontier
+        if stream_id in self._minted:
+            return Ok(())
+        self._minted.add(stream_id)
+        return Ok((_intent("stop-me", stream_id),))
 
 
 def test_subphases_are_the_pinned_identity_bearing_strings() -> None:
@@ -203,6 +236,47 @@ def test_loop_revalidates_typed_execution_disposition_at_handler_boundary() -> N
     assert identity["higher_barspec_from_finest_base"] is True
     assert identity["same_series_bars_and_fills"] is True
     assert identity["lookahead_prevention_independent_of_gap_0048"] is True
+
+
+def test_terminal_only_disposition_retires_exact_resting_id_without_counting_fill() -> None:
+    evidence = _ok(fingerprint({"terminal": "ct13-row"}))
+    terminal = RestingTerminalDisposition("stop-me", RestingTerminalCause.PROTECTIVE_STOP, evidence)
+    handler = _TerminalOutcomeHandler(terminal)
+    outcome = _ok(
+        run(
+            slices=((_obs("eurusd", _NS),), (_obs("eurusd", _NS + 1),)),
+            stream_set=_streams("eurusd"),
+            handler=handler,
+        )
+    )
+    assert outcome.filled == ()
+    assert outcome.resting == ()
+    assert handler.verified == [("stop-me", "stop-me")]
+
+
+def test_terminal_disposition_rejects_forgery_and_missing_verifier_ack() -> None:
+    evidence = _ok(fingerprint({"terminal": "ct13-row"}))
+    terminal = RestingTerminalDisposition("stop-me", RestingTerminalCause.PROTECTIVE_STOP, evidence)
+    forged = object.__new__(RestingTerminalDisposition)
+    object.__setattr__(forged, "intent_id", "stop-me")
+    object.__setattr__(forged, "cause", "protective_stop")
+    object.__setattr__(forged, "evidence_fp", evidence)
+    refused = run(
+        slices=((_obs("eurusd", _NS),), (_obs("eurusd", _NS + 1),)),
+        stream_set=_streams("eurusd"),
+        handler=_TerminalOutcomeHandler(forged),
+    )
+    assert is_refusal(refused)
+    assert refused.context["field"] == "terminal_witness"
+
+    for missing_ack in (None, Ok(False)):
+        refused = run(
+            slices=((_obs("eurusd", _NS),), (_obs("eurusd", _NS + 1),)),
+            stream_set=_streams("eurusd"),
+            handler=_TerminalOutcomeHandler(terminal, missing_ack),
+        )
+        assert is_refusal(refused)
+        assert refused.context["field"] == "terminal_witness"
 
 
 def test_changing_subphase_order_is_identity_bearing() -> None:

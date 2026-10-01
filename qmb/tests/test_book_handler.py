@@ -27,6 +27,7 @@ from qmb.execution import (
     FINANCING_SCHEDULE_KEY,
     SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
     SLIPPAGE_ADAPTER_KEY,
+    SLIPPAGE_ADAPTER_ZERO,
     SLIPPAGE_CALIBRATION_KEY,
     CommissionCalibration,
     SlippageCalibration,
@@ -46,7 +47,14 @@ from qmb.host.book_handler import (
     read_replay_positions,
 )
 from qmb.results.measures import TradeSide
-from qmb.runloop.loop import ExecutionDisposition, SliceObservation, run
+from qmb.runloop.loop import (
+    ExecutionDisposition,
+    RestingIntent,
+    RestingTerminalCause,
+    RestingTerminalDisposition,
+    SliceObservation,
+    run,
+)
 from qmf.core import (
     AccountRole,
     CalendarIdentity,
@@ -95,7 +103,11 @@ def _fp(label: str) -> Fingerprint:
     return _ok(fingerprint({"label": label}))
 
 
-def _resolved(financing_calibration: SwapCalibration | None = None) -> ResolvedRunConfig:
+def _resolved(
+    financing_calibration: SwapCalibration | None = None,
+    *,
+    slippage_adapter: str = SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
+) -> ResolvedRunConfig:
     commission = _ok(
         CommissionCalibration.try_create(
             COST_ADAPTER_PER_LOT,
@@ -106,7 +118,7 @@ def _resolved(financing_calibration: SwapCalibration | None = None) -> ResolvedR
     )
     slippage = _ok(
         SlippageCalibration.try_create(
-            SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
+            slippage_adapter,
             "replay-broker",
             percent=_ok(ExactRational.try_create(1, 10_000, UnitKind.DIMENSIONLESS_RATIO)),
         )
@@ -117,7 +129,7 @@ def _resolved(financing_calibration: SwapCalibration | None = None) -> ResolvedR
         FILL_ADAPTER_KEY: FILL_ADAPTER_DECLARED_PATH,
         FILL_BASIS_KEY: FILL_BASIS_OPTIMISTIC_EXACT,
         FINANCING_SCHEDULE_KEY: "replay-swap-table",
-        SLIPPAGE_ADAPTER_KEY: SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
+        SLIPPAGE_ADAPTER_KEY: slippage_adapter,
         SLIPPAGE_CALIBRATION_KEY: slippage,
     }
     if financing_calibration is not None:
@@ -236,15 +248,20 @@ def _path(*values: int) -> SlicePath:
     return _ok(SlicePath.try_create("eurusd", tuple(_price(value) for value in values)))
 
 
-def _quote_path(*values: int, bid: int, ask: int) -> SlicePath:
+def _quote_path(*values: int, bid: int, ask: int, market_closed: bool = False) -> SlicePath:
     return _ok(
         SlicePath.try_create(
             "eurusd",
             tuple(_price(value) for value in values),
             bid=_price(bid),
             ask=_price(ask),
+            market_closed=market_closed,
         )
     )
+
+
+def _quote_only_path(*, bid: int, ask: int) -> SlicePath:
+    return _ok(SlicePath.try_create("eurusd", (), bid=_price(bid), ask=_price(ask)))
 
 
 def _handler(
@@ -254,8 +271,9 @@ def _handler(
     rollover_calendar: object | None = None,
     writer_boot: str = "boot-1",
     writer_start: int = 0,
+    slippage_adapter: str = SLIPPAGE_ADAPTER_CONSTANT_PERCENT,
 ) -> tuple[BookExecutionSliceHandler, _ScriptedHostedBot, JournalReader, WriterId]:
-    config = _resolved(financing_calibration)
+    config = _resolved(financing_calibration, slippage_adapter=slippage_adapter)
     bound = _ok(bind_execution_ports(config))
     binding = config.replay_binding
     assert binding is not None
@@ -281,7 +299,7 @@ def _handler(
     policy_by_code = {
         "entry:family:breakout": BookOrderPolicy(OrderType.MARKET),
         "exit:family:target": BookOrderPolicy(OrderType.MARKET),
-        "exit:family:protective_stop": BookOrderPolicy(OrderType.STOP, stop_price=_price(109_500)),
+        "exit:family:protective_stop": BookOrderPolicy(OrderType.STOP),
     }
     admission = _ok(
         BookAdmissionContext.try_create(
@@ -681,7 +699,17 @@ def test_unwitnessed_ct13_ack_does_not_advance_entry_state(
     assert _ok(reader.read_checked("positions", for_world=World.REPLAY)) == []
 
 
-@pytest.mark.parametrize("receipt_field", ("engine", "format_version", "fingerprint"))
+@pytest.mark.parametrize(
+    "receipt_field",
+    (
+        "engine",
+        "format_version",
+        "fingerprint",
+        "is_evidence_bearing",
+        "retained_forever",
+        "sequence",
+    ),
+)
 def test_forged_store_receipt_does_not_advance_memory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -730,7 +758,59 @@ def _forged_receipt_field(field_name: str) -> dict[str, object]:
         return {"engine": "untrusted-engine"}
     if field_name == "format_version":
         return {"format_version": 999}
-    return {"fingerprint": _fp("forged-row-digest")}
+    if field_name == "fingerprint":
+        return {"fingerprint": _fp("forged-row-digest")}
+    if field_name in {"is_evidence_bearing", "retained_forever"}:
+        return {field_name: 1}
+    return {"sequence": False}
+
+
+@pytest.mark.parametrize("event_field", ("writer", "instant", "event_type", "world"))
+def test_malformed_typed_ct13_event_refuses_without_attribute_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event_field: str,
+) -> None:
+    handler, bot, _reader, _writer = _handler(tmp_path)
+    instant = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.proposals = (entry,)
+    _ok(handler.bind_path(_path(110_000, 110_100, 109_900)))
+    resting = _ok(handler.mint_intents("eurusd", instant))[0]
+    writer = handler.admission.journal_writer
+    original_record = writer.record
+
+    def malformed_record(
+        event_type: object,
+        payload: Mapping[str, object] | None = None,
+        *,
+        instant: object,
+        **kwargs: object,
+    ) -> Result[JournalAppendReceipt]:
+        appended = original_record(event_type, payload, instant=instant, **kwargs)
+        if is_refusal(appended):
+            return appended
+        event = appended.value.event
+        replacement: dict[str, object] = {
+            "writer": None,
+            "instant": None,
+            "event_type": "risk transition",
+            "world": "replay",
+        }
+        return Ok(
+            replace(appended.value, event=replace(event, **{event_field: replacement[event_field]}))
+        )
+
+    monkeypatch.setattr(writer, "record", malformed_record)
+    assert is_refusal(handler.execute_resting(resting, None, instant))
+    assert handler.positions == ()
 
 
 def test_partial_entry_no_fill_later_fill_rebases_once_and_reopens(tmp_path: Path) -> None:
@@ -1104,7 +1184,7 @@ def test_run_loop_keeps_partial_entry_across_nofill_and_rebases_at_terminal(
     paths = (
         _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
         _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
-        _ok(SlicePath.try_create("eurusd", (_price(110_000),), market_closed=True)),
+        _quote_path(110_000, bid=109_999, ask=110_001, market_closed=True),
         _quote_path(110_000, 110_100, 109_900, bid=109_999, ask=110_001),
     )
     _ok(handler.bind_paths(tuple(zip(instants, paths, strict=True))))
@@ -1136,3 +1216,106 @@ def test_run_loop_keeps_partial_entry_across_nofill_and_rebases_at_terminal(
         )
     )
     assert reopened.positions[0].fp1_identity() == terminal[0].fp1_identity()
+
+
+def test_partial_exposure_stops_closes_and_reopens_from_ct13(tmp_path: Path) -> None:
+    handler, bot, reader, writer = _handler(tmp_path, slippage_adapter=SLIPPAGE_ADAPTER_ZERO)
+    rules = dict(handler.admission.order_policy_by_code)
+    rules["entry:family:breakout"] = BookOrderPolicy(
+        OrderType.MARKET, liquidity=_ok(Quantity.try_create(2, "lot", 0))
+    )
+    handler.admission = replace(
+        handler.admission,
+        requested_r=_ok(ExactRational.try_create(5, 1, UnitKind.R_MULTIPLE)),
+        order_policy_by_code=MappingProxyType(rules),
+    )
+    start = _ok(Instant.try_create(1_700_000_000_000_000_000))
+    fill_at = _ok(Instant.try_create(start.value_ns + 1_000_000_000))
+    stopped_at = _ok(Instant.try_create(start.value_ns + 2_000_000_000))
+    entry = _ok(
+        EntryIntent.try_create(
+            _instrument(),
+            Direction.LONG,
+            _ok(ReasonCode.try_create("breakout", "family")),
+            handler.admission.execution_target,
+        )
+    )
+    bot.responses = ((entry,), (), ())
+    _ok(
+        handler.bind_paths(
+            (
+                (start, _quote_only_path(bid=109_999, ask=110_001)),
+                (fill_at, _quote_only_path(bid=109_999, ask=110_001)),
+                (stopped_at, _quote_only_path(bid=109_000, ask=109_002)),
+            )
+        )
+    )
+    outcome = _ok(
+        run(
+            slices=(
+                (_ok(SliceObservation.try_create("eurusd", start, True)),),
+                (_ok(SliceObservation.try_create("eurusd", fill_at, True)),),
+                (_ok(SliceObservation.try_create("eurusd", stopped_at, True)),),
+            ),
+            stream_set=("eurusd",),
+            handler=handler,
+        )
+    )
+    assert len(outcome.filled) == 1, (
+        bot.calls,
+        [(type(r.fill).__name__, getattr(r.fill, "reason", None)) for r in handler.receipts],
+    )
+    assert outcome.resting == ()
+    assert handler.pending_entry_tickets == ()
+    assert handler.finalized_resting_intent_ids
+    close_receipts = tuple(
+        receipt for receipt in handler.receipts if receipt.exit_record is not None
+    )
+    assert len(close_receipts) == 1
+    assert close_receipts[0].position is not None
+    assert close_receipts[0].position.entry_terminal_reason is EntryTerminalReason.PROTECTIVE_STOP
+    assert close_receipts[0].position.quantity == _ok(Quantity.try_create(2, "lot", 0))
+    recovered = _ok(
+        read_replay_positions(
+            journal_reader=reader,
+            stream_name="positions",
+            writer=writer,
+            binding_epoch=handler.admission.binding.fingerprint,
+            result_label=handler.admission.result_label,
+        )
+    )
+    assert len(recovered.positions) == 1
+    assert recovered.positions[0].closed is True
+    restarted = _ok(
+        BookExecutionSliceHandler.try_create(
+            hosted=bot,
+            stream_id="eurusd",
+            bound_execution=handler.bound_execution,
+            admission=handler.admission,
+            recovery=recovered,
+        )
+    )
+    assert restarted.positions == ()
+    assert restarted.pending_entry_tickets == ()
+    close_journal = close_receipts[0].journal_receipt
+    assert close_journal is not None
+    proof = RestingTerminalDisposition(
+        handler.finalized_resting_intent_ids[0],
+        RestingTerminalCause.PROTECTIVE_STOP,
+        close_journal.event.fingerprint,
+    )
+    resting = _ok(RestingIntent.try_create(proof.intent_id, "eurusd"))
+    assert is_refusal(
+        handler.verify_resting_terminal(
+            resting,
+            replace(proof, evidence_fp=_fp("wrong-terminal-row")),
+        )
+    )
+    assert is_refusal(
+        handler.verify_resting_terminal(
+            resting,
+            replace(proof, cause=RestingTerminalCause.CANCELLED),
+        )
+    )
+    foreign_resting = _ok(RestingIntent.try_create(f"{proof.intent_id}:foreign", "eurusd"))
+    assert is_refusal(handler.verify_resting_terminal(foreign_resting, proof))

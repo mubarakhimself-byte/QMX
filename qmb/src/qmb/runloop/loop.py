@@ -16,8 +16,9 @@ resolved run-config mints a CT-32 fingerprint witness (no HTML, no charts).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, Protocol, cast, runtime_checkable
 
@@ -94,6 +95,8 @@ __all__ = [
     "EventSlice",
     "LoopOutcome",
     "RestingIntent",
+    "RestingTerminalCause",
+    "RestingTerminalDisposition",
     "SilentSliceHandler",
     "SliceHandler",
     "SliceObservation",
@@ -664,7 +667,9 @@ class SliceHandler(Protocol):
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool | ExecutionDisposition]:  # pragma: no cover - protocol seam
+    ) -> Result[
+        bool | ExecutionDisposition | RestingTerminalDisposition
+    ]:  # pragma: no cover - protocol seam
         """Execute an order, optionally separating fill occurrence from terminality."""
         ...
 
@@ -704,6 +709,34 @@ class ExecutionDisposition:
             raise ValueError("an unfilled order remains live until an explicit terminal event")
 
 
+class RestingTerminalCause(StrEnum):
+    """Explicit causes that may retire a resting token without claiming a fill."""
+
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    PROTECTIVE_STOP = "protective_stop"
+
+
+@dataclass(frozen=True, slots=True)
+class RestingTerminalDisposition:
+    """Terminal-only event, requiring handler verification against durable evidence."""
+
+    intent_id: str
+    cause: RestingTerminalCause
+    evidence_fp: Fingerprint
+
+    def __post_init__(self) -> None:
+        if type(self.intent_id) is not str:
+            raise TypeError("terminal disposition names a string resting intent id")
+        token = clean_token(self.intent_id)
+        if token is None or token != self.intent_id:
+            raise ValueError("terminal disposition names one exact resting intent id")
+        if type(self.cause) is not RestingTerminalCause:
+            raise TypeError("terminal disposition carries a declared terminal cause")
+        if type(self.evidence_fp) is not Fingerprint:
+            raise TypeError("terminal disposition carries a typed durable evidence fingerprint")
+
+
 @dataclass(frozen=True, slots=True)
 class SilentSliceHandler:
     """Default ports: no financing side effects, no fills, no minted intents."""
@@ -726,7 +759,7 @@ class SilentSliceHandler:
         intent: RestingIntent,
         observation: SliceObservation | None,
         frontier: Instant,
-    ) -> Result[bool | ExecutionDisposition]:
+    ) -> Result[bool | ExecutionDisposition | RestingTerminalDisposition]:
         del intent, observation, frontier
         return Ok(False)
 
@@ -1245,6 +1278,41 @@ def _phase_resting_orders(acc: _Acc) -> Result[_Acc]:
             executed = acc.handler.execute_resting(intent, observation, acc.frontier)
             if is_refusal(executed):
                 return executed
+            if isinstance(executed.value, RestingTerminalDisposition):
+                terminal = executed.value
+                if (
+                    type(terminal.intent_id) is not str
+                    or type(terminal.cause) is not RestingTerminalCause
+                    or type(terminal.evidence_fp) is not Fingerprint
+                ):
+                    return invalid(
+                        "terminal_witness",
+                        "terminal-only disposition carries typed identity, cause, and evidence",
+                    )
+                if terminal.intent_id != intent.intent_id:
+                    return policy(
+                        "terminal_intent_id",
+                        "terminal witness names the exact resting token being retired",
+                    )
+                verifier: object = getattr(acc.handler, "verify_resting_terminal", None)
+                if not callable(verifier):
+                    return invalid(
+                        "terminal_witness",
+                        "terminal-only resting disposition requires a handler evidence verifier",
+                    )
+                verify = cast(
+                    Callable[[RestingIntent, RestingTerminalDisposition], Result[None]], verifier
+                )
+                verified = verify(intent, terminal)
+                if is_refusal(verified):
+                    return verified
+                if type(verified) is not Ok or verified.value is not None:
+                    return invalid(
+                        "terminal_witness",
+                        "terminal verifier returns an explicit Ok(None) after durable validation",
+                    )
+                actions.append(f"terminal:{terminal.cause.value}:{intent.intent_id}")
+                continue
             disposition = _execution_disposition(executed.value)
             if is_refusal(disposition):
                 return disposition
