@@ -182,6 +182,52 @@ class VirtualPosition:
             body["execution_quality"] = dict(self.execution_quality.as_mapping())
         return body
 
+    def storage_mapping(self) -> dict[str, object]:
+        """Exact private persistence form paired with :meth:`fp1_identity`.
+
+        fp1 identities intentionally normalize scaled values. The journal keeps
+        the original integer/scale representation as well so recovery does not
+        silently change runtime arithmetic scales.
+        """
+        body: dict[str, object] = {
+            "identity": self.fp1_identity(),
+            "filled_quantity": _quantity_storage(self.filled_quantity),
+            "admitted_quantity": _quantity_storage(self.admitted_quantity),
+            "faces": _faces_storage(self.faces),
+            "admission_faces": _faces_storage(self.admission_faces),
+        }
+        if self.execution_quality is not None:
+            body["execution_quality_storage"] = {
+                "kind": self.execution_quality.kind,
+                "admitted_quantity": _quantity_storage(self.execution_quality.admitted_quantity),
+                "filled_quantity": _quantity_storage(self.execution_quality.filled_quantity),
+                "shortfall": _quantity_storage(self.execution_quality.shortfall),
+            }
+        return body
+
+
+def _quantity_storage(value: Quantity) -> dict[str, object]:
+    return {"value": value.value, "unit": value.unit, "scale": value.scale}
+
+
+def _faces_storage(value: RFaces) -> dict[str, object]:
+    distance = value.original_risk_distance
+    instrument = distance.instrument
+    amount = value.original_risk_amount
+    return {
+        "original_risk_distance": {
+            "value": distance.value,
+            "scale": distance.scale,
+            "venue": instrument.venue.value,
+            "symbol": instrument.symbol,
+        },
+        "original_risk_amount": {
+            "value": amount.value,
+            "currency": amount.currency,
+            "scale": amount.scale,
+        },
+    }
+
 
 @dataclass(frozen=True, slots=True)
 class VenuePosition:

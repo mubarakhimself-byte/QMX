@@ -66,6 +66,7 @@ from qmn.ledger.virtual import (
     rebase_partial_entry,
     refuse_top_up_short_fill,
 )
+from qmn.ledger.virtual_journal import QmfVirtualLedgerJournal, VirtualLedgerRecovery
 
 __all__ = [
     "ADMISSION_PLAN_EDGE",
@@ -91,12 +92,14 @@ __all__ = [
     "PositionKind",
     "PositionModelKind",
     "QmfEntryReservationJournal",
+    "QmfVirtualLedgerJournal",
     "QuantityReconcileResult",
     "TreasuryBoundaryAct",
     "TreasuryBoundaryActKind",
     "TreasuryBoundaryJournal",
     "VenuePosition",
     "VenuePositionFold",
+    "VirtualLedgerRecovery",
     "VirtualPosition",
     "VirtualPositionStatus",
     "apply_treasury_boundary",

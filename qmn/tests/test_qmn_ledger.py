@@ -162,6 +162,75 @@ def test_fold_fill_appends_binding_ledger_and_virtual_position() -> None:
     assert len(ledger.records) == 2  # seed + fill
 
 
+def test_nonterminal_partial_fill_accumulates_on_same_reserved_command() -> None:
+    ledger = _seed_ledger()
+    faces = _faces(amount=50_000)
+    command = _fp("partial-command")
+
+    first = _ok(
+        ledger.fold_fill(
+            fill=AttributedFill(
+                command_identity=command,
+                venue_native_id="partial-1",
+                instrument="EURUSD",
+                quantity=_qty(2),
+                realized_cash=None,
+                recorded_at=_instant(2),
+            ),
+            bot_id="bot-a",
+            admission_identity=_fp("partial-admission"),
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=False,
+        )
+    )
+    assert first.position.filled_quantity == _qty(2)
+    assert first.position.rebased is False
+
+    second = _ok(
+        ledger.fold_fill(
+            fill=AttributedFill(
+                command_identity=command,
+                venue_native_id="partial-2",
+                instrument="EURUSD",
+                quantity=_qty(3),
+                realized_cash=None,
+                recorded_at=_instant(3),
+            ),
+            bot_id="bot-a",
+            admission_identity=_fp("partial-admission"),
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert second.created is False
+    assert second.position.position_ref == first.position.position_ref
+    assert second.position.filled_quantity == _qty(5)
+    assert second.position.rebased is False
+    assert ledger.has_open_virtual("EURUSD")
+
+    late = _refusal(
+        ledger.fold_fill(
+            fill=AttributedFill(
+                command_identity=command,
+                venue_native_id="late-tranche",
+                instrument="EURUSD",
+                quantity=_qty(1),
+                realized_cash=None,
+                recorded_at=_instant(4),
+            ),
+            bot_id="bot-a",
+            admission_identity=_fp("partial-admission"),
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert late.context["field"] == "entry_terminal"
+    assert len(ledger.records) == 3
+
+
 def test_no_scale_in_refuses_second_entry_on_open_virtual() -> None:
     ledger = _seed_ledger()
     faces = _faces()
@@ -207,6 +276,103 @@ def test_no_scale_in_refuses_second_entry_on_open_virtual() -> None:
     assert _refusal(guard_no_scale_in(has_open_virtual_position=True)).category is (
         RefusalCategory.POLICY_REJECTION
     )
+
+
+def test_partial_fill_overfill_and_admission_drift_do_not_change_ledger() -> None:
+    ledger = _seed_ledger()
+    command = _fp("partial-guard-command")
+    admission = _fp("partial-guard-admission")
+    faces = _faces()
+    _ok(
+        ledger.fold_fill(
+            fill=AttributedFill(command, "deal-1", "EURUSD", _qty(2), None, _instant(2)),
+            bot_id="bot-a",
+            admission_identity=admission,
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=False,
+        )
+    )
+    before = (len(ledger.records), ledger.position_for("EURUSD"))
+    overfill = _refusal(
+        ledger.fold_fill(
+            fill=AttributedFill(command, "deal-2", "EURUSD", _qty(4), None, _instant(3)),
+            bot_id="bot-a",
+            admission_identity=admission,
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert overfill.context["field"] == "filled_quantity"
+    drift = _refusal(
+        ledger.fold_fill(
+            fill=AttributedFill(command, "deal-3", "EURUSD", _qty(1), None, _instant(4)),
+            bot_id="bot-a",
+            admission_identity=_fp("changed-admission"),
+            faces=faces,
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert drift.category is RefusalCategory.POLICY_REJECTION
+    assert (len(ledger.records), ledger.position_for("EURUSD")) == before
+
+
+def test_exact_last_fill_can_carry_later_terminal_marker_without_double_fill() -> None:
+    ledger = _seed_ledger()
+    command = _fp("late-terminal-command")
+    admission = _fp("late-terminal-admission")
+    fill = AttributedFill(
+        command,
+        "late-terminal-deal",
+        "EURUSD",
+        _qty(2),
+        _money(100),
+        _instant(2),
+    )
+    first = _ok(
+        ledger.fold_fill(
+            fill=fill,
+            bot_id="bot-a",
+            admission_identity=admission,
+            faces=_faces(amount=50_000),
+            admitted_quantity=_qty(5),
+            entry_terminal=False,
+        )
+    )
+    terminal = _ok(
+        ledger.fold_fill(
+            fill=fill,
+            bot_id="bot-a",
+            admission_identity=admission,
+            faces=_faces(amount=50_000),
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert terminal.idempotent is False
+    assert terminal.position.position_ref == first.position.position_ref
+    assert terminal.position.filled_quantity == _qty(2)
+    assert terminal.position.rebased is True
+    assert terminal.position.faces.original_risk_amount == _money(20_000)
+    assert ledger.realized_cash == _money(100_100)
+    assert ledger.records[-1].fill_native_id is None
+    assert ledger.records[-1].cash_delta is None
+
+    repeated = _ok(
+        ledger.fold_fill(
+            fill=fill,
+            bot_id="bot-a",
+            admission_identity=admission,
+            faces=_faces(amount=50_000),
+            admitted_quantity=_qty(5),
+            entry_terminal=True,
+        )
+    )
+    assert repeated.idempotent is True
+    assert len(ledger.records) == 3
+    assert ledger.realized_cash == _money(100_100)
 
 
 def test_venue_position_fold_is_separate_from_virtual() -> None:
@@ -260,9 +426,7 @@ def test_partial_entry_rebases_amount_once_keeps_admission_plan() -> None:
             status=VirtualPositionStatus.PENDING_ENTRY,
         )
     )
-    updated, outcome = _ok(
-        rebase_partial_entry(position, filled_quantity=_qty(1), terminal=True)
-    )
+    updated, outcome = _ok(rebase_partial_entry(position, filled_quantity=_qty(1), terminal=True))
     assert updated.rebased is True
     assert updated.admission_faces == faces
     assert updated.admission_plan_edge == ADMISSION_PLAN_EDGE
@@ -322,12 +486,14 @@ def test_full_fill_and_non_terminal_refuse_rebase() -> None:
             filled_quantity=_qty(1),
         )
     )
-    assert _refusal(
-        rebase_partial_entry(position, filled_quantity=_qty(1), terminal=True)
-    ).category is RefusalCategory.INVALID_INPUT
-    assert _refusal(
-        rebase_partial_entry(position, filled_quantity=_qty(1), terminal=False)
-    ).category is RefusalCategory.INVALID_INPUT
+    assert (
+        _refusal(rebase_partial_entry(position, filled_quantity=_qty(1), terminal=True)).category
+        is RefusalCategory.INVALID_INPUT
+    )
+    assert (
+        _refusal(rebase_partial_entry(position, filled_quantity=_qty(1), terminal=False)).category
+        is RefusalCategory.INVALID_INPUT
+    )
 
 
 # --- AC3: netting attribution partition + virtual/venue quantity reconcile ---
@@ -528,9 +694,10 @@ def test_treasury_boundary_never_touches_positions_or_r() -> None:
     assert ledger.book_capital() == _money(99_000)
     assert is_ok(refuse_boundary_rebase_of_r(faces_before=faces, faces_after=faces))
     mutated = _faces(amount=9_000)
-    assert _refusal(
-        refuse_boundary_rebase_of_r(faces_before=faces, faces_after=mutated)
-    ).category is RefusalCategory.POLICY_REJECTION
+    assert (
+        _refusal(refuse_boundary_rebase_of_r(faces_before=faces, faces_after=mutated)).category
+        is RefusalCategory.POLICY_REJECTION
+    )
 
 
 def test_missed_rollover_reconstructed_as_correction() -> None:
@@ -612,9 +779,5 @@ def test_state_carry_absence_and_carry_requires_signed_edge() -> None:
     assert with_edge.continues_performance_signature == "perf-sig"
 
     # StateCarry value object also accepted.
-    sc = _ok(
-        StateCarry.try_create(
-            dict.fromkeys(StateCarryCounter, StateCarryChoice.RESET)
-        )
-    )
+    sc = _ok(StateCarry.try_create(dict.fromkeys(StateCarryCounter, StateCarryChoice.RESET)))
     assert is_ok(require_epoch_state_carry(state_carry=sc))

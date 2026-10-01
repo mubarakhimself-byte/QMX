@@ -24,6 +24,7 @@ from qmf.core import (
     Ok,
     Quantity,
     Result,
+    fingerprint,
     is_refusal,
 )
 from qmf.risk.r_faces import RFaces
@@ -79,6 +80,8 @@ class LedgerRecord:
     command_identity: Fingerprint | None
     money_scale: int
     note: str | None = None
+    fill_native_id: str | None = None
+    fill_identity: Fingerprint | None = None
 
     def as_mapping(self) -> Mapping[str, object]:
         body: dict[str, object] = {
@@ -96,6 +99,19 @@ class LedgerRecord:
             body["command_identity"] = self.command_identity.value
         if self.note is not None:
             body["note"] = self.note
+        if self.fill_native_id is not None:
+            body["fill_native_id"] = self.fill_native_id
+        if self.fill_identity is not None:
+            body["fill_identity"] = self.fill_identity.value
+        return MappingProxyType(body)
+
+    def storage_mapping(self) -> Mapping[str, object]:
+        """Exact private journal form retaining runtime money scale."""
+        body = dict(self.as_mapping())
+        if self.cash_delta is not None:
+            body["cash_delta_value"] = self.cash_delta.value
+            body["cash_delta_currency"] = self.cash_delta.currency
+            body["cash_delta_scale"] = self.cash_delta.scale
         return MappingProxyType(body)
 
 
@@ -107,6 +123,7 @@ class FoldFillResult:
     position: VirtualPosition
     created: bool
     scale_in_refused: bool = False
+    idempotent: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,10 +221,14 @@ class BindingVirtualLedger:
     _positions: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
     _by_ref: dict[str, VirtualPosition] = field(default_factory=dict[str, VirtualPosition])
     _pending_entries: dict[str, Fingerprint] = field(default_factory=dict[str, Fingerprint])
+    _terminal_entries: set[str] = field(default_factory=set[str])
     _reservation_journal: JournalSink[object] | None = None
     _reservation_sequence: int = 0
     _reservation_recovered: bool = False
     _reservation_uncertain: bool = False
+    _virtual_ledger_journal: JournalSink[object] | None = None
+    _virtual_ledger_recovered: bool = False
+    _virtual_ledger_uncertain: bool = False
     _sequence: int = 0
 
     @property
@@ -320,6 +341,140 @@ class BindingVirtualLedger:
         self._reservation_sequence = last_sequence
         self._reservation_recovered = True
         self._reservation_uncertain = False
+        return Ok(None)
+
+    def recover_virtual_ledger(self, recovery: object) -> Result[None]:
+        """Rebuild exact cash and virtual positions from the checked CT-13 prefix."""
+        from qmn.ledger.virtual_journal import VirtualLedgerRecovery  # noqa: PLC0415
+
+        if not isinstance(recovery, VirtualLedgerRecovery):
+            return policy(
+                "virtual_ledger_recovery",
+                "recovery is the complete typed CT-13 prefix for this binding epoch",
+            )
+        rows = recovery.rows
+        if (
+            recovery.complete is not True
+            or type(recovery.committed_high_water) is not int
+            or recovery.committed_high_water != len(rows)
+            or recovery.binding_epoch != self.binding_epoch
+        ):
+            return policy(
+                "virtual_ledger_recovery",
+                "recovery is the complete typed CT-13 prefix for this binding epoch",
+            )
+        if not rows:
+            seed = self._records[0]
+            self._virtual_ledger_recovered = True
+            appended = self._append_virtual_row(seed, None)
+            if is_refusal(appended):
+                return appended
+            self._virtual_ledger_recovered = True
+            self._virtual_ledger_uncertain = False
+            return Ok(None)
+        if len(rows) != recovery.committed_high_water:
+            return policy("virtual_ledger_recovery", "recovery high-water matches its row count")
+        typed_rows: list[tuple[LedgerRecord, VirtualPosition | None]] = []
+        typed_rows.extend((row.record, row.position) for row in rows)
+        seed = typed_rows[0][0]
+        if (
+            seed.kind is not LedgerRecordKind.SEED
+            or seed.sequence != 1
+            or seed.binding_epoch != self.binding_epoch
+            or seed.cash_delta != self.seed
+            or seed.position_ref is not None
+            or typed_rows[0][1] is not None
+        ):
+            return policy("virtual_ledger_recovery", "durable seed matches this ledger's seed")
+        positions: dict[str, VirtualPosition] = {}
+        by_ref: dict[str, VirtualPosition] = {}
+        cash = self.seed
+        records: list[LedgerRecord] = [seed]
+        for expected, (record, position) in enumerate(typed_rows[1:], start=2):
+            if record.sequence != expected or record.binding_epoch != self.binding_epoch:
+                return policy(
+                    "virtual_ledger_recovery", "ledger rows are contiguous and binding-scoped"
+                )
+            if record.position_ref is None:
+                if position is not None:
+                    return policy(
+                        "virtual_ledger_recovery", "positionless row has no position snapshot"
+                    )
+            elif position is None or position.position_ref != record.position_ref:
+                return policy(
+                    "virtual_ledger_recovery", "position snapshot matches its row reference"
+                )
+            if position is not None:
+                positions[position.instrument] = position
+                by_ref[position.position_ref.value] = position
+            if record.cash_delta is not None:
+                updated = cash.add(record.cash_delta)
+                if is_refusal(updated):
+                    return updated
+                cash = updated.value
+            records.append(record)
+        self._records = records
+        self._positions = positions
+        self._by_ref = by_ref
+        self.realized_cash = cash
+        self._sequence = len(records)
+        self._terminal_entries = {
+            record.command_identity.value
+            for record in records
+            if record.note == "entry-terminal" and record.command_identity is not None
+        }
+        for record in records:
+            if record.note != "entry-terminal" or record.command_identity is None:
+                continue
+            position = next(
+                (
+                    candidate
+                    for candidate in positions.values()
+                    if candidate.command_identity == record.command_identity
+                ),
+                None,
+            )
+            if position is None:
+                return policy(
+                    "virtual_ledger_recovery", "terminal fill retains its position snapshot"
+                )
+            if self._pending_entries.get(position.instrument) == record.command_identity:
+                terminalized = self._append_reservation_event(
+                    position.instrument,
+                    record.command_identity,
+                    "filled",
+                    outcome="recovered-terminal-fill",
+                )
+                if is_refusal(terminalized):
+                    return terminalized
+                self._pending_entries.pop(position.instrument, None)
+        self._virtual_ledger_recovered = True
+        self._virtual_ledger_uncertain = False
+        return Ok(None)
+
+    def _append_virtual_row(
+        self, record: LedgerRecord, position: VirtualPosition | None
+    ) -> Result[None]:
+        sink = self._virtual_ledger_journal
+        if sink is None:
+            return Ok(None)
+        if not self._virtual_ledger_recovered or self._virtual_ledger_uncertain:
+            return policy(
+                "virtual_ledger_journal", "durable ledger is recovered and has no uncertain append"
+            )
+        from qmn.ledger.virtual_journal import VirtualLedgerRow  # noqa: PLC0415
+
+        appended = sink.append(VirtualLedgerRow(record, position).as_mapping())
+        if is_refusal(appended):
+            self._virtual_ledger_uncertain = True
+            return appended
+        if appended.value.detail.get("complete") is not True or not isinstance(
+            appended.value.detail.get("fingerprint"), str
+        ):
+            self._virtual_ledger_uncertain = True
+            return policy(
+                "virtual_ledger_journal", "append has a verified durable CT-13 readback receipt"
+            )
         return Ok(None)
 
     def _append_reservation_event(
@@ -524,7 +679,136 @@ class BindingVirtualLedger:
                 "the risk-domain writer folds an AttributedFill joined by command identity",
                 given=repr(fill),
             )
+        raw_command = cast(object, fill.command_identity)
+        raw_quantity = cast(object, fill.quantity)
+        raw_instant = cast(object, fill.recorded_at)
+        raw_cash = cast(object, fill.realized_cash)
+        if (
+            not isinstance(raw_command, Fingerprint)
+            or clean_token(fill.venue_native_id) != fill.venue_native_id
+            or clean_token(fill.instrument) != fill.instrument
+            or not isinstance(raw_quantity, Quantity)
+            or fill.quantity.as_fraction() <= 0
+            or not isinstance(raw_instant, Instant)
+            or (raw_cash is not None and not isinstance(raw_cash, Money))
+        ):
+            return invalid(
+                "fill", "fill carries exact identity, quantity, cash, and instant fields"
+            )
+        if not isinstance(faces, RFaces) or not isinstance(admitted_quantity, Quantity):
+            return invalid("admission", "fill fold retains the typed admitted R faces and quantity")
+        if faces.original_risk_distance.instrument.symbol != fill.instrument:
+            return invalid(
+                "instrument", "risk distance instrument symbol matches the attributed fill"
+            )
+        if not isinstance(entry_terminal, bool):
+            return invalid(
+                "entry_terminal", "entry terminality is a bool", given=repr(entry_terminal)
+            )
+        fill_identity = fingerprint(fill.as_mapping())
+        if is_refusal(fill_identity):
+            return fill_identity
+        matching_native = next(
+            (record for record in self._records if record.fill_native_id == fill.venue_native_id),
+            None,
+        )
+        if matching_native is not None:
+            if matching_native.fill_identity != fill_identity.value:
+                return policy(
+                    "fill_identity",
+                    "a venue-native fill identity cannot be reused for different fill evidence",
+                    venue_native_id=fill.venue_native_id,
+                )
+            current_position = self.position_for(fill.instrument)
+            if (
+                current_position is None
+                or current_position.position_ref != matching_native.position_ref
+                or current_position.command_identity != fill.command_identity
+                or current_position.bot_id != bot_id
+                or current_position.admission_identity != admission_identity
+                or current_position.admission_faces != faces
+                or current_position.admitted_quantity != admitted_quantity
+            ):
+                return policy(
+                    "fill_identity", "idempotent fill remains bound to its virtual position"
+                )
+            if entry_terminal and fill.command_identity.value not in self._terminal_entries:
+                if current_position.status is not VirtualPositionStatus.OPEN:
+                    return policy("entry_terminal", "only an open entry can become terminal")
+                terminal_position = current_position
+                if not terminal_position.rebased and (
+                    terminal_position.filled_quantity.as_fraction()
+                    < terminal_position.admitted_quantity.as_fraction()
+                ):
+                    rebased = rebase_partial_entry(
+                        terminal_position,
+                        filled_quantity=terminal_position.filled_quantity,
+                        terminal=True,
+                    )
+                    if is_refusal(rebased):
+                        return rebased
+                    terminal_position = rebased.value[0]
+                next_sequence = self._sequence + 1
+                terminal_record = LedgerRecord(
+                    kind=LedgerRecordKind.FILL,
+                    binding_epoch=self.binding_epoch,
+                    sequence=next_sequence,
+                    recorded_at=fill.recorded_at,
+                    cash_delta=None,
+                    position_ref=terminal_position.position_ref,
+                    command_identity=fill.command_identity,
+                    money_scale=self.money_scale,
+                    note="entry-terminal",
+                )
+                persisted = self._append_virtual_row(terminal_record, terminal_position)
+                if is_refusal(persisted):
+                    return persisted
+                pending = self._pending_entries.get(fill.instrument)
+                if pending == fill.command_identity:
+                    appended = self._append_reservation_event(
+                        fill.instrument,
+                        fill.command_identity,
+                        "filled",
+                        outcome="reconciled-terminal-fill",
+                    )
+                    if is_refusal(appended):
+                        self._virtual_ledger_uncertain = True
+                        return appended
+                self._sequence = next_sequence
+                self._records.append(terminal_record)
+                self._positions[terminal_position.instrument] = terminal_position
+                self._by_ref[terminal_position.position_ref.value] = terminal_position
+                self._terminal_entries.add(fill.command_identity.value)
+                if pending == fill.command_identity:
+                    self._pending_entries.pop(fill.instrument, None)
+                return Ok(
+                    FoldFillResult(
+                        record=terminal_record,
+                        position=terminal_position,
+                        created=False,
+                    )
+                )
+            return Ok(
+                FoldFillResult(
+                    record=matching_native,
+                    position=current_position,
+                    created=False,
+                    idempotent=True,
+                )
+            )
+        if fill.command_identity.value in self._terminal_entries:
+            return policy(
+                "entry_terminal",
+                "a terminal entry command cannot contribute another fill",
+                command_identity=fill.command_identity.value,
+            )
         pending = self._pending_entries.get(fill.instrument)
+        if self._reservation_journal is not None and pending != fill.command_identity:
+            return policy(
+                "entry_reservation",
+                "hosted fills match the exact unresolved durable entry reservation",
+                instrument=fill.instrument,
+            )
         if pending is not None and pending != fill.command_identity:
             return policy(
                 "entry_reservation",
@@ -555,8 +839,6 @@ class BindingVirtualLedger:
         position: VirtualPosition
 
         if existing is None or existing.status is VirtualPositionStatus.CLOSED:
-            if not isinstance(faces, RFaces):
-                return invalid("faces", "admission carries frozen RFaces", given=repr(faces))
             minted = mint_virtual_position(
                 binding_epoch=self.binding_epoch,
                 instrument=fill.instrument,
@@ -573,18 +855,61 @@ class BindingVirtualLedger:
             position = minted.value
             created = True
         else:
-            # Open virtual position on this instrument → no scale-in.
-            blocked = guard_no_scale_in(has_open_virtual_position=True)
-            if is_refusal(blocked):
-                return blocked
-            position = existing
+            # Additional tranches belong only to the still-live original entry
+            # command. This is accumulation of one admitted order, not scale-in.
+            if (
+                existing.command_identity != fill.command_identity
+                or existing.admission_identity != admission_identity
+                or existing.bot_id != bot_id
+                or existing.faces != faces
+                or existing.admitted_quantity != admitted_quantity
+            ):
+                return policy(
+                    "scale_in",
+                    "only additional fills for the exact still-live command may accumulate",
+                    instrument=fill.instrument,
+                )
+            combined = existing.filled_quantity.add(fill.quantity)
+            if is_refusal(combined):
+                return combined
+            if combined.value.as_fraction() > existing.admitted_quantity.as_fraction():
+                return invalid(
+                    "filled_quantity",
+                    "cumulative fills cannot exceed the exact admitted quantity",
+                    admitted=str(existing.admitted_quantity.as_fraction()),
+                    filled=str(combined.value.as_fraction()),
+                )
+            position = VirtualPosition(
+                position_ref=existing.position_ref,
+                binding_epoch=existing.binding_epoch,
+                instrument=existing.instrument,
+                bot_id=existing.bot_id,
+                admission_identity=existing.admission_identity,
+                command_identity=existing.command_identity,
+                faces=existing.faces,
+                admission_faces=existing.admission_faces,
+                admitted_quantity=existing.admitted_quantity,
+                filled_quantity=combined.value,
+                status=VirtualPositionStatus.OPEN,
+                rebased=existing.rebased,
+                admission_plan_edge=existing.admission_plan_edge,
+                execution_quality=existing.execution_quality,
+            )
 
-        if entry_terminal is True and not position.rebased:
+        if position.filled_quantity.as_fraction() > position.admitted_quantity.as_fraction():
+            return invalid(
+                "filled_quantity",
+                "cumulative fills cannot exceed the exact admitted quantity",
+                admitted=str(position.admitted_quantity.as_fraction()),
+                filled=str(position.filled_quantity.as_fraction()),
+            )
+
+        if entry_terminal and not position.rebased:
             admitted_frac = position.admitted_quantity.as_fraction()
-            filled_frac = fill.quantity.as_fraction()
+            filled_frac = position.filled_quantity.as_fraction()
             if 0 < filled_frac < admitted_frac:
                 rebased = rebase_partial_entry(
-                    position, filled_quantity=fill.quantity, terminal=True
+                    position, filled_quantity=position.filled_quantity, terminal=True
                 )
                 if is_refusal(rebased):
                     return rebased
@@ -594,29 +919,42 @@ class BindingVirtualLedger:
             updated_cash = self.realized_cash.add(fill.realized_cash)
             if is_refusal(updated_cash):
                 return updated_cash
-            self.realized_cash = updated_cash.value
+        else:
+            updated_cash = Ok(self.realized_cash)
 
-        self._sequence += 1
+        next_sequence = self._sequence + 1
         record = LedgerRecord(
             kind=LedgerRecordKind.FILL,
             binding_epoch=self.binding_epoch,
-            sequence=self._sequence,
+            sequence=next_sequence,
             recorded_at=fill.recorded_at,
             cash_delta=fill.realized_cash,
             position_ref=position.position_ref,
             command_identity=fill.command_identity,
             money_scale=self.money_scale,
+            note="entry-terminal" if entry_terminal else None,
+            fill_native_id=fill.venue_native_id,
+            fill_identity=fill_identity.value,
         )
-        self._records.append(record)
-        self._positions[position.instrument] = position
-        self._by_ref[position.position_ref.value] = position
-        if pending == fill.command_identity:
+        persisted = self._append_virtual_row(record, position)
+        if is_refusal(persisted):
+            return persisted
+        if pending == fill.command_identity and entry_terminal:
             appended = self._append_reservation_event(
                 fill.instrument, fill.command_identity, "filled", outcome="attributed-fill"
             )
             if is_refusal(appended):
+                self._virtual_ledger_uncertain = True
                 return appended
+        self.realized_cash = updated_cash.value
+        self._sequence = next_sequence
+        self._records.append(record)
+        self._positions[position.instrument] = position
+        self._by_ref[position.position_ref.value] = position
+        if pending == fill.command_identity and entry_terminal:
             self._pending_entries.pop(fill.instrument, None)
+        if entry_terminal:
+            self._terminal_entries.add(fill.command_identity.value)
         return Ok(
             FoldFillResult(
                 record=record,
@@ -666,7 +1004,6 @@ class BindingVirtualLedger:
         updated_cash = self.realized_cash.add(realized_cash)
         if is_refusal(updated_cash):
             return updated_cash
-        self.realized_cash = updated_cash.value
         closed = VirtualPosition(
             position_ref=pos.position_ref,
             binding_epoch=pos.binding_epoch,
@@ -683,19 +1020,24 @@ class BindingVirtualLedger:
             admission_plan_edge=pos.admission_plan_edge,
             execution_quality=pos.execution_quality,
         )
-        self._positions[closed.instrument] = closed
-        self._by_ref[closed.position_ref.value] = closed
-        self._sequence += 1
+        next_sequence = self._sequence + 1
         record = LedgerRecord(
             kind=LedgerRecordKind.REALIZED,
             binding_epoch=self.binding_epoch,
-            sequence=self._sequence,
+            sequence=next_sequence,
             recorded_at=recorded_at,
             cash_delta=realized_cash,
             position_ref=closed.position_ref,
             command_identity=command_identity,
             money_scale=self.money_scale,
         )
+        persisted = self._append_virtual_row(record, closed)
+        if is_refusal(persisted):
+            return persisted
+        self.realized_cash = updated_cash.value
+        self._sequence = next_sequence
+        self._positions[closed.instrument] = closed
+        self._by_ref[closed.position_ref.value] = closed
         self._records.append(record)
         return Ok(record)
 
@@ -731,18 +1073,17 @@ class BindingVirtualLedger:
         updated = self.realized_cash.add(cash_delta)
         if is_refusal(updated):
             return updated
-        self.realized_cash = updated.value
         after = {k: v.position_ref.value for k, v in self._positions.items()}
         if before != after:
             return policy(
                 "positions",
                 "a treasury boundary act never touches positions",
             )
-        self._sequence += 1
+        next_sequence = self._sequence + 1
         record = LedgerRecord(
             kind=LedgerRecordKind.BOUNDARY,
             binding_epoch=self.binding_epoch,
-            sequence=self._sequence,
+            sequence=next_sequence,
             recorded_at=recorded_at,
             cash_delta=cash_delta,
             position_ref=None,
@@ -750,6 +1091,11 @@ class BindingVirtualLedger:
             money_scale=self.money_scale,
             note=note_token,
         )
+        persisted = self._append_virtual_row(record, None)
+        if is_refusal(persisted):
+            return persisted
+        self.realized_cash = updated.value
+        self._sequence = next_sequence
         self._records.append(record)
         return Ok(record)
 
@@ -778,6 +1124,8 @@ def seed_binding_ledger(
     money_scale: object | None = None,
     reservation_journal: object = None,
     reservation_recovery: object = None,
+    virtual_ledger_journal: object = None,
+    virtual_ledger_recovery: object = None,
 ) -> Result[BindingVirtualLedger]:
     """Open a binding virtual ledger at an exact scaled-integer seed (TN-25)."""
     if not isinstance(binding_epoch, Fingerprint):
@@ -849,6 +1197,16 @@ def seed_binding_ledger(
             "entry reservations append through the injected JournalSink",
             given=type(reservation_journal).__name__,
         )
+    if virtual_ledger_journal is None:
+        virtual_journal: JournalSink[object] | None = None
+    elif isinstance(virtual_ledger_journal, JournalSink):
+        virtual_journal = cast("JournalSink[object]", virtual_ledger_journal)
+    else:
+        return invalid(
+            "virtual_ledger_journal",
+            "virtual-ledger rows append through the injected checked journal port",
+            given=type(virtual_ledger_journal).__name__,
+        )
     ledger = BindingVirtualLedger(
         binding_epoch=binding_epoch,
         currency=cur,
@@ -857,6 +1215,8 @@ def seed_binding_ledger(
         realized_cash=seed,
         _records=[seed_record],
         _reservation_journal=journal,
+        _virtual_ledger_journal=virtual_journal,
+        _virtual_ledger_recovered=virtual_journal is None,
         _sequence=1,
     )
     if reservation_recovery is not None:
@@ -868,6 +1228,15 @@ def seed_binding_ledger(
             "reservation_recovery",
             "a durable reservation journal opens only with its complete committed prefix",
         )
+    if virtual_journal is not None:
+        if virtual_ledger_recovery is None:
+            return invalid(
+                "virtual_ledger_recovery",
+                "a durable virtual ledger opens only with its complete committed prefix",
+            )
+        recovered_ledger = ledger.recover_virtual_ledger(virtual_ledger_recovery)
+        if is_refusal(recovered_ledger):
+            return recovered_ledger
     return Ok(ledger)
 
 
