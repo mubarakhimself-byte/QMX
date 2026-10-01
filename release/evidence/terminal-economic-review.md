@@ -1,0 +1,11 @@
+# Independent Sol review — economic terminal line
+
+Core candidate `3fa9282cf6e7efe50813fe0b29ef2c5dfb3e64c9`; replay execution service is active uncommitted source. **Changes required; no stable full-service approval.** Other owner metadata changes remain separate.
+
+The core preserves the supplied typed CT32 economic measure set, validates its result label/period/population/account binding role against the config-derived container, and recomputes the entire selected CT32 fingerprint. This addresses reconstruction of empty/default economic measures. Independent actual artifact with LIVE label instead of REPLAY refuses even when given its newly recomputed fingerprint. Actual filesystem LedgerSink exact-line retry is idempotent across fresh handles; separate worker-slot fragments merge into one logical line for identical content, consistent with the declared merge design.
+
+Held-out failures: replace a valid typed PerformanceResult's result_label, period or population with None. `mint_completed_line` raises AttributeError in all three cases instead of returning a typed refusal. Nested container validation is required before identity comparison. Findings sent to execution and numeric owners.
+
+Service source inspection also finds an incomplete terminal acknowledgment boundary: `execute_recorded_replay_request` accepts any non-refusal return from `terminal_ledger.append`, then uses `.value` as the completed terminal line without validating exact typed LedgerLine identity or durable readback. A configured LedgerSink subclass or wrapped method returning Ok(None)/string/wrong line could claim completion without the correct persisted row. This is a concrete missing boundary check identified by inspection, not an independently executed full-chain reproduction; no full same-run entry/close fixture is stable yet. Require exact terminal row and physical durable readback before reporting successful economic completion.
+
+Independent command: `.venv/bin/python -m pytest -q -p no:cacheprovider qmb/tests/test_orchestrator_ledger.py qmb/tests/test_terminal_economic_line.py`. **11 tests passed.** Cancellation/refusal must never fall through to a completed row; a future full-service test must prove same-run actual entry and close rather than preseed-only exit economics.
