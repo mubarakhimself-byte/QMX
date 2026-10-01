@@ -922,6 +922,12 @@ def invoke_host_status(
     if _live_lock_pid(target) is None:
         _drop_stale_lock(target)
         if _live_lock_pid(target) is None:
+            if (target / DAEMON_LOCK_NAME).exists():
+                return unavailable(
+                    "daemon_lock",
+                    "daemon lock exists but its owner cannot be confirmed; status is unknown",
+                    root=str(target),
+                )
             return Ok(
                 cast(
                     "Mapping[str, object]",
@@ -1071,6 +1077,12 @@ def invoke_host_stop(
     if live is None:
         _drop_stale_lock(target)
         if _live_lock_pid(target) is None:
+            if (target / DAEMON_LOCK_NAME).exists():
+                return unavailable(
+                    "daemon_lock",
+                    "daemon lock exists but its owner cannot be confirmed; stop state is unknown",
+                    root=str(target),
+                )
             stopped: dict[str, object] = {
                 "verb": "host.stop",
                 "state": "stopped",

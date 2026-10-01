@@ -449,6 +449,16 @@ def test_status_and_stop_report_stopped_without_using_stale_host_control(
     assert (tmp_path / HOST_CONTROL_FILE).is_file()
 
 
+def test_malformed_lock_does_not_claim_stopped(tmp_path: Path) -> None:
+    (tmp_path / DAEMON_LOCK_NAME).write_text("not-json", encoding="utf-8")
+    status = invoke_host_status(root=tmp_path)
+    assert is_refusal(status)
+    assert status.context["field"] == "daemon_lock"
+    stopped = invoke_host_stop(root=tmp_path)
+    assert is_refusal(stopped)
+    assert stopped.context["field"] == "daemon_lock"
+
+
 def test_status_does_not_hide_unreachable_socket_for_live_writer(tmp_path: Path) -> None:
     _write_lock(tmp_path, os.getpid())
     _write_token(tmp_path)
