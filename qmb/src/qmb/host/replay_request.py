@@ -80,6 +80,11 @@ class ReplayInputRequest:
     ) -> Result[ReplayInputRequest]:
         if not isinstance(split, SplitManifest) or split.world is not World.REPLAY:
             return invalid("split", "a replay request pins a typed world=replay CT-12 manifest")
+        split_stamp = fingerprint(split.fp1_identity())
+        if is_refusal(split_stamp):
+            return split_stamp
+        if split_stamp.value != split.fingerprint:
+            return policy("split", "CT-12 manifest fields match the cited fingerprint")
         try:
             role = split_role if isinstance(split_role, SegmentRole) else SegmentRole(split_role)
         except (TypeError, ValueError):
@@ -160,10 +165,10 @@ class ReplayInputRequest:
                 archive_fingerprints=tuple(refs),
                 stream_id=stream_id,
                 price_metadata=price_metadata,
-                bot_identity=MappingProxyType(dict(typed_bot)),
+                bot_identity=_freeze_mapping(typed_bot),
                 source_tree=MappingProxyType(files),
-                assignment=MappingProxyType(dict(typed_assignment)),
-                state_scope=MappingProxyType(dict(typed_scope)),
+                assignment=_freeze_mapping(typed_assignment),
+                state_scope=_freeze_mapping(typed_scope),
                 state_bound=state_bound,
                 conformance_timeout_seconds=conformance_timeout_seconds,
                 fingerprint=stamped.value,
@@ -199,6 +204,11 @@ def persist_replay_request(*, request_root: object, request: object) -> Result[F
     """Persist canonical request bytes, refusing any conflicting file at the same ref."""
     if not isinstance(request, ReplayInputRequest):
         return invalid("request", "only a validated ReplayInputRequest is persisted")
+    stamped = fingerprint(request.fp1_identity())
+    if is_refusal(stamped):
+        return stamped
+    if stamped.value != request.fingerprint:
+        return policy("request", "persisted request fields match its immutable content ref")
     root = _request_root(request_root)
     if is_refusal(root):
         return root
@@ -411,6 +421,18 @@ def _identity(
         "state_bound": state_bound,
         "conformance_timeout_seconds": timeout,
     }
+
+
+def _freeze_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _freeze_mapping(cast("Mapping[str, object]", value))
+    if isinstance(value, (tuple, list)):
+        return tuple(_freeze_value(item) for item in cast("Sequence[object]", value))
+    return value
+
+
+def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType({key: _freeze_value(item) for key, item in value.items()})
 
 
 def _request_context(

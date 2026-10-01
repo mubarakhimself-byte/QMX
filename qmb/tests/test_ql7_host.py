@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TypeVar, cast
 
+import pytest
 from qmb.config import (
     ASSIGNMENT_IS_CANONICAL_KEY,
     ASSIGNMENT_KEY,
@@ -695,6 +696,9 @@ def test_durable_request_resolves_registered_split_and_manifest_bound_bot(
             conformance_timeout_seconds=30,
         )
     )
+    nested_bot_body = cast("Mapping[str, object]", request.bot_identity["body"])
+    with pytest.raises(TypeError):
+        nested_bot_body["review_mutation"] = "changed"  # type: ignore[index]
     request_ref = _ok(
         persist_replay_request(
             request_root=tmp_path / "request-root",
