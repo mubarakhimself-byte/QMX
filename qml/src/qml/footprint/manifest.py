@@ -161,11 +161,25 @@ class ProducerBinding:
         template: object = None,
     ) -> Result[ProducerBinding]:
         if isinstance(value, cls):
-            return Ok(value)
+            if value.form is ProducerBindingForm.PINNED_FINGERPRINT:
+                raw_fp = None if value.pinned is None else value.pinned.value
+                return cls.try_create(
+                    form=ProducerBindingForm.PINNED_FINGERPRINT,
+                    fingerprint=raw_fp,
+                )
+            if value.form is ProducerBindingForm.TEMPLATE:
+                return cls.try_create(
+                    form=ProducerBindingForm.TEMPLATE,
+                    template=value.template,
+                )
+            return invalid("form", "a producer binding is pinned-fingerprint or template")
         if isinstance(value, ProducerTemplate):
-            return Ok(cls(form=ProducerBindingForm.TEMPLATE, template=value))
+            return cls.try_create(
+                form=ProducerBindingForm.TEMPLATE,
+                template=value,
+            )
         if isinstance(value, Fingerprint):
-            return Ok(cls(form=ProducerBindingForm.PINNED_FINGERPRINT, pinned=value))
+            value = value.value
         payload: dict[str, object] = {}
         if isinstance(value, Mapping):
             payload.update(cast("Mapping[str, object]", value))

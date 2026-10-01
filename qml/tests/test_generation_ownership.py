@@ -7,8 +7,9 @@ from typing import TypeVar
 
 from qmf.core.chrono import CalendarIdentity
 from qmf.core.exact import UnitKind
-from qmf.core.fingerprint import fingerprint
+from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
+from qml.declaration import Confluence
 from qml.footprint import ProducerBinding, mint_footprint
 from qml.generation import (
     ACT_GENERATION,
@@ -29,6 +30,7 @@ from qml.generation import (
     refuse_qml_dsl,
     refuse_random_condition_schema,
 )
+from qml.logic import LogicIdentity, fingerprint_source_manifest
 
 import qml
 from qml import host
@@ -297,3 +299,24 @@ def test_generation_content_has_no_occurrence_facts_or_registrar_injection() -> 
     parameters = inspect.signature(author_new_structure).parameters
     assert not {"registrar", "writer", "sequence", "created_at"}.intersection(parameters)
     assert qml.__version__ not in str(payload)
+
+
+def test_generation_revalidates_nominal_fp_and_preserves_source_content_types() -> None:
+    malformed_fp = Fingerprint("bad")
+    assert is_refusal(
+        classify_parameter_search(bot_fp1=malformed_fp, trial_bot_fp1s=(malformed_fp,))
+    )
+    malformed_logic = LogicIdentity("", "", malformed_fp)
+    assert is_refusal(author_new_structure(logic_reference=malformed_logic))
+    assert is_refusal(author_new_structure(confluence=Confluence(())))
+
+    source_bytes = {"factory.py": b"def factory():\n    return None\n"}
+    authored = _ok(author_new_structure(logic_source=source_bytes))
+    assert authored.logic is not None
+    expected = _ok(fingerprint_source_manifest(source_bytes))
+    wrong_stringified = _ok(
+        fingerprint_source_manifest({"factory.py": str(source_bytes["factory.py"])})
+    )
+    assert authored.logic.source_manifest == expected
+    assert authored.logic.source_manifest != wrong_stringified
+    assert is_refusal(author_new_structure(logic_source={7: "def factory(): pass"}))

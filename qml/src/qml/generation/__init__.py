@@ -224,9 +224,8 @@ def forbidden_generator_module_hits(names: object) -> Result[tuple[str, ...]]:
 
 
 def _coerce_fingerprint(value: object, field: str) -> Result[Fingerprint]:
-    if isinstance(value, Fingerprint):
-        return Ok(value)
-    parsed = Fingerprint.try_create(value)
+    raw = value.value if isinstance(value, Fingerprint) else value
+    parsed = Fingerprint.try_create(raw)
     if is_refusal(parsed):
         return invalid(
             field,
@@ -477,7 +476,10 @@ def author_new_structure(
             return parsed
         minted_confluence = parsed.value
     elif isinstance(confluence, Confluence):
-        minted_confluence = confluence
+        parsed = Confluence.try_create(confluence)
+        if is_refusal(parsed):
+            return parsed
+        minted_confluence = parsed.value
     elif confluence_legs is not None:
         parsed = mint_confluence(confluence_legs)
         if is_refusal(parsed):
@@ -487,7 +489,10 @@ def author_new_structure(
     minted_logic: LogicIdentity | None = None
     if logic_reference is not None:
         if isinstance(logic_reference, LogicIdentity):
-            minted_logic = logic_reference
+            parsed_logic = LogicIdentity.try_from_payload(logic_reference)
+            if is_refusal(parsed_logic):
+                return parsed_logic
+            minted_logic = parsed_logic.value
         else:
             parsed_logic = LogicIdentity.try_from_payload(logic_reference)
             if is_refusal(parsed_logic):
@@ -504,8 +509,7 @@ def author_new_structure(
         blocked = _refuse_source_dsl(source_map)
         if is_refusal(blocked):
             return blocked
-        tree = {str(path): str(content) for path, content in source_map.items()}
-        parsed_logic = mint_logic_identity(logic_distribution, logic_version, tree)
+        parsed_logic = mint_logic_identity(logic_distribution, logic_version, source_map)
         if is_refusal(parsed_logic):
             return parsed_logic
         minted_logic = parsed_logic.value

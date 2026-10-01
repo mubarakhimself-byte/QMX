@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from qmf.core.chrono import CalendarIdentity
 from qmf.core.exact import ExactRational, UnitKind
-from qmf.core.fingerprint import fingerprint
+from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 from qmf.registry import FieldSetKind
 from qml.declaration import (
@@ -17,6 +17,7 @@ from qml.declaration import (
     LEG_ROLES,
     AuthoredArtifact,
     AuthoredKind,
+    Confluence,
     ConfluenceOrdering,
     LegRole,
     confluence_kind_contract,
@@ -525,7 +526,6 @@ def test_completeness_walker_accepts_typed_confluence_legs() -> None:
     assert report.complete is True
 
 
-
 def test_duplicate_display_ordinals_are_invalid() -> None:
     refused = mint_confluence(
         [
@@ -541,3 +541,10 @@ def test_qml_adds_no_registry_configurable_row() -> None:
     text = (_REPO / "docs" / "registry" / "variables.yaml").read_text(encoding="utf-8")
     assert "name: qml_" not in text
     assert "component: COMP-QML" not in text
+
+
+def test_nominal_confluence_is_revalidated_and_empty_content_refused() -> None:
+    assert is_refusal(Confluence.try_create(Confluence(())))
+    assert is_refusal(mint_confluence(Confluence(())))
+    malformed_ref = Fingerprint("bad")
+    assert is_refusal(mint_confluence([{"role": "level", "producer_binding": malformed_ref}]))

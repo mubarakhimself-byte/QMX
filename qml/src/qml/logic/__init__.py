@@ -158,7 +158,11 @@ class LogicIdentity:
     def try_from_payload(cls, payload: object) -> Result[LogicIdentity]:
         """Admit a logic-reference mapping (identity payload or a declaration body)."""
         if isinstance(payload, cls):
-            return Ok(payload)
+            return cls.try_create(
+                payload.distribution,
+                payload.version,
+                source_manifest=payload.source_manifest,
+            )
         if not isinstance(payload, Mapping):
             return invalid(
                 "logic_reference",
@@ -169,10 +173,8 @@ class LogicIdentity:
         mapping = cast("Mapping[str, object]", payload)
         nested = mapping.get("logic_reference")
         if nested is not None:
-            if isinstance(nested, cls):
-                return Ok(nested)
-            if isinstance(nested, Mapping):
-                return cls.try_from_payload(cast("Mapping[str, object]", nested))
+            if isinstance(nested, (cls, Mapping)):
+                return cls.try_from_payload(cast("object", nested))
             return invalid(
                 "logic_reference",
                 "a logic reference is a mapping of distribution, version, and "
@@ -264,9 +266,8 @@ def _resolve_manifest(source_tree: object, source_manifest: object) -> Result[Fi
 
 
 def _coerce_fingerprint(value: object) -> Result[Fingerprint]:
-    if isinstance(value, Fingerprint):
-        return Ok(value)
-    parsed = Fingerprint.try_create(value)
+    raw = value.value if isinstance(value, Fingerprint) else value
+    parsed = Fingerprint.try_create(raw)
     if is_refusal(parsed):
         return invalid(
             _MANIFEST_FIELD,

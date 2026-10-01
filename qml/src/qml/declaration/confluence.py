@@ -237,7 +237,13 @@ class ConfluenceLeg:
     ) -> Result[ConfluenceLeg]:
         """Validate one leg; role is mandatory and at least one cite-or-binding is required."""
         if isinstance(payload, cls):
-            return Ok(payload)
+            payload = {
+                "role": payload.role,
+                "producer_binding": payload.producer_binding,
+                "confluence_ref": payload.confluence_ref,
+                "declared_parameters": payload.declared_parameters,
+                "display_ordinal": payload.display_ordinal,
+            }
         mapping: dict[str, object] = {}
         if payload is not None:
             if not isinstance(payload, Mapping):
@@ -344,7 +350,7 @@ class ConfluenceLeg:
 
 def _coerce_child_ref(value: object) -> Result[Fingerprint]:
     if isinstance(value, Fingerprint):
-        return Ok(value)
+        return coerce_fingerprint(value.value)
     if isinstance(value, Confluence):
         return value.fingerprint_content()
     pinned = coerce_fingerprint(value)
@@ -434,7 +440,9 @@ class Confluence:
     ) -> Result[Confluence]:
         """Validate and build fingerprintable confluence content, value-or-refusal."""
         if isinstance(legs, cls):
-            return Ok(legs)
+            format_version = legs.kind_format_version
+            order_significance = legs.ordering
+            legs = tuple(legs.legs)
         version = _positive_int(format_version)
         if version is None:
             if isinstance(format_version, bool) or not isinstance(format_version, int):
@@ -474,7 +482,11 @@ class Confluence:
     def try_from_mapping(cls, payload: object) -> Result[Confluence]:
         """Admit a CT-34 mapping (kind envelope, body, or a bare legs sequence)."""
         if isinstance(payload, cls):
-            return Ok(payload)
+            return cls.try_create(
+                payload.legs,
+                order_significance=payload.ordering,
+                format_version=payload.kind_format_version,
+            )
         if isinstance(payload, (list, tuple)):
             return cls.try_create(cast("object", payload))
         if not isinstance(payload, Mapping):
