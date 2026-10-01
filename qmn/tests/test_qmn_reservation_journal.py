@@ -53,6 +53,55 @@ def test_reservation_transition_recovers_from_checked_ct13_stream(tmp_path: Path
     store.close()
 
 
+def test_reservation_physical_sequence_spans_writer_boot_epochs(tmp_path: Path) -> None:
+    epoch = _ok(fingerprint({"binding": "ct28-test"}))
+    store_one = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer_one = _ok(WriterId.try_create("node-test", "risk", "entry-reservations", "boot-1"))
+    adapter_one = _ok(
+        QmfEntryReservationJournal.resume(
+            store_one,
+            writer_one,
+            stream_name="risk-reservations",
+            instant=lambda: _ok(Instant.try_create(1_800_000_000_000_000_000)),
+        )
+    )
+    first = EntryReservationEvent(
+        binding_epoch=epoch,
+        sequence=1,
+        instrument="EURUSD",
+        command_identity=_ok(fingerprint({"command": "first"})),
+        event="reserved",
+    )
+    assert is_ok(adapter_one.append(first.as_mapping()))
+    store_one.close()
+
+    store_two = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer_two = _ok(WriterId.try_create("node-test", "risk", "entry-reservations", "boot-2"))
+    adapter_two = _ok(
+        QmfEntryReservationJournal.resume(
+            store_two,
+            writer_two,
+            stream_name="risk-reservations",
+            instant=lambda: _ok(Instant.try_create(1_800_000_000_000_000_001)),
+        )
+    )
+    second = EntryReservationEvent(
+        binding_epoch=epoch,
+        sequence=2,
+        instrument="GBPUSD",
+        command_identity=_ok(fingerprint({"command": "second"})),
+        event="reserved",
+    )
+
+    appended = adapter_two.append(second.as_mapping())
+
+    assert is_ok(appended)
+    assert appended.value.detail["complete"] is True
+    events = _ok(JournalReader(store_two).read_checked("risk-reservations", for_world=World.LIVE))
+    assert len(events) == 2
+    store_two.close()
+
+
 def test_reservation_adapter_rejects_untyped_input(tmp_path: Path) -> None:
     store = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
     writer_id = _ok(WriterId.try_create("node-test", "risk", "entry-reservations", "boot-1"))

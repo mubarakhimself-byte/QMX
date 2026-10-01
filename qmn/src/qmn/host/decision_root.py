@@ -208,7 +208,6 @@ class QmfHostedDecisionJournal:
             or event.writer != self.writer.writer
             or event.world is not self.journal_store.world
             or physical.fingerprint != row_fingerprint.value
-            or physical.sequence != event.sequence
             or physical.world is not self.journal_store.world
             or physical.room_role is not RoomRole.JOURNAL
             or physical.engine != "jsonl"
@@ -227,6 +226,25 @@ class QmfHostedDecisionJournal:
             return checked
         if not any(row.fingerprint == event.fingerprint for row in checked.value):
             return policy("decision_journal", "the complete decision event reads back from CT-13")
+        physical_rows = self.journal_store.read_stream(
+            self.writer.stream_name, for_world=self.journal_store.world
+        )
+        if is_refusal(physical_rows):
+            return physical_rows
+        if type(physical.sequence) is not int or physical.sequence < 0:
+            return policy("decision_journal", "the store receipt sequence is a non-negative int")
+        physical_indexes: list[int] = []
+        for index, row in enumerate(physical_rows.value):
+            if row.get("fingerprint") != event.fingerprint.value:
+                continue
+            raw_fp = fingerprint(row)
+            if not is_refusal(raw_fp) and raw_fp.value == row_fingerprint.value:
+                physical_indexes.append(index)
+        if physical_indexes != [physical.sequence]:
+            return policy(
+                "decision_journal",
+                "the store receipt sequence identifies the exact physical CT-13 row",
+            )
         return Ok(
             SinkAck(
                 {

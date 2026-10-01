@@ -38,8 +38,9 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.chrono import CalendarIdentity
-from qmf.data import JournalAppendReceipt, JournalReader, JournalWriter
-from qmf.data.store import EvidenceStore
+from qmf.data import JournalAppendReceipt, JournalEventType, JournalReader, JournalWriter
+from qmf.data.store import EvidenceStore, JournalStore
+from qmf.data.store.engines.jsonl import jsonl_opener
 from qmf.risk.binding import (
     STATE_CARRY_COUNTERS,
     BmsInstanceId,
@@ -1139,6 +1140,42 @@ def test_hosted_decision_sink_verifies_full_physical_receipt(
     refused = _refusal(journal.append({"class": DECISION_TRANSCRIPT_CLASS}))
 
     assert refused.context["field"] == "decision_journal"
+
+
+def test_hosted_decision_physical_sequence_spans_writer_boot_epochs(tmp_path: Path) -> None:
+    stamp = _instant()
+    store_one = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer_one = _ok(WriterId.try_create("node-test", "supervisor", "hosted", "boot-1"))
+    journal_one = _ok(
+        QmfHostedDecisionJournal.resume(
+            store_one,
+            writer_one,
+            stream_name="hosted",
+            instant=lambda: stamp,
+        )
+    )
+    assert is_ok(journal_one.append({"class": DECISION_TRANSCRIPT_CLASS, "boot": 1}))
+    store_one.close()
+
+    store_two = JournalStore(World.LIVE, journal_dir=tmp_path, open_stream=jsonl_opener())
+    writer_two = _ok(WriterId.try_create("node-test", "supervisor", "hosted", "boot-2"))
+    journal_two = _ok(
+        QmfHostedDecisionJournal.resume(
+            store_two,
+            writer_two,
+            stream_name="hosted",
+            instant=lambda: stamp,
+        )
+    )
+
+    appended = journal_two.append({"class": DECISION_TRANSCRIPT_CLASS, "boot": 2})
+
+    assert is_ok(appended)
+    assert appended.value.detail["complete"] is True
+    events = _ok(JournalReader(store_two).read_checked("hosted", for_world=World.LIVE))
+    assert len(events) == 2
+    assert all(event.event_type is JournalEventType.DATA_QUALITY for event in events)
+    store_two.close()
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:

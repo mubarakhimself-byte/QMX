@@ -95,6 +95,7 @@ class QmfEntryReservationJournal:
             persisted.value,
             journal=self.journal,
             writer=self.writer.writer,
+            stream_name=self.writer.stream_name,
             event_type=JournalEventType.DATA_QUALITY,
             payload=expected_payload,
             instant=appended_at,
@@ -165,6 +166,7 @@ class QmfEntryReservationJournal:
             barrier.value,
             journal=self.journal,
             writer=self.writer.writer,
+            stream_name=self.writer.stream_name,
             event_type=JournalEventType.DATA_QUALITY,
             payload=barrier_payload,
             instant=barrier_at,
@@ -249,6 +251,7 @@ def _receipt_matches(
     *,
     journal: JournalStore,
     writer: WriterId,
+    stream_name: str,
     event_type: JournalEventType,
     payload: Mapping[str, object],
     instant: Instant,
@@ -273,7 +276,6 @@ def _receipt_matches(
         and event.writer == writer
         and event.world is journal.world
         and physical.fingerprint == row_fingerprint.value
-        and physical.sequence == event.sequence
         and physical.world is journal.world
         and physical.room_role is RoomRole.JOURNAL
         and physical.engine == "jsonl"
@@ -281,4 +283,33 @@ def _receipt_matches(
         and physical.outcome in (WriteOutcome.STORED, WriteOutcome.IDEMPOTENT)
         and physical.is_evidence_bearing
         and physical.retained_forever
+        and _physical_sequence_matches(
+            journal,
+            stream_name,
+            event,
+            row_fingerprint.value,
+            physical.sequence,
+        )
     )
+
+
+def _physical_sequence_matches(
+    journal: JournalStore,
+    stream_name: str,
+    event: JournalEvent,
+    row_fingerprint: Fingerprint,
+    sequence: object,
+) -> bool:
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
+        return False
+    rows = journal.read_stream(stream_name, for_world=journal.world)
+    if is_refusal(rows):
+        return False
+    indexes: list[int] = []
+    for index, row in enumerate(rows.value):
+        if row.get("fingerprint") != event.fingerprint.value:
+            continue
+        actual = fingerprint(row)
+        if not is_refusal(actual) and actual.value == row_fingerprint:
+            indexes.append(index)
+    return indexes == [sequence]
