@@ -19,7 +19,10 @@ import inspect
 import tempfile
 from pathlib import Path
 
+from qmf.core.chrono import WriterId
 from qmf.core.refusal import is_ok, is_refusal
+from qmf.data.journal import JournalEventType
+from qmf.data.journal_producer import JournalReader
 
 from _e18 import (
     NS,
@@ -49,6 +52,32 @@ def _download_ok(dest: Path, records=None, **over):
     return res, adapter
 
 
+class _FirstSymbolAdapter:
+    """Return the scripted batch once, then empty batches for progress-only symbols."""
+
+    source = "dukascopy"
+    batch_count = 1
+    rate_limit_per_second = None
+
+    def __init__(self, records):
+        self._records = tuple(records)
+
+    def fetch(self, request, /):
+        from qmf.core.refusal import Ok
+
+        return Ok(self._records if request.symbol == "EURUSD" else ())
+
+    def earliest_available(self, symbol, /):
+        from qmf.core.refusal import Ok
+
+        return Ok(None)
+
+    def list_symbols(self):
+        from qmf.core.refusal import Ok
+
+        return Ok(("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF"))
+
+
 # --- T18-1a  persistence routes through the CT-10 boundary (RQ1) --------------
 def test_t18_1a_ct10_evidence_lands_through_qmf_data_boundary() -> None:
     with tempfile.TemporaryDirectory() as d:
@@ -62,23 +91,33 @@ def test_t18_1a_ct10_evidence_lands_through_qmf_data_boundary() -> None:
         assert (dest / "replay" / "immutable-raw-archive").is_dir()
 
 
-def test_t18_1a_no_qmb_authored_second_data_layer_FINDING() -> None:
-    """B-11: qmb-data mints no second data layer — qmf.data owns all persistence.
-
-    EXPECTED FAIL — ``download`` writes its own durable ``.qmb_intake_keys.jsonl``
-    dedup ledger (via ``qmb.orchestrator.paths``, outside the qmf.data contracts),
-    even though the content-addressed CT-10 store already makes re-admits
-    idempotent. That file is a persistence side-channel qmb authored itself.
-    """
+def test_t18_1a_ct15_authority_is_qmf_checked_ct13_evidence() -> None:
+    """QMF records the full CT-10 identity behind the key in the per-world journal."""
     with tempfile.TemporaryDirectory() as d:
         dest = Path(d) / "rooms"
         res, _ = _download_ok(dest)
         assert is_ok(res), res
-        ledger = dest / ".qmb_intake_keys.jsonl"
-        assert not ledger.exists(), (
-            "download persisted a qmb-authored durable ledger outside qmf.data "
-            f"(second data layer, B-11): {ledger}"
+        evidence = store_at(dest)
+        world_store = evidence.for_world("replay")
+        assert is_ok(world_store), world_store
+        events = JournalReader(world_store.value.journal).read_checked(
+            "ct15-intake-authority", for_world="replay", expected_start=0
         )
+        assert is_ok(events), events
+        authority = [
+            event
+            for event in events.value
+            if event.event_type is JournalEventType.DATA_QUALITY
+            and event.payload.get("class") == "qmf-ct15-intake-key"
+        ]
+        rows = scan_raw_observations(evidence)
+        assert len(authority) == 2 and len(rows) == 1
+        intent = next(event for event in authority if event.payload.get("action") == "intent")
+        complete = next(event for event in authority if event.payload.get("action") == "complete")
+        assert intent.payload["observation_fingerprint"] == rows[0]["fingerprint"]
+        assert intent.payload["source_native_id"] == rows[0]["source_native_id"]
+        assert complete.payload["complete"] is True
+        assert complete.payload["observation_fingerprint"] == rows[0]["fingerprint"]
 
 
 # --- T18-1b  request assembly + explicit reproducible end (RQ2) ---------------
@@ -201,6 +240,106 @@ def test_t18_1i_rerun_writes_no_duplicate() -> None:
         assert fps1 == fps2 and len(fps1) == 3
 
 
+def test_t18_1i_restart_rejects_changed_fact_for_same_key() -> None:
+    """Reopened QMF rooms refuse a source key whose canonical CT-10 fact changed."""
+    with tempfile.TemporaryDirectory() as d:
+        dest = Path(d) / "rooms"
+        original = provider_record("EURUSD#same", NS, bid=110_000, ask=110_020)
+        first = download(
+            download_resources(dest), adapter=FakeAdapter((original,)), store=store_at(dest)
+        )
+        assert is_ok(first), first
+        changed = provider_record("EURUSD#same", NS, bid=110_001, ask=110_021)
+        second = download(
+            download_resources(dest), adapter=FakeAdapter((changed,)), store=store_at(dest)
+        )
+        assert is_refusal(second), second
+        refused = second
+        assert refused.category.value == "policy rejection"
+        assert "different provider facts" in str(refused.context)
+        assert len(raw_observation_fingerprints(store_at(dest))) == 1
+
+
+def test_t18_1i_same_facts_reuse_canonical_row_across_boot_metadata() -> None:
+    """Receive time and writer boot metadata do not mint another CT-10 row."""
+    with tempfile.TemporaryDirectory() as d:
+        dest = Path(d) / "rooms"
+        record = provider_record("EURUSD#stable", NS)
+        first = download(
+            download_resources(dest, receive_wall_time=NS + 21),
+            adapter=FakeAdapter((record,)),
+            store=store_at(dest),
+        )
+        assert is_ok(first), first
+        later_writer = ok(WriterId.try_create("qmb", "data", "download", "boot-2"))
+        second = download(
+            download_resources(dest, receive_wall_time=NS + 99, writer=later_writer),
+            adapter=FakeAdapter((record,)),
+            store=store_at(dest),
+        )
+        assert is_ok(second), second
+        assert second.value.idempotent == 1
+        assert len(raw_observation_fingerprints(store_at(dest))) == 1
+
+
+def test_t18_1i_uncertain_ct10_ack_recovers_through_qmf_authority(monkeypatch) -> None:
+    """A raw append whose acknowledgement is lost is retried idempotently after reopen."""
+    from qmf.core import RefusalCategory, Retryability, TypedRefusal
+    from qmf.data.source_boundary import SourceObservationBoundary
+
+    with tempfile.TemporaryDirectory() as d:
+        dest = Path(d) / "rooms"
+        evidence = store_at(dest)
+        boundary = SourceObservationBoundary(evidence)
+        actual_admit = boundary.admit
+        fail_once = True
+
+        def admit_then_lose_ack(observation):
+            nonlocal fail_once
+            result = actual_admit(observation)
+            if fail_once and is_ok(result):
+                fail_once = False
+                return TypedRefusal(
+                    category=RefusalCategory.STORAGE_FAILURE,
+                    retryability=Retryability.YES,
+                    context={"field": "ct10", "reason": "simulated lost acknowledgement"},
+                )
+            return result
+
+        monkeypatch.setattr(boundary, "admit", admit_then_lose_ack)
+        record = provider_record("EURUSD#uncertain", NS)
+        first = download(
+            download_resources(dest),
+            adapter=FakeAdapter((record,)),
+            store=evidence,
+            boundary=boundary,
+        )
+        assert is_refusal(first)
+        assert len(raw_observation_fingerprints(evidence)) == 1
+
+        reopened = store_at(dest)
+        retry_writer = ok(WriterId.try_create("qmb", "data", "download", "boot-2"))
+        second = download(
+            download_resources(dest, receive_wall_time=NS + 99, writer=retry_writer),
+            adapter=FakeAdapter((record,)),
+            store=reopened,
+        )
+        assert is_ok(second), second
+        assert len(raw_observation_fingerprints(reopened)) == 1
+        world_store = ok(reopened.for_world("replay"))
+        events = ok(
+            JournalReader(world_store.journal).read_checked(
+                "ct15-intake-authority", for_world="replay", expected_start=0
+            )
+        )
+        assert sum(
+            event.event_type is JournalEventType.DATA_QUALITY
+            and event.payload.get("class") == "qmf-ct15-intake-key"
+            for event in events
+        ) == 2
+        assert {event.payload.get("action") for event in events} >= {"intent", "complete"}
+
+
 # --- T18-1j  --overwrite appends a new revision, retains the original (RQ9) ----
 def test_t18_1j_overwrite_appends_new_revision() -> None:
     with tempfile.TemporaryDirectory() as d:
@@ -231,7 +370,7 @@ def test_t18_1k_progress_emitted_to_injected_sink() -> None:
         sink = RecordingProgressSink()
         res = download(
             download_resources(dest, symbol="EURUSD, GBPUSD"),
-            adapter=FakeAdapter((provider_record("EURUSD#1", NS),)),
+            adapter=_FirstSymbolAdapter((provider_record("EURUSD#1", NS),)),
             store=store_at(dest),
             progress=sink,
         )
@@ -261,7 +400,7 @@ def test_t18_1k_progress_samples_carry_monotonic_eta() -> None:
         symbols = "EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF"
         res = download(
             download_resources(dest, symbol=symbols, start_ns=NS, end_ns=NS + 1_000),
-            adapter=FakeAdapter((provider_record("EURUSD#1", NS),)),
+            adapter=_FirstSymbolAdapter((provider_record("EURUSD#1", NS),)),
             store=store_at(dest),
             progress=sink,
         )

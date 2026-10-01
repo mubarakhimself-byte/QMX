@@ -155,6 +155,7 @@ from qmf.data.ingest import (
 from qmf.data.ingest import (
     refuse_schedule_ownership as refuse_ingest_schedule_ownership,
 )
+from qmf.data.intake_authority import IntakeAuthority
 from qmf.data.journal import (
     CausalEdge,
     DecisionOutcome,
@@ -329,6 +330,7 @@ __all__ = [
     "ForeignMoney",
     "ForeignTimestamp",
     "HoldoutSeal",
+    "IntakeAuthority",
     "IntakeKey",
     "IntakeOutcome",
     "IntakeReceipt",

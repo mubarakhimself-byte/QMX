@@ -7,12 +7,11 @@ room. No second data layer: persistence is entirely qmf-data.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Final, cast
+from typing import cast
 
 from qmf.core.chrono import WriterId
 from qmf.core.fingerprint import World
@@ -26,11 +25,12 @@ from qmf.data.ingest import (
     ProviderRecord,
     SourceRequest,
 )
+from qmf.data.intake_authority import IntakeAuthority
 from qmf.data.observation import MarketDataContext, SourceObservation
 from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.store import EvidenceStore
 
-from qmb._refuse import clean_token, invalid, storage, unavailable
+from qmb._refuse import clean_token, invalid, unavailable
 from qmb.data.catalog import persist_coverage_windows
 from qmb.data.ports import (
     DOWNLOAD_SIDES,
@@ -275,13 +275,25 @@ def download(
     if isinstance(receive, bool) or not isinstance(receive, int):
         receive = request.end_ns
 
-    # CT-15 ingest owns CT-10 minting; durable intake keys make overlapping
-    # re-runs idempotent across processes via (source, native id, revision).
-    ingest = ExternalSourceIngest(_IngestBridge(port))
-    loaded_keys = _load_intake_keys(Path(request.destination))
-    if is_refusal(loaded_keys):
-        return loaded_keys
-    known_keys = loaded_keys.value
+    # CT-15 owns normalization. QMF's per-world CT-13 stream is the durable key
+    # authority; the application-local file is never consulted for deduplication.
+    if evidence is None:
+        return invalid("store", "download requires the QMF EvidenceStore for CT-10 and CT-13")
+    world_store = evidence.for_world(request.world)
+    if is_refusal(world_store):
+        return world_store
+    authority = IntakeAuthority.resume(
+        world_store.value.journal,
+        active_writer,
+        stream_name="ct15-intake-authority",
+    )
+    if is_refusal(authority):
+        return authority
+    from qmf.core import Instant  # noqa: PLC0415 — keeps QMB's main import surface small
+
+    journal_instant = Instant.try_create(receive)
+    if is_refusal(journal_instant):
+        return journal_instant
 
     produced = 0
     idempotent = 0
@@ -290,7 +302,6 @@ def download(
     windows: list[Mapping[str, object]] = []
     total = len(request.symbols)
     sequence = 0
-
     for index, symbol in enumerate(request.symbols):
         fetch_req = ProviderFetchRequest(
             source=port.source,
@@ -341,25 +352,28 @@ def download(
         if is_refusal(market_data):
             return market_data
         covered_event_ns: list[int] = []
+        batch_keys: dict[IntakeKey, ProviderRecord] = {}
         for record in fetched.value:
+            record_sequence = sequence
+            sequence += 1
             key = IntakeKey.try_create(record.source, record.source_native_id, record.revision)
             if is_refusal(key):
                 return key
-            if key.value in known_keys:
+            batch_prior = batch_keys.get(key.value)
+            if batch_prior is not None and batch_prior == record:
                 idempotent += 1
                 continue
+            ingest = ExternalSourceIngest(_IngestBridge(port))
             receipt = ingest.intake(
                 record,
                 writer=active_writer,
-                sequence=sequence,
+                sequence=record_sequence,
                 world=request.world,
                 receive_wall_time=receive,
             )
             if is_refusal(receipt):
                 return receipt
             if receipt.value.outcome is IntakeOutcome.PRODUCED:
-                produced += 1
-                sequence += 1
                 observation = _observation_for_archive(
                     receipt.value,
                     request.side,
@@ -367,27 +381,40 @@ def download(
                 )
                 if is_refusal(observation):
                     return observation
-                stored = ingest.submit(observation.value, gate)
+                reserved = authority.value.reserve(
+                    key.value,
+                    observation.value,
+                    instant=journal_instant.value,
+                )
+                if is_refusal(reserved):
+                    return reserved
+                canonical_observation = reserved.value.observation
+                if reserved.value.complete:
+                    idempotent += 1
+                    batch_keys[key.value] = record
+                    continue
+                stored = ingest.submit(canonical_observation, gate)
                 if is_refusal(stored):
                     return stored
                 admitted += 1
-                covered_event_ns.append(observation.value.event_time.value_ns)
-                known_keys.add(key.value)
-                appended = _append_intake_key(Path(request.destination), key.value)
+                covered_event_ns.append(canonical_observation.event_time.value_ns)
+                appended = authority.value.complete(
+                    key.value,
+                    canonical_observation,
+                    instant=journal_instant.value,
+                )
                 if is_refusal(appended):
                     return appended
+                produced += 1
+                batch_keys[key.value] = record
             else:
                 idempotent += 1
-                known_keys.add(key.value)
 
         # The envelope is only a rebuildable cache.  Stamp it from observations
         # actually admitted, never from the requested window or requested sides.
         if covered_event_ns:
-            coverage_store = (
-                evidence if evidence is not None else EvidenceStore(Path(request.destination))
-            )
             persisted = persist_coverage_windows(
-                coverage_store,
+                evidence,
                 world=request.world,
                 venue=str(window_meta["venue"]),
                 symbol=symbol,
@@ -598,81 +625,3 @@ def _as_world(value: object) -> Result[World]:
         return Ok(World(token))
     except ValueError:
         return invalid("world", "world is live, replay, or simulated", given=token)
-
-
-_INTAKE_LEDGER: Final[str] = ".qmb_intake_keys.jsonl"
-
-
-def _load_intake_keys(destination: Path) -> Result[set[IntakeKey]]:
-    """Load durable CT-15 intake keys so overlapping re-runs stay idempotent.
-
-    A missing ledger is empty. A leaf symlink, non-regular file, oversize
-    file, or out-of-root realpath is a storage refusal, never a silent skip.
-    """
-    from qmb.orchestrator.paths import (  # noqa: PLC0415 — import-cycle with orchestrator
-        MAX_JSONL_BYTES,
-        read_contained_text,
-    )
-
-    path = destination / _INTAKE_LEDGER
-    if not path.exists() and not path.is_symlink():
-        return Ok(set())
-    loaded = read_contained_text(
-        path,
-        contain_within=destination,
-        max_bytes=MAX_JSONL_BYTES,
-        field="intake_ledger",
-    )
-    if is_refusal(loaded):
-        return loaded
-    keys: set[IntakeKey] = set()
-    for line in loaded.value.splitlines():
-        token = line.strip()
-        if token == "":
-            continue
-        try:
-            row = json.loads(token)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(row, Mapping):
-            continue
-        body = cast("Mapping[str, object]", row)
-        built = IntakeKey.try_create(
-            body.get("source"),
-            body.get("source_native_id"),
-            body.get("revision"),
-        )
-        if is_refusal(built):
-            continue
-        keys.add(built.value)
-    return Ok(keys)
-
-
-def _append_intake_key(destination: Path, key: IntakeKey) -> Result[None]:
-    """Append one intake key; refuse a symlink or out-of-root path."""
-    from qmb.orchestrator.paths import (  # noqa: PLC0415 — import-cycle with orchestrator
-        append_bytes_no_follow,
-    )
-
-    try:
-        destination.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        return storage(
-            "intake_ledger",
-            "could not create the intake-ledger destination directory",
-            given=type(exc).__name__,
-            path=str(destination),
-        )
-    path = destination / _INTAKE_LEDGER
-    row = {
-        "source": key.source,
-        "source_native_id": key.source_native_id,
-        "revision": key.revision,
-    }
-    payload = json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n"
-    return append_bytes_no_follow(
-        path,
-        payload.encode("utf-8"),
-        contain_within=destination,
-        field="intake_ledger",
-    )
