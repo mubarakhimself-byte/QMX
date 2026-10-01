@@ -9,8 +9,10 @@ import shutil
 from pathlib import Path
 
 from qma.core.barriers import assert_no_qmb_import, scan_qmb_imports, validate_worker_image
+from qma.core.content import content_address
 from qma.core.ontology import ActorId, DeskSlug
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration, WorkerImageManifest
+from qma.core.ports.experiments import ExperimentSpec
 from qma.core.ports.qmb import (
     QMB_BACKTEST_TOOL_ID,
     QMB_CLI_ARGV,
@@ -30,8 +32,10 @@ from qma.daemon.backtest import (
 )
 from qma.daemon.envs import ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService
+from qma.daemon.experiments import ExperimentSpecService
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
+from qma.daemon.taskgraph.records import DispatchLease
 from qma.daemon.tools import ToolRegistry
 from qmf.core import is_ok, is_refusal
 
@@ -137,6 +141,65 @@ def test_cli_transport_spawns_documented_double_not_recording(tmp_path: Path) ->
         assert receipt["world"] == QMB_WORLD_REPLAY
         assert receipt["job_id"] == placed.value.handle.job_id
         assert int(receipt["pid"]) > 0
+    finally:
+        transport.close()
+
+
+def test_registered_ct12_and_attempt_reach_spawned_cli_environment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data_ref = "fp1:sha256:" + ("d" * 64)
+    evidence_ref = "fp1:sha256:" + ("e" * 64)
+    config_ref = content_address({"class": "test-config"})
+    assert is_ok(config_ref)
+    spec = ExperimentSpec.try_create(
+        data_ref=data_ref,
+        environment_ref="env:docker",
+        seed=3,
+        model_and_harness_version={"model": "cli-test", "harness": "qmb"},
+        cost_assumptions={"spread_usd_cents": 0},
+        resolved_config_ref=config_ref.value.value,
+    )
+    assert is_ok(spec)
+    experiments = ExperimentSpecService()
+    lease = DispatchLease(
+        task_id="task-cli-runtime-binding",
+        holder_agent_id="agent-cli-test",
+        mission_id="mission-cli-test",
+        owner=_owner(),
+    )
+    registered = experiments.register(
+        spec.value,
+        dispatch_lease=lease,
+        model_deployment_ref="deploy:cli-test",
+    )
+    assert is_ok(registered)
+    transport = _cli_transport(tmp_path)
+    service = BacktestingService(
+        tools=ToolRegistry(),
+        jobs=JobHandleService(),
+        environments=_envs(ExecutionEnvironmentKind.DOCKER),
+        transport=transport,
+        experiments=experiments,
+    )
+    assert is_ok(service.install())
+    monkeypatch.setenv("QMA_QMB_SPLIT_MANIFEST_FP1", "fp1:sha256:" + ("f" * 64))
+    try:
+        placed = service.invoke(
+            QMB_BACKTEST_TOOL_ID,
+            owner=_owner(),
+            task_id=lease.task_id,
+            environment_ref="env:docker",
+            experiment_spec_fp1=registered.value.spec.spec_fp1,
+            evidence_ref=evidence_ref,
+        )
+        assert is_ok(placed)
+        assert transport.wait(placed.value.handle.job_id, timeout=10.0) == 0
+        receipt = json.loads((tmp_path / "qmb-receipt.json").read_text(encoding="utf-8"))
+        assert receipt["attempt_id"] == str(placed.value.handle.attempt_id)
+        assert receipt["experiment_spec_fp1"] == registered.value.spec.spec_fp1
+        assert receipt["evidence_ref"] == evidence_ref
+        assert receipt["split_manifest_fp1"] == data_ref
     finally:
         transport.close()
 

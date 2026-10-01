@@ -120,6 +120,10 @@ def main() -> int:
         "program": Path(sys.argv[0]).name,
         "world": os.environ.get("QMA_QMB_WORLD", ""),
         "job_id": job_id,
+        "attempt_id": os.environ.get("QMA_QMB_ATTEMPT_ID", ""),
+        "experiment_spec_fp1": os.environ.get("QMA_QMB_EXPERIMENT_SPEC_FP1", ""),
+        "evidence_ref": os.environ.get("QMA_QMB_EVIDENCE_REF", ""),
+        "split_manifest_fp1": os.environ.get("QMA_QMB_SPLIT_MANIFEST_FP1", ""),
         "pid": os.getpid(),
     }
     out = os.environ.get("QMA_QMB_RECEIPT_PATH")
@@ -173,12 +177,22 @@ def _door_env(
 ) -> dict[str, str]:
     env = {str(key): str(value) for key, value in os.environ.items()}
     payload = dict(invocation.payload)
+    identity_env_keys = (
+        "QMA_QMB_JOB_ID",
+        "QMA_QMB_ATTEMPT_ID",
+        "QMA_QMB_EXPERIMENT_SPEC_FP1",
+        "QMA_QMB_EVIDENCE_REF",
+        "QMA_QMB_SPLIT_MANIFEST_FP1",
+        "QMA_QMB_ENVIRONMENT_REF",
+        "QMA_QMB_OCCUPANCY_KEY",
+    )
+    for key in identity_env_keys:
+        env.pop(key, None)
     env["QMA_QMB_DOOR"] = "cli"
     env["QMA_QMB_WORLD"] = str(payload.get("world", QMB_WORLD_REPLAY))
     env["QMA_QMB_DOOR_PAYLOAD"] = json.dumps(payload, separators=(",", ":"))
     for key, env_key in (
         ("job_id", "QMA_QMB_JOB_ID"),
-        ("attempt_id", "QMA_QMB_ATTEMPT_ID"),
         ("experiment_spec_fp1", "QMA_QMB_EXPERIMENT_SPEC_FP1"),
         ("evidence_ref", "QMA_QMB_EVIDENCE_REF"),
         ("split_manifest_fp1", "QMA_QMB_SPLIT_MANIFEST_FP1"),
@@ -190,6 +204,9 @@ def _door_env(
         value = _payload_str(payload, key)
         if value is not None:
             env[env_key] = value
+    attempt_id = payload.get("attempt_id")
+    if isinstance(attempt_id, int) and not isinstance(attempt_id, bool) and attempt_id > 0:
+        env["QMA_QMB_ATTEMPT_ID"] = str(attempt_id)
     if receipt_path:
         env["QMA_QMB_RECEIPT_PATH"] = receipt_path
     if cancel_path:
@@ -308,6 +325,9 @@ class CliQmbDoorTransport:
             return refuse_venue_account_backtest(field="world", given=world)
         if payload.get("recorded") is not True:
             return refuse_venue_account_backtest(field="recorded", given=payload.get("recorded"))
+        attempt_id = payload.get("attempt_id")
+        if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
+            return invalid_input("attempt_id", "QMB door invocation requires a positive attempt id")
         job_id = payload.get("job_id")
         environment_ref = payload.get("environment_ref")
         occupancy_key = payload.get("occupancy_key")
