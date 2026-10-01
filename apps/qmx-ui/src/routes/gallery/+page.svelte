@@ -7,11 +7,11 @@
   import EmptyState from "$lib/workbench/EmptyState.svelte";
   import Composer from "$lib/workbench/Composer.svelte";
   import DataTable, { type Column } from "$lib/qmx/DataTable.svelte";
-  import AssetCard from "$lib/qmx/AssetCard.svelte";
+  import EntityCard from "$lib/qmx/EntityCard.svelte";
   import CandleChart from "$lib/demo/CandleChart.svelte";
   import Sparkline from "$lib/demo/Sparkline.svelte";
   import { CATALOG } from "$lib/qmx/catalog";
-  import { DEMO_ASSETS } from "$lib/demo/assets";
+  import { DEMO_ENTITIES } from "$lib/demo/assets";
   import { demoCandles } from "$lib/demo/data";
   import { cn } from "$lib/utils";
 
@@ -124,11 +124,9 @@
               <Sparkline values={[3, 4, 3.5, 5, 6, 5.5, 7]} class="h-10 w-40" />
               <Sparkline values={[7, 6, 6.5, 5, 4, 4.5, 3]} class="h-10 w-40" />
             </div>
-          {:else if selected === "AssetCard"}
+          {:else if selected === "EntityCard"}
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {#each DEMO_ASSETS.slice(0, 8) as a (a.id)}<AssetCard
-                  asset={a}
-                />{/each}
+              {#each DEMO_ENTITIES as a (a.id)}<EntityCard entity={a} />{/each}
             </div>
           {:else if selected === "EmptyState"}
             <div class="surface rounded-lg">

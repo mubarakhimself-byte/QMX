@@ -26,6 +26,24 @@
   import CandleChart from "$lib/demo/CandleChart.svelte";
   import { demoCandles } from "$lib/demo/data";
   import { cn } from "$lib/utils";
+  import EntityCard from "$lib/qmx/EntityCard.svelte";
+  import { DEMO_ENTITIES } from "$lib/demo/assets";
+
+  // DEMO: a card before and after a chat edit; changed measures are highlighted.
+  const before = DEMO_ENTITIES.find((e) => e.id === "eurusd-h1-gbm")!;
+  const after = {
+    ...before,
+    version: "v8 draft",
+    measures: before.measures.map((m) =>
+      m.key === "sharpe"
+        ? { ...m, value: "1.31" }
+        : m.key === "dd"
+          ? { ...m, value: "−5.1%" }
+          : m.key === "win"
+            ? { ...m, value: "47%" }
+            : m,
+    ),
+  };
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
@@ -330,6 +348,30 @@
                   <Badge variant="outline" class="text-[10px]"
                     >draft · not run</Badge
                   >
+                </div>
+              </div>
+              <div class="bg-muted ml-auto max-w-[85%] rounded-md px-3 py-2">
+                Tighten the stop to 0.8 ATR and show me what changes.
+              </div>
+              <div class="flex flex-col gap-3">
+                <p>
+                  With a 0.8 ATR stop the drawdown falls but more trades get
+                  stopped out early. This is a draft edit; it becomes evidence
+                  only after you publish and re-run it.
+                </p>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p class="panel-label mb-1.5">Before · v7</p>
+                    <EntityCard entity={before} compact />
+                  </div>
+                  <div>
+                    <p class="panel-label mb-1.5">Draft edit · not run</p>
+                    <EntityCard
+                      entity={after}
+                      compact
+                      changed={["sharpe", "dd", "win"]}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

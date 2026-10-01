@@ -4,7 +4,6 @@
   import History from "@lucide/svelte/icons/history";
   import AppWindow from "@lucide/svelte/icons/app-window";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import PageHeader from "$lib/workbench/PageHeader.svelte";
@@ -12,8 +11,8 @@
   import WidgetFrame from "$lib/workbench/WidgetFrame.svelte";
   import StatTile from "$lib/workbench/StatTile.svelte";
   import { workbench } from "$lib/workbench/workbench.svelte";
-  import AssetCard from "$lib/qmx/AssetCard.svelte";
-  import { DEMO_ASSETS } from "$lib/demo/assets";
+  import EntityCard from "$lib/qmx/EntityCard.svelte";
+  import { DEMO_ENTITIES } from "$lib/demo/assets";
   import { DEMO_CALENDAR } from "$lib/demo/data";
   import { cn } from "$lib/utils";
 
@@ -95,7 +94,7 @@
     },
     { title: "EURUSD H1 GBM, report v7", meta: "Your backtest · 2 hours ago" },
   ];
-  const top = [...DEMO_ASSETS].sort((a, b) => b.rating - a.rating).slice(0, 3);
+  const top = DEMO_ENTITIES.filter((e) => e.kind === "bot").slice(0, 3);
 </script>
 
 <div class="flex h-full flex-col">
@@ -246,10 +245,14 @@
           </div>
         </WidgetFrame>
 
-        <WidgetFrame title="Top rated" class="col-span-12 lg:col-span-7">
+        <WidgetFrame title="Strategies" class="col-span-12 lg:col-span-7">
           <div class="grid gap-2 sm:grid-cols-3">
             {#each top as a (a.id)}
-              <AssetCard asset={a} onselect={() => goto(resolve("/library"))} />
+              <EntityCard
+                entity={a}
+                compact
+                href={resolve("/library/[id]", { id: a.id })}
+              />
             {/each}
           </div>
         </WidgetFrame>

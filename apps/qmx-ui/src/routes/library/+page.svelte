@@ -16,8 +16,8 @@
   import PageHeader from "$lib/workbench/PageHeader.svelte";
   import EmptyState from "$lib/workbench/EmptyState.svelte";
   import { workbench } from "$lib/workbench/workbench.svelte";
-  import AssetCard, { type Asset } from "$lib/qmx/AssetCard.svelte";
-  import { DEMO_ASSETS, DEMO_ARTIFACTS } from "$lib/demo/assets";
+  import EntityCard from "$lib/qmx/EntityCard.svelte";
+  import { DEMO_ENTITIES, DEMO_ARTIFACTS } from "$lib/demo/assets";
   import { cn } from "$lib/utils";
 
   type Article = {
@@ -46,7 +46,6 @@
   let query = $state("");
   let section = $state<string | null>(null);
   let openId = $state<number | null>(null);
-  let assetId = $state<string | null>(null);
 
   onMount(async () => {
     if (!demo) return;
@@ -93,7 +92,7 @@
   );
   const open = $derived(articles.find((a) => a.id === openId));
   const assets = $derived(
-    DEMO_ASSETS.filter((a: Asset) =>
+    DEMO_ENTITIES.filter((a) =>
       kind === "artifact"
         ? a.kind === "bot" || a.kind === "model"
         : a.kind === "app" || a.kind === "workflow",
@@ -101,7 +100,7 @@
       (a) =>
         !q ||
         a.name.toLowerCase().includes(q) ||
-        a.role.toLowerCase().includes(q),
+        a.summary.toLowerCase().includes(q),
     ),
   );
   const chip = (on: boolean) =>
@@ -279,10 +278,9 @@
             >
               {#each assets as a (a.id)}
                 <li>
-                  <AssetCard
-                    asset={a}
-                    selected={assetId === a.id}
-                    onselect={() => (assetId = a.id)}
+                  <EntityCard
+                    entity={a}
+                    href={resolve("/library/[id]", { id: a.id })}
                   />
                 </li>
               {/each}

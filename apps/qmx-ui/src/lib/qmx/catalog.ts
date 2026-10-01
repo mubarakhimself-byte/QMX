@@ -141,19 +141,27 @@ export const CATALOG: CatalogEntry[] = [
     example: { values: [3, 4, 3.5, 5, 6, 5.5, 7] },
   },
   {
-    type: "AssetCard",
+    type: "EntityCard",
     group: "Card",
     description:
-      "Player-card view of a bot, ML model, mini app or workflow: overall rating, tier, stage and six attributes. Ratings come from the asset's metrics.",
+      "Card for a bot, ML model, mini app or workflow: generated cover art, stage, and four named measures with plain definitions. No overall score; evidence stays as raw measures. 'changed' highlights measures that moved after an edit.",
     props: {
-      asset: {
+      entity: {
         type: "object",
         description:
-          "{ kind, name, role, stage, rating, attributes:[{key,label,value}], spark? }",
+          "{ kind, name, summary, stage, version, fp, measures:[{key,label,value,help}], spark? }",
         required: true,
       },
+      compact: {
+        type: "boolean",
+        description: "Smaller cover and no footer, for chats and dashboards.",
+      },
+      changed: {
+        type: "array",
+        description: "Measure keys to highlight after an edit.",
+      },
     },
-    example: { asset: "DEMO_ASSETS[0]" },
+    example: { entity: "DEMO_ENTITIES[0]", compact: false },
   },
   {
     type: "EmptyState",
