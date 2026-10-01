@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import os
 import tempfile
 from pathlib import Path
 
@@ -41,6 +42,7 @@ from qmf.core.fingerprint import World
 from qmf.core.refusal import Ok, is_ok, is_refusal
 from qmf.data.ingest import IntakeKey
 from qmf.data.intake_authority import IntakeAuthority
+from qmf.data.store import EvidenceStore
 from qmf.data.journal import JournalEventType
 from qmf.data.journal_producer import JournalReader
 from qmf.data.observation import SourceObservation
@@ -188,27 +190,27 @@ def test_t18_1a_ct15_visible_uncertain_intent_needs_durable_recovery_barrier(
     """Visible CT-13 bytes cannot authorize reuse until a later fsync succeeds."""
     with tempfile.TemporaryDirectory() as d:
         root = Path(d) / "rooms"
-        evidence = store_at(root)
+        evidence = EvidenceStore(root, rotation_bytes=1)
         world_store = ok(evidence.for_world(World.REPLAY))
         writer = ok(WriterId.try_create("qmb", "data", "download", "boot-ct15"))
         authority = ok(IntakeAuthority.resume(world_store.journal, writer))
         key = ok(IntakeKey.try_create("fixture-provider", "stable-intake-key", "r1"))
         original = _authority_observation()
         original_fsync = jsonl_engine.os.fsync
-        fsync_calls = 0
+        failed_intent_sync = False
 
         def fail_intent_fsync(fd: int) -> None:
-            nonlocal fsync_calls
-            fsync_calls += 1
-            if (
-                fsync_calls == 2
-            ):  # Reserve barrier succeeds; the intent line is visible but unsynced.
+            nonlocal failed_intent_sync
+            target = Path(os.readlink(f"/proc/self/fd/{fd}"))
+            if target.name == "000002.jsonl" and not failed_intent_sync:
+                failed_intent_sync = True
                 raise OSError("injected CT-13 fsync failure")
             original_fsync(fd)
 
         monkeypatch.setattr(jsonl_engine.os, "fsync", fail_intent_fsync)
         refused_intent = authority.reserve(key, original, instant=Instant(value_ns=NS + 2))
         assert is_refusal(refused_intent)
+        assert failed_intent_sync is True
         visible = ok(
             JournalReader(world_store.journal).read_checked(
                 "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
@@ -228,9 +230,17 @@ def test_t18_1a_ct15_visible_uncertain_intent_needs_durable_recovery_barrier(
         reopening_world.journal.close()
 
         monkeypatch.setattr(jsonl_engine.os, "fsync", original_fsync)
+        synced_chunks: list[str] = []
+
+        def record_sync(fd: int) -> None:
+            synced_chunks.append(Path(os.readlink(f"/proc/self/fd/{fd}")).name)
+            original_fsync(fd)
+
+        monkeypatch.setattr(jsonl_engine.os, "fsync", record_sync)
         recovered_store = store_at(root)
         recovered_world = ok(recovered_store.for_world(World.REPLAY))
         recovered = ok(IntakeAuthority.resume(recovered_world.journal, writer))
+        assert "000002.jsonl" in synced_chunks
         reservation = ok(recovered.reserve(key, original, instant=Instant(value_ns=NS + 3)))
         assert reservation.observation.fingerprint == original.fingerprint
         assert reservation.complete is False

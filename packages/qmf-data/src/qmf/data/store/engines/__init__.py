@@ -251,6 +251,10 @@ class AppendStreamEngine(Protocol):
         """Rebuild the in-memory index by scanning the data files (raises on failure)."""
         ...
 
+    def refresh_and_sync_prefix(self) -> None:  # pragma: no cover
+        """Refresh from disk and fsync every extant chunk and its directory metadata."""
+        ...
+
     def release(self) -> None:  # pragma: no cover
         """Release the one-writer hold (remove this writer's lock), so a later handoff
         or clean shutdown does not leave the stream owned forever (M6)."""

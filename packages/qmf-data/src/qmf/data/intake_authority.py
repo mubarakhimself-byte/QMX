@@ -8,10 +8,14 @@ verbatim, so a lost append acknowledgement cannot mint a second observation.
 
 from __future__ import annotations
 
+import os
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from importlib import import_module
+from pathlib import Path
 from threading import RLock
-from typing import Final, cast
+from typing import Final, Protocol, cast
 
 from qmf.core import Instant, Ok, Result, WriteOutcome, WriterId, fingerprint, is_refusal
 from qmf.data.ingest import IntakeKey
@@ -32,11 +36,54 @@ _COMPLETE: Final[str] = "complete"
 _AUTHORITY_STREAM: Final[str] = "ct15-intake-authority"
 _COORDINATORS_LOCK = RLock()
 _COORDINATORS: dict[
-    tuple[int, str],
+    tuple[int, int, str],
     tuple[
         JournalStore, WriterId, JournalWriter, dict[IntakeKey, tuple[str, IntakeReservation]], RLock
     ],
 ] = {}
+
+
+class _ProcessLock:
+    """Advisory transaction lock shared by CT-15 handles across processes."""
+
+    def __init__(self, path: Path) -> None:
+        self._fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        if not stat.S_ISREG(os.fstat(self._fd).st_mode):
+            os.close(self._fd)
+            raise OSError("CT-15 lock path is not a regular file")
+        try:
+            fcntl = cast(_Fcntl, import_module("fcntl"))
+            fcntl.flock(self._fd, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(self._fd)
+            raise
+
+    def close(self) -> None:
+        fcntl = cast(_Fcntl, import_module("fcntl"))
+        fcntl.flock(self._fd, fcntl.LOCK_UN)
+        os.close(self._fd)
+
+    def __enter__(self) -> _ProcessLock:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+class _Fcntl(Protocol):
+    LOCK_EX: int
+    LOCK_UN: int
+
+    def flock(self, fd: int, operation: int) -> None: ...
+
+
+def _process_lock(journal: JournalStore) -> _ProcessLock:
+    lock_path = journal.coordination_lock_path("ct15-intake-authority")
+    if is_refusal(lock_path):
+        raise OSError("invalid CT-15 room lock path")
+    base = lock_path.value.parent
+    base.mkdir(parents=True, exist_ok=True)
+    return _ProcessLock(lock_path.value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +119,11 @@ class IntakeAuthority:
                 expected=_AUTHORITY_STREAM,
                 given=stream_name,
             )
-        coordinator_key = (id(journal), _AUTHORITY_STREAM)
+        coordinator_key = (id(journal), os.getpid(), _AUTHORITY_STREAM)
         with _COORDINATORS_LOCK:
             existing = _COORDINATORS.get(coordinator_key)
             if existing is not None:
-                shared_journal, _shared_writer_id, shared_writer, shared_keys, shared_lock = (
+                shared_journal, _shared_writer_id, _shared_writer, shared_keys, shared_lock = (
                     existing
                 )
                 if shared_journal is not journal:
@@ -84,40 +131,97 @@ class IntakeAuthority:
                         "journal",
                         "a cached CT-15 coordinator belongs to the exact journal object",
                     )
-                return Ok(
-                    cls(
-                        writer=shared_writer,
-                        _journal=journal,
-                        _keys=shared_keys,
-                        _lock=shared_lock,
+                try:
+                    with _process_lock(journal):
+                        events = JournalReader(journal).read_checked(
+                            _AUTHORITY_STREAM, for_world=journal.world, expected_start=0
+                        )
+                        if is_refusal(events):
+                            return events
+                        keys = _rebuild_keys(events.value, journal.world)
+                        if is_refusal(keys):
+                            return keys
+                        resumed = JournalWriter.resume(
+                            journal, writer_id, stream_name=_AUTHORITY_STREAM
+                        )
+                        if is_refusal(resumed):
+                            return resumed
+                        synced = resumed.value.synchronize_prefix()
+                        if is_refusal(synced):
+                            return synced
+                        barrier = _persist_recovery_barrier(journal, resumed.value, events.value)
+                        if is_refusal(barrier):
+                            return barrier
+                        shared_keys.clear()
+                        shared_keys.update(keys.value)
+                        shared = (journal, writer_id, resumed.value, shared_keys, shared_lock)
+                        _COORDINATORS[coordinator_key] = shared
+                        return Ok(cls(resumed.value, journal, shared_keys, shared_lock))
+                except OSError as exc:
+                    return invalid_input(
+                        "ct15_process_lock",
+                        "the CT-15 cross-process transaction lock is available",
+                        given=str(exc),
                     )
+            try:
+                with _process_lock(journal):
+                    events = JournalReader(journal).read_checked(
+                        _AUTHORITY_STREAM, for_world=journal.world, expected_start=0
+                    )
+                    if is_refusal(events):
+                        return events
+                    keys = _rebuild_keys(events.value, journal.world)
+                    if is_refusal(keys):
+                        return keys
+                    resumed = JournalWriter.resume(
+                        journal, writer_id, stream_name=_AUTHORITY_STREAM
+                    )
+                    if is_refusal(resumed):
+                        return resumed
+                    synced = resumed.value.synchronize_prefix()
+                    if is_refusal(synced):
+                        return synced
+                    barrier = _persist_recovery_barrier(journal, resumed.value, events.value)
+                    if is_refusal(barrier):
+                        return barrier
+                    shared = (journal, writer_id, resumed.value, keys.value, RLock())
+                    _COORDINATORS[coordinator_key] = shared
+                    return Ok(
+                        cls(
+                            writer=resumed.value,
+                            _journal=journal,
+                            _keys=keys.value,
+                            _lock=shared[4],
+                        )
+                    )
+            except OSError as exc:
+                return invalid_input(
+                    "ct15_process_lock",
+                    "the CT-15 cross-process transaction lock is available",
+                    given=str(exc),
                 )
-        events = JournalReader(journal).read_checked(
-            _AUTHORITY_STREAM, for_world=journal.world, expected_start=0
-        )
-        if is_refusal(events):
-            return events
-        keys = _rebuild_keys(events.value, journal.world)
-        if is_refusal(keys):
-            return keys
-        resumed = JournalWriter.resume(journal, writer_id, stream_name=_AUTHORITY_STREAM)
-        if is_refusal(resumed):
-            return resumed
-        barrier = _persist_recovery_barrier(journal, resumed.value, events.value)
-        if is_refusal(barrier):
-            return barrier
-        shared = (journal, writer_id, resumed.value, keys.value, RLock())
-        _COORDINATORS[coordinator_key] = shared
-        return Ok(
-            cls(
-                writer=resumed.value,
-                _journal=journal,
-                _keys=keys.value,
-                _lock=shared[4],
-            )
-        )
 
     def reserve(
+        self,
+        key: IntakeKey,
+        observation: SourceObservation,
+        *,
+        instant: Instant,
+    ) -> Result[IntakeReservation]:
+        try:
+            with self._lock, _process_lock(self._journal):
+                refreshed = self._refresh_process_state(instant)
+                if is_refusal(refreshed):
+                    return refreshed
+                return self._reserve_under_lock(key, observation, instant=instant)
+        except OSError as exc:
+            return invalid_input(
+                "ct15_process_lock",
+                "the CT-15 cross-process transaction lock is available",
+                given=str(exc),
+            )
+
+    def _reserve_under_lock(
         self,
         key: IntakeKey,
         observation: SourceObservation,
@@ -161,6 +265,9 @@ class IntakeAuthority:
                 return policy_rejection(
                     "journal_ack", "CT-15 intent has a complete durable CT-13 acknowledgment"
                 )
+            synchronized = self.writer.synchronize_prefix()
+            if is_refusal(synchronized):
+                return synchronized
             reservation = IntakeReservation(observation, complete=False)
             self._keys[key] = (fact_fp.value, reservation)
             return Ok(reservation)
@@ -173,6 +280,26 @@ class IntakeAuthority:
         instant: Instant,
     ) -> Result[None]:
         """Persist explicit completion after CT-10 admission and its acknowledgement."""
+        try:
+            with self._lock, _process_lock(self._journal):
+                refreshed = self._refresh_process_state(instant)
+                if is_refusal(refreshed):
+                    return refreshed
+                return self._complete_under_lock(key, observation, instant=instant)
+        except OSError as exc:
+            return invalid_input(
+                "ct15_process_lock",
+                "the CT-15 cross-process transaction lock is available",
+                given=str(exc),
+            )
+
+    def _complete_under_lock(
+        self,
+        key: IntakeKey,
+        observation: SourceObservation,
+        *,
+        instant: Instant,
+    ) -> Result[None]:
         with self._lock:
             valid = _validate_key_observation(key, observation, self.writer.world)
             if is_refusal(valid):
@@ -216,6 +343,9 @@ class IntakeAuthority:
                 return policy_rejection(
                     "journal_ack", "CT-15 completion has a complete durable CT-13 acknowledgment"
                 )
+            synchronized = self.writer.synchronize_prefix()
+            if is_refusal(synchronized):
+                return synchronized
             self._keys[key] = (
                 fact_fp.value,
                 IntakeReservation(observation, complete=True),
@@ -223,7 +353,49 @@ class IntakeAuthority:
             return Ok(None)
 
     def _refresh_and_barrier(self, instant: Instant) -> Result[None]:
+        # The public operation holds the process lock and runs _refresh_process_state
+        # before entering the key mutation path, so no second barrier is needed here.
+        return Ok(None)
+
+    def _refresh_process_state(self, instant: Instant) -> Result[None]:
+        """Refresh sequence and indexes while holding the room-wide transaction lock."""
+        synchronized = self.writer.synchronize_prefix()
+        if is_refusal(synchronized):
+            return synchronized
+        events = JournalReader(self._journal).read_checked(
+            _AUTHORITY_STREAM, for_world=self._journal.world, expected_start=0
+        )
+        if is_refusal(events):
+            return events
         if self.writer.is_blocked:
+            blocked = self.writer.blocked_event
+            if blocked is None:
+                return policy_rejection(
+                    "ct15_blocked_event", "a blocked writer retains its exact event"
+                )
+            same_sequence = next(
+                (
+                    event
+                    for event in events.value
+                    if event.writer == blocked.writer and event.sequence == blocked.sequence
+                ),
+                None,
+            )
+            if same_sequence is not None and same_sequence.fingerprint != blocked.fingerprint:
+                return policy_rejection(
+                    "ct15_sequence_conflict",
+                    "a blocked CT-15 event cannot reuse a sequence consumed by a different event",
+                    sequence=blocked.sequence,
+                )
+            if same_sequence is None and any(
+                event.writer == blocked.writer and event.sequence > blocked.sequence
+                for event in events.value
+            ):
+                return policy_rejection(
+                    "ct15_sequence_conflict",
+                    "a previously blocked CT-15 event cannot be appended after later sequences",
+                    sequence=blocked.sequence,
+                )
             recovered = self.writer.retry_blocked()
             if is_refusal(recovered):
                 return recovered
@@ -235,9 +407,20 @@ class IntakeAuthority:
         rebuilt = _rebuild_keys(events.value, self._journal.world)
         if is_refusal(rebuilt):
             return rebuilt
+        resumed = JournalWriter.resume(
+            self._journal, self.writer.writer, stream_name=_AUTHORITY_STREAM
+        )
+        if is_refusal(resumed):
+            return resumed
+        self.writer = resumed.value
+        synced = resumed.value.synchronize_prefix()
+        if is_refusal(synced):
+            return synced
         self._keys.clear()
         self._keys.update(rebuilt.value)
-        return _persist_recovery_barrier(self._journal, self.writer, events.value, instant=instant)
+        return _persist_recovery_barrier(
+            self._journal, self.writer, events.value, instant=instant
+        )
 
 
 def _rebuild_keys(
@@ -316,6 +499,9 @@ def _persist_recovery_barrier(
             "ct15_recovery_barrier",
             "the CT-13 recovery barrier is durably acknowledged and reopened",
         )
+    synchronized = writer.synchronize_prefix()
+    if is_refusal(synchronized):
+        return synchronized
     return Ok(None)
 
 

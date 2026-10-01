@@ -63,9 +63,30 @@ class JournalStore:
         """The world whose journal room this boundary writes and reads."""
         return self._world
 
+    def coordination_lock_path(self, name: object) -> Result[Path]:
+        """Return a validated room-local lock path for a cooperating data boundary."""
+        segment = safe_segment(name, field="coordination_lock")
+        if is_refusal(segment):
+            return segment
+        return Ok(self._streams.base_dir / f".{segment.value}.lock")
+
     def close(self) -> None:
         """Release every held journal stream's one-writer lock (M6)."""
         self._streams.release_all()
+
+    def refresh_and_sync_prefix(self, stream_name: object, writer: WriterId) -> Result[None]:
+        """Refresh the held stream and fsync its complete visible prefix."""
+        name = safe_segment(stream_name)
+        if is_refusal(name):
+            return name
+        acquired = self._streams.acquire(name.value, writer)
+        if is_refusal(acquired):
+            return acquired
+        try:
+            acquired.value.refresh_and_sync_prefix()
+        except StoreEngineError as exc:
+            return translate_engine_failure(exc)
+        return Ok(None)
 
     # --- append (write) -----------------------------------------------------
 

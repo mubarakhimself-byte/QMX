@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import lzma
+import multiprocessing
 import struct
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeVar
@@ -43,7 +45,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.exact import RoundingMode
-from qmf.data import DUKASCOPY_SOURCE, EvidenceStore
+from qmf.data import DUKASCOPY_SOURCE, EvidenceStore, IntakeAuthority
 from qmf.data.dukascopy import PERSONAL_USE_LICENSE, DukascopyHourKey
 from qmf.data.journal import JournalEventType
 from qmf.data.journal_producer import JournalReader
@@ -73,6 +75,20 @@ def _writer() -> WriterId:
 def _bi5(*ticks: tuple[int, int, int]) -> bytes:
     raw = b"".join(struct.pack("!IIIff", ms, ask, bid, 1.0, 1.0) for ms, ask, bid in ticks)
     return lzma.compress(raw)
+
+
+def _concurrent_download(root: str, ready: object, results: object) -> None:
+    """Separate process exercising the real filesystem CT-15 authority."""
+    path = "EURUSD/2024/00/15/10h_ticks.bi5"
+    transport = _FixtureTransport({path: _bi5((0, 110260, 110250))})
+    ready.wait()  # type: ignore[attr-defined]
+    outcome = download(_resources(Path(root), transport))
+    results.put("ok" if is_ok(outcome) else repr(outcome))  # type: ignore[attr-defined]
+
+
+def _resume_authority(index: int, journal: object) -> IntakeAuthority:
+    del index
+    return _ok(IntakeAuthority.resume(journal, _writer()))  # type: ignore[arg-type]
 
 
 class _FixtureTransport:
@@ -243,6 +259,54 @@ def test_overlapping_rerun_is_idempotent_overwrite_appends_revision() -> None:
         assert third.overwrite is True
         assert third.revision.startswith("r-")
         assert third.produced == 1
+
+
+def test_ct15_resume_initialization_is_serialized_in_process() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence = EvidenceStore(Path(tmp))
+        journal = _ok(evidence.for_world(World.REPLAY)).journal
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            authorities = list(pool.map(_resume_authority, range(16), [journal] * 16))
+        assert all(authority.writer.writer == authorities[0].writer.writer for authority in authorities)
+        events = _ok(
+            JournalReader(journal).read_checked(
+                "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+            )
+        )
+        assert [event.sequence for event in events] == list(range(len(events)))
+
+
+def test_ct15_two_process_downloads_share_one_authority_sequence(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("fork")
+    ready = context.Barrier(2)
+    results = context.Queue()
+    workers = [
+        context.Process(target=_concurrent_download, args=(str(tmp_path), ready, results))
+        for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=20)
+        assert worker.exitcode == 0
+    assert [results.get(timeout=2) for _ in workers] == ["ok", "ok"]
+
+    evidence = EvidenceStore(tmp_path)
+    journal = _ok(evidence.for_world(World.REPLAY)).journal
+    events = _ok(
+        JournalReader(journal).read_checked(
+            "ct15-intake-authority", for_world=World.REPLAY, expected_start=0
+        )
+    )
+    assert [event.sequence for event in events] == list(range(len(events)))
+    intake = [
+        event.payload.get("action")
+        for event in events
+        if event.event_type is JournalEventType.DATA_QUALITY
+        and event.payload.get("class") == "qmf-ct15-intake-key"
+    ]
+    assert intake.count("intent") == 1
+    assert intake.count("complete") == 1
 
 
 def test_provider_rate_limit_and_geo_block_are_typed_refusals() -> None:

@@ -63,6 +63,17 @@ def _ordinal_filename(ordinal: int) -> str:
     return f"{ordinal:0{_ORDINAL_WIDTH}d}.jsonl"
 
 
+def _fsync_directory(path: Path) -> None:
+    """Persist directory entries on POSIX so created rotation chunks survive recovery."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _guard_stream_file(root: Path, path: Path, *, must_exist: bool) -> None:
     """Refuse a stream file that is a symlink, out-of-root, or the wrong kind (AC4).
 
@@ -382,6 +393,33 @@ class JsonlAppendStream:
         except OSError as exc:
             raise StoreEngineError(
                 "could not rebuild the JSONL index",
+                engine="jsonl",
+                detail={"stream": str(self._dir), "os_error": str(exc)},
+            ) from exc
+
+    def refresh_and_sync_prefix(self) -> None:
+        """Re-index and durably sync the entire visible prefix, including rotated chunks."""
+        if not self._held:
+            raise StoreEngineError(
+                "only the held JSONL writer may synchronize its prefix",
+                engine="jsonl",
+                retryable=False,
+                detail={"stream": str(self._dir)},
+            )
+        try:
+            self.rebuild_index()
+            for ordinal in self._ordinals_on_disk():
+                path = self._dir / _ordinal_filename(ordinal)
+                _guard_stream_file(self._dir, path, must_exist=True)
+                with _open_stream_file(self._dir, path, "rb", must_exist=True) as handle:
+                    os.fsync(handle.fileno())
+            _fsync_directory(self._dir)
+            _fsync_directory(self._dir.parent)
+        except StoreEngineError:
+            raise
+        except OSError as exc:
+            raise StoreEngineError(
+                "could not durably synchronize the complete JSONL prefix",
                 engine="jsonl",
                 detail={"stream": str(self._dir), "os_error": str(exc)},
             ) from exc

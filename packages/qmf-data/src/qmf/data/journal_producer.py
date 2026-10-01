@@ -330,6 +330,10 @@ class JournalWriter:
         self._next_sequence += 1
         return result
 
+    def synchronize_prefix(self) -> Result[None]:
+        """Refresh writer state and fsync every extant chunk in the held stream."""
+        return self._journal.refresh_and_sync_prefix(self._stream_name, self._writer)
+
     # --- internals ----------------------------------------------------------
 
     def _commit(

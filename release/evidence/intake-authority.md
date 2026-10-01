@@ -15,14 +15,16 @@ refuse, while a new revision appends a distinct observation. The same mapping is
 projected from the entire world journal across writer boot epochs.
 
 The authority uses one fixed `ct15-intake-authority` stream per world. Multiple
-handles resumed against the same JournalStore share its writer, canonical mapping,
-and reservation lock; every reservation rebuilds the mapping from checked CT-13
-events before it can reuse a key. Resume and reservation first append a recovery
-barrier and verify its typed physical store receipt against the exact raw row and a
-checked journal reopen. This fsync barrier makes a visible prefix usable only after
-a successful durability boundary, including after a prior append failed after its
-line became visible. Alternate stream names are refused so they cannot partition
-world-local key uniqueness.
+handles resumed against the same JournalStore share the canonical mapping and
+reservation lock. Initialization is serialized through publication of that shared
+coordinator. Every resume and reservation acquires a room-local OS lock, refreshes
+the writer sequence and stream index, rebuilds keys from checked CT-13 events, and
+persists a recovery barrier before proceeding. Prefix recovery fsyncs every extant
+rotation chunk and the stream directory metadata, so a barrier in a later chunk
+cannot authorize an earlier visible but unsynced intent. A blocked event is retried
+only if its sequence is still free or already contains that exact event; conflicting
+sequence history returns a typed refusal. Alternate stream names are refused so they
+cannot partition world-local key uniqueness.
 
 QMB marks CT-15 completion only after CT-10 returns an `ObservationReceipt` whose
 observation fp1 and retained archive receipt match the canonical row, then reads
@@ -32,20 +34,22 @@ the durable intent incomplete and return a typed refusal.
 
 The former assertion that any QMB-authored file implied a second data store was
 replaced with checks for the QMF CT-13 intent/completion and their full CT-10
-fingerprint. The regressions cover same-key restart idempotence, changed facts,
-new revisions, changed receive/writer metadata, and a real raw-room append whose
-acknowledgement is lost before reopening and replaying the retained intent.
+fingerprint. The regressions cover concurrent in-process resume initialization,
+two real filesystem-backed download processes sharing one writer sequence, same-key
+restart idempotence, changed facts, new revisions, changed receive/writer metadata,
+and an fsync fault in a rotated intent chunk followed by recovery that proves that
+prior chunk was synced before reuse.
 
 Validation run after the held-out corrections:
 
 ```text
-.venv/bin/python -m pytest -q -p no:cacheprovider -c pyproject.toml qmb/tests/test_data_download.py qa/tests/epic_18/test_e18_l2_download.py packages/qmf-data/tests/test_journal_producer.py packages/qmf-data/tests/test_source_boundary.py
-66 passed
+uv run --no-sync pytest qmb/tests/test_data_download.py qa/tests/epic_18/test_e18_l2_download.py packages/qmf-data/tests/test_journal_producer.py packages/qmf-data/tests/test_source_boundary.py -q
+68 passed
 
-.venv/bin/ruff check packages/qmf-data/src/qmf/data/intake_authority.py packages/qmf-data/src/qmf/data/__init__.py qmb/src/qmb/data/download.py qmb/tests/test_data_download.py --output-format concise
+uv run --no-sync ruff check packages/qmf-data/src/qmf/data/intake_authority.py packages/qmf-data/src/qmf/data/journal_producer.py packages/qmf-data/src/qmf/data/store/engines/__init__.py packages/qmf-data/src/qmf/data/store/engines/jsonl.py packages/qmf-data/src/qmf/data/store/journal.py packages/qmf-data/src/qmf/data/store/streams.py qmb/src/qmb/data/download.py qmb/tests/test_data_download.py --output-format concise
 All checks passed
 
-.venv/bin/pyright packages/qmf-data/src/qmf/data/intake_authority.py packages/qmf-data/src/qmf/data/__init__.py qmb/src/qmb/data/download.py
+uv run --no-sync python -m pyright packages/qmf-data/src/qmf/data/intake_authority.py packages/qmf-data/src/qmf/data/journal_producer.py packages/qmf-data/src/qmf/data/store/engines/__init__.py packages/qmf-data/src/qmf/data/store/engines/jsonl.py packages/qmf-data/src/qmf/data/store/journal.py packages/qmf-data/src/qmf/data/store/streams.py qmb/src/qmb/data/download.py
 0 errors, 0 warnings, 0 informations
 ```
 

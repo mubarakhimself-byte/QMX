@@ -100,6 +100,11 @@ class HeldStreams:
         self._open = open_stream
         self._held: dict[str, tuple[str, AppendStreamEngine]] = {}
 
+    @property
+    def base_dir(self) -> Path:
+        """The room root used for streams and cooperating boundary locks."""
+        return self._base
+
     def acquire(self, name: str, writer: WriterId) -> Result[AppendStreamEngine]:
         """The held stream for ``name`` under ``writer``, refusing a second writer.
 
