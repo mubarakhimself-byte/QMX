@@ -55,6 +55,8 @@ ALTERNATIVE_TERMINAL_CLASS = "qmb-alternative-terminal-v1"
 ALTERNATIVE_TERMINAL_EDGE_STREAM = "qmb-alternative-terminal-policy-pair"
 _ROW_CLASS = "qmb-alternative-terminal-row-v1"
 _INTENT_CLASS = "qmb-alternative-study-intent-v1"
+_START_CLASS = "qmb-alternative-study-start-v1"
+_STUDY_PHASE_PROTOCOL = 1
 
 
 def _plain(value: object) -> object:
@@ -393,6 +395,7 @@ class AlternativeTerminalStore:
             "format_version": 1,
             "intent_fp1": key,
             "journal_writer": _writer_identity(journal_writer),
+            "phase_protocol": _STUDY_PHASE_PROTOCOL,
             "sequence": len(rows.value) + 1,
             "source_fp1": parsed_source.value.value,
             "split_fp1": parsed_split.value.value,
@@ -414,10 +417,101 @@ class AlternativeTerminalStore:
         if is_refusal(reread):
             return reread
         if not any(
-            item.get("intent_fp1") == key and item.get("sequence") == len(rows.value) + 1
+            item == row
             for item in reread.value
         ):
-            return policy("trial_intent", "study intent append is physically read back")
+            return policy("trial_intent", "exact study intent bytes are physically read back")
+        return Ok(None)
+
+    def start_trial(
+        self,
+        *,
+        trial_label: object,
+        candidate_fp: object,
+        source_fp: object,
+        split_fp: object,
+    ) -> Result[None]:
+        """Persist the evaluator-start boundary before any candidate effects."""
+        from qmb.optimize.sampler import validate_trial_label  # noqa: PLC0415
+
+        label = validate_trial_label(trial_label)
+        candidate = _fp(
+            candidate_fp.value if isinstance(candidate_fp, Fingerprint) else candidate_fp,
+            "candidate_fp",
+        )
+        source = _fp(
+            source_fp.value if isinstance(source_fp, Fingerprint) else source_fp, "source_fp"
+        )
+        split = _fp(
+            split_fp.value if isinstance(split_fp, Fingerprint) else split_fp, "split_fp"
+        )
+        if is_refusal(label):
+            return label
+        if is_refusal(candidate):
+            return candidate
+        if is_refusal(source):
+            return source
+        if is_refusal(split):
+            return split
+        label_fp = fingerprint(cast("Mapping[str, object]", label.value))
+        if is_refusal(label_fp):
+            return label_fp
+        pending = self.pending_trials()
+        if is_refusal(pending):
+            return pending
+        intent = pending.value.get(label_fp.value.value)
+        if intent is None:
+            return policy("trial_start", "a matching durable reservation precedes evaluator start")
+        if intent.get("phase_protocol") != _STUDY_PHASE_PROTOCOL:
+            return policy("trial_start", "legacy reservations remain unresolved")
+        if intent.get("_started") is not False:
+            return policy("trial_start", "one evaluator-start phase exists per reservation")
+        stored_label = intent.get("trial_label")
+        stored_label_fp = (
+            fingerprint(cast("Mapping[str, object]", stored_label))
+            if isinstance(stored_label, Mapping)
+            else None
+        )
+        if (
+            intent.get("candidate_fp1") != candidate.value.value
+            or intent.get("source_fp1") != source.value.value
+            or intent.get("split_fp1") != split.value.value
+            or stored_label_fp is None
+            or is_refusal(stored_label_fp)
+            or stored_label_fp.value != label_fp.value
+        ):
+            return policy("trial_start", "start phase matches the exact reserved trial")
+        rows = self._read_raw_rows()
+        if is_refusal(rows):
+            return rows
+        start: dict[str, object] = {
+            "candidate_fp1": candidate.value.value,
+            "class": _START_CLASS,
+            "format_version": 1,
+            "intent_fp1": label_fp.value.value,
+            "sequence": len(rows.value) + 1,
+            "source_fp1": source.value.value,
+            "split_fp1": split.value.value,
+            "trial_label": label.value,
+            "writer": _writer_identity(self.writer),
+        }
+        encoded = canonical_bytes(start)
+        if is_refusal(encoded):
+            return encoded
+        written = append_bytes_no_follow(
+            self.path,
+            encoded.value + b"\n",
+            contain_within=self.root,
+            field="alternative_ledger",
+        )
+        if is_refusal(written):
+            return written
+        checked = self.pending_trials()
+        if is_refusal(checked):
+            return checked
+        confirmed = checked.value.get(label_fp.value.value)
+        if confirmed is None or confirmed.get("_started") is not True:
+            return policy("trial_start", "start phase is read back before evaluator entry")
         return Ok(None)
 
     def pending_trials(self) -> Result[Mapping[str, Mapping[str, object]]]:
@@ -434,6 +528,11 @@ class AlternativeTerminalStore:
             if (label_fp := _artifact_trial_label_fp(artifact)) is not None
         }
         intents: dict[str, Mapping[str, object]] = {}
+        started = {
+            cast("str", row["intent_fp1"])
+            for row in rows.value
+            if row.get("class") == _START_CLASS
+        }
         for row in rows.value:
             if row.get("class") != _INTENT_CLASS:
                 continue
@@ -442,7 +541,9 @@ class AlternativeTerminalStore:
                 continue
             if key in intents:
                 return policy("trial_intent", "one trial label has one durable invocation intent")
-            intents[key] = cast("Mapping[str, object]", _freeze(row))
+            item = dict(row)
+            item["_started"] = key in started
+            intents[key] = cast("Mapping[str, object]", _freeze(item))
         return Ok(MappingProxyType(intents))
 
     def _row_count(self) -> Result[int]:
@@ -523,11 +624,74 @@ class AlternativeTerminalStore:
                     return storage(
                         "trial_intent", "intent writer identity is canonical", index=index
                     )
+                protocol = row.get("phase_protocol")
+                if protocol is not None and (
+                    type(protocol) is not int or protocol != _STUDY_PHASE_PROTOCOL
+                ):
+                    return storage(
+                        "trial_intent", "intent declares a supported phase protocol", index=index
+                    )
+            elif row_class == _START_CLASS:
+                label = row.get("trial_label")
+                if not isinstance(label, Mapping):
+                    return storage(
+                        "trial_start", "start phase carries its exact trial label", index=index
+                    )
+                label_fp = fingerprint(cast("Mapping[str, object]", label))
+                if is_refusal(label_fp) or row.get("intent_fp1") != label_fp.value.value:
+                    return policy(
+                        "trial_start", "start phase label matches its intent identity", index=index
+                    )
+                for field in ("candidate_fp1", "source_fp1", "split_fp1"):
+                    parsed_fp = _fp(row.get(field), field)
+                    if is_refusal(parsed_fp):
+                        return parsed_fp
             elif row_class != _ROW_CLASS:
                 return storage(
                     "alternative_ledger", "terminal row uses a recognized class", index=index
                 )
             rows.append(row)
+        intents_by_fp = {
+            cast("str", row.get("intent_fp1")): row
+            for row in rows
+            if row.get("class") == _INTENT_CLASS
+        }
+        starts_seen: set[str] = set()
+        for row in rows:
+            if row.get("class") != _START_CLASS:
+                continue
+            key = cast("str", row["intent_fp1"])
+            intent = intents_by_fp.get(key)
+            start_label = row.get("trial_label")
+            intent_label = None if intent is None else intent.get("trial_label")
+            start_label_fp = (
+                fingerprint(cast("Mapping[str, object]", start_label))
+                if isinstance(start_label, Mapping)
+                else None
+            )
+            intent_label_fp = (
+                fingerprint(cast("Mapping[str, object]", intent_label))
+                if isinstance(intent_label, Mapping)
+                else None
+            )
+            if (
+                intent is None
+                or intent.get("phase_protocol") != _STUDY_PHASE_PROTOCOL
+                or key in starts_seen
+                or any(
+                    row.get(field) != intent.get(field)
+                    for field in (
+                        "intent_fp1", "candidate_fp1", "source_fp1", "split_fp1"
+                    )
+                )
+                or start_label_fp is None
+                or intent_label_fp is None
+                or is_refusal(start_label_fp)
+                or is_refusal(intent_label_fp)
+                or start_label_fp.value != intent_label_fp.value
+            ):
+                return policy("trial_start", "one start phase matches its versioned reservation")
+            starts_seen.add(key)
         return Ok(tuple(rows))
 
     def read(
@@ -587,7 +751,7 @@ class AlternativeTerminalStore:
             return rows
         artifacts: list[AlternativeTerminalArtifact] = []
         for index, row in enumerate(rows.value):
-            if row.get("class") == _INTENT_CLASS:
+            if row.get("class") in {_INTENT_CLASS, _START_CLASS}:
                 continue
             body = row.get("artifact")
             if not isinstance(body, Mapping):

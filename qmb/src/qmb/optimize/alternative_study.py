@@ -611,31 +611,51 @@ def run_alternative_study(
                 or prior_writer.value.stream != journal_writer.writer.stream
             ):
                 return policy("trial_intent", "retry context matches its pinned durable intent")
-            prior_journal_writer = JournalWriter.resume(journal_store, prior_writer.value)
-            if is_refusal(prior_journal_writer):
-                return prior_journal_writer
-            recovered = recover_alternative_run_receipt(
-                candidate.value,
-                source,
-                candidate_registry.value,
-                initial_accounting_state=initial_accounting_state,
-                expected_command_owner_epoch=candidate.value.command.command_owner_epoch,
-                journal_writer=prior_journal_writer.value,
-                journal_store=journal_store,
-                trial_label=label,
-            )
-            if is_refusal(recovered):
-                return recovered
-            return cast(
-                "Result[object]",
-                terminal_store.append(
-                    recovered.value,
+            if prior_intent.get("phase_protocol") != 1:
+                return unavailable(
+                    "trial_recovery",
+                    "legacy intent lacks a durable phase proving evaluator had not started",
+                )
+            if prior_intent.get("_started") is True:
+                prior_journal_writer = JournalWriter.resume(journal_store, prior_writer.value)
+                if is_refusal(prior_journal_writer):
+                    return prior_journal_writer
+                recovered = recover_alternative_run_receipt(
+                    candidate.value,
+                    source,
+                    candidate_registry.value,
+                    initial_accounting_state=initial_accounting_state,
+                    expected_command_owner_epoch=candidate.value.command.command_owner_epoch,
+                    journal_writer=prior_journal_writer.value,
                     journal_store=journal_store,
-                    registry=registry_persistence,
-                    lineage_writer=lineage_writer,
                     trial_label=label,
-                ),
-            )
+                )
+                if is_refusal(recovered):
+                    return unavailable(
+                        "trial_recovery",
+                        "started trial has no complete checked CT-13 chain; effects remain unknown",
+                        cause=recovered.category.value,
+                    )
+                return cast(
+                    "Result[object]",
+                    terminal_store.append(
+                        recovered.value,
+                        journal_store=journal_store,
+                        registry=registry_persistence,
+                        lineage_writer=lineage_writer,
+                        trial_label=label,
+                    ),
+                )
+            if prior_intent.get("_started") is not False:
+                return policy("trial_recovery", "reservation phase state is explicit")
+        started = terminal_store.start_trial(
+            trial_label=label,
+            candidate_fp=candidate.value.fingerprint,
+            source_fp=source.fingerprint,
+            split_fp=source_split_fp,
+        )
+        if is_refusal(started):
+            return started
         try:
             executed = cast(_ExecuteTrial, execute_trial)(
                 generation,

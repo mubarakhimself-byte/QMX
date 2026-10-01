@@ -47,12 +47,20 @@ NFR-03).
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from types import MappingProxyType
 from typing import Final, cast
 
-from qmf.core.exact import ExactRational, RoundingMode, UnitKind
+from qmf.core.exact import (
+    MONEY_STORAGE_SCALE,
+    ExactRational,
+    Money,
+    RoundingMode,
+    UnitKind,
+)
 from qmf.core.fingerprint import Fingerprint, World, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.risk.performance import FORBIDDEN_COMPOSITE_EXPRESSIONS, reject_composite_expression
@@ -90,9 +98,11 @@ __all__ = [
     "ObjectiveDistribution",
     "ParameterSlice",
     "SensitivityReport",
+    "SensitivitySample",
     "SliceBin",
     "WinnerStability",
     "build_sensitivity_report",
+    "build_sensitivity_report_from_samples",
     "refuse_search_quality_verdict",
     "sensitivity_identity",
 ]
@@ -546,6 +556,99 @@ class SensitivityReport:
         return content
 
 
+@dataclass(frozen=True, slots=True)
+class SensitivitySample:
+    """One exact, already-attributed trial sample for the shared pure report fold.
+
+    Ledger-backed Book callers still enter through :func:`build_sensitivity_report`.
+    Other governed compositions can provide their own verified durable samples
+    without manufacturing a ``LedgerLine`` or CT-32 identity.
+    """
+
+    trial_id: str
+    world: str
+    role: str
+    objective: Fraction
+    unit_kind: str
+    currency: str | None
+    assignment: Mapping[str, object]
+    taint: str
+
+    @classmethod
+    def try_create(
+        cls,
+        *,
+        trial_id: object,
+        world: object,
+        role: object,
+        objective: object,
+        unit_kind: object,
+        currency: object,
+        assignment: object,
+        taint: object,
+    ) -> Result[SensitivitySample]:
+        identifier = clean_token(trial_id)
+        world_token = clean_token(world)
+        role_token = _as_trial_role(role)
+        if identifier is None:
+            return invalid("trial_id", "a sensitivity sample has an exact durable trial identity")
+        if world_token not in {item.value for item in World}:
+            return invalid("world", "a sensitivity sample carries a declared QMF world")
+        if is_refusal(role_token):
+            return role_token
+        if isinstance(objective, bool):
+            return invalid("objective", "an exact sensitivity objective is never boolean")
+        if isinstance(objective, Fraction):
+            magnitude = objective
+        elif isinstance(objective, int):
+            magnitude = Fraction(objective)
+        else:
+            return invalid("objective", "a sensitivity objective is an exact rational value")
+        unit = clean_token(unit_kind)
+        if unit is None or unit not in {item.value for item in UnitKind}:
+            return invalid("unit_kind", "a sensitivity sample uses one exact CT-01 unit kind")
+        currency_token: str | None = None
+        if unit == UnitKind.MONEY.value:
+            currency_token = clean_token(currency)
+            if currency_token is None:
+                return invalid("currency", "money-valued samples retain their exact currency")
+            scaled = magnitude * (10**MONEY_STORAGE_SCALE)
+            if scaled.denominator != 1:
+                return invalid("objective", "money objective is representable at QMF storage scale")
+            money = Money.try_create(scaled.numerator, currency_token, MONEY_STORAGE_SCALE)
+            if is_refusal(money):
+                return money
+        elif currency is not None:
+            return invalid("currency", "non-money sensitivity samples carry no currency")
+        if not isinstance(assignment, Mapping) or not assignment:
+            return invalid("assignment", "a sensitivity sample has its exact parameter assignment")
+        normalized: dict[str, object] = {}
+        assignment_body = cast("Mapping[object, object]", assignment)
+        for name, value in assignment_body.items():
+            parameter = clean_token(name)
+            if parameter is None or parameter in normalized:
+                return invalid("assignment", "parameter names are unique non-empty tokens")
+            checked_value = _canon_value(parameter, value)
+            if is_refusal(checked_value):
+                return checked_value
+            normalized[parameter] = value
+        taint_token = clean_token(taint)
+        if taint_token is None or taint_token != TAINT_OPTIMISTIC:
+            return invalid("taint", "sensitivity retains the current optimistic execution taint")
+        return Ok(
+            cls(
+                trial_id=identifier,
+                world=world_token,
+                role=role_token.value,
+                objective=magnitude,
+                unit_kind=unit,
+                currency=currency_token,
+                assignment=MappingProxyType(normalized),
+                taint=taint_token,
+            )
+        )
+
+
 def build_sensitivity_report(
     lines: object,
     *,
@@ -610,6 +713,107 @@ def build_sensitivity_report(
         neighbourhood_override=parsed_neighbourhood.value,
         analysed=analysed,
         excluded=excluded,
+    )
+
+
+def build_sensitivity_report_from_samples(
+    samples: object,
+    *,
+    objective: object,
+    world: object = None,
+    direction: object = DIRECTION_MAX,
+    role: object = ROLE_TRIAL,
+    neighbourhood_size: object = None,
+) -> Result[SensitivityReport]:
+    """Fold typed exact samples from a verified non-LedgerLine composition.
+
+    This is the shared computational core for compositions whose governed source
+    is not Book CT-32. It accepts only typed exact trial samples, carries their
+    world/role/unit and optimistic taint, and uses the same analysis and report
+    schema as the ledger-backed Book entry point.
+    """
+    if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence):
+        return invalid("samples", "sensitivity samples are an ordered typed sequence")
+    objective_name = clean_token(objective)
+    if objective_name is None:
+        return invalid("objective", "a sensitivity objective has a declared measure identity")
+    lowered = objective_name.casefold()
+    for forbidden in FORBIDDEN_COMPOSITE_EXPRESSIONS:
+        boundary_match = re.search(
+            rf"(?<![a-z0-9]){re.escape(forbidden)}(?![a-z0-9])",
+            lowered,
+        )
+        if boundary_match is not None:
+            return reject_composite_expression(objective_name)
+    parsed_direction = _as_direction(direction)
+    if is_refusal(parsed_direction):
+        return parsed_direction
+    parsed_role = _as_trial_role(role)
+    if is_refusal(parsed_role):
+        return parsed_role
+    parsed_neighbourhood = _as_optional_size(neighbourhood_size)
+    if is_refusal(parsed_neighbourhood):
+        return parsed_neighbourhood
+    claimed = refuse_optimistic_edge_claim()
+    if is_refusal(claimed):
+        return claimed
+    expected_world = _world_token(world) if world is not None else None
+    if expected_world is not None and expected_world not in {item.value for item in World}:
+        return invalid("world", "sensitivity samples use a declared QMF world")
+    analyzed: list[_AnalysedTrial] = []
+    seen: set[str] = set()
+    selected_world: str | None = expected_world
+    for index, raw in enumerate(cast("Sequence[object]", samples)):
+        if type(raw) is not SensitivitySample:
+            return invalid("sample", "every sensitivity input is a typed exact sample", index=index)
+        checked = SensitivitySample.try_create(
+            trial_id=raw.trial_id,
+            world=raw.world,
+            role=raw.role,
+            objective=raw.objective,
+            unit_kind=raw.unit_kind,
+            currency=raw.currency,
+            assignment=raw.assignment,
+            taint=raw.taint,
+        )
+        if is_refusal(checked):
+            return checked
+        sample = checked.value
+        if sample.role != parsed_role.value:
+            return policy("role", "all samples share the requested completed-trial role")
+        if selected_world is None:
+            selected_world = sample.world
+        if sample.world != selected_world:
+            return policy("world", "a sensitivity report never mixes world labels")
+        if sample.trial_id in seen:
+            return policy("trial_id", "each durable trial appears once in sensitivity history")
+        seen.add(sample.trial_id)
+        assignment: dict[str, _ParamValue] = {}
+        for name, value in sample.assignment.items():
+            parameter = _canon_value(name, value)
+            if is_refusal(parameter):
+                return parameter
+            assignment[name] = parameter.value
+        analyzed.append(
+            _AnalysedTrial(
+                run_id=sample.trial_id,
+                world=sample.world,
+                objective=sample.objective,
+                unit_kind=sample.unit_kind,
+                currency=sample.currency,
+                assignment=assignment,
+            )
+        )
+    if selected_world is None:
+        return invalid("world", "an empty sensitivity sample set declares its world")
+    return _assemble_report(
+        objective=objective_name,
+        direction=parsed_direction.value,
+        world=selected_world,
+        role=parsed_role.value,
+        neighbourhood_override=parsed_neighbourhood.value,
+        analysed=analyzed,
+        excluded=[],
     )
 
 
