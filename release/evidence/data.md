@@ -118,3 +118,9 @@ until its integrity witness exists. Existing stores need no migration. An edge w
 the previous implementation that already lacks its witness has no intent record and stays
 fail-closed; it requires operator-directed recovery. This does not certify power-loss,
 Windows filesystem, deployed-storage, or universal durability behavior.
+
+## Independent Sol intake-refusal review — `bd0a7d28d0d9471d59d2dadac82c96b9b89162b6`
+
+Bounded correction approved. Actual download fetches the complete requested symbol set before opening world-scoped rooms or admitting records. Independent local provider fixture fetches valid EURUSD records then refuses GBPUSD: a new destination gains no world namespace/files; a previously populated destination retains byte-identical existing files. Single-symbol provider refusal also leaves no intake files. `/tmp/review_fetch_refusal.py` exercises the production download and genuine provider decoding without network calls or substituting intake results. This is provider-fetch refusal atomicity, not general rollback after a later storage/admission failure.
+
+Both example/test flaky-stream wrappers delegate refresh_and_sync_prefix to their real underlying engine, retaining actual durability synchronization rather than a dummy method. Independent data download, journal producer and QA18 download suites pass **55 tests**, including actual duplicate CT15 download/authority initialization and two-process shared sequence controls. Command `.venv/bin/python -m pytest -q -p no:cacheprovider qmb/tests/test_data_download.py packages/qmf-data/tests/test_journal_producer.py qa/tests/epic_18/test_e18_l2_download.py`. No product edits or credentials/provider calls.
