@@ -262,6 +262,10 @@ class BindingVirtualLedger:
             and not self._reservation_uncertain
         )
 
+    def uses_reservation_journal(self, journal: object) -> bool:
+        """Whether this ledger was constructed with this exact durable journal port."""
+        return self._reservation_journal is journal
+
     def recover_entry_reservations(self, recovery: object) -> Result[None]:
         """Rebuild pending occupancy from a complete ordered journal projection."""
         if not isinstance(recovery, EntryReservationRecovery):
