@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TypeVar
 
 from qmb.doors import api
@@ -43,6 +44,7 @@ from qmb.execution import (
     split_path_at,
 )
 from qmb.execution.cost import ZeroCostAdapter
+from qmb.execution.fill import entry_reference_price
 from qmb.runloop import (
     SAME_SLICE_NEW_INTENT_FILL,
     SUBPHASES,
@@ -143,6 +145,17 @@ def _bar(
             ask=None if ask is None else _price(ask),
         )
     )
+
+
+def _quote_path(
+    *, bid: int | None = 1_09900, ask: int | None = 1_10100, symbol: str = "EURUSD"
+) -> SlicePath:
+    instrument = Instrument(venue=VenueId(value=_VENUE), symbol=symbol)
+
+    def quote(value: int | None) -> Price | None:
+        return None if value is None else _ok(Price.try_create(value, instrument, 5))
+
+    return _ok(SlicePath.try_create("eurusd", (), bid=quote(bid), ask=quote(ask)))
 
 
 def _order(
@@ -263,6 +276,79 @@ def test_market_limit_stop_stop_limit_trailing_moo_moc() -> None:
     assert isinstance(moc_wait, NoFill)
     moc = _ok(_cross(_order(OrderType.MARKET_ON_CLOSE), _bar(session_close=True)))
     assert isinstance(moc, Fill)
+
+
+def test_quote_only_market_and_protective_stop_use_executable_side() -> None:
+    path = _quote_path()
+    assert _ok(entry_reference_price(path, _entry(Direction.LONG))) == _price(1_10100)
+    assert _ok(entry_reference_price(path, _entry(Direction.SHORT))) == _price(1_09900)
+    assert _ok(entry_reference_price(_bar(open_=1_10000), _entry())) == _price(1_10000)
+    long_market = _ok(_cross(_order(OrderType.MARKET), path))
+    short_market = _ok(_cross(_order(OrderType.MARKET, side=Direction.SHORT), path))
+    assert isinstance(long_market, Fill)
+    assert isinstance(short_market, Fill)
+    assert long_market.pre_slip_price == _price(1_10100)
+    assert short_market.pre_slip_price == _price(1_09900)
+    zero_slipped = _ok(ZeroSlippageAdapter().apply(long_market, path))
+    assert isinstance(zero_slipped, Fill)
+    assert zero_slipped.post_slip_price == _price(1_10100)
+
+    spread_calibration = _ok(
+        SlippageCalibration.try_create(
+            "spread-crossing", "broker-a", spread_fraction=_ratio(1, 2)
+        )
+    )
+    spread_adapter = SpreadCrossingSlippageAdapter(calibration=spread_calibration)
+    nonzero_impact = _ok(spread_adapter.apply(long_market, path))
+    # The declared half-spread impact is applied; with quote-only evidence and
+    # no observed print at the worse price, the legal-print gate refuses it.
+    assert isinstance(nonzero_impact, NoFill)
+
+    long_stop = _ok(_cross(_order(OrderType.STOP, stop=1_10050), path))
+    short_stop = _ok(
+        _cross(_order(OrderType.STOP, side=Direction.SHORT, stop=1_09950), path)
+    )
+    assert isinstance(long_stop, Fill)
+    assert isinstance(short_stop, Fill)
+    assert long_stop.pre_slip_price == _price(1_10100)
+    assert short_stop.pre_slip_price == _price(1_09900)
+    assert long_stop.gap_fill is True
+    assert short_stop.gap_fill is True
+
+    # A buy stop cannot use the bid to manufacture a trigger; a sell stop
+    # cannot use the ask either.
+    not_crossed_buy = _ok(_cross(_order(OrderType.STOP, stop=1_10150), path))
+    not_crossed_sell = _ok(
+        _cross(_order(OrderType.STOP, side=Direction.SHORT, stop=1_09850), path)
+    )
+    assert isinstance(not_crossed_buy, NoFill)
+    assert isinstance(not_crossed_sell, NoFill)
+
+
+def test_quote_only_requires_valid_two_sided_same_instrument_quotes() -> None:
+    crossed = _cross(_order(OrderType.MARKET), _quote_path(bid=1_10200, ask=1_10100))
+    assert is_refusal(crossed)
+    one_sided = _cross(_order(OrderType.MARKET), _quote_path(ask=1_10100, bid=None))
+    assert is_refusal(one_sided)
+    mismatched = _cross(_order(OrderType.MARKET), _quote_path(symbol="GBPUSD"))
+    assert is_refusal(mismatched)
+
+    valid = _quote_path()
+    malformed = replace(valid, bid=True)  # type: ignore[arg-type]
+    invalid_side = _cross(_order(OrderType.MARKET), malformed)
+    assert is_refusal(invalid_side)
+    malformed_value = replace(valid, bid=replace(_price(1_09900), value=True))  # type: ignore[arg-type]
+    invalid_integer = _cross(_order(OrderType.MARKET), malformed_value)
+    assert is_refusal(invalid_integer)
+
+    unsupported = _cross(
+        _order(OrderType.LIMIT, limit=1_10000), valid
+    )
+    assert is_refusal(unsupported)
+
+    no_quote_no_path = _ok(SlicePath.try_create("eurusd", ()))
+    unchanged_refusal = _cross(_order(OrderType.MARKET), no_quote_no_path)
+    assert is_refusal(unchanged_refusal)
 
 
 def test_all_or_none_any_leg_fail_nofills_group() -> None:

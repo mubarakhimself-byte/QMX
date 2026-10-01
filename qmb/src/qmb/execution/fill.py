@@ -53,6 +53,7 @@ __all__ = [
     "OrderType",
     "cross_declared_path",
     "default_fill_order",
+    "entry_reference_price",
     "fill_all_or_none",
     "fill_pipeline_identity",
     "path_ohlc",
@@ -401,6 +402,27 @@ def cross_declared_path(
         return _nofill_value(NOFILL_STALE_DATA)
     if ticket.value.order_type is OrderType.ALL_OR_NONE:
         return _nofill_value(NOFILL_ALL_OR_NONE_LEG_FAILED)
+    if _quote_only_path(path):
+        expected_instrument = (
+            authorized.value.instrument
+            if isinstance(authorized.value, EntryIntent)
+            else ticket.value.stop_price.instrument
+            if ticket.value.stop_price is not None
+            else None
+        )
+        quoted = _cross_quote_only(ticket.value, path, expected_instrument)
+        if is_refusal(quoted):
+            return quoted
+        if isinstance(quoted.value, NoFill):
+            return _as_fill(quoted.value)
+        pre_slip, gap = quoted.value
+        return _emit(
+            ticket.value,
+            requested_quantity=ticket.value.quantity,
+            pre_slip=pre_slip,
+            fill_basis=basis.value,
+            gap_fill=gap,
+        )
     ohlc = path_ohlc(path)
     if is_refusal(ohlc):
         return ohlc
@@ -428,6 +450,109 @@ def cross_declared_path(
         fill_basis=basis.value,
         gap_fill=gap,
     )
+
+
+def _quote_only_path(path: SlicePath) -> bool:
+    """Whether the declared slice contains quote sides but no trade path."""
+    return (
+        not path.prints
+        and path.open is None
+        and path.high is None
+        and path.low is None
+        and path.close is None
+        and (path.bid is not None or path.ask is not None)
+    )
+
+
+def entry_reference_price(path: object, intent: object) -> Result[Price]:
+    """Recorded executable price used to admit an entry on its source slice.
+
+    Existing OHLC/print paths keep their declared opening-price behavior. A
+    quote-only path uses the direction's executable side and never synthesizes
+    a midpoint or bar value.
+    """
+    authorized = require_authorized_intent(intent)
+    if is_refusal(authorized):
+        return authorized
+    if not isinstance(authorized.value, EntryIntent):
+        return invalid("intent", "entry reference pricing consumes an EntryIntent")
+    if not isinstance(path, SlicePath):
+        return invalid("path", "entry reference pricing consumes a SlicePath")
+    if _quote_only_path(path):
+        side = authorized.value.direction
+        return _quote_reference_price(path, side, authorized.value.instrument)
+    prices = path_ohlc(path)
+    if is_refusal(prices):
+        return prices
+    return Ok(prices.value[0])
+
+
+def _quote_reference_price(
+    path: SlicePath, side: Direction, expected_instrument: object
+) -> Result[Price]:
+    raw_bid: object = getattr(path, "bid", None)
+    raw_ask: object = getattr(path, "ask", None)
+    if raw_bid is None or raw_ask is None:
+        return invalid("quote", "quote-only crossing requires both bid and ask")
+    if not isinstance(raw_bid, Price) or not isinstance(raw_ask, Price):
+        return invalid("quote", "quote-only sides are typed exact prices")
+    bid, ask = raw_bid, raw_ask
+    if (
+        type(bid.value) is not int
+        or type(ask.value) is not int
+        or type(bid.scale) is not int
+        or type(ask.scale) is not int
+        or bid.scale <= 0
+        or ask.scale <= 0
+    ):
+        return invalid("quote", "quote-only sides carry exact integer values and scales")
+    if bid.instrument != ask.instrument or bid.scale != ask.scale:
+        return invalid("quote", "bid and ask share one instrument and price scale")
+    if expected_instrument is not None and bid.instrument != expected_instrument:
+        return invalid("quote", "quote instrument matches the authorized instrument")
+    if bid.value >= ask.value:
+        return invalid("quote", "recorded bid is below the recorded ask")
+    return Ok(ask if side is Direction.LONG else bid)
+
+
+def _cross_quote_only(
+    order: FillOrder, path: SlicePath, expected_instrument: object
+) -> Result[tuple[Price, bool] | NoFill]:
+    """Cross only executable sides explicitly recorded on a quote-only CT10 slice."""
+    if order.order_type not in (OrderType.MARKET, OrderType.STOP):
+        return invalid(
+            "order_type",
+            "quote-only crossing is characterized for market and protective stop orders",
+            given=order.order_type.value,
+        )
+    side_price_result = _quote_reference_price(
+        path,
+        order.side,
+        expected_instrument
+        if expected_instrument is not None
+        else order.stop_price.instrument if order.stop_price is not None else None,
+    )
+    if is_refusal(side_price_result):
+        return side_price_result
+    side_price = side_price_result.value
+    reference = order.stop_price if order.order_type is OrderType.STOP else None
+    if reference is not None and (
+        reference.instrument != side_price.instrument
+        or reference.scale != side_price.scale
+    ):
+        return invalid("stop_price", "the stop and executable quote share identity")
+    if order.order_type is OrderType.MARKET:
+        return _priced_hit(side_price, False)
+    if reference is None:
+        return invalid("stop_price", "a stop order names an exact stop price")
+    triggered = (
+        side_price.value >= reference.value
+        if _is_buy(order)
+        else side_price.value <= reference.value
+    )
+    if not triggered:
+        return _priced_none(NOFILL_NOT_TRIGGERED)
+    return _priced_hit(side_price, side_price.value != reference.value)
 
 
 def fill_all_or_none(
