@@ -1,0 +1,9 @@
+# Installed research save and orderly reopen
+
+Command: `/workspace/qmx-installed-replay-candidate/venv/bin/python -I /workspace/qmx-installed-research-smoke.py` from `/workspace`; exit 0. Trace: `/workspace/qmx-installed-research-smoke.log`. Installed snapshot is `1c4c73b1e51e9194464601830e7543ecd1108b6d`, not the final candidate.
+
+The driver imports the labeled source fixture from `qmb/tests/test_ql7_graduation_recovery.py`; no test framework is installed into the product environment. Isolated Python ignores source PYTHONPATH, and explicit module-origin assertions confirm QMB, QMF core and QML come from that non-editable installation's site-packages. It saves canonical Stage0 research, reads/restores the same reference, performs pure graduation, persists the promoted-from CT07 edge, closes/reopens RegistryPersistence and compares the edge target to the separately restored research fingerprint. Retained state: `/workspace/qmx-installed-research-v5h6k1yd`.
+
+Result: PASS for this normal installed library save/orderly-reopen path. Root's matching source test plus existing research-host store suite passed 6 tests (`/workspace/qmx-qml-graduation-reopen-root.log`); independent combined QML/QMB review passed 13. This is local fixture execution, not financial/provider execution, source loading from a promoted Bot registration, crash/fsync durability, full application or final installed acceptance.
+
+Independent review subsequently reproduced research-store symlink escape and noncanonical foreign-reference writes. See `qml-evidence-integrity-review.md`; those are real security/correctness failures under repair. This positive deliberately does not imply that the installed older snapshot's store is secure or release-ready. Repeat against the final repaired frozen installation, including the hostile controls.
