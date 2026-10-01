@@ -9,17 +9,24 @@ time doubles — no real systemd host is required.
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import os
+import signal
 import socket
+import sys
+import time
 from collections.abc import Mapping, MutableSequence, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Literal, Protocol, cast
 
 from qmf.core.refusal import Ok, Result, is_refusal
 
-from qmn.host._refuse import clean_token, invalid, policy
+from qmn.host._refuse import clean_token, invalid, policy, unavailable
 
 __all__ = [
     "ASYNC_ALLOWED_SURFACES",
@@ -53,6 +60,7 @@ __all__ = [
     "SupervisionConfig",
     "admit_under_lifecycle",
     "evaluate_safe_point",
+    "main",
     "notify_ready",
     "notify_watchdog",
     "notify_watchdog_trigger",
@@ -241,6 +249,134 @@ def supervision_process_model() -> Mapping[str, object]:
             "drain_window_breach_exit_code": DRAIN_WINDOW_BREACH_EXIT_CODE,
         }
     )
+
+
+def main() -> int:
+    """Run the configured provider-free stand-down supervisor process.
+
+    This release has no production venue adapter composed into the process yet.
+    The service therefore stays alive and serves local status while reporting
+    execution unavailable. ``READY=1`` means only that this supervisor and its
+    status door are running; it is not trading readiness.
+    """
+    configured = _process_configuration()
+    if is_refusal(configured):
+        print(f"qmn supervisor refused configuration: {dict(configured.context)}", file=sys.stderr)
+        return 2
+    root, state, bind_host, bind_port = configured.value
+    del root, state
+
+    stopped = False
+
+    def request_stop(_signum: int, _frame: object) -> None:
+        nonlocal stopped
+        stopped = True
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
+
+    class StatusHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/healthz":
+                status = 200
+                body = {"process": "alive", "trading": "stand-down"}
+            elif self.path == "/readiness":
+                status = 503
+                body = {
+                    "process": "alive",
+                    "state": "stand-down-alive",
+                    "trading": "unavailable",
+                    "reason": "production venue adapter is not composed",
+                }
+            else:
+                status = 404
+                body = {"error": "not found"}
+            encoded = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format
+            del args
+
+    try:
+        server = HTTPServer((bind_host, bind_port), StatusHandler)
+        server.timeout = 0.25
+    except OSError as exc:
+        print(f"qmn supervisor could not bind evidence status door: {exc}", file=sys.stderr)
+        return 2
+    ready = notify_ready()
+    if is_refusal(ready):
+        server.server_close()
+        print(f"qmn supervisor sd_notify READY failed: {dict(ready.context)}", file=sys.stderr)
+        return 2
+    last_watchdog = time.monotonic()
+    watchdog_usec = _watchdog_interval_usec()
+    try:
+        while not stopped:
+            server.handle_request()
+            if (
+                watchdog_usec is not None
+                and time.monotonic() - last_watchdog >= watchdog_usec / 2_000_000
+            ):
+                watched = notify_watchdog()
+                if is_refusal(watched):
+                    print("qmn supervisor watchdog notification failed", file=sys.stderr)
+                    return 2
+                last_watchdog = time.monotonic()
+    finally:
+        server.server_close()
+        sd_notify("STOPPING=1")
+    return 0
+
+
+def _process_configuration() -> Result[tuple[Path, Path, str, int]]:
+    """Validate required local paths and loopback status bind before READY."""
+    root_raw = os.environ.get("QMX_ROOT")
+    state_raw = os.environ.get("QMX_STATE")
+    bind_raw = os.environ.get("QMN_EVIDENCE_BIND")
+    if not root_raw or not state_raw or not bind_raw:
+        return unavailable(
+            "supervisor_configuration",
+            "QMX_ROOT, QMX_STATE, and QMN_EVIDENCE_BIND are required",
+        )
+    root = Path(root_raw)
+    state = Path(state_raw)
+    if not root.is_absolute() or not root.is_dir() or not os.access(root, os.R_OK):
+        return unavailable("qmx_root", "QMX_ROOT must be an absolute readable directory")
+    if not state.is_absolute() or not state.is_dir() or not os.access(state, os.R_OK | os.W_OK):
+        return unavailable(
+            "qmx_state", "QMX_STATE must be an absolute readable and writable directory"
+        )
+    host, separator, port_raw = bind_raw.rpartition(":")
+    if not separator or not port_raw.isdecimal():
+        return invalid("evidence_bind", "QMN_EVIDENCE_BIND uses loopback IPv4 host:port")
+    try:
+        address = ipaddress.ip_address(host)
+        port = int(port_raw)
+    except ValueError:
+        return invalid(
+            "evidence_bind",
+            "QMN_EVIDENCE_BIND uses a numeric loopback IPv4 address and port",
+        )
+    if address.version != 4 or not address.is_loopback or not 0 < port < 65536:
+        return policy("evidence_bind", "status door binds only to loopback IPv4 and a valid port")
+    return Ok((root, state, host, port))
+
+
+def _watchdog_interval_usec() -> int | None:
+    """Read systemd's watchdog interval, if configured, without ambient probing."""
+    raw = os.environ.get("WATCHDOG_USEC")
+    if raw is None or not raw.isdecimal() or int(raw) <= 0:
+        return None
+    return int(raw)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 @dataclass(frozen=True, slots=True)
