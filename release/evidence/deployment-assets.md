@@ -69,3 +69,24 @@ Process ids were 52414 and 52474. Reproducible smoke script:
 host lifecycle for that recorded SHA, not later source repairs or full release
 acceptance. No deployment script, system service or provider act was invoked.
 Native Windows and connected product execution remain pending.
+
+
+Installed node entrypoint: `/workspace/qmx-installed-assets-candidate/venv/bin/python -m qmn.host.supervise`, cwd `/workspace`, explicit QMX_ROOT installed path,
+QMX_STATE `/tmp/qmx-installed-node-x5poy4cz`, loopback QMN_EVIDENCE_BIND,
+ran twice with SIGTERM shutdown. Health 200/alive/stand-down, readiness
+503/stand-down-alive/trading unavailable and both exits 0: PASS
+(`/workspace/qmx-assets-node-smoke.py`, `/workspace/qmx-assets-node-smoke.log`).
+Installed QMF `EvidenceStore` + `JournalReader.read_checked('node-supervision',
+for_world=World.LIVE, expected_start=0)` reopened the same evidence path:
+exactly two typed events with distinct WriterId boot epochs, PASS
+(`/workspace/qmx-assets-node-readback.log`). This is provider-free supervised
+process recovery, not node trading activation. That candidate emits a runpy
+eager-import RuntimeWarning; node owner notified for a later candidate repair.
+
+An additional acceptance manifest binds the actual installed-launch command
+and trace to the same 38-artifact inventory:
+`/workspace/qmx-bundle-assets-candidate/acceptance-lifecycle.json`.
+`uv run --no-sync python tools/release_gate.py <that manifest>` correctly
+returns FAIL for the 16 remaining mandatory lanes; installed_launch no longer
+reports missing. Exact log `/workspace/qmx-assets-recorded-acceptance-gate.log`.
+No other candidate's tests were relabeled as this candidate's acceptance.
