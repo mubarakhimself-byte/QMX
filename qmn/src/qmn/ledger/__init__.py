@@ -35,6 +35,7 @@ from qmn.ledger.epoch import (
     require_epoch_state_carry,
     validate_state_carry_declaration,
 )
+from qmn.ledger.reservation_journal import QmfEntryReservationJournal
 from qmn.ledger.treasury import (
     TREASURY_BOUNDARY_KINDS,
     TreasuryBoundaryAct,
@@ -89,6 +90,7 @@ __all__ = [
     "PartialEntryRebase",
     "PositionKind",
     "PositionModelKind",
+    "QmfEntryReservationJournal",
     "QuantityReconcileResult",
     "TreasuryBoundaryAct",
     "TreasuryBoundaryActKind",

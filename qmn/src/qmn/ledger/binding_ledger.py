@@ -275,6 +275,7 @@ class BindingVirtualLedger:
             recovery.binding_epoch != self.binding_epoch
             or not recovery.complete
             or recovery.committed_high_water != len(recovery.events)
+            or recovery.committed_high_water < self._reservation_sequence
         ):
             return policy(
                 "reservation_recovery",

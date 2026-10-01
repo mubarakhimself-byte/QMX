@@ -12,6 +12,7 @@ from qmf.core import (
     DataDrivenClock,
     Duration,
     ExactRational,
+    Fingerprint,
     Instant,
     Instrument,
     Money,
@@ -77,6 +78,7 @@ from qml.protocol import (
 )
 from qmn.journal_dispatch import RecordingJournalSink
 from qmn.ledger import EntryReservationEvent, EntryReservationRecovery, seed_binding_ledger
+from qmn.ledger.binding_ledger import BindingVirtualLedger
 from qmn.order.identity import NativeExecutionMap, NativeExecutionMapping
 from qmn.order.protection import ENTRY_RELATIVE_FORM
 from qmn.promotion import AdmissionLayerFreshState
@@ -406,13 +408,16 @@ def _path(
     *,
     bms: str | None = None,
     binding_record: BookBindingRecord | None = None,
-    ledger_epoch: object = None,
-    reservation_recovery: object = None,
+    ledger_epoch: Fingerprint | None = None,
+    reservation_recovery: EntryReservationRecovery | None = None,
+    reservation_journal: RecordingJournalSink | None = None,
 ) -> BookPathContext:
     binding = binding_record if binding_record is not None else _book_binding_record()
     epoch = _ok(binding.fingerprint())
     position_epoch = ledger_epoch if ledger_epoch is not None else epoch
-    reservation_journal = RecordingJournalSink()
+    reservation_journal = (
+        RecordingJournalSink() if reservation_journal is None else reservation_journal
+    )
     recovery = (
         EntryReservationRecovery(position_epoch, (), 0, True)
         if reservation_recovery is None
@@ -665,7 +670,7 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
         ),
     )
     _ok(
-        path.position_ledger.observe_submission_outcome(
+        cast(BindingVirtualLedger, path.position_ledger).observe_submission_outcome(
             "EURUSD", command_id, unknown
         )
     )
@@ -687,7 +692,7 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
         ),
     )
     _ok(
-        path.position_ledger.observe_submission_outcome(
+        cast(BindingVirtualLedger, path.position_ledger).observe_submission_outcome(
             "EURUSD", command_id, rejected
         )
     )
@@ -696,21 +701,27 @@ def test_hosted_entry_reservation_survives_dispatch_until_terminal_resolution() 
 
 def test_pending_entry_recovers_from_committed_journal_events_after_restart() -> None:
     admitted = _ok(_propose())
-    path = _path()
+    journal = RecordingJournalSink()
+    path = _path(reservation_journal=journal)
     _ok(dispatch_hosted_intents(admitted, (_entry(),), path=path))
-    journal = path.position_ledger._reservation_journal
-    assert isinstance(journal, RecordingJournalSink)
     parsed_events = tuple(
         _ok(EntryReservationEvent.from_mapping(event)) for event in journal.appended
     )
     recovery = EntryReservationRecovery(
-        _ok(path.binding_record.fingerprint()),
+        _ok(cast(BookBindingRecord, path.binding_record).fingerprint()),
         parsed_events,
         len(parsed_events),
         True,
     )
+    stale_projection = EntryReservationRecovery(recovery.binding_epoch, (), 0, True)
+    downgrade = _refusal(
+        cast(BindingVirtualLedger, path.position_ledger).recover_entry_reservations(
+            stale_projection
+        )
+    )
+    assert downgrade.context["field"] == "reservation_recovery"
     recovered_path = _path(
-        binding_record=path.binding_record,
+        binding_record=cast(BookBindingRecord, path.binding_record),
         reservation_recovery=recovery,
     )
     refused = _refusal(
@@ -720,20 +731,23 @@ def test_pending_entry_recovers_from_committed_journal_events_after_restart() ->
 
 
 def test_uncertain_reservation_append_latches_entry_admission_closed() -> None:
-    path = _path()
-    journal = path.position_ledger._reservation_journal
-    assert isinstance(journal, RecordingJournalSink)
+    journal = RecordingJournalSink()
+    path = _path(reservation_journal=journal)
+    ledger = cast(BindingVirtualLedger, path.position_ledger)
     journal.partial = True
     identity = _ok(fingerprint({"command": "uncertain-reservation-test"}))
-    refused = _refusal(path.position_ledger.reserve_entry("EURUSD", identity))
+    refused = _refusal(ledger.reserve_entry("EURUSD", identity))
     assert refused.context["field"] == "reservation_journal"
-    retry = _refusal(path.position_ledger.reserve_entry("EURUSD", identity))
+    retry = _refusal(ledger.reserve_entry("EURUSD", identity))
     assert retry.context["field"] == "reservation_journal"
     incomplete = EntryReservationRecovery(
-        _ok(path.binding_record.fingerprint()), (), 0, False
+        _ok(cast(BookBindingRecord, path.binding_record).fingerprint()), (), 0, False
     )
-    not_recovered = _refusal(path.position_ledger.recover_entry_reservations(incomplete))
+    not_recovered = _refusal(ledger.recover_entry_reservations(incomplete))
     assert not_recovered.context["field"] == "reservation_recovery"
+    empty_recovery = EntryReservationRecovery(incomplete.binding_epoch, (), 0, True)
+    _ok(ledger.recover_entry_reservations(empty_recovery))
+    assert ledger.reservation_admission_ready
 
 
 def test_ledger_binding_epoch_must_match_admitted_binding() -> None:
