@@ -153,3 +153,14 @@ FunctionFactory and construct_bot accept an injected factory and do not expose a
 Exact held logic.py SHA256 `1bb56183654c5e9d663e23f8013940758fccd56f7875e723983f014d82061e14`; catalog characterization test `4635489c2711b2a63b3d704e709de027086054118df4203f4ac97d8ef5a8e626`. Independent Layer1/catalog/logic suites: 44 passed. Original nominal source_manifest=None in both duplicate orders now typed-refuses, as do malformed nominal fingerprint and actual canonical-field mapping/wrapped mapping variants. Exact duplicates and two valid distinct source manifests sharing distribution/version admit the explicitly cited full tuple in either order. Wrong-key foreign content remains refused. Valid public lint followed by construct_bot with FunctionFactory and canonical lookback assignment succeeds. No registered-factory catalog authority or factory-byte certification is invented.
 
 Candidate census now revalidates nominal LogicIdentity and surfaces malformed candidates claiming the cited distribution/version before choosing a full-tuple match, preserving valid different source identities. Scope closes the finite exception/order defect; coverage floor remains unchanged and no final candidate approval follows.
+
+
+### Public Bot construction nominal declaration bypass — actual FAIL
+
+Coverage-guided lifecycle exploration uses stale diagnostic qmx-qml-logic-reviewed-coverage.json only to locate public boundaries; no quota/padding claim. Actual public construct_bot control uses a genuine `_recording_world` BotDefinition and counting Factory.construct: valid nominal declaration returns Ok and initializes once. Copy its public body mapping, set mandatory logic_reference=None: construct_bot returns typed refusal and does not initialize again. Instead ordinary dataclasses.replace(valid, logic_reference=None) returns Ok and initializes the factory a second time. No object.__setattr__, custom canonical object or private factory registry is involved.
+
+Both protocol/factory.py _as_bot_definition and BotDefinition.try_from_mapping short-circuit nominal declarations. This bypasses the mandatory CT33 sixth semantic group before user factory effects. Narrow repair is validating nominal declaration content through official field validators before factory initialization, preserving valid canonical identity and exact types. It does not require a catalog API for FunctionFactory or a full registry gate inside generic construct_bot. Positive controls must include valid public mint, equivalent valid mapping, invalid nominal/mapping same refusal with zero factory init, and avoid losing preserved assignment/surface/scope behavior. Root notified; no product/test edits.
+
+Observed source hashes:
+- `qml/src/qml/protocol/factory.py`: `534c307930691f7c4929066ed5fb2a8566cc182fd7c5d2c902f1088b557d949c`
+- `qml/src/qml/declaration/bot.py`: `83f9280912a83bcd17f6169c942758cf36248456a34ece6fdbf7e7b589c1c61a`
