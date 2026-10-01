@@ -1303,7 +1303,9 @@ designed failure; every typed refusal the node can emit belongs here.
   artifact (`mis.regime_eval.incomplete_training`), invent a CLI JSON
   loader (`mis.regime_eval.cli_loader`), or a rerun mismatches identical
   inputs (`mis.regime_eval.reproducibility_mismatch`); also holdout-leak
-  contract breach (`mis.regime_eval.holdout_leak`), missing LightGBM on a
+  contract breach (`mis.regime_eval.holdout_leak`), a requested evaluation
+  backend disagrees with the trained artifact encoding
+  (`mis.regime_eval.backend_artifact_mismatch`), missing LightGBM on a
   lightgbm backend (`mis.regime_eval.lightgbm_missing`), insufficient
   train/validation/holdout rows (`mis.regime_eval.insufficient_train_rows`
   / `mis.regime_eval.insufficient_validation_rows` /

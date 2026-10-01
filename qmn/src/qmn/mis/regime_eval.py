@@ -703,9 +703,23 @@ def build_evaluation_config(
             "backend is deterministic-surrogate or lightgbm",
             given=repr(backend),
         )
-    # Tests and poe never run LightGBM; operator machines may choose it.
-    if backend_token == EVALUATION_BACKEND_LIGHTGBM and _model_is_surrogate(artifact.model_text):
-        backend_token = EVALUATION_BACKEND_DETERMINISTIC
+    artifact_is_surrogate = _model_is_surrogate(artifact.model_text)
+    if backend_token == EVALUATION_BACKEND_LIGHTGBM and artifact_is_surrogate:
+        return policy(
+            "backend",
+            "explicit LightGBM evaluation requires a trained LightGBM artifact",
+            failure_id="mis.regime_eval.backend_artifact_mismatch",
+            backend=backend_token,
+            artifact_encoding="deterministic-surrogate",
+        )
+    if backend_token == EVALUATION_BACKEND_DETERMINISTIC and not artifact_is_surrogate:
+        return policy(
+            "backend",
+            "deterministic-surrogate evaluation requires its declared surrogate artifact",
+            failure_id="mis.regime_eval.backend_artifact_mismatch",
+            backend=backend_token,
+            artifact_encoding="lightgbm",
+        )
 
     labeled_fp = labeled.fingerprint()
     if is_refusal(labeled_fp):
@@ -1301,9 +1315,26 @@ def _model_is_surrogate(model_text: str) -> bool:
 
 
 def _select_predictor(backend: str, model_text: str) -> Result[PredictFn]:
-    if _model_is_surrogate(model_text) or backend == EVALUATION_BACKEND_DETERMINISTIC:
+    is_surrogate = _model_is_surrogate(model_text)
+    if backend == EVALUATION_BACKEND_DETERMINISTIC:
+        if not is_surrogate:
+            return policy(
+                "backend",
+                "deterministic-surrogate evaluation requires its declared surrogate artifact",
+                failure_id="mis.regime_eval.backend_artifact_mismatch",
+                backend=backend,
+                artifact_encoding="lightgbm",
+            )
         return Ok(_deterministic_surrogate_predict)
     if backend == EVALUATION_BACKEND_LIGHTGBM:
+        if is_surrogate:
+            return policy(
+                "backend",
+                "explicit LightGBM evaluation requires a trained LightGBM artifact",
+                failure_id="mis.regime_eval.backend_artifact_mismatch",
+                backend=backend,
+                artifact_encoding="deterministic-surrogate",
+            )
         if importlib.util.find_spec("lightgbm") is None:
             return policy(
                 "backend",

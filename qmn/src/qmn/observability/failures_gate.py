@@ -214,6 +214,7 @@ DESIGNED_TYPED_FAILURE_IDS: Final[frozenset[str]] = frozenset(
         "mis.regime_labels.no_training",
         "mis.regime_labels.sealed_holdout_peek",
         "mis.regime_eval.artifact_mutation",
+        "mis.regime_eval.backend_artifact_mismatch",
         "mis.regime_eval.cli_loader",
         "mis.regime_eval.empty_predictions",
         "mis.regime_eval.holdout_leak",

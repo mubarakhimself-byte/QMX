@@ -213,6 +213,41 @@ def test_identical_inputs_reproduce_evaluation_report(tmp_path: Path) -> None:
     assert _ok(assert_evaluation_reproducible(second, _ok(first.governed_fingerprint())))
 
 
+def test_explicit_lightgbm_refuses_deterministic_surrogate_artifact(tmp_path: Path) -> None:
+    from qmn.mis.regime_eval import EVALUATION_BACKEND_LIGHTGBM, build_evaluation_config
+
+    cleaned, labeled, artifact = _trained(tmp_path)
+    result = build_evaluation_config(
+        artifact=artifact,
+        labeled=labeled,
+        cleaned=cleaned,
+        output_dir=str(tmp_path / "mismatch"),
+        backend=EVALUATION_BACKEND_LIGHTGBM,
+    )
+    assert is_refusal(result)
+    assert result.context.get("failure_id") == "mis.regime_eval.backend_artifact_mismatch"
+
+
+def test_predictor_refuses_backend_artifact_mismatch_and_keeps_surrogate_positive() -> None:
+    from qmn.mis.regime_eval import (
+        EVALUATION_BACKEND_DETERMINISTIC,
+        EVALUATION_BACKEND_LIGHTGBM,
+        _select_predictor,  # pyright: ignore[reportPrivateUsage] -- artifact encoding mismatch is a private predictor invariant not constructible through valid TrainingArtifact fixtures.
+    )
+
+    surrogate = "qmx_deterministic_surrogate_lightgbm_text_v1\\n{}"
+    selected = _select_predictor(EVALUATION_BACKEND_DETERMINISTIC, surrogate)
+    assert is_ok(selected)
+    mismatch = _select_predictor(EVALUATION_BACKEND_LIGHTGBM, surrogate)
+    assert is_refusal(mismatch)
+    assert mismatch.context.get("failure_id") == "mis.regime_eval.backend_artifact_mismatch"
+
+    non_surrogate = '{"backend":"lightgbm"}'
+    inverse_mismatch = _select_predictor(EVALUATION_BACKEND_DETERMINISTIC, non_surrogate)
+    assert is_refusal(inverse_mismatch)
+    assert inverse_mismatch.context.get("failure_id") == "mis.regime_eval.backend_artifact_mismatch"
+
+
 def test_policy_refusals_for_profit_live_threshold_and_mutation() -> None:
     cleaned, labeled = _prepared()
     assert is_refusal(refuse_profit_inference(claim="pnl"))
