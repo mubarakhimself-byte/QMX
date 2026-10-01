@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import TypeVar
+
 from qmb.optimize import (
     STUDY_GENERATION_DRIVER_WRITES_EVIDENCE,
     PriorTrial,
+    ProposedTrial,
     StudyStepper,
     coerce_study_space,
     run_study_generations,
@@ -13,8 +17,10 @@ from qmf.core.exact import UnitKind
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import Ok, Result, is_ok, is_refusal
 
+T = TypeVar("T")
 
-def _ok(result: Result[object]) -> object:
+
+def _ok(result: Result[T]) -> T:
     assert is_ok(result), result
     return result.value
 
@@ -49,7 +55,11 @@ def test_generation_driver_reads_back_every_trial_before_advancing() -> None:
     ledger_view: dict[tuple[int, int], PriorTrial] = {}
     execution_order: list[tuple[int, int]] = []
 
-    def execute(generation: int, proposal: object, label: object) -> Result[object]:
+    def execute(
+        generation: int,
+        proposal: ProposedTrial,
+        label: Mapping[str, object],
+    ) -> Result[object]:
         assert label["generation_index"] == generation
         assignment = proposal.assignment
         execution_order.append((generation, proposal.ask_index))
@@ -83,10 +93,16 @@ def test_generation_driver_reads_back_every_trial_before_advancing() -> None:
 
 
 def test_generation_driver_does_not_advance_on_unread_trial() -> None:
+    def execute_trial(*_args: object) -> Result[object]:
+        return Ok(None)
+
+    def missing_ledger_row(_generation: int, _ask: int) -> Result[object]:
+        return Ok(None)
+
     outcome = run_study_generations(
         _stepper(),
         generation_count=1,
-        execute_trial=lambda *_: Ok(None),
-        read_trial=lambda *_: Ok(None),  # type: ignore[arg-type]
+        execute_trial=execute_trial,
+        read_trial=missing_ledger_row,
     )
     assert is_refusal(outcome)

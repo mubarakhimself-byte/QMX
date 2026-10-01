@@ -1,40 +1,44 @@
 from pathlib import Path
+from typing import Any, TypeVar
 from unittest.mock import patch
 
 from qmf.core import World, WriterId, is_ok, is_refusal
+from qmf.core.refusal import Result
 from qmf.data import EvidenceStore, JournalReader, JournalWriter
 from qmf.data.store.engines import StoreEngineError
 from qmf.data.store.engines.jsonl import JsonlAppendStream
 
+T = TypeVar("T")
 
-def _ok(result):
+
+def _ok(result: Result[T]) -> T:
     assert is_ok(result), result
     return result.value
 
 
-def _writer():
+def _writer() -> WriterId:
     return _ok(WriterId.try_create("integrity", "tests", "events", "boot-1"))
 
 
-def _inject_partial_append(journal_writer):
-    real_open = Path.open
+def _inject_partial_append(journal_writer: JournalWriter) -> None:
+    real_open: Any = Path.open
 
     class Partial:
-        def __init__(self, wrapped):
+        def __init__(self, wrapped: Any) -> None:
             self.wrapped = wrapped
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, *_args: Any) -> None:
             self.wrapped.close()
 
-        def write(self, data):
+        def write(self, data: bytes) -> int:
             self.wrapped.write(data[: max(1, len(data) // 2)])
             self.wrapped.flush()
             raise OSError("injected partial append")
 
-    def open_with_partial(path, mode="r", *args, **kwargs):
+    def open_with_partial(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         wrapped = real_open(path, mode, *args, **kwargs)
         if mode == "ab" and path.suffix == ".jsonl":
             return Partial(wrapped)
@@ -45,7 +49,7 @@ def _inject_partial_append(journal_writer):
     assert is_refusal(refused)
 
 
-def test_same_handle_retry_reconciles_torn_tail_before_idempotency(tmp_path):
+def test_same_handle_retry_reconciles_torn_tail_before_idempotency(tmp_path: Path) -> None:
     rooms = _ok(EvidenceStore(tmp_path).for_world(World.REPLAY))
     writer = JournalWriter(rooms.journal, _writer())
     _ok(writer.record_data_quality({"event": 0}, instant=10))
@@ -58,30 +62,30 @@ def test_same_handle_retry_reconciles_torn_tail_before_idempotency(tmp_path):
     rooms.journal.close()
 
 
-def test_repeated_partial_retry_keeps_one_logical_event(tmp_path):
+def test_repeated_partial_retry_keeps_one_logical_event(tmp_path: Path) -> None:
     rooms = _ok(EvidenceStore(tmp_path).for_world(World.REPLAY))
     writer = JournalWriter(rooms.journal, _writer())
     _ok(writer.record_data_quality({"event": 0}, instant=10))
     _inject_partial_append(writer)
     # The first retry reconciles the first tail, then encounters another partial write.
-    real_open = Path.open
+    real_open: Any = Path.open
 
     class Partial:
-        def __init__(self, wrapped):
+        def __init__(self, wrapped: Any) -> None:
             self.wrapped = wrapped
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, *_args: Any) -> None:
             self.wrapped.close()
 
-        def write(self, data):
+        def write(self, data: bytes) -> int:
             self.wrapped.write(data[: max(1, len(data) // 2)])
             self.wrapped.flush()
             raise OSError("injected second partial append")
 
-    def open_with_partial(path, mode="r", *args, **kwargs):
+    def open_with_partial(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         wrapped = real_open(path, mode, *args, **kwargs)
         return Partial(wrapped) if mode == "ab" and path.suffix == ".jsonl" else wrapped
 
@@ -94,14 +98,14 @@ def test_repeated_partial_retry_keeps_one_logical_event(tmp_path):
     rooms.journal.close()
 
 
-def test_retry_after_complete_line_fsync_error_is_visible_once(tmp_path):
+def test_retry_after_complete_line_fsync_error_is_visible_once(tmp_path: Path) -> None:
     rooms = _ok(EvidenceStore(tmp_path).for_world(World.REPLAY))
     writer = JournalWriter(rooms.journal, _writer())
     _ok(writer.record_data_quality({"event": 0}, instant=10))
     real_fsync = __import__("os").fsync
     calls = 0
 
-    def fail_once(fd):
+    def fail_once(fd: int) -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -118,28 +122,28 @@ def test_retry_after_complete_line_fsync_error_is_visible_once(tmp_path):
     rooms.journal.close()
 
 
-def test_malformed_newline_corruption_refuses_without_rewriting_bytes(tmp_path):
+def test_malformed_newline_corruption_refuses_without_rewriting_bytes(tmp_path: Path) -> None:
     rooms = _ok(EvidenceStore(tmp_path).for_world(World.REPLAY))
     writer = JournalWriter(rooms.journal, _writer())
     _ok(writer.record_data_quality({"event": 0}, instant=10))
-    real_open = Path.open
+    real_open: Any = Path.open
 
     class CorruptLine:
-        def __init__(self, wrapped):
+        def __init__(self, wrapped: Any) -> None:
             self.wrapped = wrapped
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, *_args: Any) -> None:
             self.wrapped.close()
 
-        def write(self, _data):
+        def write(self, _data: bytes) -> int:
             self.wrapped.write(b"{malformed}\n")
             self.wrapped.flush()
             raise OSError("injected completed corrupt line")
 
-    def open_corrupt(path, mode="r", *args, **kwargs):
+    def open_corrupt(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         wrapped = real_open(path, mode, *args, **kwargs)
         return CorruptLine(wrapped) if mode == "ab" and path.suffix == ".jsonl" else wrapped
 
@@ -154,7 +158,7 @@ def test_malformed_newline_corruption_refuses_without_rewriting_bytes(tmp_path):
     rooms.journal.close()
 
 
-def test_jsonl_rebuild_keeps_committed_rotation_prefix(tmp_path):
+def test_jsonl_rebuild_keeps_committed_rotation_prefix(tmp_path: Path) -> None:
     stream = JsonlAppendStream(tmp_path / "stream", writer_token="writer", rotation_bytes=6)
     _ok(stream.acquire())
     stream.append(b'{"a":1}')
@@ -163,30 +167,30 @@ def test_jsonl_rebuild_keeps_committed_rotation_prefix(tmp_path):
     stream.release()
 
 
-def test_rotation_failure_reconciles_ordinal_offset_and_sequence(tmp_path):
+def test_rotation_failure_reconciles_ordinal_offset_and_sequence(tmp_path: Path) -> None:
     stream = JsonlAppendStream(tmp_path / "stream", writer_token="writer", rotation_bytes=10)
     _ok(stream.acquire())
     first = b'{"a":1}'
     second = b'{"b":2}'
     stream.append(first)
-    real_open = Path.open
+    real_open: Any = Path.open
 
     class Partial:
-        def __init__(self, wrapped):
+        def __init__(self, wrapped: Any) -> None:
             self.wrapped = wrapped
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, *_args: Any) -> None:
             self.wrapped.close()
 
-        def write(self, data):
+        def write(self, data: bytes) -> int:
             self.wrapped.write(data[: max(1, len(data) // 2)])
             self.wrapped.flush()
             raise OSError("injected failure at rotation")
 
-    def fail_at_rotation(path, mode="r", *args, **kwargs):
+    def fail_at_rotation(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         wrapped = real_open(path, mode, *args, **kwargs)
         return Partial(wrapped) if mode == "ab" and path.name == "000001.jsonl" else wrapped
 

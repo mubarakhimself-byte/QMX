@@ -18,7 +18,7 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 from unittest.mock import patch
 
 import pytest
@@ -34,7 +34,14 @@ from qmf.core import (
     is_refusal,
     unpersistable,
 )
-from qmf.data.store import EvidenceStore, RegistryRoom, RoomExport, StoreEngineError, jsonl_opener
+from qmf.data.store import (
+    EvidenceStore,
+    RegistryRoom,
+    RoomExport,
+    StoreEngineError,
+    StoreReceipt,
+    jsonl_opener,
+)
 from qmf.registry import (
     EdgeType,
     LineageEdge,
@@ -123,6 +130,14 @@ def _live(tmp_path: Path) -> RegistryPersistence:
     opened = RegistryPersistence.open(store, World.LIVE)
     assert is_ok(opened)
     return opened.value
+
+
+def _live_with_room(tmp_path: Path) -> tuple[RegistryPersistence, RegistryRoom]:
+    store = EvidenceStore(tmp_path / "store")
+    opened = store.for_world(World.LIVE)
+    assert is_ok(opened)
+    world_store = opened.value
+    return RegistryPersistence(store, world_store), world_store.registry_room
 
 
 def _with_room(tmp_path: Path, room: RegistryRoom) -> RegistryPersistence:
@@ -738,13 +753,14 @@ def test_durable_supersedes_idempotent_reappend_is_not_a_fork(tmp_path: Path) ->
 
 
 def test_supersedes_witness_failure_is_reconciled_after_reopen(tmp_path: Path) -> None:
-    persistence = _live(tmp_path)
+    persistence, room = _live_with_room(tmp_path)
     edge = _sup("retry-new", "retry-old")
-    room = persistence._ws.registry_room
     real_put = room.put_record
     calls = 0
 
-    def fail_witness_once(record, **kwargs):
+    def fail_witness_once(
+        record: Mapping[str, object], **kwargs: object
+    ) -> Result[StoreReceipt]:
         nonlocal calls
         calls += 1
         if calls == 2:
@@ -772,24 +788,24 @@ def test_supersedes_torn_append_retry_after_reopen_uses_durable_intent(
 ) -> None:
     persistence = _live(tmp_path)
     edge = _sup("torn-new", "torn-old")
-    real_open = Path.open
+    real_open: Any = Path.open
 
     class Partial:
-        def __init__(self, wrapped):
+        def __init__(self, wrapped: Any) -> None:
             self.wrapped = wrapped
 
-        def __enter__(self):
+        def __enter__(self) -> Partial:
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, *_args: Any) -> None:
             self.wrapped.close()
 
-        def write(self, data):
+        def write(self, data: bytes) -> int:
             self.wrapped.write(data[: max(1, len(data) // 2)])
             self.wrapped.flush()
             raise OSError("injected torn lineage append")
 
-    def fail_edge_append(path, mode="r", *args, **kwargs):
+    def fail_edge_append(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         wrapped = real_open(path, mode, *args, **kwargs)
         return Partial(wrapped) if mode == "ab" and path.suffix == ".jsonl" else wrapped
 
@@ -810,9 +826,8 @@ def test_supersedes_torn_append_retry_after_reopen_uses_durable_intent(
 
 
 def test_unwitnessed_matching_supersedes_line_does_not_get_blessed(tmp_path: Path) -> None:
-    persistence = _live(tmp_path)
+    persistence, room = _live_with_room(tmp_path)
     edge = _sup("unwitnessed-new", "unwitnessed-old")
-    room = persistence._ws.registry_room
     raw = room.append_lineage_edge(
         "manual",
         edge.writer,
@@ -828,19 +843,29 @@ def test_unwitnessed_matching_supersedes_line_does_not_get_blessed(tmp_path: Pat
 
 
 def test_pending_supersedes_retry_rechecks_room_wide_linearity(tmp_path: Path) -> None:
-    persistence = _live(tmp_path)
-    room = persistence._ws.registry_room
+    persistence, room = _live_with_room(tmp_path)
     first = _sup("pending-b", "pending-a")
     competing = _sup("pending-c", "pending-a")
     real_append = room.append_lineage_edge
     calls = 0
 
-    def refuse_first_append(*args, **kwargs):
+    def refuse_first_append(
+        edge_stream: object,
+        writer: WriterId,
+        edge: Mapping[str, object],
+        *,
+        presented_fingerprint: object | None = None,
+    ) -> Result[StoreReceipt]:
         nonlocal calls
         calls += 1
         if calls == 1:
             return unpersistable("injected lineage append failure")
-        return real_append(*args, **kwargs)
+        return real_append(
+            edge_stream,
+            writer,
+            edge,
+            presented_fingerprint=presented_fingerprint,
+        )
 
     with patch.object(room, "append_lineage_edge", side_effect=refuse_first_append):
         assert is_refusal(persistence.persist_edge(first, edge_stream="first"))

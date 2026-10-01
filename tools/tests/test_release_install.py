@@ -8,8 +8,6 @@ import json
 import tarfile
 from io import BytesIO
 from pathlib import Path
-from types import ModuleType
-from typing import cast
 from zipfile import ZipFile
 
 import pytest
@@ -17,7 +15,7 @@ import pytest
 _INSTALL_PATH = Path(__file__).resolve().parents[2] / "release" / "install.py"
 _SPEC = importlib.util.spec_from_file_location("qmx_release_installer", _INSTALL_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
-installer = cast("ModuleType", importlib.util.module_from_spec(_SPEC))
+installer = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(installer)
 
 _DISTRIBUTIONS = (
@@ -117,7 +115,7 @@ def _mock_environment(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]],
 
 
 def test_preflight_rejects_missing_required_wheel_before_environment(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path / "bundle")
     manifest = json.loads((bundle / "acceptance.json").read_text())
@@ -136,7 +134,7 @@ def test_preflight_rejects_missing_required_wheel_before_environment(
 
 
 def test_preflight_rejects_malformed_inventory_and_tampering_before_environment(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path / "bundle")
     manifest = json.loads((bundle / "acceptance.json").read_text())
@@ -156,7 +154,7 @@ def test_preflight_rejects_malformed_inventory_and_tampering_before_environment(
 
 
 def test_preflight_requires_every_consumed_artifact_to_be_in_inventory(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path / "bundle")
     manifest = json.loads((bundle / "acceptance.json").read_text())
@@ -171,7 +169,7 @@ def test_preflight_requires_every_consumed_artifact_to_be_in_inventory(
 
 
 def test_preflight_rejects_wheel_metadata_mismatch_before_environment(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path / "bundle")
     wheel_path = bundle / "qmb-1.0.0-py3-none-any.whl"
@@ -200,7 +198,9 @@ def test_lock_preflight_accepts_uv_multihash_continuation_format(tmp_path: Path)
     installer._validate_lock(lock)
 
 
-def test_preflight_rejects_unhashed_lock_before_environment(tmp_path: Path, monkeypatch) -> None:
+def test_preflight_rejects_unhashed_lock_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     bundle = _bundle(tmp_path / "bundle")
     lock_path = bundle / "requirements.lock"
     lock_path.write_text("example==1.0.0\n")
@@ -215,7 +215,9 @@ def test_preflight_rejects_unhashed_lock_before_environment(tmp_path: Path, monk
     assert not calls and not environments
 
 
-def test_preflight_rejects_unsafe_archive_before_environment(tmp_path: Path, monkeypatch) -> None:
+def test_preflight_rejects_unsafe_archive_before_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     bundle = _bundle(tmp_path / "bundle", unsafe_ui=True)
     calls, environments = _mock_environment(monkeypatch)
     destination = tmp_path / "install"
@@ -229,7 +231,7 @@ def test_preflight_rejects_unsafe_archive_before_environment(tmp_path: Path, mon
 
 
 def test_positive_install_flow_is_mocked_and_uses_only_bound_artifacts(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path / "bundle")
     extra = bundle / "unlisted-9.9.9-py3-none-any.whl"

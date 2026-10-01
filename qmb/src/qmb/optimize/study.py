@@ -90,7 +90,7 @@ def run_study_generations(
         "Callable[[int, ProposedTrial, Mapping[str, object]], Result[object]]",
         execute_trial,
     )
-    read = cast("Callable[[int, int], Result[PriorTrial]]", read_trial)
+    read = cast("Callable[[int, int], Result[object]]", read_trial)
 
     current = stepper
     generations: list[tuple[PriorTrial, ...]] = []
