@@ -78,3 +78,11 @@ Epic11 still refuses unratified extra QML homes; epic13 owned source vocabulary/
 types fixes and epic18 durable QMF intake authority implementation continue.
 This is not a final whole-run PASS. Logs `/workspace/qmx-qa-current.log`,
 `/workspace/qmx-qa12-corrected.log`, `/workspace/qmx-qa15-corrected.log`.
+
+Factory/tool lanes after wire/example changes: `uv run --no-sync poe test-tools`
+PASS 563 tests with 98.48% coverage over its declared factory scanner/helper
+modules; `uv run --no-sync mypy adws` PASS 36 source files;
+`uv run --no-sync pytest -q adws/tests` PASS 4 tests. Logs
+`/workspace/qmx-tools-source-coverage-current.log`,
+`/workspace/qmx-factory-mypy-current.log`, `/workspace/qmx-factory-tests-current.log`.
+These checks do not certify continuing product edits or close product coverage.
