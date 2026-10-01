@@ -10,7 +10,7 @@
   "remote": "https://github.com/MubarakHimself/QMX.git",
   "branch": "release/rc-2026-10-01",
   "worktree": "/workspace/QMX-release",
-  "published_delta": "All three current published refs match audit pins; initial fetch and refresh succeeded 2026-10-01; /workspace/qmx-published-ref-refresh.log",
+  "published_delta": "All three current published refs match audit pins; initial fetch and both refreshes succeeded 2026-10-01; /workspace/qmx-published-ref-refresh.log and /workspace/qmx-published-ref-refresh-late.log",
   "ui_owner": "Claude in user's separate session; integration pending reviewed contribution",
   "workflow": "User-authorized attended Codex implementation and independent Sol review; operator merges only",
   "resolved_from_documentation": {
@@ -23,6 +23,9 @@
     "reviewed Claude UI contribution",
     "security verification",
     "external provider connectivity",
-    "ATC example policy financial grammar/parameters; generic registered-policy runtime does not infer them"
+    "ATC example policy financial grammar/parameters; generic registered-policy runtime does not infer them",
+    "Ubuntu 24.04 installation/recovery: anonymous container mirrors and official rootfs access failed; tested host is Debian 13 x86-64",
+    "QMN production venue-session resource composition and pinned native descriptor/readback; generic typed resource and attribution work continues independently",
+    "GAP-0058 single-machine Windows UI/QMN placement and supported topology decision remains open in governing architecture"
   ]
 }
