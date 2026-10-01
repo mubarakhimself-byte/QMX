@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,14 +53,38 @@ def archive(source: Path, destination: Path) -> None:
                 packed.addfile(info, content)
 
 
-def build(destination: Path, ui_build: Path) -> None:
+def build_ui(destination: Path, candidate: str, source: Path) -> None:
+    """Build the UI from this candidate in a disposable registered worktree."""
+    npm = shutil.which("npm")
+    if npm is None:
+        raise RuntimeError("npm is required to bootstrap the pinned UI build tools")
+    ui = source / "apps/qmx-ui"
+    command = [
+        npm,
+        "exec",
+        "--yes",
+        "--package=node@22.12.0",
+        "--package=pnpm@10.18.3",
+        "--",
+        "pnpm",
+    ]
+    run([*command, "install", "--frozen-lockfile"], cwd=ui)
+    run([*command, "build"], cwd=ui)
+    assets = ui / "build"
+    if not (assets / "index.html").is_file():
+        raise RuntimeError("Candidate UI build has no index.html")
+    archive(assets, destination / "ui.tar.gz")
+    (destination / "ui-build.json").write_text(
+        json.dumps({"candidate": candidate, "node": "22.12.0", "pnpm": "10.18.3"}) + "\n"
+    )
+
+
+def build(destination: Path) -> None:
     """Build both workspaces, locked runtime dependencies and mandatory packs."""
     uv = shutil.which("uv")
     git = shutil.which("git")
     if uv is None or git is None:
         raise RuntimeError("uv and git are required for artifact construction")
-    if not ui_build.is_dir() or not (ui_build / "index.html").is_file():
-        raise RuntimeError("A built static UI with index.html is required")
     if destination.exists() and any(destination.iterdir()):
         raise RuntimeError("Use an empty artifact destination to prevent stale wheel reuse")
     destination.mkdir(parents=True, exist_ok=True)
@@ -78,7 +103,9 @@ def build(destination: Path, ui_build: Path) -> None:
             "apps",
             "tools",
             "pyproject.toml",
+            "uv.lock",
             "release/launcher.py",
+            "release/install.py",
         ]
     )
     if dirty.strip():
@@ -88,26 +115,57 @@ def build(destination: Path, ui_build: Path) -> None:
     candidate = run([git, "rev-parse", "HEAD"]).strip()
     epoch = run([git, "show", "-s", "--format=%ct", "HEAD"]).strip()
     os.environ["SOURCE_DATE_EPOCH"] = epoch
-    run([uv, "build", "--all-packages", "--out-dir", str(destination)])
-    run([uv, "build", "--project", "qmx-agents", "--all-packages", "--out-dir", str(destination)])
-    export = ["export", "--locked", "--no-default-groups", "--no-emit-local", "--no-header"]
-    root_lock = run(
-        [uv, *export, "--package", "qmb", "--package", "qmn", "--package", "qmf-calendar-forex"]
-    )
-    nested_lock = run([uv, *export, "--project", "qmx-agents", "--all-packages"])
-    (destination / "requirements.lock").write_text(root_lock + "\n" + nested_lock)
-    shutil.copyfile(ROOT / "release/launcher.py", destination / "launcher.py")
-    shutil.copyfile(ROOT / "release/install.py", destination / "install.py")
-    archive(ui_build, destination / "ui.tar.gz")
-    packs = ROOT / "qmx-agents/packages/qma-daemon/src/qma/daemon/bundled_packs"
-    if not packs.is_dir():
-        raise RuntimeError("Installed mandatory pack resources have not been repaired")
-    pack_inventory = {
-        path.relative_to(packs).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(packs.rglob("*"))
-        if path.is_file() and "__pycache__" not in path.parts
-    }
-    (destination / "pack-resources.json").write_text(json.dumps(pack_inventory, indent=2) + "\n")
+    with tempfile.TemporaryDirectory(prefix="qmx-release-source-") as temporary:
+        source = Path(temporary) / "source"
+        run([git, "worktree", "add", "--detach", str(source), candidate])
+        try:
+            run([uv, "build", "--all-packages", "--out-dir", str(destination)], cwd=source)
+            run(
+                [
+                    uv,
+                    "build",
+                    "--project",
+                    "qmx-agents",
+                    "--all-packages",
+                    "--out-dir",
+                    str(destination),
+                ],
+                cwd=source,
+            )
+            export = ["export", "--locked", "--no-default-groups", "--no-emit-local", "--no-header"]
+            root_lock = run(
+                [
+                    uv,
+                    *export,
+                    "--package",
+                    "qmb",
+                    "--package",
+                    "qmn",
+                    "--package",
+                    "qmf-calendar-forex",
+                ],
+                cwd=source,
+            )
+            nested_lock = run(
+                [uv, *export, "--project", "qmx-agents", "--all-packages"], cwd=source
+            )
+            (destination / "requirements.lock").write_text(root_lock + "\n" + nested_lock)
+            shutil.copyfile(source / "release/launcher.py", destination / "launcher.py")
+            shutil.copyfile(source / "release/install.py", destination / "install.py")
+            build_ui(destination, candidate, source)
+            packs = source / "qmx-agents/packages/qma-daemon/src/qma/daemon/bundled_packs"
+            if not packs.is_dir():
+                raise RuntimeError("Installed mandatory pack resources have not been repaired")
+            pack_inventory = {
+                path.relative_to(packs).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in sorted(packs.rglob("*"))
+                if path.is_file() and "__pycache__" not in path.parts
+            }
+            (destination / "pack-resources.json").write_text(
+                json.dumps(pack_inventory, indent=2) + "\n"
+            )
+        finally:
+            run([git, "worktree", "remove", "--force", str(source)])
     artifacts = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(destination.iterdir())
@@ -126,6 +184,5 @@ def build(destination: Path, ui_build: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("destination", type=Path)
-    parser.add_argument("--ui-build", type=Path, required=True)
     args = parser.parse_args()
-    build(args.destination.resolve(), args.ui_build.resolve())
+    build(args.destination.resolve())

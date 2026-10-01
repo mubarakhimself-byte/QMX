@@ -276,12 +276,18 @@ def test_interval_overlaps() -> None:
 
 
 def test_empty_half_open_interval_never_overlaps() -> None:
-    empty = Interval.try_create(_instant(5), _instant(5)).value
-    other_empty = Interval.try_create(_instant(-2), _instant(-2)).value
-    containing = Interval.try_create(_instant(0), _instant(10)).value
-    assert empty.overlaps(other_empty).value is False
-    assert empty.overlaps(containing).value is False
-    assert containing.overlaps(empty).value is False
+    empty_result = Interval.try_create(_instant(5), _instant(5))
+    other_result = Interval.try_create(_instant(-2), _instant(-2))
+    containing_result = Interval.try_create(_instant(0), _instant(10))
+    assert is_ok(empty_result) and is_ok(other_result) and is_ok(containing_result)
+    empty, other_empty, containing = (
+        empty_result.value,
+        other_result.value,
+        containing_result.value,
+    )
+    for left, right in ((empty, other_empty), (empty, containing), (containing, empty)):
+        overlap = left.overlaps(right)
+        assert is_ok(overlap) and overlap.value is False
 
 
 def test_interval_fp1_identity() -> None:

@@ -107,8 +107,9 @@ lint = "ruff check packages tests examples plugins"
 # `poe.exe` itself is also blocked under this nested .venv (os error 4551); after
 # `uv sync` run `python scripts/ensure_poe_shim.py` so `uv run poe` uses poe.cmd.
 types = "python -m pyright"
-test = "pytest packages tests --cov=qma --cov-branch --cov-report=term-missing --cov-fail-under=0"
+test = "pytest packages tests --cov=packages/qma-core/src --cov=packages/qma-wire/src --cov=packages/qma-daemon/src --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
+cov-report = "python ../tools/nested_coverage_report.py"
 
 [tool.poe.tasks.check]
-sequence = ["fmt-check", "lint", "types", "test"]
+sequence = ["fmt-check", "lint", "types", "test", "cov-report"]
 default_item_type = "ref"

@@ -1,16 +1,33 @@
 """Independent negative controls for same-candidate release acceptance."""
 
+import zipfile
 from copy import deepcopy
+from pathlib import Path
+from typing import TypedDict
 
 import pytest
 import release_gate as gate
 
 
-def evidence() -> dict:
+class Evidence(TypedDict):
+    candidate: str
+    artifacts: dict[str, str]
+    checks: dict[str, dict[str, object]]
+
+
+def evidence() -> Evidence:
     artifacts = {f"{name}-0.1.0-py3-none-any.whl": "b" * 64 for name in gate.DISTRIBUTIONS}
     artifacts.update(
         dict.fromkeys(
-            ("ui.tar.gz", "launcher.py", "requirements.lock", "pack-resources.json"), "b" * 64
+            (
+                "ui.tar.gz",
+                "launcher.py",
+                "install.py",
+                "requirements.lock",
+                "pack-resources.json",
+                "ui-build.json",
+            ),
+            "b" * 64,
         )
     )
     return {
@@ -75,16 +92,35 @@ def test_untyped_command_and_trace_refuse() -> None:
     assert gate.evaluate(record)
 
 
-def test_missing_actual_artifacts_refuse(tmp_path) -> None:
+def test_missing_actual_artifacts_refuse(tmp_path: Path) -> None:
     assert gate.evaluate(evidence(), evidence_root=tmp_path)
 
 
-def test_empty_evidence_file_is_not_a_trace(tmp_path) -> None:
+def test_empty_evidence_file_is_not_a_trace(tmp_path: Path) -> None:
     (tmp_path / "trace.log").write_text("")
-    assert gate._local_file(tmp_path, "trace.log") is None
+    assert gate._local_file(tmp_path, "trace.log") is None  # pyright: ignore[reportPrivateUsage]
 
 
-def test_plain_text_cannot_impersonate_wheel(tmp_path) -> None:
+def test_plain_text_cannot_impersonate_wheel(tmp_path: Path) -> None:
     path = tmp_path / "qmb-0.1.0-py3-none-any.whl"
     path.write_text("not a wheel")
-    assert gate._artifact_errors(path)
+    assert gate._artifact_errors(path)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_wheel_identity_and_structural_positive_control(tmp_path: Path) -> None:
+    path = tmp_path / "qmb-0.1.0-py3-none-any.whl"
+    with zipfile.ZipFile(path, "w") as wheel:
+        wheel.writestr("qmb-0.1.0.dist-info/METADATA", "Name: qmb\nVersion: 0.1.0\n")
+        wheel.writestr("qmb-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\n")
+        wheel.writestr("qmb-0.1.0.dist-info/RECORD", "")
+    assert gate._artifact_errors(path) == []  # pyright: ignore[reportPrivateUsage]
+    with zipfile.ZipFile(path, "w") as wheel:
+        wheel.writestr("unrelated.dist-info/METADATA", "Name: unrelated\n")
+    assert gate._artifact_errors(path)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_metadata_alone_is_not_installable_wheel(tmp_path: Path) -> None:
+    path = tmp_path / "qmb-0.1.0-py3-none-any.whl"
+    with zipfile.ZipFile(path, "w") as wheel:
+        wheel.writestr("qmb.dist-info/METADATA", "Name: qmb\n")
+    assert gate._artifact_errors(path)  # pyright: ignore[reportPrivateUsage]

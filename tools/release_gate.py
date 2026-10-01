@@ -8,6 +8,7 @@ import sys
 import tarfile
 import zipfile
 from collections.abc import Mapping
+from email.parser import BytesParser
 from pathlib import Path
 from typing import cast
 
@@ -77,8 +78,15 @@ def evaluate(manifest: object, *, evidence_root: Path | None = None) -> list[str
     wheel_names = {str(name).split("-")[0] for name in artifacts if str(name).endswith(".whl")}
     for name in sorted(DISTRIBUTIONS - wheel_names):
         errors.append(f"{name}: required wheel is missing")
-    for suffix in ("ui.tar.gz", "launcher.py", "requirements.lock", "pack-resources.json"):
-        if not any(str(name).endswith(suffix) for name in artifacts):
+    for suffix in (
+        "ui.tar.gz",
+        "launcher.py",
+        "install.py",
+        "requirements.lock",
+        "pack-resources.json",
+        "ui-build.json",
+    ):
+        if suffix not in artifacts:
             errors.append(f"{suffix}: required product artifact is missing")
     if evidence_root is not None:
         for name, digest in artifacts.items():
@@ -87,6 +95,16 @@ def evaluate(manifest: object, *, evidence_root: Path | None = None) -> list[str
                 errors.append(f"{name}: artifact is absent or checksum differs")
             else:
                 errors.extend(_artifact_errors(path))
+        errors.extend(_pack_errors(evidence_root, artifacts))
+        provenance = _local_file(evidence_root, "ui-build.json")
+        if provenance is None:
+            errors.append("ui-build.json: exact UI build provenance is absent")
+        else:
+            try:
+                if json.loads(provenance.read_text()).get("candidate") != candidate:
+                    errors.append("ui-build.json: UI belongs to another candidate")
+            except (ValueError, AttributeError):
+                errors.append("ui-build.json: invalid UI build provenance")
     checks = manifest.get("checks")
     if not isinstance(checks, Mapping):
         checks = {}
@@ -131,8 +149,15 @@ def _artifact_errors(path: Path) -> list[str]:
                 metadata = [
                     name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")
                 ]
-                if len(metadata) != 1 or b"Name: " not in wheel.read(metadata[0]):
+                if len(metadata) != 1:
                     return [f"{path.name}: missing wheel distribution metadata"]
+                message = BytesParser().parsebytes(wheel.read(metadata[0]))
+                name = str(message.get("Name", "")).lower().replace("-", "_").replace(".", "_")
+                if name != path.name.split("-")[0]:
+                    return [f"{path.name}: wheel metadata distribution differs from filename"]
+                prefix = metadata[0].removesuffix("METADATA")
+                if any(prefix + item not in wheel.namelist() for item in ("WHEEL", "RECORD")):
+                    return [f"{path.name}: missing mandatory wheel WHEEL/RECORD"]
         elif path.name.endswith("ui.tar.gz"):
             with tarfile.open(path) as packed:
                 if "index.html" not in packed.getnames():
@@ -145,6 +170,39 @@ def _artifact_errors(path: Path) -> list[str]:
             return [f"{path.name}: runtime versions are not pinned"]
     except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError, KeyError) as exc:
         return [f"{path.name}: invalid artifact format: {exc}"]
+    return []
+
+
+def _pack_errors(root: Path, artifacts: Mapping[str, object]) -> list[str]:
+    """Bind the mandatory pack inventory to the actual installed distribution."""
+    inventory = _local_file(root, "pack-resources.json")
+    daemon = next(
+        (
+            str(name)
+            for name in artifacts
+            if str(name).startswith("qma_daemon-") and str(name).endswith(".whl")
+        ),
+        None,
+    )
+    wheel_path = _local_file(root, daemon)
+    if inventory is None or wheel_path is None:
+        return ["mandatory pack inventory or daemon wheel is absent"]
+    try:
+        recorded = json.loads(inventory.read_text())
+        prefix = "qma/daemon/bundled_packs/"
+        with zipfile.ZipFile(wheel_path) as wheel:
+            actual = {
+                name.removeprefix(prefix): hashlib.sha256(wheel.read(name)).hexdigest()
+                for name in wheel.namelist()
+                if name.startswith(prefix) and not name.endswith("/")
+            }
+        if (
+            recorded != actual
+            or len([name for name in actual if name.endswith("manifest.json")]) < 5
+        ):
+            return ["mandatory pack inventory differs from bundled daemon resources"]
+    except (OSError, ValueError, zipfile.BadZipFile):
+        return ["mandatory pack resources cannot be verified"]
     return []
 
 

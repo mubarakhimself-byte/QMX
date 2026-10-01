@@ -115,6 +115,8 @@ def evaluate(
     expected_packages: Collection[str] = (),
     expected_sources: Collection[str] = (),
     source_root: Path | None = None,
+    *,
+    contract_modules: Collection[str] = FULL_BRANCH_MODULES,
 ) -> list[str]:
     """Check schema, source-only package floors and full-branch contracts.
 
@@ -157,7 +159,7 @@ def evaluate(
     for source in sorted(set(expected_sources) - summaries.keys()):
         violations.append(f"{source}: source file was not measured (fail-closed)")
     violations.extend(_package_violations(summaries, expected_packages))
-    violations.extend(_full_branch_violations(summaries))
+    violations.extend(_full_branch_violations(summaries, contract_modules))
     return violations
 
 
@@ -192,10 +194,12 @@ def _package_violations(
     return violations
 
 
-def _full_branch_violations(files: Mapping[str, dict[str, int]]) -> list[str]:
+def _full_branch_violations(
+    files: Mapping[str, dict[str, int]], contract_modules: Collection[str] = FULL_BRANCH_MODULES
+) -> list[str]:
     """Require the actual qmf-core contract sources with nonzero branch evidence."""
     violations: list[str] = []
-    for suffix in FULL_BRANCH_MODULES:
+    for suffix in contract_modules:
         summary = files.get(f"packages/qmf-core/src/{suffix}")
         if summary is None:
             violations.append(

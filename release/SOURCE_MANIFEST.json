@@ -8,5 +8,9 @@
   "published_delta": "All three current published refs match audit pins; fetch succeeded 2026-10-01",
   "ui_owner": "Claude in user's separate session; integration pending reviewed contribution",
   "workflow": "User-authorized attended Codex implementation and independent Sol review; operator merges only",
-  "pending": ["native Windows support target and execution", "QML proposed research/host distribution adoption", "durable CT15 intake key ownership", "reviewed Claude UI contribution", "security verification", "external provider connectivity"]
+  "resolved_from_documentation": {
+    "windows_target": "Windows 11 x86-64; docs/architecture/stack.md; native installation/recovery not tested",
+    "intake_identity": "QMF data owns CT-15 source/native-ID/revision; application owns acquisition checkpoint/retry metadata, docs/components/qmf-data.md and CT-15"
+  },
+  "pending": ["native Windows installation and recovery execution", "QML proposed research/host distribution boundary (ADR-0023 remains proposed)", "reviewed Claude UI contribution", "security verification", "external provider connectivity"]
 }
