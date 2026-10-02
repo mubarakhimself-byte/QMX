@@ -426,15 +426,10 @@ class BindingVirtualLedger:
         for record in records:
             if record.note != "entry-terminal" or record.command_identity is None:
                 continue
-            position = next(
-                (
-                    candidate
-                    for candidate in positions.values()
-                    if candidate.command_identity == record.command_identity
-                ),
-                None,
+            position = (
+                None if record.position_ref is None else by_ref.get(record.position_ref.value)
             )
-            if position is None:
+            if position is None or position.command_identity != record.command_identity:
                 return policy(
                     "virtual_ledger_recovery", "terminal fill retains its position snapshot"
                 )

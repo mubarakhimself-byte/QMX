@@ -219,6 +219,68 @@ def test_partial_entry_close_survives_checked_ct13_restart(tmp_path: Path) -> No
     assert persisted_record["sequence"] == 5
     second_store.close()
 
+    third_store = _store(tmp_path)
+    third_journal = _adapter(third_store, "boot-3")
+    third_reservations = _reservation_journal(third_store, "boot-3")
+    restarted = _ok(
+        seed_binding_ledger(
+            binding_epoch=epoch,
+            seed=_ok(Money.try_create(100_000, "USD", 2)),
+            recorded_at=_at(1),
+            virtual_ledger_journal=third_journal,
+            virtual_ledger_recovery=_ok(third_journal.recover(epoch)),
+            reservation_journal=third_reservations,
+            reservation_recovery=_ok(third_reservations.recover(epoch)),
+        )
+    )
+    current = restarted.position_for("EURUSD")
+    assert current is not None
+    assert current.status is VirtualPositionStatus.OPEN
+    assert current.command_identity == next_command
+    assert current.filled_quantity == _quantity(1)
+    historical = restarted.position_by_ref(terminal.position.position_ref)
+    assert historical is not None
+    assert historical.status is VirtualPositionStatus.CLOSED
+    assert historical.filled_quantity == _quantity(3)
+    assert historical.faces.original_risk_amount == _ok(Money.try_create(30_000, "USD", 2))
+    assert restarted.realized_cash == _ok(Money.try_create(97_850, "USD", 2))
+    assert [record.sequence for record in restarted.records] == [1, 2, 3, 4, 5]
+    assert not restarted.has_pending_entry("EURUSD")
+    _ok(restarted.recover_virtual_ledger(_ok(third_journal.recover(epoch))))
+    assert len(_ok(third_journal.recover(epoch)).rows) == 5
+    third_store.close()
+
+
+@pytest.mark.parametrize("missing_reference", [False, True])
+def test_recovery_refuses_terminal_without_matching_position(
+    tmp_path: Path, missing_reference: bool
+) -> None:
+    test_partial_entry_close_survives_checked_ct13_restart(tmp_path)
+    store = _store(tmp_path)
+    journal = _adapter(store, "forged-recovery")
+    recovery = _ok(journal.recover(_fp("binding-epoch")))
+    terminal = recovery.rows[-1]
+    forged = (
+        replace(terminal, record=replace(terminal.record, position_ref=None), position=None)
+        if missing_reference
+        else replace(
+            terminal,
+            record=replace(terminal.record, command_identity=_fp("foreign-command")),
+        )
+    )
+    refused = seed_binding_ledger(
+        binding_epoch=recovery.binding_epoch,
+        seed=_ok(Money.try_create(100_000, "USD", 2)),
+        recorded_at=_at(1),
+        virtual_ledger_journal=journal,
+        virtual_ledger_recovery=replace(recovery, rows=(*recovery.rows[:-1], forged)),
+    )
+    assert isinstance(refused, TypedRefusal)
+    assert refused.category is RefusalCategory.POLICY_REJECTION
+    assert refused.context["reason"] == "terminal fill retains its position snapshot"
+    assert len(_ok(journal.recover(recovery.binding_epoch)).rows) == 5
+    store.close()
+
 
 def test_missing_physical_ack_keeps_fill_state_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
