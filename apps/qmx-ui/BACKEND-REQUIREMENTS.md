@@ -66,3 +66,14 @@ Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc de
 - **Entity detail**: per bot/model/app/workflow — evidence runs (CT-32 with run role), journal (CT-13), node/book connections and seat state, operations with input schemas (headless apps run from here), linked artifacts.
 - **Model and tool lists** for the composer and Settings come from the daemon's provider registry; the UI stores no keys.
 - **Background art presets (optional)**: saved variants live in browser storage per machine (`qmx.art`, `qmx.art.presets`, a few numbers each). If the operator wants them to follow them across machines, the daemon needs a small per-user preferences store; no other backend need.
+
+## Lab (operator rulings 2026-10-02; needs docs and backend work)
+
+- **Rename Authoring to Lab** on the rail (docs record Authoring, DEC-0470 / ADR-0026). The Lab merges Authoring, Backtest and ML work; backend/docs refactor to match.
+- **Model as a first-class object** (none exists; DEC-0172 only allows weights baked into bot logic), including imported models (ONNX or code from outside) and reuse across mini apps and servers.
+- **Model slots** with defaults for entry signal, sizing, regime and risk throttle, all operator-extensible. Today sizing is Book-only (QL-7) and regime/throttle are node MIS/KSA (never read by bots).
+- **External compute**: any provider (Colab, AWS, GPU clouds) as execution environments; each run records where it ran and its cost. B-9 says only the controlled machine sees governed/sealed data, so the evidence status of off-machine runs needs a ruling. Vendor choice is GAP-0075.
+- **Pair trading, portfolio-level runs, strategy/scenario generator** (GAP-0063, GAP-0085; DEC-0273 defers portfolios).
+- **Saved tests, reports, datasets and feature sets as reusable items** (none are Library kinds today, DEC-0271).
+- **Pass thresholds and overfit budgets** for sweeps and robustness (GAP-0017/0048/0049).
+- **Agents and sub-agent swarms in workflows**: the UI needs where each runs and its live state (QMA refactor pending).
