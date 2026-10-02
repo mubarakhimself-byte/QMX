@@ -11,9 +11,8 @@
   import X from "@lucide/svelte/icons/x";
   import FileBox from "@lucide/svelte/icons/file-box";
   import Rss from "@lucide/svelte/icons/rss";
-  import Newspaper from "@lucide/svelte/icons/newspaper";
   import AppWindowMac from "@lucide/svelte/icons/app-window-mac";
-  import { SOURCES, FEED, HEADLINES, NEWS_CONSUMERS } from "$lib/demo/feeds";
+  import { SOURCES, FEED } from "$lib/demo/feeds";
 
   /** Omarchy-style web app: the site gets its own window. */
   function openWebApp(url: string, name: string) {
@@ -45,7 +44,6 @@
   const KINDS = [
     { id: "knowledge", label: "Knowledge", icon: BookOpen },
     { id: "sources", label: "Sources", icon: Rss },
-    { id: "news", label: "News", icon: Newspaper },
     { id: "files", label: "Artifacts", icon: FileBox },
     { id: "artifact", label: "Bots & models", icon: Package },
     { id: "contribution", label: "Apps & workflows", icon: Blocks },
@@ -327,75 +325,6 @@
                   {/each}
                 </ul>
               </section>
-            </div>
-          {:else if kind === "news"}
-            <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-              <section
-                aria-label="Headlines"
-                class="surface overflow-hidden rounded-lg"
-              >
-                <div class="flex items-center gap-2 border-b px-4 py-2.5">
-                  <span class="bg-destructive size-2 animate-pulse rounded-full"
-                  ></span>
-                  <span class="panel-label">Headlines · sample</span>
-                </div>
-                <ul>
-                  {#each HEADLINES as h (h.time + h.title)}
-                    <li
-                      class="hover:bg-muted/40 grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3 border-t px-4 py-3 first:border-t-0"
-                    >
-                      <span class="num text-muted-foreground text-sm"
-                        >{h.time}</span
-                      >
-                      <span class="min-w-0">
-                        <span class="block font-medium">{h.title}</span>
-                        <span
-                          class="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs"
-                        >
-                          {h.source}
-                          {#each h.symbols as sym (sym)}<span
-                              class="bg-muted text-foreground rounded-sm px-1.5"
-                              >{sym}</span
-                            >{/each}
-                          <span
-                            class={h.tone === "positive"
-                              ? "text-success"
-                              : h.tone === "negative"
-                                ? "text-destructive"
-                                : ""}
-                          >
-                            {h.tone === "positive"
-                              ? "▲"
-                              : h.tone === "negative"
-                                ? "▼"
-                                : "●"}
-                            {h.tone}
-                          </span>
-                        </span>
-                      </span>
-                      <span
-                        class={cn(
-                          "rounded-sm px-1.5 py-0.5 text-[10px] uppercase",
-                          h.impact === "high"
-                            ? "bg-destructive/15 text-destructive"
-                            : h.impact === "medium"
-                              ? "bg-warning/15 text-warning"
-                              : "bg-muted text-muted-foreground",
-                        )}>{h.impact}</span
-                      >
-                    </li>
-                  {/each}
-                </ul>
-              </section>
-              <aside class="flex flex-col gap-2">
-                <p class="panel-label">Where news goes</p>
-                {#each NEWS_CONSUMERS as c (c.name)}
-                  <div class="surface rounded-lg p-3.5">
-                    <p class="font-medium">{c.name}</p>
-                    <p class="text-muted-foreground text-sm">{c.what}</p>
-                  </div>
-                {/each}
-              </aside>
             </div>
           {:else if kind === "files"}
             <div class="surface overflow-hidden rounded-lg">
