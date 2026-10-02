@@ -38,10 +38,10 @@ export class WidgetBoard {
   constructor(views: Record<string, WidgetSpec[]>) {
     this.layout = structuredClone(views);
     this.view = Object.keys(views)[0] ?? "";
-    const seen = new Map<string, WidgetSpec>();
-    for (const list of Object.values(views))
-      for (const w of list) seen.set(w.id, w);
-    this.catalog = [...seen.values()];
+    // Every widget once, in first-seen order.
+    this.catalog = Object.values(views)
+      .flat()
+      .filter((w, i, all) => all.findIndex((x) => x.id === w.id) === i);
   }
 
   get views(): string[] {
@@ -51,8 +51,7 @@ export class WidgetBoard {
     return this.layout[this.view] ?? [];
   }
   get addable(): WidgetSpec[] {
-    const ids = new Set(this.shown.map((w) => w.id));
-    return this.catalog.filter((w) => !ids.has(w.id));
+    return this.catalog.filter((w) => !this.shown.some((x) => x.id === w.id));
   }
   spec(id: string): WidgetSpec | undefined {
     return this.catalog.find((w) => w.id === id);
