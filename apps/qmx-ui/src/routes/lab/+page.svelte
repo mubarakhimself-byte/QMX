@@ -31,6 +31,7 @@
   import { ASSETS, ENVIRONMENTS } from "$lib/lab/demo";
   import EnvChip from "$lib/lab/EnvChip.svelte";
   import { LAB_CONTEXT, LAB_SESSIONS } from "$lib/lab/copilot";
+  import StartDialog from "$lib/lab/StartDialog.svelte";
 
   const fromUrl = page.url.searchParams.get("layout");
   if (fromUrl && lab.layouts.some((l) => l.id === fromUrl))
@@ -56,6 +57,7 @@
     workbench.notify(`${LAB_PANELS[id].title} added to ${l.name}.`);
   }
   let saving = $state(false);
+  let starting = $state(false);
   let layoutName = $state("");
   function openSave() {
     layoutName = `${lab.active.name} (mine)`;
@@ -105,11 +107,8 @@
           </DropdownMenu.Item>
         {/each}
         <DropdownMenu.Separator />
-        <DropdownMenu.Item
-          onclick={() =>
-            workbench.notify(
-              "Start from a hypothesis, a template, code or an import. The Lab copilot can draft it.",
-            )}><Plus />Start something new</DropdownMenu.Item
+        <DropdownMenu.Item onclick={() => (starting = true)}
+          ><Plus />Start something new</DropdownMenu.Item
         >
       </DropdownMenu.Content>
     </DropdownMenu.Root>
@@ -319,3 +318,5 @@
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+<StartDialog bind:open={starting} />

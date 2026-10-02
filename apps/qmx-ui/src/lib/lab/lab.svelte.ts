@@ -157,6 +157,15 @@ class LabState {
     this.persist();
   }
 
+  /** Add a layout built elsewhere (e.g. the guided start) and open it. */
+  addLayout(l: TileLayout) {
+    const copy = { ...clone(l), id: `u-${Date.now().toString(36)}` };
+    this.stored = [...this.stored, copy];
+    this.activeId = copy.id;
+    this.persist();
+    return copy;
+  }
+
   saveAs(name: string) {
     const copy: TileLayout = {
       ...clone(this.active),
