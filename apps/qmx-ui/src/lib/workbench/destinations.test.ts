@@ -7,7 +7,7 @@ describe("platform rail destinations", () => {
       "home",
       "copilot",
       "library",
-      "authoring",
+      "lab",
     ]);
   });
 

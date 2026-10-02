@@ -123,7 +123,7 @@
         {#if e.kind !== "app"}<Button
             size="sm"
             variant="outline"
-            href={resolve("/authoring")}><Workflow /> Authoring</Button
+            href={resolve("/lab")}><Workflow /> Open in Lab</Button
           >{/if}
         {#if e.kind === "bot" && (e.stage === "Evidence" || e.stage === "Paper")}
           <Button

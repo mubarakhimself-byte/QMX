@@ -32,13 +32,6 @@ export const DEMO_APPS: OpenedApp[] = [
     icon: "node",
     href: "/trade",
   },
-  {
-    instanceId: "demo-lab",
-    label: "Backtest lab (demo)",
-    icon: "lab",
-    attention: "running",
-  },
-  { instanceId: "demo-ml", label: "ML Studio (demo)", icon: "ml" },
 ];
 
 /**

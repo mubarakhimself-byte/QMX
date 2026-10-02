@@ -2,7 +2,7 @@ import type { Component } from "svelte";
 import House from "@lucide/svelte/icons/house";
 import MessagesSquare from "@lucide/svelte/icons/messages-square";
 import LibraryBig from "@lucide/svelte/icons/library-big";
-import Workflow from "@lucide/svelte/icons/workflow";
+import FlaskConical from "@lucide/svelte/icons/flask-conical";
 import Settings from "@lucide/svelte/icons/settings";
 
 /**
@@ -11,7 +11,7 @@ import Settings from "@lucide/svelte/icons/settings";
  * Settings is chrome, pinned to the rail foot.
  */
 export type Destination = {
-  id: "home" | "copilot" | "library" | "authoring" | "settings";
+  id: "home" | "copilot" | "library" | "lab" | "settings";
   label: string;
   href: string;
   icon: Component;
@@ -35,10 +35,12 @@ export const PRODUCT_DESTINATIONS: readonly Destination[] = [
     shortcut: "3",
   },
   {
-    id: "authoring",
-    label: "Authoring",
-    href: "/authoring",
-    icon: Workflow,
+    // Docs name this destination Authoring (DEC-0470); operator ruled the
+    // merged Lab on 2026-10-02 and the rename is flagged for the docs.
+    id: "lab",
+    label: "Lab",
+    href: "/lab",
+    icon: FlaskConical,
     shortcut: "4",
   },
 ];

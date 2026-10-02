@@ -324,3 +324,26 @@
 :root.theme-paper .scrim {
   background: color-mix(in oklab, var(--background) 80%, transparent);
 }
+
+/* Lab and tiled boards: near-opaque tiles so dense work stays readable over the art. */
+.tile {
+  background: color-mix(in oklab, var(--panel) 90%, var(--background));
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 8px 22px rgb(0 0 0 / 0.3);
+}
+:root.theme-paper .tile {
+  box-shadow: 0 4px 14px rgb(60 50 30 / 0.12);
+}
+/* Work running somewhere other than this machine: a slow pulse on its dot. */
+@keyframes remote-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--info) 60%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--info) 0%, transparent); }
+}
+.remote-pulse {
+  animation: remote-pulse 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .remote-pulse { animation: none; }
+}

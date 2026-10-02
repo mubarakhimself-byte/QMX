@@ -1,0 +1,200 @@
+/**
+ * Lab chrome state: which layout is open, its tiles (edits are kept per
+ * machine), what each link group has selected, and runs ticked for compare.
+ * Layout and selection are client-only; runs and assets come from the
+ * daemon once it is wired (demo data until then).
+ */
+import {
+  pane,
+  parseLayouts,
+  split,
+  type LinkGroup,
+  type TileLayout,
+} from "$lib/workbench/tiles/tiles";
+
+export const BUILTIN_LAYOUTS: TileLayout[] = [
+  {
+    id: "build",
+    name: "Build",
+    root: split("row", [
+      [pane("b-assets", "assets"), 16],
+      [
+        split("col", [
+          [
+            split("row", [
+              [pane("b-editor", "editor", "violet"), 70],
+              [pane("b-inspector", "inspector", "violet"), 30],
+            ]),
+            64,
+          ],
+          [
+            split("row", [
+              [pane("b-runs", "runs", "amber"), 62],
+              [pane("b-equity", "equity", "amber"), 38],
+            ]),
+            36,
+          ],
+        ]),
+        84,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "test",
+    name: "Test",
+    root: split("row", [
+      [
+        split("col", [
+          [pane("t-matrix", "matrix", "amber"), 58],
+          [pane("t-runs", "runs", "amber"), 42],
+        ]),
+        58,
+      ],
+      [
+        split("col", [
+          [pane("t-equity", "equity", "amber"), 46],
+          [pane("t-robust", "robustness", "amber"), 54],
+        ]),
+        42,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "train",
+    name: "Train",
+    root: split("row", [
+      [pane("tr-data", "data"), 22],
+      [
+        split("col", [
+          [pane("tr-training", "training"), 58],
+          [pane("tr-slots", "slots"), 42],
+        ]),
+        48,
+      ],
+      [
+        split("col", [
+          [pane("tr-compute", "compute"), 55],
+          [pane("tr-agents", "agents"), 45],
+        ]),
+        30,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "compare",
+    name: "Compare",
+    root: split("row", [
+      [pane("c-runs", "runs", "teal"), 42],
+      [
+        split("col", [
+          [pane("c-equity", "equity", "teal"), 50],
+          [pane("c-compare", "compare", "teal"), 50],
+        ]),
+        58,
+      ],
+    ]),
+    docked: [],
+  },
+];
+
+const KEY = "qmx.lab.layouts";
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+function load(): TileLayout[] {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? parseLayouts(JSON.parse(raw), () => true) : [];
+  } catch {
+    return [];
+  }
+}
+
+class LabState {
+  /** Edited copies of built-ins (same id) plus the operator's own layouts. */
+  stored = $state<TileLayout[]>(load());
+  activeId = $state("build");
+  editing = $state(false);
+  /** Selection per link group (a run id, a step id …). */
+  selected = $state<Record<LinkGroup, string | null>>({
+    violet: "model",
+    amber: "run-441",
+    teal: "run-441",
+  });
+  /** Runs ticked for compare. */
+  ticked = $state<string[]>(["run-441", "run-502", "run-508"]);
+  copilotOpen = $state(false);
+
+  get layouts(): TileLayout[] {
+    const builtins = BUILTIN_LAYOUTS.map(
+      (b) => this.stored.find((s) => s.id === b.id) ?? b,
+    );
+    const own = this.stored.filter(
+      (s) => !BUILTIN_LAYOUTS.some((b) => b.id === s.id),
+    );
+    return [...builtins, ...own];
+  }
+
+  get active(): TileLayout {
+    return this.layouts.find((l) => l.id === this.activeId) ?? this.layouts[0];
+  }
+
+  isBuiltin(id: string) {
+    return BUILTIN_LAYOUTS.some((b) => b.id === id);
+  }
+
+  isEdited(id: string) {
+    return this.isBuiltin(id) && this.stored.some((s) => s.id === id);
+  }
+
+  private persist() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(this.stored));
+    } catch {
+      /* storage unavailable: edits last for this window */
+    }
+  }
+
+  update(next: TileLayout) {
+    this.stored = [...this.stored.filter((s) => s.id !== next.id), next];
+    this.persist();
+  }
+
+  saveAs(name: string) {
+    const copy: TileLayout = {
+      ...clone(this.active),
+      id: `u-${Date.now().toString(36)}`,
+      name: name.trim().slice(0, 40) || "My layout",
+    };
+    this.stored = [...this.stored, copy];
+    this.activeId = copy.id;
+    this.persist();
+    return copy;
+  }
+
+  /** Built-ins return to their default; your own layouts are deleted. */
+  reset(id: string) {
+    this.stored = this.stored.filter((s) => s.id !== id);
+    if (!this.isBuiltin(id) && this.activeId === id) this.activeId = "build";
+    this.persist();
+  }
+
+  select(link: LinkGroup | undefined, id: string) {
+    if (link) this.selected[link] = id;
+    else this.selected.amber = id;
+  }
+
+  selectedFor(link: LinkGroup | undefined): string | null {
+    return this.selected[link ?? "amber"];
+  }
+
+  toggleTick(id: string) {
+    this.ticked = this.ticked.includes(id)
+      ? this.ticked.filter((t) => t !== id)
+      : [...this.ticked, id].slice(-4);
+  }
+}
+
+export const lab = new LabState();
