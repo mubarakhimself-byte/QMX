@@ -1,5 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Button } from "$lib/components/ui/button";
@@ -36,7 +37,10 @@
     { id: "appearance", label: "Appearance" },
     { id: "developer", label: "Developer" },
   ] as const;
-  let tab = $state<string>("general");
+  const fromUrl = page.url.searchParams.get("tab") ?? "";
+  let tab = $state<string>(
+    TABS.some((t) => t.id === fromUrl) ? fromUrl : "general",
+  );
   let presetName = $state("");
 
   const setArt = (patch: Partial<ArtConfig>) =>

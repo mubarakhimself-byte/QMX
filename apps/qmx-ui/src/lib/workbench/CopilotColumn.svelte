@@ -14,9 +14,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import EmptyState from "./EmptyState.svelte";
   import Composer from "./Composer.svelte";
-  import { MODELS, workbench } from "./workbench.svelte";
+  import { resolve } from "$app/paths";
   import type { CopilotContext } from "./copilot-context";
 
   type Session = { id: string; title: string; when: string };
@@ -31,6 +30,7 @@
     onremoveref,
     context,
     sessions = [],
+    starters = [],
   }: {
     title?: string;
     profile?: string;
@@ -41,14 +41,14 @@
     onremoveref?: (ref: string) => void;
     context?: CopilotContext;
     sessions?: Session[];
+    /** A few things this copilot is good at, offered on an empty session. */
+    starters?: string[];
   } = $props();
+  let draftSeed = $state("");
 
   // svelte-ignore state_referenced_locally
   let list = $state<Session[]>([...sessions]);
   let current = $state<string | null>(null);
-  let showSettings = $state(false);
-  let instructions = $state("");
-  let modelId = $state(workbench.modelDefaults.app ?? "sonnet");
   const active = $derived(list.find((s) => s.id === current));
 
   function newSession() {
@@ -106,11 +106,11 @@
         onclick={newSession}><Plus /></Button
       >
       <Button
-        variant={showSettings ? "secondary" : "ghost"}
+        variant="ghost"
         size="icon-xs"
         aria-label={`${title} settings`}
-        aria-pressed={showSettings}
-        onclick={() => (showSettings = !showSettings)}><Settings2 /></Button
+        title="Model, tools and instructions for this copilot"
+        href={`${resolve("/settings")}?tab=models`}><Settings2 /></Button
       >
       {#if onclose}
         <Button
@@ -122,42 +122,27 @@
       {/if}
     </div>
   </header>
-  {#if showSettings}
-    <div class="flex shrink-0 flex-col gap-2 border-b p-3 text-sm">
-      <label class="flex flex-col gap-1">
-        <span class="text-muted-foreground text-xs"
-          >Standing instructions for this copilot</span
-        >
-        <textarea
-          bind:value={instructions}
-          rows={3}
-          class="bg-background/40 rounded-md border px-2 py-1.5 text-sm"
-          placeholder="Prefer walk-forward over single backtests."
-        ></textarea>
-      </label>
-      <label class="flex items-center justify-between gap-2">
-        <span class="text-muted-foreground text-xs">Default model</span>
-        <select
-          bind:value={modelId}
-          class="bg-background/40 h-8 rounded-md border px-2 text-sm"
-        >
-          {#each MODELS as m (m.id)}<option value={m.id}>{m.label}</option
-            >{/each}
-        </select>
-      </label>
-      <p class="text-muted-foreground text-xs">
-        Saved per copilot once the daemon is connected.
+  <div class="flex min-h-0 flex-1 flex-col justify-end overflow-auto p-3">
+    {#if active}
+      <p class="text-muted-foreground text-sm">
+        {active.title}: messages load from the daemon once it is connected.
       </p>
-    </div>
-  {/if}
-  <div class="min-h-0 flex-1 overflow-auto">
-    <EmptyState
-      class="h-full"
-      title={active ? active.title : "No messages yet"}
-      description={active
-        ? "This session's messages load from the daemon once it is connected."
-        : hint}
-    />
+    {:else}
+      {#if hint}<p class="text-muted-foreground mb-3 text-sm">{hint}</p>{/if}
+      {#if starters.length}
+        <ul class="flex flex-col gap-1.5" aria-label="Suggestions">
+          {#each starters as st (st)}
+            <li>
+              <button
+                type="button"
+                class="hover:bg-muted hover:border-ring/40 w-full rounded-lg border px-3 py-2 text-left text-sm"
+                onclick={() => (draftSeed = st)}>{st}</button
+              >
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {/if}
   </div>
   <div class="p-2">
     <Composer
@@ -166,6 +151,7 @@
       {refs}
       {onremoveref}
       {context}
+      seed={draftSeed}
     />
   </div>
 </aside>

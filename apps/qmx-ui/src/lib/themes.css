@@ -354,3 +354,37 @@
     animation: none;
   }
 }
+
+/* Native selects match the theme: dark popup in dark themes, own chevron. */
+:root.dark select {
+  color-scheme: dark;
+}
+select {
+  appearance: none;
+  background-color: color-mix(in oklab, var(--background) 60%, transparent);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 55%,
+    calc(100% - 9px) 55%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  padding-right: 1.75rem !important;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+select:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--ring) 60%, transparent);
+  outline-offset: 1px;
+}
+select option {
+  background: var(--popover);
+  color: var(--popover-foreground);
+}
+input[type="number"] {
+  color-scheme: inherit;
+}
+:root.dark input[type="number"] {
+  color-scheme: dark;
+}

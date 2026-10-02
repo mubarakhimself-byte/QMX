@@ -52,10 +52,54 @@
   let pairs = $state<[string, string][]>([]);
   let pairA = $state("EURUSD");
   let pairB = $state("GBPUSD");
-  let params = $state([
-    { name: "ATR stop (×)", from: 1, to: 2.5, step: 0.5, on: true },
-    { name: "Lookback (bars)", from: 20, to: 60, step: 20, on: false },
-    { name: "Score threshold", from: 0.55, to: 0.7, step: 0.05, on: false },
+  let own = $state<string[]>([]);
+  let newMarket = $state("");
+  function addMarket() {
+    const m = newMarket.trim().toUpperCase();
+    if (!m) return;
+    if (!own.includes(m) && !MARKET_GROUPS.some((g) => g.items.includes(m)))
+      own = [...own, m];
+    if (!markets.includes(m)) markets = [...markets, m];
+    newMarket = "";
+  }
+  const MEASURES = [
+    "Net %",
+    "Sharpe",
+    "Max drawdown",
+    "Profit factor",
+    "Win rate",
+    "Average trade",
+    "Exposure",
+    "Longest losing streak",
+  ];
+  let measures = $state(["Net %", "Sharpe", "Max drawdown", "Profit factor"]);
+  type Param = {
+    id: string;
+    name: string;
+    from: number;
+    to: number;
+    step: number;
+    on: boolean;
+    custom?: boolean;
+  };
+  let params = $state<Param[]>([
+    { id: "p1", name: "ATR stop (×)", from: 1, to: 2.5, step: 0.5, on: true },
+    {
+      id: "p2",
+      name: "Lookback (bars)",
+      from: 20,
+      to: 60,
+      step: 20,
+      on: false,
+    },
+    {
+      id: "p3",
+      name: "Score threshold",
+      from: 0.55,
+      to: 0.7,
+      step: 0.05,
+      on: false,
+    },
   ]);
   let costs = $state("Default spread");
   let env = $state("vps-fsn");
@@ -128,6 +172,36 @@
             {/each}
           </div>
         {/each}
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-muted-foreground w-20 text-xs">Yours</span>
+          {#each own as m (m)}
+            <button
+              type="button"
+              class={chip(markets.includes(m))}
+              aria-pressed={markets.includes(m)}
+              onclick={() => (markets = toggle(markets, m))}>{m}</button
+            >
+          {/each}
+          <input
+            bind:value={newMarket}
+            placeholder="Any symbol, e.g. WTI"
+            aria-label="Add a market"
+            class="bg-background/40 h-7 w-40 rounded-md border px-2 text-xs uppercase"
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addMarket();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-7"
+            onclick={addMarket}><Plus />Add</Button
+          >
+        </div>
       </section>
 
       <section class="grid gap-2">
@@ -209,12 +283,21 @@
               >Step</span
             ><span></span>
           </div>
-          {#each params as p (p.name)}
+          {#each params as p (p.id)}
             <div
               class="grid grid-cols-[2.5rem_1fr_repeat(3,5rem)_4rem] items-center gap-2 text-sm"
             >
               <Switch bind:checked={p.on} aria-label={`Sweep ${p.name}`} />
-              <span class={p.on ? "" : "text-muted-foreground"}>{p.name}</span>
+              {#if p.custom}
+                <input
+                  bind:value={p.name}
+                  aria-label="Parameter name"
+                  class="bg-background/40 h-7 rounded-md border px-2 text-sm"
+                />
+              {:else}
+                <span class={p.on ? "" : "text-muted-foreground"}>{p.name}</span
+                >
+              {/if}
               <input
                 type="number"
                 bind:value={p.from}
@@ -245,6 +328,58 @@
               >
             </div>
           {/each}
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-7"
+              onclick={() =>
+                (params = [
+                  ...params,
+                  {
+                    id: `p${params.length + 1}`,
+                    name: "New parameter",
+                    from: 1,
+                    to: 3,
+                    step: 1,
+                    on: true,
+                    custom: true,
+                  },
+                ])}><Plus />Add a parameter</Button
+            >
+            <span class="text-muted-foreground text-xs"
+              >New ones are added to the bot's declared ranges as a new version.</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="grid gap-2">
+        <h3 class="text-sm font-medium">
+          Measures <span class="text-muted-foreground font-normal"
+            >recorded for every run; raw numbers, never a combined score</span
+          >
+        </h3>
+        <div class="flex flex-wrap items-center gap-1.5">
+          {#each MEASURES as m (m)}
+            <button
+              type="button"
+              class={chip(measures.includes(m))}
+              aria-pressed={measures.includes(m)}
+              onclick={() => (measures = toggle(measures, m))}>{m}</button
+            >
+          {/each}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-7"
+            onclick={() =>
+              workbench.notify(
+                "Describe the measure to the Lab copilot; it writes it as a reusable measure.",
+              )}><Plus />Your own</Button
+          >
         </div>
       </section>
 

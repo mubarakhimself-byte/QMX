@@ -277,6 +277,12 @@
           onremoveref={(r) => workbench.removeRef(r)}
           context={LAB_CONTEXT}
           sessions={LAB_SESSIONS}
+          starters={[
+            `Sweep ${subject.name} across the majors on H1 and H4`,
+            "Why did the XAUUSD M15 run fail?",
+            "Compare the three ticked runs and say what changed",
+            "Build a panel showing drawdown by session",
+          ]}
         />
       </Resizable.Pane>
     {/if}

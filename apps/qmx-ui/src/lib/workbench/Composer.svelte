@@ -4,7 +4,6 @@
   import Paperclip from "@lucide/svelte/icons/paperclip";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Wrench from "@lucide/svelte/icons/wrench";
-  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import X from "@lucide/svelte/icons/x";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Sparkles from "@lucide/svelte/icons/sparkles";
@@ -23,6 +22,7 @@
     onremoveref,
     size = "md",
     context = MAIN_CONTEXT,
+    seed = "",
   }: {
     placeholder?: string;
     label?: string;
@@ -32,9 +32,14 @@
     size?: "md" | "lg";
     /** Tools, targets and attach sources for this surface. */
     context?: CopilotContext;
+    /** Text placed in the box when a suggestion is picked. */
+    seed?: string;
   } = $props();
 
   let draft = $state("");
+  $effect(() => {
+    if (seed) draft = seed;
+  });
   // Send goes through dispatchChat once a transport is bound; never faked.
   const online = $derived(workbench.connection === "connected");
   const model = $derived(
@@ -62,6 +67,10 @@
   const groups = $derived([
     ...new Set(context.tools.map((t) => t.group ?? "")),
   ]);
+  const iconChip =
+    "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted relative flex size-7 shrink-0 items-center justify-center rounded-md";
+  const badge =
+    "bg-primary text-primary-foreground num absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] leading-none";
   const chip =
     "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap";
 </script>
@@ -110,8 +119,13 @@
   <div class="flex items-center gap-0.5 px-2 pb-2">
     {#if context.attach}
       <DropdownMenu.Root>
-        <DropdownMenu.Trigger class={chip} aria-label="Attach">
-          <Paperclip class="size-4" /> Attach
+        <DropdownMenu.Trigger
+          class={iconChip}
+          aria-label={`Attach${refs.length ? `, ${refs.length} attached` : ""}`}
+          title="Attach"
+        >
+          <Paperclip class="size-4" />
+          {#if refs.length}<span class={badge}>{refs.length}</span>{/if}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" class="w-64">
           {#each context.attach as a (a.id)}
@@ -145,11 +159,12 @@
     {#if context.targets}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          class={chip}
+          class={target ? chip : iconChip}
           aria-label={`Target: ${target?.name ?? "copilot decides"}`}
+          title="Aim this message at"
         >
           <AtSign class="size-4" />
-          {target?.name ?? "Target"}
+          {#if target}<span class="max-w-24 truncate">{target.name}</span>{/if}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" class="w-80">
           <DropdownMenu.Label>Aim this message at</DropdownMenu.Label>
@@ -196,11 +211,12 @@
 
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        class={chip}
+        class={iconChip}
         aria-label={`Tools, ${tools.length} on`}
+        title="Tools"
       >
-        <Wrench class="size-4" /> Tools
-        <span class="num text-xs opacity-70">{tools.length}</span>
+        <Wrench class="size-4" />
+        <span class={badge}>{tools.length}</span>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" class="max-h-96 w-72 overflow-auto">
         <DropdownMenu.Label>Tools the copilot may use here</DropdownMenu.Label>
@@ -231,14 +247,6 @@
     </DropdownMenu.Root>
 
     <div class="ml-auto flex items-center gap-1">
-      {#if !online}
-        <span
-          class="text-muted-foreground flex items-center gap-1 px-1 text-xs"
-          title="Sending needs a connection to the QMX daemon."
-        >
-          <WifiOff class="size-3.5" /> Offline
-        </span>
-      {/if}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger class={chip} aria-label={`Model: ${model.label}`}>
           <Sparkles class="size-4" />
@@ -269,7 +277,8 @@
       <Button
         type="submit"
         size="icon-sm"
-        aria-label={online ? "Send" : "Send (offline)"}
+        aria-label={online ? "Send" : "Send (needs the daemon)"}
+        title={online ? "Send" : "Sending needs a connection to the QMX daemon"}
         disabled={!online || !draft.trim()}
       >
         <ArrowUp />
