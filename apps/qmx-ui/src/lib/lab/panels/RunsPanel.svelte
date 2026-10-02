@@ -10,7 +10,8 @@
   import type { LinkGroup } from "$lib/workbench/tiles/tiles";
   import EnvChip from "../EnvChip.svelte";
   import StatusDot from "../StatusDot.svelte";
-  import { RUNS, type Run } from "../demo";
+  import X from "@lucide/svelte/icons/x";
+  import { RUNS, envById, type Run } from "../demo";
   import { lab } from "../lab.svelte";
 
   let { link }: { link?: LinkGroup } = $props();
@@ -23,15 +24,17 @@
 
   const rows = $derived.by(() => {
     const f = RUNS.filter((r) =>
-      filter === "All"
-        ? true
-        : filter === "Running"
-          ? r.status === "running" || r.status === "queued"
-          : filter === "Done"
-            ? r.status === "done"
-            : r.status === "failed" ||
-              r.status === "aborted" ||
-              r.status === "unknown",
+      lab.envFilter && r.env !== lab.envFilter
+        ? false
+        : filter === "All"
+          ? true
+          : filter === "Running"
+            ? r.status === "running" || r.status === "queued"
+            : filter === "Done"
+              ? r.status === "done"
+              : r.status === "failed" ||
+                r.status === "aborted" ||
+                r.status === "unknown",
     );
     const v = (r: Run) =>
       sortKey === "id" ? Number(r.id.slice(4)) : (r[sortKey] ?? -Infinity);
@@ -75,6 +78,15 @@
         onclick={() => (filter = f)}>{f}</button
       >
     {/each}
+    {#if lab.envFilter}
+      <button
+        type="button"
+        class="bg-info/12 text-info ml-1 flex h-6 items-center gap-1 rounded-md px-2 text-xs"
+        aria-label="Show work on every machine"
+        onclick={() => (lab.envFilter = null)}
+        >Only {envById(lab.envFilter)?.name}<X class="size-3" /></button
+      >
+    {/if}
     <span class="text-muted-foreground ml-auto text-xs tabular-nums"
       >{rows.length} runs · {counts.running} running · {counts.queued} queued ·
       {lab.ticked.length} ticked</span

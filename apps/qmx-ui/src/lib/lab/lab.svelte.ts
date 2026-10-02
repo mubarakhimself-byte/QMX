@@ -12,30 +12,28 @@ import {
   type TileLayout,
 } from "$lib/workbench/tiles/tiles";
 
+// Every layout opens with the same Resources tile on the left (operator,
+// 2026-10-02); the rest is only what that kind of work needs.
+const resources = (id: string) => pane(id, "resources");
+
 export const BUILTIN_LAYOUTS: TileLayout[] = [
   {
     id: "build",
     name: "Build",
     root: split("row", [
-      [pane("b-assets", "assets"), 16],
+      [resources("b-res"), 18],
       [
         split("col", [
           [
             split("row", [
-              [pane("b-editor", "editor", "violet"), 70],
-              [pane("b-inspector", "inspector", "violet"), 30],
+              [pane("b-editor", "editor", "violet"), 72],
+              [pane("b-inspector", "inspector", "violet"), 28],
             ]),
-            64,
+            72,
           ],
-          [
-            split("row", [
-              [pane("b-runs", "runs", "amber"), 62],
-              [pane("b-equity", "equity", "amber"), 38],
-            ]),
-            36,
-          ],
+          [pane("b-logs", "logs", "amber"), 28],
         ]),
-        84,
+        82,
       ],
     ]),
     docked: [],
@@ -44,19 +42,20 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     id: "test",
     name: "Test",
     root: split("row", [
+      [resources("t-res"), 17],
       [
         split("col", [
-          [pane("t-matrix", "matrix", "amber"), 58],
-          [pane("t-runs", "runs", "amber"), 42],
+          [pane("t-matrix", "matrix", "amber"), 56],
+          [pane("t-runs", "runs", "amber"), 44],
         ]),
-        58,
+        50,
       ],
       [
         split("col", [
           [pane("t-equity", "equity", "amber"), 46],
           [pane("t-robust", "robustness", "amber"), 54],
         ]),
-        42,
+        33,
       ],
     ]),
     docked: [],
@@ -65,20 +64,13 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     id: "train",
     name: "Train",
     root: split("row", [
-      [pane("tr-data", "data"), 22],
+      [resources("tr-res"), 20],
       [
         split("col", [
-          [pane("tr-training", "training"), 58],
-          [pane("tr-slots", "slots"), 42],
+          [pane("tr-training", "training"), 66],
+          [pane("tr-logs", "logs", "amber"), 34],
         ]),
-        48,
-      ],
-      [
-        split("col", [
-          [pane("tr-compute", "compute"), 55],
-          [pane("tr-agents", "agents"), 45],
-        ]),
-        30,
+        80,
       ],
     ]),
     docked: [],
@@ -87,20 +79,21 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     id: "compare",
     name: "Compare",
     root: split("row", [
-      [pane("c-runs", "runs", "teal"), 42],
+      [resources("c-res"), 17],
+      [pane("c-runs", "runs", "teal"), 35],
       [
         split("col", [
           [pane("c-equity", "equity", "teal"), 50],
           [pane("c-compare", "compare", "teal"), 50],
         ]),
-        58,
+        48,
       ],
     ]),
     docked: [],
   },
 ];
 
-const KEY = "qmx.lab.layouts";
+const KEY = "qmx.lab.layouts.v2";
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 function load(): TileLayout[] {
@@ -126,6 +119,8 @@ class LabState {
   /** Runs ticked for compare. */
   ticked = $state<string[]>(["run-441", "run-502", "run-508"]);
   copilotOpen = $state(false);
+  /** Show only work on one machine (null = everywhere). */
+  envFilter = $state<string | null>(null);
 
   get layouts(): TileLayout[] {
     const builtins = BUILTIN_LAYOUTS.map(

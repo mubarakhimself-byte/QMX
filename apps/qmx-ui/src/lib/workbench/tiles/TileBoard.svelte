@@ -65,6 +65,11 @@
     teal: "bg-[oklch(0.75_0.12_185)]",
   };
 
+  const LINK_BORDER: Record<LinkGroup, string> = {
+    violet: "color-mix(in oklab, oklch(0.68 0.17 295) 55%, transparent)",
+    amber: "color-mix(in oklab, oklch(0.8 0.15 75) 50%, transparent)",
+    teal: "color-mix(in oklab, oklch(0.75 0.12 185) 50%, transparent)",
+  };
   const info = (p: TilePane): PanelInfo =>
     catalog[p.panel] ?? {
       title: "Unsupported panel",
@@ -145,6 +150,7 @@
       "tile flex h-full min-h-0 flex-col overflow-hidden rounded-lg",
       dropTarget === p.id && "ring-ring ring-2",
     )}
+    style={p.link ? `border-color: ${LINK_BORDER[p.link]}` : undefined}
     aria-label={i.title}
     ondragover={(e) => {
       if (!dragging) return;
@@ -235,7 +241,7 @@
         {/if}
       </div>
     </header>
-    <div class="relative min-h-0 flex-1">
+    <div class="@container relative min-h-0 flex-1">
       {#if catalog[p.panel]}
         {@render panel(p)}
       {:else}

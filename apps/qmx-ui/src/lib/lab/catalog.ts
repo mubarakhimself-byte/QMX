@@ -31,6 +31,8 @@ import DataPanel from "./panels/DataPanel.svelte";
 import ComputePanel from "./panels/ComputePanel.svelte";
 import AgentsPanel from "./panels/AgentsPanel.svelte";
 import LogsPanel from "./panels/LogsPanel.svelte";
+import ResourcesPanel from "./panels/ResourcesPanel.svelte";
+import Layers from "@lucide/svelte/icons/layers";
 
 export type LabPanel = {
   title: string;
@@ -41,6 +43,12 @@ export type LabPanel = {
 };
 
 export const LAB_PANELS: Record<string, LabPanel> = {
+  resources: {
+    title: "Resources",
+    icon: Layers,
+    note: "Items, data, machines and slots",
+    view: ResourcesPanel,
+  },
   assets: {
     title: "Toolbox",
     icon: Boxes,

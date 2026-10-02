@@ -217,7 +217,10 @@
           {#each ENVIRONMENTS as e (e.id)}
             <DropdownMenu.Item
               disabled={e.status === "offline"}
-              onclick={() => (runOn = e.id)}
+              onclick={() => {
+                runOn = e.id;
+                if (lab.envFilter) lab.envFilter = e.id;
+              }}
             >
               <span class="flex w-full flex-col">
                 <span class="flex items-center justify-between gap-2"
@@ -235,6 +238,13 @@
               </span>
             </DropdownMenu.Item>
           {/each}
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem
+            checked={lab.envFilter === runOn}
+            onCheckedChange={(on) => (lab.envFilter = on ? runOn : null)}
+          >
+            Show only work on {ENVIRONMENTS.find((e) => e.id === runOn)?.name}
+          </DropdownMenu.CheckboxItem>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
       <Button size="sm" onclick={run}><Play />Run</Button>

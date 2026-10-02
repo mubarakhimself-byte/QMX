@@ -13,6 +13,7 @@
     type Theme,
   } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
+  import ComputePanel from "$lib/lab/panels/ComputePanel.svelte";
   import { Input } from "$lib/components/ui/input";
   import { Slider } from "$lib/components/ui/slider";
   import Shuffle from "@lucide/svelte/icons/shuffle";
@@ -33,6 +34,7 @@
     { id: "general", label: "General" },
     { id: "models", label: "Models" },
     { id: "nodes", label: "Trading nodes" },
+    { id: "compute", label: "Compute" },
     { id: "data", label: "Data & sources" },
     { id: "appearance", label: "Appearance" },
     { id: "developer", label: "Developer" },
@@ -382,6 +384,17 @@
           <ShieldAlert class="size-3.5" /> Kill switch and risk limits live on the
           node, not in this window.
         </p>
+      </section>
+    {:else if tab === "compute"}
+      <section class={cn(card, "p-0")} aria-labelledby="s-compute">
+        <div class="px-5 pt-5">
+          <h2 id="s-compute" class="text-lg font-semibold">Compute</h2>
+          <p class="text-muted-foreground text-sm">
+            Machines the Lab and agents can run on: this computer, servers you
+            control, notebooks and GPU providers.
+          </p>
+        </div>
+        <div class="h-[28rem]"><ComputePanel /></div>
       </section>
     {:else if tab === "data"}
       <section class={card} aria-labelledby="s-src">
