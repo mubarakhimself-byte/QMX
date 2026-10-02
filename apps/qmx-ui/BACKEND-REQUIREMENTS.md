@@ -77,3 +77,20 @@ Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc de
 - **Saved tests, reports, datasets and feature sets as reusable items** (none are Library kinds today, DEC-0271).
 - **Pass thresholds and overfit budgets** for sweeps and robustness (GAP-0017/0048/0049).
 - **Agents and sub-agent swarms in workflows**: the UI needs where each runs and its live state (QMA refactor pending).
+
+### Lab: what each panel needs from the backend (L11, 2026-10-02)
+
+| Panel | Needs | In docs? |
+|---|---|---|
+| Runs, Equity, Log | List runs for a subject with procedure, run role, market, measures, state, progress, where it ran; CT-32 series for equity; run console stream | Runs, roles, CT-32: yes (qmb.md B-3/B-4/B-10). "Where it ran" per run: via CT-46 environment ref |
+| Sweep grid | Permutation sweep results keyed by market × timeframe (B-12) | Yes; CLI wiring missing (DEC-0286) |
+| Scenario builder | Submit a sweep: bot version, markets, pairs, timeframes, parameter ranges from CT-33, costs preset, environment; estimate count and time | Sweep yes; pairs, saved scenarios and estimates: new scope |
+| Robustness | Ladder results per run (costs, shuffle, noise, significance, walk-forward), cost tier, state; operator-set pass bars | Procedures yes (B-14); thresholds open (GAP-0048/0049) |
+| Compare | Measures for N runs plus what differs; refusal reasons when not comparable | Planning only (T-R5-04) |
+| Editor, Inspector | Graph Template draft read/write (editor_draft_head, publish), step settings and code, where each step runs; import a model file, repo folder, notebook | Drafts yes (SCN-0033); import paths: new scope |
+| Training, Model slots | Training job progress and curves, split manifest (CT-12), model object, slots (entry, sizing, regime, throttle, custom) | Split yes; model object and slots: new scope |
+| Data | Datasets with provider, schema, timezone, freshness, gaps, revision; add data (upload via PUT /artifacts/stage, connect a source, derive) | Dataset fields yes (CT-10/15); derive and connect flows: partly |
+| Compute | Environments (CT-46) with kind, hardware, slots used/total, cost, status, evidence eligibility; add an environment (SSH, Colab, cloud GPU) | Environments yes; vendors GAP-0075; Colab and evidence rule for remote runs need a ruling |
+| Agents | Quants, agents and sub-agents on the subject with state and environment | Ontology yes (QMA); live tree read model: needed |
+| Lab copilot | Per-surface tool list, targets (quants) and attach sources; sessions with history; per-copilot instructions and default model | Product sessions yes (psess); per-surface tool lists: new scope |
+| Layouts | None: saved per machine in the browser; optional sync if the operator wants it across machines | — |

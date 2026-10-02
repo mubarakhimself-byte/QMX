@@ -32,13 +32,13 @@ Cross-cutting items land in the first pass that needs them: per-context composer
 | L1 | Research: what the docs define for experiments, QMB, QML, graphs, compute; reference products (StrategyQuant, QuantConnect, MLflow/W&B, node editors, Bloomberg tiling) | done (docs brief + reference patterns) |
 | L2 | 2–3 whole-screen layout options for the operator | shown 2026-10-02 (A workbench, B evidence first, C tiling presets) |
 | L3 | Operator picks; record the ruling | done: C tiling engine with A (Build) and B (Test, Compare) as default layouts; name "Lab" |
-| L4 | Lab shell and navigation: one rail entry, old Authoring / Backtest / ML entries folded in, links redirected | — |
-| L5 | Build: node editor rethink (readable over the background, specific copilot), code mode, import a model built elsewhere | — |
-| L6 | Test: runs, scenario generator (pairs × timeframes × pair trading), robustness, compare | — |
-| L7 | Train: ML datasets, features, split/leakage, models, plug into slots | — |
-| L8 | Data and compute: datasets, features, presets as reusable items; where it runs (local, Colab, GPU provider) | — |
-| L9 | Lab copilot: its own tools, targets and attach sources; multiple sessions with history | — |
-| L10 | Click-through journeys and fixes | — |
+| L4 | Lab shell and navigation: one rail entry, old Authoring / Backtest / ML entries folded in, links redirected | done: tiling engine (`lib/workbench/tiles`), `/lab`, 4 layouts, 14 panels, rail shows Lab, redirects |
+| L5 | Build: node editor rethink (readable over the background, specific copilot), code mode, import a model built elsewhere | first cut: Graph / Code / Import modes, map toggle, refit on resize, inspector shows where a step runs. Open: run state on nodes, saved steps palette, copilot edits to the graph |
+| L6 | Test: runs, scenario generator (pairs × timeframes × pair trading), robustness, compare | done (demo): runs table, sweep grid, scenario builder with run count / time / luck warning, robustness ladder, compare with refusal note |
+| L7 | Train: ML datasets, features, split/leakage, models, plug into slots | first cut: pipeline, loss curves, CT-12 split, four slots + add a slot (three marked new scope) |
+| L8 | Data and compute: datasets, features, presets as reusable items; where it runs (local, Colab, GPU provider) | done (demo): toolbox with add-your-own per group, data with dataset details, compute with slots, cost, evidence status; off-machine work pulses |
+| L9 | Lab copilot: its own tools, targets and attach sources; multiple sessions with history | done: per-surface context in the composer; Lab tools, quants as targets, Lab attach sources; sessions, new session, settings |
+| L10 | Click-through journeys and fixes | first round done at 1280/1920/2560: minimise reflow, link follow, drag swap, save layout + reload, edit close/add, redirects, scenario counts; fixed edited-mark bug, table wrap, graph refit. Next round after operator review |
 | L11 | Backend mapping for Codex; gaps flagged as new scope | — |
 
 ## Rulings for the Lab (2026-10-02)
@@ -52,4 +52,5 @@ Cross-cutting items land in the first pass that needs them: per-context composer
 ## Log
 
 - 2026-10-02: ledger created. Round 6 feedback recorded in `UI-BACKLOG.md`. Library back arrow fixed (`a5babae3`). L1 research started.
+- 2026-10-02: Lab built while operator away (commits 9d3f7985..). L4, L6, L8, L9 done as demo; L5, L7 first cut; L10 round 1; L11 written.
 - 2026-10-02: L1 done (docs brief: 17 gaps; reference patterns). L2 shown. L3 ruled (see above).

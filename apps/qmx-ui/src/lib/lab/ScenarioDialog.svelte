@@ -201,6 +201,14 @@
           >
         </h3>
         <div class="grid gap-1.5">
+          <div
+            class="text-muted-foreground grid grid-cols-[2.5rem_1fr_repeat(3,5rem)_4rem] gap-2 text-xs"
+            aria-hidden="true"
+          >
+            <span></span><span>Sweep</span><span>From</span><span>To</span><span
+              >Step</span
+            ><span></span>
+          </div>
           {#each params as p (p.name)}
             <div
               class="grid grid-cols-[2.5rem_1fr_repeat(3,5rem)_4rem] items-center gap-2 text-sm"
