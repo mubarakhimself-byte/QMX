@@ -108,7 +108,7 @@
         bind:edges
         {nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.12, maxZoom: 1.1 }}
+        fitViewOptions={{ padding: 0.08, maxZoom: 1.6 }}
         defaultEdgeOptions={{
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
         }}

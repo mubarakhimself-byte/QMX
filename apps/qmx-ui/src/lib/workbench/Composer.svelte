@@ -8,13 +8,12 @@
   import X from "@lucide/svelte/icons/x";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Sparkles from "@lucide/svelte/icons/sparkles";
-  import LibraryBig from "@lucide/svelte/icons/library-big";
-  import Upload from "@lucide/svelte/icons/upload";
   import LayoutPanelTop from "@lucide/svelte/icons/layout-panel-top";
   import AtSign from "@lucide/svelte/icons/at-sign";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Button } from "$lib/components/ui/button";
-  import { workbench, MODELS, TOOLS, TARGETS } from "./workbench.svelte";
+  import { workbench, MODELS } from "./workbench.svelte";
+  import { MAIN_CONTEXT, type CopilotContext } from "./copilot-context";
   import { cn } from "$lib/utils";
 
   let {
@@ -23,6 +22,7 @@
     refs = [],
     onremoveref,
     size = "md",
+    context = MAIN_CONTEXT,
   }: {
     placeholder?: string;
     label?: string;
@@ -30,6 +30,8 @@
     refs?: string[];
     onremoveref?: (ref: string) => void;
     size?: "md" | "lg";
+    /** Tools, targets and attach sources for this surface. */
+    context?: CopilotContext;
   } = $props();
 
   let draft = $state("");
@@ -38,20 +40,28 @@
   const model = $derived(
     MODELS.find((m) => m.id === workbench.model) ?? MODELS[0],
   );
-  const toolCount = $derived(workbench.tools.length);
-  const target = $derived(TARGETS.find((t) => t.id === workbench.target));
-  const AXES = [
-    "published",
-    "configured",
-    "granted",
-    "reachable",
-    "healthy",
-  ] as const;
-  /** Where a target falls short, in plain words. */
-  function gap(t: (typeof TARGETS)[number]): string | null {
-    const missing = AXES.find((a) => !t.axes[a]);
-    return missing ? `not ${missing}` : null;
+  const isMain = $derived(context.id === "main");
+  // The main copilot keeps its choices in the workbench; other surfaces keep their own.
+  // svelte-ignore state_referenced_locally
+  let localTools = $state<string[]>([...context.defaultTools]);
+  let localTarget = $state<string | null>(null);
+  const tools = $derived(isMain ? workbench.tools : localTools);
+  const targetId = $derived(isMain ? workbench.target : localTarget);
+  const target = $derived(context.targets?.find((t) => t.id === targetId));
+  function toggleTool(id: string) {
+    if (isMain) workbench.toggleTool(id);
+    else
+      localTools = localTools.includes(id)
+        ? localTools.filter((t) => t !== id)
+        : [...localTools, id];
   }
+  function setTarget(id: string | null) {
+    if (isMain) workbench.target = id as typeof workbench.target;
+    else localTarget = id;
+  }
+  const groups = $derived([
+    ...new Set(context.tools.map((t) => t.group ?? "")),
+  ]);
   const chip =
     "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap";
 </script>
@@ -98,94 +108,124 @@
         : "max-h-56 min-h-12 text-[15px]",
     )}></textarea>
   <div class="flex items-center gap-0.5 px-2 pb-2">
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger class={chip} aria-label="Attach">
-        <Paperclip class="size-4" /> Attach
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-60">
-        <DropdownMenu.Item onclick={() => goto(resolve("/library"))}>
-          <LibraryBig /> From Library…
-        </DropdownMenu.Item>
-        <DropdownMenu.Item disabled>
-          <Upload /> Upload a file
-          <span class="text-muted-foreground ml-auto text-xs">needs daemon</span
+    {#if context.attach}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger class={chip} aria-label="Attach">
+          <Paperclip class="size-4" /> Attach
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" class="w-64">
+          {#each context.attach as a (a.id)}
+            <DropdownMenu.Item
+              disabled={!!a.needs}
+              onclick={() => {
+                if (a.href) goto(resolve(a.href as "/library"));
+                else
+                  workbench.notify(
+                    `${a.label}: pick it on screen; it joins this message.`,
+                  );
+              }}
+            >
+              <a.icon />
+              <span class="flex min-w-0 flex-col">
+                <span>{a.label}</span>
+                {#if a.note}<span class="text-muted-foreground text-xs"
+                    >{a.note}</span
+                  >{/if}
+              </span>
+              {#if a.needs}<span
+                  class="text-muted-foreground ml-auto text-xs whitespace-nowrap"
+                  >{a.needs}</span
+                >{/if}
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
+
+    {#if context.targets}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          class={chip}
+          aria-label={`Target: ${target?.name ?? "copilot decides"}`}
+        >
+          <AtSign class="size-4" />
+          {target?.name ?? "Target"}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" class="w-80">
+          <DropdownMenu.Label>Aim this message at</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup
+            value={targetId ?? ""}
+            onValueChange={(v) => setTarget(v || null)}
           >
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Label class="text-muted-foreground text-xs font-normal">
-          Use the message-plus icon on any widget to attach it.
-        </DropdownMenu.Label>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+            <DropdownMenu.RadioItem value="" closeOnSelect>
+              <span class="flex flex-col"
+                ><span>Let the copilot decide</span><span
+                  class="text-muted-foreground text-xs"
+                  >It picks from what you have granted</span
+                ></span
+              >
+            </DropdownMenu.RadioItem>
+            {#each context.targets as t (t.id)}
+              <DropdownMenu.RadioItem
+                value={t.id}
+                closeOnSelect
+                disabled={!!t.blocked && t.blocked !== "not granted"}
+              >
+                <span class="flex min-w-0 flex-col">
+                  <span class="flex items-center gap-2"
+                    >{t.name}<span class="text-muted-foreground text-xs"
+                      >{t.kind}</span
+                    ></span
+                  >
+                  <span class="text-muted-foreground truncate text-xs"
+                    >{t.note}</span
+                  >
+                  <span
+                    class={cn(
+                      "text-xs",
+                      t.blocked ? "text-warning" : "text-success",
+                    )}>{t.blocked ? `Can't use: ${t.blocked}` : "Ready"}</span
+                  >
+                </span>
+              </DropdownMenu.RadioItem>
+            {/each}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
 
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
         class={chip}
-        aria-label={`Target: ${target?.name ?? "copilot decides"}`}
+        aria-label={`Tools, ${tools.length} on`}
       >
-        <AtSign class="size-4" />
-        {target?.name ?? "Target"}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-80">
-        <DropdownMenu.Label>Aim this message at</DropdownMenu.Label>
-        <DropdownMenu.RadioGroup
-          value={workbench.target ?? ""}
-          onValueChange={(v) =>
-            (workbench.target = (v || null) as typeof workbench.target)}
-        >
-          <DropdownMenu.RadioItem value="" closeOnSelect>
-            <span class="flex flex-col"
-              ><span>Let the copilot decide</span><span
-                class="text-muted-foreground text-xs"
-                >It picks from what you have granted</span
-              ></span
-            >
-          </DropdownMenu.RadioItem>
-          {#each TARGETS as t (t.id)}
-            {@const g = gap(t)}
-            <DropdownMenu.RadioItem
-              value={t.id}
-              closeOnSelect
-              disabled={!!g && g !== "not granted"}
-            >
-              <span class="flex min-w-0 flex-col">
-                <span class="flex items-center gap-2"
-                  >{t.name}<span class="text-muted-foreground text-xs"
-                    >{t.kind}</span
-                  ></span
-                >
-                <span
-                  class="text-muted-foreground truncate font-mono text-[11px]"
-                  >{t.ops.join(" · ")}</span
-                >
-                <span class={cn("text-xs", g ? "text-warning" : "text-success")}
-                  >{g ? `Can't use: ${g}` : "Ready"}</span
-                >
-              </span>
-            </DropdownMenu.RadioItem>
-          {/each}
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger class={chip} aria-label={`Tools, ${toolCount} on`}>
         <Wrench class="size-4" /> Tools
-        <span class="num text-xs opacity-70">{toolCount}</span>
+        <span class="num text-xs opacity-70">{tools.length}</span>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-64">
-        <DropdownMenu.Label>Tools the copilot may use</DropdownMenu.Label>
-        {#each TOOLS as t (t.id)}
-          <DropdownMenu.CheckboxItem
-            checked={workbench.tools.includes(t.id)}
-            onCheckedChange={() => workbench.toggleTool(t.id)}
-            closeOnSelect={false}
-          >
-            <span class="flex flex-col">
-              <span class="font-mono text-[13px]">{t.id}</span>
-              <span class="text-muted-foreground text-xs">{t.note}</span>
-            </span>
-          </DropdownMenu.CheckboxItem>
+      <DropdownMenu.Content align="start" class="max-h-96 w-72 overflow-auto">
+        <DropdownMenu.Label>Tools the copilot may use here</DropdownMenu.Label>
+        {#each groups as g (g)}
+          {#if g}<DropdownMenu.Label
+              class="text-muted-foreground pt-2 text-xs font-normal"
+              >{g}</DropdownMenu.Label
+            >{/if}
+          {#each context.tools.filter((t) => (t.group ?? "") === g) as t (t.id)}
+            <DropdownMenu.CheckboxItem
+              checked={tools.includes(t.id)}
+              onCheckedChange={() => toggleTool(t.id)}
+              closeOnSelect={false}
+            >
+              <span class="flex flex-col">
+                <span class="font-mono text-[13px]"
+                  >{t.id}{#if t.scope === "new"}<span
+                      class="text-muted-foreground ml-1.5 font-sans text-[11px]"
+                      >new scope</span
+                    >{/if}</span
+                >
+                <span class="text-muted-foreground text-xs">{t.note}</span>
+              </span>
+            </DropdownMenu.CheckboxItem>
+          {/each}
         {/each}
       </DropdownMenu.Content>
     </DropdownMenu.Root>

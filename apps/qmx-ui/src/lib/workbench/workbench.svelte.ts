@@ -97,7 +97,7 @@ export const TARGETS = [
   },
   {
     id: "lab",
-    name: "Backtest lab",
+    name: "Lab",
     kind: "Mini app",
     ops: ["qmb.backtest", "qmb.walk_forward", "qmb.robustness"],
     axes: {

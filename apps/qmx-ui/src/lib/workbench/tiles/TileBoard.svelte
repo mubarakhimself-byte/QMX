@@ -109,7 +109,21 @@
     dropTarget = null;
   }
   let sizeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Sizes of the visible split at `path`, to ignore reports that change nothing. */
+  function currentSizes(path: number[]): number[] | null {
+    let n: TileNode | null = visible;
+    for (const k of path) n = n?.kind === "split" ? n.children[k] : null;
+    return n?.kind === "split" ? n.sizes : null;
+  }
   function resized(path: number[], sizes: number[]) {
+    const now = currentSizes(path);
+    // Paneforge reports the starting layout on mount; only real drags are edits.
+    if (
+      now &&
+      now.length === sizes.length &&
+      now.every((v, i) => Math.abs(v - sizes[i]) < 0.5)
+    )
+      return;
     clearTimeout(sizeTimer);
     sizeTimer = setTimeout(
       () =>

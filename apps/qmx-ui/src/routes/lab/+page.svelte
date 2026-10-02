@@ -19,6 +19,8 @@
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Resizable from "$lib/components/ui/resizable";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import { Input } from "$lib/components/ui/input";
   import { cn } from "$lib/utils";
   import TileBoard from "$lib/workbench/tiles/TileBoard.svelte";
   import { addPane, pane } from "$lib/workbench/tiles/tiles";
@@ -28,6 +30,7 @@
   import { lab } from "$lib/lab/lab.svelte";
   import { ASSETS, ENVIRONMENTS } from "$lib/lab/demo";
   import EnvChip from "$lib/lab/EnvChip.svelte";
+  import { LAB_CONTEXT, LAB_SESSIONS } from "$lib/lab/copilot";
 
   const fromUrl = page.url.searchParams.get("layout");
   if (fromUrl && lab.layouts.some((l) => l.id === fromUrl))
@@ -52,10 +55,16 @@
     lab.update({ ...l, root: addPane(l.root, pane(tileId, id)) });
     workbench.notify(`${LAB_PANELS[id].title} added to ${l.name}.`);
   }
-  function saveLayout() {
-    const name = window.prompt("Name this layout", `${lab.active.name} (mine)`);
-    if (name === null) return;
-    const l = lab.saveAs(name);
+  let saving = $state(false);
+  let layoutName = $state("");
+  function openSave() {
+    layoutName = `${lab.active.name} (mine)`;
+    saving = true;
+  }
+  function saveLayout(e: SubmitEvent) {
+    e.preventDefault();
+    const l = lab.saveAs(layoutName);
+    saving = false;
     workbench.notify(`Saved layout: ${l.name}`);
   }
   function run() {
@@ -135,7 +144,7 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content>
-          <DropdownMenu.Item onclick={saveLayout}
+          <DropdownMenu.Item onclick={openSave}
             ><Save />Save as a new layout</DropdownMenu.Item
           >
           {#if lab.isBuiltin(lab.activeId)}
@@ -266,8 +275,31 @@
           onclose={() => (lab.copilotOpen = false)}
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
+          context={LAB_CONTEXT}
+          sessions={LAB_SESSIONS}
         />
       </Resizable.Pane>
     {/if}
   </Resizable.PaneGroup>
 </div>
+
+<Dialog.Root bind:open={saving}>
+  <Dialog.Content class="sm:max-w-md">
+    <form class="flex flex-col gap-4" onsubmit={saveLayout}>
+      <Dialog.Header>
+        <Dialog.Title>Save this layout</Dialog.Title>
+        <Dialog.Description
+          >Keeps the tiles, their sizes, links and what is minimised. It appears
+          next to Build, Test, Train and Compare.</Dialog.Description
+        >
+      </Dialog.Header>
+      <Input bind:value={layoutName} maxlength={40} aria-label="Layout name" />
+      <Dialog.Footer>
+        <Button type="button" variant="ghost" onclick={() => (saving = false)}
+          >Cancel</Button
+        >
+        <Button type="submit" disabled={!layoutName.trim()}>Save layout</Button>
+      </Dialog.Footer>
+    </form>
+  </Dialog.Content>
+</Dialog.Root>

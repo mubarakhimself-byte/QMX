@@ -81,7 +81,7 @@
     >
   </div>
   <div class="min-h-0 flex-1 overflow-auto">
-    <table class="w-full text-sm">
+    <table class="w-full text-sm whitespace-nowrap">
       <thead
         class="bg-panel text-muted-foreground sticky top-0 z-10 text-left text-xs"
       >
