@@ -58,12 +58,12 @@ Cross-cutting items land in the first pass that needs them: per-context composer
 ## Lab round 2 (operator review 2026-10-02: "good enough for the first stable release")
 
 Doing now (L12):
-- [ ] Composer: icons with count badges, no overflow, drop the Offline label, better new-session empty state; copilot settings link to Settings (agents and models).
-- [ ] Styled selects everywhere (scenario builder used native ones); add your own markets, parameters and metrics in the scenario builder.
-- [ ] One **Resources** tile (toolbox + data + compute + model slots + presets + recent indicators), the same in every layout, a quick menu into the Library. Machine status moves to the bottom bar; adding a machine goes to Settings.
-- [ ] Link-group colour on the tile border.
-- [ ] Curated default layouts (no equity in Build; runs not everywhere). "Run on" filters the Lab to what that machine runs.
-- [ ] "Start something new": a guided flow (what are you testing → steps → layout), e.g. compare versions (regime study v1 vs v3 + hybrid), train a model, test a hypothesis, custom workflow.
+- [x] Composer: icons with count badges, no overflow, drop the Offline label, better new-session empty state; copilot settings link to Settings (agents and models).
+- [x] Styled selects everywhere (scenario builder used native ones); add your own markets, parameters and metrics in the scenario builder.
+- [x] One **Resources** tile (toolbox + data + compute + model slots + presets + recent indicators), the same in every layout, a quick menu into the Library. Machine status moves to the bottom bar; adding a machine goes to Settings.
+- [x] Link-group colour on the tile border.
+- [x] Curated default layouts (no equity in Build; runs not everywhere). "Run on" filters the Lab to what that machine runs.
+- [x] "Start something new": a guided flow (what are you testing → steps → layout), e.g. compare versions (regime study v1 vs v3 + hybrid), train a model, test a hypothesis, custom workflow.
 
 Backlog (needs backend or later passes):
 - [ ] Agents live: their nodes, sub-agents and streamed work (after the QMA refactor). Agents get their own machines (EC2, Modal).

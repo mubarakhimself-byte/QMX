@@ -146,12 +146,12 @@
             </td>
             <td class="num py-1 pr-3 text-xs">{r.id}</td>
             <td class="py-1 pr-3">{r.procedure}</td>
-            <td class="py-1"
+            <td class="py-1 pr-3"
               >{r.symbol}
               <span class="text-muted-foreground text-xs">{r.timeframe}</span
               ></td
             >
-            <td class="text-muted-foreground py-1 text-xs">{r.role}</td>
+            <td class="text-muted-foreground py-1 pr-3 text-xs">{r.role}</td>
             <td
               class={cn(
                 "num py-1 pr-3 text-right",
