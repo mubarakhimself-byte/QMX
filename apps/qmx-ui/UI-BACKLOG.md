@@ -3,6 +3,67 @@
 Branch `ui-review/repair`. Demo data only; backend wiring is Codex's (see BACKEND-REQUIREMENTS.md).
 Order of work: **design system first**, then rebuild screens on it. Most problems below come from screens built one by one.
 
+## Round 6 feedback (2026-10-02, operator walk-through, ~40 min dictation)
+
+**Verdict:** visual design gets marks; layout, usability and intentionality are poor. Too much unused space, too many words and too little to do, screens rushed. **New way of working: one screen at a time**, done properly (options, then build, then click-through user journeys, then backend mapping), before moving on.
+
+### Working method (operator ruling)
+- [ ] One screen per pass. Each pass: study the job, 2–3 layout options, operator picks, build, then drive it like a user (click, drag, minimise, small window, many accounts, empty and overloaded states), then list what the backend must provide.
+- [ ] Drive pages in the browser with intent, not only screenshots.
+- [ ] Use the local design skills (frontend-design, design-system-compliance, verify-ui-change) on every pass.
+- [ ] Settle the design system / layout rules (space management, density, text measure) so screens stop drifting.
+
+### Structure (needs operator ruling)
+- [ ] Proposal: one permanent **Lab** that merges Authoring, Backtest lab and ML Studio (all are "experiment, test, prove in paper, then live"). Some work needs a node editor, some code, some neither; bring in models built outside (Claude Code, Codex, ONNX). Add datasets, reports, tests, models and features as first-class items. External compute (Colab, GPU providers, external engines). StrategyQuant-style scenario generation: many pairs, timeframes, pair trading. Needs a deep design pass (subagent research allowed). Backend may need restructuring (Codex/docs ruling).
+- [ ] Permanent rail destinations rather than mini apps: Lab, Portfolio (books, risk, position sizing, promotions/approvals live here), Trading node manager.
+
+### Copilot and composer (all surfaces)
+- [ ] Tools, Target, Attach and messaging differ per context (mini app, Lab, node). An app declares its own tools, targets and attach sources; some apps need no attachments.
+- [ ] App copilot: multiple sessions with history, and its own settings (VS Code style header).
+- [ ] Main copilot: session column must collapse on its own (keep Browser/Terminal/Diff open). Sub-agent preview missing.
+- [ ] Show how a message looks with an attached document, a Library item, and a mini-app item.
+- [ ] Copilot can create a new widget (JSON render, as in the storyboard): show the flow, and how it connects front to back.
+
+### Widget grid (all boards)
+- [ ] Minimise must reclaim space: minimised widgets dock to the bottom and the rest fill up (Bloomberg-style space management).
+- [ ] Tiling quality (Markets view especially).
+- [ ] Operator likes: Edit layout, add widget, the idea of copilot-built custom widgets; good layouts become templates.
+
+### Home
+- [ ] Add your own tabs (dashboard you build); current tabs are previews.
+- [ ] Notifications area at the top for things needing attention.
+- [ ] Drop the "Home" word in the header. Keep the ticker.
+- [ ] "While you were away" too thin for many concurrent jobs (e.g. nine models training on a GPU provider).
+- [ ] Many accounts across brokers/exchanges (Binance, Coinbase, Bybit, …); crypto can have more than one broker.
+- [ ] News widget too thin; unused space below.
+- [ ] Agents view leaves space unused.
+
+### Trading node
+- [ ] Paper/live colour on the tiles' borders, not the whole page frame.
+- [ ] Order-flow views for charting (crypto venues provide it).
+- [ ] Drop "Waiting for you"/promotion here; promotion belongs in Portfolio.
+- [ ] Protection widget not needed.
+
+### Authoring (until merged into Lab)
+- [ ] Whole page needs a rethink: too compact; background makes editor, sidebars and bottom tabs hard to read.
+- [ ] Copilot for the node editor should be specific to it.
+
+### Library
+- [ ] Reader wastes the right side on wide screens (text-heavy page): use the width.
+- [ ] Sources: embedded browser fails inside QMX (sites refuse embedding); works outside. Scraping (e.g. Firecrawl) is a backend item.
+- [ ] Artifacts tab: items don't open; needs a full rethink.
+- [ ] Cards: operator loves them. Colour by family (e.g. scalper = blue and gold), or let the operator edit the card art as a preset. Add list view vs card view. ML models should look different from bots.
+- [ ] Model detail page is poor (unused space, no function); app/workflow detail likewise. Summary cards are good.
+- [x] Back arrow on a detail page returned to the Knowledge tab; now returns to the tab the item came from.
+
+### Settings
+- [ ] Every tab needs depth and things to do; too many words, nothing clickable.
+- [ ] General: thin; use the space.
+- [ ] Models/providers: will change (Claude CLI proxy for model providers).
+- [ ] Trading nodes: a node is a VPS. Show server, provider, region, IP, latency, status, who uses it; kill it from here; paper and live may not be separate nodes.
+- [ ] Data & sources: can't add anything. Sources need API keys, scraping workflows, cron schedules, use by mini apps.
+- [ ] Appearance: fine; more variations welcome.
+
 ## 0. Foundation (do first)
 
 - [x] One `MiniAppShell` for every mini app: name, views tabs, edit layout, copilot toggle, widget grid, optional app copilot. Research, Trade, Lab, ML Studio all use it.

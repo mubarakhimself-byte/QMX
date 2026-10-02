@@ -48,6 +48,10 @@
     trial: "text-muted-foreground",
     replicate: "text-info",
   };
+  // Return to the Library tab the item lives in, not the default tab.
+  const backHref = $derived(
+    `${resolve("/library")}?tab=${e && (e.kind === "bot" || e.kind === "model") ? "artifact" : "contribution"}`,
+  );
 </script>
 
 <svelte:head
@@ -71,11 +75,13 @@
     <header
       class="bg-panel flex shrink-0 items-center gap-4 border-b px-4 py-3"
     >
+      <!-- eslint-disable svelte/no-navigation-without-resolve -- backHref is resolve("/library") plus a query string -->
       <a
-        href={resolve("/library")}
+        href={backHref}
         class="text-muted-foreground hover:text-foreground"
         aria-label="Back to Library"><ArrowLeft class="size-5" /></a
       >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
       <CoverArt
         kind={e.kind}
         seed={e.id}

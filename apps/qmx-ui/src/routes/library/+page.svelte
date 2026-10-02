@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import Search from "@lucide/svelte/icons/search";
   import Package from "@lucide/svelte/icons/package";
   import BookOpen from "@lucide/svelte/icons/book-open";
@@ -47,7 +48,10 @@
     { id: "artifact", label: "Bots & models", icon: Package },
     { id: "contribution", label: "Apps & workflows", icon: Blocks },
   ] as const;
-  let kind = $state<string>("knowledge");
+  // ?tab= lets detail pages return to the tab they were opened from.
+  const TAB_IDS = ["knowledge", "sources", "files", "artifact", "contribution"];
+  const fromUrl = page.url.searchParams.get("tab") ?? "";
+  let kind = $state<string>(TAB_IDS.includes(fromUrl) ? fromUrl : "knowledge");
 
   const demo = workbench.demoMode;
   let articles = $state.raw<Article[]>([]);
