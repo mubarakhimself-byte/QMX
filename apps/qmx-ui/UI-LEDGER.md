@@ -54,3 +54,23 @@ Cross-cutting items land in the first pass that needs them: per-context composer
 - 2026-10-02: ledger created. Round 6 feedback recorded in `UI-BACKLOG.md`. Library back arrow fixed (`a5babae3`). L1 research started.
 - 2026-10-02: Lab built while operator away (commits 9d3f7985..). L4, L6, L8, L9 done as demo; L5, L7 first cut; L10 round 1; L11 written.
 - 2026-10-02: L1 done (docs brief: 17 gaps; reference patterns). L2 shown. L3 ruled (see above).
+
+## Lab round 2 (operator review 2026-10-02: "good enough for the first stable release")
+
+Doing now (L12):
+- [ ] Composer: icons with count badges, no overflow, drop the Offline label, better new-session empty state; copilot settings link to Settings (agents and models).
+- [ ] Styled selects everywhere (scenario builder used native ones); add your own markets, parameters and metrics in the scenario builder.
+- [ ] One **Resources** tile (toolbox + data + compute + model slots + presets + recent indicators), the same in every layout, a quick menu into the Library. Machine status moves to the bottom bar; adding a machine goes to Settings.
+- [ ] Link-group colour on the tile border.
+- [ ] Curated default layouts (no equity in Build; runs not everywhere). "Run on" filters the Lab to what that machine runs.
+- [ ] "Start something new": a guided flow (what are you testing → steps → layout), e.g. compare versions (regime study v1 vs v3 + hybrid), train a model, test a hypothesis, custom workflow.
+
+Backlog (needs backend or later passes):
+- [ ] Agents live: their nodes, sub-agents and streamed work (after the QMA refactor). Agents get their own machines (EC2, Modal).
+- [ ] Compare: save compare sets as presets, "watch" sets; better equity and compare views; primary and secondary layers.
+- [ ] Training: start a session from the editor; a proper training-runs tile.
+- [ ] Model slots: "Add a slot" must work; parameters and metrics extensible everywhere; robustness checks configurable and buildable from workflows.
+- [ ] Agents in the Lab are mostly workflows: custom workflows (train in a pattern, test a hypothesis) as first-class.
+- [ ] "Working on" holds configurations; compare versions side by side and build a hybrid with the copilot.
+- [ ] "Build a new panel" and most edits run through copilot skills (design skill input from the UI lane).
+- [ ] Remove all mock data when wiring to the live backend.
