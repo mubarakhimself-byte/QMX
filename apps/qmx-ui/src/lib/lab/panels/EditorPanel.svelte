@@ -27,12 +27,14 @@
   import type { LinkGroup } from "$lib/workbench/tiles/tiles";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { lab } from "../lab.svelte";
+  import FitOnResize from "../FitOnResize.svelte";
 
   let { link }: { link?: LinkGroup } = $props();
 
   const MODES = ["Graph", "Code", "Import"] as const;
   let mode = $state<(typeof MODES)[number]>("Graph");
   let showMap = $state(false);
+  let canvas = $state<HTMLElement | null>(null);
   let nodes = $state.raw<Node[]>(demoNodes());
   let edges = $state.raw<Edge[]>(demoEdges());
   const nodeTypes = { step: StepNode };
@@ -101,7 +103,7 @@
       >
     {/if}
   </div>
-  <div class="relative min-h-0 flex-1">
+  <div class="relative min-h-0 flex-1" bind:this={canvas}>
     {#if mode === "Graph"}
       <SvelteFlow
         bind:nodes
@@ -116,6 +118,7 @@
         colorMode={workbench.theme === "paper" ? "light" : "dark"}
         proOptions={{ hideAttribution: true }}
       >
+        <FitOnResize target={canvas} />
         <Background gap={22} />
         <Controls position="bottom-left" showLock={false} />
         {#if showMap}
