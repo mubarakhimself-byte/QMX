@@ -3,6 +3,8 @@
  * daemon identity, and nothing here pretends a backend answered.
  */
 
+import { parseArt, parsePresets, type ArtConfig, type ArtPreset } from "./art";
+
 /** Transport state shown in the status bar. No transport is bound yet. */
 export type ConnectionState =
   "not-bound" | "connecting" | "connected" | "reconnecting" | "failed";
@@ -162,6 +164,23 @@ function storedFlag(key: string, fallback: boolean): boolean {
   }
 }
 
+function storedJson(key: string): unknown {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? undefined : JSON.parse(v);
+  } catch {
+    return undefined;
+  }
+}
+
+function store(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage unavailable: lasts for this window only */
+  }
+}
+
 function storedTheme(): Theme {
   try {
     const t = localStorage.getItem("qmx.theme");
@@ -196,6 +215,31 @@ class Workbench {
       /* storage unavailable */
     }
   }
+  /** Background art and the operator's saved variants (per machine). */
+  art = $state<ArtConfig>(parseArt(storedJson("qmx.art")));
+  artPresets = $state<ArtPreset[]>(parsePresets(storedJson("qmx.art.presets")));
+
+  setArt(c: ArtConfig) {
+    this.art = parseArt(c);
+    store("qmx.art", this.art);
+  }
+
+  saveArtPreset(name: string) {
+    const preset = {
+      id: `u-${Date.now().toString(36)}`,
+      name: name.trim().slice(0, 40) || "Untitled",
+      config: { ...this.art },
+    };
+    this.artPresets = [...this.artPresets, preset];
+    store("qmx.art.presets", this.artPresets);
+    return preset;
+  }
+
+  deleteArtPreset(id: string) {
+    this.artPresets = this.artPresets.filter((p) => p.id !== id);
+    store("qmx.art.presets", this.artPresets);
+  }
+
   tools = $state<string[]>(["get_candles", "run_backtest", "library.search"]);
 
   toggleTool(id: string) {

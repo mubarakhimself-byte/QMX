@@ -65,3 +65,4 @@ Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc de
 - **ML models**: there is no ML-model entity in the docs. The UI shows models with "slots" (entry signal, position sizing, MIS regime, risk throttle). Needs a decision on how a model artifact is registered and plugged into a slot.
 - **Entity detail**: per bot/model/app/workflow — evidence runs (CT-32 with run role), journal (CT-13), node/book connections and seat state, operations with input schemas (headless apps run from here), linked artifacts.
 - **Model and tool lists** for the composer and Settings come from the daemon's provider registry; the UI stores no keys.
+- **Background art presets (optional)**: saved variants live in browser storage per machine (`qmx.art`, `qmx.art.presets`, a few numbers each). If the operator wants them to follow them across machines, the daemon needs a small per-user preferences store; no other backend need.

@@ -12,6 +12,18 @@
     type Theme,
   } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
+  import { Input } from "$lib/components/ui/input";
+  import { Slider } from "$lib/components/ui/slider";
+  import Shuffle from "@lucide/svelte/icons/shuffle";
+  import Save from "@lucide/svelte/icons/save";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import InkBackground from "$lib/workbench/InkBackground.svelte";
+  import {
+    ART_STYLES,
+    BUILTIN_PRESETS,
+    GLOWS,
+    type ArtConfig,
+  } from "$lib/workbench/art";
 
   // Settings chrome (UI EXPERIENCE §7). Layout after the storyboard's settings
   // reference: one centred title, tab pills, cards in two columns, tables.
@@ -25,6 +37,12 @@
     { id: "developer", label: "Developer" },
   ] as const;
   let tab = $state<string>("general");
+  let presetName = $state("");
+
+  const setArt = (patch: Partial<ArtConfig>) =>
+    workbench.setArt({ ...workbench.art, ...patch });
+  const sameArt = (a: ArtConfig, b: ArtConfig) =>
+    (Object.keys(a) as (keyof ArtConfig)[]).every((k) => a[k] === b[k]);
 
   const THEME_CHOICES: {
     id: Theme;
@@ -437,18 +455,207 @@
             </button>
           {/each}
         </div>
-        <label class="flex items-center justify-between gap-3 border-t pt-3">
-          <span
-            ><span class="block text-sm font-medium">Background art</span><span
-              class="text-muted-foreground block text-xs"
-              >The ink map behind the panels</span
-            ></span
-          >
+      </section>
+      <section class={cn(card, "mt-4")} aria-labelledby="s-art">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="s-art" class="text-lg font-semibold">Background art</h2>
+            <p class="text-muted-foreground text-sm">
+              The art behind the panels, drawn in your theme's ink. Pick a
+              style, tune it, and save the ones you like. Saved on this machine.
+            </p>
+          </div>
           <Switch
             checked={workbench.inkEnabled}
             onCheckedChange={(v) => workbench.setInk(v)}
+            aria-label="Show background art"
           />
-        </label>
+        </div>
+        <div class="grid gap-4 border-t pt-4 lg:grid-cols-5">
+          <div
+            class="bg-background relative aspect-video overflow-hidden rounded-xl border lg:col-span-3"
+          >
+            <InkBackground inline config={workbench.art} />
+            <div
+              class="surface absolute bottom-4 left-4 w-56 rounded-lg p-3 text-xs"
+            >
+              <span class="block font-medium">Panel over the art</span>
+              <span class="text-muted-foreground"
+                >How cards read on top of it</span
+              >
+            </div>
+            {#if !workbench.inkEnabled}
+              <span
+                class="bg-background/80 absolute top-3 right-3 rounded-md px-2 py-1 text-xs"
+                >Off: the preview still shows it</span
+              >
+            {/if}
+          </div>
+          <div class="flex flex-col gap-4 lg:col-span-2">
+            <div
+              role="radiogroup"
+              aria-label="Art style"
+              class="grid grid-cols-5 gap-2"
+            >
+              {#each ART_STYLES as s (s.id)}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={workbench.art.style === s.id}
+                  title={s.note}
+                  class={cn(
+                    "hover:bg-muted flex flex-col gap-1 rounded-lg border p-1.5 text-left text-xs transition-colors",
+                    workbench.art.style === s.id && "border-ring bg-muted",
+                  )}
+                  onclick={() => setArt({ style: s.id })}
+                >
+                  <span
+                    class="bg-background relative block h-12 overflow-hidden rounded-md"
+                  >
+                    <InkBackground
+                      inline
+                      config={{ ...workbench.art, style: s.id, glow: "off" }}
+                    />
+                  </span>
+                  <span class="truncate">{s.label}</span>
+                </button>
+              {/each}
+            </div>
+            <div class="grid gap-2 text-sm">
+              <span class="flex justify-between"
+                >Density<span class="text-muted-foreground tabular-nums"
+                  >{workbench.art.density.toFixed(1)}×</span
+                ></span
+              >
+              <Slider
+                type="single"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={workbench.art.density}
+                onValueCommit={(v: number) => setArt({ density: v })}
+                aria-label="Density"
+              />
+            </div>
+            <div class="grid gap-2 text-sm">
+              <span class="flex justify-between"
+                >Strength<span class="text-muted-foreground tabular-nums"
+                  >{Math.round(workbench.art.strength * 100)}%</span
+                ></span
+              >
+              <Slider
+                type="single"
+                min={0.3}
+                max={1.6}
+                step={0.05}
+                value={workbench.art.strength}
+                onValueChange={(v: number) => setArt({ strength: v })}
+                aria-label="Strength"
+              />
+            </div>
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 text-sm"
+            >
+              <span>Glow</span>
+              <div class="flex gap-1" role="radiogroup" aria-label="Glow">
+                {#each GLOWS as g (g)}
+                  <Button
+                    size="sm"
+                    role="radio"
+                    aria-checked={workbench.art.glow === g}
+                    variant={workbench.art.glow === g ? "secondary" : "ghost"}
+                    class="capitalize"
+                    onclick={() => setArt({ glow: g })}>{g}</Button
+                  >
+                {/each}
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-sm">
+              <span
+                >Variation <span class="text-muted-foreground tabular-nums"
+                  >#{workbench.art.seed}</span
+                ></span
+              >
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() =>
+                  setArt({ seed: Math.floor(Math.random() * 99999) })}
+                ><Shuffle class="size-4" />Shuffle</Button
+              >
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-3 border-t pt-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h3 class="text-sm font-medium">Saved variants</h3>
+            <form
+              class="flex gap-2"
+              onsubmit={(e) => {
+                e.preventDefault();
+                const p = workbench.saveArtPreset(presetName);
+                presetName = "";
+                workbench.notify(`Saved background: ${p.name}`);
+              }}
+            >
+              <Input
+                class="h-8 w-48"
+                placeholder="Name this variant"
+                maxlength={40}
+                bind:value={presetName}
+                aria-label="Variant name"
+              />
+              <Button size="sm" type="submit"
+                ><Save class="size-4" />Save current</Button
+              >
+            </form>
+          </div>
+          <ul
+            class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7"
+          >
+            {#each [...BUILTIN_PRESETS, ...workbench.artPresets] as p (p.id)}
+              {@const mine = p.id.startsWith("u-")}
+              {@const on = sameArt(p.config, workbench.art)}
+              <li
+                class={cn(
+                  "group relative overflow-hidden rounded-lg border",
+                  on && "border-ring",
+                )}
+              >
+                <button
+                  type="button"
+                  class="hover:bg-muted flex w-full flex-col text-left"
+                  aria-pressed={on}
+                  onclick={() => workbench.setArt(p.config)}
+                >
+                  <span
+                    class="bg-background relative block aspect-video overflow-hidden"
+                  >
+                    <InkBackground inline config={p.config} />
+                  </span>
+                  <span
+                    class="flex items-center justify-between gap-2 p-2 text-xs"
+                  >
+                    <span class="truncate font-medium">{p.name}</span>
+                    <span class="text-muted-foreground"
+                      >{mine ? "Yours" : "Built-in"}</span
+                    >
+                  </span>
+                </button>
+                {#if mine}
+                  <Button
+                    size="icon-sm"
+                    variant="secondary"
+                    class="absolute top-1.5 right-1.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                    aria-label={`Delete ${p.name}`}
+                    onclick={() => workbench.deleteArtPreset(p.id)}
+                    ><Trash2 class="size-3.5" /></Button
+                  >
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
       </section>
     {:else if tab === "developer"}
       <div class="grid gap-4 md:grid-cols-2">

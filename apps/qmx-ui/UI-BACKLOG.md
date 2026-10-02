@@ -12,7 +12,7 @@ Order of work: **design system first**, then rebuild screens on it. Most problem
 - [x] More depth and personality across the app: an overlay/scrim under content so the ink background never fights charts or text.
 - [x] Platform must absorb new mini apps / widgets without broken UI: unknown widget type or missing data renders a typed "unsupported" frame, never an error (backend + catalog).
 - [ ] Component library: can the operator create new components? (decide: authoring components vs only composing catalog entries).
-- [ ] Background art: multiple variants, savable.
+- [x] Background art: multiple variants, savable. Five styles (fractal, contours, candles, halftone, liquidity), density/strength/glow/variation, built-in and saved variants in Settings > Appearance; per machine.
 
 ## Home
 
