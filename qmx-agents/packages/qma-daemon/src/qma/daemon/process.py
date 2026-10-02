@@ -803,7 +803,9 @@ class DaemonProcess:
             _journal=journal,
             _sessions=self._product_sessions,
         )
-        self._artifacts = ArtifactStore(hooks=HookRegistry())
+        self._artifacts = ArtifactStore(
+            hooks=HookRegistry(), journal=journal, durable_store=substrate.artifact_store,
+        )
         self._editor_drafts = EditorDraftService(
             journal=self._journal,
             sqlite=self.sqlite,
@@ -1001,6 +1003,12 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_mailbox
+            restored_artifacts = process._artifacts.restore_from_journal()
+            if is_refusal(restored_artifacts):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_artifacts
             restored_tickets = process._transfers.restore()
             if is_refusal(restored_tickets):
                 process._closed = True

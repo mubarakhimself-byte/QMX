@@ -30,6 +30,9 @@ from qml.research.stage0 import (
 
 from qmb.host.bot_registration import mint_ct06_envelope, mint_generation_envelope
 
+if os.name == "nt":
+    from qmb.host import _windows_research
+
 __all__ = [
     "QMA_BINDS_SECOND_CT44_OVER_RESEARCH_ROOT_V1",
     "QMA_WRITES_RESEARCH_ROOT",
@@ -125,6 +128,21 @@ def read_research_blob(
     ref = _admit_ref(research_ref)
     if is_refusal(ref):
         return ref
+    if os.name == "nt":
+        try:
+            payload = _windows_research.read_blob(root.value, path.value.name)
+        except _windows_research.UnsafePath as exc:
+            return policy(_FIELD_RESEARCH_ROOT, str(exc))
+        except FileNotFoundError as exc:
+            return invalid(
+                "research_ref",
+                "no canonical research blob is stored under research_root for that ref",
+                research_ref=path.value.name,
+                given=type(exc).__name__,
+            )
+        except OSError as exc:
+            return _persist_os_error(path.value, exc)
+        return _validate_canonical_blob(payload, ref.value)
     opened = _open_research_root(root.value, create=False)
     if is_refusal(opened):
         return opened
@@ -422,6 +440,14 @@ def _read_blob_at(
 
 def _write_research_blob(*, root: Path, path: Path, payload: bytes) -> Result[None]:
     """Create a no-clobber blob using only a pinned no-follow root descriptor."""
+    if os.name == "nt":
+        try:
+            _windows_research.write_blob(root, path.name, payload)
+        except _windows_research.UnsafePath as exc:
+            return policy(_FIELD_RESEARCH_ROOT, str(exc))
+        except OSError as exc:
+            return _persist_os_error(path, exc)
+        return Ok(None)
     opened = _open_research_root(root, create=True)
     if is_refusal(opened):
         return opened
