@@ -16,6 +16,8 @@
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { RUNS, SYMBOLS, TIMEFRAMES, type Run } from "../demo";
   import { lab } from "../lab.svelte";
+  import ScenarioDialog from "../ScenarioDialog.svelte";
+  import Sparkle from "@lucide/svelte/icons/sparkle";
 
   let { link }: { link?: LinkGroup } = $props();
 
@@ -61,6 +63,7 @@
       `${what} added to the scenario draft. Running it needs the daemon.`,
     );
   }
+  let building = $state(false);
 </script>
 
 <div class="flex h-full flex-col">
@@ -72,8 +75,14 @@
         runs</span
       ></span
     >
+    <Button
+      variant="outline"
+      size="sm"
+      class="ml-auto h-7"
+      onclick={() => (building = true)}><Sparkle />New scenario</Button
+    >
     <div
-      class="ml-auto flex items-center gap-0.5"
+      class="flex items-center gap-0.5"
       role="radiogroup"
       aria-label="Measure"
     >
@@ -195,3 +204,5 @@
     </div>
   </div>
 </div>
+
+<ScenarioDialog bind:open={building} />
