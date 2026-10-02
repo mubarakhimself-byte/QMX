@@ -362,13 +362,18 @@
                 <div class="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p class="panel-label mb-1.5">Before · v7</p>
-                    <EntityCard entity={before} compact />
+                    <EntityCard
+                      entity={before}
+                      compact
+                      href={resolve("/library/[id]", { id: before.id })}
+                    />
                   </div>
                   <div>
                     <p class="panel-label mb-1.5">Draft edit · not run</p>
                     <EntityCard
                       entity={after}
                       compact
+                      href={resolve("/library/[id]", { id: before.id })}
                       changed={["sharpe", "dd", "win"]}
                     />
                   </div>

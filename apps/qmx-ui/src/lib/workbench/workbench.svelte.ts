@@ -227,9 +227,22 @@ class Workbench {
    */
   copilotRefs = $state<string[]>([]);
 
+  /** Short confirmation shown after an action (e.g. added to copilot). */
+  notice = $state<{ text: string; href?: string; action?: string } | null>(
+    null,
+  );
+  #noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  notify(text: string, href?: string, action?: string) {
+    this.notice = { text, href, action };
+    clearTimeout(this.#noticeTimer);
+    this.#noticeTimer = setTimeout(() => (this.notice = null), 4000);
+  }
+
   addRef(label: string) {
     if (!this.copilotRefs.includes(label))
       this.copilotRefs = [...this.copilotRefs, label];
+    this.notify(`Added to copilot: ${label}`, "/copilot", "Open Copilot");
   }
 
   removeRef(label: string) {

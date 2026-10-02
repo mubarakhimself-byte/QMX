@@ -6,6 +6,7 @@
   import InkBackground from "$lib/workbench/InkBackground.svelte";
   import { workbench, THEMES } from "$lib/workbench/workbench.svelte";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
 
   let { children } = $props();
 
@@ -32,5 +33,20 @@
       <main class="min-w-0 flex-1 overflow-hidden">{@render children()}</main>
     </div>
     <StatusBar />
+    {#if workbench.notice}
+      <div
+        role="status"
+        class="surface fixed right-4 bottom-10 z-50 flex max-w-md items-center gap-3 rounded-lg px-4 py-2.5 text-sm"
+      >
+        <span class="min-w-0 flex-1 truncate">{workbench.notice.text}</span>
+        {#if workbench.notice.href}
+          <a
+            class="text-primary shrink-0 font-medium hover:underline"
+            href={resolve(workbench.notice.href as "/")}
+            >{workbench.notice.action ?? "Open"}</a
+          >
+        {/if}
+      </div>
+    {/if}
   </div>
 </Tooltip.Provider>
