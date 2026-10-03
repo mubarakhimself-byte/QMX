@@ -6,7 +6,7 @@
     `color-mix(in oklab, ${v >= 0.7 ? "var(--destructive)" : "var(--primary)"} ${Math.round(Math.abs(v) * 70)}%, transparent)`;
 </script>
 
-<div class="flex h-full flex-col p-3">
+<div class="flex h-full flex-col overflow-auto p-3">
   <div
     class="grid min-h-0 flex-1 gap-1"
     style="grid-template-columns: 6rem repeat({CORR.names
@@ -31,6 +31,7 @@
     {/each}
   </div>
   <p class="text-muted-foreground mt-2 text-xs">
-    FX core and Prop challenge move together (0.72): both lean on US500 and USD.
+    Alt momentum and Weekly rotation move together (0.71): both lean on the same
+    large alts.
   </p>
 </div>

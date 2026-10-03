@@ -20,6 +20,8 @@
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import InkBackground from "$lib/workbench/InkBackground.svelte";
+  import LookSettings from "$lib/workbench/LookSettings.svelte";
+  import { ROTATIONS } from "$lib/workbench/look";
   import {
     ART_STYLES,
     BUILTIN_PRESETS,
@@ -473,6 +475,7 @@
           {/each}
         </div>
       </section>
+      <LookSettings {card} />
       <section class={cn(card, "mt-4")} aria-labelledby="s-art">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -601,6 +604,27 @@
                 ><Shuffle class="size-4" />Shuffle</Button
               >
             </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 border-t pt-4 text-sm">
+          <span class="font-medium">Change the art on its own</span>
+          <span class="text-muted-foreground"
+            >Picks a new style and variation</span
+          >
+          <div
+            class="ml-auto flex gap-1"
+            role="radiogroup"
+            aria-label="Rotate the art"
+          >
+            {#each ROTATIONS as r (r.id)}
+              <Button
+                size="sm"
+                role="radio"
+                aria-checked={workbench.artRotate === r.id}
+                variant={workbench.artRotate === r.id ? "secondary" : "ghost"}
+                onclick={() => workbench.setArtRotate(r.id)}>{r.label}</Button
+              >
+            {/each}
           </div>
         </div>
         <div class="flex flex-col gap-3 border-t pt-4">

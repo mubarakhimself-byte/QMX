@@ -4,6 +4,14 @@
  */
 
 import { parseArt, parsePresets, type ArtConfig, type ArtPreset } from "./art";
+import {
+  parseCustom,
+  parseRotation,
+  parseSurface,
+  type CustomTheme,
+  type Rotation,
+  type Surface,
+} from "./look";
 
 /** Transport state shown in the status bar. No transport is bound yet. */
 export type ConnectionState =
@@ -220,6 +228,26 @@ class Workbench {
     this.artPresets = [...this.artPresets, preset];
     store("qmx.art.presets", this.artPresets);
     return preset;
+  }
+
+  /** Surface style, custom theme and art rotation (per machine). */
+  surface = $state<Surface>(parseSurface(storedJson("qmx.surface")));
+  custom = $state<CustomTheme>(parseCustom(storedJson("qmx.customTheme")));
+  artRotate = $state<Rotation>(parseRotation(storedJson("qmx.art.rotate")));
+
+  setSurface(s: Surface) {
+    this.surface = s;
+    store("qmx.surface", s);
+  }
+
+  setCustom(c: CustomTheme) {
+    this.custom = parseCustom(c);
+    store("qmx.customTheme", this.custom);
+  }
+
+  setArtRotate(r: Rotation) {
+    this.artRotate = r;
+    store("qmx.art.rotate", r);
   }
 
   deleteArtPreset(id: string) {

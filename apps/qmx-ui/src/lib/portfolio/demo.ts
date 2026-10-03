@@ -605,6 +605,51 @@ export type JournalNote = {
   r?: number;
 };
 export const JOURNAL: Record<string, JournalNote[]> = {
+  "avax-mom": [
+    {
+      time: "Today 09:40",
+      kind: "trade",
+      text: "Bought 110 AVAX at 28.30 on a breakout with volume.",
+      r: 0,
+    },
+    {
+      time: "Yesterday 18:10",
+      kind: "trade",
+      text: "Sold 95 AVAX at 27.95; trailing stop.",
+      r: 0.8,
+    },
+    {
+      time: "Sep 30",
+      kind: "event",
+      text: "Day 30 on paper: all checks passed.",
+    },
+  ],
+  "sol-mom": [
+    {
+      time: "Today 07:55",
+      kind: "trade",
+      text: "Bought 24 SOL at 146.10; volatility target allows 0.9 R.",
+      r: 0,
+    },
+    {
+      time: "Yesterday 15:20",
+      kind: "event",
+      text: "SOL token unlock announced for Friday; size held.",
+    },
+  ],
+  "doge-brk": [
+    {
+      time: "Today 10:05",
+      kind: "trade",
+      text: "Bought DOGE at 0.1172; stopped at 0.1151.",
+      r: -1,
+    },
+    {
+      time: "Yesterday",
+      kind: "note",
+      text: "Paper results trail the Lab by 2.1%; slippage looks higher than modelled.",
+    },
+  ],
   "eth-mr": [
     {
       time: "Today 11:20",
