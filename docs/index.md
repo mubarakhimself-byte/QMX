@@ -29,6 +29,9 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 
 ## Architecture
 
+- [Bounded SDK request proposal](decisions/ADR-0027-bounded-sdk-request-runtime.md)
+  records the isolated branch's request/provider/read-tool scope and release limits.
+
 - [Architecture overview](architecture/overview.md) — presents the C4 context, containers, layers, component topology, and reserved seams, including the trading node's deployment diagram (the VPS, workstation and sandbox planes, the bucket, and the cTrader demo and live hosts) and its process-internals diagram (`qmn.service`, the timer units, the hot rooms and evidence tier, the passive hub, and the separate observability stack) from TN-3/TN-16.
 - [Stack and delivery surface](architecture/stack.md) — records adopted and unresolved runtime, package, store, toolchain, and CI choices by layer.
 - [Dependency manifest](architecture/dependencies.yaml) — provides the machine-readable component graph, layers, interfaces, and spec paths, including the default-deny dependency direction and the one ratified inter-library edge (DEC-0120).

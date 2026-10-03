@@ -12,6 +12,14 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-03 - Bounded SDK request branch proposal
+
+[ADR-0027](decisions/ADR-0027-bounded-sdk-request-runtime.md) records the reuse
+preflight and bounded native/request/read-tool slice on the isolated SDK branch.
+It remains proposed for canonical fold-list/native-cut adoption; current attended
+implementation authorization permits local code and commits, and forbids merge.
+Existing ADR history and release-readiness claims are unchanged.
+
 This records changes to the QMF knowledge base. It is not a software release log and does not convert provisional decisions into implementation authority.
 
 ## 2026-09-25 — UI host plus backend-delta absorption (change mode)

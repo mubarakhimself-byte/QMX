@@ -1292,3 +1292,131 @@ refuses a third logger besides stdlib JSON-lines and QMB LogSink
 - **Notification tier:** silent-log (caller receives the typed refusal).
 - **Product-user affordance:** logs remain logs. Do not add another
   logger beside the daemon JSON-lines stream and QMB's LogSink.
+
+### FR-86: Invalid SDK request or provider result
+
+- **Failure class:** invalid input / failed request.
+- **Detection:** request contracts validate identities, profile/app/page binding,
+  finite positive duration and result fields; runtime rejects malformed input.
+- **Auto-recovery / retry:** none; correct the input and use a new request key.
+- **Visible degraded state:** invalid input is not admitted; invalid provider result fails the turn.
+- **Notification tier:** operator-visible returned refusal or request error code.
+- **Product-user affordance:** correct the request or adapter; no model fallback occurred.
+
+### FR-87: Stale or mismatching SDK session context
+
+- **Failure class:** policy rejection at host admission; sanitized `context_changed` request failure at model continuation.
+- **Detection:** request admission/execution/tool dispatch and each model continuation check principal, context revision and full accepted context binding. Continuation also checks relevant grant revocation IDs and expiry through the existing grant ledger.
+- **Auto-recovery / retry:** none; explicitly submit under the current context.
+- **Visible degraded state:** execution or continuation is refused; existing evidence remains readable. Cached tool observations are withheld from another model turn.
+- **Notification tier:** operator-visible returned refusal or failed request with sanitized `context_changed` error.
+- **Product-user affordance:** the session target or authority changed or expired; inspect it before resubmitting.
+### FR-88: Conflicting idempotency key or concurrent request ownership
+
+- **Failure class:** policy rejection.
+- **Detection:** the same principal/session/key with different request content,
+  concurrent execution or incompatible request state is refused by RequestRuntime.
+- **Auto-recovery / retry:** exact repeated admission returns the existing request; no duplicate execution.
+- **Visible degraded state:** the accepted request remains authoritative.
+- **Notification tier:** operator-visible returned refusal or existing request.
+- **Product-user affordance:** inspect the original request; use a new key only for genuinely new work.
+
+### FR-89: Missing or incompatible provider
+
+- **Failure class:** policy rejection.
+- **Detection:** requested provider absent, identity mismatch or native-tool capability
+  is refused before dispatch in the bounded runtime.
+- **Auto-recovery / retry:** none; no automatic paid or alternate-provider fallback.
+- **Visible degraded state:** request stays queued without an inference call.
+- **Notification tier:** operator-visible returned refusal.
+- **Product-user affordance:** explicitly configure an eligible provider and retry the queued request.
+
+### FR-90: Native configuration cannot enforce the text-only contract
+
+- **Failure class:** failed request (`unsafe_config`, `unsupported`).
+- **Detection:** native adapter refuses default/shared config home, hooks/config files,
+  resume/workspace injection or effective settings that do not disable native tools.
+- **Auto-recovery / retry:** none; operator supplies a dedicated supported configuration.
+- **Visible degraded state:** no model turn starts.
+- **Notification tier:** operator-visible sanitized request error.
+- **Product-user affordance:** use the documented dedicated home; do not weaken permissions to proceed.
+
+### FR-91: Native subscription authentication required
+
+- **Failure class:** failed request (`auth_required`).
+- **Detection:** dedicated home absent or native account/read does not report ChatGPT
+  authentication. The adapter does not extract credentials.
+- **Auto-recovery / retry:** none; user signs in through the native CLI.
+- **Visible degraded state:** no model turn starts and no API-key billing fallback occurs.
+- **Notification tier:** operator-visible sanitized request error.
+- **Product-user affordance:** sign in personally, then submit a new request key; do not paste tokens.
+
+### FR-92: Owner lost or execution outcome unknown
+
+- **Failure class:** interrupted request (`owner_lost`, `outcome_unknown`).
+- **Detection:** journal restore finds a running/cancellation-requested snapshot, or
+  provider/tool dispatch loses an acknowledged terminal outcome.
+- **Auto-recovery / retry:** no automatic replay; explicit retry creates a new owner attempt.
+- **Visible degraded state:** interrupted evidence persists; prior cost/effects remain uncertain.
+- **Notification tier:** operator-visible request state.
+- **Product-user affordance:** reconcile previous work before retry; retry may make another subscription call.
+
+### FR-93: Cancellation intent differs from observed outcome
+
+- **Failure class:** cancellation-requested / cancelled / interrupted request.
+- **Detection:** RequestRuntime journals intent before signaling the adapter; only
+  an observed cancelled outcome establishes cancellation. Completed output wins a race.
+- **Auto-recovery / retry:** none; accepted read handlers may finish, and unknown stays interrupted.
+- **Visible degraded state:** query remains available; new tool/model dispatch is stopped.
+- **Notification tier:** operator-visible request state.
+- **Product-user affordance:** cancel is a request, not proof that earlier work never happened.
+
+### FR-94: Tool access, profile ceiling or operation grant denied
+
+- **Failure class:** failed request (`tool_denied`) / policy rejection.
+- **Detection:** ToolLoopProvider accepts only installed read bindings allowed by
+  trusted profile configuration; ProductSessionService checks current grant and envelope.
+- **Auto-recovery / retry:** none; no grant widening, arbitrary executable or cross-session fallback.
+- **Visible degraded state:** handler is not called; refusal remains request evidence.
+- **Notification tier:** operator-visible sanitized request error.
+- **Product-user affordance:** the requested operation is outside this session's authority.
+
+### FR-95: Model action is malformed or includes authority fields
+
+- **Failure class:** failed request (`invalid_action`).
+- **Detection:** strict JSON parser rejects duplicate/nonfinite values, unsupported
+  actions and extra fields; model output supplies only an installed name and data arguments.
+- **Auto-recovery / retry:** none; no automatic corrective model call.
+- **Visible degraded state:** loop stops without executing the malformed action.
+- **Notification tier:** operator-visible sanitized request error.
+- **Product-user affordance:** revise the request or adapter output; model text cannot issue grants.
+
+### FR-96: Tool loop resource limit exhausted
+
+- **Failure class:** failed request (`loop_limit`) or interrupted after uncertain dispatch.
+- **Detection:** ToolLoopProvider bounds model/tool call counts, total duration,
+  response/result/context bytes and finite numeric data.
+- **Auto-recovery / retry:** none; limits never silently expand.
+- **Visible degraded state:** no further model/tool dispatch; previously completed reads remain observed.
+- **Notification tier:** operator-visible sanitized request error.
+- **Product-user affordance:** reduce the task or explicitly choose different bounded limits.
+
+### FR-97: Native protocol/process failure or unexpected tool execution
+
+- **Failure class:** failed request before dispatch; interrupted when terminal outcome is uncertain.
+- **Detection:** native adapter bounds JSONL messages and rejects invalid protocol,
+  EOF, timeout, wrong turn identity, unexpected native tool items and server requests.
+- **Auto-recovery / retry:** none; child process is terminated and reaped.
+- **Visible degraded state:** failed/interrupted request, never invented completion.
+- **Notification tier:** operator-visible sanitized error without arbitrary native output.
+- **Product-user affordance:** inspect version/protocol compatibility; reconcile any unknown turn before retry.
+
+### FR-98: SDK journal snapshot cannot be read or written
+
+- **Failure class:** storage failure.
+- **Detection:** AuthoritativeJournal refuses append/read, or RequestRuntime.restore
+  validates an invalid durable snapshot.
+- **Auto-recovery / retry:** none; dispatch cannot proceed without durable acceptance.
+- **Visible degraded state:** existing state remains authoritative; no invented snapshot.
+- **Notification tier:** operator-visible returned refusal.
+- **Product-user affordance:** repair the local evidence/storage issue before requesting more work.
