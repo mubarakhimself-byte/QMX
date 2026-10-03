@@ -32,6 +32,24 @@ import ComputePanel from "./panels/ComputePanel.svelte";
 import AgentsPanel from "./panels/AgentsPanel.svelte";
 import LogsPanel from "./panels/LogsPanel.svelte";
 import ResourcesPanel from "./panels/ResourcesPanel.svelte";
+import PodStackPanel from "./panels/PodStackPanel.svelte";
+import BlockPanel from "./panels/BlockPanel.svelte";
+import SizeTrailPanel from "./panels/SizeTrailPanel.svelte";
+import FanPanel from "./panels/FanPanel.svelte";
+import StressPanel from "./panels/StressPanel.svelte";
+import InterventionsPanel from "./panels/InterventionsPanel.svelte";
+import PodGridPanel from "./panels/PodGridPanel.svelte";
+import PodEquityPanel from "./panels/PodEquityPanel.svelte";
+import AllocatePanel from "./panels/AllocatePanel.svelte";
+import Boxes2 from "@lucide/svelte/icons/layers-2";
+import Puzzle from "@lucide/svelte/icons/puzzle";
+import ChartBarDecreasing from "@lucide/svelte/icons/chart-bar-decreasing";
+import ChartArea from "@lucide/svelte/icons/chart-area";
+import Siren from "@lucide/svelte/icons/siren";
+import History from "@lucide/svelte/icons/history";
+import Rows3 from "@lucide/svelte/icons/rows-3";
+import Scale from "@lucide/svelte/icons/scale";
+
 import Layers from "@lucide/svelte/icons/layers";
 
 export type LabPanel = {
@@ -126,6 +144,60 @@ export const LAB_PANELS: Record<string, LabPanel> = {
     icon: Bot,
     note: "Agents and sub-agents",
     view: AgentsPanel,
+  },
+  podstack: {
+    title: "Pod",
+    icon: Boxes2,
+    note: "A pod's blocks, slot by slot",
+    view: PodStackPanel,
+  },
+  block: {
+    title: "Block",
+    icon: Puzzle,
+    note: "The selected block's settings",
+    view: BlockPanel,
+  },
+  sizetrail: {
+    title: "Size trail",
+    icon: ChartBarDecreasing,
+    note: "Why a trade got its size",
+    view: SizeTrailPanel,
+  },
+  fan: {
+    title: "Drawdown fan",
+    icon: ChartArea,
+    note: "Chance of the kill line, per pod",
+    view: FanPanel,
+  },
+  stress: {
+    title: "Stress board",
+    icon: Siren,
+    note: "Crises × pods",
+    view: StressPanel,
+  },
+  interventions: {
+    title: "Interventions",
+    icon: History,
+    note: "Every shrink, refusal and halt",
+    view: InterventionsPanel,
+  },
+  podgrid: {
+    title: "Pod comparison",
+    icon: Rows3,
+    note: "Pods side by side, no total score",
+    view: PodGridPanel,
+  },
+  podequity: {
+    title: "Pod equity",
+    icon: ChartLine,
+    note: "Ticked pods on the same bots",
+    view: PodEquityPanel,
+  },
+  allocate: {
+    title: "Allocate",
+    icon: Scale,
+    note: "Split capital across tested pods",
+    view: AllocatePanel,
   },
   logs: {
     title: "Log",

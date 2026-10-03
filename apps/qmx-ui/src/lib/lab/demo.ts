@@ -119,12 +119,12 @@ export function activity(env: string, layout: string): number {
 }
 
 export const SYMBOLS = [
-  "EURUSD",
-  "GBPUSD",
-  "USDJPY",
-  "AUDUSD",
-  "XAUUSD",
-  "US500",
+  "BTCUSDT",
+  "ETHUSDT",
+  "SOLUSDT",
+  "AVAXUSDT",
+  "LINKUSDT",
+  "DOGEUSDT",
 ];
 export const TIMEFRAMES = ["M15", "H1", "H4"];
 
@@ -164,15 +164,15 @@ function sweep(): Run[] {
     for (const s of SYMBOLS) {
       n++;
       const edge =
-        (s.startsWith("EUR") || s === "GBPUSD" ? 0.0012 : 0.0002) +
+        (s.startsWith("BTC") || s === "ETHUSDT" ? 0.0012 : 0.0002) +
         (tf === "H1" ? 0.0006 : 0) +
         (r() - 0.5) * 0.0018;
       const status: RunStatus =
-        s === "US500" && tf === "H4"
+        s === "DOGEUSDT" && tf === "H4"
           ? "running"
-          : s === "XAUUSD" && tf === "M15"
+          : s === "LINKUSDT" && tf === "M15"
             ? "failed"
-            : s === "AUDUSD" && tf === "H4"
+            : s === "AVAXUSDT" && tf === "H4"
               ? "queued"
               : "done";
       const eq =
@@ -216,7 +216,7 @@ export const RUNS: Run[] = [
   {
     id: "run-441",
     procedure: "Walk-forward",
-    symbol: "EURUSD",
+    symbol: "BTCUSDT",
     timeframe: "H1",
     role: "confirmation",
     status: "done",
@@ -230,7 +230,7 @@ export const RUNS: Run[] = [
   {
     id: "run-442",
     procedure: "Monte Carlo",
-    symbol: "EURUSD",
+    symbol: "BTCUSDT",
     timeframe: "H1",
     role: "replicate",
     status: "running",
@@ -245,7 +245,7 @@ export const RUNS: Run[] = [
   {
     id: "run-443",
     procedure: "Training",
-    symbol: "EURUSD",
+    symbol: "BTCUSDT",
     timeframe: "H1",
     role: "trial",
     status: "running",
@@ -316,11 +316,11 @@ export const ASSETS: Asset[] = [
   {
     id: "bot-gbm",
     kind: "bot",
-    name: "EURUSD H1 GBM",
+    name: "BTC breakout",
     meta: "v7 · research-paper",
   },
-  { id: "bot-trend", kind: "bot", name: "US500 Trend", meta: "v12 · live" },
-  { id: "bot-fade", kind: "bot", name: "Gold Fade", meta: "v4 · node-paper" },
+  { id: "bot-trend", kind: "bot", name: "ETH trend", meta: "v12 · live" },
+  { id: "bot-fade", kind: "bot", name: "SOL momentum", meta: "v4 · paper" },
   {
     id: "m-scorer",
     kind: "model",
@@ -345,14 +345,14 @@ export const ASSETS: Asset[] = [
   {
     id: "d-fx",
     kind: "dataset",
-    name: "FX majors M1 2015–2026",
-    meta: "Dukascopy · 11 GB",
+    name: "Binance spot 1m 2019–2026",
+    meta: "Binance public data · 38 GB",
   },
   {
     id: "d-news",
     kind: "dataset",
     name: "Calendar events",
-    meta: "Forex Factory · daily",
+    meta: "Forex Factory + crypto news · daily",
   },
   {
     id: "d-csv",

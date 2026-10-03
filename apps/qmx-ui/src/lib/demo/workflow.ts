@@ -26,17 +26,17 @@ export const DEMO_STEPS: Step[] = [
   {
     id: "src",
     kind: "Data",
-    label: "MT5 bars",
-    detail: "EURUSD · H1 · 2019–2026",
+    label: "Exchange bars",
+    detail: "BTCUSDT · H1 · 2019–2026",
     x: 0,
     y: 80,
     settings: [
-      ["Source", "MT5 terminal"],
-      ["Symbol", "EURUSD"],
+      ["Source", "Binance spot"],
+      ["Symbol", "BTCUSDT"],
       ["Timeframe", "H1"],
       ["Range", "2019-01-01 → 2026-09-30"],
     ],
-    code: `bars = mt5.bars("EURUSD", "H1", start="2019-01-01")\nbars = bars.dropna()`,
+    code: `bars = binance.bars("BTCUSDT", "H1", start="2019-01-01")\nbars = bars.dropna()`,
   },
   {
     id: "feat",
@@ -136,7 +136,7 @@ export const PALETTE: {
   {
     group: "Data",
     items: [
-      { label: "MT5 bars", detail: "Symbol, timeframe, range" },
+      { label: "Exchange bars", detail: "Pair, timeframe, range" },
       { label: "Dataset from Library", detail: "Any stored dataset" },
       { label: "Economic calendar", detail: "Events and news windows" },
     ],

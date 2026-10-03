@@ -92,9 +92,76 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     ]),
     docked: [],
   },
+  {
+    id: "pods",
+    name: "Pods",
+    root: split("row", [
+      [resources("pb-res"), 17],
+      [pane("pb-stack", "podstack", "violet"), 45],
+      [
+        split("col", [
+          [pane("pb-block", "block", "violet"), 55],
+          [pane("pb-trail", "sizetrail", "violet"), 45],
+        ]),
+        38,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "podtest",
+    name: "Pod test",
+    root: split("col", [
+      [
+        split("row", [
+          [pane("pt-equity", "podequity", "teal"), 50],
+          [pane("pt-fan", "fan", "teal"), 50],
+        ]),
+        48,
+      ],
+      [
+        split("row", [
+          [pane("pt-stress", "stress", "teal"), 64],
+          [pane("pt-int", "interventions", "teal"), 36],
+        ]),
+        52,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "podcompare",
+    name: "Pod compare",
+    root: split("row", [
+      [pane("pc-grid", "podgrid", "teal"), 56],
+      [
+        split("col", [
+          [pane("pc-equity", "podequity", "teal"), 50],
+          [pane("pc-fan", "fan", "teal"), 50],
+        ]),
+        44,
+      ],
+    ]),
+    docked: [],
+  },
+  {
+    id: "allocate",
+    name: "Allocate",
+    root: split("row", [
+      [pane("al-alloc", "allocate", "teal"), 58],
+      [
+        split("col", [
+          [pane("al-equity", "podequity", "teal"), 55],
+          [pane("al-fan", "fan", "teal"), 45],
+        ]),
+        42,
+      ],
+    ]),
+    docked: [],
+  },
 ];
 
-const KEY = "qmx.lab.layouts.v4";
+const KEY = "qmx.lab.layouts.v5";
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 function load(): TileLayout[] {
@@ -120,6 +187,10 @@ class LabState {
   /** Runs ticked for compare. */
   ticked = $state<string[]>(["run-441", "run-502", "run-508"]);
   copilotOpen = $state(false);
+  /** Pods in the Lab: the one being built, its selected block, and pods ticked for tests. */
+  labPod = $state("trend");
+  block = $state("kill");
+  podsTicked = $state<string[]>(["classic", "trend", "voltarget"]);
   /**
    * The machine the Lab is looking at (null = all machines), like a remote
    * window in VS Code: picking one connects first, then every tile shows

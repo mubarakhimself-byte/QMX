@@ -22,7 +22,7 @@
   /** Dataset node fields the docs require (provider … revision). */
   const DETAIL: Record<string, [string, string][]> = {
     "d-fx": [
-      ["Provider", "Dukascopy (personal use)"],
+      ["Provider", "Binance public data (data.binance.vision)"],
       ["Schema", "OHLCV + bid/ask spread"],
       ["Timezone", "UTC; sessions from the calendar"],
       ["Freshness", "Updated 06:00 today"],
@@ -30,7 +30,7 @@
       ["Revision", "release 14 · fp1:a91c…"],
     ],
     "d-news": [
-      ["Provider", "Forex Factory calendar"],
+      ["Provider", "Forex Factory calendar + CryptoPanic"],
       ["Schema", "time, currency, impact, actual, forecast"],
       ["Timezone", "UTC"],
       ["Freshness", "Updated hourly"],

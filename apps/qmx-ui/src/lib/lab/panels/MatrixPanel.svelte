@@ -69,7 +69,7 @@
 <div class="flex h-full flex-col">
   <div class="flex h-9 shrink-0 items-center gap-2 border-b px-2">
     <span class="text-xs"
-      ><span class="font-medium">EURUSD H1 GBM v7</span>
+      ><span class="font-medium">BTC breakout v7</span>
       <span class="text-muted-foreground"
         >· {SYMBOLS.length} markets × {TIMEFRAMES.length} timeframes = {sweep.length}
         runs</span

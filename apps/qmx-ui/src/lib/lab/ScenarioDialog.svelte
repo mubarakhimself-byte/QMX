@@ -21,37 +21,28 @@
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
   const MARKET_GROUPS = [
+    { label: "Majors", items: ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT"] },
     {
-      label: "FX majors",
-      items: [
-        "EURUSD",
-        "GBPUSD",
-        "USDJPY",
-        "AUDUSD",
-        "USDCAD",
-        "NZDUSD",
-        "USDCHF",
-      ],
+      label: "Large alts",
+      items: ["SOLUSDT", "AVAXUSDT", "LINKUSDT", "ADAUSDT", "DOTUSDT"],
     },
-    { label: "FX crosses", items: ["EURJPY", "GBPJPY", "EURGBP", "AUDJPY"] },
-    { label: "Metals", items: ["XAUUSD", "XAGUSD"] },
-    { label: "Indices", items: ["US500", "NAS100", "DE40", "UK100"] },
-    { label: "Crypto", items: ["BTCUSD", "ETHUSD", "SOLUSD"] },
+    { label: "Memes", items: ["DOGEUSDT", "SHIBUSDT", "PEPEUSDT"] },
+    { label: "Crosses", items: ["ETHBTC", "SOLETH"] },
   ];
   const TFS = ["M5", "M15", "M30", "H1", "H4", "D1"];
 
   let markets = $state<string[]>([
-    "EURUSD",
-    "GBPUSD",
-    "USDJPY",
-    "AUDUSD",
-    "XAUUSD",
-    "US500",
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "AVAXUSDT",
+    "LINKUSDT",
+    "DOGEUSDT",
   ]);
   let tfs = $state<string[]>(["M15", "H1", "H4"]);
   let pairs = $state<[string, string][]>([]);
-  let pairA = $state("EURUSD");
-  let pairB = $state("GBPUSD");
+  let pairA = $state("ETHUSDT");
+  let pairB = $state("BTCUSDT");
   let own = $state<string[]>([]);
   let newMarket = $state("");
   function addMarket() {
@@ -146,7 +137,7 @@
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
     <form class="flex flex-col gap-5" onsubmit={run}>
       <Dialog.Header>
-        <Dialog.Title>New scenario · EURUSD H1 GBM v7</Dialog.Title>
+        <Dialog.Title>New scenario · BTC breakout v7</Dialog.Title>
         <Dialog.Description>
           Every combination below becomes its own run. Results land in the sweep
           grid and the runs table.
@@ -184,7 +175,7 @@
           {/each}
           <input
             bind:value={newMarket}
-            placeholder="Any symbol, e.g. WTI"
+            placeholder="Any pair, e.g. TONUSDT"
             aria-label="Add a market"
             class="bg-background/40 h-7 w-40 rounded-md border px-2 text-xs uppercase"
             onkeydown={(e) => {

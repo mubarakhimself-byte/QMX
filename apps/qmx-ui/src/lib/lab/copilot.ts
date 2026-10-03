@@ -142,7 +142,7 @@ export const LAB_CONTEXT: CopilotContext = {
 
 export const LAB_SESSIONS = [
   { id: "s1", title: "Sweep the majors on H1 and H4", when: "Today" },
-  { id: "s2", title: "Why does GBPUSD M15 beat H1?", when: "Today" },
+  { id: "s2", title: "Why does ETH M15 beat H1?", when: "Today" },
   { id: "s3", title: "Import the vol forecaster", when: "Yesterday" },
   { id: "s4", title: "Leakage check on session flags", when: "Sep 29" },
 ];
