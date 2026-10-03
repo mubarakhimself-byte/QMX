@@ -80,3 +80,19 @@ Backlog (needs backend or later passes):
 - [x] Machine switching like a VS Code remote window: connect (reachable, signed in, healthy), then every tile shows that machine only; per-layout counts; "nothing here" state that points to where its work is; offline machines say why.
 - [x] Copilot-led start for outside work, custom workflows and training: question cards in the main copilot, then a guide strip that switches Lab layouts step by step.
 - [x] Transcript audit: recovered requests and rulings written to `UI-BACKLOG.md` ("Recovered from the transcript audit").
+
+## Pass 2: Portfolio
+
+| Chunk | What | Status |
+|-------|------|--------|
+| P1 | Research: what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress |
+| P2 | 2–3 whole-screen options | — |
+| P3 | Operator picks (or "surprise me") | — |
+| P4 | Portfolio shell on the tiling engine; rail entry; layouts | — |
+| P5 | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide | — |
+| P6 | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates | — |
+| P7 | Promotions and approvals: research-paper → node-paper → live, signed cards | — |
+| P8 | Optimisation (new scope): allocation across Books and bots, correlation, what-if | — |
+| P9 | Portfolio copilot context (tools, targets, attach), templates | — |
+| P10 | Click-through journeys and fixes | — |
+| P11 | Backend mapping for Codex | — |
