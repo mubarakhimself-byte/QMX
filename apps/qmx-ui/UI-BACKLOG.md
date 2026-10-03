@@ -3,6 +3,56 @@
 Branch `ui-review/repair`. Demo data only; backend wiring is Codex's (see BACKEND-REQUIREMENTS.md).
 Order of work: **design system first**, then rebuild screens on it. Most problems below come from screens built one by one.
 
+## Recovered from the transcript audit (2026-10-03)
+
+An agent re-read every operator message in this session and checked it against these files. Rounds 1–4 (2026-10-01) were never written down; they are summarised here so a rebuild doesn't undo them.
+
+### Built in rounds 1–4 (keep)
+
+- Themed scrollbars; larger base text; no focus box on the composer; the composer grows with its text.
+- Model picker in the composer; copilot pop-out window.
+- Seven themes ("Plain" removed); frosted glass, neumorphic wells, ink background made trading-themed (fractals).
+- Player cards for bots, models, apps and workflows with named measures and **no overall rating or tier** (QMB bans composite scores).
+- Artifacts tab restored in the Library; headless-app operations on detail pages; ticker; Sydney/Tokyo clocks removed.
+
+### Rulings (recorded now)
+
+- Grok UI scrapped; the Excalidraw storyboard is the working spec. Web app first, desktop wrapper later; spacing judged at full-screen desktop (1920–2560).
+- Build on shadcn-svelte (Rhea preset) and community components, not from scratch. Read docs/, _bmad-output and _docwork before work.
+- Model selection lives in Settings, set per copilot.
+- Research pipeline follows the current docs: hypothesis → graduate → QMB evidence → paper → promote → activate (WF1/WF2 only as labels).
+- ML has a home in the UI (now the Lab) because models from papers should be usable anywhere: risk, sizing, MIS.
+- Crypto is the design focus, with more than one broker or exchange per setup.
+- The operator delegated chunking: "keep a ledger… I believe you are smart enough" (2026-10-02).
+- Customisability ("Lego") applies to the **whole app**, not only the Lab.
+
+### Needs the operator's confirmation
+
+- [ ] "No themes for trading" was read as "no background art on /trade". Confirm.
+- [ ] Colab and other providers: allowed; are off-machine results ever evidence, or exploration only? (Answer mixed both options.)
+- [ ] Rail/layout: Claude Design options A/B/C were never picked; the operator liked "Claude's take" (spaces across the top, agent lane, jobs strip). Adopt it or not?
+- [ ] Dictation cut out three times; a "template" he mentioned could not be found. Ask him to restate anything missing.
+
+### Missing items (now on the backlog)
+
+- [x] Lab machine switch connects first and scopes the whole Lab; "nothing here" state per layout (done 2026-10-03, `5aee5513`).
+- [x] Start something new: outside work, custom workflows and training start as a main-copilot conversation with question cards, then a guide strip drives the Lab layouts (done 2026-10-03).
+- [ ] Genetic algorithms and other Lean-style experiment types in the Lab (dropped in the merge).
+- [ ] Animations: a few purposeful ones (panel expand, run finishing, connect).
+- [ ] Review the Minara reference site (never reviewed).
+- [ ] alphaXiv link 2409.06289: use as the example item for the Sources feed.
+
+### Details that were dropped (now on the backlog)
+
+- [ ] Library: diagrams generated from articles (no AI, or a cheap model), not only key-point summaries.
+- [ ] Sources: videos as a research source; any site can become an in-app web app (Omarchy-style).
+- [ ] The copilot builds **whole mini apps and workflows** from the component library through skills, not only widgets.
+- [ ] Resources tile also holds artifacts.
+- [ ] Home tab previews link through to the full pages (Markets → Portfolio, Agents, main Copilot).
+- [ ] Settings: each tab gets its own layout for its job, not the same card pattern everywhere.
+- [ ] Headless mini apps and workflows: how they are presented and run from the UI.
+- [ ] Stress-test the UI across many failure scenarios; the copilot inherits any inconsistency.
+
 ## Round 6 feedback (2026-10-02, operator walk-through, ~40 min dictation)
 
 **Verdict:** visual design gets marks; layout, usability and intentionality are poor. Too much unused space, too many words and too little to do, screens rushed. **New way of working: one screen at a time**, done properly (options, then build, then click-through user journeys, then backend mapping), before moving on.
@@ -107,7 +157,7 @@ Order of work: **design system first**, then rebuild screens on it. Most problem
 
 ## Trading node
 
-- [x] Paper vs live: whole-frame border colour (paper orange, live blue), not just a badge.
+- [x] ~~Paper vs live: whole-frame border colour~~ Superseded 2026-10-02: the colour goes on the tile borders, not the whole frame (see Round 6, Trading node).
 - [ ] Multiple nodes; latency test.
 - [ ] Kill-switch authority (research docs).
 - [ ] Book: risk management and position sizing — where it lives.

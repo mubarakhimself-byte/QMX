@@ -74,3 +74,9 @@ Backlog (needs backend or later passes):
 - [ ] "Working on" holds configurations; compare versions side by side and build a hybrid with the copilot.
 - [ ] "Build a new panel" and most edits run through copilot skills (design skill input from the UI lane).
 - [ ] Remove all mock data when wiring to the live backend.
+
+## Lab round 3 (2026-10-03)
+
+- [x] Machine switching like a VS Code remote window: connect (reachable, signed in, healthy), then every tile shows that machine only; per-layout counts; "nothing here" state that points to where its work is; offline machines say why.
+- [x] Copilot-led start for outside work, custom workflows and training: question cards in the main copilot, then a guide strip that switches Lab layouts step by step.
+- [x] Transcript audit: recovered requests and rulings written to `UI-BACKLOG.md` ("Recovered from the transcript audit").
