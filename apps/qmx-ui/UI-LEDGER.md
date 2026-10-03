@@ -105,3 +105,18 @@ Backlog (needs backend or later passes):
 - QMX's edge over other platforms: agents, news and workflows feed the portfolio; things built in the Lab or the main copilot arrive here.
 - Main copilot can take in conversations from other screens (e.g. a Lab chat) and its changes show live elsewhere, e.g. the Lab popped out on a second monitor (Copilot pass).
 
+
+### Portfolio round 2 rulings (operator, 2026-10-03)
+
+- **Spot crypto only.** IC Markets and cTrader are out; no CFDs, no prop firms. (Big backend change: the docs are cTrader-centred.)
+- **"Books" become "Pods".** A pod is one way of doing risk management and position sizing; a Book + BMS is one method among many (models, workflows, hybrids, BMS variants). Nothing centralised.
+- Portfolio is mostly for watching; risk and sizing systems are built in the Lab and wired here by the Lab or main copilot.
+- Pod page needs a real redesign: less text, bigger controls, things you can adjust.
+- Live: a chart per trading bot across the top; positions sortable and richer; trading servers must be actionable (or move into the header); exposure and correlation move to Live.
+- Road to live starts at paper trading (anything earlier stays in the Lab); each bot gets a trading journal; use the player (FC/FIFA-style) bot cards here.
+- Agent requests go back to the Lab. Allocate leaves Portfolio: allocation is experimentation, so it moves to the Lab.
+- Events and news split by crypto and FX (FX as influence on crypto), with sentiment; every item must name its backend source. A news/sentiment workflow ships as a template.
+- MIS stays as is for now; later it gets logs, indicators and model views, grown from the Lab or the copilot.
+- **Proposal accepted:** an in-depth Lab refactor for risk management and position-sizing systems (pods, Books, BMS variants, models, workflows, allocation experiments).
+- Templates on every page that builds things (Lab, Portfolio, and introduce them in the Library).
+- Appearance: themes editable like VS Code; background art can rotate on its own; consider design styles (glassmorphism, liquid glass, minimalism, neumorphism, claymorphism, neo-brutalism, skeuomorphism).
