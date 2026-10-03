@@ -17,7 +17,7 @@ How the UI work is chunked and where it stands. The backlog (`UI-BACKLOG.md`) ho
 |---|------|--------|
 | 1 | **Lab**: Authoring + Backtest lab + ML Studio merged into one permanent section (ruled 2026-10-02) | in progress |
 | 2 | Portfolio: books, risk, position sizing, promotions and approvals (new permanent section; portfolio optimisation is new scope) | queued |
-| 3 | Trading nodes: node manager (servers, provider, region, IP, latency, kill) and the node screen (tile borders for paper/live, order flow) | queued |
+| 3 | Trading nodes: folded into Portfolio → Live (ruled 2026-10-03); node manager lives in Settings → Compute and Portfolio | merged into pass 2 |
 | 4 | Settings: depth and real controls on every tab; data sources you can add (keys, scraping, schedules) | queued |
 | 5 | Home: your own tabs, notifications, many accounts across exchanges, widget reflow on minimise | queued |
 | 6 | Library: full-width reader, Artifacts rethink, card art by family, list/card view, detail pages | queued |
@@ -85,9 +85,9 @@ Backlog (needs backend or later passes):
 
 | Chunk | What | Status |
 |-------|------|--------|
-| P1 | Research: what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress |
-| P2 | 2–3 whole-screen options | — |
-| P3 | Operator picks (or "surprise me") | — |
+| P1 | Research (done 2026-10-03: docs brief + 20 verified reference products): what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress |
+| P2 | 2–3 whole-screen options | shown: Risk, Books, Promotions, Optimise on one tiling board |
+| P3 | Operator picks (or "surprise me") | "surprise me, take it further" (see rulings) |
 | P4 | Portfolio shell on the tiling engine; rail entry; layouts | — |
 | P5 | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide | — |
 | P6 | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates | — |
@@ -96,3 +96,12 @@ Backlog (needs backend or later passes):
 | P9 | Portfolio copilot context (tools, targets, attach), templates | — |
 | P10 | Click-through journeys and fixes | — |
 | P11 | Backend mapping for Codex | — |
+
+### Portfolio rulings (operator, 2026-10-03)
+
+- Portfolio is a Lab for risk, sizing and allocation: many Books and BMS variations (mini apps make them multiply), risk and sizing by rules, by ML models, by older QMX models brought back, or hybrids. Sky's the limit; surprise and take it further.
+- Allocation is conversational: "this Binance account should grow quickly, let it take on the book." Portfolio copilot is specific, with its own skills; the main copilot reaches it too.
+- **The trading node folds into Portfolio** as a Live section (paper and live portfolios; trading locally or on one or many servers). A separate trading node screen is no longer needed.
+- QMX's edge over other platforms: agents, news and workflows feed the portfolio; things built in the Lab or the main copilot arrive here.
+- Main copilot can take in conversations from other screens (e.g. a Lab chat) and its changes show live elsewhere, e.g. the Lab popped out on a second monitor (Copilot pass).
+
