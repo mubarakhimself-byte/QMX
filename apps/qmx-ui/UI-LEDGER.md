@@ -16,7 +16,7 @@ How the UI work is chunked and where it stands. The backlog (`UI-BACKLOG.md`) ho
 | # | Pass | Status |
 |---|------|--------|
 | 1 | **Lab**: Authoring + Backtest lab + ML Studio merged into one permanent section (ruled 2026-10-02) | in progress |
-| 2 | Portfolio: books, risk, position sizing, promotions and approvals (new permanent section; portfolio optimisation is new scope) | queued |
+| 2 | Portfolio: books, risk, position sizing, promotions and approvals, allocation, MIS, live trading | first cut done 2026-10-03; awaiting operator review |
 | 3 | Trading nodes: folded into Portfolio → Live (ruled 2026-10-03); node manager lives in Settings → Compute and Portfolio | merged into pass 2 |
 | 4 | Settings: depth and real controls on every tab; data sources you can add (keys, scraping, schedules) | queued |
 | 5 | Home: your own tabs, notifications, many accounts across exchanges, widget reflow on minimise | queued |
@@ -88,14 +88,14 @@ Backlog (needs backend or later passes):
 | P1 | Research (done 2026-10-03: docs brief + 20 verified reference products): what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress |
 | P2 | 2–3 whole-screen options | shown: Risk, Books, Promotions, Optimise on one tiling board |
 | P3 | Operator picks (or "surprise me") | "surprise me, take it further" (see rulings) |
-| P4 | Portfolio shell on the tiling engine; rail entry; layouts | — |
-| P5 | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide | — |
-| P6 | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates | — |
-| P7 | Promotions and approvals: research-paper → node-paper → live, signed cards | — |
-| P8 | Optimisation (new scope): allocation across Books and bots, correlation, what-if | — |
-| P9 | Portfolio copilot context (tools, targets, attach), templates | — |
-| P10 | Click-through journeys and fixes | — |
-| P11 | Backend mapping for Codex | — |
+| P4 | Portfolio shell on the tiling engine; rail entry; layouts | done: /portfolio, Risk, Books, Live, Promotions, MIS, Allocate; shared LayoutStore; /trade redirects |
+| P5 | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide | done (demo): 5 venues, 6 accounts, nodes, KSA per account, USDT flagged |
+| P6 | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates | done (demo): risk source (rules/model/hybrid/Lab workflow), ladder, rules stack, wall, 10 templates |
+| P7 | Promotions and approvals: research-paper → node-paper → live, signed cards | done (demo): lanes, card with server checks (blocks on fail), activation; agent requests with diffs |
+| P8 | Optimisation (new scope): allocation across Books and bots, correlation, what-if | first cut: aims, limits, frontier, now vs proposed with resample bands, correlation |
+| P9 | Portfolio copilot context (tools, targets, attach), templates | done: own tools, PM/Trader/Analyst targets, attach Book/account/Lab/event, sessions, starters |
+| P10 | Click-through journeys and fixes | round 1 at 1280/1920: link follow, paper/live borders, blocked signing, activation, templates, redirect; fixed grid width and frontier size |
+| P11 | Backend mapping for Codex | done (BACKEND-REQUIREMENTS.md) |
 
 ### Portfolio rulings (operator, 2026-10-03)
 

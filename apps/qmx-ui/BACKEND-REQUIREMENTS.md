@@ -103,3 +103,25 @@ Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc de
 - Evidence status of runs on remote machines is still open; the UI labels them "exploration only" until ruled (B-9).
 - Templates across the app (Lab layouts and workflows, Portfolio, Library, Home): saved, shared and started from; the backend stores them.
 
+
+### Portfolio: what each panel needs (P11, 2026-10-03)
+
+The trading node folds into Portfolio (operator ruling 2026-10-03). **Biggest gap: no doc connects the UI to the node** (ADR-0026: the UI talks only to the agent daemon; node powers sit behind local channels, DEC-0202/0285). Portfolio needs a read model and a powers path from the UI.
+
+| Panel | Needs | In docs? |
+|---|---|---|
+| Accounts | Venues, accounts with role, equity, today, settlement currency, node, reconciliation verdict, KSA level per (venue, account); connect an exchange/broker | Roster/accounts yes (TN-22, DEC-0207); UI read path missing; crypto settlement (USDT) is a gap (DEC-0267) |
+| Risk, Book, Rules, Books wall | Per Book: version fp1, template, account, Book mode, binding state, seats, equity series, the USD sizing ladder (capital, kill line, runway, periods, budget, seat allowance, R price), loss used this period, distance to kill line, rule states | Ladder and fields yes (CT-22/27/28, DEC-0154); **no published read model** for the live numbers |
+| Risk source | Which engine sizes a Book: rules, a model, a hybrid, or a published Lab workflow (custom kill switch, sizing) | New scope (operator vision; QL-7 puts sizing in the Book) |
+| Exposure, Correlation | Cross-account exposure by asset and Book correlation, as after-the-fact reports with an as-of time | Allowed only as reports (DEC-0143); not specified |
+| Events | Upcoming calendar/news items mapped to the Books they affect, plus protection windows | Calendar yes (DEC-0214); mapping to Books new |
+| Chart, Positions | Live prices for held markets; positions and working orders across accounts with Book, R face and mode | Virtual ledger yes (TN-25); streaming read path missing |
+| Kill switch | KSA level per scope, requested vs enforced with source and receive times; powers: resume, escalate, flatten, paper flip, reset paper, resolve unknown (operator only, rechecked at click, journaled) | Powers list yes (TN-17, DEC-0202); UI path missing |
+| Trading servers | Nodes with location, latency to broker, heartbeat health, accounts carried; add a node | Liveness heartbeat yes (DEC-0262); provisioning wizard later |
+| Road to live, Promotion card | Items by stage (research-paper, node-paper, live), server-run checks as passed/refused list, card summary, evidence, sign; activation at next day boundary | Yes (TN-20, DEC-0205, DEC-0261) |
+| Agent requests | QMA approval_request with field diff when money-path relevant; approve/decline | Yes (CT-47, DEC-0313); never promotion (DEC-0345) |
+| Allocate | Objective, limits, frontier, weights now vs proposed, resample stability; "draft these changes" → new Book versions + treasury acts | New scope (no allocation object, DEC-0154/0435) |
+| MIS | Labelers (live and shadow) with current value and consumers | Shadow lane yes (DEC-0204/0262); MIS revamp pending |
+| Templates | Book templates (10 shipped in the UI) as default v1 documents; create a Book from a template on a demo account | Defaults/versions/copies yes (DEC-0144); creating templates from the UI is not on the powers list |
+
+Doc conflicts to settle (not asked of the operator, per standing rule): seat states (`active|benched` in risk DEC-0155 vs `admitted|active|benched|quarantined` in node DEC-0204); kill-line recovery (GitBook: paper until next re-seed; node docs: operator signature per binding). The UI follows the node docs.
