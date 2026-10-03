@@ -29,8 +29,8 @@
   });
   const NOW: [number, number] = [9.4, 13.1];
   const PROPOSED: [number, number] = [8.2, 15.6];
-  const W = 420;
-  const H = 200;
+  const W = 800;
+  const H = 300;
   const sx = (x: number) => ((x - 3) / 16) * W;
   const sy = (y: number) => H - ((y - 2) / 22) * H;
   const path = FRONTIER.map(
@@ -94,7 +94,7 @@
     </p>
   </aside>
   <div class="flex min-h-0 flex-col overflow-auto">
-    <div class="solid-backing border-b p-3">
+    <div class="solid-backing flex min-h-[16rem] flex-1 flex-col border-b p-3">
       <p class="mb-1 text-sm font-medium">
         Risk against return <span class="text-muted-foreground font-normal"
           >yearly, from evidence runs</span
@@ -102,10 +102,19 @@
       </p>
       <svg
         viewBox="0 0 {W} {H}"
-        class="h-48 w-full"
+        class="min-h-0 w-full flex-1"
         role="img"
         aria-label="Efficient frontier with today's mix and the proposal"
       >
+        {#each [0.25, 0.5, 0.75] as g (g)}
+          <line x1="0" x2={W} y1={g * H} y2={g * H} stroke="var(--border)" />
+        {/each}
+        <text x="4" y="14" font-size="11" fill="var(--muted-foreground)"
+          >return ↑</text
+        >
+        <text x={W - 60} y={H - 6} font-size="11" fill="var(--muted-foreground)"
+          >risk →</text
+        >
         <path
           d={path}
           fill="none"
@@ -151,9 +160,9 @@
         <tr class="border-b"
           ><th class="py-1.5 pl-3 font-normal">Book</th><th class="font-normal"
             >Now</th
-          ><th class="font-normal">Proposed</th><th
-            class="pr-3 text-right font-normal">Volatility</th
-          ></tr
+          ><th class="font-normal"
+            >Proposed <span class="opacity-70">(band: resample range)</span></th
+          ><th class="pr-3 text-right font-normal">Volatility</th></tr
         >
       </thead>
       <tbody>
@@ -174,11 +183,23 @@
             >
             <td
               ><span class="flex items-center gap-2"
-                ><span
-                  class="bg-primary h-2 rounded-sm"
-                  style="width:{Math.min(a.proposed, cap) * 2}px"
-                ></span><span class="num text-xs"
-                  >{Math.min(a.proposed, cap)}%</span
+                ><span class="relative block h-3 w-24">
+                  <span
+                    class="bg-primary/20 absolute inset-y-0 rounded-sm"
+                    style="left:{Math.max(
+                      0,
+                      Math.min(a.proposed, cap) -
+                        (Math.abs(a.proposed - a.now) >= 8 ? 9 : 3),
+                    ) * 2}px; width:{(Math.abs(a.proposed - a.now) >= 8
+                      ? 18
+                      : 6) * 2}px"
+                    title="Range across 200 resamples"
+                  ></span>
+                  <span
+                    class="bg-primary absolute inset-y-0.5 left-0 rounded-sm"
+                    style="width:{Math.min(a.proposed, cap) * 2}px"
+                  ></span></span
+                ><span class="num text-xs">{Math.min(a.proposed, cap)}%</span
                 ></span
               ></td
             >

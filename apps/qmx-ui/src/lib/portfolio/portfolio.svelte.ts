@@ -13,7 +13,7 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
     id: "risk",
     name: "Risk",
     root: split("row", [
-      [accounts("r-acc"), 16],
+      [accounts("r-acc"), 15],
       [
         split("col", [
           [pane("r-grid", "risk", "amber"), 58],
@@ -25,14 +25,14 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
             42,
           ],
         ]),
-        54,
+        59,
       ],
       [
         split("col", [
           [pane("r-book", "book", "amber"), 62],
           [pane("r-rules", "rules", "amber"), 38],
         ]),
-        30,
+        26,
       ],
     ]),
     docked: [],

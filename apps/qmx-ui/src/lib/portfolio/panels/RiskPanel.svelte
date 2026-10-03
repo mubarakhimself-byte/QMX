@@ -62,7 +62,7 @@
             )}
             onclick={() => (portfolio.book = b.id)}
           >
-            <td class="py-1.5 pl-3">
+            <td class="py-1.5 pr-3 pl-3">
               <span class="flex items-center gap-2">
                 <span
                   class={cn(
