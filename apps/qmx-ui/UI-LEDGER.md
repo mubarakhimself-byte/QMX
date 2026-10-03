@@ -130,7 +130,7 @@ Backlog (needs backend or later passes):
 - [x] Events split crypto / FX with sentiment and source.
 - [x] Allocate removed; agent requests in the Lab.
 - [x] Appearance: surface styles (glass, liquid glass, solid, brutalist), your own theme, rotating art.
-- [ ] **Next: Lab pods refactor** (design ready: scratchpad lab-risk-systems.md): Pod Build, Pod Test, Pod Compare, Allocate layouts; 20 blocks, 10 spot templates; stress library; size trail. Also switch the Lab and Home demo data from FX to spot crypto.
+- [x] Lab pods: Pods (stack, block, size trail), Pod test (equity, drawdown fan, stress board, interventions), Pod compare (no total score), Allocate (fund plan). 25 blocks, 10 spot templates. Lab demo data switched to spot crypto (Home still FX: next).
 - [ ] Library templates.
 
 
