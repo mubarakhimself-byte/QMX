@@ -33,6 +33,7 @@
   } from "$lib/portfolio/copilot";
   import { MODE_BORDER } from "$lib/portfolio/bits";
   import TemplatesDialog from "$lib/portfolio/TemplatesDialog.svelte";
+  import ServersStrip from "$lib/portfolio/ServersStrip.svelte";
 
   const L = portfolio.layouts;
   const fromUrl = page.url.searchParams.get("layout");
@@ -72,8 +73,8 @@
     <div
       class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
     >
-      <FlaskConical class="text-warning size-3.5" /> Demo portfolio. Sample accounts,
-      Books and prices; no money is real.
+      <FlaskConical class="text-warning size-3.5" /> Demo portfolio. Sample spot accounts,
+      pods and prices; no money is real.
     </div>
   {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
@@ -154,6 +155,8 @@
       </DropdownMenu.Root>
     </nav>
     <div class="ml-auto flex items-center gap-1.5">
+      <ServersStrip />
+      <span class="bg-border mx-1 h-5 w-px"></span>
       <Button
         variant="ghost"
         size="sm"
@@ -189,7 +192,7 @@
             onclick={() => {
               portfolio.copilotOpen = true;
               workbench.notify(
-                "Describe the panel you want; the Portfolio copilot builds it from your accounts and Books.",
+                "Describe the panel you want; the Portfolio copilot builds it from your accounts and pods.",
               );
             }}><Sparkles />Build a new panel…</DropdownMenu.Item
           >
@@ -228,18 +231,18 @@
         <CopilotColumn
           title="Portfolio copilot"
           profile="portfolio"
-          hint="Knows every account, Book and promotion. It drafts and proposes; you sign anything that touches money."
-          placeholder="Let the Binance account take on Crypto momentum…"
+          hint="Knows every account, pod and bot on the road to live. It explains, watches and brings tested pods in from the Lab; you sign anything that touches money."
+          placeholder="Bring the vol-target pod from the Lab onto Bybit…"
           onclose={() => (portfolio.copilotOpen = false)}
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={PORTFOLIO_CONTEXT}
           sessions={PORTFOLIO_SESSIONS}
           starters={[
-            "Let the Binance account take on Crypto momentum and grow faster",
-            "Why is the prop challenge near its daily limit?",
-            "Compare rules and the vol model for sizing Crypto momentum",
-            "Draft a canary Book for US500 Trend v12",
+            "Let the Bybit account take on Alt momentum and grow faster",
+            "Why is SOL near its cap in Alt momentum?",
+            "Bring the tested vol-target pod from the Lab onto paper",
+            "Summarise ETH mean reversion's journal this week",
           ]}
         />
       </Resizable.Pane>

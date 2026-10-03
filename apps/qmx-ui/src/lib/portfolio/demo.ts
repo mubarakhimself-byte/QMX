@@ -1,119 +1,89 @@
 /**
- * DEMO data for Portfolio. Shapes follow the risk and trading-node docs:
- * venue → account → BMS (one per account) → Books → seats; the USD sizing
- * ladder; Book mode LIVE | PAPER; binding live | paper | stood-down; seat
- * active | benched; KSA levels; promotion vs activation. "Risk engine" per
- * Book (rules, a model, or both) is the operator's vision and new scope.
- * Nothing here is real money.
+ * DEMO data for Portfolio: spot crypto only (operator ruling 2026-10-03; no
+ * CFDs, no FX broker, no prop firms). Money is run by **pods**: a pod is one
+ * way of doing risk management and position sizing (a Book + BMS from the
+ * docs is one method; models, Lab workflows and hybrids are others). Every
+ * value here names the backend source it would come from. Nothing is real.
  */
 import { equityWalk } from "$lib/qmx/charts";
+import type { Entity } from "$lib/qmx/entities";
 
-export type Venue = {
-  id: string;
-  name: string;
-  kind: "crypto" | "fx" | "prop";
-  platform: string;
-};
+export type Venue = { id: string; name: string; market: string };
 export const VENUES: Venue[] = [
-  {
-    id: "binance",
-    name: "Binance",
-    kind: "crypto",
-    platform: "Spot + USDⓈ-M futures",
-  },
-  { id: "bybit", name: "Bybit", kind: "crypto", platform: "Unified account" },
-  { id: "coinbase", name: "Coinbase", kind: "crypto", platform: "Advanced" },
-  { id: "icm", name: "IC Markets", kind: "fx", platform: "cTrader" },
-  { id: "ftmo", name: "FTMO", kind: "prop", platform: "cTrader" },
+  { id: "binance", name: "Binance", market: "Spot" },
+  { id: "bybit", name: "Bybit", market: "Spot" },
+  { id: "coinbase", name: "Coinbase", market: "Advanced spot" },
+  { id: "kraken", name: "Kraken", market: "Spot" },
 ];
 
-export type Role = "live" | "demo" | "prop-firm" | "sensing-only";
+export type Ksa = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
 export type Account = {
   id: string;
   venue: string;
   name: string;
-  role: Role;
+  role: "live" | "paper" | "watch";
   equity: number;
   today: number;
-  settles: string;
+  quote: string;
   node: string;
-  reconciled: "reconciled" | "drift" | "unknown";
   ksa: Ksa;
 };
-export type Ksa = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
 
 export const ACCOUNTS: Account[] = [
   {
-    id: "bn-main",
+    id: "bn-spot",
     venue: "binance",
-    name: "Binance main",
+    name: "Binance spot",
     role: "live",
-    equity: 24180,
-    today: 1.9,
-    settles: "USDT",
-    node: "vps-tokyo",
-    reconciled: "reconciled",
+    equity: 38420,
+    today: 1.6,
+    quote: "USDT",
+    node: "tokyo",
     ksa: "GREEN",
   },
   {
-    id: "by-demo",
-    venue: "bybit",
-    name: "Bybit demo",
-    role: "demo",
-    equity: 10000,
-    today: 0.6,
-    settles: "USDT",
+    id: "bn-test",
+    venue: "binance",
+    name: "Binance testnet",
+    role: "paper",
+    equity: 25000,
+    today: 0.4,
+    quote: "USDT",
     node: "local",
-    reconciled: "reconciled",
     ksa: "GREEN",
   },
   {
-    id: "cb-watch",
-    venue: "coinbase",
-    name: "Coinbase",
-    role: "sensing-only",
-    equity: 3120,
-    today: -0.4,
-    settles: "USD",
-    node: "vps-tokyo",
-    reconciled: "reconciled",
-    ksa: "GREEN",
-  },
-  {
-    id: "ic-live",
-    venue: "icm",
-    name: "IC Markets live",
+    id: "by-spot",
+    venue: "bybit",
+    name: "Bybit spot",
     role: "live",
-    equity: 48630,
-    today: 0.14,
-    settles: "USD",
-    node: "vps-london",
-    reconciled: "drift",
+    equity: 16210,
+    today: 2.8,
+    quote: "USDT",
+    node: "tokyo",
     ksa: "YELLOW",
   },
   {
-    id: "ic-demo",
-    venue: "icm",
-    name: "IC Markets demo",
-    role: "demo",
-    equity: 50000,
-    today: 0.3,
-    settles: "USD",
-    node: "local",
-    reconciled: "reconciled",
+    id: "cb-spot",
+    venue: "coinbase",
+    name: "Coinbase",
+    role: "live",
+    equity: 6150,
+    today: -0.7,
+    quote: "USD",
+    node: "frankfurt",
     ksa: "GREEN",
   },
   {
-    id: "ftmo-1",
-    venue: "ftmo",
-    name: "FTMO challenge",
-    role: "prop-firm",
-    equity: 98420,
-    today: -1.2,
-    settles: "USD",
-    node: "vps-london",
-    reconciled: "reconciled",
-    ksa: "ORANGE",
+    id: "kr-watch",
+    venue: "kraken",
+    name: "Kraken",
+    role: "watch",
+    equity: 2040,
+    today: 0.2,
+    quote: "USD",
+    node: "frankfurt",
+    ksa: "GREEN",
   },
 ];
 
@@ -121,506 +91,684 @@ export type Node = {
   id: string;
   name: string;
   where: string;
-  latency: string;
+  latency: { venue: string; ms: number }[];
   status: "up" | "degraded" | "down";
   mode: "live" | "paper";
+  cpu: number;
+  uptime: string;
 };
 export const NODES: Node[] = [
   {
-    id: "vps-london",
-    name: "London node",
-    where: "Equinix LD4 · VPS",
-    latency: "1.8 ms to IC Markets",
+    id: "tokyo",
+    name: "Tokyo",
+    where: "AWS ap-northeast-1",
+    latency: [
+      { venue: "Binance", ms: 9 },
+      { venue: "Bybit", ms: 11 },
+    ],
     status: "up",
     mode: "live",
+    cpu: 34,
+    uptime: "18 days",
   },
   {
-    id: "vps-tokyo",
-    name: "Tokyo node",
-    where: "AWS ap-northeast-1",
-    latency: "14 ms to Binance",
+    id: "frankfurt",
+    name: "Frankfurt",
+    where: "Hetzner FSN1",
+    latency: [
+      { venue: "Coinbase", ms: 21 },
+      { venue: "Kraken", ms: 17 },
+    ],
     status: "degraded",
     mode: "live",
+    cpu: 71,
+    uptime: "3 days",
   },
   {
     id: "local",
     name: "This laptop",
     where: "Dell Precision 5550",
-    latency: "paper only",
+    latency: [{ venue: "Binance testnet", ms: 140 }],
     status: "up",
     mode: "paper",
+    cpu: 22,
+    uptime: "6 hours",
   },
 ];
 
-export type Engine = {
-  kind: "rules" | "model" | "hybrid";
+/** How a pod does risk and sizing. All but "book" are new scope. */
+export type Method = {
+  kind: "book" | "model" | "workflow" | "hybrid" | "rules";
   label: string;
-  note: string;
+  from: string;
 };
-export type Rule = {
-  name: string;
-  value: string;
-  limit: string;
-  used: number;
-  state: "ok" | "near" | "tripped";
+export type Knob = {
+  key: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
 };
-export type Seat = {
-  bot: string;
-  state: "active" | "benched";
-  r: string;
-  pnl: number;
-};
-export type Book = {
+export type Guard = { name: string; now: string; limit: string; used: number };
+export type PodBot = {
   id: string;
   name: string;
-  template: string;
-  version: string;
-  account: string;
-  mode: "LIVE" | "PAPER";
-  binding: "live" | "paper" | "stood-down";
-  engine: Engine;
-  capital: number;
-  killLine: number;
-  runwayPeriods: number;
-  seatAllowance: number;
-  equity: number;
-  lossToday: number;
-  equitySeries: number[];
-  rules: Rule[];
-  seats: Seat[];
+  symbol: string;
+  weight: number;
+  state: "trading" | "benched" | "paused";
+  pnl: number;
 };
 
-function ladder(
-  b: Pick<Book, "capital" | "killLine" | "runwayPeriods" | "seatAllowance">,
-) {
-  const runway = b.capital - b.killLine;
-  const budget = runway / b.runwayPeriods;
-  return { runway, budget, rPrice: budget / b.seatAllowance };
-}
-export const sizing = ladder;
+export type Pod = {
+  id: string;
+  name: string;
+  method: Method;
+  account: string;
+  mode: "LIVE" | "PAPER";
+  version: string;
+  equity: number;
+  start: number;
+  floor: number;
+  today: number;
+  curve: number[];
+  knobs: Knob[];
+  guards: Guard[];
+  bots: PodBot[];
+};
 
-export const BOOKS: Book[] = [
+export const PODS: Pod[] = [
   {
-    id: "fx-core",
-    name: "FX core",
-    template: "Conservative FX",
+    id: "core",
+    name: "BTC & ETH core",
+    method: { kind: "book", label: "Book + BMS", from: "Docs default ladder" },
+    account: "bn-spot",
+    mode: "LIVE",
     version: "v3",
-    account: "ic-live",
-    mode: "LIVE",
-    binding: "live",
-    engine: { kind: "rules", label: "Rules", note: "Default sizing ladder" },
-    capital: 25000,
-    killLine: 21500,
-    runwayPeriods: 10,
-    seatAllowance: 5,
-    equity: 25840,
-    lossToday: 120,
-    equitySeries: equityWalk(11, 90, 0.0012, 0.006),
-    rules: [
+    equity: 24180,
+    start: 20000,
+    floor: 17000,
+    today: 1.4,
+    curve: equityWalk(12, 120, 0.0016, 0.009),
+    knobs: [
       {
-        name: "Risk per trade",
-        value: "0.28%",
-        limit: "0.30%",
-        used: 0.93,
-        state: "near",
+        key: "risk",
+        label: "Risk per trade",
+        value: 0.5,
+        min: 0.1,
+        max: 2,
+        step: 0.05,
+        unit: "%",
       },
       {
-        name: "Daily loss",
-        value: "$120",
-        limit: "$350",
-        used: 0.34,
-        state: "ok",
+        key: "daily",
+        label: "Daily loss stop",
+        value: 2,
+        min: 0.5,
+        max: 6,
+        step: 0.25,
+        unit: "%",
       },
       {
-        name: "Correlated pairs",
-        value: "2",
-        limit: "3",
-        used: 0.67,
-        state: "ok",
+        key: "exposure",
+        label: "Most in one coin",
+        value: 60,
+        min: 10,
+        max: 100,
+        step: 5,
+        unit: "%",
       },
       {
-        name: "News window",
-        value: "USD CPI in 2h",
-        limit: "blocks new entries",
-        used: 0.5,
-        state: "near",
+        key: "floor",
+        label: "Kill line",
+        value: 17000,
+        min: 12000,
+        max: 20000,
+        step: 500,
+        unit: "$",
       },
     ],
-    seats: [
-      { bot: "EURUSD H1 GBM", state: "active", r: "1.2 R", pnl: 412 },
-      { bot: "US500 Trend", state: "active", r: "0.8 R", pnl: -43 },
-      { bot: "Gold Fade", state: "benched", r: "0 R", pnl: -96 },
+    guards: [
+      { name: "Daily loss", now: "$96", limit: "$484", used: 0.2 },
+      { name: "BTC share", now: "54%", limit: "60%", used: 0.9 },
+      {
+        name: "Above kill line",
+        now: "$7,180",
+        limit: "$7,180 room",
+        used: 0.3,
+      },
+    ],
+    bots: [
+      {
+        id: "btc-breakout",
+        name: "BTC breakout",
+        symbol: "BTCUSDT",
+        weight: 55,
+        state: "trading",
+        pnl: 1240,
+      },
+      {
+        id: "eth-trend",
+        name: "ETH trend",
+        symbol: "ETHUSDT",
+        weight: 45,
+        state: "trading",
+        pnl: 410,
+      },
     ],
   },
   {
-    id: "crypto-mom",
-    name: "Crypto momentum",
-    template: "Crypto momentum",
-    version: "v1",
-    account: "bn-main",
-    mode: "LIVE",
-    binding: "live",
-    engine: {
+    id: "alts",
+    name: "Alt momentum",
+    method: {
       kind: "model",
-      label: "Vol forecaster",
-      note: "Sizes by forecast volatility (model, new scope)",
+      label: "Volatility target",
+      from: "Lab model · Vol forecaster v2",
     },
-    capital: 15000,
-    killLine: 12000,
-    runwayPeriods: 8,
-    seatAllowance: 4,
-    equity: 16210,
-    lossToday: 0,
-    equitySeries: equityWalk(23, 90, 0.0022, 0.014),
-    rules: [
-      {
-        name: "Per-bot cap",
-        value: "18%",
-        limit: "20%",
-        used: 0.9,
-        state: "near",
-      },
-      {
-        name: "Portfolio trailing stop",
-        value: "−3.1%",
-        limit: "−8%",
-        used: 0.39,
-        state: "ok",
-      },
-      {
-        name: "Rebalance drift",
-        value: "6%",
-        limit: "10%",
-        used: 0.6,
-        state: "ok",
-      },
-    ],
-    seats: [
-      { bot: "BTC breakout", state: "active", r: "1.0 R", pnl: 640 },
-      { bot: "ETH trend", state: "active", r: "0.7 R", pnl: 210 },
-      { bot: "SOL momentum", state: "active", r: "0.5 R", pnl: -88 },
-    ],
-  },
-  {
-    id: "crypto-mr",
-    name: "Crypto neutral",
-    template: "Market-neutral",
-    version: "v2",
-    account: "by-demo",
-    mode: "PAPER",
-    binding: "paper",
-    engine: {
-      kind: "hybrid",
-      label: "Rules + regime HMM",
-      note: "Rules size; the regime model throttles (new scope)",
-    },
-    capital: 10000,
-    killLine: 8500,
-    runwayPeriods: 10,
-    seatAllowance: 5,
-    equity: 10240,
-    lossToday: 35,
-    equitySeries: equityWalk(31, 90, 0.0008, 0.005),
-    rules: [
-      {
-        name: "Net exposure",
-        value: "4%",
-        limit: "±10%",
-        used: 0.4,
-        state: "ok",
-      },
-      {
-        name: "Funding cost",
-        value: "0.02%/8h",
-        limit: "0.05%",
-        used: 0.4,
-        state: "ok",
-      },
-    ],
-    seats: [{ bot: "Basis carry", state: "active", r: "0.6 R", pnl: 75 }],
-  },
-  {
-    id: "prop",
-    name: "Prop challenge",
-    template: "Prop-firm challenge",
-    version: "v1",
-    account: "ftmo-1",
+    account: "by-spot",
     mode: "LIVE",
-    binding: "live",
-    engine: {
-      kind: "rules",
-      label: "Rules",
-      note: "Hard daily and total loss",
-    },
-    capital: 100000,
-    killLine: 90000,
-    runwayPeriods: 2,
-    seatAllowance: 5,
-    equity: 98420,
-    lossToday: 3900,
-    equitySeries: equityWalk(41, 90, -0.0002, 0.006),
-    rules: [
+    version: "v2",
+    equity: 16210,
+    start: 15000,
+    floor: 12000,
+    today: 2.8,
+    curve: equityWalk(23, 120, 0.0021, 0.016),
+    knobs: [
       {
-        name: "Daily loss",
-        value: "$3,900",
-        limit: "$5,000",
-        used: 0.78,
-        state: "near",
+        key: "target",
+        label: "Yearly volatility target",
+        value: 35,
+        min: 10,
+        max: 80,
+        step: 5,
+        unit: "%",
       },
       {
-        name: "Total loss",
-        value: "$1,580",
-        limit: "$10,000",
-        used: 0.16,
-        state: "ok",
+        key: "cap",
+        label: "Most in one coin",
+        value: 25,
+        min: 5,
+        max: 50,
+        step: 5,
+        unit: "%",
       },
       {
-        name: "Reducing mode",
-        value: "on at 60%",
-        limit: "flatten at 80%",
-        used: 0.78,
-        state: "near",
+        key: "daily",
+        label: "Daily loss stop",
+        value: 3,
+        min: 1,
+        max: 8,
+        step: 0.5,
+        unit: "%",
       },
     ],
-    seats: [{ bot: "US500 Trend", state: "active", r: "0.4 R", pnl: -1200 }],
+    guards: [
+      { name: "Volatility now", now: "41%", limit: "35% target", used: 1 },
+      { name: "SOL share", now: "23%", limit: "25%", used: 0.92 },
+      { name: "Daily loss", now: "$0", limit: "$486", used: 0 },
+    ],
+    bots: [
+      {
+        id: "sol-mom",
+        name: "SOL momentum",
+        symbol: "SOLUSDT",
+        weight: 40,
+        state: "trading",
+        pnl: 620,
+      },
+      {
+        id: "avax-mom",
+        name: "AVAX momentum",
+        symbol: "AVAXUSDT",
+        weight: 30,
+        state: "trading",
+        pnl: 180,
+      },
+      {
+        id: "link-mom",
+        name: "LINK momentum",
+        symbol: "LINKUSDT",
+        weight: 30,
+        state: "benched",
+        pnl: -95,
+      },
+    ],
   },
   {
-    id: "gold",
-    name: "Gold",
-    template: "Drawdown recovery",
-    version: "v2",
-    account: "ic-live",
-    mode: "PAPER",
-    binding: "stood-down",
-    engine: {
-      kind: "rules",
-      label: "Rules",
-      note: "Halves size after 5% drawdown",
+    id: "rotation",
+    name: "Weekly rotation",
+    method: {
+      kind: "workflow",
+      label: "Rotation workflow",
+      from: "Lab workflow · Top-5 rotation v2",
     },
-    capital: 8000,
-    killLine: 7000,
-    runwayPeriods: 5,
-    seatAllowance: 4,
-    equity: 6980,
-    lossToday: 0,
-    equitySeries: equityWalk(51, 90, -0.0012, 0.008),
-    rules: [
+    account: "cb-spot",
+    mode: "LIVE",
+    version: "v1",
+    equity: 6150,
+    start: 6000,
+    floor: 5100,
+    today: -0.7,
+    curve: equityWalk(31, 120, 0.0005, 0.011),
+    knobs: [
       {
-        name: "Kill line",
-        value: "$6,980",
-        limit: "$7,000",
-        used: 1,
-        state: "tripped",
+        key: "coins",
+        label: "Coins held",
+        value: 5,
+        min: 2,
+        max: 10,
+        step: 1,
+        unit: "",
+      },
+      {
+        key: "drift",
+        label: "Rebalance when off by",
+        value: 10,
+        min: 2,
+        max: 30,
+        step: 1,
+        unit: "%",
       },
     ],
-    seats: [{ bot: "Gold Fade", state: "benched", r: "0 R", pnl: 0 }],
+    guards: [
+      {
+        name: "Next rebalance",
+        now: "Monday 00:00",
+        limit: "weekly",
+        used: 0.6,
+      },
+      { name: "Above kill line", now: "$1,050", limit: "$900 room", used: 0.5 },
+    ],
+    bots: [
+      {
+        id: "rotator",
+        name: "Top-5 rotator",
+        symbol: "Basket",
+        weight: 100,
+        state: "trading",
+        pnl: 150,
+      },
+    ],
+  },
+  {
+    id: "meanrev",
+    name: "Mean reversion",
+    method: {
+      kind: "hybrid",
+      label: "Rules + regime model",
+      from: "Lab · Regime HMM v1 throttles the rules",
+    },
+    account: "bn-test",
+    mode: "PAPER",
+    version: "v4",
+    equity: 25640,
+    start: 25000,
+    floor: 21000,
+    today: 0.4,
+    curve: equityWalk(41, 120, 0.0009, 0.006),
+    knobs: [
+      {
+        key: "risk",
+        label: "Risk per trade",
+        value: 0.4,
+        min: 0.1,
+        max: 2,
+        step: 0.05,
+        unit: "%",
+      },
+      {
+        key: "throttle",
+        label: "Size in trending regime",
+        value: 30,
+        min: 0,
+        max: 100,
+        step: 10,
+        unit: "%",
+      },
+    ],
+    guards: [
+      { name: "Regime", now: "trending", limit: "size cut to 30%", used: 0.7 },
+      { name: "Daily loss", now: "$40", limit: "$512", used: 0.08 },
+    ],
+    bots: [
+      {
+        id: "eth-mr",
+        name: "ETH mean reversion",
+        symbol: "ETHUSDT",
+        weight: 100,
+        state: "trading",
+        pnl: 640,
+      },
+    ],
   },
 ];
 
 export const accountById = (id: string) => ACCOUNTS.find((a) => a.id === id);
 export const venueById = (id: string) => VENUES.find((v) => v.id === id);
 export const nodeById = (id: string) => NODES.find((n) => n.id === id);
-export const bookById = (id: string) => BOOKS.find((b) => b.id === id);
-export const isLive = (b: Book) => b.mode === "LIVE";
+export const podById = (id: string) => PODS.find((p) => p.id === id);
 
-export type Promotion = {
-  id: string;
-  what: string;
-  kind: "bot" | "model" | "book";
-  stage: "research-paper" | "node-paper" | "live";
-  book: string;
-  detail: string;
-  gates: { name: string; ok: boolean | null }[];
+/** Trading bots across pods, for the per-bot charts on Live. */
+export const TRADING_BOTS = PODS.flatMap((p) =>
+  p.bots
+    .filter((b) => b.symbol !== "Basket")
+    .map((b) => ({ ...b, pod: p.name, mode: p.mode })),
+);
+export const BASE_PRICE: Record<string, [number, number]> = {
+  BTCUSDT: [64210, 0],
+  ETHUSDT: [3118, 1],
+  SOLUSDT: [152.4, 2],
+  AVAXUSDT: [27.6, 2],
+  LINKUSDT: [11.84, 3],
+};
+
+/** Bots on the road to live: paper first (anything earlier stays in the Lab). */
+export type Candidate = {
+  entity: Entity;
+  stage: "paper" | "ready" | "live";
+  pod: string;
+  days: number;
+  checks: { name: string; ok: boolean | null }[];
   summary: string;
 };
 
-export const PROMOTIONS: Promotion[] = [
+const bot = (
+  id: string,
+  name: string,
+  summary: string,
+  stage: Entity["stage"],
+  m: [string, string, string, string],
+): Entity => ({
+  id,
+  kind: "bot",
+  name,
+  summary,
+  stage,
+  version: "v1",
+  fp: "fp1:" + id.slice(0, 4),
+  family: "Momentum",
+  measures: [
+    {
+      key: "net",
+      label: "Net",
+      value: m[0],
+      help: "Return over the paper period",
+      tone: m[0].startsWith("−") ? "down" : "up",
+    },
+    {
+      key: "dd",
+      label: "Max drawdown",
+      value: m[1],
+      help: "Worst fall from a peak",
+      tone: "down",
+    },
+    {
+      key: "win",
+      label: "Win rate",
+      value: m[2],
+      help: "Share of trades that made money",
+    },
+    {
+      key: "trades",
+      label: "Trades",
+      value: m[3],
+      help: "Closed trades on paper",
+    },
+  ],
+  spark: equityWalk(id.length * 13, 40, 0.002, 0.012),
+});
+
+export const CANDIDATES: Candidate[] = [
   {
-    id: "pr-1",
-    what: "EURUSD H1 GBM v8",
-    kind: "bot",
-    stage: "research-paper",
-    book: "fx-core",
-    detail: "Walk-forward 12 folds · Sharpe 1.51",
-    gates: [
-      { name: "Evidence attached (CT-32)", ok: true },
-      { name: "Admission layers 1–3", ok: true },
-      { name: "Capability check on IC Markets", ok: true },
-      { name: "No unsigned money-rule change", ok: false },
+    entity: bot(
+      "eth-mr",
+      "ETH mean reversion",
+      "Fades 2σ moves on ETH in calm regimes",
+      "Paper",
+      ["+2.6%", "−1.1%", "61%", "38"],
+    ),
+    stage: "paper",
+    pod: "Mean reversion",
+    days: 12,
+    checks: [
+      { name: "30 days on paper", ok: false },
+      { name: "Paper drawdown under 5%", ok: true },
+      { name: "Matches its Lab evidence", ok: true },
     ],
     summary:
-      "Promote EURUSD H1 GBM v8 to node-paper on IC Markets demo, replacing v7 after a 7-day soak.",
+      "Keep on paper until day 30, then move ETH mean reversion to Binance spot inside a new pod.",
   },
   {
-    id: "pr-2",
-    what: "Breakout scorer",
-    kind: "model",
-    stage: "research-paper",
-    book: "crypto-mom",
-    detail: "AUC 0.61 · plugs into entry signal",
-    gates: [
-      { name: "Evidence attached", ok: true },
-      { name: "Sealed year opened once", ok: true },
-      { name: "Model object defined (new scope)", ok: null },
+    entity: bot(
+      "doge-brk",
+      "DOGE breakout",
+      "Breakouts on DOGE with volume confirmation",
+      "Paper",
+      ["−0.8%", "−3.9%", "44%", "21"],
+    ),
+    stage: "paper",
+    pod: "Alt momentum (paper copy)",
+    days: 9,
+    checks: [
+      { name: "30 days on paper", ok: false },
+      { name: "Paper drawdown under 5%", ok: true },
+      { name: "Matches its Lab evidence", ok: false },
     ],
     summary:
-      "Use the breakout scorer as the entry signal for BTC breakout in Crypto momentum.",
+      "Paper results trail the Lab evidence; review before going further.",
   },
   {
-    id: "pr-3",
-    what: "Gold Fade v4",
-    kind: "bot",
-    stage: "node-paper",
-    book: "gold",
-    detail: "Soak day 4 of 7 on IC Markets demo",
-    gates: [
-      { name: "Soak complete", ok: false },
-      { name: "Paper equity above floor", ok: true },
+    entity: bot(
+      "avax-mom",
+      "AVAX momentum v2",
+      "Momentum on AVAX with a volatility filter",
+      "Paper",
+      ["+4.1%", "−2.2%", "53%", "47"],
+    ),
+    stage: "ready",
+    pod: "Alt momentum",
+    days: 31,
+    checks: [
+      { name: "30 days on paper", ok: true },
+      { name: "Paper drawdown under 5%", ok: true },
+      { name: "Matches its Lab evidence", ok: true },
+      { name: "Your signature", ok: null },
     ],
-    summary: "Return Gold Fade v4 to live on Gold after the soak.",
+    summary:
+      "Replace AVAX momentum v1 with v2 in Alt momentum on Bybit spot. Activates at the next day boundary.",
   },
   {
-    id: "pr-4",
-    what: "US500 Trend v12",
-    kind: "bot",
+    entity: bot(
+      "sol-mom",
+      "SOL momentum",
+      "Momentum on SOL, sized by the volatility target",
+      "Live",
+      ["+6.3%", "−3.4%", "55%", "64"],
+    ),
     stage: "live",
-    book: "fx-core",
-    detail: "Signed · activates at the next day boundary",
-    gates: [
-      { name: "Promotion card signed", ok: true },
-      { name: "Activation", ok: null },
+    pod: "Alt momentum",
+    days: 18,
+    checks: [
+      { name: "Signed", ok: true },
+      { name: "Activated", ok: true },
+      { name: "First 30 live days", ok: null },
     ],
-    summary: "Activate US500 Trend v12 on FX core. Takes effect at 00:00 UTC.",
+    summary: "Live since Sep 15 in Alt momentum.",
   },
 ];
 
-export type ApprovalRequest = {
-  id: string;
-  from: string;
-  what: string;
-  moneyPath: boolean;
-  diff?: [string, string, string][];
-  when: string;
+export type JournalNote = {
+  time: string;
+  kind: "trade" | "note" | "event";
+  text: string;
+  r?: number;
 };
-
-/** QMA approval_request messages: separate from node signatures (DEC-0345). */
-export const APPROVALS: ApprovalRequest[] = [
-  {
-    id: "ap-1",
-    from: "Portfolio Manager quant",
-    what: "Crypto momentum v2: give BTC breakout more room",
-    moneyPath: true,
-    diff: [
-      ["Per-bot cap", "20%", "25%"],
-      ["Rebalance drift", "10%", "8%"],
-    ],
-    when: "12 min ago",
-  },
-  {
-    id: "ap-2",
-    from: "Analyst quant",
-    what: "Run a 120-run sweep on the Research VPS (about $1.10)",
-    moneyPath: false,
-    when: "40 min ago",
-  },
-];
+export const JOURNAL: Record<string, JournalNote[]> = {
+  "eth-mr": [
+    {
+      time: "Today 11:20",
+      kind: "trade",
+      text: "Sold 0.6 ETH at 3,131 after a 2.1σ spike; target hit.",
+      r: 1.2,
+    },
+    {
+      time: "Today 08:05",
+      kind: "event",
+      text: "Regime turned trending; size cut to 30%.",
+    },
+    {
+      time: "Yesterday 22:40",
+      kind: "trade",
+      text: "Bought 0.8 ETH at 3,052; stopped out at 3,021.",
+      r: -1,
+    },
+    {
+      time: "Yesterday 09:15",
+      kind: "note",
+      text: "You: watch how it behaves around the CPI print.",
+    },
+  ],
+};
 
 export type NewsItem = {
   when: string;
   title: string;
-  impact: "high" | "medium";
+  kind: "crypto" | "fx";
+  impact: "high" | "medium" | "low";
+  sentiment: number;
   affects: string[];
+  source: string;
 };
-export const EVENTS: NewsItem[] = [
+export const NEWS: NewsItem[] = [
   {
     when: "in 2h",
     title: "US CPI (Sep)",
+    kind: "fx",
     impact: "high",
-    affects: ["FX core", "Prop challenge"],
+    sentiment: -0.2,
+    affects: ["BTC", "ETH"],
+    source: "Forex Factory calendar",
   },
   {
     when: "in 5h",
     title: "FOMC minutes",
+    kind: "fx",
     impact: "high",
-    affects: ["FX core", "Crypto momentum"],
+    sentiment: -0.1,
+    affects: ["BTC", "ETH", "SOL"],
+    source: "Forex Factory calendar",
   },
   {
-    when: "tomorrow",
-    title: "ETH Pectra upgrade window",
+    when: "now",
+    title: "Dollar index up 0.6% today",
+    kind: "fx",
     impact: "medium",
-    affects: ["Crypto momentum", "Crypto neutral"],
+    sentiment: -0.4,
+    affects: ["BTC"],
+    source: "Price feed (DXY)",
+  },
+  {
+    when: "12m ago",
+    title: "Spot BTC ETFs took in $412M yesterday",
+    kind: "crypto",
+    impact: "high",
+    sentiment: 0.7,
+    affects: ["BTC"],
+    source: "The Block RSS",
+  },
+  {
+    when: "40m ago",
+    title: "SOL token unlock of 2.1M on Friday",
+    kind: "crypto",
+    impact: "medium",
+    sentiment: -0.3,
+    affects: ["SOL"],
+    source: "CryptoPanic",
+  },
+  {
+    when: "1h ago",
+    title: "Binance lists a new AVAX pair",
+    kind: "crypto",
+    impact: "low",
+    sentiment: 0.3,
+    affects: ["AVAX"],
+    source: "Binance announcements RSS",
+  },
+  {
+    when: "2h ago",
+    title: "Crowd mood on ETH turns bullish",
+    kind: "crypto",
+    impact: "medium",
+    sentiment: 0.5,
+    affects: ["ETH"],
+    source: "Sentiment workflow (template)",
   },
 ];
 
-/** Allocation what-if (new scope: no allocation object in the docs, DEC-0154). */
-export const ALLOC = BOOKS.filter((b) => b.binding !== "stood-down").map(
-  (b, i) => ({
-    book: b.name,
-    now: [32, 20, 13, 35][i] ?? 0,
-    proposed: [30, 28, 17, 25][i] ?? 0,
-    vol: [6.1, 14.2, 4.3, 7.8][i] ?? 0,
-  }),
-);
-
 export const CORR: { names: string[]; m: number[][] } = {
-  names: ["FX core", "Crypto mom.", "Crypto neutral", "Prop"],
+  names: ["Core", "Alt mom.", "Rotation", "Mean rev."],
   m: [
-    [1, 0.18, 0.05, 0.72],
-    [0.18, 1, 0.31, 0.12],
-    [0.05, 0.31, 1, 0.02],
-    [0.72, 0.12, 0.02, 1],
+    [1, 0.64, 0.58, 0.12],
+    [0.64, 1, 0.71, 0.08],
+    [0.58, 0.71, 1, 0.1],
+    [0.12, 0.08, 0.1, 1],
   ],
 };
 
+export const EXPOSURE = [
+  { asset: "BTC", share: 41 },
+  { asset: "ETH", share: 24 },
+  { asset: "SOL", share: 11 },
+  { asset: "AVAX", share: 6 },
+  { asset: "LINK", share: 2 },
+  { asset: "Stablecoins", share: 16 },
+];
+
 export const TEMPLATES = [
   {
-    id: "t-fx",
-    name: "Conservative FX",
-    note: "0.25% per trade, 1.5% daily, 6% max drawdown, news blackout",
-  },
-  {
-    id: "t-mom",
-    name: "Crypto momentum",
-    note: "Volatility target, per-bot cap 20%, trailing portfolio stop",
-  },
-  {
-    id: "t-neutral",
-    name: "Market-neutral crypto",
-    note: "Gross and net exposure caps, funding-cost limit",
-  },
-  {
-    id: "t-prop",
-    name: "Prop-firm challenge",
-    note: "Hard 5% daily, 10% total, reduce at 60%, flatten at 80%",
-  },
-  {
-    id: "t-parity",
-    name: "Risk parity",
-    note: "Equal risk per bot, monthly reweight, correlation alert at 0.7",
-  },
-  {
     id: "t-core",
-    name: "Core and satellite",
-    note: "80% steady bots, 20% high-variance with its own cap",
+    name: "BTC & ETH core",
+    note: "Book + BMS, 0.5% per trade, 2% daily stop, kill line at −15%",
+  },
+  {
+    id: "t-vol",
+    name: "Volatility target",
+    note: "A model sizes to a yearly volatility; hard caps per coin",
+  },
+  {
+    id: "t-rotation",
+    name: "Weekly rotation",
+    note: "Hold the top N coins by momentum; rebalance on drift",
+  },
+  {
+    id: "t-dca",
+    name: "Accumulation ladder",
+    note: "Buy in steps on dips; never sells below cost",
+  },
+  {
+    id: "t-meanrev",
+    name: "Mean reversion with regime",
+    note: "Rules size; a regime model cuts size when trending",
+  },
+  {
+    id: "t-canary",
+    name: "Canary",
+    note: "Tiny live size for a new bot, ramps up on a schedule",
   },
   {
     id: "t-sandbox",
     name: "Paper sandbox",
-    note: "Simulated capital, sanity caps only, report after N days",
+    note: "Testnet capital, sanity caps only, report after N days",
   },
   {
-    id: "t-recovery",
-    name: "Drawdown recovery",
-    note: "Halve size after 5% drawdown, restore at half recovered",
+    id: "t-news",
+    name: "News-aware",
+    note: "Pauses entries around high-impact events; uses the news workflow",
   },
   {
-    id: "t-canary",
-    name: "Single-venue canary",
-    note: "Tiny live size for a new promotion, ramp on schedule",
-  },
-  {
-    id: "t-model",
-    name: "Model-sized book",
-    note: "A model sizes trades; rules stay as hard limits (new scope)",
+    id: "t-own",
+    name: "Build your own in the Lab",
+    note: "Wire your own blocks; the copilot brings it here",
   },
 ];

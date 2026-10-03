@@ -1,49 +1,33 @@
 <script lang="ts">
-  /** What the whole portfolio is exposed to, by asset, across accounts. A report: never used to stop an order. */
-  const ROWS = [
-    { asset: "USD", long: 41, short: 18 },
-    { asset: "BTC", long: 22, short: 0 },
-    { asset: "EUR", long: 19, short: 4 },
-    { asset: "ETH", long: 11, short: 3 },
-    { asset: "Gold", long: 6, short: 0 },
-    { asset: "US500", long: 9, short: 0 },
-    { asset: "JPY", long: 0, short: 12 },
-  ];
-  const max = Math.max(...ROWS.map((r) => Math.max(r.long, r.short)));
+  /** What the portfolio holds, by coin, across every account (spot: long only). A report, never used to stop an order. */
+  import { EXPOSURE } from "../demo";
+
+  const max = Math.max(...EXPOSURE.map((r) => r.share));
 </script>
 
 <div class="flex h-full flex-col">
   <div class="min-h-0 flex-1 overflow-auto px-3 py-2">
-    <div
-      class="text-muted-foreground mb-1.5 grid grid-cols-[3.5rem_1fr_1fr] gap-2 text-xs"
-    >
-      <span></span><span class="text-right">Short</span><span>Long</span>
-    </div>
-    {#each ROWS as r (r.asset)}
+    {#each EXPOSURE as r (r.asset)}
       <div
-        class="grid grid-cols-[3.5rem_1fr_1fr] items-center gap-2 py-1 text-sm"
+        class="grid grid-cols-[5.5rem_1fr_3rem] items-center gap-2 py-1.5 text-sm"
       >
-        <span>{r.asset}</span>
-        <span class="flex justify-end">
+        <span class={r.asset === "Stablecoins" ? "text-muted-foreground" : ""}
+          >{r.asset}</span
+        >
+        <span class="bg-muted h-3 overflow-hidden rounded-sm">
           <span
-            class="bg-destructive/60 h-3 rounded-l-sm"
-            style="width:{(r.short / max) * 100}%"
+            class="block h-full rounded-sm {r.asset === 'Stablecoins'
+              ? 'bg-muted-foreground/50'
+              : 'bg-primary/80'}"
+            style="width:{(r.share / max) * 100}%"
           ></span>
         </span>
-        <span class="flex items-center gap-2">
-          <span
-            class="bg-success/60 h-3 rounded-r-sm"
-            style="width:{(r.long / max) * 100}%"
-          ></span>
-          <span class="num text-muted-foreground text-xs"
-            >{r.long - r.short > 0 ? "+" : ""}{r.long - r.short}%</span
-          >
-        </span>
+        <span class="num text-right">{r.share}%</span>
       </div>
     {/each}
   </div>
   <p class="text-muted-foreground border-t px-3 py-2 text-xs">
-    Share of total equity, as of 12:04 UTC. A report only; each Book's own
-    limits do the stopping.
+    Share of total equity at 12:04 UTC. A report; each pod's own limits do the
+    stopping.
   </p>
 </div>

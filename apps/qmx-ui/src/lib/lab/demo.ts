@@ -527,3 +527,35 @@ export const SLOTS: Slot[] = [
     scope: "new",
   },
 ];
+
+/** Agent requests (QMA approval_request): moved here from Portfolio (operator, 2026-10-03). */
+export type ApprovalRequest = {
+  id: string;
+  from: string;
+  what: string;
+  moneyPath: boolean;
+  diff?: [string, string, string][];
+  when: string;
+};
+
+/** QMA approval_request messages: separate from node signatures (DEC-0345). */
+export const APPROVALS: ApprovalRequest[] = [
+  {
+    id: "ap-1",
+    from: "Portfolio Manager quant",
+    what: "Alt momentum pod v3: give SOL more room",
+    moneyPath: true,
+    diff: [
+      ["Per-bot cap", "20%", "25%"],
+      ["Rebalance drift", "10%", "8%"],
+    ],
+    when: "12 min ago",
+  },
+  {
+    id: "ap-2",
+    from: "Analyst quant",
+    what: "Run a 120-run sweep on the Research VPS (about $1.10)",
+    moneyPath: false,
+    when: "40 min ago",
+  },
+];

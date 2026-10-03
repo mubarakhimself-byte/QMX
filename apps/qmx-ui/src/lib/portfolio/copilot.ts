@@ -1,9 +1,10 @@
 /**
- * The Portfolio copilot: it drafts, explains and proposes; you sign. Agents
- * never place orders, size trades or touch the kill switch, so every money
- * change it makes is a draft version waiting for your signature.
+ * The Portfolio copilot: it explains, watches and wires things in from the
+ * Lab; you sign. Agents never place orders, size trades or touch the kill
+ * switch, so any money change is a draft waiting for your signature.
+ * Building risk systems and allocation experiments happen in the Lab.
  */
-import BookOpen from "@lucide/svelte/icons/book-open";
+import Boxes from "@lucide/svelte/icons/boxes";
 import Building2 from "@lucide/svelte/icons/building-2";
 import FlaskConical from "@lucide/svelte/icons/flask-conical";
 import Newspaper from "@lucide/svelte/icons/newspaper";
@@ -13,52 +14,45 @@ export const PORTFOLIO_CONTEXT: CopilotContext = {
   id: "portfolio",
   tools: [
     {
-      id: "book.draft_version",
-      note: "Draft a new Book version (you sign)",
-      group: "Books",
-    },
-    {
-      id: "book.from_template",
-      note: "Start a Book from a template",
-      group: "Books",
-    },
-    {
-      id: "book.attach_engine",
-      note: "Use a model or Lab workflow for risk",
-      group: "Books",
+      id: "pod.bring_from_lab",
+      note: "Bring a tested pod or risk system from the Lab",
+      group: "Pods",
       scope: "new",
     },
     {
-      id: "allocation.propose",
-      note: "Propose an allocation across Books",
-      group: "Allocate",
-      scope: "new",
+      id: "pod.draft_version",
+      note: "Draft a new pod version (you sign)",
+      group: "Pods",
     },
     {
-      id: "allocation.what_if",
-      note: "Replay a what-if allocation",
-      group: "Allocate",
-      scope: "new",
+      id: "pod.from_template",
+      note: "Start a pod from a template",
+      group: "Pods",
     },
     {
       id: "promotion.prepare_card",
       note: "Assemble a promotion card for signing",
-      group: "Promote",
+      group: "Road to live",
+    },
+    {
+      id: "journal.summarise",
+      note: "Summarise a bot's journal",
+      group: "Road to live",
     },
     {
       id: "risk.explain",
       note: "Explain a limit, a breach or a level",
-      group: "Risk",
+      group: "Watch",
     },
     {
       id: "news.watch",
       note: "Watch events that hit what you hold",
-      group: "Risk",
+      group: "Watch",
     },
   ],
   defaultTools: [
-    "book.draft_version",
-    "book.from_template",
+    "pod.draft_version",
+    "pod.from_template",
     "promotion.prepare_card",
     "risk.explain",
     "news.watch",
@@ -68,7 +62,7 @@ export const PORTFOLIO_CONTEXT: CopilotContext = {
       id: "pm",
       name: "Portfolio Manager",
       kind: "Quant",
-      note: "Proposes Book versions and allocations",
+      note: "Proposes pod versions from Lab results",
       blocked: null,
     },
     {
@@ -78,40 +72,33 @@ export const PORTFOLIO_CONTEXT: CopilotContext = {
       note: "Watches news windows and live state",
       blocked: null,
     },
-    {
-      id: "analyst",
-      name: "Analyst",
-      kind: "Quant",
-      note: "Pulls evidence from the Lab",
-      blocked: null,
-    },
   ],
   attach: [
     {
-      id: "book",
-      label: "A Book",
-      note: "Its version, rules and seats",
-      icon: BookOpen,
+      id: "pod",
+      label: "A pod",
+      note: "Its version, limits and bots",
+      icon: Boxes,
       needs: null,
     },
     {
       id: "account",
       label: "An account",
-      note: "Equity, Books and kill-switch level",
+      note: "Equity, pods and kill-switch level",
       icon: Building2,
       needs: null,
     },
     {
       id: "lab",
       label: "From the Lab",
-      note: "A run, model or workflow",
+      note: "A tested pod, model or workflow",
       icon: FlaskConical,
       needs: null,
     },
     {
       id: "event",
-      label: "An event",
-      note: "From the calendar or news",
+      label: "A news item",
+      note: "From the events stream",
       icon: Newspaper,
       needs: null,
     },
@@ -119,7 +106,11 @@ export const PORTFOLIO_CONTEXT: CopilotContext = {
 };
 
 export const PORTFOLIO_SESSIONS = [
-  { id: "p1", title: "Let Binance take on Crypto momentum", when: "Today" },
-  { id: "p2", title: "Why is the prop book near its limit?", when: "Today" },
-  { id: "p3", title: "Rules vs the vol model for sizing", when: "Yesterday" },
+  { id: "p1", title: "Let Bybit take on Alt momentum", when: "Today" },
+  { id: "p2", title: "Why is SOL near its cap?", when: "Today" },
+  {
+    id: "p3",
+    title: "Bring the vol-target pod from the Lab",
+    when: "Yesterday",
+  },
 ];

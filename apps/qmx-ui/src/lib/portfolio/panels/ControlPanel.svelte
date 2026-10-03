@@ -13,7 +13,7 @@
   import { KSA_EFFECT, KSA_TONE } from "../bits";
 
   const LEVELS = ["GREEN", "YELLOW", "ORANGE", "RED", "BLACK"] as const;
-  let scope = $state("ftmo-1");
+  let scope = $state("by-spot");
   const acct = $derived(ACCOUNTS.find((a) => a.id === scope)!);
   const POWERS = [
     {
@@ -56,7 +56,7 @@
     <span class="text-muted-foreground">Scope</span>
     <select bind:value={scope} class="h-7 rounded-md border px-2 text-xs">
       <option value="global">Everything</option>
-      {#each ACCOUNTS.filter((a) => a.role !== "sensing-only") as a (a.id)}<option
+      {#each ACCOUNTS.filter((a) => a.role !== "watch") as a (a.id)}<option
           value={a.id}>{a.name}</option
         >{/each}
     </select>
@@ -81,11 +81,11 @@
   {#if scope !== "global" && acct.ksa !== "GREEN"}
     <div class="bg-warning/10 mx-2 rounded-md px-3 py-2 text-xs">
       <p>
-        <span class="font-medium">Requested:</span> ORANGE by the daily-loss rule
+        <span class="font-medium">Requested:</span> YELLOW by the volatility guard
         at 11:42.
       </p>
       <p>
-        <span class="font-medium">Enforced:</span> ORANGE on the London node since
+        <span class="font-medium">Enforced:</span> YELLOW on the Tokyo node since
         11:42:03 (source: node, received 11:42:04).
       </p>
     </div>
@@ -107,6 +107,6 @@
   </div>
   <p class="text-muted-foreground mt-auto border-t px-3 py-2 text-xs">
     Agents and the copilot never use these. You can build your own kill switch
-    as a workflow in the Lab and attach it to a Book.
+    as a workflow in the Lab and attach it to a pod.
   </p>
 </div>

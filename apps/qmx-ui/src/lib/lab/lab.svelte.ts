@@ -32,7 +32,13 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
             ]),
             72,
           ],
-          [pane("b-logs", "logs", "amber"), 28],
+          [
+            split("row", [
+              [pane("b-logs", "logs", "amber"), 58],
+              [pane("b-approvals", "approvals"), 42],
+            ]),
+            28,
+          ],
         ]),
         82,
       ],
@@ -94,7 +100,7 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
   },
 ];
 
-const KEY = "qmx.lab.layouts.v2";
+const KEY = "qmx.lab.layouts.v3";
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 function load(): TileLayout[] {

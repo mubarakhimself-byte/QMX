@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * MIS: the node's market labelers (regime, volatility, liquidity, news
-   * state) and who listens to them (Book doors and the kill switch, never
+   * state) and who listens to them (pod guards and the kill switch, never
    * bots). Candidate labelers run in a shadow lane until promoted. A big
    * revamp is coming (operator, 2026-10-03); this is the placeholder shape.
    */
@@ -14,14 +14,14 @@
       value: "elevated",
       since: "09:10",
       lane: "live",
-      feeds: "Book doors, kill switch",
+      feeds: "Pod guards, kill switch",
     },
     {
       name: "Session",
       value: "London–NY overlap",
       since: "12:00",
       lane: "live",
-      feeds: "Book doors",
+      feeds: "Pod guards",
     },
     {
       name: "News state",

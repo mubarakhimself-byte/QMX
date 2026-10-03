@@ -1,9 +1,9 @@
 <script lang="ts">
   /**
-   * The promotion card for the selected item: plain-words summary (part of
-   * the card's identity), the checks that ran on the server as a passed or
-   * refused list, evidence, and your signature. Never signed from a bare
-   * dropdown; a failing check blocks signing and says why.
+   * The promotion card for the selected bot: what you are signing in plain
+   * words (part of the card's identity), the checks as a passed or refused
+   * list, and the one action that fits its stage. A failing check blocks
+   * signing and says why. Activation takes effect at the next day boundary.
    */
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
@@ -12,66 +12,63 @@
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
-  import { PROMOTIONS, bookById } from "../demo";
+  import { CANDIDATES } from "../demo";
   import { portfolio } from "../portfolio.svelte";
 
-  const p = $derived(PROMOTIONS.find((x) => x.id === portfolio.promotion)!);
-  const blocked = $derived(p.gates.some((g) => g.ok === false));
-  const verb = $derived(p.stage === "live" ? "Activate" : "Sign promotion");
+  const c = $derived(
+    CANDIDATES.find((x) => x.entity.id === portfolio.candidate) ??
+      CANDIDATES[0],
+  );
+  const blocked = $derived(c.checks.some((k) => k.ok === false));
+  const action = $derived(
+    c.stage === "paper"
+      ? "Sign for live"
+      : c.stage === "ready"
+        ? "Sign and activate"
+        : "Pull back to paper",
+  );
 </script>
 
 <div class="flex h-full flex-col overflow-auto">
-  <div class="border-b px-3 py-2">
-    <p class="text-muted-foreground text-xs">
-      {p.kind} · {bookById(p.book)?.name} · {p.stage}
-    </p>
-    <p class="text-base font-semibold">{p.what}</p>
+  <div class="flex items-baseline gap-2 border-b px-4 py-3">
+    <span class="text-lg font-semibold">{c.entity.name}</span>
+    <span class="text-muted-foreground text-sm">{c.pod} · day {c.days}</span>
   </div>
-  <section class="border-b px-3 py-3">
-    <h4 class="text-muted-foreground mb-1 text-xs">What you are signing</h4>
-    <p class="text-sm">{p.summary}</p>
+  <section class="border-b px-4 py-3">
+    <p class="text-muted-foreground mb-1 text-xs">What you are signing</p>
+    <p class="text-base">{c.summary}</p>
   </section>
-  <section class="border-b px-3 py-3">
-    <h4 class="text-muted-foreground mb-2 text-xs">Checks run on the server</h4>
-    <ul class="grid gap-1.5">
-      {#each p.gates as g (g.name)}
-        <li class="flex items-center gap-2 text-sm">
-          {#if g.ok === true}<Check
-              class="text-success size-4"
-            />{:else if g.ok === false}<X
-              class="text-destructive size-4"
-            />{:else}<Minus class="text-muted-foreground size-4" />{/if}
-          <span class={cn(g.ok === null && "text-muted-foreground")}
-            >{g.name}</span
+  <section class="border-b px-4 py-3">
+    <ul class="grid gap-2">
+      {#each c.checks as k (k.name)}
+        <li class="flex items-center gap-2.5 text-base">
+          {#if k.ok === true}<Check
+              class="text-success size-5"
+            />{:else if k.ok === false}<X
+              class="text-destructive size-5"
+            />{:else}<Minus class="text-muted-foreground size-5" />{/if}
+          <span class={cn(k.ok === null && "text-muted-foreground")}
+            >{k.name}</span
           >
-          {#if g.ok === null}<span class="text-muted-foreground ml-auto text-xs"
-              >waiting</span
-            >{/if}
         </li>
       {/each}
     </ul>
   </section>
-  <section class="px-3 py-3 text-xs">
-    <p class="text-muted-foreground">
-      Evidence: walk-forward run-441 (CT-32) · Book template fp1 9c41…e2a0
-    </p>
-    {#if p.stage === "live"}<p class="mt-1">
-        Activation takes effect at the next day boundary (00:00 UTC); there is
-        no override.
-      </p>{/if}
-  </section>
-  <div class="mt-auto flex items-center gap-2 border-t px-3 py-2">
+  <div class="mt-auto flex flex-wrap items-center gap-3 px-4 py-3">
     <Button
-      size="sm"
-      disabled={blocked}
+      size="lg"
+      variant={c.stage === "live" ? "outline" : "default"}
+      disabled={blocked && c.stage !== "live"}
       onclick={() =>
         workbench.notify(
-          `${verb} needs the trading node. You'd sign with your operator key; it's journaled.`,
-        )}><PenLine />{verb}</Button
+          `${action} needs the trading node. You sign with your operator key; it's journaled.`,
+        )}><PenLine />{action}</Button
     >
-    {#if blocked}<span class="text-destructive text-xs"
-        >Blocked: {p.gates.find((g) => g.ok === false)?.name}</span
+    {#if blocked && c.stage !== "live"}<span class="text-destructive text-sm"
+        >Waiting on: {c.checks.find((k) => k.ok === false)?.name}</span
       >{/if}
-    <span class="text-muted-foreground ml-auto text-xs">0 of 1 signed</span>
+    {#if c.stage === "ready"}<span class="text-muted-foreground text-sm"
+        >Takes effect at 00:00 UTC</span
+      >{/if}
   </div>
 </div>

@@ -1,54 +1,40 @@
 /**
- * Portfolio chrome state: layouts, the selected Book and promotion, which
- * world is shown (live, paper or both: a view filter, never a control; the
- * docs forbid a generic LIVE/PAPER toggle), and which node is in view.
+ * Portfolio chrome state: layouts, the selected pod and road-to-live
+ * candidate, and which world is shown (live, paper or both: a view filter,
+ * never a control; the docs forbid a generic LIVE/PAPER toggle).
  */
 import { LayoutStore } from "$lib/workbench/tiles/store.svelte";
 import { pane, split, type TileLayout } from "$lib/workbench/tiles/tiles";
 
-const accounts = (id: string) => pane(id, "accounts");
-
 export const PORTFOLIO_LAYOUTS: TileLayout[] = [
   {
-    id: "risk",
-    name: "Risk",
+    id: "overview",
+    name: "Overview",
     root: split("row", [
-      [accounts("r-acc"), 15],
+      [pane("o-acc", "accounts"), 15],
       [
         split("col", [
-          [pane("r-grid", "risk", "amber"), 58],
+          [pane("o-pods", "pods", "amber"), 56],
           [
             split("row", [
-              [pane("r-exposure", "exposure"), 50],
-              [pane("r-news", "news"), 50],
+              [pane("o-events", "events"), 58],
+              [pane("o-exposure", "exposure"), 42],
             ]),
-            42,
+            44,
           ],
         ]),
-        59,
+        57,
       ],
-      [
-        split("col", [
-          [pane("r-book", "book", "amber"), 62],
-          [pane("r-rules", "rules", "amber"), 38],
-        ]),
-        26,
-      ],
+      [pane("o-pod", "pod", "amber"), 28],
     ]),
     docked: [],
   },
   {
-    id: "books",
-    name: "Books",
+    id: "pods",
+    name: "Pods",
     root: split("row", [
-      [pane("b-wall", "wall", "amber"), 62],
-      [
-        split("col", [
-          [pane("b-book", "book", "amber"), 58],
-          [pane("b-approvals", "approvals"), 42],
-        ]),
-        38,
-      ],
+      [pane("p-list", "pods", "amber"), 30],
+      [pane("p-pod", "pod", "amber"), 70],
     ]),
     docked: [],
   },
@@ -56,34 +42,35 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
     id: "live",
     name: "Live",
     root: split("col", [
+      [pane("l-charts", "botcharts"), 54],
       [
         split("row", [
-          [pane("l-chart", "chart"), 64],
-          [pane("l-control", "control"), 36],
+          [pane("l-positions", "positions"), 50],
+          [pane("l-exposure", "exposure"), 20],
+          [
+            split("col", [
+              [pane("l-control", "control"), 58],
+              [pane("l-corr", "correlation"), 42],
+            ]),
+            30,
+          ],
         ]),
-        56,
-      ],
-      [
-        split("row", [
-          [pane("l-positions", "positions"), 68],
-          [pane("l-nodes", "nodes"), 32],
-        ]),
-        44,
+        46,
       ],
     ]),
     docked: [],
   },
   {
-    id: "promotions",
-    name: "Promotions",
+    id: "road",
+    name: "Road to live",
     root: split("row", [
-      [pane("p-lanes", "promotions", "teal"), 58],
+      [pane("r-road", "road", "teal"), 60],
       [
         split("col", [
-          [pane("p-card", "signing", "teal"), 60],
-          [pane("p-approvals", "approvals"), 40],
+          [pane("r-card", "signing", "teal"), 52],
+          [pane("r-journal", "journal", "teal"), 48],
         ]),
-        42,
+        40,
       ],
     ]),
     docked: [],
@@ -95,25 +82,10 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
       [pane("m-mis", "mis"), 50],
       [
         split("col", [
-          [pane("m-chart", "chart"), 60],
-          [pane("m-news", "news"), 40],
+          [pane("m-charts", "botcharts"), 60],
+          [pane("m-events", "events"), 40],
         ]),
         50,
-      ],
-    ]),
-    docked: [],
-  },
-  {
-    id: "allocate",
-    name: "Allocate",
-    root: split("row", [
-      [pane("a-opt", "allocate"), 64],
-      [
-        split("col", [
-          [pane("a-corr", "correlation"), 55],
-          [pane("a-exp", "exposure"), 45],
-        ]),
-        36,
       ],
     ]),
     docked: [],
@@ -121,9 +93,9 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
 ];
 
 class PortfolioState {
-  layouts = new LayoutStore("qmx.portfolio.layouts", PORTFOLIO_LAYOUTS);
-  book = $state("fx-core");
-  promotion = $state("pr-1");
+  layouts = new LayoutStore("qmx.portfolio.layouts.v2", PORTFOLIO_LAYOUTS);
+  pod = $state("core");
+  candidate = $state("avax-mom");
   world = $state<"all" | "live" | "paper">("all");
   copilotOpen = $state(false);
   templatesOpen = $state(false);
