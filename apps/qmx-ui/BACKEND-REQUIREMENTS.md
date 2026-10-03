@@ -125,3 +125,11 @@ The trading node folds into Portfolio (operator ruling 2026-10-03). **Biggest ga
 | Templates | Book templates (10 shipped in the UI) as default v1 documents; create a Book from a template on a demo account | Defaults/versions/copies yes (DEC-0144); creating templates from the UI is not on the powers list |
 
 Doc conflicts to settle (not asked of the operator, per standing rule): seat states (`active|benched` in risk DEC-0155 vs `admitted|active|benched|quarantined` in node DEC-0204); kill-line recovery (GitBook: paper until next re-seed; node docs: operator signature per binding). The UI follows the node docs.
+
+### Rulings that change the backend (operator, 2026-10-03)
+
+- **Spot crypto only.** IC Markets and cTrader are out; no CFDs, no prop firms. The docs and node are cTrader-centred: needs spot exchange adapters (Binance, Bybit, Coinbase, Kraken), exchange order-size filters, USDT/USDC quote handling (docs require USD settlement), 24/7 budget periods, testnet paper accounts.
+- **Pods replace Books as the unit of risk and sizing.** A Book + BMS is one pod method; models, Lab workflows and hybrids are others (design: a pod is a PolicyPair-style stack of blocks; see the Lab pods design). Pods are built and tested in the Lab, wired into Portfolio by the copilot, run on paper first.
+- **News and events need sources:** crypto news feeds and FX/macro calendar, sentiment scoring (a workflow template), mapping items to coins and pods.
+- **Trading journal per bot** (trades with R, events, operator notes).
+- **Every UI value needs a backend source**; demo data is removed when wiring.
