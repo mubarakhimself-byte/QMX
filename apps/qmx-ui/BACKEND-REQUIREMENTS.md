@@ -133,3 +133,5 @@ Doc conflicts to settle (not asked of the operator, per standing rule): seat sta
 - **News and events need sources:** crypto news feeds and FX/macro calendar, sentiment scoring (a workflow template), mapping items to coins and pods.
 - **Trading journal per bot** (trades with R, events, operator notes).
 - **Every UI value needs a backend source**; demo data is removed when wiring.
+- **Pods run live and paper sides at the same time** (operator, 2026-10-03, round 3): each pod has a paper account side and, once promoted, a live side; both report equity and curves.
+- **Copilot sessions that run for days** with sub-agents, off-machine; no per-step approval requests (agent requests removed from the UI).

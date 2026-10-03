@@ -133,3 +133,13 @@ Backlog (needs backend or later passes):
 - [ ] **Next: Lab pods refactor** (design ready: scratchpad lab-risk-systems.md): Pod Build, Pod Test, Pod Compare, Allocate layouts; 20 blocks, 10 spot templates; stress library; size trail. Also switch the Lab and Home demo data from FX to spot crypto.
 - [ ] Library templates.
 
+
+### Rulings (operator, 2026-10-03, round 3)
+
+- **Every pod has a live side and a paper side**, running together, so changes are watched on paper before going live (or both trade). Done in the UI; backend needs it.
+- Live: positions on top with exposure and correlation as tabs; bot charts below. Done.
+- Kill switch always visible in the header, not a tile. Done.
+- Road to live: paper-day progress inside the bot card; richer trading journal. Done.
+- **Agent requests removed.** Agents mostly run off-machine for long stretches; the operator won't start work he's unsure of. Instead: **copilot sessions that run for days**, using sub-agents (Copilot pass).
+- Wants a built-in help or guide feature for things like "how do I train something new" (Copilot pass).
+- Mini apps need re-thinking now that Lab, Portfolio and Library are first-class; the Research demo app is redundant (Mini apps pass).
