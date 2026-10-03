@@ -120,3 +120,16 @@ Backlog (needs backend or later passes):
 - **Proposal accepted:** an in-depth Lab refactor for risk management and position-sizing systems (pods, Books, BMS variants, models, workflows, allocation experiments).
 - Templates on every page that builds things (Lab, Portfolio, and introduce them in the Library).
 - Appearance: themes editable like VS Code; background art can rotate on its own; consider design styles (glassmorphism, liquid glass, minimalism, neumorphism, claymorphism, neo-brutalism, skeuomorphism).
+
+### Portfolio round 2 progress (2026-10-03)
+
+- [x] Spot crypto only in Portfolio data (Binance, Bybit, Coinbase, Kraken); pods replace Books.
+- [x] Pod page redesign (curve, safety meter, sliders, guard rings, bot weights, draft to paper).
+- [x] Live: per-bot charts, sortable/groupable positions, exposure, correlation; servers actionable and in the header.
+- [x] Road to live from paper, player cards, promotion card, trading journal.
+- [x] Events split crypto / FX with sentiment and source.
+- [x] Allocate removed; agent requests in the Lab.
+- [x] Appearance: surface styles (glass, liquid glass, solid, brutalist), your own theme, rotating art.
+- [ ] **Next: Lab pods refactor** (design ready: scratchpad lab-risk-systems.md): Pod Build, Pod Test, Pod Compare, Allocate layouts; 20 blocks, 10 spot templates; stress library; size trail. Also switch the Lab and Home demo data from FX to spot crypto.
+- [ ] Library templates.
+

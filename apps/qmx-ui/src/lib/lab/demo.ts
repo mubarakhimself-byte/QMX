@@ -546,8 +546,8 @@ export const APPROVALS: ApprovalRequest[] = [
     what: "Alt momentum pod v3: give SOL more room",
     moneyPath: true,
     diff: [
-      ["Per-bot cap", "20%", "25%"],
-      ["Rebalance drift", "10%", "8%"],
+      ["Most in one coin", "25%", "30%"],
+      ["Daily loss stop", "3%", "2.5%"],
     ],
     when: "12 min ago",
   },
