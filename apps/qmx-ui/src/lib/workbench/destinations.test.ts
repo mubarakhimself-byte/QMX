@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { PRODUCT_DESTINATIONS, isActive } from "./destinations";
 
 describe("platform rail destinations", () => {
-  it("keeps the four product destinations in rail order", () => {
+  it("keeps the product destinations in rail order", () => {
     expect(PRODUCT_DESTINATIONS.map((d) => d.id)).toEqual([
       "home",
       "copilot",
       "library",
       "lab",
+      "portfolio",
     ]);
   });
 

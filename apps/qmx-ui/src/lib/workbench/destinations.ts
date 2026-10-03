@@ -3,6 +3,7 @@ import House from "@lucide/svelte/icons/house";
 import MessagesSquare from "@lucide/svelte/icons/messages-square";
 import LibraryBig from "@lucide/svelte/icons/library-big";
 import FlaskConical from "@lucide/svelte/icons/flask-conical";
+import Briefcase from "@lucide/svelte/icons/briefcase-business";
 import Settings from "@lucide/svelte/icons/settings";
 
 /**
@@ -11,7 +12,7 @@ import Settings from "@lucide/svelte/icons/settings";
  * Settings is chrome, pinned to the rail foot.
  */
 export type Destination = {
-  id: "home" | "copilot" | "library" | "lab" | "settings";
+  id: "home" | "copilot" | "library" | "lab" | "portfolio" | "settings";
   label: string;
   href: string;
   icon: Component;
@@ -42,6 +43,15 @@ export const PRODUCT_DESTINATIONS: readonly Destination[] = [
     href: "/lab",
     icon: FlaskConical,
     shortcut: "4",
+  },
+  {
+    // Books, risk, promotions, allocation and live trading (the trading node
+    // folded in, operator ruling 2026-10-03). Not yet a docs destination.
+    id: "portfolio",
+    label: "Portfolio",
+    href: "/portfolio",
+    icon: Briefcase,
+    shortcut: "5",
   },
 ];
 

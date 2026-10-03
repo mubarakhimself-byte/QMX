@@ -348,8 +348,8 @@
               you approve it.
             </p>
           </div>
-          <Button size="sm" variant="outline" href={resolve("/trade")}
-            >Open trading node</Button
+          <Button size="sm" variant="outline" href={resolve("/portfolio")}
+            >Open in Portfolio</Button
           >
         </div>
         <table class="w-full text-sm">

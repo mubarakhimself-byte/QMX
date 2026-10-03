@@ -39,6 +39,7 @@
     onchange,
     panel,
     tools,
+    borderFor,
     class: className,
   }: {
     layout: TileLayout;
@@ -48,6 +49,8 @@
     panel: Snippet<[TilePane]>;
     /** Extra controls in a tile's title bar (e.g. a mode switch). */
     tools?: Snippet<[TilePane]>;
+    /** Border colour for a tile (e.g. paper or live); overrides the link colour. */
+    borderFor?: (p: TilePane) => string | undefined;
     class?: string;
   } = $props();
 
@@ -150,7 +153,11 @@
       "tile flex h-full min-h-0 flex-col overflow-hidden rounded-lg",
       dropTarget === p.id && "ring-ring ring-2",
     )}
-    style={p.link ? `border-color: ${LINK_BORDER[p.link]}` : undefined}
+    style={borderFor?.(p)
+      ? `border-color: ${borderFor(p)}; border-width: 2px`
+      : p.link
+        ? `border-color: ${LINK_BORDER[p.link]}`
+        : undefined}
     aria-label={i.title}
     ondragover={(e) => {
       if (!dragging) return;
