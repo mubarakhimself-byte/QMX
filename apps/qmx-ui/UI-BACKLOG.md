@@ -23,10 +23,10 @@ Library (pass 2 built the first six):
 - [ ] The Library still lacks personality (an identity, an icon of its own).
 
 Copilot (next pass; operator: "needs a rethink"):
-- [ ] Rethink "aim this message at" (the target menu).
-- [ ] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot.
-- [ ] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation.
-- [ ] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app.
+- [x] Rethink "aim this message at" (the target menu).
+- [x] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot.
+- [x] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation.
+- [x] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app.
 - [ ] Terminal (look at shadcn's terminal component) and browser integration.
 - [ ] Rules for what the copilot builds in the UI (see "Copilot pass: rules" above), plus: new things load in place without restarting the app; heavy things load in the background.
 - [ ] The copilot designs components from shadcn (registry) or its own design style.

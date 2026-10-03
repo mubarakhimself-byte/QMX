@@ -15,6 +15,8 @@
   import { MAIN_CONTEXT, type CopilotContext } from "./copilot-context";
   import { cn } from "$lib/utils";
   import LibraryPicker from "$lib/library/LibraryPicker.svelte";
+  import AimMenu from "$lib/copilot/AimMenu.svelte";
+  import { COMMANDS } from "$lib/copilot/demo";
 
   let {
     placeholder = "Ask the copilot…",
@@ -66,6 +68,12 @@
     if (isMain) workbench.target = id as typeof workbench.target;
     else localTarget = id;
   }
+  // Typing "/" offers the commands.
+  const slash = $derived(
+    /^\/\w*$/.test(draft)
+      ? COMMANDS.filter((c) => c.cmd.startsWith(draft.toLowerCase()))
+      : [],
+  );
   const groups = $derived([
     ...new Set(context.tools.map((t) => t.group ?? "")),
   ]);
@@ -96,6 +104,24 @@
             onclick={() => onremoveref?.(ref)}
           >
             <X class="size-3.5" />
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if slash.length}
+    <ul class="border-b px-1.5 py-1.5" role="listbox" aria-label="Commands">
+      {#each slash as c (c.cmd)}
+        <li>
+          <button
+            type="button"
+            role="option"
+            aria-selected="false"
+            class="hover:bg-muted flex w-full items-baseline gap-3 rounded-md px-2 py-1 text-left"
+            onclick={() => (draft = `${c.cmd} `)}
+          >
+            <span class="font-mono text-[13px]">{c.cmd}</span>
+            <span class="text-muted-foreground text-xs">{c.note}</span>
           </button>
         </li>
       {/each}
@@ -159,7 +185,9 @@
       </DropdownMenu.Root>
     {/if}
 
-    {#if context.targets}
+    {#if isMain}
+      <AimMenu />
+    {:else if context.targets}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           class={target ? chip : iconChip}

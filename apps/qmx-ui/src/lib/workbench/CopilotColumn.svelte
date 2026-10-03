@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
+  import MessagesSquare from "@lucide/svelte/icons/messages-square";
   /**
    * Right-hand copilot column for a surface (the Lab, a mini app). Each has
    * its own sessions with history (switch, start new), its own settings
@@ -98,6 +100,11 @@
             >No earlier sessions</DropdownMenu.Label
           >
         {/each}
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item
+          onclick={() => goto(resolve("/copilot"))}
+          ><MessagesSquare />Continue in the main copilot</DropdownMenu.Item
+        >
       </DropdownMenu.Content>
     </DropdownMenu.Root>
     {#if profile}<Badge

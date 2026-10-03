@@ -190,3 +190,13 @@ Library redesign, then main Copilot, Home, Settings, Mini apps. The backlog was 
 - [x] Article sources (MQL5, clippings, arXiv, web pages) and "Explain it as" four ways via the copilot (`/copilot?ask=`).
 - [x] Portfolio and Lab headers fit smaller screens (button words and server latency show only on wide screens).
 
+### Copilot pass 1 done (2026-10-03)
+
+- [x] Sessions sidebar: "Going on now" (running, waiting for you) on top, then Pinned, Main copilot, and sessions from the Lab, Portfolio, Library and mini apps; foldable; search and New session work. Sessions can run for days.
+- [x] Sessions started elsewhere open here with a "Continue here" card; the Lab and Portfolio side copilots offer "Continue in the main copilot".
+- [x] The conversation is drawn as blocks the daemon can stream: your message with attachments, plan checklist, sub-agents with live status and where they run, tool calls, "Changed elsewhere in QMX" links, artifacts (open, save to Library), tables, before/after cards, question cards (with "Something else"), permission cards (Allow, Allow for this session, Not now; real money never).
+- [x] Showcase session "Weekend-safe pod, end to end": one session drafts a pod in the Lab, tests it on a server, saves notes to the Library and asks to put it on paper.
+- [x] Work area: Activity (every agent and background job across sessions, progress, where it runs, stop), Artifacts, Browser, Terminal (job output; commands go through the daemon), Preview.
+- [x] "Aim this message at" became Mode and reach: Ask, Plan or Do; which areas it may touch; who answers (main, a screen's copilot, a mini app, a running agent). Real money is never in reach.
+- [x] "/" commands in the composer; a new session opens with a greeting and "How do I…" (guided walks for train, bring in, workflow; drafted asks for pods, articles, watching while away).
+- [ ] Next: terminal as a real shell through the daemon, browser driven by the copilot, skills list, the rules for copilot-built UI, components registry.

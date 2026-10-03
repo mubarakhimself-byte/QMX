@@ -143,3 +143,11 @@ Doc conflicts to settle (not asked of the operator, per standing rule): seat sta
 - **Run together (mixes).** Split money across pods, combined curve and dip, saved as a mix that goes to paper like a pod. Docs have nothing at portfolio level (DEC-0435, DEC-0207): new scope.
 - **Kill switch by scope.** Scopes: everything, one server, one pod, one pod on one server. Strengths: stop new trades, and close and halt; plus resume. The docs allow flatten at any scope (DEC-0150) but the node's closed powers list has no pause or stand-down for a Book (pod) and nothing per server: needs new powers, each rechecked at click time and journaled with the signature.
 - **Lab copilot pod tools:** pod.edit, pod.test, pod.stress_scenario, pod.mix, pod.paper (all new scope).
+
+### Main copilot (Copilot pass 1, 2026-10-03)
+
+- **Sessions** with an origin (main, Lab, Portfolio, Library, a mini app), a status (running, waiting for you, done), age, agent count, pinning; moving a session into the main copilot keeps its history.
+- **A session as a stream of typed blocks:** user message (+ attachments), text, plan (steps with state and place), agents (name, role, state, where it runs, last line, progress), tool calls (name, args, duration, result), changes made elsewhere (place, what, deep link), artifact (id, type, title; save to Library), table, before/after entity, question (options, recommended, free answer), permission request (action, detail, guard; once / for the session / not now).
+- **Activity feed** across sessions: agents and background jobs with progress, where they run, log tail, stop.
+- **Mode and reach per message:** ask, plan or do; allowed areas (Lab, Portfolio paper, Library, mini apps, servers, settings); who answers (main, a surface copilot, a mini app copilot, a running agent). Real-money actions are never delegable (they stay behind the operator's signature).
+- **Slash commands** registry and the "How do I…" starters.

@@ -1,57 +1,38 @@
 <script lang="ts">
-  import GuidedStart from "$lib/workbench/GuidedStart.svelte";
-  import Plus from "@lucide/svelte/icons/plus";
-  import Search from "@lucide/svelte/icons/search";
-  import MessagesSquare from "@lucide/svelte/icons/messages-square";
-  import Globe from "@lucide/svelte/icons/globe";
-  import SquareTerminal from "@lucide/svelte/icons/square-terminal";
-  import FileDiff from "@lucide/svelte/icons/file-diff";
-  import AppWindow from "@lucide/svelte/icons/app-window";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Check from "@lucide/svelte/icons/check";
-  import Maximize2 from "@lucide/svelte/icons/maximize-2";
-  import LibraryBig from "@lucide/svelte/icons/library-big";
-  import Wrench from "@lucide/svelte/icons/wrench";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import PageHeader from "$lib/workbench/PageHeader.svelte";
-  import EmptyState from "$lib/workbench/EmptyState.svelte";
-  import Composer from "$lib/workbench/Composer.svelte";
-  import WidgetFrame from "$lib/workbench/WidgetFrame.svelte";
-  import { workbench } from "$lib/workbench/workbench.svelte";
-  import CandleChart from "$lib/demo/CandleChart.svelte";
-  import { demoCandles } from "$lib/demo/data";
-  import { cn } from "$lib/utils";
-  import EntityCard from "$lib/qmx/EntityCard.svelte";
-  import { DEMO_ENTITIES } from "$lib/demo/assets";
-
-  // DEMO: a card before and after a chat edit; changed measures are highlighted.
-  const before = DEMO_ENTITIES.find((e) => e.id === "btc-breakout")!;
-  const after = {
-    ...before,
-    version: "v8 draft",
-    measures: before.measures.map((m) =>
-      m.key === "sharpe"
-        ? { ...m, value: "1.31" }
-        : m.key === "dd"
-          ? { ...m, value: "−5.1%" }
-          : m.key === "win"
-            ? { ...m, value: "47%" }
-            : m,
-    ),
-  };
+  /**
+   * The main copilot (Copilot pass, operator 2026-10-03). Sessions on the
+   * left, grouped by where they started, with what is running or waiting
+   * on top; any session can be continued here, where the copilot reaches
+   * all of QMX. The conversation shows its work: plan, sub-agents, tools,
+   * changes made elsewhere, artifacts, questions and permission cards. On
+   * the right, Activity shows every agent and background job. The composer
+   * sets how much it may do and what it may touch.
+   * Params: ?session= opens one, ?start=train|import|workflow starts a
+   * guided walk, ?ask= drafts a message, ?focus=1 opens focus mode.
+   */
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
+  import FlaskConical from "@lucide/svelte/icons/flask-conical";
+  import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import PanelRight from "@lucide/svelte/icons/panel-right";
+  import * as Resizable from "$lib/components/ui/resizable";
+  import { Button } from "$lib/components/ui/button";
+  import Composer from "$lib/workbench/Composer.svelte";
+  import GuidedStart from "$lib/workbench/GuidedStart.svelte";
+  import { workbench } from "$lib/workbench/workbench.svelte";
+  import { cn } from "$lib/utils";
+  import Thread from "$lib/copilot/Thread.svelte";
+  import SessionsSidebar from "$lib/copilot/SessionsSidebar.svelte";
+  import WorkArea from "$lib/copilot/WorkArea.svelte";
+  import HowDoI from "$lib/copilot/HowDoI.svelte";
+  import { SESSIONS, THREADS, type Session } from "$lib/copilot/demo";
 
-  /** Focus hides sessions and preview; ?focus=1 opens straight into it. */
-  let focus = $state(page.url.searchParams.get("focus") === "1");
+  const params = page.url.searchParams;
+  const demo = workbench.demoMode;
+  let focus = $state(params.get("focus") === "1");
+  let showWork = $state(true);
   function popOut() {
     window.open(
       resolve("/copilot") + "?focus=1",
@@ -60,92 +41,68 @@
     );
   }
 
-  // Work-area tabs are client-local preview hosts; opening one implies no grant.
-  const WORK_TABS = [
-    {
-      id: "browser",
-      label: "Browser",
-      icon: Globe,
-      title: "No page open",
-      text: "Pages the copilot opens, or that you open, show here.",
-    },
-    {
-      id: "terminal",
-      label: "Terminal",
-      icon: SquareTerminal,
-      title: "No job output",
-      text: "A read-only view of a job's output. It is not a shell on this machine.",
-    },
-    {
-      id: "diff",
-      label: "Diff",
-      icon: FileDiff,
-      title: "Nothing to compare",
-      text: "Compare two versions of a draft, strategy or file.",
-    },
-    {
-      id: "app",
-      label: "App preview",
-      icon: AppWindow,
-      title: "No app previewed",
-      text: "Preview a mini app, widget or workflow. Previewing does not install or grant it.",
-    },
-  ] as const;
-  let workTab = $state<string>("browser");
-
-  // DEMO conversation: sample session, tool calls and results for design review.
-  const demo = workbench.demoMode;
-  const SESSIONS = [
-    { id: "s1", title: "EURUSD H1 model backtest", when: "Today" },
-    { id: "s2", title: "News sentiment features", when: "Yesterday" },
-    { id: "s3", title: "Gold mean-reversion idea", when: "Sep 28" },
-  ];
-  // ?start=import|train|workflow opens a copilot-led start (from the Lab).
-  const startParam = page.url.searchParams.get("start");
-  const startKind =
-    startParam === "import" ||
+  type StartKind = "train" | "import" | "workflow";
+  const startParam = params.get("start");
+  let startKind = $state<StartKind | null>(
     startParam === "train" ||
-    startParam === "workflow"
+      startParam === "import" ||
+      startParam === "workflow"
       ? startParam
-      : null;
-  let activeSession = $state<string | null>(
-    startKind ? "start" : demo ? "s1" : null,
+      : null,
   );
-  const TOOLS = [
-    { name: "get_candles", args: "EURUSD · H1 · 2024–2026", ms: 420 },
-    {
-      name: "run_backtest",
-      args: "workflow btc-breakout · draft demo",
-      ms: 8100,
-    },
-    { name: "compare_benchmark", args: "buy-and-hold", ms: 260 },
-  ];
-  const RESULT = [
-    ["Net return", "+18.4%", "+3.1%"],
-    ["Sharpe", "1.42", "0.21"],
-    ["Max drawdown", "−6.8%", "−11.9%"],
-    ["Trades", "187", "1"],
-    ["Win rate", "54.1%", "—"],
-  ];
-  let copied = $state(false);
-  let previewing = $state(false);
-  const candles = demoCandles(120, 1.07, 11);
+  let sessions = $state<Session[]>(demo ? [...SESSIONS] : []);
+  const askedSession = params.get("session");
+  let active = $state<string | null>(
+    startParam || params.get("ask")
+      ? null
+      : askedSession && SESSIONS.some((s) => s.id === askedSession)
+        ? askedSession
+        : demo
+          ? "weekend"
+          : null,
+  );
+  let seed = $state(params.get("ask") ?? "");
+  let workTab = $state("activity");
+  let artifact = $state<string | null>(null);
 
-  async function copyTable() {
-    const tsv = [["Metric", "Strategy", "Buy & hold"], ...RESULT]
-      .map((r) => r.join("\t"))
-      .join("\n");
-    try {
-      await navigator.clipboard.writeText(tsv);
-      copied = true;
-      setTimeout(() => (copied = false), 1500);
-    } catch {
-      copied = false;
-    }
+  const session = $derived(sessions.find((s) => s.id === active));
+  const blocks = $derived(active ? (THREADS[active] ?? []) : []);
+  // Questions and permission cards you have answered, per session.
+  let resolved = $state<Record<string, number>>({});
+  const waitingOn = $derived(
+    blocks.filter((b) => b.kind === "ask" || b.kind === "permission").length -
+      (resolved[active ?? ""] ?? 0),
+  );
+  const agentsHere = $derived(
+    blocks.flatMap((b) => (b.kind === "agents" ? b.agents : [])),
+  );
+  const running = $derived(agentsHere.filter((a) => a.state === "running"));
+
+  function open(id: string) {
+    active = id;
+    startKind = null;
   }
-  function expandResult() {
-    previewing = true;
-    workTab = "app";
+  function newSession() {
+    const s: Session = {
+      id: `n-${Date.now().toString(36)}`,
+      title: "New session",
+      origin: "Main",
+      status: "done",
+      age: "Now",
+    };
+    sessions = [s, ...sessions];
+    active = s.id;
+    startKind = null;
+    seed = "";
+  }
+  function continueHere() {
+    if (!session) return;
+    sessions = sessions.map((s) =>
+      s.id === session.id ? { ...s, origin: "Main" } : s,
+    );
+    workbench.notify(
+      `"${session.title}" now lives in the main copilot, with everything it can reach.`,
+    );
   }
 </script>
 
@@ -155,304 +112,138 @@
       class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
     >
       <FlaskConical class="text-warning size-3.5" />
-      Demo conversation. Sample messages, tool calls and results; nothing was run.
+      Demo sessions. Sample plans, agents, tools and results; nothing ran.
     </div>
   {/if}
-  <PageHeader title="Copilot" subtitle="Conversation workspace">
-    {#snippet actions()}
+  <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
+    <h1 class="text-base font-semibold">Copilot</h1>
+    {#if session}
+      <span class="text-muted-foreground min-w-0 truncate text-sm"
+        >{session.title}</span
+      >
+      {#if session.status !== "done"}
+        <span
+          class={cn(
+            "shrink-0 rounded-full px-2 py-0.5 text-xs",
+            session.status === "running"
+              ? "bg-info/15 text-info"
+              : "bg-warning/15 text-warning",
+          )}
+          >{session.status === "running" ? "Running" : "Waiting for you"} · {session.age}</span
+        >
+      {/if}
+    {/if}
+    <div class="ml-auto flex items-center gap-1">
       <Button
         variant={focus ? "secondary" : "ghost"}
         size="sm"
         aria-pressed={focus}
+        title={focus ? "Exit focus" : "Focus"}
         onclick={() => (focus = !focus)}
       >
-        {#if focus}<Minimize2 /> Exit focus{:else}<Maximize2 /> Focus{/if}
+        {#if focus}<Minimize2 /><span class="hidden xl:inline">Exit focus</span
+          >{:else}<Maximize2 /><span class="hidden xl:inline">Focus</span>{/if}
       </Button>
-      <Button variant="ghost" size="sm" onclick={popOut}>
-        <ExternalLink /> New window
+      <Button variant="ghost" size="sm" title="New window" onclick={popOut}>
+        <ExternalLink /><span class="hidden xl:inline">New window</span>
       </Button>
-    {/snippet}
-  </PageHeader>
-
-  <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-    {#if !focus}
-      <Resizable.Pane defaultSize={18} minSize={14} maxSize={30}>
-        <aside
-          aria-label="Sessions"
-          class="bg-panel flex h-full flex-col gap-1.5 p-2"
+      {#if !focus}
+        <Button
+          variant={showWork ? "secondary" : "ghost"}
+          size="icon-sm"
+          aria-label="Activity and work area"
+          title="Activity and work area"
+          aria-pressed={showWork}
+          onclick={() => (showWork = !showWork)}><PanelRight /></Button
         >
-          <Button variant="outline" size="sm" class="justify-start" disabled>
-            <Plus /> New session
-          </Button>
-          <div class="relative">
-            <Search
-              class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-            />
-            <Input
-              placeholder="Search sessions"
-              aria-label="Search sessions"
-              class="h-8 pl-8"
-              disabled
-            />
-          </div>
-          {#if demo}
-            <ul class="flex flex-col gap-0.5">
-              {#each SESSIONS as s (s.id)}
-                <li>
-                  <button
-                    type="button"
-                    class={cn(
-                      "hover:bg-muted flex w-full flex-col rounded-sm px-2 py-1.5 text-left",
-                      activeSession === s.id && "bg-muted",
-                    )}
-                    aria-current={activeSession === s.id ? "true" : undefined}
-                    onclick={() => (activeSession = s.id)}
-                  >
-                    <span class="truncate text-sm">{s.title}</span>
-                    <span class="text-muted-foreground text-xs">{s.when}</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <EmptyState
-              class="flex-1"
-              title="No sessions"
-              description="Sessions are kept by the daemon. Connect to see your history."
-            />
-          {/if}
-        </aside>
-      </Resizable.Pane>
-      <Resizable.Handle />
-    {/if}
+      {/if}
+    </div>
+  </header>
 
-    <Resizable.Pane defaultSize={46} minSize={30}>
-      <section aria-label="Conversation" class="bg-panel flex h-full flex-col">
-        <div class="min-h-0 flex-1 overflow-auto">
-          {#if startKind && activeSession === "start"}
-            <GuidedStart kind={startKind} />
-          {:else if demo && activeSession === "s1"}
-            <div
-              class="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-6 text-[15px] leading-relaxed"
-            >
-              <div class="bg-muted ml-auto max-w-[85%] rounded-md px-3 py-2">
-                Backtest the EURUSD H1 gradient-boosting workflow on 2024–2026
-                and compare it with buy-and-hold.
-              </div>
-              <div class="flex flex-col gap-2">
-                <details class="group rounded-md border">
-                  <summary
-                    class="text-muted-foreground flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
-                  >
-                    <Wrench class="size-3.5" /> Used {TOOLS.length} tools
-                  </summary>
-                  <ul
-                    class="flex flex-col gap-1.5 border-t px-3 py-2.5 font-mono text-[13px]"
-                  >
-                    {#each TOOLS as t (t.name)}
-                      <li class="flex items-center gap-2">
-                        <Check class="text-success size-3.5" />
-                        <span class="font-medium">{t.name}</span>
-                        <span class="text-muted-foreground truncate"
-                          >{t.args}</span
-                        >
-                        <span class="text-muted-foreground ml-auto"
-                          >{(t.ms / 1000).toFixed(1)}s</span
-                        >
-                      </li>
-                    {/each}
-                  </ul>
-                </details>
-                <p>
-                  The strategy beat buy-and-hold over the period with less than
-                  half the drawdown. Most of the edge came from London-session
-                  breakouts; the 2025 Q2 chop accounts for the largest losing
-                  streak.
-                </p>
-                <div class="surface overflow-hidden rounded-lg">
-                  <div
-                    class="bg-panel flex h-8 items-center gap-1 border-b pr-1 pl-3"
-                  >
-                    <span class="panel-label">Backtest vs buy-and-hold</span>
-                    <div class="ml-auto flex items-center">
-                      <Tooltip.Root>
-                        <Tooltip.Trigger>
-                          {#snippet child({ props })}
-                            <Button
-                              {...props}
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Copy table"
-                              onclick={copyTable}
-                            >
-                              {#if copied}<Check />{:else}<Copy />{/if}
-                            </Button>
-                          {/snippet}
-                        </Tooltip.Trigger>
-                        <Tooltip.Content
-                          >{copied ? "Copied" : "Copy table"}</Tooltip.Content
-                        >
-                      </Tooltip.Root>
-                      <Tooltip.Root>
-                        <Tooltip.Trigger>
-                          {#snippet child({ props })}
-                            <Button
-                              {...props}
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Open in preview"
-                              onclick={expandResult}
-                            >
-                              <Maximize2 />
-                            </Button>
-                          {/snippet}
-                        </Tooltip.Trigger>
-                        <Tooltip.Content>Open in preview</Tooltip.Content>
-                      </Tooltip.Root>
-                      <Tooltip.Root>
-                        <Tooltip.Trigger>
-                          {#snippet child({ props })}
-                            <Button
-                              {...props}
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Save to Library (needs daemon)"
-                              aria-disabled="true"
-                              class="aria-disabled:pointer-events-auto aria-disabled:opacity-50"
-                              onclick={(e) => e.preventDefault()}
-                            >
-                              <LibraryBig />
-                            </Button>
-                          {/snippet}
-                        </Tooltip.Trigger>
-                        <Tooltip.Content
-                          >Save to Library needs the daemon</Tooltip.Content
-                        >
-                      </Tooltip.Root>
-                    </div>
-                  </div>
-                  <table class="w-full text-sm">
-                    <thead class="text-muted-foreground text-left">
-                      <tr>
-                        <th class="px-4 py-2 font-medium">Metric</th>
-                        <th class="px-4 text-right font-medium">Strategy</th>
-                        <th class="px-3 text-right font-medium"
-                          >Buy &amp; hold</th
-                        >
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each RESULT as [m, s, b] (m)}
-                        <tr class="border-t">
-                          <td class="px-4 py-2.5">{m}</td>
-                          <td class="num px-4 text-right font-medium">{s}</td>
-                          <td class="text-muted-foreground px-3 text-right"
-                            >{b}</td
-                          >
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-                <div class="flex gap-1.5">
-                  <Badge variant="outline" class="text-[10px]"
-                    >sample result</Badge
-                  >
-                  <Badge variant="outline" class="text-[10px]"
-                    >draft · not run</Badge
-                  >
-                </div>
-              </div>
-              <div class="bg-muted ml-auto max-w-[85%] rounded-md px-3 py-2">
-                Tighten the stop to 0.8 ATR and show me what changes.
-              </div>
-              <div class="flex flex-col gap-3">
-                <p>
-                  With a 0.8 ATR stop the drawdown falls but more trades get
-                  stopped out early. This is a draft edit; it becomes evidence
-                  only after you publish and re-run it.
-                </p>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p class="panel-label mb-1.5">Before · v7</p>
-                    <EntityCard
-                      entity={before}
-                      compact
-                      href={resolve("/library/[id]", { id: before.id })}
-                    />
-                  </div>
-                  <div>
-                    <p class="panel-label mb-1.5">Draft edit · not run</p>
-                    <EntityCard
-                      entity={after}
-                      compact
-                      href={resolve("/library/[id]", { id: before.id })}
-                      changed={["sharpe", "dd", "win"]}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          {:else}
-            <EmptyState
-              class="h-full"
-              icon={MessagesSquare}
-              title={demo
-                ? "No sample messages in this session"
-                : "Start a conversation"}
-              description="Ask the copilot to research, build a workflow, or explain a result. It can reference apps, widgets and Library items."
-            />
-          {/if}
-        </div>
-        <div class="mx-auto w-full max-w-4xl px-6 pb-5">
-          <Composer
-            size={focus ? "lg" : "md"}
-            seed={page.url.searchParams.get("ask") ?? ""}
-            refs={workbench.copilotRefs}
-            onremoveref={(r) => workbench.removeRef(r)}
+  {#key `${focus}-${showWork}`}
+    <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
+      {#if !focus}
+        <Resizable.Pane defaultSize={18} minSize={13} maxSize={28}>
+          <SessionsSidebar
+            {sessions}
+            {active}
+            onopen={open}
+            onnew={newSession}
           />
-        </div>
-      </section>
-    </Resizable.Pane>
-    {#if !focus}
-      <Resizable.Handle />
+        </Resizable.Pane>
+        <Resizable.Handle />
+      {/if}
 
-      <Resizable.Pane defaultSize={36} minSize={20}>
-        <Tabs.Root
-          bind:value={workTab}
-          class="bg-panel flex h-full flex-col gap-0"
+      <Resizable.Pane
+        defaultSize={focus ? 100 : showWork ? 52 : 82}
+        minSize={30}
+      >
+        <section
+          aria-label="Conversation"
+          class="bg-panel flex h-full flex-col"
         >
-          <div class="flex h-9 shrink-0 items-center border-b px-2">
-            <Tabs.List variant="line" aria-label="Work area">
-              {#each WORK_TABS as t (t.id)}
-                <Tabs.Trigger value={t.id}><t.icon />{t.label}</Tabs.Trigger>
-              {/each}
-            </Tabs.List>
+          <div class="min-h-0 flex-1 overflow-auto">
+            {#if startKind}
+              <GuidedStart kind={startKind} />
+            {:else if blocks.length}
+              <Thread
+                {blocks}
+                onartifact={(id) => {
+                  artifact = id;
+                  workTab = "preview";
+                  showWork = true;
+                }}
+                onagent={() => {
+                  workTab = "activity";
+                  showWork = true;
+                }}
+                onresolve={() => {
+                  if (active) resolved[active] = (resolved[active] ?? 0) + 1;
+                }}
+                oncontinue={session?.origin !== "Main"
+                  ? continueHere
+                  : undefined}
+              />
+            {:else}
+              <HowDoI
+                onstart={(k) => (startKind = k)}
+                onask={(t) => (seed = t)}
+              />
+            {/if}
           </div>
-          {#each WORK_TABS as t (t.id)}
-            <Tabs.Content value={t.id} class="min-h-0 flex-1">
-              {#if t.id === "app" && previewing}
-                <div class="flex h-full flex-col p-2">
-                  <WidgetFrame
-                    title="EURUSD · strategy period (demo)"
-                    class="flex-1"
-                    onclose={() => (previewing = false)}
-                  >
-                    <CandleChart {candles} />
-                  </WidgetFrame>
-                </div>
-              {:else}
-                <EmptyState
-                  class="h-full"
-                  icon={t.icon}
-                  title={t.title}
-                  description={t.text}
-                />
-              {/if}
-            </Tabs.Content>
-          {/each}
-        </Tabs.Root>
+          <div class="mx-auto w-full max-w-4xl px-6 pb-5">
+            {#if waitingOn || running.length}
+              <p
+                class="text-muted-foreground mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+              >
+                {#if running.length}<span class="flex items-center gap-1.5"
+                    ><span class="bg-info remote-pulse size-1.5 rounded-full"
+                    ></span>{running.length}
+                    {running.length === 1 ? "agent" : "agents"} working on {[
+                      ...new Set(running.map((a) => a.where)),
+                    ].join(", ")}</span
+                  >{/if}
+                {#if waitingOn}<span class="text-warning"
+                    >{waitingOn} waiting for you above</span
+                  >{/if}
+              </p>
+            {/if}
+            <Composer
+              size={focus ? "lg" : "md"}
+              {seed}
+              refs={workbench.copilotRefs}
+              onremoveref={(r) => workbench.removeRef(r)}
+            />
+          </div>
+        </section>
       </Resizable.Pane>
-    {/if}
-  </Resizable.PaneGroup>
+
+      {#if !focus && showWork}
+        <Resizable.Handle />
+        <Resizable.Pane defaultSize={30} minSize={20}>
+          <WorkArea bind:tab={workTab} bind:artifact session={active} />
+        </Resizable.Pane>
+      {/if}
+    </Resizable.PaneGroup>
+  {/key}
 </div>
