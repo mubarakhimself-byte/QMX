@@ -52,27 +52,45 @@
           onclick={() => (portfolio.candidate = c.entity.id)}
           aria-pressed={portfolio.candidate === c.entity.id}
         >
-          <EntityCard entity={c.entity} compact />
-          <span class="mt-1.5 flex items-center gap-2 px-1 text-xs">
-            <span class="text-muted-foreground">day {c.days}</span>
-            <span class="flex flex-1 gap-0.5">
-              {#each c.checks as k (k.name)}
-                <span
-                  class={cn(
-                    "h-1.5 flex-1 rounded-full",
-                    k.ok === true
-                      ? "bg-success"
-                      : k.ok === false
-                        ? "bg-destructive"
-                        : "bg-muted-foreground/30",
-                  )}
-                  title={k.name}
-                ></span>
-              {/each}
-            </span>
-            <span class="text-muted-foreground">{passed}/{c.checks.length}</span
-            >
-          </span>
+          <EntityCard entity={c.entity} compact>
+            {#snippet footer()}
+              <span class="flex flex-col gap-1.5 border-t pt-2.5">
+                <span class="flex items-center justify-between text-xs">
+                  <span class="font-medium"
+                    >Day {c.days}{c.stage === "paper"
+                      ? " of 30 on paper"
+                      : c.stage === "live"
+                        ? " of 30 live"
+                        : ""}</span
+                  >
+                  <span class="text-muted-foreground"
+                    >{passed} of {c.checks.length} checks</span
+                  >
+                </span>
+                <span class="bg-muted h-1.5 overflow-hidden rounded-full">
+                  <span
+                    class="bg-primary block h-full rounded-full"
+                    style="width:{Math.min(1, c.days / 30) * 100}%"
+                  ></span>
+                </span>
+                <span class="flex gap-1">
+                  {#each c.checks as k (k.name)}
+                    <span
+                      class={cn(
+                        "flex-1 truncate rounded px-1 py-0.5 text-center text-[10px]",
+                        k.ok === true
+                          ? "bg-success/15 text-success"
+                          : k.ok === false
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-muted text-muted-foreground",
+                      )}
+                      title={k.name}>{k.name}</span
+                    >
+                  {/each}
+                </span>
+              </span>
+            {/snippet}
+          </EntityCard>
         </button>
       {:else}
         <p class="text-muted-foreground px-1 py-6 text-center text-xs">

@@ -34,6 +34,7 @@
   import { MODE_BORDER } from "$lib/portfolio/bits";
   import TemplatesDialog from "$lib/portfolio/TemplatesDialog.svelte";
   import ServersStrip from "$lib/portfolio/ServersStrip.svelte";
+  import KillSwitchChip from "$lib/portfolio/KillSwitchChip.svelte";
 
   const L = portfolio.layouts;
   const fromUrl = page.url.searchParams.get("layout");
@@ -104,6 +105,7 @@
         </button>
       {/each}
     </div>
+    <KillSwitchChip />
     <nav class="flex items-center gap-0.5" aria-label="Layouts">
       {#each L.layouts as l (l.id)}
         <button

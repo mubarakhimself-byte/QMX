@@ -33,8 +33,6 @@ import AgentsPanel from "./panels/AgentsPanel.svelte";
 import LogsPanel from "./panels/LogsPanel.svelte";
 import ResourcesPanel from "./panels/ResourcesPanel.svelte";
 import Layers from "@lucide/svelte/icons/layers";
-import Inbox from "@lucide/svelte/icons/inbox";
-import ApprovalsPanel from "./panels/ApprovalsPanel.svelte";
 
 export type LabPanel = {
   title: string;
@@ -128,12 +126,6 @@ export const LAB_PANELS: Record<string, LabPanel> = {
     icon: Bot,
     note: "Agents and sub-agents",
     view: AgentsPanel,
-  },
-  approvals: {
-    title: "Agent requests",
-    icon: Inbox,
-    note: "Approve or decline what agents ask",
-    view: ApprovalsPanel,
   },
   logs: {
     title: "Log",

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   /**
    * Card for a bot, ML model, mini app or workflow. A generated cover, the
    * stage, and four named measures with plain definitions. No overall score:
@@ -17,12 +18,15 @@
     href,
     compact = false,
     changed = [],
+    footer,
   }: {
     entity: Entity;
     href?: string;
     compact?: boolean;
     /** Measure keys that changed after an edit; highlighted in place. */
     changed?: string[];
+    /** Extra content drawn inside the card, at the bottom. */
+    footer?: Snippet;
   } = $props();
 
   const ICON = {
@@ -125,5 +129,6 @@
         {/if}
       </p>
     {/if}
+    {@render footer?.()}
   </div>
 </svelte:element>

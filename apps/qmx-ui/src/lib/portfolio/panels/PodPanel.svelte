@@ -25,6 +25,23 @@
   import { portfolio } from "../portfolio.svelte";
 
   const p = $derived(podById(portfolio.pod)!);
+  /** Every pod has a paper side; live exists once it is promoted. */
+  let side = $state<"live" | "paper">("live");
+  const hasLive = $derived(p.mode === "LIVE");
+  const view = $derived(
+    side === "live" && hasLive
+      ? {
+          account: p.account,
+          equity: p.equity,
+          today: p.today,
+          curve: p.curve,
+          mode: "live" as const,
+        }
+      : { ...p.paper, mode: "paper" as const },
+  );
+  const other = $derived(
+    view.mode === "live" ? p.paper.curve : hasLive ? p.curve : null,
+  );
   let edits = $state<Record<string, Record<string, number>>>({});
   const val = (key: string, base: number) => edits[p.id]?.[key] ?? base;
   function set(key: string, v: number) {
@@ -64,25 +81,33 @@
 
   // Safety meter: floor (kill line) → start capital → now.
   const lo = $derived(p.floor * 0.97);
-  const hi = $derived(Math.max(p.start, p.equity) * 1.03);
+  const hi = $derived(Math.max(p.start, view.equity) * 1.03);
   const at = (v: number) => ((v - lo) / (hi - lo)) * 100;
-  const room = $derived(p.equity - p.floor);
+  const room = $derived(view.equity - p.floor);
 
   // Area chart of the pod's equity.
   const W = 600;
   const H = 120;
   const area = $derived.by(() => {
-    const v = p.curve;
-    const min = Math.min(...v);
-    const max = Math.max(...v);
-    const pts = v.map((y, i) => [
-      (i / (v.length - 1)) * W,
-      H - ((y - min) / (max - min || 1)) * (H - 8) - 4,
-    ]);
-    const line = pts
-      .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`)
-      .join("");
-    return { line, fill: `${line}L${W},${H}L0,${H}Z` };
+    // Both sides on one scale: the shown side filled, the other dashed.
+    const v = view.curve;
+    const all = [...v, ...(other ?? [])];
+    const min = Math.min(...all);
+    const max = Math.max(...all);
+    const toLine = (c: number[]) =>
+      c
+        .map((y, i) => {
+          const x = (i / (c.length - 1)) * W;
+          const yy = H - ((y - min) / (max - min || 1)) * (H - 8) - 4;
+          return `${i ? "L" : "M"}${x.toFixed(1)},${yy.toFixed(1)}`;
+        })
+        .join("");
+    const line = toLine(v);
+    return {
+      line,
+      fill: `${line}L${W},${H}L0,${H}Z`,
+      other: other ? toLine(other) : null,
+    };
   });
   const ring = (used: number) => {
     const r = 22;
@@ -99,26 +124,48 @@
         <div class="flex items-center gap-2">
           <h3 class="text-2xl font-semibold tracking-tight">{p.name}</h3>
           <span
-            class="rounded px-2 py-0.5 text-xs"
-            style="background: color-mix(in oklab, var(--tone-{p.mode === 'LIVE'
-              ? 'live'
-              : 'paper'}) 22%, transparent)">{p.mode}</span
+            class="bg-muted/50 flex rounded-md p-0.5 text-xs"
+            role="radiogroup"
+            aria-label="Live or paper side"
           >
+            {#each ["live", "paper"] as const as m (m)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={view.mode === m}
+                disabled={m === "live" && !hasLive}
+                title={m === "live" && !hasLive
+                  ? "Not promoted to live yet"
+                  : undefined}
+                class={cn(
+                  "flex items-center gap-1.5 rounded px-2 py-0.5 capitalize disabled:opacity-40",
+                  view.mode === m
+                    ? "bg-background shadow-sm"
+                    : "text-muted-foreground",
+                )}
+                onclick={() => (side = m)}
+                ><span
+                  class="size-1.5 rounded-full"
+                  style="background: var(--tone-{m})"
+                ></span>{m}</button
+              >
+            {/each}
+          </span>
           <span class="text-muted-foreground text-sm">{p.version}</span>
         </div>
         <p class="text-muted-foreground text-sm">
-          {accountById(p.account)?.name}
+          {accountById(view.account)?.name}
         </p>
       </div>
       <div class="ml-auto text-right">
-        <p class="num text-3xl font-semibold">{usd(p.equity)}</p>
+        <p class="num text-3xl font-semibold">{usd(view.equity)}</p>
         <p
           class={cn(
             "num text-sm",
-            p.today >= 0 ? "text-success" : "text-destructive",
+            view.today >= 0 ? "text-success" : "text-destructive",
           )}
         >
-          {pct(p.today)} today
+          {pct(view.today)} today
         </p>
       </div>
     </div>
@@ -137,6 +184,17 @@
         </linearGradient>
       </defs>
       <path d={area.fill} fill="url(#pod-fill)" />
+      {#if area.other}
+        <path
+          d={area.other}
+          fill="none"
+          stroke="var(--tone-{view.mode === 'live' ? 'paper' : 'live'})"
+          stroke-width="1.5"
+          stroke-dasharray="5 4"
+          opacity="0.8"
+          vector-effect="non-scaling-stroke"
+        />
+      {/if}
       <path
         d={area.line}
         fill="none"
@@ -170,7 +228,7 @@
         ></span>
         <span
           class="border-background bg-foreground absolute -top-1 size-6 -translate-x-1/2 rounded-full border-4"
-          style="left:{at(p.equity)}%"
+          style="left:{at(view.equity)}%"
         ></span>
       </div>
       <div class="text-muted-foreground mt-2 flex justify-between text-sm">

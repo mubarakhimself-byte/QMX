@@ -8,11 +8,7 @@
   import { portfolio } from "../portfolio.svelte";
 
   const rows = $derived(
-    PODS.filter(
-      (p) =>
-        portfolio.world === "all" ||
-        (portfolio.world === "live") === (p.mode === "LIVE"),
-    ),
+    PODS.filter((p) => portfolio.world !== "live" || p.mode === "LIVE"),
   );
 </script>
 
@@ -60,6 +56,20 @@
             )}
             style="width:{Math.min(1, room) * 100}%"
           ></span></span
+        >
+      </span>
+      <span class="flex items-center gap-3 text-xs">
+        <span class="flex items-center gap-1"
+          ><span
+            class="size-1.5 rounded-full"
+            style="background: var(--tone-live)"
+          ></span>{p.mode === "LIVE" ? usd(p.equity) : "not live yet"}</span
+        >
+        <span class="flex items-center gap-1"
+          ><span
+            class="size-1.5 rounded-full"
+            style="background: var(--tone-paper)"
+          ></span>{usd(p.paper.equity)}</span
         >
       </span>
       <span class="text-muted-foreground text-xs"

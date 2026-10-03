@@ -42,21 +42,8 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
     id: "live",
     name: "Live",
     root: split("col", [
-      [pane("l-charts", "botcharts"), 54],
-      [
-        split("row", [
-          [pane("l-positions", "positions"), 50],
-          [pane("l-exposure", "exposure"), 20],
-          [
-            split("col", [
-              [pane("l-control", "control"), 58],
-              [pane("l-corr", "correlation"), 42],
-            ]),
-            30,
-          ],
-        ]),
-        46,
-      ],
+      [pane("l-holdings", "holdings"), 52],
+      [pane("l-charts", "botcharts"), 48],
     ]),
     docked: [],
   },
@@ -93,7 +80,7 @@ export const PORTFOLIO_LAYOUTS: TileLayout[] = [
 ];
 
 class PortfolioState {
-  layouts = new LayoutStore("qmx.portfolio.layouts.v2", PORTFOLIO_LAYOUTS);
+  layouts = new LayoutStore("qmx.portfolio.layouts.v3", PORTFOLIO_LAYOUTS);
   pod = $state("core");
   candidate = $state("avax-mom");
   world = $state<"all" | "live" | "paper">("all");

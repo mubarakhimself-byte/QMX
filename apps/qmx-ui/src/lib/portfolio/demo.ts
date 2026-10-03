@@ -176,9 +176,15 @@ export type Pod = {
   knobs: Knob[];
   guards: Guard[];
   bots: PodBot[];
+  /**
+   * Every pod runs a paper side next to its live side (operator, 2026-10-03),
+   * so a change can be watched on paper before it goes live. A pod not yet
+   * promoted has only its paper side.
+   */
+  paper: { account: string; equity: number; today: number; curve: number[] };
 };
 
-export const PODS: Pod[] = [
+export const PODS = [
   {
     id: "core",
     name: "BTC & ETH core",
@@ -442,7 +448,39 @@ export const PODS: Pod[] = [
       },
     ],
   },
-];
+] as unknown as Pod[];
+
+// Paper sides: same pod, testnet capital.
+const PAPER_SIDE: Record<string, Pod["paper"]> = {
+  core: {
+    account: "bn-test",
+    equity: 20880,
+    today: 1.1,
+    curve: equityWalk(112, 120, 0.0013, 0.009),
+  },
+  alts: {
+    account: "bn-test",
+    equity: 15620,
+    today: 2.2,
+    curve: equityWalk(123, 120, 0.0018, 0.015),
+  },
+  rotation: {
+    account: "bn-test",
+    equity: 6040,
+    today: -0.4,
+    curve: equityWalk(131, 120, 0.0004, 0.011),
+  },
+};
+for (const p of PODS) {
+  if (p.mode === "PAPER")
+    p.paper = {
+      account: p.account,
+      equity: p.equity,
+      today: p.today,
+      curve: p.curve,
+    };
+  else p.paper = PAPER_SIDE[p.id];
+}
 
 export const accountById = (id: string) => ACCOUNTS.find((a) => a.id === id);
 export const venueById = (id: string) => VENUES.find((v) => v.id === id);

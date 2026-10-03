@@ -22,6 +22,8 @@ import EventsPanel from "./panels/EventsPanel.svelte";
 import BotChartsPanel from "./panels/BotChartsPanel.svelte";
 import ControlPanel from "./panels/ControlPanel.svelte";
 import PositionsPanel from "./panels/PositionsPanel.svelte";
+import HoldingsPanel from "./panels/HoldingsPanel.svelte";
+import Layers from "@lucide/svelte/icons/layers";
 import NodesPanel from "./panels/NodesPanel.svelte";
 import RoadPanel from "./panels/RoadPanel.svelte";
 import SigningPanel from "./panels/SigningPanel.svelte";
@@ -75,6 +77,13 @@ export const PORTFOLIO_PANELS: Record<string, PortfolioPanel> = {
     icon: CandlestickChart,
     note: "A chart per trading bot",
     view: BotChartsPanel,
+  },
+  holdings: {
+    title: "Holdings",
+    icon: Layers,
+    note: "Positions, exposure and correlation as tabs",
+    view: HoldingsPanel,
+    trading: true,
   },
   positions: {
     title: "Positions",
