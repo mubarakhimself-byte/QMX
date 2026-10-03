@@ -24,7 +24,7 @@
 
   const rows = $derived.by(() => {
     const f = RUNS.filter((r) =>
-      lab.envFilter && r.env !== lab.envFilter
+      lab.machine && r.env !== lab.machine
         ? false
         : filter === "All"
           ? true
@@ -78,13 +78,13 @@
         onclick={() => (filter = f)}>{f}</button
       >
     {/each}
-    {#if lab.envFilter}
+    {#if lab.machine}
       <button
         type="button"
         class="bg-info/12 text-info ml-1 flex h-6 items-center gap-1 rounded-md px-2 text-xs"
         aria-label="Show work on every machine"
-        onclick={() => (lab.envFilter = null)}
-        >Only {envById(lab.envFilter)?.name}<X class="size-3" /></button
+        onclick={() => lab.connect(null)}
+        >On {envById(lab.machine)?.name}<X class="size-3" /></button
       >
     {/if}
     <span class="text-muted-foreground ml-auto text-xs tabular-nums"

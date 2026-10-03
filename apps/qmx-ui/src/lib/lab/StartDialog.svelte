@@ -13,6 +13,9 @@
   import Import from "@lucide/svelte/icons/import";
   import Check from "@lucide/svelte/icons/check";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import MessagesSquare from "@lucide/svelte/icons/messages-square";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
@@ -137,7 +140,15 @@
   const multi = $derived(kind === "compare");
   const chosen = $derived(KINDS.find((k) => k.id === kind));
 
+  /** These start as a copilot conversation, which then drives the Lab. */
+  const COPILOT_LED: Kind[] = ["import", "workflow", "train"];
   function choose(k: Kind) {
+    if (COPILOT_LED.includes(k)) {
+      open = false;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path plus a query string
+      goto(`${resolve("/copilot")}?start=${k}`);
+      return;
+    }
     kind = k;
     name = KINDS.find((x) => x.id === k)!.title;
     picks = k === "compare" ? ["wf-regime"] : [];
@@ -250,6 +261,11 @@
             <span>
               <span class="block text-sm font-medium">{k.title}</span>
               <span class="text-muted-foreground block text-xs">{k.note}</span>
+              {#if COPILOT_LED.includes(k.id)}<span
+                  class="text-primary mt-1 flex items-center gap-1 text-xs"
+                  ><MessagesSquare class="size-3" />Starts a copilot
+                  conversation</span
+                >{/if}
             </span>
           </button>
         {/each}

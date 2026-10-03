@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GuidedStart from "$lib/workbench/GuidedStart.svelte";
   import Plus from "@lucide/svelte/icons/plus";
   import Search from "@lucide/svelte/icons/search";
   import MessagesSquare from "@lucide/svelte/icons/messages-square";
@@ -99,7 +100,17 @@
     { id: "s2", title: "News sentiment features", when: "Yesterday" },
     { id: "s3", title: "Gold mean-reversion idea", when: "Sep 28" },
   ];
-  let activeSession = $state(demo ? "s1" : null);
+  // ?start=import|train|workflow opens a copilot-led start (from the Lab).
+  const startParam = page.url.searchParams.get("start");
+  const startKind =
+    startParam === "import" ||
+    startParam === "train" ||
+    startParam === "workflow"
+      ? startParam
+      : null;
+  let activeSession = $state<string | null>(
+    startKind ? "start" : demo ? "s1" : null,
+  );
   const TOOLS = [
     { name: "get_candles", args: "EURUSD · H1 · 2024–2026", ms: 420 },
     {
@@ -218,7 +229,9 @@
     <Resizable.Pane defaultSize={46} minSize={30}>
       <section aria-label="Conversation" class="bg-panel flex h-full flex-col">
         <div class="min-h-0 flex-1 overflow-auto">
-          {#if demo && activeSession === "s1"}
+          {#if startKind && activeSession === "start"}
+            <GuidedStart kind={startKind} />
+          {:else if demo && activeSession === "s1"}
             <div
               class="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-6 text-[15px] leading-relaxed"
             >

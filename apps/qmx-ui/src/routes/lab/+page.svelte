@@ -28,10 +28,14 @@
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { LAB_PANELS } from "$lib/lab/catalog";
   import { lab } from "$lib/lab/lab.svelte";
-  import { ASSETS, ENVIRONMENTS } from "$lib/lab/demo";
+  import { ASSETS, ENVIRONMENTS, activity } from "$lib/lab/demo";
   import EnvChip from "$lib/lab/EnvChip.svelte";
   import { LAB_CONTEXT, LAB_SESSIONS } from "$lib/lab/copilot";
   import StartDialog from "$lib/lab/StartDialog.svelte";
+  import MachinePicker from "$lib/lab/MachinePicker.svelte";
+  import MachineEmpty from "$lib/lab/MachineEmpty.svelte";
+  import LabStrips from "$lib/lab/LabStrips.svelte";
+  import { GUIDES } from "$lib/lab/guides";
 
   const fromUrl = page.url.searchParams.get("layout");
   if (fromUrl && lab.layouts.some((l) => l.id === fromUrl))
@@ -41,7 +45,8 @@
     ["bot", "template", "model"].includes(a.kind),
   );
   let subject = $state(SUBJECTS.find((s) => s.id === "bot-gbm")!);
-  let runOn = $state("local");
+  const guideId = page.url.searchParams.get("guide");
+  if (guideId && GUIDES[guideId]) lab.startGuide(GUIDES[guideId]);
 
   const catalog = Object.fromEntries(
     Object.entries(LAB_PANELS).map(([id, p]) => [
@@ -70,7 +75,7 @@
     workbench.notify(`Saved layout: ${l.name}`);
   }
   function run() {
-    const env = ENVIRONMENTS.find((e) => e.id === runOn)!;
+    const env = ENVIRONMENTS.find((e) => e.id === (lab.machine ?? "local"))!;
     workbench.notify(
       `Running needs the daemon. It would run the published version of ${subject.name} on ${env.name}.`,
     );
@@ -128,6 +133,11 @@
           >{l.name}{#if lab.isEdited(l.id)}<span
               class="text-muted-foreground"
               title="Changed from the default">*</span
+            >{/if}{#if lab.machine}{@const n = activity(lab.machine, l.id)}<span
+              class="num ml-1.5 rounded px-1 text-[11px] {n
+                ? 'bg-info/15 text-info'
+                : 'text-muted-foreground/60'}"
+              title={`${n} on this machine`}>{n}</span
             >{/if}</button
         >
       {/each}
@@ -197,55 +207,7 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
       <span class="bg-border mx-1 h-5 w-px"></span>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="outline"
-              size="sm"
-              class="gap-1.5"
-              aria-label="Choose where runs go"
-            >
-              <EnvChip env={runOn} /><ChevronDown class="size-3.5" />
-            </Button>
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-72">
-          <DropdownMenu.Label>Run on</DropdownMenu.Label>
-          {#each ENVIRONMENTS as e (e.id)}
-            <DropdownMenu.Item
-              disabled={e.status === "offline"}
-              onclick={() => {
-                runOn = e.id;
-                if (lab.envFilter) lab.envFilter = e.id;
-              }}
-            >
-              <span class="flex w-full flex-col">
-                <span class="flex items-center justify-between gap-2"
-                  >{e.name}<span class="num text-muted-foreground text-xs"
-                    >{e.slots[0]}/{e.slots[1]} slots</span
-                  ></span
-                >
-                <span class="text-muted-foreground text-xs"
-                  >{e.where} · {e.status === "offline"
-                    ? "offline"
-                    : e.evidence
-                      ? "can produce evidence"
-                      : "exploration only"}</span
-                >
-              </span>
-            </DropdownMenu.Item>
-          {/each}
-          <DropdownMenu.Separator />
-          <DropdownMenu.CheckboxItem
-            checked={lab.envFilter === runOn}
-            onCheckedChange={(on) => (lab.envFilter = on ? runOn : null)}
-          >
-            Show only work on {ENVIRONMENTS.find((e) => e.id === runOn)?.name}
-          </DropdownMenu.CheckboxItem>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+      <MachinePicker />
       <Button size="sm" onclick={run}><Play />Run</Button>
       <Button
         variant={lab.copilotOpen ? "secondary" : "ghost"}
@@ -257,21 +219,26 @@
       >
     </div>
   </header>
+  <LabStrips />
 
   <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
     <Resizable.Pane defaultSize={lab.copilotOpen ? 76 : 100} minSize={50}>
-      <TileBoard
-        class="p-1.5"
-        layout={lab.active}
-        {catalog}
-        editing={lab.editing}
-        onchange={(next) => lab.update(next)}
-      >
-        {#snippet panel(p)}
-          {@const View = LAB_PANELS[p.panel].view}
-          <View link={p.link} />
-        {/snippet}
-      </TileBoard>
+      {#if lab.machine && activity(lab.machine, lab.activeId) === 0}
+        <MachineEmpty machine={lab.machine} onstart={() => (starting = true)} />
+      {:else}
+        <TileBoard
+          class="p-1.5"
+          layout={lab.active}
+          {catalog}
+          editing={lab.editing}
+          onchange={(next) => lab.update(next)}
+        >
+          {#snippet panel(p)}
+            {@const View = LAB_PANELS[p.panel].view}
+            <View link={p.link} />
+          {/snippet}
+        </TileBoard>
+      {/if}
     </Resizable.Pane>
     {#if lab.copilotOpen}
       <Resizable.Handle />

@@ -69,6 +69,30 @@ export const ENVIRONMENTS: Environment[] = [
 
 export const envById = (id: string) => ENVIRONMENTS.find((e) => e.id === id);
 
+/**
+ * How much work a machine has for a layout kind. Drafts are edited on this
+ * laptop; tests and comparisons are runs; training is the training job.
+ * The daemon reports this per environment once wired.
+ */
+export function activity(env: string, layout: string): number {
+  const runsHere = RUNS.filter(
+    (r) => r.env === env && r.procedure !== "Training",
+  );
+  switch (layout) {
+    case "build":
+      return env === "local" ? 1 : 0;
+    case "test":
+      return runsHere.length;
+    case "train":
+      return RUNS.filter((r) => r.env === env && r.procedure === "Training")
+        .length;
+    case "compare":
+      return runsHere.filter((r) => r.status === "done").length;
+    default:
+      return RUNS.filter((r) => r.env === env).length;
+  }
+}
+
 export const SYMBOLS = [
   "EURUSD",
   "GBPUSD",

@@ -4,6 +4,7 @@
  * Layout and selection are client-only; runs and assets come from the
  * daemon once it is wired (demo data until then).
  */
+import { envById } from "./demo";
 import {
   pane,
   parseLayouts,
@@ -119,8 +120,72 @@ class LabState {
   /** Runs ticked for compare. */
   ticked = $state<string[]>(["run-441", "run-502", "run-508"]);
   copilotOpen = $state(false);
-  /** Show only work on one machine (null = everywhere). */
-  envFilter = $state<string | null>(null);
+  /**
+   * The machine the Lab is looking at (null = all machines), like a remote
+   * window in VS Code: picking one connects first, then every tile shows
+   * only that machine's work.
+   */
+  machine = $state<string | null>(null);
+  connection = $state<{
+    target: string;
+    step: number;
+    failed: string | null;
+  } | null>(null);
+  /** A copilot-led walk through the Lab (layout per step). */
+  guide = $state<{
+    title: string;
+    steps: { layout: string; text: string }[];
+    at: number;
+  } | null>(null);
+
+  /** Placement checks in the CT-46 order the docs use. */
+  static CHECKS = ["Reachable", "Signed in", "Healthy"];
+
+  connect(id: string | null) {
+    if (id === null || id === this.machine) {
+      this.machine = id;
+      this.connection = null;
+      return;
+    }
+    const env = envById(id);
+    this.connection = { target: id, step: 0, failed: null };
+    const tick = (step: number) => {
+      if (!this.connection || this.connection.target !== id) return;
+      if (env?.status === "offline" && step === 0) {
+        this.connection = {
+          target: id,
+          step: 0,
+          failed: `${env.name} is offline. Start it from its provider, or pick another machine.`,
+        };
+        return;
+      }
+      if (step >= LabState.CHECKS.length) {
+        this.machine = id;
+        this.connection = null;
+        return;
+      }
+      this.connection = { target: id, step: step + 1, failed: null };
+      setTimeout(() => tick(step + 1), 380);
+    };
+    setTimeout(() => tick(0), 300);
+  }
+
+  startGuide(g: { title: string; steps: { layout: string; text: string }[] }) {
+    this.guide = { ...g, at: 0 };
+    this.activeId = g.steps[0].layout;
+  }
+
+  guideStep(delta: number) {
+    if (!this.guide) return;
+    const at = this.guide.at + delta;
+    if (at < 0) return;
+    if (at >= this.guide.steps.length) {
+      this.guide = null;
+      return;
+    }
+    this.guide = { ...this.guide, at };
+    this.activeId = this.guide.steps[at].layout;
+  }
 
   get layouts(): TileLayout[] {
     const builtins = BUILTIN_LAYOUTS.map(

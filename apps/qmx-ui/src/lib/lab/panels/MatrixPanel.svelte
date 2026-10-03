@@ -149,7 +149,14 @@
                   ? "border-ring ring-ring ring-1"
                   : "border-border/60 hover:border-ring/60",
               )}
-              style="background: {fill(r)}"
+              style="background: {lab.machine && r.env !== lab.machine
+                ? 'transparent'
+                : fill(r)}; opacity: {lab.machine && r.env !== lab.machine
+                ? 0.35
+                : 1}"
+              title={lab.machine && r.env !== lab.machine
+                ? `Ran on another machine`
+                : undefined}
               aria-label={`${s} ${tf}: ${r.status}${value(r) !== null ? `, ${value(r)}` : ""}`}
               onclick={() => lab.select(link, r.id)}
             >

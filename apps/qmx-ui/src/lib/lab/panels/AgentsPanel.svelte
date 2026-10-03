@@ -10,6 +10,15 @@
   import EnvChip from "../EnvChip.svelte";
   import StatusDot from "../StatusDot.svelte";
   import { AGENTS } from "../demo";
+  import { lab } from "../lab.svelte";
+  const shown = $derived(
+    lab.machine
+      ? AGENTS.map((a) => ({
+          ...a,
+          children: (a.children ?? []).filter((c) => c.env === lab.machine),
+        })).filter((a) => a.env === lab.machine || a.children.length)
+      : AGENTS,
+  );
 
   let open = $state<string[]>(AGENTS.map((a) => a.id));
   const toggle = (id: string) =>
@@ -18,7 +27,7 @@
 
 <div class="flex h-full flex-col">
   <ul class="min-h-0 flex-1 overflow-auto py-1">
-    {#each AGENTS as a (a.id)}
+    {#each shown as a (a.id)}
       {@const kids = a.children ?? []}
       <li>
         <div class="hover:bg-muted/40 flex items-start gap-2 px-3 py-2">
