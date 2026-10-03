@@ -407,6 +407,7 @@
         <div class="mx-auto w-full max-w-4xl px-6 pb-5">
           <Composer
             size={focus ? "lg" : "md"}
+            seed={page.url.searchParams.get("ask") ?? ""}
             refs={workbench.copilotRefs}
             onremoveref={(r) => workbench.removeRef(r)}
           />

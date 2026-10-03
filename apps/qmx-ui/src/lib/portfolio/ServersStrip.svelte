@@ -24,13 +24,14 @@
     );
 </script>
 
-<div class="flex items-center gap-1" aria-label="Trading servers">
+<div class="flex shrink-0 items-center gap-1" aria-label="Trading servers">
   {#each NODES as n (n.id)}
     {@const best = Math.min(...n.latency.map((l) => l.ms))}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        class="hover:bg-muted data-[state=open]:bg-muted flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs"
+        class="hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs whitespace-nowrap"
         aria-label={`${n.name} server, ${n.status}`}
+        title={`${n.name} · ${best} ms`}
       >
         <span
           class={cn(
@@ -39,8 +40,12 @@
             n.status !== "up" && "remote-pulse",
           )}
         ></span>
-        <Server class="text-muted-foreground size-3.5" />{n.name}
-        <span class="num text-muted-foreground">{best} ms</span>
+        <Server class="text-muted-foreground size-3.5" /><span
+          class="max-w-20 truncate">{n.name}</span
+        >
+        <span class="num text-muted-foreground hidden 2xl:inline"
+          >{best} ms</span
+        >
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" class="w-72">
         <DropdownMenu.Label>{n.name} · {n.where}</DropdownMenu.Label>

@@ -182,3 +182,11 @@ Library redesign, then main Copilot, Home, Settings, Mini apps. The backlog was 
 - [x] Test: catalogue ids unique, links only to real screens, trading things connect to Lab or Portfolio.
 - [ ] Next in Library: model and app full pages, diagrams from articles, Home and "Save to Library" links.
 
+### Library pass 2 done (2026-10-03, evening)
+
+- [x] Journals shelf removed; "Journal & logs" and "Code" tabs inside items (bots, models, pods, blocks, workflows, setups).
+- [x] Select several → add to copilot, or save as a collection (kept in this browser; "Your collections" in the shelves).
+- [x] Banded, foldable shelf groups; hide the shelves; reading mode for articles.
+- [x] Article sources (MQL5, clippings, arXiv, web pages) and "Explain it as" four ways via the copilot (`/copilot?ask=`).
+- [x] Portfolio and Lab headers fit smaller screens (button words and server latency show only on wide screens).
+

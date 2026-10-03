@@ -163,19 +163,26 @@
         variant="ghost"
         size="sm"
         onclick={() => (portfolio.templatesOpen = true)}
-        ><LayoutTemplate />Templates</Button
+        title="Templates"
+        ><LayoutTemplate /><span class="hidden 2xl:inline">Templates</span
+        ></Button
       >
       <Button
         variant={L.editing ? "secondary" : "ghost"}
         size="sm"
         aria-pressed={L.editing}
         onclick={() => (L.editing = !L.editing)}
-        ><Pencil />{L.editing ? "Done" : "Edit layout"}</Button
+        title={L.editing ? "Done" : "Edit layout"}
+        ><Pencil /><span class="hidden 2xl:inline"
+          >{L.editing ? "Done" : "Edit layout"}</span
+        ></Button
       >
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
-            <Button {...props} variant="ghost" size="sm"><Plus />Panel</Button>
+            <Button {...props} variant="ghost" size="sm" title="Add a panel"
+              ><Plus /><span class="hidden 2xl:inline">Panel</span></Button
+            >
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-64">

@@ -279,12 +279,17 @@
         size="sm"
         aria-pressed={lab.editing}
         onclick={() => (lab.editing = !lab.editing)}
-        ><Pencil />{lab.editing ? "Done" : "Edit layout"}</Button
+        title={lab.editing ? "Done" : "Edit layout"}
+        ><Pencil /><span class="hidden 2xl:inline"
+          >{lab.editing ? "Done" : "Edit layout"}</span
+        ></Button
       >
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
-            <Button {...props} variant="ghost" size="sm"><Plus />Panel</Button>
+            <Button {...props} variant="ghost" size="sm" title="Add a panel"
+              ><Plus /><span class="hidden 2xl:inline">Panel</span></Button
+            >
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-64">

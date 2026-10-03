@@ -2,13 +2,15 @@
   /**
    * The Library (redesign, operator 2026-10-03: "needs a bloody redesign …
    * needs to connect to all the other parts"). One store room every screen
-   * reads from and saves to. Shelves on the left (things that trade, things
-   * that run, proof, inputs, knowledge), the shelf in the middle as cards or
-   * a list, and the selected item on the right with where it is used across
-   * QMX. Articles keep the reader; sources keep the in-app browser.
+   * reads from and saves to. Shelves on the left in collapsible groups, the
+   * shelf in the middle as cards or a list (pick several to hand to the
+   * copilot or keep as a collection), and the selected item on the right
+   * with where it is used, its journal and logs, and its code. Articles
+   * keep the reader (with a reading mode); sources keep the in-app browser.
    * Deep links: ?shelf=<id>&item=<id>; old ?tab= links still land.
    */
-  import { onMount } from "svelte";
+  import { onMount, type Component } from "svelte";
+  import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import Search from "@lucide/svelte/icons/search";
@@ -27,8 +29,18 @@
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
   import AppWindow from "@lucide/svelte/icons/app-window";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
+  import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
+  import FolderHeart from "@lucide/svelte/icons/folder-heart";
+  import BookOpenText from "@lucide/svelte/icons/book-open-text";
+  import Minimize2 from "@lucide/svelte/icons/minimize-2";
+  import Check from "@lucide/svelte/icons/check";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Resizable from "$lib/components/ui/resizable";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -46,21 +58,16 @@
     shelfById,
     type LibraryItem,
   } from "$lib/library/items";
+  import {
+    ARTICLE_SOURCES,
+    EXPLAIN_AS,
+    OTHER_ARTICLES,
+    type Article,
+  } from "$lib/library/articles";
   import ItemCard from "$lib/library/ItemCard.svelte";
   import ItemInspector from "$lib/library/ItemInspector.svelte";
 
-  type Article = {
-    id: number;
-    title: string;
-    summary: string;
-    published: string;
-    section: string;
-    series: string | null;
-    part: number | null;
-    url: string;
-  };
-
-  // Old tab ids from before the redesign.
+  // Old tab ids from before the redesign; journals now live inside items.
   const OLD_TAB: Record<string, string> = {
     knowledge: "articles",
     sources: "sources",
@@ -79,20 +86,31 @@
   if (askedItem && itemById(askedItem) && !params.get("shelf"))
     shelf = itemById(askedItem)!.shelf;
 
-  let view = $state<"cards" | "list">("cards");
-  try {
-    if (localStorage.getItem("qmx.library.view") === "list") view = "list";
-  } catch {
-    /* storage unavailable */
-  }
-  function setView(v: "cards" | "list") {
-    view = v;
+  // Per-viewer conveniences, kept in this browser only.
+  function stored<T>(key: string, fallback: T): T {
     try {
-      localStorage.setItem("qmx.library.view", v);
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  function keep(key: string, value: unknown) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
       /* storage unavailable */
     }
   }
+  let view = $state<"cards" | "list">(stored("qmx.library.view", "cards"));
+  let navOpen = $state(stored("qmx.library.nav", true));
+  let folded = $state<string[]>(stored("qmx.library.folded", []));
+  type Collection = { id: string; name: string; items: string[] };
+  let collections = $state<Collection[]>(stored("qmx.library.collections", []));
+  $effect(() => keep("qmx.library.view", view));
+  $effect(() => keep("qmx.library.nav", navOpen));
+  $effect(() => keep("qmx.library.folded", folded));
+  $effect(() => keep("qmx.library.collections", collections));
 
   const VIEWS = [
     ["cards", LayoutGrid, "Cards"],
@@ -108,6 +126,11 @@
     i.summary.toLowerCase().includes(q) ||
     (i.family ?? "").toLowerCase().includes(q);
 
+  const collection = $derived(
+    shelf.startsWith("col:")
+      ? collections.find((c) => `col:${c.id}` === shelf)
+      : undefined,
+  );
   const mode = $derived(
     shelf === "articles"
       ? "articles"
@@ -118,9 +141,11 @@
   const items = $derived(
     LIBRARY.filter(
       (i) =>
-        (shelf === "everything" || i.shelf === shelf) &&
-        i.shelf !== "sources" &&
-        match(i),
+        (collection
+          ? collection.items.includes(i.id)
+          : shelf === "everything"
+            ? i.shelf !== "sources"
+            : i.shelf === shelf) && match(i),
     ),
   );
   const grouped = $derived(
@@ -133,13 +158,52 @@
   );
   const countOf = (id: string) => LIBRARY.filter((i) => i.shelf === id).length;
 
-  // Articles: the reader, as before but wider, with a side column.
+  // Pick several: hand them to the copilot together or keep them as a collection.
+  let selecting = $state(false);
+  let picked = $state<string[]>([]);
+  let naming = $state(false);
+  let collectionName = $state("");
+  function choose(id: string) {
+    if (selecting)
+      picked = picked.includes(id)
+        ? picked.filter((x) => x !== id)
+        : [...picked, id];
+    else selectedId = id;
+  }
+  function addPicked() {
+    for (const id of picked) workbench.addRef(itemById(id)!.name, true);
+    workbench.notify(
+      `Added ${picked.length} items to the copilot.`,
+      "/copilot",
+      "Open Copilot",
+    );
+    picked = [];
+    selecting = false;
+  }
+  function saveCollection(e: SubmitEvent) {
+    e.preventDefault();
+    const c = {
+      id: Date.now().toString(36),
+      name: collectionName.trim().slice(0, 40) || "My collection",
+      items: [...picked],
+    };
+    collections = [...collections, c];
+    naming = false;
+    picked = [];
+    selecting = false;
+    shelf = `col:${c.id}`;
+    workbench.notify(`Saved the collection "${c.name}".`);
+  }
+
+  // Articles: several sources, the reader, and a reading mode.
   let articles = $state.raw<Article[]>([]);
   let loadState = $state<"idle" | "loading" | "ready" | "failed">("idle");
+  let articleSource = $state<string>("mql5");
   let section = $state<string | null>(null);
   let openId = $state<number | null>(null);
   let text = $state<ArticleText | null>(null);
   let textFor = $state<number | null>(null);
+  let reading = $state(false);
   onMount(async () => {
     if (!demo) return;
     loadState = "loading";
@@ -155,20 +219,25 @@
   });
   $effect(() => {
     const id = openId;
-    if (id === null || id === textFor) return;
+    if (id === null || id === textFor || id < 0) return;
     textFor = id;
     text = null;
     loadArticleText(id).then((t) => {
       if (textFor === id) text = t;
     });
   });
+  const pool = $derived(
+    articleSource === "mql5"
+      ? articles
+      : OTHER_ARTICLES.filter((a) => a.source === articleSource),
+  );
   const sections = $derived.by(() => {
     const counts: Record<string, number> = {};
-    for (const a of articles) counts[a.section] = (counts[a.section] ?? 0) + 1;
+    for (const a of pool) counts[a.section] = (counts[a.section] ?? 0) + 1;
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   });
   const hits = $derived(
-    articles.filter(
+    pool.filter(
       (a) =>
         (!section || a.section === section) &&
         (!q ||
@@ -176,7 +245,19 @@
           a.summary.toLowerCase().includes(q)),
     ),
   );
-  const open = $derived(articles.find((a) => a.id === openId));
+  const open = $derived(
+    [...articles, ...OTHER_ARTICLES].find((a) => a.id === openId),
+  );
+  const countFor = (src: string) =>
+    src === "mql5"
+      ? articles.length
+      : OTHER_ARTICLES.filter((a) => a.source === src).length;
+  /** Open the main copilot with a message drafted (and the open article attached when reading). */
+  function explain(ask: string) {
+    if (open && mode === "articles") workbench.addRef(open.title, true);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve
+    goto(`${resolve("/copilot")}?ask=${encodeURIComponent(ask)}`);
+  }
 
   // Sources: open inside QMX.
   const sources = $derived(
@@ -192,8 +273,23 @@
   function pick(id: string) {
     shelf = id;
     selectedId = null;
+    reading = false;
   }
+  const showNav = $derived(navOpen && !reading);
 </script>
+
+{#snippet tick(on: boolean)}
+  <span
+    class={cn(
+      "absolute top-2 left-2 z-10 flex size-5 items-center justify-center rounded border-2 shadow",
+      on
+        ? "border-primary bg-primary text-primary-foreground"
+        : "border-white/80 bg-black/30",
+    )}
+    aria-hidden="true"
+    >{#if on}<Check class="size-3.5" />{/if}</span
+  >
+{/snippet}
 
 {#snippet itemList(list: LibraryItem[])}
   {#if view === "cards"}
@@ -202,32 +298,27 @@
       style="grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr))"
     >
       {#each list as i (i.id)}
-        <li>
+        {@const on = selecting ? picked.includes(i.id) : selected?.id === i.id}
+        <li class="relative">
+          {#if selecting}{@render tick(picked.includes(i.id))}{/if}
           {#if i.entity}
             <div
               role="button"
               tabindex="0"
-              class={cn(
-                "h-full rounded-xl",
-                selected?.id === i.id && "ring-primary ring-2",
-              )}
-              aria-pressed={selected?.id === i.id}
-              onclick={() => (selectedId = i.id)}
+              class={cn("h-full rounded-xl", on && "ring-primary ring-2")}
+              aria-pressed={on}
+              onclick={() => choose(i.id)}
               onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  selectedId = i.id;
+                  choose(i.id);
                 }
               }}
             >
               <EntityCard entity={i.entity} compact tint={familyColor(i)} />
             </div>
           {:else}
-            <ItemCard
-              item={i}
-              selected={selected?.id === i.id}
-              onselect={() => (selectedId = i.id)}
-            />
+            <ItemCard item={i} selected={on} onselect={() => choose(i.id)} />
           {/if}
         </li>
       {/each}
@@ -236,16 +327,27 @@
     <ul class="flex flex-col">
       {#each list as i (i.id)}
         {@const s = shelfById(i.shelf)!}
+        {@const on = selecting ? picked.includes(i.id) : selected?.id === i.id}
         <li>
           <button
             type="button"
             class={cn(
               "hover:bg-muted/60 flex w-full items-center gap-3 border-b px-2 py-2 text-left",
-              selected?.id === i.id && "bg-muted",
+              on && "bg-muted",
             )}
-            aria-pressed={selected?.id === i.id}
-            onclick={() => (selectedId = i.id)}
+            aria-pressed={on}
+            onclick={() => choose(i.id)}
           >
+            {#if selecting}
+              <span
+                class={cn(
+                  "flex size-4 shrink-0 items-center justify-center rounded border",
+                  on && "border-primary bg-primary text-primary-foreground",
+                )}
+                aria-hidden="true"
+                >{#if on}<Check class="size-3" />{/if}</span
+              >
+            {/if}
             <span
               class="h-7 w-1 shrink-0 rounded-full"
               style="background:{familyColor(i)}"
@@ -267,7 +369,7 @@
                 >{i.stage}</span
               >{/if}
             <span
-              class="text-muted-foreground num hidden w-32 shrink-0 truncate text-right text-xs @[28rem]:inline"
+              class="text-muted-foreground hidden w-32 shrink-0 truncate text-right text-xs @[28rem]:inline"
               >{i.starts
                 ? "Template"
                 : [...new Set(i.uses.map((u) => u.place))].join(", ") ||
@@ -278,6 +380,29 @@
       {/each}
     </ul>
   {/if}
+{/snippet}
+
+{#snippet navButton(
+  id: string,
+  label: string,
+  Icon: Component,
+  n: number | string,
+  note = "",
+)}
+  <button
+    type="button"
+    class={cn(
+      "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+      shelf === id && "bg-muted font-medium",
+    )}
+    title={note || label}
+    aria-current={shelf === id ? "true" : undefined}
+    onclick={() => pick(id)}
+  >
+    <Icon class="text-muted-foreground size-4 shrink-0" />
+    <span class="min-w-0 flex-1 truncate">{label}</span>
+    <span class="num text-muted-foreground text-xs">{n}</span>
+  </button>
 {/snippet}
 
 <div class="flex h-full flex-col">
@@ -292,6 +417,15 @@
     </div>
   {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={navOpen ? "Hide shelves" : "Show shelves"}
+      title={navOpen ? "Hide shelves" : "Show shelves"}
+      aria-pressed={navOpen}
+      onclick={() => (navOpen = !navOpen)}
+      >{#if navOpen}<PanelLeftClose />{:else}<PanelLeftOpen />{/if}</Button
+    >
     <h1 class="flex items-center gap-2 text-base font-semibold">
       <Library class="size-4" />Library
     </h1>
@@ -308,6 +442,15 @@
     </div>
     <div class="ml-auto flex items-center gap-1.5">
       {#if mode === "items"}
+        <Button
+          variant={selecting ? "secondary" : "ghost"}
+          size="sm"
+          aria-pressed={selecting}
+          onclick={() => {
+            selecting = !selecting;
+            picked = [];
+          }}><ListChecks />{selecting ? "Done" : "Select"}</Button
+        >
         <div
           class="bg-muted flex rounded-md p-0.5"
           role="radiogroup"
@@ -326,7 +469,7 @@
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground",
               )}
-              onclick={() => setView(v)}><Icon class="size-4" /></button
+              onclick={() => (view = v)}><Icon class="size-4" /></button
             >
           {/each}
         </div>
@@ -348,10 +491,8 @@
               )}><Upload />Import a file</DropdownMenu.Item
           >
           <DropdownMenu.Item
-            onclick={() =>
-              workbench.notify(
-                "Ask the copilot to make anything (a bot, a pod, a scenario, a mini app); what it makes is saved here.",
-              )}><Sparkles />Ask the copilot</DropdownMenu.Item
+            onclick={() => explain("Make me something new for the Library: ")}
+            ><Sparkles />Ask the copilot</DropdownMenu.Item
           >
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -366,63 +507,106 @@
       description="Items appear here once QMX is connected to its daemon."
     />
   {:else}
-    {#key mode}
+    {#key `${mode}-${showNav}`}
       <Resizable.PaneGroup direction="horizontal" class="scrim min-h-0 flex-1">
-        <Resizable.Pane defaultSize={15} minSize={11} maxSize={24}>
-          <nav
-            aria-label="Shelves"
-            class="bg-panel flex h-full flex-col gap-3 overflow-auto p-2"
-          >
-            <button
-              type="button"
-              class={cn(
-                "hover:bg-muted flex items-center justify-between rounded-md px-2 py-1.5 text-sm",
-                shelf === "everything" && "bg-muted font-medium",
-              )}
-              onclick={() => pick("everything")}
-              >Everything<span class="num text-muted-foreground text-xs"
-                >{LIBRARY.filter((i) => i.shelf !== "sources").length}</span
-              ></button
+        {#if showNav}
+          <Resizable.Pane defaultSize={15} minSize={11} maxSize={24}>
+            <nav
+              aria-label="Shelves"
+              class="bg-panel flex h-full flex-col gap-2 overflow-auto p-2"
             >
-            {#each SHELF_GROUPS as g (g.label)}
-              <div>
-                <p class="text-muted-foreground mb-1 px-2 text-xs">{g.label}</p>
-                {#each g.shelves as s (s.id)}
+              {@render navButton(
+                "everything",
+                "Everything",
+                Library,
+                LIBRARY.filter((i) => i.shelf !== "sources").length,
+              )}
+              {#each SHELF_GROUPS as g (g.label)}
+                {@const shut = folded.includes(g.label)}
+                <div class="bg-muted/25 rounded-lg border border-transparent">
                   <button
                     type="button"
-                    class={cn(
-                      "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                      shelf === s.id && "bg-muted font-medium",
-                    )}
-                    title={s.note}
-                    aria-current={shelf === s.id ? "true" : undefined}
-                    onclick={() => pick(s.id)}
+                    class="hover:text-foreground text-muted-foreground flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold"
+                    aria-expanded={!shut}
+                    onclick={() =>
+                      (folded = shut
+                        ? folded.filter((x) => x !== g.label)
+                        : [...folded, g.label])}
                   >
-                    <s.icon class="text-muted-foreground size-4 shrink-0" />
-                    <span class="min-w-0 flex-1 truncate">{s.label}</span>
-                    <span class="num text-muted-foreground text-xs"
-                      >{s.id === "articles"
-                        ? articles.length || ""
-                        : countOf(s.id)}</span
-                    >
+                    <g.icon class="size-3.5" />
+                    <span class="flex-1">{g.label}</span>
+                    <ChevronRight
+                      class={cn(
+                        "size-3.5 transition-transform",
+                        !shut && "rotate-90",
+                      )}
+                    />
                   </button>
-                {/each}
-              </div>
-            {/each}
-          </nav>
-        </Resizable.Pane>
-        <Resizable.Handle />
+                  {#if !shut}
+                    <div class="px-1 pb-1">
+                      {#each g.shelves as s (s.id)}
+                        {@render navButton(
+                          s.id,
+                          s.label,
+                          s.icon,
+                          s.id === "articles"
+                            ? articles.length + OTHER_ARTICLES.length || ""
+                            : countOf(s.id),
+                          s.note,
+                        )}
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+              {#if collections.length}
+                <div class="bg-muted/25 rounded-lg px-1 pb-1">
+                  <p
+                    class="text-muted-foreground flex items-center gap-2 px-1 py-2 text-xs font-semibold"
+                  >
+                    <FolderHeart class="size-3.5" />Your collections
+                  </p>
+                  {#each collections as c (c.id)}
+                    {@render navButton(
+                      `col:${c.id}`,
+                      c.name,
+                      FolderHeart,
+                      c.items.length,
+                    )}
+                  {/each}
+                </div>
+              {/if}
+            </nav>
+          </Resizable.Pane>
+          <Resizable.Handle />
+        {/if}
 
         {#if mode === "items"}
-          <Resizable.Pane defaultSize={47} minSize={28}>
+          <Resizable.Pane defaultSize={showNav ? 47 : 58} minSize={28}>
             <section aria-label="Items" class="@container flex h-full flex-col">
-              <p
-                class="text-muted-foreground flex h-9 shrink-0 items-center border-b px-3 text-xs"
+              <div
+                class="text-muted-foreground flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs"
               >
-                {shelf === "everything"
-                  ? `${items.length} items on every shelf`
-                  : `${items.length} · ${shelfById(shelf)?.note}`}
-              </p>
+                <span class="truncate"
+                  >{collection
+                    ? `${items.length} in ${collection.name}`
+                    : shelf === "everything"
+                      ? `${items.length} items on every shelf`
+                      : `${items.length} · ${shelfById(shelf)?.note}`}</span
+                >
+                {#if collection}
+                  <button
+                    type="button"
+                    class="hover:text-destructive ml-auto flex items-center gap-1"
+                    onclick={() => {
+                      collections = collections.filter(
+                        (c) => c.id !== collection.id,
+                      );
+                      pick("everything");
+                    }}><Trash2 class="size-3.5" />Delete collection</button
+                  >
+                {/if}
+              </div>
               <div class="min-h-0 flex-1 overflow-auto p-3">
                 {#if !items.length}
                   <EmptyState
@@ -452,10 +636,40 @@
                   {@render itemList(items)}
                 {/if}
               </div>
+              {#if selecting}
+                <div
+                  class="bg-panel flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+                >
+                  <span class="text-sm font-medium">{picked.length} picked</span
+                  >
+                  <Button
+                    size="sm"
+                    disabled={!picked.length}
+                    onclick={addPicked}
+                    ><MessageSquarePlus />Add to copilot</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!picked.length}
+                    onclick={() => {
+                      collectionName = "";
+                      naming = true;
+                    }}><FolderHeart />Save as a collection</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="ml-auto"
+                    onclick={() => (picked = items.map((i) => i.id))}
+                    >Pick all {items.length}</Button
+                  >
+                </div>
+              {/if}
             </section>
           </Resizable.Pane>
           <Resizable.Handle />
-          <Resizable.Pane defaultSize={38} minSize={26}>
+          <Resizable.Pane defaultSize={showNav ? 38 : 42} minSize={26}>
             <aside class="bg-panel h-full" aria-label="Selected item">
               {#if selected}
                 <ItemInspector item={selected} />
@@ -470,63 +684,101 @@
             </aside>
           </Resizable.Pane>
         {:else if mode === "articles"}
-          <Resizable.Pane defaultSize={26} minSize={18}>
-            <section aria-label="Articles" class="flex h-full flex-col">
-              <div class="flex h-9 shrink-0 items-center gap-2 border-b px-3">
-                <select
-                  class="h-7 max-w-full min-w-0 flex-1 rounded-md border px-2 text-xs"
-                  aria-label="Section"
-                  value={section ?? ""}
-                  onchange={(e) =>
-                    (section = (e.target as HTMLSelectElement).value || null)}
-                >
-                  <option value="">All sections ({articles.length})</option>
-                  {#each sections as [name, n] (name)}<option value={name}
-                      >{name} ({n})</option
-                    >{/each}
-                </select>
-                <span
-                  class="text-muted-foreground num shrink-0 text-xs"
-                  role="status"
-                  >{#if loadState === "loading"}Loading…{:else if loadState === "failed"}Failed{:else}{hits.length}{/if}</span
-                >
-              </div>
-              <ul class="min-h-0 flex-1 overflow-auto">
-                {#each hits.slice(0, 200) as a (a.id)}
-                  <li>
-                    <button
-                      type="button"
-                      class={cn(
-                        "hover:bg-muted/60 flex w-full flex-col border-b px-3 py-2.5 text-left",
-                        openId === a.id && "bg-muted",
-                      )}
-                      aria-current={openId === a.id ? "true" : undefined}
-                      onclick={() => (openId = a.id)}
+          {#if !reading}
+            <Resizable.Pane defaultSize={showNav ? 26 : 30} minSize={18}>
+              <section aria-label="Articles" class="flex h-full flex-col">
+                <div class="flex shrink-0 flex-col gap-1.5 border-b p-2">
+                  <select
+                    class="h-7 w-full rounded-md border px-2 text-xs"
+                    aria-label="Source"
+                    bind:value={articleSource}
+                    onchange={() => (section = null)}
+                  >
+                    {#each ARTICLE_SOURCES as s (s.id)}<option value={s.id}
+                        >{s.name} ({countFor(s.id)})</option
+                      >{/each}
+                  </select>
+                  <div class="flex items-center gap-2">
+                    <select
+                      class="h-7 min-w-0 flex-1 rounded-md border px-2 text-xs"
+                      aria-label="Section"
+                      value={section ?? ""}
+                      onchange={(e) =>
+                        (section =
+                          (e.target as HTMLSelectElement).value || null)}
                     >
-                      <span
-                        class="line-clamp-2 text-sm leading-snug font-medium"
-                        >{a.title}</span
+                      <option value="">All sections</option>
+                      {#each sections as [name, n] (name)}<option value={name}
+                          >{name} ({n})</option
+                        >{/each}
+                    </select>
+                    <span
+                      class="text-muted-foreground num shrink-0 text-xs"
+                      role="status"
+                      >{#if articleSource === "mql5" && loadState === "loading"}Loading…{:else if articleSource === "mql5" && loadState === "failed"}Failed{:else}{hits.length}{/if}</span
+                    >
+                  </div>
+                </div>
+                {#if !hits.length && articleSource !== "mql5"}
+                  <EmptyState
+                    class="flex-1"
+                    icon={BookOpen}
+                    title="Nothing from this source yet"
+                    description={ARTICLE_SOURCES.find(
+                      (s) => s.id === articleSource,
+                    )?.note}
+                  />
+                {/if}
+                <ul class="min-h-0 flex-1 overflow-auto">
+                  {#each hits.slice(0, 200) as a (a.id)}
+                    <li>
+                      <button
+                        type="button"
+                        class={cn(
+                          "hover:bg-muted/60 flex w-full flex-col border-b px-3 py-2.5 text-left",
+                          openId === a.id && "bg-muted",
+                        )}
+                        aria-current={openId === a.id ? "true" : undefined}
+                        onclick={() => (openId = a.id)}
                       >
-                      <span class="text-muted-foreground mt-0.5 text-xs"
-                        ><span class="num">{a.published}</span> · {a.section}{#if a.part}
-                          · Part {a.part}{/if}</span
-                      >
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            </section>
-          </Resizable.Pane>
-          <Resizable.Handle />
-          <Resizable.Pane defaultSize={59} minSize={34}>
+                        <span
+                          class="line-clamp-2 text-sm leading-snug font-medium"
+                          >{a.title}</span
+                        >
+                        <span class="text-muted-foreground mt-0.5 text-xs"
+                          ><span class="num">{a.published}</span> · {a.section}{#if a.part}
+                            · Part {a.part}{/if}</span
+                        >
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            </Resizable.Pane>
+            <Resizable.Handle />
+          {/if}
+          <Resizable.Pane
+            defaultSize={reading ? 100 : showNav ? 59 : 70}
+            minSize={34}
+          >
             {#if open}
               <article class="bg-panel @container flex h-full flex-col">
-                <header class="flex flex-col gap-2 border-b px-6 py-4">
+                <header
+                  class={cn(
+                    "flex flex-col gap-2 border-b px-6 py-4",
+                    reading && "mx-auto w-full max-w-6xl",
+                  )}
+                >
                   <p class="text-muted-foreground text-xs">
                     {open.section}{open.series ? ` · ${open.series}` : ""} ·
                     <span class="num">{open.published}</span>
                   </p>
-                  <h2 class="text-xl leading-snug font-semibold">
+                  <h2
+                    class={cn(
+                      "leading-snug font-semibold",
+                      reading ? "text-3xl" : "text-xl",
+                    )}
+                  >
                     {open.title}
                   </h2>
                   <div class="flex flex-wrap items-center gap-2">
@@ -539,17 +791,27 @@
                       size="sm"
                       variant="outline"
                       onclick={() =>
-                        workbench.notify(
-                          "The Article to hypothesis workflow pulls testable claims and drafts a hypothesis citing this article. Needs the daemon.",
+                        explain(
+                          "Use the Article to hypothesis workflow on this article: pull the testable claims and draft a hypothesis that cites it.",
                         )}><Lightbulb /> Turn into hypothesis</Button
                     >
                     <Button
                       size="sm"
-                      variant="ghost"
-                      href={resolve("/library/article/[id]", {
-                        id: String(open.id),
-                      })}><Maximize2 /> Full page</Button
+                      variant={reading ? "secondary" : "ghost"}
+                      aria-pressed={reading}
+                      onclick={() => (reading = !reading)}
+                      >{#if reading}<Minimize2 /> Leave reading mode{:else}<BookOpenText
+                        /> Reading mode{/if}</Button
                     >
+                    {#if open.id > 0}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        href={resolve("/library/article/[id]", {
+                          id: String(open.id),
+                        })}><Maximize2 /> Full page</Button
+                      >
+                    {/if}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -560,75 +822,90 @@
                     >
                   </div>
                 </header>
-                <div
-                  class="grid min-h-0 flex-1 grid-cols-1 overflow-auto @[56rem]:grid-cols-[minmax(0,1fr)_17rem]"
-                >
-                  <div class="min-w-0 px-6 py-5">
-                    {#if text === null}
-                      <div class="flex flex-col gap-2">
-                        <Skeleton class="h-4 w-full" /><Skeleton
-                          class="h-4 w-11/12"
-                        /><Skeleton class="h-32 w-full" />
-                      </div>
-                    {:else if text.status === "no-text"}
-                      <p class="text-muted-foreground text-sm">
-                        Full text comes from the daemon's Library. For this
-                        demo, start the preview with QMX_DEMO_MQL5_DIR set.
-                      </p>
-                    {:else}
-                      <!-- Sanitised with DOMPurify in loadArticleText. -->
-                      <div class="prose-qmx max-w-[78ch]">
-                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                        {@html text.html}
-                      </div>
-                    {/if}
-                  </div>
-                  <aside
-                    class="flex flex-col gap-4 border-t px-5 py-5 @[56rem]:border-t-0 @[56rem]:border-l"
+                <div class="min-h-0 flex-1 overflow-auto">
+                  <div
+                    class={cn(
+                      "grid grid-cols-1 @[56rem]:grid-cols-[minmax(0,1fr)_17rem]",
+                      reading && "mx-auto max-w-6xl",
+                    )}
                   >
-                    <section>
-                      <h3
-                        class="mb-1 flex items-center gap-1.5 text-sm font-medium"
-                      >
-                        <Sparkles class="size-3.5" /> Key points
-                      </h3>
-                      <p class="text-muted-foreground text-sm">
-                        {open.summary}
-                      </p>
-                      <p class="text-muted-foreground mt-1 text-xs">
-                        A small model on the daemon writes real key points and
-                        testable claims. Shown: the article's opening.
-                      </p>
-                    </section>
-                    {#if text && text.status !== "no-text" && text.figures.length}
-                      <section>
-                        <h3 class="mb-1 text-sm font-medium">Figures</h3>
-                        <div class="grid grid-cols-2 gap-1.5">
-                          {#each text.figures.slice(0, 6) as src (src)}<img
-                              {src}
-                              alt=""
-                              loading="lazy"
-                              class="h-20 w-full rounded-md bg-white object-contain"
-                            />{/each}
+                    <div class="min-w-0 px-6 py-5">
+                      {#if open.id < 0}
+                        <p class="text-base leading-relaxed">{open.summary}</p>
+                        <p class="text-muted-foreground mt-3 text-sm">
+                          Full text arrives through the daemon from {ARTICLE_SOURCES.find(
+                            (s) => s.id === open.source,
+                          )?.name}.
+                        </p>
+                      {:else if text === null}
+                        <div class="flex flex-col gap-2">
+                          <Skeleton class="h-4 w-full" /><Skeleton
+                            class="h-4 w-11/12"
+                          /><Skeleton class="h-32 w-full" />
                         </div>
+                      {:else if text.status === "no-text"}
+                        <p class="text-muted-foreground text-sm">
+                          Full text comes from the daemon's Library. For this
+                          demo, start the preview with QMX_DEMO_MQL5_DIR set.
+                        </p>
+                      {:else}
+                        <div
+                          class={cn(
+                            "prose-qmx max-w-[78ch]",
+                            reading && "text-[17px]",
+                          )}
+                        >
+                          <!-- Sanitised with DOMPurify in loadArticleText. -->
+                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                          {@html text.html}
+                        </div>
+                      {/if}
+                    </div>
+                    <aside
+                      class="flex flex-col gap-4 border-t px-5 py-5 @[56rem]:border-t-0 @[56rem]:border-l"
+                    >
+                      <section>
+                        <h3
+                          class="mb-1 flex items-center gap-1.5 text-sm font-medium"
+                        >
+                          <Sparkles class="size-3.5" /> Key points
+                        </h3>
+                        <p class="text-muted-foreground text-sm">
+                          {open.summary}
+                        </p>
                       </section>
-                    {/if}
-                    <section>
-                      <h3 class="mb-1 text-sm font-medium">Use it</h3>
-                      <ul
-                        class="text-muted-foreground flex flex-col gap-1 text-sm"
-                      >
-                        <li>
-                          Turn it into a hypothesis, then test it in the Lab.
-                        </li>
-                        <li>Add it to the copilot to ask about it.</li>
-                        <li>
-                          Diagrams of the method: planned (a cheap model draws
-                          them).
-                        </li>
-                      </ul>
-                    </section>
-                  </aside>
+                      <section>
+                        <h3 class="mb-1.5 text-sm font-medium">
+                          Explain it as
+                        </h3>
+                        <div class="grid grid-cols-2 gap-1.5">
+                          {#each EXPLAIN_AS as x (x.id)}
+                            <button
+                              type="button"
+                              class="hover:border-ring/60 hover:bg-muted/50 rounded-md border px-2 py-2 text-left text-sm"
+                              onclick={() => explain(x.ask)}>{x.label}</button
+                            >
+                          {/each}
+                        </div>
+                        <p class="text-muted-foreground mt-1.5 text-xs">
+                          The copilot makes it and saves it beside the article.
+                        </p>
+                      </section>
+                      {#if open.id > 0 && text && text.status !== "no-text" && text.figures.length}
+                        <section>
+                          <h3 class="mb-1 text-sm font-medium">Figures</h3>
+                          <div class="grid grid-cols-2 gap-1.5">
+                            {#each text.figures.slice(0, 6) as src (src)}<img
+                                {src}
+                                alt=""
+                                loading="lazy"
+                                class="h-20 w-full rounded-md bg-white object-contain"
+                              />{/each}
+                          </div>
+                        </section>
+                      {/if}
+                    </aside>
+                  </div>
                 </div>
               </article>
             {:else}
@@ -640,7 +917,7 @@
             {/if}
           </Resizable.Pane>
         {:else}
-          <Resizable.Pane defaultSize={27} minSize={18}>
+          <Resizable.Pane defaultSize={showNav ? 27 : 32} minSize={18}>
             <section aria-label="Sources" class="flex h-full flex-col">
               <ul class="shrink-0 border-b p-1.5">
                 {#each sources as s (s.id)}
@@ -695,14 +972,14 @@
                   class="w-full"
                   onclick={() =>
                     workbench.notify(
-                      "Add a feed, a site or a video channel; the daemon fetches it and files new items here.",
+                      "Add a feed, a site, a video channel or your clippings folder; the daemon fetches it and files new items here.",
                     )}><Plus />Add a source</Button
                 >
               </div>
             </section>
           </Resizable.Pane>
           <Resizable.Handle />
-          <Resizable.Pane defaultSize={58} minSize={30}>
+          <Resizable.Pane defaultSize={showNav ? 58 : 68} minSize={30}>
             <section aria-label="Browser" class="bg-panel flex h-full flex-col">
               <div class="flex items-center gap-2 border-b px-2 py-1.5">
                 <Button
@@ -753,3 +1030,29 @@
     {/key}
   {/if}
 </div>
+
+<Dialog.Root bind:open={naming}>
+  <Dialog.Content class="sm:max-w-md">
+    <form class="flex flex-col gap-4" onsubmit={saveCollection}>
+      <Dialog.Header>
+        <Dialog.Title>Save {picked.length} items as a collection</Dialog.Title>
+        <Dialog.Description
+          >It appears under Your collections. Hand the whole collection to the
+          copilot any time.</Dialog.Description
+        >
+      </Dialog.Header>
+      <Input
+        bind:value={collectionName}
+        maxlength={40}
+        placeholder="e.g. BTC breakout research"
+        aria-label="Collection name"
+      />
+      <Dialog.Footer>
+        <Button type="button" variant="ghost" onclick={() => (naming = false)}
+          >Cancel</Button
+        >
+        <Button type="submit">Save collection</Button>
+      </Dialog.Footer>
+    </form>
+  </Dialog.Content>
+</Dialog.Root>

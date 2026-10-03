@@ -9,6 +9,44 @@ Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each w
 
 ---
 
+## Operator review of Library pass 1 (2026-10-03, evening) — new requests
+
+Library (pass 2 built the first six):
+- [x] Journals are not a shelf: journal and logs sit inside bots, models and pods (inspector tab "Journal & logs").
+- [x] See the code of things (blocks, bots, pods, workflows, models, setups): inspector tab "Code", read only, "Edit in the Lab".
+- [x] Pick several items and hand them to the copilot together; keep them as a collection.
+- [x] Shelf groups stand out (banded, with icons) and fold; the whole shelf column can hide.
+- [x] Reading mode for articles and papers (list and shelves step away, bigger text).
+- [x] Articles from other sources (Obsidian clippings, arXiv, web pages) beside MQL5; "Explain it as" plain words, diagram, interactive page or explainer video (Karpathy post, 2026-10-02).
+- [x] "Ask the copilot" in + New opens the copilot with a drafted message (copilot page takes `?ask=`).
+- [ ] Firecrawl (including its Alexandria provider catalogue) as the web source and for scheduled scrapes. Operator may pay for it; nothing calls it until he approves (BACKEND).
+- [ ] The Library still lacks personality (an identity, an icon of its own).
+
+Copilot (next pass; operator: "needs a rethink"):
+- [ ] Rethink "aim this message at" (the target menu).
+- [ ] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot.
+- [ ] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation.
+- [ ] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app.
+- [ ] Terminal (look at shadcn's terminal component) and browser integration.
+- [ ] Rules for what the copilot builds in the UI (see "Copilot pass: rules" above), plus: new things load in place without restarting the app; heavy things load in the background.
+- [ ] The copilot designs components from shadcn (registry) or its own design style.
+
+Home (needs a full rethink):
+- [ ] Greeting; a customizable ticker (by hand or the copilot); a screener mini app; news; everything we've added since.
+
+Settings:
+- [ ] APIs and keys, trading servers, multiple exchange accounts and brokers, sources, MCP servers.
+- [ ] Compute page wastes space: the main card should fill or split the width.
+- [ ] Background art that is not only lines; more themes (editing already works).
+
+App-wide:
+- [ ] Start-up screen like Photoshop or PyCharm: QMX appears, then the world fills in slowly in the theme's colours. Loading states and a few deliberate animations.
+- [ ] Screen sizes: headers and panels must fit smaller screens (Portfolio header fixed; check every screen).
+- [ ] Fresh out of the box with no demo data: how every screen looks on day one (later, as its own pass).
+- [ ] Monitoring that keeps running when the laptop is off: scheduled jobs and watch workflows on a server, with logs and alerts; decide where they live (a "Automations" shelf of headless mini apps).
+- [ ] Live market data for charts (exchange streams through the backend); charting as a mini app.
+- [ ] New pod journey from scratch ("build my own").
+
 ## Library (operator priority 1: "needs a bloody redesign", "needs to connect to all the other parts")
 
 **Library pass 1 (2026-10-03) moved these:**

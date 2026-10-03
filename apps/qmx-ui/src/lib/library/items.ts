@@ -15,20 +15,26 @@ import AppWindow from "@lucide/svelte/icons/app-window";
 import LayoutTemplate from "@lucide/svelte/icons/layout-template";
 import FileChartColumn from "@lucide/svelte/icons/file-chart-column";
 import Radio from "@lucide/svelte/icons/radio";
-import NotebookPen from "@lucide/svelte/icons/notebook-pen";
 import Siren from "@lucide/svelte/icons/siren";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Database from "@lucide/svelte/icons/database";
 import FileBox from "@lucide/svelte/icons/file-box";
 import BookOpen from "@lucide/svelte/icons/book-open";
 import Rss from "@lucide/svelte/icons/rss";
+import ChartCandlestick from "@lucide/svelte/icons/chart-candlestick";
+import Play from "@lucide/svelte/icons/play";
+import ShieldCheck from "@lucide/svelte/icons/shield-check";
+import Inbox from "@lucide/svelte/icons/inbox";
+import GraduationCap from "@lucide/svelte/icons/graduation-cap";
 import { DEMO_ARTIFACTS, DEMO_ENTITIES } from "$lib/demo/assets";
 import { SOURCES } from "$lib/demo/feeds";
 import type { Entity } from "$lib/qmx/entities";
 import { ASSETS, RUNS } from "$lib/lab/demo";
 import {
   BLOCKS,
+  INTERVENTIONS,
   LAB_PODS,
+  PAPER_INTERVENTIONS,
   MY_STRESS,
   PAPER_RUNS,
   POD_TEMPLATES,
@@ -66,7 +72,6 @@ export type ShelfId =
   | "templates"
   | "reports"
   | "paper"
-  | "journals"
   | "scenarios"
   | "setups"
   | "datasets"
@@ -81,9 +86,14 @@ export type Shelf = {
   note: string;
 };
 
-export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
+export const SHELF_GROUPS: {
+  label: string;
+  icon: Component;
+  shelves: Shelf[];
+}[] = [
   {
     label: "Things that trade",
+    icon: ChartCandlestick,
     shelves: [
       {
         id: "bots",
@@ -113,6 +123,7 @@ export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
   },
   {
     label: "Things that run",
+    icon: Play,
     shelves: [
       {
         id: "workflows",
@@ -136,6 +147,7 @@ export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
   },
   {
     label: "Proof",
+    icon: ShieldCheck,
     shelves: [
       {
         id: "reports",
@@ -150,12 +162,6 @@ export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
         note: "Bots and pods on paper money",
       },
       {
-        id: "journals",
-        label: "Journals",
-        icon: NotebookPen,
-        note: "Every trade with notes",
-      },
-      {
         id: "scenarios",
         label: "Stress scenarios",
         icon: Siren,
@@ -165,6 +171,7 @@ export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
   },
   {
     label: "Inputs",
+    icon: Inbox,
     shelves: [
       {
         id: "setups",
@@ -188,6 +195,7 @@ export const SHELF_GROUPS: { label: string; shelves: Shelf[] }[] = [
   },
   {
     label: "Knowledge",
+    icon: GraduationCap,
     shelves: [
       {
         id: "articles",
@@ -223,6 +231,12 @@ export type LibraryItem = {
   /** Templates: what using it starts. */
   starts?: Use;
   details?: [string, string][];
+  /** Journal: what happened and why (trades, interventions, notes). */
+  journal?: { time: string; text: string; tone?: "good" | "bad" }[];
+  /** Machine logs, newest last. */
+  logs?: string[];
+  /** The item as code, read-only here; edit it in the Lab. */
+  code?: { lang: "python" | "yaml"; text: string };
 };
 
 /** Colour by family so a scalper never looks like a trend follower. */
@@ -243,7 +257,6 @@ export function familyColor(item: Pick<LibraryItem, "family" | "shelf">) {
         templates: "#a855f7",
         scenarios: "#dc2626",
         paper: "#f0a03a",
-        journals: "#4c8dff",
       } as Record<string, string>
     )[item.shelf] ?? "#64748b"
   );
@@ -576,15 +589,6 @@ function proofItems(): LibraryItem[] {
       uses: [portfolio("On the road to live", "road")],
     })),
   ];
-  const journals = Object.entries(JOURNAL).map(([id, notes]) => ({
-    id: `journal-${id}`,
-    shelf: "journals" as const,
-    name: `${PODS.flatMap((p) => p.bots).find((b) => b.id === id)?.name ?? CANDIDATES.find((c) => c.entity.id === id)?.entity.name ?? id} journal`,
-    summary: `${notes.length} entries, latest ${notes[0]?.time ?? ""}`,
-    family: "Journal",
-    updated: notes[0]?.time ?? "",
-    uses: [portfolio("Trading journal", "road")],
-  }));
   const scenarios = [
     ...STRESS.map((s) => ({ ...s, by: "Built in" })),
     ...MY_STRESS,
@@ -597,7 +601,7 @@ function proofItems(): LibraryItem[] {
     updated: s.by === "Built in" ? "Built in" : "Today",
     uses: [lab("On the stress board", "pod-test")],
   }));
-  return [...reports, ...paper, ...journals, ...scenarios];
+  return [...reports, ...paper, ...scenarios];
 }
 
 function inputItems(): LibraryItem[] {
@@ -719,3 +723,145 @@ export const LIBRARY: LibraryItem[] = [
 ];
 
 export const itemById = (id: string) => LIBRARY.find((i) => i.id === id);
+
+// Journals, logs and code live inside the things they belong to (operator,
+// 2026-10-03: "journals should be connected in bots, models or pods").
+const py = (lines: string[]) => lines.join("\n");
+
+function blockCode(b: (typeof BLOCKS)[number]): string {
+  const sig = {
+    inputs: "def read(market: Market) -> dict:",
+    guards: "def check(state: PodState) -> Verdict:",
+    allocator:
+      "def split(capital: float, bots: list[Bot]) -> dict[str, float]:",
+    sizer: "def size(entry: Entry, state: PodState) -> float:",
+    throttles: "def factor(state: PodState) -> float:  # 0.0 to 1.0",
+    caps: "def cap(order: Order, book: Exposure) -> Order:",
+    ledger: "def settle(fill: Fill, ledger: Ledger) -> Ledger:",
+  }[b.slot];
+  return py([
+    `# ${b.name}: ${b.what}`,
+    `# Setting: ${b.setting}. Pure: same inputs, same answer.`,
+    "",
+    sig,
+    `    ...  # the daemon shows the real body once wired`,
+  ]);
+}
+
+for (const item of LIBRARY) {
+  const e = item.entity;
+  if (item.shelf === "bots") {
+    const id = item.id;
+    item.journal = JOURNAL[id]
+      ? JOURNAL[id].map((n) => ({
+          time: n.time,
+          text:
+            n.r === undefined
+              ? n.text
+              : `${n.text} (${n.r > 0 ? "+" : ""}${n.r}R)`,
+          tone: n.r === undefined ? undefined : n.r >= 0 ? "good" : "bad",
+        }))
+      : (e?.journal ?? []).map((t) => ({
+          time: t.time,
+          text: `${t.side} ${t.symbol} ${t.entry} → ${t.exit}${t.note ? `: ${t.note}` : ""}`,
+          tone: t.pnl >= 0 ? ("good" as const) : ("bad" as const),
+        }));
+    item.logs = [
+      "09:55:02 signal  breakout above 64,150 (score 0.68)",
+      "09:55:02 sent    to pod for sizing",
+      "09:55:03 sized   $743.60 after correlation cap ×0.6",
+      "09:55:03 filled  0.01159 at 64,152.1, fee $0.74",
+    ];
+    item.code = {
+      lang: "python",
+      text: py([
+        `# ${item.name}: ${item.summary}`,
+        "# The bot decides when; the pod decides how much.",
+        "",
+        "def on_bar(bar: Bar, state: BotState) -> Signal | None:",
+        "    if breaks_out(bar, state.range) and state.score(bar) > 0.60:",
+        "        return Signal.buy(stop=bar.close - atr(bar, 14))",
+        "    return None",
+      ]),
+    };
+  } else if (item.shelf === "pods" && item.id.startsWith("lab-")) {
+    const pod = LAB_PODS.find((p) => `lab-${p.id}` === item.id)!;
+    item.journal = [...PAPER_INTERVENTIONS, ...INTERVENTIONS]
+      .filter((x) => x.pod === pod.name)
+      .map((x) => ({
+        time: x.time,
+        text: `${x.what} by ${x.by}`,
+        tone: x.what.startsWith("Stood") ? ("bad" as const) : undefined,
+      }));
+    item.code = {
+      lang: "yaml",
+      text: [
+        `pod: ${pod.name}`,
+        `version: ${pod.version}`,
+        "stack:",
+        ...SLOTS.map((s) => `  ${s.id}: [${pod.stack[s.id].join(", ")}]`),
+        "  venue_fit: always",
+      ].join("\n"),
+    };
+  } else if (item.shelf === "pods") {
+    item.journal = [
+      { time: "Today 10:12", text: "Refused an entry: volatility spike" },
+      {
+        time: "Yesterday",
+        text: "Paper side matched live within 0.4%",
+        tone: "good",
+      },
+      { time: "Sep 30", text: "You raised risk per trade to 0.5% (v3)" },
+    ];
+  } else if (item.shelf === "blocks") {
+    const b = BLOCKS.find((x) => `block-${x.id}` === item.id)!;
+    item.code = { lang: "python", text: blockCode(b) };
+  } else if (item.shelf === "models") {
+    item.logs = [
+      "epoch 1  train 0.684  valid 0.691",
+      "epoch 40 train 0.612  valid 0.655",
+      "fold 12/12 AUC 0.61 (±0.03)",
+      "leakage checks 6/6 pass",
+      "saved model file, fingerprint fp1:77f0…aa19",
+    ];
+    item.journal = [
+      {
+        time: "Today 12:08",
+        text: "Retrained on data to Sep 30",
+        tone: "good",
+      },
+      { time: "Sep 24", text: "You added funding rate as a feature" },
+    ];
+    item.code = {
+      lang: "yaml",
+      text: (e?.parameters ?? [])
+        .map(([k, v]) => `${k.toLowerCase().replaceAll(" ", "_")}: ${v}`)
+        .join("\n"),
+    };
+  } else if (item.shelf === "workflows" && e?.steps) {
+    item.code = {
+      lang: "yaml",
+      text: [
+        `workflow: ${item.name}`,
+        "steps:",
+        ...e.steps.map((s) => `  - ${s}`),
+      ].join("\n"),
+    };
+    item.logs = [
+      "02:00 started (schedule)",
+      ...e.steps.map(
+        (s, i) => `02:${String(3 + i * 4).padStart(2, "0")} ${s} ok`,
+      ),
+      "02:21 finished",
+    ];
+  } else if (item.shelf === "setups") {
+    item.code = {
+      lang: "yaml",
+      text: [
+        `name: ${item.name}`,
+        `kind: ${item.family}`,
+        `settings: ${item.summary}`,
+      ].join("\n"),
+    };
+  }
+}
