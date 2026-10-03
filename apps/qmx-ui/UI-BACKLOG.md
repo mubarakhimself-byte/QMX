@@ -1,3 +1,334 @@
+# Master backlog (rebuilt 2026-10-03 from a full transcript audit)
+
+This section is the working backlog. Order of passes (operator, 2026-10-03): Library, main Copilot, Home, Settings, Mini apps; Lab and Portfolio leftovers alongside. Older notes below it are kept for history; where they conflict, this section wins.
+
+Code checked: C:\Users\Mubarak\Desktop\QMX-worktrees\ui-review-repair\apps\qmx-ui\src (branch ui-review/repair, HEAD 9aadfc76, clean tree). Paths below are relative to that `src` folder.
+Sources read: all operator messages (user_msgs.txt), the seven question answers (2026-10-01 to 2026-10-03), the last message (2026-10-03 10:59: "You've forgotten about the library"), missed-requests.md, recovered.md, UI-BACKLOG.md, UI-LEDGER.md, BACKEND-REQUIREMENTS.md.
+Status words: NOT DONE, PARTLY, DONE, SUPERSEDED (a later message replaced it), UNCLEAR (not sure he meant it). Within each section the order is NOT DONE, PARTLY, DONE, SUPERSEDED, UNCLEAR.
+Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each with a live side and a paper side); spot crypto only (IC Markets, cTrader, CFDs, prop firms dropped); agent requests removed; Allocate folded into Lab Test as "Run together"; Lab has Strategies | Pods benches; the trading node is folded into Portfolio as Live; Home keeps the current rail; themes and background art stay everywhere (10-03 answer), the real fault was see-through panels.
+
+---
+
+## Library (operator priority 1: "needs a bloody redesign", "needs to connect to all the other parts")
+
+NOT DONE
+- [NOT DONE] Library must connect to every other part: Lab, Portfolio, main Copilot, Home, mini apps, templates, artifacts, bot cards, journal, evidence. — (2026-10-03, "It needs to be able to connect to all the other parts") — Today the links are one-way and thin: Lab Resources has one icon linking to the Library page (lib/lab/panels/ResourcesPanel.svelte:56), the Copilot "From Library…" attach item only navigates to the Library page instead of opening a picker (lib/workbench/copilot-context.ts:70-76), Portfolio bot cards (road to live) have no link to their Library entry (lib/portfolio/panels/RoadPanel.svelte:55), "Save to Library" is disabled (routes/copilot/+page.svelte:319). Ledger pass 6 lists no connection work at all.
+- [NOT DONE] Ask "how does the library connect to all this?" — show it, not just describe it. — (2026-10-03, "maybe how does the library connect to all this?") — No design or screen for it exists.
+- [NOT DONE] Whole Library redesign as its own one-screen pass (research, 2-3 layout options, build, click-through). — (2026-10-03, "the library is, I think, needing a bloody redesign") — Ledger pass 6 is "queued"; nothing started. Library layout is the same as round 5.
+- [NOT DONE] Reader should use the full width on large screens; text-heavy page wastes the right side. — (2026-10-02, "a lot of space on the left, like on the right") — Reader text is capped at max-w-3xl inside a 54% pane (routes/library/+page.svelte:340). Full-page reader (routes/library/article/[id]/+page.svelte:109) is centred at max-w-7xl with contents and side column, but the in-page reader is what he complained about.
+- [NOT DONE] Artifacts tab: items must open; it needs a whole rethink ("they don't even open and they are all awful"). — (2026-10-02, "artifacts, nah, I don't like this that much") — It is still a plain table whose rows are not clickable (routes/library/+page.svelte:457-493).
+- [NOT DONE] Saved configurations (test presets, model configs such as two gradient-boosting setups, feature sets, datasets) should live in the Library, probably under a different name than "artifacts". — (2026-10-01, "I think this is where artifacts were meant to come in") — Lab Resources holds "Saved tests", "Presets", "Datasets" (lib/lab/demo.ts ASSET_GROUPS) but the Library has no such kind and the Artifacts tab is still the old file table.
+- [NOT DONE] Card art colour by family (for example scalper = blue and gold), or let the operator edit card art as a preset. — (2026-10-02, "if it's a scalper, it can be like gold") — Cover colour is fixed per kind only (lib/qmx/CoverArt.svelte:5-10); `family` exists on entities (lib/qmx/entities.ts:80) but is not used for colour.
+- [NOT DONE] List view as well as card view for bots/models/apps. — (2026-10-02, "different views like list view or card view") — Only the card grid exists (routes/library/+page.svelte:507-519).
+- [NOT DONE] Templates in the Library (start from a template; most things will begin from templates). — (2026-10-03, "we are introducing templates in the library") — Ledger line "Library templates" is unchecked; nothing in routes/library.
+- [NOT DONE] Diagrams generated from articles, without AI or with a cheap model. — (2026-10-01, "maybe we could have some diagrams from them") — No diagram code anywhere; reader shows scraped figures only (routes/library/+page.svelte:325-337).
+- [NOT DONE] Videos as a source for hypothesis research ("from maybe videos to academic papers"). — (2026-10-01, "hypothesis research from maybe videos to academic papers") — Not in the Sources list (lib/demo/feeds.ts) or BACKEND-REQUIREMENTS.md.
+- [NOT DONE] Model detail page is poor: unused space and no function; app/workflow detail likewise. — (2026-10-02, "the actual detailed view is very poor") — routes/library/[id]/+page.svelte is the same first-cut tabs (Performance, Trading, Setup); no redesign pass yet.
+- [NOT DONE] Detail page vocabulary and links are out of date: still says "Book" and "node"; "Promote…" says approve on the trading node, which no longer exists. — (2026-10-03, "let's not call them books I guess let's call them pods") — routes/library/[id]/+page.svelte:128-136 and :292. Should link to Portfolio, Road to live.
+- [NOT DONE] Library items should show where they are used (which pods, nodes, paper results, backtest reports) and open their paper-trading and test reports. — (2026-10-01, "it's trading history paper trading results or trading backtesting reports") — Detail shows evidence runs, a journal and a connections list only for demo bots (routes/library/[id]/+page.svelte:234-312); no paper-results or report views.
+
+PARTLY
+- [PARTLY] Real article summaries (key points) and testable claims from a cheap model. — (2026-10-01, "I want to see if I can have a summary in there") — "Key points" box exists but just shows the article's opening excerpt (routes/library/+page.svelte:303-312); real summary is a backend item (BACKEND-REQUIREMENTS.md:61).
+- [PARTLY] Sources: arXiv, alphaXiv, SSRN, MQL5 as feeds/RSS. — (2026-10-01, "put them as an RSS feed") — Sources tab lists them with sample items only, labelled "Proposed · needs backend" (lib/demo/feeds.ts); you cannot add a source from the Library.
+- [PARTLY] In-house browser for sources instead of a pop-up, same styling. — (2026-10-01, "I would prefer if the browser is in-house, not a pop-up") — iframe pane built (routes/library/+page.svelte:441-449), but many sites refuse embedding (he saw this 2026-10-02) and the only fallback is a hint line and an "Outside QMX" button; scraping through Firecrawl is not designed.
+- [PARTLY] Omarchy-style: any site becomes an in-app "web app". — (2026-10-01, "he has apps where he can have browsers as apps") — Comment in feeds.ts only; no way to promote a site to an app.
+- [PARTLY] Turn an article into a hypothesis. — (2026-10-01 plan; button built) — Button exists but is disabled (routes/library/+page.svelte:277-285).
+- [PARTLY] Resources menu in the Lab as the quick menu into the Library, also holding artifacts and recently used indicators. — (2026-10-02, "artifacts also come here") — Resources has Items, Data, Machines, Slots tabs only (lib/lab/panels/ResourcesPanel.svelte:23-28); no artifacts, no recent indicators.
+- [PARTLY] Entity detail: denser, overlay instead of busy background, fewer tabs. — (2026-10-01, "I prefer like an overlay because the background is confusing me") — Done in first cut (scrim, 3-4 tabs); his 2026-10-02 verdict was still "poor" for models and apps (see NOT DONE).
+- [PARTLY] Apps & workflows: tighter layout, operations for headless apps. — (2026-10-01, "operations for these are what these are apps and workflows") — Cards are good and headless apps get an Operations tab (routes/library/[id]/+page.svelte:335-369), but Run buttons are disabled and the layout is not tightened.
+- [PARTLY] ML models look different from bots. — (2026-10-02, "I haven't seen any ML model") — Models are green, bots blue (lib/qmx/CoverArt.svelte:5-10); cards otherwise identical.
+- [PARTLY] Cover art for academic papers and articles like the model-release "college" style, possibly via JSON render. — (2026-10-01, "even in academic papers I don't know if that's possible") — Generated cover art exists for bots, models, apps and workflows only.
+- [PARTLY] Library layout, spacing and text size across all five tabs. — (2026-10-01, "the layout for the library, you haven't given it time") — Sections list and three-pane done; full pass not done.
+
+DONE
+- [DONE] Bot/model cards with named measures and plain definitions, no overall score. — (2026-10-01, "I'm not understanding what RET is") — lib/qmx/EntityCard.svelte:95-116.
+- [DONE] FIFA/FC-style player cards for bots, models, apps, workflows; also used in Copilot and Portfolio. — (2026-10-01, "the FIFA or FC card") — lib/qmx/EntityCard.svelte, routes/copilot/+page.svelte:378-392, lib/portfolio/panels/RoadPanel.svelte:55.
+- [DONE] Card variables change after an edit in chat (before/after). — (2026-10-01, "the card variables can change") — routes/copilot/+page.svelte:33-47 with `changed` highlight.
+- [DONE] Artifacts tab restored (he was shocked it was removed). — (2026-10-01, "that's why I was so shocked that you removed artifacts") — routes/library/+page.svelte:47 (but see NOT DONE: it must open).
+- [DONE] Knowledge: list | reader | side three-pane layout. — (2026-10-01, "the three window thing was far better") — routes/library/+page.svelte:169-352.
+- [DONE] Read the MQL5 articles in-house, with search and sections. — (2026-10-01, "I would like to just be able to read them") — routes/library/+page.svelte:169-352; full page at routes/library/article/[id]/+page.svelte.
+- [DONE] News moved from the Library to Home. — (2026-10-01, "news is not meant to be the library") — News widget in routes/home/+page.svelte:434.
+- [DONE] "Add to copilot" does something visible. — (2026-10-01, "when I click add to compiler, like nothing goes on") — routes/library/+page.svelte:274, workbench.addRef.
+- [DONE] Clicking a bot card in chat or on Home opens that exact version in the Library. — (2026-10-01, "a link that takes me straight to that version") — routes/copilot/+page.svelte:381; routes/home/+page.svelte:405.
+- [DONE] Back arrow on a detail page returns to the tab it came from. — (2026-10-02, "it takes me straight back to the library I don't know why") — routes/library/[id]/+page.svelte:52.
+- [DONE] Trading journal, connections and evidence inside a bot's detail. — (2026-10-01, "look at maybe tests ... the trading journal") — routes/library/[id]/+page.svelte:234-312.
+- [DONE] Mini apps without a UI are shown as "headless" with operations. — (2026-10-01, "mini apps that don't really have a UI") — lib/qmx/EntityCard.svelte:73; routes/library/[id]/+page.svelte:335.
+- [DONE] "Open in Lab" from a bot/model detail. — (implied by "connect to all the other parts") — routes/library/[id]/+page.svelte:123.
+
+UNCLEAR
+- [UNCLEAR] "How is QMB going to come in / how is a model running?" in the Library detail. — (2026-10-01, "I want to see a model running") — A terminal was added for models in an earlier round; unclear if he wants more.
+
+---
+
+## Copilot (main copilot chat)
+
+NOT DONE
+- [NOT DONE] Session column on the left must collapse by itself while keeping Browser/Terminal/Diff open (today only Focus mode hides it, and Focus also hides the work area). — (2026-10-02, "I want it to be able to collapse on its own") — routes/copilot/+page.svelte:178-227.
+- [NOT DONE] Sub-agent preview in the main copilot. — (2026-10-02, "You haven't also done the sub-agents preview") — Sub-agents appear only in the Lab Agents panel (lib/lab/panels/AgentsPanel.svelte) and Home Agents widget; nothing in routes/copilot.
+- [NOT DONE] Show how a message looks with an attached document, a Library item, or a mini-app item. — (2026-10-02, "I want to see how a message looks like when I attach") — Attachments show only as chips in the composer (lib/workbench/Composer.svelte:82-100); no message shows one.
+- [NOT DONE] "New session" and "Search sessions" buttons work. — (implied by sessions list) — Both are disabled (routes/copilot/+page.svelte:184, :195).
+- [NOT DONE] Sessions that run for days, using sub-agents (replaces agent requests). — (2026-10-03, "that session can run for days") — No long-running session state, progress or sub-agent tree in the session list. Ledger says "Copilot pass".
+- [NOT DONE] Main copilot can take in a conversation from another screen (for example a Lab chat), and its changes show live there, even with the Lab popped out on a second monitor. — (2026-10-03, "I can bring in conversations from other pages") — No bring-in action, no Lab pop-out (only the copilot has pop-out, routes/copilot/+page.svelte:55).
+- [NOT DONE] Built-in help or guide ("how do I train something new?"). — (2026-10-03, "some sort of helping thing feature") — Only the three copilot-led walks exist (lib/lab/guides.ts); no general help.
+- [NOT DONE] Copilot builds whole mini apps and workflows from the component library through skills, not just widgets. — (2026-10-01, "the copilot in the chat is meant to be able to build all mini apps") — No flow; component spec catalog exists (lib/qmx/catalog.ts, routes/gallery).
+- [NOT DONE] Rules for anything the copilot creates: only catalog components, declared size range, checked at smallest size, draft preview you keep or discard, no overflow. — (2026-10-03, "How do we prevent overflows? How do we prevent buggings?") — Eight open items in UI-BACKLOG.md "Copilot pass"; none built.
+- [NOT DONE] Stress-test the UI across many failure scenarios because the copilot inherits any inconsistency. — (2026-10-01, "we need to really consider multiple scenarios") — Open in backlog.
+- [NOT DONE] Target menu: think through failure cases. — (2026-10-01, "there are lots of issues that can come from it") — Open; menu shows readiness axes (lib/workbench/copilot-context.ts:56-68) but no failure handling.
+- [NOT DONE] Update shadcn-svelte components and document which ones the copilot may use. — (2026-10-03, "we have to update components") — Open in backlog.
+
+PARTLY
+- [PARTLY] Copilot can create a new widget from JSON render and the flow front-to-back is shown. — (2026-10-02, "I want to see how the co-pilot can create a new widget") — "Build a new panel…" only shows a message (routes/lab/+page.svelte:305-307, routes/portfolio/+page.svelte:199); widget board "Add widget" adds from a fixed list.
+- [PARTLY] Copilot understands what each mini app does and does not do. — (2026-10-01, "this mini app does this this mini app doesn't do this") — Target list shows each target's operations and five readiness checks (lib/workbench/copilot-context.ts:56-68); the app declaring its own tools is only wired for Lab and Portfolio.
+- [PARTLY] Attach: from the Library, upload a file, per-context sources. — (2026-10-02, "attach also needs a rethink") — Per-context attach sources exist (Composer.svelte:120-150); Library attach just navigates away, upload says "needs daemon".
+- [PARTLY] Sub-agents, workflow agents and copilots all visible (QMA's three kinds). — (2026-10-01, "three types of agents") — Lab and Home show quants and sub-agents with states; not in the main copilot.
+- [PARTLY] Copilot-led "Start something new" using question cards, then it switches Lab layouts. — (2026-10-03, "we start just as a co-pilot session") — Built (routes/copilot/+page.svelte:232, lib/workbench/GuidedStart.svelte, lib/lab/LabStrips.svelte); the copilot does not yet act on its own, which needs backend skills and hooks.
+- [PARTLY] Save a chat result to the Library. — (implied) — Button present but disabled (routes/copilot/+page.svelte:319).
+
+DONE
+- [DONE] Copilot input: no focus box, grows with text then scrolls. — (2026-10-01, "I don't know why there is a box that forms") — lib/workbench/Composer.svelte:112-117.
+- [DONE] Model picker in the chat box. — (2026-10-01, "I haven't seen a model picker") — lib/workbench/Composer.svelte:45-48.
+- [DONE] Model choice also lives in Settings, set per copilot. — (2026-10-01, "model selection actually is meant to be inside the settings") — routes/settings/+page.svelte (Models tab, default model per copilot).
+- [DONE] Pop-out copilot to a bigger screen or new window. — (2026-10-01, "detached to a bigger screen") — routes/copilot/+page.svelte:55-61, Focus mode.
+- [DONE] Tools, Target, Attach and messaging differ per context (main, Lab, Portfolio). — (2026-10-02, "tools in every mini app are not going to be the same") — lib/workbench/copilot-context.ts, lib/lab/copilot.ts, lib/portfolio/copilot.ts.
+- [DONE] App copilot has multiple sessions with history and its own settings (VS Code style header). — (2026-10-02, "multiple sessions in application co-pilot") — lib/workbench/CopilotColumn.svelte:60-117.
+- [DONE] Composer icons with count badges, no Offline label, better new-session empty state. — (2026-10-02, "Things like tools, you can just use an icon") — Composer.svelte:70-73.
+- [DONE] Copilot settings link to Settings (agents and models). — (2026-10-02, "Settings for the copilot, it should take us straight to settings") — ledger L12, CopilotColumn.svelte:117.
+- [DONE] A chat session demo with tool calls, result table and a preview tab. — (2026-10-01, "I would like to see a chat session") — routes/copilot/+page.svelte:234-395.
+- [DONE] "Add to copilot" on widgets shows a chip and a toast. — (2026-10-01, "Can I add it to chat? Bloody hell") — WidgetFrame onmessage; workbench.addRef.
+
+SUPERSEDED
+- [SUPERSEDED] Agent requests inside Portfolio. — (2026-10-03 10:01, "agent requests, again, seems like a very irrelevant tab") — Removed; replaced by long-running copilot sessions (see NOT DONE).
+
+---
+
+## Home
+
+NOT DONE
+- [NOT DONE] Add your own tabs so Home is your dashboard. — (2026-10-02, "I want to be able to add new tabs") — Views fixed to Today, Markets, Agents (routes/home/+page.svelte:225-243); WidgetBoard has no "add view" (lib/workbench/board.svelte.ts).
+- [NOT DONE] Notifications area at the top for things needing attention. — (2026-10-02, "give it some spacing on top") — None; approvals live in a widget only.
+- [NOT DONE] Drop the word "Home" in the header, keep the ticker. — (2026-10-02, "we don't need this home word") — Header still prints it (lib/workbench/MiniAppShell.svelte:102; routes/home/+page.svelte:320).
+- [NOT DONE] Home tabs are previews that link through to the full pages (Markets to Portfolio, Agents, main Copilot). — (2026-10-02, "markets ... can connect the portfolio page agents main co-pilot") — Only the brief cards and pipeline cards link out.
+- [NOT DONE] "While you were away" must carry many parallel jobs (for example nine models training on a GPU provider). — (2026-10-02, "this thing will not give me enough information") — Three fixed brief cards and four jobs (routes/home/+page.svelte:61-105).
+- [NOT DONE] Minimising a widget must free its space (it docks at the bottom, others fill up). — (2026-10-02, "protection goes all the way to the bottom and the top fills up") — Done in Lab/Portfolio tiling, not on Home, which still uses the older grid where a minimised card only shrinks in place (lib/workbench/MiniAppShell.svelte:160-169).
+- [NOT DONE] Tiling quality for the Markets view. — (2026-10-02, "the tiling is very poor") — Same old grid; no tiling engine on Home.
+- [NOT DONE] Home on spot crypto with many accounts (Binance, Coinbase, Bybit) and a Markets view for one specific broker. — (2026-10-02, "crypto can have more than one broker") — Home still shows FX demo data, "Paper · 3 books", and promotions to "book FX-P" (routes/home/+page.svelte:21-47, :292); ledger says "Home still FX: next".
+- [NOT DONE] Agents view and News widget use their space (news too thin, empty space below). — (2026-10-02, "why would news be this thin") — Same widgets as round 5; no change recorded.
+- [NOT DONE] Richer approval flow in the review dialog. — (2026-10-01, "I don't know if I can do better") — Open in backlog.
+- [NOT DONE] Templates on Home. — (2026-10-03, "even the home section") — None.
+
+PARTLY
+- [PARTLY] Rename Books to Pods everywhere. — (2026-10-03, "let's call them pods") — Done in Portfolio and Lab; Home, Library detail and Settings still say books.
+
+DONE
+- [DONE] Remove the sidebar from Home. — (2026-10-01, "remove that bloody sidebar on the home page") — Home uses no sidebar (routes/home/+page.svelte:320).
+- [DONE] Dashboard grid of widgets with minimise, expand, add widget, edit layout. — (2026-10-01, "think of it like a dashboard") — lib/workbench/MiniAppShell.svelte, WidgetFrame.
+- [DONE] Live equity next to paper equity. — (2026-10-01, "Live equity, there is nothing") — routes/home/+page.svelte:285-310.
+- [DONE] Strategy pipeline columns scroll and expand. — (2026-10-01, "they're not scrollable, they don't expand") — routes/home/+page.svelte:395-440.
+- [DONE] News on Home with filters. — (2026-10-01, "news ... meant to be on the home page") — routes/home/+page.svelte:434-473.
+- [DONE] Live trade ticker; Sydney/Tokyo/London clocks removed. — (2026-10-01, "maybe we can have also a live trade ticker") — lib/qmx/TickerTape.svelte; no session clocks in code.
+- [DONE] Fresh-install "Get started" board instead of empty boxes. — (2026-10-01, "most of these things ... likely not be populated") — routes/home/+page.svelte:215-243.
+- [DONE] Waiting-for-you review pop-up. — (2026-10-01, "the pop-up is nice") — routes/home/+page.svelte (Dialog).
+
+UNCLEAR
+- [UNCLEAR] "You didn't update the carding, other cards at home" — (2026-10-01, "you actually didn't update the carding") — Unclear which cards; Home pipeline cards do use the new cover art.
+
+---
+
+## Settings
+
+NOT DONE
+- [NOT DONE] Every tab needs depth and things to do; fewer words, nothing only readable. — (2026-10-02, "I can't click a thing") — General tab is a static readiness list with disabled Pair/Check buttons (routes/settings/+page.svelte:207-262).
+- [NOT DONE] Each tab gets its own layout for its job (he liked the pill tabs, not the same card everywhere). — (2026-10-02, "you didn't have to design everything every section like that") — Same card pattern on all tabs.
+- [NOT DONE] Trading nodes tab: a node is a VPS; show server, provider, region, IP, latency, status, who uses it; kill it from here; paper and live may not be separate nodes. — (2026-10-02, "who's the provider the latency is it active") — Still a static two-row table "Paper node / Live node", "Not connected", column "Books" (routes/settings/+page.svelte, nodes tab). The actions exist in Portfolio Live (lib/portfolio/panels/NodesPanel.svelte, ServersStrip.svelte) but not here.
+- [NOT DONE] Data & sources: add new sources (Excel/CSV upload, API providers), keys, scraping workflows, cron schedules, use by mini apps. — (2026-10-02, "I can't add data I can't add anything") — Only six disabled switches (routes/settings/+page.svelte, data tab).
+- [NOT DONE] Models/providers tab will change (Claude CLI proxy for model providers). — (2026-10-02, "we are going to use something claude CLI proxy") — Static three-row list.
+- [NOT DONE] Appearance text contradicts the 2026-10-03 ruling: it still says trading screens never show the background. — (2026-10-03, "I don't think the themes are removed. I think keep them") — routes/settings/+page.svelte Appearance card. Fix the wording.
+- [NOT DONE] Background art generator (new wallpaper every so often). — (2026-10-03, "changing the background art generation of its own") — Rotation among saved/built-in variants exists (workbench.artRotate); no generator.
+- [NOT DONE] Remaining design styles he asked about (neumorphism, claymorphism, skeuomorphism, minimalism). — (2026-10-03, "what do you think is viable for us here") — Styles offered: Glass, Liquid glass, Solid, Brutalist (lib/workbench/look.ts:9-30).
+- [NOT DONE] Settings reference layout from the Excalidraw storyboard (oval/diamond/green box he tried to point to). — (2026-10-01, "that's ideal for settings to be honest") — Never located; ask him to re-show it.
+
+PARTLY
+- [PARTLY] Compute providers and storage buckets added and removed by the operator. — (2026-10-03, "I can add providers, compute providers, I can remove") — Compute tab hosts Add compute and Add storage (lib/lab/panels/ComputePanel.svelte:43, :126) but bucket connection "needs the daemon".
+- [PARTLY] Themes editable like VS Code. — (2026-10-03, "can't I just edit them like Visual Studio Code") — "Your theme" accent, background, opacity, radius, text size (lib/workbench/LookSettings.svelte); not a full token editor.
+
+DONE
+- [DONE] More themes; remove the plain one. — (2026-10-01, "the plain one is ugly you can add more themes") — Seven themes: Ink, Cobalt, Ember, Graphite, Moss, Violet, Paper (routes/settings/+page.svelte:61-100).
+- [DONE] Multiple background art variants, saved. — (2026-10-01, "multiple variants of the background art ... and save them") — routes/settings/+page.svelte Background art section; lib/workbench/art.ts.
+- [DONE] Default model per copilot. — (2026-10-01) — Models tab.
+- [DONE] Appearance has more variations (contours, candles, liquidity, halftone, fractal). — (2026-10-02, "you could add more on your own time") — lib/workbench/art.ts.
+- [DONE] Compute lives in Settings with a link from the Lab. — (2026-10-02, "adding compute can be in the settings") — Compute tab; lib/lab/panels/ResourcesPanel.svelte:121.
+- [DONE] Settings has a Developer tab with demo mode and component library. — (2026-10-01, "demo mode is on oh that's cool") — routes/settings/+page.svelte.
+
+---
+
+## Mini apps
+
+NOT DONE
+- [NOT DONE] Many more mini apps (news and sentiment, and others); three kinds: remix screens, headless apps, extensions. — (2026-10-03, "we can have way more mini-apps") — Backlog line, nothing built.
+- [NOT DONE] Retire the Research demo mini app. — (2026-10-03, "this research mini app is very useless now") — Still on the rail in demo mode (lib/workbench/workbench.svelte.ts:32; routes/apps/demo-research/+page.svelte).
+- [NOT DONE] Show how mini apps are made and rendered, including building a variant from widgets taken from Portfolio or the Lab. — (2026-10-03, "combine certain functionalities from portfolio and then ... create a mini app") — No flow. He asked the agent to help him think this through.
+- [NOT DONE] Headless mini apps and workflows: how they are presented and run in the UI. — (2026-10-02, "mini apps and workflows that don't use the front end") — Only the Operations tab in the Library; no run surface.
+- [NOT DONE] News and sentiment workflow shipped as a template. — (2026-10-03, "one of the workflows we should have as a template is one for news") — Portfolio events panel has an "Add a source or a news workflow" button that only shows a message (lib/portfolio/panels/EventsPanel.svelte:101).
+
+PARTLY
+- [PARTLY] A mini app declares its own tools, targets and attach sources, and may need none. — (2026-10-02, "some mini apps I don't think need actual bloody things") — Mechanism exists (lib/workbench/copilot-context.ts null targets/attach); only main, Lab, Portfolio use it.
+- [PARTLY] The platform absorbs new mini apps and widgets without showing an error. — (2026-10-01, "it needs to be able to fit in without showing that there is an error") — Typed "unsupported" frame exists in MiniAppShell and TileBoard (lib/workbench/MiniAppShell.svelte:61-68).
+- [PARTLY] Customisable component library: can the operator create new components? — (2026-10-01, "I can create new components of my own freaking") — Gallery lists the catalog (routes/gallery); backlog still says "decide".
+
+DONE
+- [DONE] Same widget controls everywhere (add to copilot, minimise, expand, close, add). — (2026-10-01, "where is the minimization maximization") — lib/workbench/WidgetFrame.svelte, MiniAppShell.
+- [DONE] Add widgets, edit layout, resize in edit mode. — (2026-10-02, "I can add widgets? Heck no way!") — MiniAppShell.svelte:123-130, :173-190.
+- [DONE] Mini apps render well in small views. — (2026-10-01, "mini apps look good though in small views") — no change needed.
+
+SUPERSEDED
+- [SUPERSEDED] ML Studio as a mini app or workflow. — (2026-10-02, "Now the ML Studio, I think goes straight to the lab. This is a non-negotiable") — Redirects to the Lab Train layout (routes/apps/demo-ml/+page.svelte).
+- [SUPERSEDED] Trading node as a mini app. — (2026-10-02, "backtesting ... not a mini app"; 2026-10-03 folded into Portfolio) — routes/trade redirects to Portfolio Live.
+- [SUPERSEDED] Backtest lab as a mini app. — (2026-10-02, "it's now a standard icon, not a mini app") — Folded into the Lab.
+
+---
+
+## Lab
+
+NOT DONE
+- [NOT DONE] Genetic algorithms and the wider set of Lean-style experiments (parameter search, many metrics). — (2026-10-01, "to literally genetic algorithms there are so many experiments") — No code mentions it.
+- [NOT DONE] Explain the sweep grid with a diagram, not text; show other layouts than the one grid. — (2026-10-03, "Maybe explain that to me a bit in a diagram") — Grid is built (lib/lab/panels/MatrixPanel.svelte) but no explanation view.
+- [NOT DONE] Explain model slots. — (2026-10-03, "the one thing I don't understand is slots") — Slots tab exists (lib/lab/panels/SlotsPanel.svelte) with no plain-words help.
+- [NOT DONE] Save compare sets as presets and "watch" them; primary and secondary compare layers; better equity and compare views. — (2026-10-02, "can't I just compare then save, then compare, then save") — lib/lab/panels/ComparePanel.svelte has no save; open in ledger.
+- [NOT DONE] A proper training-runs tile and starting a training session from the editor. — (2026-10-02, "How do I start a training session?") — Training tile shows one pipeline (lib/lab/panels/TrainingPanel.svelte); guide covers it only by walk-through.
+- [NOT DONE] Robustness checks editable and buildable from workflows. — (2026-10-02, "robustness itself can come from workflows") — Open in ledger.
+- [NOT DONE] Agents live: their nodes, sub-agents, streamed work; agents on their own machines (EC2, Modal). — (2026-10-02, "I'm yet to see what they're actually doing live") — Static demo list (lib/lab/panels/AgentsPanel.svelte); ledger backlog.
+- [NOT DONE] Editor: run state on nodes, saved-steps palette, copilot edits the graph. — (2026-10-01, "Show what happens while a step runs") — Open in ledger L5.
+- [NOT DONE] Remove all mock data when wiring to the live backend. — (2026-10-02, "you should remove your mock data") — Future step.
+- [NOT DONE] Order-flow views for charts (crypto venues provide it). — (2026-10-02, "Can we get in some order flow things") — Not in code; backlog lists it under the dead "Trading node" heading, should move to Portfolio Live.
+- [NOT DONE] Evidence status of off-machine runs (Colab, AWS). — (2026-10-02/10-03 answers) — UI shows "exploration only"; ruling still open.
+
+PARTLY
+- [PARTLY] Resources tile also holding artifacts and recently used indicators. — (2026-10-02, "Then I think artifacts also come here") — See Library section.
+- [PARTLY] "Build a new panel" and most edits run through copilot skills. — (2026-10-02, "being able to build a new panel might require skill") — Menu item only shows a message (routes/lab/+page.svelte:305-307).
+- [PARTLY] Add a slot must work; add parameters and metrics everywhere. — (2026-10-02, "Can I add new metrics to measure?") — Scenario builder lets you add markets, parameters and measures (lib/lab/ScenarioDialog.svelte:179, :340, :351-371); the "Add a slot" button exists (SlotsPanel.svelte:80) but not wired.
+- [PARTLY] Templates in the Lab, including the one he could not find again. — (2026-10-02, "I can't find the template") — Start dialog can "keep as a template" (lib/lab/StartDialog.svelte:374), pod templates exist (lib/lab/pods.ts); no template gallery.
+- [PARTLY] Any compute provider; each run shows where it ran; agent swarms visible with location. — (2026-10-02, "I can use colab I can use AWS") — Machines, pulse marking (lib/lab/EnvChip.svelte, themes.css:341); real adding needs backend.
+- [PARTLY] StrategyQuant patterns (databank, what-ifs, robustness ladder, walk-forward matrix, cluster pass). — (2026-10-01, "what if scenarios the editors and whatnot") — Runs table, scenarios, robustness ladder, matrix built; databank saved views and cluster pass rule not confirmed.
+- [PARTLY] Custom workflows as first-class (train in a pattern, test a hypothesis). — (2026-10-02, "a custom workflow ... then what?") — Copilot-led walk exists (lib/lab/guides.ts); workflows are not first-class objects beyond Resources list.
+- [PARTLY] Import a model or code built elsewhere (ONNX, notebook, repo). — (2026-10-02, "I can import a Jupyter notebook") — Import modes exist (lib/lab/panels/EditorPanel.svelte:49); runs only against demo data.
+
+DONE
+- [DONE] Authoring, Backtest lab and ML Studio merged into one permanent Lab. — (2026-10-02, "Authoring, backtesting, ML, all of them are combined in one lab") — routes/lab/+page.svelte; old routes redirect.
+- [DONE] Tiling board with saved layouts, linked panels, minimise dock that reflows others. — (2026-10-02, "you've really done the minimizing thing quite well") — lib/workbench/tiles/*.
+- [DONE] Tile border colour for link groups and paper/live. — (2026-10-02, "You can color code the border itself") — lib/lab/..., lib/portfolio/bits.ts:34-35.
+- [DONE] Machine switch connects first, then scopes the whole Lab, with a "nothing here" state per layout. — (2026-10-03, "make sure it's connected") — lib/lab/MachinePicker.svelte, MachineEmpty.svelte, LabStrips.svelte; commit 5aee5513.
+- [DONE] Start something new: copilot-led survey with question cards, then layouts switch step by step. — (2026-10-03, "the options here are absurdly poor") — routes/copilot/+page.svelte:232; lib/lab/StartDialog.svelte.
+- [DONE] Scenario generator (pairs, timeframes, pair trading) with styled drop-downs. — (2026-10-02, "that scenario generator ... is bloody nice") — lib/lab/ScenarioDialog.svelte.
+- [DONE] One Resources tile in every layout; compute tile folded in; machine status in the bottom bar. — (2026-10-02, "we can call it Resources") — lib/lab/panels/ResourcesPanel.svelte; lib/workbench/StatusBar.svelte:50.
+- [DONE] Curated default layouts (no equity in Build, runs not everywhere). — (2026-10-02, "in build, why do we have equity?") — ledger L12.
+- [DONE] Node editor readable over the background; code mode; import; inspector; minimap toggle. — (2026-10-02, "the background makes it difficult to see") — lib/lab/panels/EditorPanel.svelte; solid backing (themes.css:394).
+- [DONE] Lab copilot with its own tools, targets, attach, sessions and starters. — (2026-10-02, "copilot for even a node-based editor needs to be specific") — lib/lab/copilot.ts.
+- [DONE] Pods bench (Design, Test, Paper) and Strategies bench (Build, Test, Train, Compare). — (2026-10-03, "there are so many tabs up here") — routes/lab/+page.svelte:57-60; ledger round 4.
+- [DONE] Pod resources differ from strategy resources. — (2026-10-03, "resources under pods are very different") — lib/lab/panels/PodResourcesPanel.svelte.
+- [DONE] Stress board with your own scenarios added through the copilot. — (2026-10-03, "I'll add my own custom things with co-pilot") — lib/lab/panels/StressPanel.svelte:56-115.
+- [DONE] Paper trading for new risk and sizing systems happens in the Lab. — (2026-10-03, "they have to go through paper trading themselves") — lib/lab/panels/PaperRunPanel.svelte, PaperFeedPanel.svelte.
+- [DONE] Head to head replaces the unclear comparison table. — (2026-10-03, "pod comparison ... I don't get it") — lib/lab/panels/HeadToHeadPanel.svelte.
+- [DONE] Lab demo data on spot crypto. — (2026-10-03) — lib/lab/demo.ts.
+
+SUPERSEDED
+- [SUPERSEDED] Allocate tab. — (2026-10-03, "allocate is out completely") — Now "Run together" in Lab Test (lib/lab/panels/PodEquityPanel.svelte:95).
+- [SUPERSEDED] Separate Pods, Pod test, Pod compare and Allocate tabs. — (2026-10-03, "these tabs are so many") — Replaced by the Pods bench.
+- [SUPERSEDED] Colab is "not evidence" vs "any provider allowed" confusion. — (2026-10-03 answer) — Any provider allowed; evidence question still open (see NOT DONE).
+
+---
+
+## Portfolio
+
+NOT DONE
+- [NOT DONE] MIS gets logs, indicators and model views later. — (2026-10-03, "I want to be able to add indicators") — Placeholder only (lib/portfolio/panels/MisPanel.svelte).
+- [NOT DONE] Portfolio items link back to the Library (bot cards, journals, evidence). — (2026-10-03, "how does the library connect to all this?") — No hrefs on Road-to-live cards.
+- [NOT DONE] Main copilot or Lab copilot can wire a Lab-built pod or workflow into Portfolio. — (2026-10-03, "the co-pilot can wire that stuff from the lab to here") — Backend skills; UI has no hand-off beyond the paper tab's "Promote to live".
+
+PARTLY
+- [PARTLY] Spot crypto only; IC Markets, cTrader, CFDs and prop firms removed. — (2026-10-03, "IC markets is meant to be totally out") — Portfolio and Lab done; Home, Library demo bots (EURUSD) and Settings text still FX-style.
+- [PARTLY] Events and news split by crypto and FX with sentiment, each item naming a backend source. — (2026-10-03, "every little bit of information ... should have a source") — Built (lib/portfolio/panels/EventsPanel.svelte); data is demo.
+- [PARTLY] Promotion card: sign and activate. — (2026-10-03, "if I don't promote can I sign an activate?") — Blocked correctly; the operator said the card needs more thought (lib/portfolio/panels/SigningPanel.svelte).
+
+DONE
+- [DONE] Portfolio as a permanent page; promotions, risk and sizing live here, not in the trading node. — (2026-10-02, "Risk management, position sizing is going to be portfolio") — routes/portfolio/+page.svelte.
+- [DONE] Trading node folded into Portfolio as a Live section; separate node screen gone. — (2026-10-03, "a trading node won't be necessary") — routes/trade redirects to ?layout=live.
+- [DONE] Books renamed Pods; pod page redesigned with bigger controls, save and discard. — (2026-10-03, "let's call them pods") — lib/portfolio/panels/PodPanel.svelte:413-420.
+- [DONE] Every pod has a live side and a paper side. — (2026-10-03, "every pod should have a live mode and a paper mode") — lib/portfolio/panels/PodsPanel.svelte:65-71.
+- [DONE] Live layout: positions on top with exposure and correlation as tabs; bot charts below; sortable positions. — (2026-10-03, "put positions on top, put the charts at the bottom") — lib/portfolio/panels/HoldingsPanel.svelte; portfolio.svelte.ts:36-44.
+- [DONE] Trading servers actionable (test latency, restart, drain) and shown in the header. — (2026-10-03, "trading servers ... I can't do anything to it") — lib/portfolio/panels/NodesPanel.svelte; ServersStrip.svelte.
+- [DONE] Kill switch always in the header, per server or per pod as a grid. — (2026-10-03, "kill switch per server or per pod") — lib/portfolio/KillMatrix.svelte.
+- [DONE] Road to live starts at paper; day progress inside the card; bot journal; player cards. — (2026-10-03, "it should be inside the bot card") — lib/portfolio/panels/RoadPanel.svelte, JournalPanel.svelte.
+- [DONE] Paper/live colour on tile borders (orange paper, blue live). — (2026-10-02, "maybe in paper mode it's like orange") — lib/themes.css:316-317; bits.ts.
+- [DONE] Pod templates for Portfolio. — (2026-10-03, "the lab and the portfolio should have templates") — lib/portfolio/TemplatesDialog.svelte.
+- [DONE] Portfolio copilot with own tools and targets. — (2026-10-03, "the portfolio copilot is also very specific") — lib/portfolio/copilot.ts.
+- [DONE] Many accounts across Binance, Bybit, Coinbase, Kraken. — (2026-10-02, "seven accounts ... Binance, Coinbase, bybit") — lib/portfolio/demo.ts:13-15; AccountsPanel.
+
+SUPERSEDED
+- [SUPERSEDED] Dedicated portfolio optimisation page. — (2026-10-01, "portfolio optimization seriously deserves its own page") — Moved into Lab as "Run together" (2026-10-03).
+- [SUPERSEDED] Order of Live tiles ("charts across the top"). — (2026-10-03 09:17) — Replaced by positions on top, charts at the bottom (2026-10-03 10:01).
+- [SUPERSEDED] "Waiting for you"/promotion and Protection widgets on the trading node. — (2026-10-02, "this one is not going to be here") — Removed with the node.
+- [SUPERSEDED] Research-paper, node-paper, live shown as separate stages in Portfolio. — (2026-10-03, "everything earlier stays in the lab") — Road to live begins at paper.
+
+---
+
+## Cross-cutting
+
+NOT DONE
+- [NOT DONE] A few purposeful animations (panel expand, run finishing, connect). — (2026-10-01, "I haven't seen charting, I haven't seen animations") — Only a pulse for remote work (lib/themes.css:341).
+- [NOT DONE] Review the Minara reference site. — (2026-10-01, "I browse them myself") — Never reviewed.
+- [NOT DONE] alphaXiv link 2409.06289 as the Sources example. — (2026-10-01, pasted link) — Not used.
+- [NOT DONE] Multi-screen: open views on several windows. — (2026-10-01, "Can I have ability to add multiple screens") — Only the copilot pops out.
+- [NOT DONE] Space management and layout rules that hold at full-screen desktop (1920, 2560). — (2026-10-01, "when i put it on full screen there is a lot of space") — Foundation says done; his 2026-10-02 verdict was still "unused space" on Home, Library, Settings, Agents.
+
+PARTLY
+- [PARTLY] Customisability ("Lego") app-wide: everything has defaults but can be added, removed, edited. — (2026-10-02, "customizability is paramount here") — Strong in Lab and Portfolio; Home, Library and Settings are not.
+- [PARTLY] Templates on every page that builds things. — (2026-10-03, "templates ... for everything every page") — Portfolio and Lab only; Library and Home none.
+- [PARTLY] Help/guide for "how do I train something new". — (2026-10-03) — See Copilot.
+- [PARTLY] Design styles beyond themes. — (2026-10-03) — Four surface styles built; see Settings.
+- [PARTLY] Vocabulary renames (Pods, spot crypto, no cTrader). — (2026-10-03) — See Home and Library.
+
+DONE
+- [DONE] Scrap the Grok UI; rebuild from the storyboard as a web app first. — (2026-10-01, "scrap the entire bloody thing") — SvelteKit app.
+- [DONE] Build on shadcn-svelte and community components, with a component library page. — (2026-10-01, "SHAD CN has MCPs ... you don't have to work from scratch") — lib/components/ui, routes/gallery.
+- [DONE] Seven themes with frosted glass, ink background made trading-themed (fractals), themed scrollbars, larger text. — (2026-10-01, "they're scroll bars. They're ugly as hell") — lib/themes.css:287; lib/workbench/InkBackground.svelte; app.css font-size.
+- [DONE] OpenBB-style widget controls (minimise, expand, close, add to copilot). — (2026-10-01, "that widget thing where I can close, minimize, maximize") — lib/workbench/WidgetFrame.svelte.
+- [DONE] Unknown widget renders a typed "unsupported" frame, never an error. — (2026-10-01) — MiniAppShell.svelte:61.
+- [DONE] See-through panels fixed: charts, graph canvases and nodes sit on solid backing. — (2026-10-03, "that opacity I think is the issue here") — lib/themes.css:394 `.solid-backing`; near-opaque tiles at :328.
+- [DONE] Charting and calendar. — (2026-10-01, "I haven't seen charting ... A calendar") — lib/qmx/LineChart.svelte, lib/demo/CandleChart.svelte, Home "Next events".
+- [DONE] Rail kept as is. — (2026-10-03, "keep what we have for now") — lib/workbench/destinations.ts.
+- [DONE] One screen at a time with options, click-through and ledger. — (2026-10-02, "keep a ledger for your backlog") — UI-LEDGER.md.
+
+SUPERSEDED
+- [SUPERSEDED] "No themes for trading" read as no background art on trade screens. — (2026-10-01 → 10-03 answer) — Themes and art stay everywhere.
+- [SUPERSEDED] Claude Design rail options A, B, C and "Claude's take". — (2026-10-03, "I'm okay with what we have") — Rail unchanged.
+- [SUPERSEDED] Whole-frame paper/live border. — (2026-10-02) — Tile borders instead.
+
+UNCLEAR
+- [UNCLEAR] T3 Code as a reference platform. — (2026-10-01, "another platform called T3 Code") — Never followed up.
+- [UNCLEAR] Make the "Markets" tab Bloomberg-like only in tiling, or add widgets from other apps. — (2026-10-02, "Bloomberg Terminal ... would do this far better") — Tiling covered; scope of "Bloomberg-like" unclear.
+
+---
+
+## Missing from UI-BACKLOG.md (not in the current backlog at all)
+
+Not in UI-BACKLOG.md and not in UI-LEDGER.md either:
+1. How the Library connects to Lab, Portfolio, Copilot, Home and mini apps: a real Library picker for "attach from Library", "Save to Library" from chat, Library links on Portfolio bot cards, Library items showing where they are used. (The operator's last message; only a vague "Library" pass exists.)
+2. Library detail pages still say "Book" and "node"; "Promote…" should go to Portfolio, Road to live.
+3. "New session" and "Search sessions" buttons in the main Copilot are disabled.
+4. Settings Appearance copy still says trading screens never show the background (contradicts the 2026-10-03 ruling).
+5. Remaining design styles (neumorphism, claymorphism, skeuomorphism, minimalism) and a background art generator.
+6. Explain the sweep grid with a diagram; explain model slots in plain words.
+7. Move "order-flow views" out of the dead "Trading node" heading into Portfolio Live.
+8. Home still on the old widget grid: minimise does not reclaim space, no tiling engine; Home demo data still FX and "books".
+9. A way to build a mini app (or Portfolio variant) from widgets taken out of Portfolio or the Lab.
+10. Library "Turn into hypothesis" and "Save to Library" stay disabled; no plan beyond "needs daemon".
+
+In UI-LEDGER.md only (not in UI-BACKLOG.md): Library templates; help or guide feature; sessions that run for days; main copilot taking in conversations from other screens and Lab pop-out; Lab compare presets and "watch"; slots; agents live; Home still FX.
+
+---
+
+# Older backlog notes (history)
+
 # QMX UI backlog (operator feedback, 2026-10-01 round 5)
 
 Branch `ui-review/repair`. Demo data only; backend wiring is Codex's (see BACKEND-REQUIREMENTS.md).
