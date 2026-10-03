@@ -11,6 +11,11 @@ Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each w
 
 ## Library (operator priority 1: "needs a bloody redesign", "needs to connect to all the other parts")
 
+**Library pass 1 (2026-10-03) moved these:**
+- DONE: whole redesign (shelves, cards or list, inspector); "how does it connect" shown as a map on every item; every item lists where it is used with links into Lab, Portfolio, Copilot, Home and mini apps; reader uses the width (text plus a side column); files open in the inspector; saved setups shelf (test settings, presets, features, model settings); card colour by family; list view; templates shelf (workflows, pods, Portfolio pods, Lab layouts, a mini app); detail page says pod and server, and "Road to live" replaces the old Promote button; copilot "From Library…" opens a picker instead of leaving the screen; Portfolio's promotion card and Lab pod resources link into the Library; demo items switched to spot crypto.
+- PARTLY: videos are listed as a source (fetching is backend); "Make it an app" for a source is a button with a reason (desktop app).
+- STILL OPEN: model and app full pages; diagrams from articles; Home and "Save to Library" links; adding a source for real.
+
 NOT DONE
 - [NOT DONE] Library must connect to every other part: Lab, Portfolio, main Copilot, Home, mini apps, templates, artifacts, bot cards, journal, evidence. — (2026-10-03, "It needs to be able to connect to all the other parts") — Today the links are one-way and thin: Lab Resources has one icon linking to the Library page (lib/lab/panels/ResourcesPanel.svelte:56), the Copilot "From Library…" attach item only navigates to the Library page instead of opening a picker (lib/workbench/copilot-context.ts:70-76), Portfolio bot cards (road to live) have no link to their Library entry (lib/portfolio/panels/RoadPanel.svelte:55), "Save to Library" is disabled (routes/copilot/+page.svelte:319). Ledger pass 6 lists no connection work at all.
 - [NOT DONE] Ask "how does the library connect to all this?" — show it, not just describe it. — (2026-10-03, "maybe how does the library connect to all this?") — No design or screen for it exists.

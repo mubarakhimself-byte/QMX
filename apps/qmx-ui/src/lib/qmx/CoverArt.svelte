@@ -21,12 +21,15 @@
     seed,
     series,
     steps = 0,
+    tint,
     class: className = "",
   }: {
     kind: EntityKind;
     seed: string;
     series?: number[];
     steps?: number;
+    /** Ground colour by family (e.g. scalpers gold), overriding the kind's. */
+    tint?: string;
     class?: string;
   } = $props();
 
@@ -101,7 +104,9 @@
     }));
     return { dots, line, nodes, tiles };
   });
-  const tone = $derived(DUOTONE[kind]);
+  const tone = $derived(
+    tint ? { ground: tint, ink: DUOTONE[kind].ink } : DUOTONE[kind],
+  );
 </script>
 
 <svg

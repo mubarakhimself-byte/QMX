@@ -55,8 +55,10 @@ export type JournalEntry = {
 };
 
 export type Connection = {
-  node: string;
-  book: string;
+  /** The trading server it runs on. */
+  server: string;
+  /** The pod that sizes its trades. */
+  pod: string;
   mode: "Paper" | "Live";
   seat: "active" | "benched";
 };

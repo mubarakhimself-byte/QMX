@@ -76,7 +76,7 @@
       kind: "Finished",
       title: "EURUSD H1 model beat its benchmark",
       body: "Walk-forward 2024–2026: Sharpe 1.42, max drawdown −6.8%.",
-      href: "/library/eurusd-h1-gbm",
+      href: "/library/btc-breakout",
     },
     {
       tone: "text-warning",
@@ -92,7 +92,7 @@
       kind: "Heads up",
       title: "Gold Fade hit its drawdown limit",
       body: "Paused at −4.0% on paper. No live exposure.",
-      href: "/library/gold-fade",
+      href: "/library/eth-mr",
     },
   ];
   const JOBS = [

@@ -106,7 +106,7 @@ export const DEMO_STEPS: Step[] = [
       ["Format", "Library artifact"],
       ["Includes", "Equity, drawdown, trades"],
     ],
-    code: `report(result).save_to_library("eurusd-h1-gbm")`,
+    code: `report(result).save_to_library("btc-breakout")`,
   },
 ];
 

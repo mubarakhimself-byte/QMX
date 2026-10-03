@@ -167,3 +167,18 @@ Backlog (needs backend or later passes):
 - [x] **Paper** (new): Paper run (paper equity against the band its test expected, soak day progress, verdict), Live decisions (each paper trade with the steps that sized it, refusals, arriving live), Ready for live? (checks, Promote to live builds the promotion card; signing and activation stay in Portfolio), today's interventions.
 - [x] **Kill switch grid** in the Portfolio header: pods down the side, servers across. Row = pod everywhere, column = server, square = one pod on one server, corner = everything. Two strengths (stop new trades; close and halt), each needs a second click; Resume. The chip shows how many scopes are stopped. Exchange-account levels stay as the second tab.
 - [x] Lab copilot gets pod tools and pod starters; surfaces can draft text into it (seed).
+
+### Pass order (operator, 2026-10-03)
+
+Library redesign, then main Copilot, Home, Settings, Mini apps. The backlog was rebuilt from a full transcript audit (UI-BACKLOG.md, top section).
+
+### Library pass 1 done (2026-10-03)
+
+- [x] One catalogue (`lib/library/items.ts`): 16 shelves in five groups (things that trade, things that run, proof, inputs, knowledge), each item with where it is used. Items come from the Lab, Portfolio and Copilot samples, so links are real.
+- [x] `/library`: shelves, cards or list (remembered), inspector with a "where it's used" map and links, settings and measures; Everything view grouped by shelf; search across shelves; + New (template, import, copilot). Deep links `?shelf=&item=`; old `?tab=` links still land.
+- [x] Articles: section picker, wider reader with a side column (key points, figures, use it). Sources: videos added, "Add a source", "Make it an app".
+- [x] Outbound links: copilot attach opens a Library picker; promotion card and Lab pod resources link into the Library; detail page vocabulary fixed (pod, server, Road to live).
+- [x] Demo Library data switched to spot crypto (ids now match Portfolio bots).
+- [x] Test: catalogue ids unique, links only to real screens, trading things connect to Lab or Portfolio.
+- [ ] Next in Library: model and app full pages, diagrams from articles, Home and "Save to Library" links.
+

@@ -89,12 +89,14 @@
         ></button
       >
     {/each}
+    <!-- eslint-disable svelte/no-navigation-without-resolve -->
     <a
-      href={resolve("/library")}
+      href={`${resolve("/library")}?shelf=pods`}
       class="text-muted-foreground hover:text-foreground hover:bg-muted ml-auto flex size-7 items-center justify-center rounded-md"
       aria-label="Open the Library"
       title="Open the Library"><LibraryBig class="size-3.5" /></a
     >
+    <!-- eslint-enable svelte/no-navigation-without-resolve -->
   </div>
 
   <div class="min-h-0 flex-1 overflow-auto">
@@ -199,9 +201,12 @@
       <p class="text-muted-foreground px-3 pb-3 text-xs">
         Every pod in a test sizes the same trades from these bots, so the
         difference you see is the pod.
-        <a href={resolve("/library")} class="text-primary underline"
-          >More bots in the Library</a
+        <!-- eslint-disable svelte/no-navigation-without-resolve -->
+        <a
+          href={`${resolve("/library")}?shelf=bots`}
+          class="text-primary underline">More bots in the Library</a
         >
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
       </p>
     {:else if tab === "blocks"}
       <div class="flex flex-col gap-3 p-3">

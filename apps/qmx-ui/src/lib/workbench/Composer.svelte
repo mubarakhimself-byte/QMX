@@ -14,6 +14,7 @@
   import { workbench, MODELS } from "./workbench.svelte";
   import { MAIN_CONTEXT, type CopilotContext } from "./copilot-context";
   import { cn } from "$lib/utils";
+  import LibraryPicker from "$lib/library/LibraryPicker.svelte";
 
   let {
     placeholder = "Ask the copilot…",
@@ -37,6 +38,7 @@
   } = $props();
 
   let draft = $state("");
+  let picking = $state(false);
   $effect(() => {
     if (seed) draft = seed;
   });
@@ -132,7 +134,8 @@
             <DropdownMenu.Item
               disabled={!!a.needs}
               onclick={() => {
-                if (a.href) goto(resolve(a.href as "/library"));
+                if (a.id === "library") picking = true;
+                else if (a.href) goto(resolve(a.href as "/library"));
                 else
                   workbench.notify(
                     `${a.label}: pick it on screen; it joins this message.`,
@@ -286,3 +289,8 @@
     </div>
   </div>
 </form>
+
+<LibraryPicker
+  bind:open={picking}
+  onpick={(name) => workbench.addRef(name, true)}
+/>

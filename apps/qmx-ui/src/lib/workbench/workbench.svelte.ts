@@ -72,10 +72,10 @@ export const TOOLS = [
  */
 export const TARGETS = [
   {
-    id: "research-fx",
-    name: "Research · FX",
+    id: "research-crypto",
+    name: "Research · Crypto",
     kind: "Mini app",
-    ops: ["fx.quote", "fx.signals", "fx.correlation"],
+    ops: ["crypto.quote", "crypto.signals", "crypto.correlation"],
     axes: {
       published: true,
       configured: true,
@@ -85,10 +85,10 @@ export const TARGETS = [
     },
   },
   {
-    id: "calendar-sync",
-    name: "Calendar sync",
+    id: "news-sentiment",
+    name: "News & sentiment",
     kind: "Headless app",
-    ops: ["calendar.refresh", "calendar.windows"],
+    ops: ["news.refresh", "news.windows"],
     axes: {
       published: true,
       configured: true,
@@ -298,10 +298,11 @@ class Workbench {
     this.#noticeTimer = setTimeout(() => (this.notice = null), 4000);
   }
 
-  addRef(label: string) {
+  addRef(label: string, quiet = false) {
     if (!this.copilotRefs.includes(label))
       this.copilotRefs = [...this.copilotRefs, label];
-    this.notify(`Added to copilot: ${label}`, "/copilot", "Open Copilot");
+    if (!quiet)
+      this.notify(`Added to copilot: ${label}`, "/copilot", "Open Copilot");
   }
 
   removeRef(label: string) {

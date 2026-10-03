@@ -11,7 +11,7 @@
     run
       ? [
           `placed on ${envById(run.env)?.name ?? run.env} (${envById(run.env)?.where ?? ""})`,
-          `bot eurusd-h1-gbm v7 · ${run.symbol} ${run.timeframe} · role ${run.role}`,
+          `bot btc-breakout v7 · ${run.symbol} ${run.timeframe} · role ${run.role}`,
           ...(run.status === "queued"
             ? ["waiting for a free slot; the governor never oversubscribes"]
             : run.status === "failed"

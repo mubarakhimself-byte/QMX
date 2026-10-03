@@ -126,15 +126,15 @@
             href={resolve("/lab")}><Workflow /> Open in Lab</Button
           >{/if}
         {#if e.kind === "bot" && (e.stage === "Evidence" || e.stage === "Paper")}
+          <!-- eslint-disable svelte/no-navigation-without-resolve -->
           <Button
             size="sm"
             variant="outline"
-            aria-disabled="true"
-            class="aria-disabled:opacity-60"
-            title="Promotion is a signed card you approve on the trading node; needs the daemon"
-            onclick={(ev) => ev.preventDefault()}
-            ><ShieldCheck /> Promote…</Button
+            href={`${resolve("/portfolio")}?layout=road`}
+            title="Promotion happens on Portfolio's Road to live, where you sign the card"
+            ><ShieldCheck /> Road to live</Button
           >
+          <!-- eslint-enable svelte/no-navigation-without-resolve -->
         {/if}
       </div>
     </header>
@@ -279,9 +279,9 @@
             </table>
           </section>
           <section class="flex flex-col gap-3">
-            {#each e.connections ?? [] as c (c.book)}
+            {#each e.connections ?? [] as c (c.pod)}
               <div class="surface flex flex-col gap-2 rounded-xl p-4">
-                <p class="font-medium">{c.node}</p>
+                <p class="font-medium">Runs on {c.server}</p>
                 <div class="flex flex-wrap gap-1.5">
                   <Badge
                     variant="outline"
@@ -289,7 +289,7 @@
                       ? 'live'
                       : 'paper'})">{c.mode}</Badge
                   >
-                  <Badge variant="outline">Book {c.book}</Badge>
+                  <Badge variant="outline">Pod {c.pod}</Badge>
                   <Badge
                     variant="outline"
                     class={c.seat === "active" ? "" : "text-muted-foreground"}
@@ -297,7 +297,7 @@
                   >
                 </div>
                 <p class="text-muted-foreground text-xs">
-                  Sizing comes from the book, never from the bot.
+                  Sizing comes from the pod, never from the bot.
                 </p>
               </div>
             {:else}

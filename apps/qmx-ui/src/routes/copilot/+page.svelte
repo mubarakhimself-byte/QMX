@@ -31,7 +31,7 @@
   import { DEMO_ENTITIES } from "$lib/demo/assets";
 
   // DEMO: a card before and after a chat edit; changed measures are highlighted.
-  const before = DEMO_ENTITIES.find((e) => e.id === "eurusd-h1-gbm")!;
+  const before = DEMO_ENTITIES.find((e) => e.id === "btc-breakout")!;
   const after = {
     ...before,
     version: "v8 draft",
@@ -115,7 +115,7 @@
     { name: "get_candles", args: "EURUSD · H1 · 2024–2026", ms: 420 },
     {
       name: "run_backtest",
-      args: "workflow eurusd-h1-gbm · draft demo",
+      args: "workflow btc-breakout · draft demo",
       ms: 8100,
     },
     { name: "compare_benchmark", args: "buy-and-hold", ms: 260 },

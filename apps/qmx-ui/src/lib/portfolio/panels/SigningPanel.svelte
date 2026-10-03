@@ -9,7 +9,10 @@
   import X from "@lucide/svelte/icons/x";
   import Minus from "@lucide/svelte/icons/minus";
   import PenLine from "@lucide/svelte/icons/pen-line";
+  import LibraryBig from "@lucide/svelte/icons/library-big";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
+  import { itemById } from "$lib/library/items";
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { CANDIDATES } from "../demo";
@@ -33,6 +36,15 @@
   <div class="flex items-baseline gap-2 border-b px-4 py-3">
     <span class="text-lg font-semibold">{c.entity.name}</span>
     <span class="text-muted-foreground text-sm">{c.pod} · day {c.days}</span>
+    {#if itemById(c.entity.id)}
+      <!-- eslint-disable svelte/no-navigation-without-resolve -->
+      <a
+        href={`${resolve("/library")}?item=${c.entity.id}`}
+        class="text-muted-foreground hover:text-foreground ml-auto flex items-center gap-1 text-xs"
+        ><LibraryBig class="size-3.5" />In the Library</a
+      >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
+    {/if}
   </div>
   <section class="border-b px-4 py-3">
     <p class="text-muted-foreground mb-1 text-xs">What you are signing</p>

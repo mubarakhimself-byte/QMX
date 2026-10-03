@@ -19,6 +19,7 @@
     compact = false,
     changed = [],
     footer,
+    tint,
   }: {
     entity: Entity;
     href?: string;
@@ -27,6 +28,8 @@
     changed?: string[];
     /** Extra content drawn inside the card, at the bottom. */
     footer?: Snippet;
+    /** Cover colour by family; defaults to the kind's colour. */
+    tint?: string;
   } = $props();
 
   const ICON = {
@@ -64,6 +67,7 @@
       seed={entity.id}
       series={entity.spark}
       steps={entity.steps?.length ?? 0}
+      {tint}
       class={compact ? "h-20 w-full" : "h-28 w-full"}
     />
     <span
@@ -120,7 +124,7 @@
         <span class="num truncate">{entity.fp}</span>
         {#if entity.connections?.length}
           <span class="ml-auto truncate"
-            >{entity.connections[0].book} · {entity.connections[0].mode}</span
+            >{entity.connections[0].pod} · {entity.connections[0].mode}</span
           >
         {:else if entity.slots?.length}
           <span class="ml-auto truncate">{entity.slots.length} slots</span>

@@ -164,7 +164,7 @@
           {:else if selected === "RunConsole"}
             <div class="h-48">
               <RunConsole
-                command="qmb backtest us500-trend"
+                command="qmb backtest eth-trend"
                 lines={[
                   "data verify US500 H4 ok",
                   "fold 1/12 sharpe 1.21",

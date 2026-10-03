@@ -230,7 +230,7 @@ export const CATALOG: CatalogEntry[] = [
       },
     },
     example: {
-      command: "qmb backtest us500-trend",
+      command: "qmb backtest eth-trend",
       lines: ["fold 1/12 sharpe 1.21"],
       status: "done",
     },
