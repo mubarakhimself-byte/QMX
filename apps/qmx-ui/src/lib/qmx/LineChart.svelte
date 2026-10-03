@@ -23,7 +23,7 @@
   const domain = $derived(extent(series.flatMap((s) => s.values)));
 </script>
 
-<div class="flex h-full flex-col gap-1.5">
+<div class="solid-backing flex h-full flex-col gap-1.5 rounded-md">
   <svg
     viewBox="0 0 {W} {height}"
     preserveAspectRatio="none"

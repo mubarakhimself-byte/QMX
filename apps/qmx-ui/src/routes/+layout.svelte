@@ -20,9 +20,7 @@
     root.classList.toggle("dark", workbench.theme !== "paper");
   });
   // Trading surfaces never get the decorative background.
-  const showInk = $derived(
-    workbench.inkEnabled && !page.url.pathname.startsWith("/trade"),
-  );
+  const showInk = $derived(workbench.inkEnabled);
 </script>
 
 <Tooltip.Provider delayDuration={300}>

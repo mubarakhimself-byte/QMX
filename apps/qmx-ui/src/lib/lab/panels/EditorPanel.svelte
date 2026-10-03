@@ -161,7 +161,7 @@
 
 <style>
   :global(.svelte-flow) {
-    --xy-background-color: transparent;
+    --xy-background-color: color-mix(in oklab, var(--background) 88%, black);
     --xy-background-pattern-color: color-mix(
       in oklab,
       var(--muted-foreground) 28%,

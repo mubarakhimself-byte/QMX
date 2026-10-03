@@ -13,7 +13,8 @@
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import EnvChip from "../EnvChip.svelte";
-  import { ENVIRONMENTS, RUNS } from "../demo";
+  import { ENVIRONMENTS, RUNS, STORAGE } from "../demo";
+  import HardDrive from "@lucide/svelte/icons/hard-drive";
 
   const ADD = [
     { label: "A server over SSH", note: "Any VPS or box you control" },
@@ -112,6 +113,34 @@
       </li>
     {/each}
   </ul>
+  <div class="border-t">
+    <div class="flex h-8 items-center px-3 text-xs">
+      <span class="font-medium">Storage</span>
+      <span class="text-muted-foreground ml-1.5">new scope</span>
+      <button
+        type="button"
+        class="text-muted-foreground hover:text-foreground ml-auto flex items-center gap-1"
+        onclick={() =>
+          workbench.notify(
+            "Connecting a bucket needs the daemon. Keys stay in your credential store.",
+          )}><Plus class="size-3.5" />Add storage</button
+      >
+    </div>
+    <ul>
+      {#each STORAGE as b (b.id)}
+        <li class="flex items-center gap-2 px-3 py-1.5 text-xs">
+          <HardDrive class="text-muted-foreground size-3.5" />
+          <span class="font-medium">{b.name}</span>
+          <span class="text-muted-foreground truncate">{b.where}</span>
+          <span
+            class="ml-auto whitespace-nowrap {b.status === 'offline'
+              ? 'text-muted-foreground'
+              : ''}">{b.used}</span
+          >
+        </li>
+      {/each}
+    </ul>
+  </div>
   <p class="text-muted-foreground border-t px-3 py-2 text-xs">
     Runs elsewhere never see your sealed test data, so their results are for
     exploring. Rerun a winner here to make it evidence.

@@ -28,10 +28,10 @@ An agent re-read every operator message in this session and checked it against t
 
 ### Needs the operator's confirmation
 
-- [ ] "No themes for trading" was read as "no background art on /trade". Confirm.
-- [ ] Colab and other providers: allowed; are off-machine results ever evidence, or exploration only? (Answer mixed both options.)
-- [ ] Rail/layout: Claude Design options A/B/C were never picked; the operator liked "Claude's take" (spaces across the top, agent lane, jobs strip). Adopt it or not?
-- [ ] Dictation cut out three times; a "template" he mentioned could not be found. Ask him to restate anything missing.
+- [x] Ruled 2026-10-03: themes and background art stay everywhere, trading included. The real problem was see-through panels: charts, graph canvases and nodes now sit on solid backing.
+- [x] Ruled 2026-10-03: compute providers (any VPS, AWS, Colab, GPU clouds) are added and removed by the operator; the backend adapts. Two kinds of work need placing: the copilot's own agents and swarms, and workflow agents from the node editor that run locally or on servers (long or always-on jobs). Storage buckets too. Evidence status of off-machine runs still open (UI shows "exploration only" until ruled).
+- [x] Ruled 2026-10-03: keep the current rail and shell. "If I did not choose, it means surprise me; I haven't complained, so I'm okay with it."
+- [x] Restated 2026-10-03: templates across the app (Lab most, then Portfolio, Library, Home); the operator will mostly start from templates rather than build from scratch.
 
 ### Missing items (now on the backlog)
 

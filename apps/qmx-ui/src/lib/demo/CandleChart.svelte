@@ -101,7 +101,7 @@
 
 <div
   bind:this={el}
-  class="h-full min-h-40 w-full"
+  class="solid-backing h-full min-h-40 w-full"
   aria-label="Candlestick chart (demo data)"
   role="img"
 ></div>

@@ -94,3 +94,12 @@ Operator asked for these; the docs do not cover them yet. Flag for a BMad/doc de
 | Agents | Quants, agents and sub-agents on the subject with state and environment | Ontology yes (QMA); live tree read model: needed |
 | Lab copilot | Per-surface tool list, targets (quants) and attach sources; sessions with history; per-copilot instructions and default model | Product sessions yes (psess); per-surface tool lists: new scope |
 | Layouts | None: saved per machine in the browser; optional sync if the operator wants it across machines | — |
+
+### Compute, storage and where agents run (operator, 2026-10-03)
+
+- Operator-managed compute providers: add or remove any VPS, AWS, Colab or GPU cloud; the backend adapts (CT-46 environments, vendors GAP-0075).
+- Two kinds of agent work to place: the copilot's own agents, sub-agents and swarms; and workflow agents inside Graph Templates (node editor) that run locally or on a server, including always-on and many-hour jobs. The UI shows where each runs and its live state.
+- Storage buckets (e.g. S3, Backblaze B2) for data and artifacts that don't live on the laptop: list, connect, usage, cost.
+- Evidence status of runs on remote machines is still open; the UI labels them "exploration only" until ruled (B-9).
+- Templates across the app (Lab layouts and workflows, Portfolio, Library, Home): saved, shared and started from; the backend stores them.
+

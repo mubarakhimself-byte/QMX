@@ -327,7 +327,8 @@
 
 /* Lab and tiled boards: near-opaque tiles so dense work stays readable over the art. */
 .tile {
-  background: color-mix(in oklab, var(--panel) 90%, var(--background));
+  /* Panel colour laid over the solid page colour: same tint, fully opaque. */
+  background: linear-gradient(var(--panel), var(--panel)), var(--background);
   border: 1px solid var(--border);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.04),
@@ -387,4 +388,9 @@ input[type="number"] {
 }
 :root.dark input[type="number"] {
   color-scheme: dark;
+}
+
+/* Charts and canvases never show the art through them (operator, 2026-10-03). */
+.solid-backing {
+  background: linear-gradient(var(--panel), var(--panel)), var(--background);
 }

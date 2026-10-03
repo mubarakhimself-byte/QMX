@@ -69,6 +69,31 @@ export const ENVIRONMENTS: Environment[] = [
 
 export const envById = (id: string) => ENVIRONMENTS.find((e) => e.id === id);
 
+/** Where data and artifacts are kept besides this laptop (new scope). */
+export const STORAGE = [
+  {
+    id: "disk",
+    name: "This laptop",
+    where: "C: drive",
+    used: "412 GB free of 1 TB",
+    status: "ready",
+  },
+  {
+    id: "b2",
+    name: "Research data",
+    where: "Backblaze B2 bucket",
+    used: "38 GB · $0.23/month",
+    status: "ready",
+  },
+  {
+    id: "s3",
+    name: "Model store",
+    where: "AWS S3 bucket",
+    used: "Not connected",
+    status: "offline",
+  },
+] as const;
+
 /**
  * How much work a machine has for a layout kind. Drafts are edited on this
  * laptop; tests and comparisons are runs; training is the training job.

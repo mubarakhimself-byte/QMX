@@ -29,7 +29,7 @@
 
 <div
   class={cn(
-    "surface text-foreground w-56 overflow-hidden rounded-lg text-xs transition-shadow",
+    "tile text-foreground w-56 overflow-hidden rounded-lg text-xs transition-shadow",
     selected && "ring-ring ring-2",
   )}
 >
