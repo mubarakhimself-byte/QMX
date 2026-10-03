@@ -39,11 +39,11 @@ from qmf.core.refusal import is_ok, is_refusal
 def test_seed_vocabulary_counts_and_owner() -> None:
     assert WIRE_VOCABULARY_OWNER == "qma-wire"
     assert SEED_COMMAND_COUNT == 9
-    assert ADDABLE_COMMAND_COUNT == 7
-    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 16
+    assert ADDABLE_COMMAND_COUNT == 9
+    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 18
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 11
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 18
+    assert ADDABLE_QUERY_COUNT == 12
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 19
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS
@@ -69,6 +69,8 @@ def test_seed_members_match_ratified_packet() -> None:
         "cancel_job",
         "open_product_session",
         "grant_product_session",
+        "submit_agent_request",
+        "cancel_agent_request",
     } == WIRE_COMMANDS
     assert WireCommand.TRANSFER_ARTIFACT.value == "transfer_artifact"
     assert WireCommand.TRANSFER_COMPLETE.value == "transfer_complete"

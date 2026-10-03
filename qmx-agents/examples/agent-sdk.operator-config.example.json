@@ -1,0 +1,43 @@
+{
+  "research_corpus_root_path": "<existing-operator-owned-corpus-directory>",
+  "agent_sdk": {
+    "enabled": false,
+    "max_workers": 2,
+    "max_inflight": 16,
+    "shutdown_timeout_seconds": 2,
+    "providers": {
+      "operator-proxy": {
+        "protocol": "chat-completions",
+        "endpoint": "http://127.0.0.1:9000/v1/chat/completions",
+        "model": "<operator-configured-workhorse>",
+        "deployment_id": "operator-configured-proxy",
+        "stream": true
+      }
+    },
+    "profiles": {
+      "research-reader": {
+        "role": "application",
+        "authority_profile": "app-use",
+        "app_instance_id": "<exact-enabled-research-instance-id>",
+        "provider_id": "operator-proxy",
+        "tools": ["research_browse"],
+        "timeout_seconds": 120,
+        "max_prompt_bytes": 32768
+      },
+      "authoring-assistant": {
+        "role": "global",
+        "authority_profile": "authoring",
+        "provider_id": "operator-proxy",
+        "tools": [],
+        "timeout_seconds": 120,
+        "max_prompt_bytes": 32768
+      }
+    },
+    "instance_revisions": {"<exact-enabled-research-instance-id>": 1},
+    "research_browse": {
+      "source_id": "strats",
+      "snapshot_ref": "<exact-host-verified-CorpusSnapshot-id>",
+      "allowed_locators": ["README.md"]
+    }
+  }
+}

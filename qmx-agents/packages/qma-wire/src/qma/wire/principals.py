@@ -92,6 +92,9 @@ HUMAN_GATE_COMMANDS: Final[frozenset[str]] = frozenset(
         "transfer_artifact",
         # AM-09 cancel is authorized only by the originating-session operator (Epic 73).
         "cancel_job",
+        # Optional SDK ingress is bound to the authenticated local operator.
+        "submit_agent_request",
+        "cancel_agent_request",
     }
 )
 

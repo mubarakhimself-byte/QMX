@@ -72,3 +72,75 @@ fake-process protocol proof and live-provider proof. No remote agent, long resea
 subagent/provider loop, memory backend or production supervisor is claimed here.
 
 Designed failures are registered in the owning package's `FAILURES.md` FR-86..98.
+
+## Integrated daemon and inference transport increment
+
+The subsequent isolated increment reuses this runtime inside `DaemonProcess`.
+There is no new listener: the existing authenticated paired CT-40 socket now
+supports optional `submit_agent_request`, `get_agent_request`, `cancel_agent_request`.
+Each requires its own host-advertised capability. Client initialization cannot
+create a disabled SDK. No UI/frontend files or presentation changes are included.
+
+`operator-config.json` may include an explicit `agent_sdk` section. It defaults to
+disabled when absent. Host profiles bind behavior, separate app-use/authoring
+admission, exact app/page instance, provider/model and prompt limits. Provider and
+pinned tool manifest hashes bind accepted work across restart. Clients send only:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"submit_agent_request","params":{"product_session_ref":"psess:existing-app","profile_id":"research-reader","prompt":"Browse the permitted pinned corpus metadata.","idempotency_key":"browse-one"}}
+```
+
+Status/cancellation use exact `request_id` plus `product_session_ref`. Submit returns
+an accepted receipt promptly; bounded daemon workers execute off the listener loop.
+Same-conversation turns serialize. Status excludes prompts/instructions/credentials;
+authorized results are returned only under unchanged disclosure scope. After
+narrowing, safe status has `content_withheld`; originating cancellation remains usable.
+The existing single-operator principal-class model is retained, not new tenant isolation.
+
+The real installed read tool is `qml.research.browse@1`, backed by existing
+KnowledgeService/plain-file snapshots. Host fixes source, snapshot and locators;
+model output cannot read an arbitrary path or select another source. It returns
+allowed corpus metadata/content fingerprints, not file contents or citations.
+No grants are minted by request admission. Current enabled contribution, exact
+host-configured instance revision and live grant are checked before dispatch.
+
+The explicit API/proxy protocol is POST `/v1/chat/completions` with text messages,
+one completion choice and `finish_reason=stop`; JSON or UTF-8 SSE is supported.
+SSE requires a normal finish plus `[DONE]`. Provider tool calls, multimodal content,
+Responses/Anthropic translation, resume and compressed response protocols are
+unsupported. A named environment key reference is optional and lazy; no token
+values appear in configuration/results/logs. Literal-loopback HTTP is accepted;
+other endpoints require normally validated HTTPS. No redirects, retries, ambient
+HTTP proxy routing, account impersonation or automatic API-paid fallback occurs.
+CLIProxyAPI compatibility means this HTTP inference subset only.
+
+Cancellation/timeout after HTTP dispatch preserves unknown outcome. Four shared
+transport slots remain occupied until blocked DNS/connect workers actually exit;
+no delayed stopped connection may subsequently initiate POST. This bounds retained
+work rather than promising instant thread termination.
+
+A test drives operator configuration through the real paired socket, local fixture
+HTTP model responses and actual corpus metadata read. It verifies app-use cannot
+select an authoring profile, hidden locator exclusion, single SQLite ownership and
+restart scope narrowing withholding old results. Fixture inference is not live
+provider proof. Existing native startup/configuration evidence remains offline.
+
+Daemon shutdown stops admission and queued work, requests active cancellation,
+waits a bounded interval, then freezes remaining requests interrupted before
+journal close. Already running callbacks may finish; late completion cannot write
+through the closed owner. Human login helper is outside this source checkout at
+`task-4/Login-NativeCodex.ps1`; it has not been executed by this task and performs
+login only. Live provider testing waits for the integrated backend to be ready.
+
+The reviewable configuration template is `agent-sdk.operator-config.example.json`.
+It is disabled and uses placeholders, not a configured account/deployment. Adjust
+the endpoint to an explicitly supported provider, choose an eligible model, obtain
+the existing enabled app instance and current config revision, and verify the
+snapshot ID through the loaded KnowledgeSource before enabling it. Availability
+revision and config revision are distinct. The example's port is a placeholder
+operator choice, not a requirement/default of CLIProxyAPI. Optional `api_key_env`
+is an uppercase named reference, never a literal key. Global behavior may also use
+app-use authority when `session_app_instance_id` explicitly binds its scope;
+role does not imply permission. No runtime automatically configures provider accounts.
+
+Known queued requests recover automatically in journal order under the current host policy and scope, including when the configured capacity is lowered. Changed contexts fail before dispatch. Requests interrupted while running never replay automatically. Shutdown cancels queued work and freezes any unconfirmed running attempt before closing the journal.

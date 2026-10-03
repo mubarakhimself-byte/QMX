@@ -138,6 +138,7 @@ from qma.daemon.journal.variables import (
     GovernedVariableRegistry,
     fold_pairing_ttl_from_journal,
 )
+from qma.daemon.knowledge.service import KnowledgeService
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
 from qma.daemon.observability_boundary import (
     LOGS_REMAIN_LOGS,
@@ -184,6 +185,10 @@ from qma.daemon.plugins.pack_ui import (
     restore_plugin_install_records_projection,
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.request_runtime.contracts import ProviderAdapter
+from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
+from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
+from qma.daemon.request_runtime.service import RequestRuntime
 from qma.daemon.retry import HostRetryLoop
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
 from qma.daemon.sessions.product_session import (
@@ -200,6 +205,15 @@ from qma.daemon.taskgraph.projection import (
 )
 from qma.daemon.telemetry.store import TelemetryStore
 from qma.daemon.tools.registry import ToolRegistry
+from qma.wire.agent_request import (
+    AGENT_REQUEST_CAPABILITIES,
+    GET_AGENT_REQUEST_CAPABILITY,
+    SUBMIT_AGENT_REQUEST_CAPABILITY,
+    parse_cancel_agent_request,
+    parse_get_agent_request,
+    parse_submit_agent_request,
+    require_agent_request_capability,
+)
 from qma.wire.cancel_job import require_cancel_job_capability
 from qma.wire.editor_draft import (
     EDITOR_DRAFT_HTTP_PATH,
@@ -804,7 +818,9 @@ class DaemonProcess:
             _sessions=self._product_sessions,
         )
         self._artifacts = ArtifactStore(
-            hooks=HookRegistry(), journal=journal, durable_store=substrate.artifact_store,
+            hooks=HookRegistry(),
+            journal=journal,
+            durable_store=substrate.artifact_store,
         )
         self._editor_drafts = EditorDraftService(
             journal=self._journal,
@@ -820,6 +836,8 @@ class DaemonProcess:
         )
         self._live_producers = LiveProducerRegistry()
         self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
+        self._agent_requests: AgentRequestBridge | None = None
+        self._agent_instance_revisions: Mapping[str, int] = {}
 
     @classmethod
     def compose(
@@ -1044,6 +1062,33 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return activated
+            # Optional host configuration adds no listener, grants or implicit
+            # transport. Local import keeps configuration/policy types acyclic.
+            from .request_runtime.provider_config import load_agent_request_config  # noqa: PLC0415
+
+            configured = load_agent_request_config(process.root)
+            if is_refusal(configured):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return configured
+            if configured.value is not None:
+                sdk = configured.value
+                installed = process.configure_agent_requests(
+                    providers=sdk.providers,
+                    policies=sdk.policies,
+                    profile_tools=sdk.profile_tools,
+                    research_browse=sdk.research_browse,
+                    instance_revisions=sdk.instance_revisions,
+                    max_workers=sdk.max_workers,
+                    max_inflight=sdk.max_inflight,
+                    shutdown_timeout_seconds=sdk.shutdown_timeout_seconds,
+                )
+                if is_refusal(installed):
+                    process._closed = True
+                    process._journal.close()
+                    process._substrate.close()
+                    return installed
             _process_gate.holder = process
             return Ok(process)
 
@@ -1078,6 +1123,117 @@ class DaemonProcess:
     @property
     def product_sessions(self) -> ProductSessionService:
         return self._product_sessions
+
+    @property
+    def agent_requests(self) -> AgentRequestBridge | None:
+        return self._agent_requests
+
+    def _agent_request_now(self) -> str:
+        value = self._now_ns()
+        if value is None:
+            raise RuntimeError("daemon clock is unavailable")
+        return format_utc_iso_z(Instant(value_ns=value))
+
+    def _agent_tool_target(
+        self, session_ref: str
+    ) -> Result[tuple[ContributionRecord, InstanceRecord]]:
+        loaded_session = self.product_sessions.get(session_ref)
+        if is_refusal(loaded_session):
+            return loaded_session
+        session = loaded_session.value
+        instance_id = session.app_instance_id
+        revision = self._agent_instance_revisions.get(instance_id or "")
+        if instance_id is None or revision is None or revision != session.context.config_revision:
+            return policy_rejection(
+                "instance_id", "tool target has no matching current host revision"
+            )
+        loaded = next(
+            (
+                item
+                for plugin_id in self.roster.loader.loaded_ids()
+                if (item := self.roster.loader.get(plugin_id)) is not None
+                and item.instance_id == instance_id
+            ),
+            None,
+        )
+        if loaded is None:
+            return policy_rejection(
+                "instance_id", "tool instance is not enabled on the live roster"
+            )
+        published = next(
+            (
+                row
+                for row in loaded.published
+                if row.qualified_id == session.context.contribution.qualified_id
+                and row.package_version == session.context.contribution.package_version
+                and row.availability == "enabled"
+            ),
+            None,
+        )
+        if published is None:
+            return policy_rejection(
+                "contribution", "tool contribution is not enabled on the live roster"
+            )
+        return Ok(
+            (
+                ContributionRecord(
+                    qualified_id=published.qualified_id or "",
+                    package_version=published.package_version,
+                    availability=published.availability,
+                ),
+                InstanceRecord(instance_id=instance_id, config_revision=revision),
+            )
+        )
+
+    def configure_agent_requests(
+        self,
+        *,
+        providers: Mapping[str, ProviderAdapter],
+        policies: Mapping[str, AgentRequestPolicy],
+        profile_tools: Mapping[str, frozenset[str]] | None = None,
+        research_browse: Mapping[str, object] | None = None,
+        instance_revisions: Mapping[str, int] | None = None,
+        max_workers: int = 2,
+        max_inflight: int = 16,
+        shutdown_timeout_seconds: float = 2,
+    ) -> Result[None]:
+        """Trusted startup seam; paired clients never mutate provider or tool policy."""
+        if self._agent_requests is not None or self._closed or self._server is not None:
+            return policy_rejection(
+                "agent_requests", "request policy installs once before listener startup"
+            )
+        restored = self.product_sessions.restore_from_journal()
+        if is_refusal(restored):
+            return restored
+        self._agent_instance_revisions = MappingProxyType(dict(instance_revisions or {}))
+        runtime = RequestRuntime(
+            journal=self.journal, product_sessions=self.product_sessions, providers=providers
+        )
+        try:
+            wrapped = bind_daemon_tool_providers(
+                runtime,
+                providers,
+                profile_tools or {},
+                research_browse or {},
+                KnowledgeService(registry=self.roster.knowledge),
+                target_resolver=self._agent_tool_target,
+                now=self._agent_request_now,
+            )
+            if is_refusal(wrapped):
+                return wrapped
+            runtime.providers = dict(wrapped.value)
+            bridge = AgentRequestBridge(
+                runtime=runtime,
+                policies=policies,
+                now=self._agent_request_now,
+                max_workers=max_workers,
+                max_inflight=max_inflight,
+                shutdown_timeout_seconds=shutdown_timeout_seconds,
+            )
+        except ValueError:
+            return invalid_input("agent_requests", "host SDK policy could not be installed")
+        self._agent_requests = bridge
+        return Ok(None)
 
     def mount_pack_ui_view(
         self, *, product_session_id: object, view_id: object
@@ -2523,6 +2679,7 @@ class DaemonProcess:
                     or PACK_UI_REQUEST_CAPABILITY in raw_caps
                     or GET_PACK_UI_REQUEST_CAPABILITY in raw_caps
                     or raw_caps.get(CANCEL_JOB_CAPABILITY) is True
+                    or any(raw_caps.get(name) is True for name in AGENT_REQUEST_CAPABILITIES)
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2530,6 +2687,9 @@ class DaemonProcess:
                 live_producers=self._live_producers,
                 connection_token=connection_token,
                 advertise_pairing=advertise,
+                server_capabilities={}
+                if self._agent_requests is None
+                else self._agent_requests.capabilities,
             )
             if is_refusal(completed):
                 return _jsonrpc_refusal(req_id, completed)
@@ -2540,6 +2700,8 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method in AGENT_REQUEST_CAPABILITIES:
+            return self._dispatch_agent_request(connection, request, req_id, cast("str", method))
         if method == WireCommand.SAVE_EDITOR_DRAFT.value:
             return self._dispatch_editor_draft_command(connection, request, req_id, publish=False)
         if method == WireCommand.PUBLISH_EDITOR_DRAFT.value:
@@ -2732,6 +2894,68 @@ class DaemonProcess:
         if is_refusal(sent):
             return _jsonrpc_refusal(req_id, sent)
         return _jsonrpc_result(req_id, sent.value.to_snapshot_row().to_payload())
+
+    def _dispatch_agent_request(
+        self,
+        connection: WireConnection,
+        request: Mapping[str, object],
+        req_id: object,
+        method: str,
+    ) -> dict[str, object]:
+        gated = require_agent_request_capability(connection.capabilities, method)
+        if is_refusal(gated):
+            return _jsonrpc_refusal(req_id, gated)
+        if (
+            not connection.authenticated
+            or connection.pairing_record_id is None
+            or connection.principal_class is not PrincipalClass.OPERATOR
+        ):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "authentication", "agent requests require authenticated operator pairing"
+                ),
+            )
+        bridge = self._agent_requests
+        if bridge is None:
+            return _jsonrpc_refusal(
+                req_id, policy_rejection("agent_requests", "SDK request policy is not configured")
+            )
+        if method == GET_AGENT_REQUEST_CAPABILITY:
+            authorized_query = connection.require_query_capability(method)
+            if is_refusal(authorized_query):
+                return _jsonrpc_refusal(req_id, authorized_query)
+        else:
+            authorized_command = connection.authorize_command(method)
+            if is_refusal(authorized_command):
+                return _jsonrpc_refusal(req_id, authorized_command)
+        try:
+            if method == SUBMIT_AGENT_REQUEST_CAPABILITY:
+                params = parse_submit_agent_request(request.get("params"))
+                if is_refusal(params):
+                    return _jsonrpc_refusal(req_id, params)
+                result = bridge.submit(params.value, principal=connection.principal_class)
+            else:
+                reference = (
+                    parse_get_agent_request(request.get("params"))
+                    if method == GET_AGENT_REQUEST_CAPABILITY
+                    else parse_cancel_agent_request(request.get("params"))
+                )
+                if is_refusal(reference):
+                    return _jsonrpc_refusal(req_id, reference)
+                result = (
+                    bridge.get(reference.value, principal=connection.principal_class)
+                    if method == GET_AGENT_REQUEST_CAPABILITY
+                    else bridge.cancel(reference.value, principal=connection.principal_class)
+                )
+        except RuntimeError:
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection("agent_requests", "daemon request admission is unavailable"),
+            )
+        if is_refusal(result):
+            return _jsonrpc_refusal(req_id, result)
+        return _jsonrpc_result(req_id, result.value)
 
     def _dispatch_product_session_invoke(
         self,
@@ -3974,6 +4198,8 @@ class DaemonProcess:
             return
         self._closed = True
         self._bound = None
+        if self._agent_requests is not None:
+            self._agent_requests.close()
         self._journal.close()
         closer = getattr(self.backtesting.transport, "close", None)
         try:

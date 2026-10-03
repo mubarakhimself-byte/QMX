@@ -48,7 +48,7 @@ def test_list_mailbox_is_addable_ct40_and_absent_at_inspect_sha() -> None:
     assert SEED_COMMAND_COUNT == 9
     assert SEED_QUERY_COUNT == 7
     assert SEED_EVENT_COUNT == 10
-    assert ADDABLE_QUERY_COUNT == 11
+    assert ADDABLE_QUERY_COUNT == 12
     assert LIST_MAILBOX_EXISTED_AT_INSPECT_SHA is False
     assert LIST_MAILBOX_INSPECT_SHA == "34c148be"
     assert ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA is True

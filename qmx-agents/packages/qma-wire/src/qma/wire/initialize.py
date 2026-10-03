@@ -30,6 +30,7 @@ from types import MappingProxyType
 from typing import Final, cast
 
 from qma.core.vocabulary import PrincipalClass
+from qma.wire.agent_request import AGENT_REQUEST_CAPABILITIES
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
 from qma.wire.editor_draft import (
     editor_draft_capability_unavailable,
@@ -119,6 +120,7 @@ CANCEL_JOB_CAPABILITY_MINTED: Final[bool] = True
 DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset()
 _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
     {
+        *AGENT_REQUEST_CAPABILITIES,
         PACK_UI_REQUEST_CAPABILITY,
         GET_PACK_UI_REQUEST_CAPABILITY,
         CANCEL_JOB_CAPABILITY,

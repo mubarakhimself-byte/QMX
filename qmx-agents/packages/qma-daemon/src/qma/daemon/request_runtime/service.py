@@ -122,6 +122,7 @@ class RequestRuntime:
         self._keys: dict[tuple[str, str, str], str] = {}
         self._tokens: dict[str, threading.Event] = {}
         self._active_conversations: set[str] = set()
+        self._frozen_requests: set[str] = set()
         self._restored = False
 
     def _persist(self, record: RequestRecord) -> Result[RequestRecord]:
@@ -364,6 +365,10 @@ class RequestRuntime:
         with self._lock:
             try:
                 current = self._records[request_id]
+                if request_id in self._frozen_requests:
+                    # The daemon already recorded lost ownership before closing
+                    # its journal. A late provider return cannot write afterward.
+                    return Ok(current)
                 return self._persist(replace(current, status=status, result=result, error=error))
             finally:
                 self._tokens.pop(request_id, None)
@@ -389,6 +394,17 @@ class RequestRuntime:
                 return policy_rejection(
                     "request_state", "model continuation requires an active uncancelled turn"
                 )
+            return self.validate_request_context(request_id, now=now)
+
+    def validate_request_context(
+        self, request_id: str, *, now: object = None
+    ) -> Result[RequestRecord]:
+        """Revalidate retained disclosure against current session authority."""
+        with self._lock:
+            loaded = self.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
             bound = self._bound(row.spec, row.context_binding)
             if is_refusal(bound):
                 return bound
@@ -408,6 +424,38 @@ class RequestRuntime:
                 if is_refusal(evaluated):
                     return evaluated
             return Ok(row)
+
+    def interrupt_active_request(self, request_id: str) -> Result[RequestRecord]:
+        """Host shutdown boundary: stop new effects and freeze late completions.
+
+        This records unknown outcome rather than asserting cancellation. Call it
+        before closing the journal when a cooperative provider did not stop.
+        """
+        with self._lock:
+            loaded = self.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
+            token = self._tokens.get(request_id)
+            if token is not None:
+                token.set()
+            self._frozen_requests.add(request_id)
+            if row.status in {"running", "cancellation_requested"}:
+                return self._persist(replace(row, status="interrupted", error="daemon_shutdown"))
+            return Ok(row)
+
+    def fail_queued_request(self, request_id: str) -> Result[RequestRecord]:
+        """Host admission failure before dispatch is a known terminal outcome."""
+        with self._lock:
+            loaded = self.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
+            if row.status != "queued":
+                return policy_rejection(
+                    "request_state", "only an undispatched request can fail admission"
+                )
+            return self._persist(replace(row, status="failed", error="context_changed"))
 
     def cancel(self, request_id: str) -> Result[RequestRecord]:
         with self._lock:

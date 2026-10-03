@@ -53,6 +53,7 @@ class ToolBinding:
     instance: InstanceRecord
     grant_id: str
     execute: Callable[[Mapping[str, object]], Mapping[str, object]]
+    argument_scope: tuple[tuple[str, str | tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if self.descriptor.effect_class != "read":
@@ -213,6 +214,7 @@ class ToolLoopProvider:
                 "name": name,
                 "required_arguments": list(self.tools[name].descriptor.configuration.required_keys),
                 "optional_arguments": list(self.tools[name].descriptor.configuration.optional_keys),
+                "host_argument_scope": dict(self.tools[name].argument_scope),
             }
             for name in names
         ]
@@ -324,6 +326,12 @@ class ToolLoopProvider:
                     output: object = _binding.execute(_bound.validated_payload)
                 except ProviderCancelled:
                     raise
+                except ProviderError as exc:
+                    if exc.code == "tool_denied":
+                        raise
+                    raise ProviderError(
+                        "outcome_unknown", "Host tool outcome requires reconciliation"
+                    ) from exc
                 except Exception as exc:
                     raise ProviderError(
                         "outcome_unknown", "Host tool outcome requires reconciliation"

@@ -46,12 +46,12 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03),
 # and get_pack_ui_request for recorded pack chrome (Epic 72), get_product_session
 # for exact grant recovery, and get_job for originating-session job reattachment.
-ADDABLE_QUERY_COUNT: Final[int] = 11
+ADDABLE_QUERY_COUNT: Final[int] = 12
 # transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3),
 # save/publish_editor_draft (Story 71; AM-09), cancel_job (Epic 73; AM-09),
 # and ProductSession open/grant (DEC-0421 / DEC-0442).
 # Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 7
+ADDABLE_COMMAND_COUNT: Final[int] = 9
 
 
 class MessageFamily(StrEnum):
@@ -90,6 +90,8 @@ class WireCommand(StrEnum):
     CANCEL_JOB = "cancel_job"
     OPEN_PRODUCT_SESSION = "open_product_session"
     GRANT_PRODUCT_SESSION = "grant_product_session"
+    SUBMIT_AGENT_REQUEST = "submit_agent_request"
+    CANCEL_AGENT_REQUEST = "cancel_agent_request"
 
 
 class WireQuery(StrEnum):
@@ -128,6 +130,7 @@ class WireQuery(StrEnum):
     GET_PACK_UI_REQUEST = "get_pack_ui_request"
     GET_PRODUCT_SESSION = "get_product_session"
     GET_JOB = "get_job"
+    GET_AGENT_REQUEST = "get_agent_request"
 
 
 class WireEvent(StrEnum):

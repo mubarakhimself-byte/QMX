@@ -1420,3 +1420,84 @@ refuses a third logger besides stdlib JSON-lines and QMB LogSink
 - **Visible degraded state:** existing state remains authoritative; no invented snapshot.
 - **Notification tier:** operator-visible returned refusal.
 - **Product-user affordance:** repair the local evidence/storage issue before requesting more work.
+
+### FR-99: Invalid or unavailable operator SDK policy
+
+- **Failure class:** invalid input or unavailable dependency.
+- **Detection:** optional `agent_sdk` configuration admits only explicit supported providers, profiles, bounds and pinned domain scope; invalid policy or partial worker startup refuses composition.
+- **Auto-recovery / retry:** no inference fallback; correct host configuration or resource availability and restart explicitly.
+- **Visible degraded state:** SDK remains disabled or startup is refused; partial workers are closed and the sole-writer root is released.
+- **Notification tier:** sanitized startup/install refusal without credential/config values.
+- **Product-user affordance:** ask the operator to configure an eligible provider and matching app policy.
+
+### FR-100: Authenticated request method unavailable or unauthorized
+
+- **Failure class:** policy rejection or invalid input.
+- **Detection:** existing paired CT-40 origin/proof authentication, distinct server-owned method capabilities, exact DTO fields, bound operator session, host role/authority/instance policy and prompt budget.
+- **Auto-recovery / retry:** none; obtain the proper session/policy through existing authority paths.
+- **Visible degraded state:** no request/provider call is admitted; clients cannot supply provider URLs, instructions, principals, grants or callbacks.
+- **Notification tier:** typed wire refusal.
+- **Product-user affordance:** select an available host profile in the authorized app or authoring context.
+
+### FR-101: Background request capacity or conversation contention
+
+- **Failure class:** policy rejection for capacity; queued state for same-conversation contention.
+- **Detection:** bounded daemon worker/inflight admission and serialized conversation execution.
+- **Auto-recovery / retry:** already accepted conversation turns wait and execute in order; rejected capacity requires a later explicit submission.
+- **Visible degraded state:** queue-full refuses before durable acceptance; current status remains queryable.
+- **Notification tier:** typed admission refusal or queued receipt.
+- **Product-user affordance:** wait for current work or cancel owned work; do not manufacture another authority store.
+
+### FR-102: Scope or configuration changed before execution/disclosure
+
+- **Failure class:** known `context_changed` failure or withheld content.
+- **Detection:** current context, grant revocation/expiry and host profile/provider/tool manifest identity are rechecked before provider dispatch and result disclosure.
+- **Auto-recovery / retry:** no automatic retargeting or replay; submit a new explicitly scoped request.
+- **Visible degraded state:** undispatched queued work becomes failed; safe owned status is available while old content is withheld. Cancellation remains available to the originating principal/session when authority shrinks.
+- **Notification tier:** sanitized request error and `content_withheld` receipt.
+- **Product-user affordance:** inspect status and current permissions; cancel stale work if required.
+
+### FR-103: Daemon shutdown with unconfirmed provider work
+
+- **Failure class:** interrupted/unknown outcome.
+- **Detection:** admission closes, queued work is cancelled, running work gets cancellation intent, bounded shutdown expires without confirmed completion.
+- **Auto-recovery / retry:** none; running owners restore interrupted and late callbacks cannot append after the journal closes.
+- **Visible degraded state:** interrupted request with `daemon_shutdown`; no claimed hard stop of arbitrary callbacks.
+- **Notification tier:** durable safe status.
+- **Product-user affordance:** inspect/reconcile unknown work before explicit retry; queued restart behavior is documented separately.
+
+### FR-104: HTTP inference authorization or known rejection
+
+- **Failure class:** unavailable dependency/known provider failure.
+- **Detection:** explicitly referenced auth is absent, HTTP 401/403/429 or another non-success status arrives.
+- **Auto-recovery / retry:** no retries, redirects, account translation or paid fallback.
+- **Visible degraded state:** failed request with sanitized `auth_required`, `rate_limited` or provider rejection code.
+- **Notification tier:** request status; response bodies and Authorization values are excluded.
+- **Product-user affordance:** resolve the configured provider's access/limits with the operator.
+
+### FR-105: HTTP response incomplete, unsupported or cancelled after dispatch
+
+- **Failure class:** known incomplete failure for an observed non-stop finish reason; unknown outcome for malformed/lost responses or cancellation after dispatch; invalid/protocol refusal before effects.
+- **Detection:** malformed/oversize JSON or SSE, unsupported native tool/multimodal response, non-stop finish reason, missing SSE terminal/DONE, connection loss, timeout or cancellation after POST initiation.
+- **Auto-recovery / retry:** none; closing the socket does not prove upstream cancellation.
+- **Visible degraded state:** interrupted/unknown where dispatch may have occurred; no fabricated completion.
+- **Notification tier:** sanitized provider error.
+- **Product-user affordance:** inspect/reconcile before retry; select a supported text Chat Completions deployment.
+
+### FR-106: Retained HTTP transport capacity exhausted
+
+- **Failure class:** unavailable dependency.
+- **Detection:** process-wide four-transport limit includes blocked DNS/connect workers until they actually exit.
+- **Auto-recovery / retry:** no automatic retry; capacity releases on actual worker teardown, including startup-failure cleanup.
+- **Visible degraded state:** another request is refused rather than accumulating hidden transport threads; stopped delayed connects cannot later initiate a POST.
+- **Notification tier:** sanitized unavailable request error.
+- **Product-user affordance:** wait for transport recovery or fix the endpoint; bounded retained work is not immediate thread termination.
+
+### FR-107: Research browse target, pin or locator denied
+
+- **Failure class:** known `tool_denied` before effect; existing unknown-outcome handling applies after an unconfirmed callback.
+- **Detection:** exact `qml.research.browse@1` descriptor, enabled contribution/instance/current host revision, one matching live session grant, host snapshot/source pin and explicit locator allowlist.
+- **Auto-recovery / retry:** none; model output cannot change source/root/target/grant or add operations.
+- **Visible degraded state:** known scope refusal fails without another model call; permitted metadata excludes disallowed corpus locators and contents.
+- **Notification tier:** sanitized tool denial.
+- **Product-user affordance:** browse the currently authorized pinned corpus scope or request a host configuration change.

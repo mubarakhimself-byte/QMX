@@ -69,6 +69,8 @@ def test_ownership_and_closed_human_gate_list() -> None:
             "cancel_job",
             "open_product_session",
             "grant_product_session",
+            "submit_agent_request",
+            "cancel_agent_request",
         }
     )
     assert frozenset({"mailbox.delivery", "telemetry"}) == DAEMON_JOB_TRIM_STREAMS
