@@ -13,8 +13,9 @@ import {
   type TileLayout,
 } from "$lib/workbench/tiles/tiles";
 
-// Every layout opens with the same Resources tile on the left (operator,
-// 2026-10-02); the rest is only what that kind of work needs.
+// Every strategy layout opens with the same Resources tile on the left
+// (operator, 2026-10-02); pod layouts open with Pod resources instead, because
+// a pod's ingredients are different (operator, 2026-10-03).
 const resources = (id: string) => pane(id, "resources");
 
 export const BUILTIN_LAYOUTS: TileLayout[] = [
@@ -92,76 +93,76 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     ]),
     docked: [],
   },
+  // The Pods bench (operator, 2026-10-03): a pod needs designing, testing
+  // and a paper run before money. Comparing rivals and splitting money
+  // across pods live inside Test; Pod resources replace the strategy ones.
   {
-    id: "pods",
-    name: "Pods",
+    id: "pod-design",
+    name: "Design",
+    group: "pods",
     root: split("row", [
-      [resources("pb-res"), 17],
-      [pane("pb-stack", "podstack", "violet"), 45],
+      [pane("pd-res", "podres"), 18],
+      [pane("pd-stack", "podstack", "violet"), 46],
       [
         split("col", [
-          [pane("pb-block", "block", "violet"), 55],
-          [pane("pb-trail", "sizetrail", "violet"), 45],
+          [pane("pd-block", "block", "violet"), 55],
+          [pane("pd-trail", "sizetrail", "violet"), 45],
         ]),
-        38,
+        36,
       ],
     ]),
     docked: [],
   },
   {
-    id: "podtest",
-    name: "Pod test",
-    root: split("col", [
-      [
-        split("row", [
-          [pane("pt-equity", "podequity", "teal"), 50],
-          [pane("pt-fan", "fan", "teal"), 50],
-        ]),
-        48,
-      ],
-      [
-        split("row", [
-          [pane("pt-stress", "stress", "teal"), 64],
-          [pane("pt-int", "interventions", "teal"), 36],
-        ]),
-        52,
-      ],
-    ]),
-    docked: [],
-  },
-  {
-    id: "podcompare",
-    name: "Pod compare",
+    id: "pod-test",
+    name: "Test",
+    group: "pods",
     root: split("row", [
-      [pane("pc-grid", "podgrid", "teal"), 56],
+      [pane("pt-res", "podres"), 18],
       [
         split("col", [
-          [pane("pc-equity", "podequity", "teal"), 50],
-          [pane("pc-fan", "fan", "teal"), 50],
+          [pane("pt-equity", "podequity", "teal"), 52],
+          [pane("pt-stress", "stress", "teal"), 48],
         ]),
-        44,
+        50,
       ],
-    ]),
-    docked: [],
-  },
-  {
-    id: "allocate",
-    name: "Allocate",
-    root: split("row", [
-      [pane("al-alloc", "allocate", "teal"), 58],
       [
         split("col", [
-          [pane("al-equity", "podequity", "teal"), 55],
-          [pane("al-fan", "fan", "teal"), 45],
+          [pane("pt-h2h", "headtohead", "teal"), 58],
+          [pane("pt-fan", "fan", "teal"), 42],
         ]),
-        42,
+        32,
+      ],
+      [pane("pt-int", "interventions", "teal"), 20],
+    ]),
+    docked: ["pt-int"],
+  },
+  {
+    id: "pod-paper",
+    name: "Paper",
+    group: "pods",
+    root: split("row", [
+      [pane("pp-res", "podres"), 18],
+      [
+        split("col", [
+          [pane("pp-run", "paperrun", "amber"), 55],
+          [pane("pp-feed", "paperfeed", "amber"), 45],
+        ]),
+        54,
+      ],
+      [
+        split("col", [
+          [pane("pp-grad", "graduate", "amber"), 55],
+          [pane("pp-int", "interventions", "amber"), 45],
+        ]),
+        28,
       ],
     ]),
     docked: [],
   },
 ];
 
-const KEY = "qmx.lab.layouts.v5";
+const KEY = "qmx.lab.layouts.v6";
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 function load(): TileLayout[] {
@@ -191,6 +192,31 @@ class LabState {
   labPod = $state("trend");
   block = $state("kill");
   podsTicked = $state<string[]>(["classic", "trend", "voltarget"]);
+  /** Bots and stress scenarios a pod test runs over. */
+  botsTicked = $state<string[]>(["btc-breakout", "eth-trend", "sol-mom"]);
+  stressTicked = $state<string[]>([
+    "flash",
+    "outage",
+    "depeg",
+    "weekend",
+    "ftx",
+    "bear",
+    "mine-1",
+  ]);
+  /** "Run together": how a test splits money across the ticked pods (%). */
+  mix = $state<Record<string, number>>({
+    classic: 25,
+    trend: 35,
+    voltarget: 40,
+  });
+  together = $state(false);
+  /** Text dropped into the Lab copilot's composer (e.g. "build a stress scenario"). */
+  copilotSeed = $state("");
+  /** The last layout open on each bench, so switching back lands there. */
+  private lastOn = $state<Record<string, string>>({
+    strategies: "build",
+    pods: "pod-design",
+  });
   /**
    * The machine the Lab is looking at (null = all machines), like a remote
    * window in VS Code: picking one connects first, then every tile shows
@@ -258,6 +284,37 @@ class LabState {
     this.activeId = this.guide.steps[at].layout;
   }
 
+  /** Strategies or Pods: follows the open layout. */
+  get bench(): string {
+    return this.active.group ?? "strategies";
+  }
+
+  /** The layouts on the open bench, for the header. */
+  get benchLayouts(): TileLayout[] {
+    return this.layouts.filter((l) => (l.group ?? "strategies") === this.bench);
+  }
+
+  open(id: string) {
+    this.lastOn[this.bench] = this.activeId;
+    this.activeId = id;
+  }
+
+  setBench(b: string) {
+    if (b === this.bench) return;
+    this.lastOn[this.bench] = this.activeId;
+    const target = this.lastOn[b];
+    this.activeId = this.layouts.some((l) => l.id === target)
+      ? target
+      : (this.layouts.find((l) => (l.group ?? "strategies") === b)?.id ??
+        "build");
+  }
+
+  /** Open the Lab copilot with a message drafted. */
+  ask(text: string) {
+    this.copilotOpen = true;
+    this.copilotSeed = text;
+  }
+
   get layouts(): TileLayout[] {
     const builtins = BUILTIN_LAYOUTS.map(
       (b) => this.stored.find((s) => s.id === b.id) ?? b,
@@ -316,8 +373,12 @@ class LabState {
 
   /** Built-ins return to their default; your own layouts are deleted. */
   reset(id: string) {
+    const bench = this.bench;
     this.stored = this.stored.filter((s) => s.id !== id);
-    if (!this.isBuiltin(id) && this.activeId === id) this.activeId = "build";
+    if (!this.isBuiltin(id) && this.activeId === id)
+      this.activeId =
+        BUILTIN_LAYOUTS.find((l) => (l.group ?? "strategies") === bench)?.id ??
+        "build";
     this.persist();
   }
 

@@ -135,3 +135,11 @@ Doc conflicts to settle (not asked of the operator, per standing rule): seat sta
 - **Every UI value needs a backend source**; demo data is removed when wiring.
 - **Pods run live and paper sides at the same time** (operator, 2026-10-03, round 3): each pod has a paper account side and, once promoted, a live side; both report equity and curves.
 - **Copilot sessions that run for days** with sub-agents, off-machine; no per-step approval requests (agent requests removed from the UI).
+
+### Pods bench and kill switch (round 4, 2026-10-03)
+
+- **Pod paper runs.** A pod version soaks on paper money (exchange testnet or the node's paper ledger) before promotion. The Lab needs per run: equity series, the band its test predicted (p5/p95 by day), soak day and length, verdict, the graduation checks (soak time, inside the band, kill-line distance, fills matched, no unknown positions), and a live stream of sizing decisions (each trade's block-by-block steps, refusals, interventions).
+- **Pod tests** need: chosen bots, pods and stress scenarios as inputs; per pod the head-to-head measures with a noise width per measure; custom stress scenarios (from words via the copilot, from real dates, or set by hand) stored as objects.
+- **Run together (mixes).** Split money across pods, combined curve and dip, saved as a mix that goes to paper like a pod. Docs have nothing at portfolio level (DEC-0435, DEC-0207): new scope.
+- **Kill switch by scope.** Scopes: everything, one server, one pod, one pod on one server. Strengths: stop new trades, and close and halt; plus resume. The docs allow flatten at any scope (DEC-0150) but the node's closed powers list has no pause or stand-down for a Book (pod) and nothing per server: needs new powers, each rechecked at click time and journaled with the signature.
+- **Lab copilot pod tools:** pod.edit, pod.test, pod.stress_scenario, pod.mix, pod.paper (all new scope).

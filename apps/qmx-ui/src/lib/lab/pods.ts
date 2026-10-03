@@ -266,6 +266,8 @@ export type LabPod = {
   version: string;
   template: string;
   color: string;
+  /** Where this version is on its way to money. */
+  stage: "draft" | "tested" | "paper" | "live";
   stack: Record<SlotId, string[]>;
 };
 
@@ -276,6 +278,7 @@ export const LAB_PODS: LabPod[] = [
     version: "v3",
     template: "Classic Book (Book + BMS)",
     color: "var(--muted-foreground)",
+    stage: "live",
     stack: {
       inputs: [],
       guards: ["kill", "streak", "brakes"],
@@ -292,6 +295,7 @@ export const LAB_PODS: LabPod[] = [
     version: "v2",
     template: "Trend rider",
     color: "var(--chart-2)",
+    stage: "paper",
     stack: {
       inputs: ["regime-input", "vol-input"],
       guards: ["kill", "brakes", "news-kill"],
@@ -308,6 +312,7 @@ export const LAB_PODS: LabPod[] = [
     version: "v1",
     template: "Vol-targeted core",
     color: "var(--chart-4)",
+    stage: "paper",
     stack: {
       inputs: ["vol-input", "peg-input"],
       guards: ["kill", "brakes"],
@@ -530,75 +535,284 @@ export const INTERVENTIONS = [
   },
 ];
 
-/** Measures per pod for the comparison grid: raw numbers, no total score. */
-export const POD_MEASURES: {
-  group: string;
-  label: string;
-  values: Record<string, string>;
-  best?: string;
-}[] = [
+export const POD_EQUITY: Record<string, number[]> = {
+  // Seeds picked so each curve's deepest dip and gain match Head to head.
+  classic: equityWalk(8, 120, 0.0035, 0.035),
+  trend: equityWalk(4, 120, 0.0015, 0.03),
+  voltarget: equityWalk(1, 120, 0.0015, 0.03),
+};
+
+export const STAGE_LABEL: Record<LabPod["stage"], string> = {
+  draft: "Draft",
+  tested: "Tested",
+  paper: "On paper",
+  live: "Live",
+};
+
+/** Bots a pod test can run over (published versions from the Library). */
+export const TEST_BOTS = [
+  { id: "btc-breakout", name: "BTC breakout", symbol: "BTCUSDT" },
+  { id: "eth-trend", name: "ETH trend", symbol: "ETHUSDT" },
+  { id: "sol-mom", name: "SOL momentum", symbol: "SOLUSDT" },
+  { id: "avax-mom", name: "AVAX momentum", symbol: "AVAXUSDT" },
+  { id: "eth-mr", name: "ETH mean reversion", symbol: "ETHUSDT" },
+  { id: "rotator", name: "Top-5 rotator", symbol: "Basket" },
+];
+
+/** Paper money a pod can soak on before it touches real money. */
+export const PAPER_MONEY = [
   {
-    group: "Return",
-    label: "Net (USD)",
-    values: { classic: "+$6,420", trend: "+$5,880", voltarget: "+$4,910" },
-    best: "classic",
+    id: "bn-test",
+    name: "Binance testnet",
+    note: "The exchange's own test market",
+    balance: 25000,
   },
   {
-    group: "Return",
-    label: "Return ÷ max drawdown",
-    values: { classic: "1.1", trend: "1.6", voltarget: "2.0" },
-    best: "voltarget",
+    id: "by-test",
+    name: "Bybit testnet",
+    note: "The exchange's own test market",
+    balance: 10000,
   },
   {
-    group: "Pain",
-    label: "Max drawdown",
-    values: { classic: "−24%", trend: "−15%", voltarget: "−10%" },
-    best: "voltarget",
-  },
-  {
-    group: "Pain",
-    label: "Worst week",
-    values: { classic: "−9.8%", trend: "−6.1%", voltarget: "−4.4%" },
-    best: "voltarget",
-  },
-  {
-    group: "Tail",
-    label: "Chance of hitting the kill line (90 days)",
-    values: { classic: "7.4%", trend: "2.1%", voltarget: "0.6%" },
-    best: "voltarget",
-  },
-  {
-    group: "Tail",
-    label: "Worst stress loss",
-    values: { classic: "−$4,100", trend: "−$2,200", voltarget: "−$1,600" },
-    best: "voltarget",
-  },
-  {
-    group: "Behaviour",
-    label: "Trades shrunk or refused",
-    values: { classic: "3%", trend: "18%", voltarget: "26%" },
-  },
-  {
-    group: "Behaviour",
-    label: "Time halted",
-    values: { classic: "1.2%", trend: "4.0%", voltarget: "0.8%" },
-  },
-  {
-    group: "Fragility",
-    label: "Profit from top 5 trades",
-    values: { classic: "41%", trend: "33%", voltarget: "24%" },
-    best: "voltarget",
+    id: "ledger",
+    name: "Node paper ledger",
+    note: "Any exchange; fills simulated on live prices",
+    balance: 20000,
   },
 ];
 
-export const POD_EQUITY: Record<string, number[]> = {
-  classic: equityWalk(201, 120, 0.0015, 0.014),
-  trend: equityWalk(202, 120, 0.0014, 0.01),
-  voltarget: equityWalk(203, 120, 0.0012, 0.007),
+/** Head to head: each pod's measures as numbers, and which way is better. */
+export type PodAttr = {
+  id: string;
+  label: string;
+  note: string;
+  better: "high" | "low" | "none";
+  unit: "usd" | "pct";
+  values: Record<string, number>;
+  /** Differences smaller than this are inside the Monte Carlo noise. */
+  noise: number;
+};
+export const POD_ATTRS: PodAttr[] = [
+  {
+    id: "profit",
+    label: "Profit",
+    note: "Net on $20,000, after fees",
+    better: "high",
+    unit: "usd",
+    values: { classic: 6440, trend: 5340, voltarget: 4400 },
+    noise: 400,
+  },
+  {
+    id: "dip",
+    label: "Deepest dip",
+    note: "Largest fall from a high",
+    better: "low",
+    unit: "pct",
+    values: { classic: -24, trend: -15, voltarget: -10 },
+    noise: 2,
+  },
+  {
+    id: "crash",
+    label: "Worst crash",
+    note: "Worst loss on the stress board",
+    better: "low",
+    unit: "usd",
+    values: { classic: -4100, trend: -2200, voltarget: -1600 },
+    noise: 300,
+  },
+  {
+    id: "kill",
+    label: "Kill-line risk",
+    note: "Chance of hitting it in 90 days",
+    better: "low",
+    unit: "pct",
+    values: { classic: 7.4, trend: 2.1, voltarget: 0.6 },
+    noise: 1,
+  },
+  {
+    id: "luck",
+    label: "Luck share",
+    note: "Profit that came from the top 5 trades",
+    better: "low",
+    unit: "pct",
+    values: { classic: 41, trend: 33, voltarget: 24 },
+    noise: 5,
+  },
+  {
+    id: "steps",
+    label: "Steps in",
+    note: "Trades it shrank or refused",
+    better: "none",
+    unit: "pct",
+    values: { classic: 3, trend: 18, voltarget: 26 },
+    noise: 0,
+  },
+];
+
+/** A pod version soaking on paper: the Lab watches it against its own test. */
+export type PaperRun = {
+  pod: string;
+  version: string;
+  money: string;
+  server: string;
+  day: number;
+  of: number;
+  started: string;
+  /** Paper equity so far, and the band its test said to expect. */
+  equity: number[];
+  p5: number[];
+  p95: number[];
+  verdict: "as-tested" | "drifting" | "ready";
+  checks: { label: string; done: boolean; note: string }[];
 };
 
-export const ALLOCATION = [
-  { pod: "Classic Book", now: 40, proposed: 25, band: [18, 33] },
-  { pod: "Trend rider", now: 35, proposed: 35, band: [28, 41] },
-  { pod: "Vol-targeted core", now: 25, proposed: 40, band: [35, 46] },
+function band(seed: number, n: number, drift: number, width: number) {
+  const mid = equityWalk(seed, n, drift, 0.003);
+  return {
+    p5: mid.map((v, i) => v * (1 - width * Math.sqrt((i + 1) / n))),
+    p95: mid.map((v, i) => v * (1 + width * Math.sqrt((i + 1) / n))),
+  };
+}
+
+export const PAPER_RUNS: PaperRun[] = [
+  {
+    pod: "trend",
+    version: "v2",
+    money: "Binance testnet",
+    server: "This laptop",
+    day: 4,
+    of: 7,
+    started: "Sep 29",
+    equity: equityWalk(311, 32, 0.0012, 0.004),
+    ...band(311, 56, 0.0012, 0.03),
+    verdict: "as-tested",
+    checks: [
+      { label: "Soak time", done: false, note: "Day 4 of 7" },
+      { label: "Inside the tested band", done: true, note: "Every day so far" },
+      {
+        label: "Kill line kept its distance",
+        done: true,
+        note: "Closest: 71% of room left",
+      },
+      {
+        label: "Every fill matched the exchange",
+        done: true,
+        note: "112 of 112",
+      },
+      { label: "No unknown positions", done: true, note: "None" },
+    ],
+  },
+  {
+    pod: "voltarget",
+    version: "v1",
+    money: "Bybit testnet",
+    server: "Tokyo",
+    day: 9,
+    of: 7,
+    started: "Sep 24",
+    equity: equityWalk(322, 56, 0.0011, 0.003),
+    ...band(322, 56, 0.0011, 0.025),
+    verdict: "ready",
+    checks: [
+      { label: "Soak time", done: true, note: "9 of 7 days" },
+      { label: "Inside the tested band", done: true, note: "Every day" },
+      {
+        label: "Kill line kept its distance",
+        done: true,
+        note: "Closest: 88% of room left",
+      },
+      {
+        label: "Every fill matched the exchange",
+        done: true,
+        note: "204 of 204",
+      },
+      { label: "No unknown positions", done: true, note: "None" },
+    ],
+  },
+];
+
+/** Decisions arriving from a paper run: each trade with the steps that sized it. */
+export type PaperDecision = {
+  at: string;
+  bot: string;
+  side: "Buy" | "Sell";
+  symbol: string;
+  steps: { by: string; usd: number }[];
+  refused?: string;
+};
+export const PAPER_FEED: PaperDecision[] = [
+  {
+    at: "10:41",
+    bot: "SOL momentum",
+    side: "Buy",
+    symbol: "SOLUSDT",
+    steps: [
+      { by: "Sizer 0.75%", usd: 860 },
+      { by: "Regime ×1", usd: 860 },
+      { by: "Caps", usd: 860 },
+    ],
+  },
+  {
+    at: "10:12",
+    bot: "AVAX momentum",
+    side: "Buy",
+    symbol: "AVAXUSDT",
+    steps: [{ by: "Sizer 0.75%", usd: 640 }],
+    refused: "Volatility spike 3.1×",
+  },
+  {
+    at: "09:55",
+    bot: "BTC breakout",
+    side: "Buy",
+    symbol: "BTCUSDT",
+    steps: [
+      { by: "Sizer 0.75%", usd: 1240 },
+      { by: "Correlation cap ×0.6", usd: 744 },
+      { by: "Venue fit", usd: 743.6 },
+    ],
+  },
+  {
+    at: "09:20",
+    bot: "ETH trend",
+    side: "Sell",
+    symbol: "ETHUSDT",
+    steps: [{ by: "Exit at target", usd: 910 }],
+  },
+];
+
+/** Stress scenarios you made yourself (here, one drafted with the copilot). */
+export const MY_STRESS = [
+  {
+    id: "mine-1",
+    name: "BTC −15% while Binance pauses withdrawals",
+    by: "You, with the copilot",
+  },
+];
+
+/** Today's interventions from the pods on paper. */
+export const PAPER_INTERVENTIONS = [
+  {
+    time: "Today 10:12",
+    pod: "Trend rider",
+    what: "Refused AVAX entry",
+    by: "Volatility spike (3.1×)",
+  },
+  {
+    time: "Today 09:55",
+    pod: "Trend rider",
+    what: "Shrunk ×0.6",
+    by: "Correlation cap (BTC with ETH open)",
+  },
+  {
+    time: "Today 03:00",
+    pod: "Vol-targeted core",
+    what: "Shrunk ×0.5",
+    by: "Thin hours",
+  },
+  {
+    time: "Yesterday 21:40",
+    pod: "Vol-targeted core",
+    what: "Shrunk ×0.75",
+    by: "Drawdown ladder at −3.1%",
+  },
 ];

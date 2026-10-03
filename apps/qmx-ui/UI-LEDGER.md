@@ -143,3 +143,27 @@ Backlog (needs backend or later passes):
 - **Agent requests removed.** Agents mostly run off-machine for long stretches; the operator won't start work he's unsure of. Instead: **copilot sessions that run for days**, using sub-agents (Copilot pass).
 - Wants a built-in help or guide feature for things like "how do I train something new" (Copilot pass).
 - Mini apps need re-thinking now that Lab, Portfolio and Library are first-class; the Research demo app is redundant (Mini apps pass).
+
+
+### Rulings (operator, 2026-10-03, round 4)
+
+- **Too many Lab tabs.** Pods, Pod test, Pod compare and Allocate were four tabs on top of Build, Test, Train and Compare. Pods need more thought, not more tabs.
+- **New risk and sizing systems go through paper themselves** before money, and that happens in the Lab ("Pod test is where paper trading happens"); positions arrive live.
+- **Pod resources differ from strategy resources.**
+- **Stress board:** the operator adds his own scenarios with the copilot.
+- Pod comparison table: not understood. Allocate: not understood.
+- **Kill switch per server or per pod**, combined.
+- Mini apps: fine; the Lab took over a lot, which is good. Wants many more mini apps (news, anything else).
+- Order after this: **main Copilot, then Library, then Home.** Remember component updates. The copilot must be able to create new things in the UI under rules that prevent overflows and bugs (Copilot pass).
+
+### Round 4 done (2026-10-03)
+
+- [x] **Lab benches.** A Strategies | Pods switch in the Lab header; each bench shows only its own tabs. Strategies: Build, Test, Train, Compare. Pods: **Design, Test, Paper**. Old links (`?layout=pods|podtest|podcompare|allocate`) land on the new tabs. Saved layouts remember their bench (`group` on TileLayout, tested).
+- [x] **Pod resources** replace Resources on the Pods bench: Pods (with stage: draft, tested, on paper, live), Bots, Blocks by slot, Stress (built-in and yours), Money (testnets and the node paper ledger). Ticks here are what a test runs. New pod from a template or the copilot.
+- [x] **Test** = equity + stress board + head to head + drawdown fan (interventions minimised). Compare and Allocate are folded in:
+  - **Head to head** replaces the comparison table: one card per pod with bars (profit, deepest dip, worst crash, kill-line risk, luck share, steps in), a trophy only when the gap beats the noise, and a one-line trade-off. No total score.
+  - **Run together** replaces Allocate: split $20,000 across the ticked pods with sliders (equal money, equal risk, ask the copilot), see the combined curve against each pod alone, save as a mix (goes to paper like a pod).
+  - Stress board: + Scenario (describe to the copilot, replay real dates, set shocks by hand); your scenarios marked "Yours" and show "Not run yet · Run".
+- [x] **Paper** (new): Paper run (paper equity against the band its test expected, soak day progress, verdict), Live decisions (each paper trade with the steps that sized it, refusals, arriving live), Ready for live? (checks, Promote to live builds the promotion card; signing and activation stay in Portfolio), today's interventions.
+- [x] **Kill switch grid** in the Portfolio header: pods down the side, servers across. Row = pod everywhere, column = server, square = one pod on one server, corner = everything. Two strengths (stop new trades; close and halt), each needs a second click; Resume. The chip shows how many scopes are stopped. Exchange-account levels stay as the second tab.
+- [x] Lab copilot gets pod tools and pod starters; surfaces can draft text into it (seed).

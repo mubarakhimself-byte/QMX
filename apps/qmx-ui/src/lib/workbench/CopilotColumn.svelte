@@ -31,6 +31,7 @@
     context,
     sessions = [],
     starters = [],
+    seed = "",
   }: {
     title?: string;
     profile?: string;
@@ -43,8 +44,13 @@
     sessions?: Session[];
     /** A few things this copilot is good at, offered on an empty session. */
     starters?: string[];
+    /** Text the surface drafts into the composer (e.g. from a "+ Scenario" menu). */
+    seed?: string;
   } = $props();
   let draftSeed = $state("");
+  $effect(() => {
+    if (seed) draftSeed = seed;
+  });
 
   // svelte-ignore state_referenced_locally
   let list = $state<Session[]>([...sessions]);

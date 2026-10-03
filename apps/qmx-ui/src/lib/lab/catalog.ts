@@ -38,17 +38,22 @@ import SizeTrailPanel from "./panels/SizeTrailPanel.svelte";
 import FanPanel from "./panels/FanPanel.svelte";
 import StressPanel from "./panels/StressPanel.svelte";
 import InterventionsPanel from "./panels/InterventionsPanel.svelte";
-import PodGridPanel from "./panels/PodGridPanel.svelte";
 import PodEquityPanel from "./panels/PodEquityPanel.svelte";
-import AllocatePanel from "./panels/AllocatePanel.svelte";
+import PodResourcesPanel from "./panels/PodResourcesPanel.svelte";
+import HeadToHeadPanel from "./panels/HeadToHeadPanel.svelte";
+import PaperRunPanel from "./panels/PaperRunPanel.svelte";
+import PaperFeedPanel from "./panels/PaperFeedPanel.svelte";
+import GraduatePanel from "./panels/GraduatePanel.svelte";
 import Boxes2 from "@lucide/svelte/icons/layers-2";
 import Puzzle from "@lucide/svelte/icons/puzzle";
 import ChartBarDecreasing from "@lucide/svelte/icons/chart-bar-decreasing";
 import ChartArea from "@lucide/svelte/icons/chart-area";
 import Siren from "@lucide/svelte/icons/siren";
 import History from "@lucide/svelte/icons/history";
-import Rows3 from "@lucide/svelte/icons/rows-3";
-import Scale from "@lucide/svelte/icons/scale";
+import Swords from "@lucide/svelte/icons/swords";
+import Wallet from "@lucide/svelte/icons/wallet";
+import Radio from "@lucide/svelte/icons/radio";
+import Rocket from "@lucide/svelte/icons/rocket";
 
 import Layers from "@lucide/svelte/icons/layers";
 
@@ -181,28 +186,40 @@ export const LAB_PANELS: Record<string, LabPanel> = {
     note: "Every shrink, refusal and halt",
     view: InterventionsPanel,
   },
-  podgrid: {
-    title: "Pod comparison",
-    icon: Rows3,
-    note: "Pods side by side, no total score",
-    view: PodGridPanel,
-  },
   podequity: {
     title: "Pod equity",
     icon: ChartLine,
     note: "Ticked pods on the same bots",
     view: PodEquityPanel,
   },
-  allocate: {
-    title: "Allocate",
-    icon: Scale,
-    note: "Split capital across tested pods",
-    view: AllocatePanel,
+  podres: {
+    title: "Pod resources",
+    icon: Wallet,
+    note: "Pods, bots, blocks, stress and paper money",
+    view: PodResourcesPanel,
   },
-  logs: {
-    title: "Log",
-    icon: ScrollText,
-    note: "Output of the selected run",
-    view: LogsPanel,
+  headtohead: {
+    title: "Head to head",
+    icon: Swords,
+    note: "Ticked pods as cards, side by side",
+    view: HeadToHeadPanel,
+  },
+  paperrun: {
+    title: "Paper run",
+    icon: Radio,
+    note: "A pod on paper against its own test",
+    view: PaperRunPanel,
+  },
+  paperfeed: {
+    title: "Live decisions",
+    icon: History,
+    note: "Each paper trade and how it was sized",
+    view: PaperFeedPanel,
+  },
+  graduate: {
+    title: "Ready for live?",
+    icon: Rocket,
+    note: "Checks before promotion",
+    view: GraduatePanel,
   },
 };

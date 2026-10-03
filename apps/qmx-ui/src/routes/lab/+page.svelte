@@ -8,6 +8,7 @@
    */
   import { page } from "$app/state";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
+  import Layers2 from "@lucide/svelte/icons/layers-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Play from "@lucide/svelte/icons/play";
   import Plus from "@lucide/svelte/icons/plus";
@@ -36,10 +37,24 @@
   import MachineEmpty from "$lib/lab/MachineEmpty.svelte";
   import LabStrips from "$lib/lab/LabStrips.svelte";
   import { GUIDES } from "$lib/lab/guides";
+  import { LAB_PODS, POD_TEMPLATES, STAGE_LABEL } from "$lib/lab/pods";
 
-  const fromUrl = page.url.searchParams.get("layout");
+  // Old links to the four pod tabs land on the Pods bench's three.
+  const OLD: Record<string, string> = {
+    pods: "pod-design",
+    podtest: "pod-test",
+    podcompare: "pod-test",
+    allocate: "pod-test",
+  };
+  const asked = page.url.searchParams.get("layout");
+  const fromUrl = asked ? (OLD[asked] ?? asked) : null;
   if (fromUrl && lab.layouts.some((l) => l.id === fromUrl))
     lab.activeId = fromUrl;
+  const BENCHES = [
+    { id: "strategies", label: "Strategies", icon: FlaskConical },
+    { id: "pods", label: "Pods", icon: Layers2 },
+  ];
+  const pod = $derived(LAB_PODS.find((p) => p.id === lab.labPod)!);
 
   const SUBJECTS = ASSETS.filter((a) =>
     ["bot", "template", "model"].includes(a.kind),
@@ -76,6 +91,13 @@
   }
   function run() {
     const env = ENVIRONMENTS.find((e) => e.id === (lab.machine ?? "local"))!;
+    if (lab.bench === "pods") {
+      if (lab.activeId !== "pod-test") lab.activeId = "pod-test";
+      workbench.notify(
+        `Testing needs the daemon. It would replay ${lab.botsTicked.length} bots through ${lab.podsTicked.length} pods and ${lab.stressTicked.length} stress scenarios on ${env.name}.`,
+      );
+      return;
+    }
     workbench.notify(
       `Running needs the daemon. It would run the published version of ${subject.name} on ${env.name}.`,
     );
@@ -93,37 +115,117 @@
   {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
     <h1 class="text-base font-semibold">Lab</h1>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} variant="ghost" size="sm" class="gap-1.5">
-            <span class="text-muted-foreground text-xs">Working on</span>
-            {subject.name}<ChevronDown class="size-3.5" />
-          </Button>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content class="w-64">
-        {#each SUBJECTS as s (s.id)}
-          <DropdownMenu.Item onclick={() => (subject = s)}>
-            <span class="flex flex-col">
-              <span>{s.name}</span>
-              <span class="text-muted-foreground text-xs">{s.meta}</span>
-            </span>
-          </DropdownMenu.Item>
-        {/each}
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onclick={() => (starting = true)}
-          ><Plus />Start something new</DropdownMenu.Item
+    <div
+      class="bg-muted flex rounded-lg p-0.5"
+      role="radiogroup"
+      aria-label="Bench"
+    >
+      {#each BENCHES as b (b.id)}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={lab.bench === b.id}
+          class={cn(
+            "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm",
+            lab.bench === b.id
+              ? "bg-background text-foreground font-medium shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onclick={() => lab.setBench(b.id)}
+          ><b.icon class="size-3.5" />{b.label}</button
         >
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+      {/each}
+    </div>
+    {#if lab.bench === "pods"}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="sm" class="gap-1.5">
+              <span class="text-muted-foreground text-xs">Working on</span>
+              <span class="size-2 rounded-full" style="background:{pod.color}"
+              ></span>
+              {pod.name}
+              {pod.version}<ChevronDown class="size-3.5" />
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content class="w-72">
+          {#each LAB_PODS as p (p.id)}
+            <DropdownMenu.Item onclick={() => (lab.labPod = p.id)}>
+              <span class="size-2 rounded-full" style="background:{p.color}"
+              ></span>
+              <span class="flex flex-1 flex-col">
+                <span>{p.name} {p.version}</span>
+                <span class="text-muted-foreground text-xs">{p.template}</span>
+              </span>
+              <span class="text-muted-foreground text-xs"
+                >{STAGE_LABEL[p.stage]}</span
+              >
+            </DropdownMenu.Item>
+          {/each}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            onclick={() =>
+              lab.ask(
+                "Build me a new pod for my momentum bots: risk about 0.5% a trade, stop everything at -10%, and slow down on weekends.",
+              )}><Sparkles />New pod with the copilot</DropdownMenu.Item
+          >
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger
+              ><Plus />New pod from a template</DropdownMenu.SubTrigger
+            >
+            <DropdownMenu.SubContent class="w-64">
+              {#each POD_TEMPLATES as t (t.id)}
+                <DropdownMenu.Item
+                  onclick={() =>
+                    workbench.notify(
+                      `A draft from "${t.name}" opens in Design. Nothing changes until you save it.`,
+                    )}
+                >
+                  <span class="flex flex-col"
+                    ><span>{t.name}</span><span
+                      class="text-muted-foreground text-xs">{t.note}</span
+                    ></span
+                  >
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {:else}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="sm" class="gap-1.5">
+              <span class="text-muted-foreground text-xs">Working on</span>
+              {subject.name}<ChevronDown class="size-3.5" />
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content class="w-64">
+          {#each SUBJECTS as s (s.id)}
+            <DropdownMenu.Item onclick={() => (subject = s)}>
+              <span class="flex flex-col">
+                <span>{s.name}</span>
+                <span class="text-muted-foreground text-xs">{s.meta}</span>
+              </span>
+            </DropdownMenu.Item>
+          {/each}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onclick={() => (starting = true)}
+            ><Plus />Start something new</DropdownMenu.Item
+          >
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
 
     <nav class="flex items-center gap-0.5" aria-label="Layouts">
-      {#each lab.layouts as l (l.id)}
+      {#each lab.benchLayouts as l (l.id)}
         <button
           type="button"
           class={cn(
-            "h-7 rounded-md px-3 text-sm",
+            "h-7 rounded-md px-3 text-sm whitespace-nowrap",
             lab.activeId === l.id
               ? "bg-muted text-foreground font-medium"
               : "text-muted-foreground hover:text-foreground",
@@ -208,7 +310,9 @@
       </DropdownMenu.Root>
       <span class="bg-border mx-1 h-5 w-px"></span>
       <MachinePicker />
-      <Button size="sm" onclick={run}><Play />Run</Button>
+      <Button size="sm" onclick={run}
+        ><Play />{lab.bench === "pods" ? "Run test" : "Run"}</Button
+      >
       <Button
         variant={lab.copilotOpen ? "secondary" : "ghost"}
         size="icon-sm"
@@ -246,19 +350,31 @@
         <CopilotColumn
           title="Lab copilot"
           profile="lab"
-          hint={`Knows ${subject.name}, the open layout and every run. Ask it to build a step, a panel, a test or a sweep.`}
-          placeholder="Sweep this across the majors on H1 and H4…"
+          hint={lab.bench === "pods"
+            ? `Knows ${pod.name}, its blocks, every pod test and paper run. Ask it to build a block, a stress scenario or a mix.`
+            : `Knows ${subject.name}, the open layout and every run. Ask it to build a step, a panel, a test or a sweep.`}
+          placeholder={lab.bench === "pods"
+            ? "Make a stress scenario where…"
+            : "Sweep this across the majors on H1 and H4…"}
+          seed={lab.copilotSeed}
           onclose={() => (lab.copilotOpen = false)}
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={LAB_CONTEXT}
           sessions={LAB_SESSIONS}
-          starters={[
-            `Sweep ${subject.name} across the majors on H1 and H4`,
-            "Why did the LINK M15 run fail?",
-            "Compare the three ticked runs and say what changed",
-            "Build a panel showing drawdown by session",
-          ]}
+          starters={lab.bench === "pods"
+            ? [
+                `Why did ${pod.name} refuse the AVAX entry this morning?`,
+                "Build a stress scenario from the March 2020 crash",
+                "Make a block that halves size after three losses in a row",
+                "Split $20,000 across the ticked pods to keep dips under 8%",
+              ]
+            : [
+                `Sweep ${subject.name} across the majors on H1 and H4`,
+                "Why did the LINK M15 run fail?",
+                "Compare the three ticked runs and say what changed",
+                "Build a panel showing drawdown by session",
+              ]}
         />
       </Resizable.Pane>
     {/if}
@@ -272,7 +388,7 @@
         <Dialog.Title>Save this layout</Dialog.Title>
         <Dialog.Description
           >Keeps the tiles, their sizes, links and what is minimised. It appears
-          next to Build, Test, Train and Compare.</Dialog.Description
+          next to this bench's other layouts.</Dialog.Description
         >
       </Dialog.Header>
       <Input bind:value={layoutName} maxlength={40} aria-label="Layout name" />

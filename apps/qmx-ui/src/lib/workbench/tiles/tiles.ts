@@ -35,6 +35,8 @@ export type TileLayout = {
   root: TileNode;
   /** Ids of minimised tiles. */
   docked: string[];
+  /** Which set of layouts this belongs to (e.g. the Lab's Pods bench). */
+  group?: string;
 };
 
 export const pane = (
@@ -247,6 +249,8 @@ export function parseLayouts(
           (d): d is string => typeof d === "string" && ids.includes(d),
         )
       : [];
-    return [{ id: o.id, name: o.name.slice(0, 40), root, docked }];
+    const group =
+      typeof o.group === "string" ? { group: o.group.slice(0, 24) } : {};
+    return [{ id: o.id, name: o.name.slice(0, 40), root, docked, ...group }];
   });
 }

@@ -83,4 +83,16 @@ describe("tiling layouts", () => {
     expect(out).toHaveLength(1);
     expect(out[0].docked).toEqual(["a"]);
   });
+
+  it("keeps the group a layout belongs to, and only a string one", () => {
+    const out = parseLayouts(
+      [
+        { id: "p", name: "Pods mine", root: tree, docked: [], group: "pods" },
+        { id: "q", name: "Odd", root: tree, docked: [], group: 7 },
+      ],
+      () => true,
+    );
+    expect(out[0].group).toBe("pods");
+    expect(out[1].group).toBeUndefined();
+  });
 });

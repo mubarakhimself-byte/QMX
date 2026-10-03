@@ -206,3 +206,18 @@ An agent re-read every operator message in this session and checked it against t
 - **Books**: authority bot → Book → BMS → operator. Book owns admission, sizing, doors, leash, exits; BMS owns accounting, constraints, kill line, reporting. Sizing ladder in USD (book_capital, loss_floor, loss_runway, period_loss_budget, r_unit_price, position_risk_amount = requested_r × r_unit_price). Template sections: charter, footprint_requirements, money_rules, admission_bar, leash_grammar, capacity_and_sweep, exit_policy, control_policy, protection_windows, paper. UI edits mint a new version (branches-from), never mutate. Seat active|benched; Book mode LIVE|PAPER; binding live|paper|stood-down (three vocabularies). **No ratified portfolio-optimisation concept** — operator wants a dedicated page; flag as new scope.
 - **Data sources**: all via CT-15 → CT-10; Dukascopy primary (personal use), news calendar, cTrader intended. CSV import = a CT-15 adapter (no Excel in docs). Upload = `PUT /artifacts/stage` (refuses while stage_max_bytes unset). Dataset node shows provider, coverage, schema, units, timezone, calendar, freshness, provenance, entitlement, revision; missing/denied/truncated distinct.
 - **Unknown views/widgets**: PackUiRequest ingest drops bad views with typed diagnostics (unknown_pack_ui_schema, view_op_not_contributed, view_schema_drift…); unknown renderer → empty pane with visible reason, `failure_class=view`, pack stays enabled, other views mount, jobs untouched. Closed slots app-nav / canvas-widget / detail / copilot-panel / preview-tab; renderers native / json-render / mcp-app.
+
+
+## Copilot pass: rules for things the copilot creates (operator, 2026-10-03)
+
+The copilot will make panels, blocks, scenarios, layouts and mini apps. To stop overflows and broken screens:
+- [ ] It builds only from the component catalog (shadcn-svelte + QMX components), never raw HTML or its own CSS.
+- [ ] Every generated panel declares a size range (min width and height) and is checked at its smallest size and in a narrow tile before it is offered.
+- [ ] Text truncates or wraps by rule; numbers use the `num` style; long lists scroll inside the panel, never the page.
+- [ ] Unknown or broken panels show the "not supported" frame with a reason, never a crash (already in TileBoard).
+- [ ] New things arrive as a draft you can preview, keep or discard; nothing replaces a working layout silently.
+- [ ] Component library refresh: update shadcn-svelte components and document which ones the copilot may use.
+
+## Mini apps (operator, 2026-10-03)
+
+- [ ] Many more mini apps: news and sentiment, and others. Three kinds: remix screens, headless apps, extensions. Retire the Research demo.

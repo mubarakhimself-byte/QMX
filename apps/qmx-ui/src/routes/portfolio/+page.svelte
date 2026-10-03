@@ -111,7 +111,7 @@
         <button
           type="button"
           class={cn(
-            "h-7 rounded-md px-3 text-sm",
+            "h-7 rounded-md px-3 text-sm whitespace-nowrap",
             L.activeId === l.id
               ? "bg-muted text-foreground font-medium"
               : "text-muted-foreground hover:text-foreground",

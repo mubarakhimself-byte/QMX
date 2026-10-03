@@ -20,6 +20,9 @@
     test: "being tested",
     train: "training",
     compare: "to compare",
+    "pod-design": "being designed",
+    "pod-test": "being tested",
+    "pod-paper": "on paper",
   };
   const elsewhere = $derived(
     lab.layouts

@@ -68,6 +68,36 @@ export const LAB_CONTEXT: CopilotContext = {
       note: "Read coverage, gaps and schema",
       group: "Data",
     },
+    {
+      id: "pod.edit",
+      note: "Add, remove or tune a pod's blocks",
+      group: "Pods",
+      scope: "new",
+    },
+    {
+      id: "pod.test",
+      note: "Replay bots through pods, Monte Carlo the dips",
+      group: "Pods",
+      scope: "new",
+    },
+    {
+      id: "pod.stress_scenario",
+      note: "Build a stress scenario from words or dates",
+      group: "Pods",
+      scope: "new",
+    },
+    {
+      id: "pod.mix",
+      note: "Split money across pods and test it",
+      group: "Pods",
+      scope: "new",
+    },
+    {
+      id: "pod.paper",
+      note: "Draft a paper run for your signature",
+      group: "Pods",
+      scope: "new",
+    },
   ],
   defaultTools: [
     "qmb.backtest",

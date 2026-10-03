@@ -113,6 +113,14 @@ export function activity(env: string, layout: string): number {
         .length;
     case "compare":
       return runsHere.filter((r) => r.status === "done").length;
+    // Pods: drafts live on this laptop, pod tests queue like runs, and the
+    // paper runs the Lab watches sit on whichever server trades them.
+    case "pod-design":
+      return env === "local" ? 3 : 0;
+    case "pod-test":
+      return ({ local: 1, "vps-fsn": 2 } as Record<string, number>)[env] ?? 0;
+    case "pod-paper":
+      return env === "local" ? 1 : 0;
     default:
       return RUNS.filter((r) => r.env === env).length;
   }
