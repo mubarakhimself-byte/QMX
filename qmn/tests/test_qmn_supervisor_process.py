@@ -90,7 +90,7 @@ def test_supervisor_module_runs_stand_down_and_survives_restart(tmp_path: Path) 
         finally:
             process.terminate()
             _stdout, stderr = process.communicate(timeout=5)
-            assert process.returncode == 0
+            assert process.returncode == (1 if os.name == "nt" else 0)
             assert stderr is not None and b"RuntimeWarning" not in stderr
 
     evidence = EvidenceStore(state / "evidence")
@@ -148,7 +148,7 @@ def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
     finally:
         process.terminate()
         _stdout, stderr = process.communicate(timeout=5)
-        assert process.returncode == 0
+        assert process.returncode == (1 if os.name == "nt" else 0)
         assert stderr is not None and b"RuntimeWarning" not in stderr
 
 
@@ -177,7 +177,7 @@ def test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile(
     finally:
         process.terminate()
         _stdout, stderr = process.communicate(timeout=5)
-        assert process.returncode == 0
+        assert process.returncode == (1 if os.name == "nt" else 0)
         assert stderr is not None and b"RuntimeWarning" not in stderr
 
     evidence = EvidenceStore(state / "evidence")
