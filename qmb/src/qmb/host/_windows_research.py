@@ -131,8 +131,14 @@ def _open(
     # Directory handles are anchors, never data-I/O handles. READ_ATTRIBUTES
     # suffices for reparse/type verification and avoids unnecessary SYNCHRONIZE
     # rights on read-only ancestors. File descriptors require synchronous I/O.
+    # FILE_LIST_DIRECTORY makes directory anchors participate in sharing checks.
+    # Attribute-only opens can permit a root move before the first leaf is open.
+    # Share directory writes for NTFS's internal target open during publication;
+    # never share deletion, so held ancestors cannot move. No directory data I/O
+    # is performed, and SYNCHRONIZE is not needed. Leaves keep their own modes.
     options = 0x200000 | (1 if directory else 0x60)
-    access = 0x80 if directory else 0x80100000
+    access = 0x81 if directory else 0x80100000
+    native_share = share | 2 if directory else share
     if directory and create:
         options |= 2  # NTFS directory-creation metadata is write-through too.
     if writable:
@@ -146,7 +152,7 @@ def _open(
         c.byref(status),
         None,
         0,
-        share,
+        native_share,
         disposition,
         options,
         None,

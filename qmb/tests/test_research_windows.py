@@ -179,6 +179,157 @@ def test_native_held_ancestors_and_temporary_cannot_be_replaced(
     assert list(root.iterdir()) == [result.path]
 
 
+@pytest.mark.parametrize("mode", ["read", "write"])
+@pytest.mark.parametrize("parent", [False, True])
+def test_native_directory_cannot_move_before_leaf_acquisition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    parent: bool,
+) -> None:
+    from qmb.host import _windows_research as native
+
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "admitted" / "research"
+    root.mkdir(parents=True)
+    target = root.parent if parent else root
+    outside = tmp_path / "outside"
+    name = saved.research_ref.value.replace(":", "-")
+    if mode == "read":
+        (root / name).write_bytes(saved.canonical_bytes)
+    attempted = False
+
+    def attack() -> None:
+        nonlocal attempted
+        if attempted:
+            return
+        attempted = True
+        with ThreadPoolExecutor(max_workers=1) as pool:
+
+            def move_directory() -> None:
+                with pytest.raises(PermissionError) as denied:
+                    target.rename(outside)
+                assert denied.value.winerror in (5, 32)
+
+            pool.submit(move_directory).result(timeout=5)
+
+    if mode == "write":
+        seam = "_flush_existing"
+        actual = cast(Callable[[int, str, bytes], bool], getattr(native, seam))
+
+        def before_flush(directory: int, leaf: str, content: bytes) -> bool:
+            attack()
+            return actual(directory, leaf, content)
+
+        monkeypatch.setattr(native, seam, before_flush)
+        receipt = _ok(
+            persist_research_blob(
+                research_root=root,
+                research_ref=saved.research_ref,
+                canonical_bytes=saved.canonical_bytes,
+            )
+        )
+        assert receipt.path == root / name
+    else:
+        seam = "_open"
+        actual_open = cast(Callable[..., int], getattr(native, seam))
+
+        def before_open(
+            leaf: str,
+            directory_handle: int | None,
+            *,
+            directory: bool,
+            create: bool = False,
+            writable: bool = False,
+            share: int = 1,
+        ) -> int:
+            if not directory:
+                attack()
+            return actual_open(
+                leaf,
+                directory_handle,
+                directory=directory,
+                create=create,
+                writable=writable,
+                share=share,
+            )
+
+        monkeypatch.setattr(native, seam, before_open)
+        assert (
+            _ok(read_research_blob(research_root=root, research_ref=saved.research_ref))
+            == saved.canonical_bytes
+        )
+    assert attempted and not outside.exists()
+    assert (root / name).read_bytes() == saved.canonical_bytes
+    # The same operation succeeds after all native handles have been released.
+    target.rename(outside)
+    assert outside.exists() and not target.exists()
+
+
+@pytest.mark.parametrize("mode", ["read", "write"])
+def test_native_parent_cannot_move_during_component_walk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    from qmb.host import _windows_research as native
+
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "admitted" / "research"
+    root.mkdir(parents=True)
+    name = saved.research_ref.value.replace(":", "-")
+    if mode == "read":
+        (root / name).write_bytes(saved.canonical_bytes)
+    seam = "_open"
+    actual = cast(Callable[..., int], getattr(native, seam))
+    attacked = False
+    outside = tmp_path / "outside"
+
+    def during_walk(
+        component: str,
+        parent: int | None,
+        *,
+        directory: bool,
+        create: bool = False,
+        writable: bool = False,
+        share: int = 1,
+    ) -> int:
+        nonlocal attacked
+        if directory and component == root.name and not attacked:
+            attacked = True
+            with ThreadPoolExecutor(max_workers=1) as pool:
+
+                def move_parent() -> None:
+                    with pytest.raises(PermissionError) as denied:
+                        root.parent.rename(outside)
+                    assert denied.value.winerror in (5, 32)
+
+                pool.submit(move_parent).result(timeout=5)
+        return actual(
+            component, parent, directory=directory, create=create, writable=writable, share=share
+        )
+
+    monkeypatch.setattr(native, seam, during_walk)
+    if mode == "write":
+        receipt = _ok(
+            persist_research_blob(
+                research_root=root,
+                research_ref=saved.research_ref,
+                canonical_bytes=saved.canonical_bytes,
+            )
+        )
+        assert receipt.path == root / name
+    else:
+        assert (
+            _ok(read_research_blob(research_root=root, research_ref=saved.research_ref))
+            == saved.canonical_bytes
+        )
+    assert attacked and not outside.exists()
+    assert (root / name).read_bytes() == saved.canonical_bytes
+    root.parent.rename(outside)
+    assert outside.exists() and not root.parent.exists()
+
+
 def test_native_existing_blob_save_requires_successful_flush(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
