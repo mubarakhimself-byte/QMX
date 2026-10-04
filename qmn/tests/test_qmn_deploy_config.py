@@ -39,6 +39,15 @@ def config_mod() -> ModuleType:
 def test_init_and_validate_run_pure_scaffold_and_report_boot_block(
     config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    if os.name == "nt":
+        # Scaffold publication needs POSIX dir-fd create/fsync, which this CLI
+        # deliberately refuses when unavailable. Native startup reads are a
+        # separate read-only capability.
+        assert config_mod.main(["init", "--root", str(tmp_path)]) == 2
+        assert not (tmp_path / "node-config.json").exists()
+        assert config_mod.main(["validate", "--root", str(tmp_path)]) == 2
+        assert "refused:" in capsys.readouterr().err
+        return
     assert config_mod.main(["init", "--root", str(tmp_path)]) == 0
     artifact = json.loads((tmp_path / "node-config.json").read_text(encoding="utf-8"))
     assert artifact["class"] == "resolved-node-config"
@@ -58,6 +67,14 @@ def test_init_and_validate_run_pure_scaffold_and_report_boot_block(
 def test_explain_uses_pure_layer_report_without_secret_values(
     config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    if os.name == "nt":
+        assert config_mod.main(["init", "--root", str(tmp_path)]) == 2
+        assert config_mod.main(["explain", "--root", str(tmp_path)]) == 2
+        assert not (tmp_path / "node-config.json").exists()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "refused:" in captured.err
+        return
     assert config_mod.main(["init", "--root", str(tmp_path)]) == 0
     capsys.readouterr()
     assert config_mod.main(["explain", "--root", str(tmp_path)]) == 0
@@ -98,6 +115,7 @@ def test_deployment_validate_refuses_symlink_without_child_process(
     except (OSError, NotImplementedError):
         pytest.skip("symlink creation unavailable")
     calls: list[object] = []
+
     def record_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append((args, kwargs))
         return subprocess.CompletedProcess([], 0, "", "")
@@ -226,7 +244,9 @@ def test_config_init_rejects_parent_swap_to_symlink_without_outside_write(
 
     monkeypatch.setattr(config_cli.os, "open", swap_before_open)
     assert config_cli.main(["init", "--root", str(root), "--path", "configs/node.json"]) == 2
-    assert swapped
+    # On Windows the CLI refuses the unsupported publication capability before
+    # calling this POSIX-only interception seam. Keep the no-write assertion.
+    assert swapped is (os.name != "nt")
     assert not (outside / "node.json").exists()
     assert not target.exists()
 
