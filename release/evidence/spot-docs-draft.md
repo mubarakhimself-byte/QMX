@@ -1,114 +1,148 @@
-# Draft documentation patch: recorded spot slice
+# Draft documentation patch: recorded spot backend and governed read
 
-Status: DRAFT, 2026-10-04. Review with the parent architecture/startup lane before
-applying to canonical docs. Existing decisions, contracts, gap status and registry
-values are not silently rewritten. No new COMP/CT is proposed by this local slice.
+Status: DRAFT, 2026-10-04. This is a reviewed local synthetic infrastructure
+candidate, not canonical ratification or live release acceptance. The parent
+coordinates the shared daemon startup lane. No canonical docs, CTs, registry
+values or gap status are changed by this patch.
 
 ## Proposed addition to docs/components/qmf-venue.md
 
-> A credential-free recorded spot metadata normalizer exists in `qmf.venue.spot`.
-> It accepts CCXT-style explicit spot/non-contract/active BASE/QUOTE markets only
-> with `TICK_SIZE` decimal-string metadata and separate amount/cost limits. It
-> performs no network I/O and imports no CCXT/Hummingbot runtime. This does not
-> extend the cTrader adapter's capabilities or establish a live spot declaration.
-> Only `qmn.venue` consumes this module. Other precision modes, fee currencies,
-> derivatives and unverified provider classification fail closed.
-
-CT-18 follow-up: add a separately versioned spot declaration and measured profile
-before live decode/command support. Per-market base/quote, settlement/custody class,
-precisionMode, order subset and minimum/maximum limits must be explicit. Do not
-cast an exchange market dictionary as a ratified CT-18 profile.
+A credential-free spot normalizer exists in `qmf.venue.spot`. It admits explicitly
+active, non-contract BASE/QUOTE spot metadata with decimal-string TICK_SIZE
+precision and separate amount/cost limits. Binary floats are refused. It uses
+no CCXT/Hummingbot runtime and makes no network calls. Only `qmn.venue` consumes
+it. This does not establish a CT-18 live spot capability or classify cTrader CFDs
+as deliverable spot FX. Other precision modes and fee currencies remain future.
 
 ## Proposed addition to docs/components/trading-node.md
 
-> `qmn.venue.spot_paper.SpotPaperAccount` is a local recorded-data infrastructure
-> harness, not vendor-demo paper or a fourth production VenueClientKind. It has
-> no sockets, credentials or live-order transport. It serializes account mutations
-> under a process mutex and holds a native OS file lock on a directory keyed by
-> `(provider_connection_id, venue_id, account_id)`. Node placement is excluded
-> from that key. A second node targeting the same account/root is refused.
-> Different accounts may have different explicit policy references and open
-> notional/freshness/fee/admission limits; a Book is not hardcoded as their owner.
-> This harness does not replace production Book/BMS sizing or certify CT-23 risk.
-> SQLite snapshot plus simulation audit rows commit atomically. Reopening verifies
-> policy/market/account/seed identity and invalidates price readiness. UNKNOWN
-> real exchange effects remain outside the simulated terminal states.
+`qmn.venue.spot_paper.SpotPaperAccount` owns a local deterministic simulation
+ledger. It is not vendor-demo paper, a fourth VenueClientKind, a Book/BMS sizing
+implementation or CT-32 evidence. It has no exchange sockets or credentials.
+Balances, quote fees, remaining reservations, stable client IDs, FIFO admission
+indices/times, snapshot, audit and retained query view commit in one SQLite
+transaction. Derived decimals preserve additional digits. Delayed events cannot
+fill orders before their admission. FIFO survives restart independently of client
+ID spelling. Retries preserve exact payloads; cancel releases reservations once.
 
-Configuration additions for a future reviewed roster contract (not implemented as
-operator-config keys): `provider_connection_id`, stable `account_id`, `node_id`,
-`account_policy_ref`, explicit `asset_class`/settlement capabilities and an
-authoritative writer assignment with fencing. Local simulation config currently
-uses `AccountScope` and `PaperPolicy` values supplied by the host/harness. Shared
-roots/local file locks do not establish cross-server fencing, failover or safe
-independent-root ownership. Never enable live capabilities on that assumption.
+The local ownership key is (provider connection, venue, account), excluding node
+placement. Native OS locking proves one writer only on one machine/shared
+canonical root. It does not prove distributed fencing across servers or roots.
+Different accounts have independent policy, fee, budget, ledger and reservation
+state. A restarted writer verifies policy/market/account/seed identity and clears
+price readiness. Storage failure blocks mutations until reopen/reconciliation.
+No remote submission UNKNOWN outcome is fabricated by the local terminal states.
 
-CT-19/20 follow-up: define and verify limit/market amount units, client ID mapping,
-fees in arbitrary assets, balance reservations, partial terminal events,
-cancel/fill races, UNKNOWN after timeout/not-found and authoritative reconciliation.
-Current local simulation does not claim those remote semantics. CT-21 stays
-secret-reference-only; browser/manual secret entry remains user-controlled.
+Simulation state format 2 records admission indices/times. Format-1 candidate
+state is refused; no unsafe automatic FIFO/time reconstruction is performed.
+Preserve any old databases as historical fixtures and use a fresh synthetic
+root. The format-1 retained query projection is marked `retained` and contains an
+`audit_seq`; it makes no writer-liveness assertion. The query is a QMN-owned
+projection, not a new production money contract or CT-13 journal.
 
 ## Proposed addition to docs/components/qmf-data.md
 
-> `qmn.venue.spot_recorded.RecordedSpotSource` routes recorded spot ticks through
-> the real `SourceObservationBoundary` into replay-world immutable raw archives.
-> Foreign prices are exact at the declared price scale; the complete input tick
-> is retained in market-data provenance. Origin, writer/sequence, source/native ID,
-> revision and correction linkage are explicit. The tested producer admits synthetic recordings only. Synthetic observations carry
-> `synthetic-infrastructure-only` provenance and do not validate trading edge.
-> Archive receipt and observation fingerprints remain distinct. Fresh QMF reads
-> verify retained identity; cross-world reads remain refused.
+`qmn.venue.spot_recorded.RecordedSpotSource` admits synthetic ticks through the
+real SourceObservationBoundary and immutable CT-10 replay archive. Complete raw
+bid/ask/liquidity/sequence/time provenance is retained. Replay freshly verifies
+the receipt, then checks pinned source/venue/market, synthetic license, precision,
+raw time and foreign bid against CT-10 before execution. Archive receipt and
+observation fingerprints are distinct. Corrections append and cross-world reads
+remain refused. Synthetic observations cannot validate trading edge.
 
-CT-15/GAP-0060 follow-up: this recorded adapter does not resolve canonical live
-source selection, durable multi-provider download key coordination, historical
-paging/backfill or exchange-specific snapshot/diff bridging. The baseline Windows
-`IntakeAuthority` imports `fcntl`; the separate QMB lane owns its cross-platform
-repair. This slice does not alter that shared authority or certify it. Public
-recordings are refused until the existing authority and source license are bound. Source-native idempotency beyond replaying
-the exact retained observation needs the existing authority with a supported
-platform binding, rather than a second key database in this adapter.
+Public-source recordings are refused by this producer until the existing CT-15
+authority and explicit license are bound. This slice does not change the existing
+intake locking modules; the governed-QMB lane owns their platform repair. Historical
+paging, live source selection and exchange-specific sequence bridging remain future.
 
-## Proposed addition to QMA API/operation documentation
+## Proposed addition to docs/components/qma-daemon.md
 
-> The explicit host installation seam `SpotQueryDoor` publishes
-> `qmn.spot.paper.query@1` (owner COMP-QMN, effect read, placement node), requiring
-> `provider_connection_id`, `venue_id` and `account_id`. The host binds a concrete callback,
-> contribution/package version, instance/config revision and exact account scope.
-> Invocation uses existing `ProductSessionService.dispatch_public_call`, including
-> canonical input hashing and grant validation/revocation. Extra keys or account
-> retargeting refuse before callback. It installs no submit/cancel/transfer tool,
-> no venue credentials or new service. The supported door is library-only. Global
-> catalog/startup wiring belongs with the parent composition lane; this is not
-> HTTP/MCP acceptance or a native agent tool binding.
+Normal `python -m qma.daemon` startup installs `qmn.spot.paper.query@1` when the
+OS-owned operator-config.json contains a `spot_paper_queries` instance mapping.
+The existing enabled `trading-readonly:positions` contribution provides the read
+adapter. Each binding pins package/config revision, provider connection, venue,
+account, policy reference and an absolute simulation SQLite path. The daemon
+opens the retained QMN projection with mode=ro and query_only, never imports QMN
+execution, constructs a writer or obtains an order callback.
 
-Mini-apps and agents can eventually consume this descriptor through the existing
-host transport. Enabling a pack is not a grant. QMA-paper execution remains denied,
-including simulated order intents that would dispatch a money-path action. QML
-strategy semantics and QMB compute/CT-32 ownership are unchanged. Analytics read
-simulation balances/orders/fees and actual QMF observation references; they must
-display simulation status and must not manufacture CT-32 results from those rows.
+The existing paired CT-40 open_product_session, grant_product_session and
+start_mission route is used. The descriptor is published into the daemon's host
+operation roster only when configured. An enabled pack is not a grant. Existing
+ProductSessionService dispatch checks hashes, contribution/instance, grant scope,
+expiry/revocation and accepted-work binding. A session account_scope token pins
+the full host scope/policy/path, so changing the host binding while accidentally
+reusing a revision cannot retarget an existing session/grant. Raw payload keys
+must exactly match account/provider/venue before canonical validation; an extra
+path or operation field cannot be dropped into a successful query. Restart
+restores the existing session/grants. There is no new memory/checkpoint namespace.
 
-## Proposed runbook and acceptance entries
+No submit/cancel/transfer tool is installed for models, including paper. The
+native agent tool manifest remains unchanged. There is no new listener, CLI,
+MCP service or UI. The supported read doors are library/in-process and the
+existing paired QMA wire. The default bundled trading-readonly pack has one
+instance; a binding selects one account for that instance, not an unbounded
+account browser. Multiple QMN accounts remain independent backend objects.
 
-Run the new spot tests and `tools/spot_paper_journey.py` using Python 3.14 with the
-repository's existing declared dependencies. Source paths must select this checkout,
-not an editable install pointing elsewhere. The journey accepts only a local output
-directory and synthetic fixture phases; it performs no provider login or network
-request. Retain its JSON report and source/observation/archive references. Do not
-publish credentials in logs. The SQLite audit is simulation state, not CT-13 or
-operator log substitution.
+An explicit `host_retry_attempt_ceiling` in the same OS-owned config is admitted
+through the existing governed registry when spot bindings are installed. No
+ceiling/default is invented. Missing ceiling leaves existing read admission
+fail-closed. An example operator config fragment is:
 
-For restart: stop the account writer, reopen the same canonical root/account with
-the same market/seed/policy identity, inspect balances/reservations/open orders,
-cancel or retain them explicitly, and provide a fresh same-feed recorded snapshot
-before admitting new intents. Do not delete a lock file to force takeover; the OS
-releases this harness's lock on process exit. For storage failure, the writer
-blocks new mutations until closed/reopened and reconciled.
+```json
+{
+  "host_retry_attempt_ceiling": 1,
+  "spot_paper_queries": {
+    "pack:trading-readonly": {
+      "config_revision": 7,
+      "package_version": "0.1.0",
+      "provider_connection_id": "conn:recorded",
+      "venue_id": "recorded:crypto",
+      "account_id": "a",
+      "policy_ref": "policy:a:1000",
+      "state_db_path": "C:/operator-owned/paper/account-key/paper.sqlite"
+    }
+  }
+}
+```
 
-Acceptance statuses: local exact arithmetic, reservations, partial fill/cancel/retry,
-two account/policy isolation, same-root writer exclusion, restart and governed read
-are the implemented test targets. Real exchange integration, Book/BMS sizing,
-deliverable spot FX, global rate/IP limits, distributed fencing, live UNKNOWN
-reconciliation, normal-start UI/API/agent binding, power-loss durability, unattended
-paper week and release gates remain unsupported/unverified. Do not rename passing
-fixture tests as full crypto readiness or a completed paper soak.
+Those counts/revisions are fixture/operator choices, not canonical defaults.
+Keep the existing research_corpus_root_path and other independently configured
+host keys. Client requests cannot supply paths, configuration or host ceilings.
+
+## Proposed addition to docs/lenses/ops/runbook.md
+
+Use the repository's declared Python 3.14 dependencies, with source paths pinned
+to the reviewed checkout. `tools/spot-paper-check.ps1` checks 13 Python files,
+runs focused tests and separate seed/verify processes from the QMN-owned
+`qmn/examples/spot_paper_journey.py`. Its EvidenceRoot must be outside the Git
+worktree because the existing research-corpus startup policy rejects Git roots.
+Keep JSON reports, archive/observation references and audit sequences. These are
+simulation evidence, not trading-edge or live readiness evidence.
+
+Stop/reopen the writer with identical state identity and inspect retained balances,
+orders and reservations before a fresh same-feed snapshot. Do not delete lock
+files to force ownership. Abrupt process exit releases the OS lock but is not
+power-loss certification. Do not reuse format-1 state under format 2. The daemon
+reads last committed retained state even when the QMN writer is stopped; READY
+on that retained view must not be presented as current feed/writer liveness.
+
+## Proposed addition to docs/lenses/testing/fixtures-and-scenarios.md
+
+Focused fixtures cover precision/minimum notional, quote fees, reservations,
+partial/full fills, cancel/retry, delayed pre-admission ticks, restart FIFO,
+per-account policy/state isolation, same-root writer exclusion, storage rollback,
+CT-10 readback consistency and granted read scope. Real paired WebSocket tests
+exercise operator opening/granting, no-grant/retarget/extra-key/execution denials,
+revocation, restart, changed host binding, and a separate normal daemon module
+entrypoint restoring and querying the actual retained ledger. No credentials,
+live exchange, paid provider or provisioning is used.
+
+## Proposed addition to docs/architecture/overview.md
+
+Reuse COMP-QMF-VENUE for metadata, COMP-QMF-DATA for CT-10, COMP-QMN for the
+simulation ledger/query projection and COMP-QMA-DAEMON for governed read dispatch.
+No new COMP/CT or global node infrastructure is introduced. QML strategy meaning,
+QMB compute/CT-32 and Book/BMS risk ownership remain unchanged. Existing intake
+locking remains owned by the parallel governed-QMB lane. No live spot capability,
+deliverable spot FX, distributed fencing, venue UNKNOWN reconciliation, unattended
+paper week or release gate is certified by this candidate.

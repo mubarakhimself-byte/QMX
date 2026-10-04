@@ -163,6 +163,11 @@ def test_storage_failure_rolls_back_reservation_and_blocks_writer(tmp_path: Path
         assert a.query()["orders"] == []
         assert a.query()["balances"]["USDT"]["reserved"] == "0"
         assert a.query()["writer_available"] is False
+        # The retained reader sees the same rolled-back state as the writer.
+        import json
+
+        view = json.loads(a.db.execute("SELECT body FROM query_view WHERE id=1").fetchone()[0])
+        assert view["orders"] == [] and view["balances"]["USDT"]["reserved"] == "0"
         a.db.execute("DROP TRIGGER fixture_failure")
         assert is_refusal(a.submit("failed", "buy", "0.100", "100.00", now_ns=1000))
     finally:
@@ -225,6 +230,10 @@ def test_fee_arithmetic_retains_more_than_28_derived_digits(tmp_path: Path) -> N
         }
         assert is_ok(a.ingest(recorded))
         assert is_ok(a.submit("long", "buy", "0.12345678", "12345.12345678", now_ns=1000))
+        # Derived reservations exceed the foreign-input digit limit. A second
+        # admission and cancellation must still operate on those exact amounts.
+        assert is_ok(a.submit("second", "buy", "0.12345678", "12345.12345678", now_ns=1000))
+        assert is_ok(a.cancel("second"))
         assert is_ok(
             a.ingest(
                 {
@@ -241,5 +250,41 @@ def test_fee_arithmetic_retains_more_than_28_derived_digits(tmp_path: Path) -> N
             cost = Decimal("0.12345678") * Decimal("12345.12345678")
             expected = Decimal("10000") - cost * (1 + Decimal("0.123456789012345678"))
             assert Decimal(a.query()["balances"]["USDT"]["total"]) == expected
+    finally:
+        a.close()
+
+
+def test_restart_preserves_admission_fifo_not_client_id_sort(tmp_path: Path) -> None:
+    opened = open_account(tmp_path)
+    assert is_ok(opened)
+    a = opened.value
+    try:
+        assert is_ok(tick(a))
+        assert is_ok(a.submit("z-first", "buy", "0.100", "100.00", now_ns=1000))
+        assert is_ok(a.submit("a-second", "buy", "0.100", "100.00", now_ns=1000))
+    finally:
+        a.close()
+    reopened = open_account(tmp_path)
+    assert is_ok(reopened)
+    try:
+        assert is_ok(tick(reopened.value, 2, 1001, True))
+        orders = {o["client_id"]: o for o in reopened.value.query()["orders"]}
+        assert orders["z-first"]["filled"] == "0.100"
+        assert orders["a-second"]["filled"] == "0"
+    finally:
+        reopened.value.close()
+
+
+def test_delayed_tick_cannot_fill_before_order_admission(tmp_path: Path) -> None:
+    opened = open_account(tmp_path)
+    assert is_ok(opened)
+    a = opened.value
+    try:
+        assert is_ok(tick(a))
+        assert is_ok(a.submit("later", "buy", "0.100", "100.00", now_ns=1050))
+        assert is_ok(tick(a, 2, 1001, False))
+        assert a.query()["orders"][0]["filled"] == "0"
+        assert is_ok(tick(a, 3, 1050, False))
+        assert a.query()["orders"][0]["filled"] == "0.100"
     finally:
         a.close()

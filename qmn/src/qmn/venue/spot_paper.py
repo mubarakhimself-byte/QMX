@@ -63,6 +63,12 @@ def _validate_state(state: dict[str, Any], market: SpotMarket) -> None:
     for client_id, order in state["orders"].items():
         if order["client_id"] != client_id or order["side"] not in {"buy", "sell"}:
             raise ValueError("simulation order identity is corrupt")
+        if (
+            type(order["admission_index"]) is not int
+            or type(order["admitted_ns"]) is not int
+            or not 0 <= order["admitted_ns"] <= state["clock_ns"]
+        ):
+            raise ValueError("simulation admission identity is corrupt")
         amount, filled, reserved = (_stored(order[key]) for key in ("amount", "filled", "reserved"))
         if filled > amount or order["status"] not in {"OPEN", "PARTIAL", "CANCELED", "FILLED"}:
             raise ValueError("simulation order fill/status is corrupt")
@@ -87,6 +93,29 @@ def _validate_state(state: dict[str, Any], market: SpotMarket) -> None:
         if reserved > total or reserved != expected[asset]:
             raise ValueError("simulation balance reservation does not reconcile")
     _stored(state["fees"])
+    if sorted(o["admission_index"] for o in state["orders"].values()) != list(
+        range(len(state["orders"]))
+    ):
+        raise ValueError("simulation admission order is corrupt")
+
+
+def _query_view(state: dict[str, Any], scope: AccountScope, market: SpotMarket) -> dict[str, Any]:
+    """QMN-owned retained read projection; it asserts no current writer liveness."""
+    return {
+        "format_version": 1,
+        "paper_state_version": 2,
+        "retained": True,
+        "simulation": True,
+        "behavior": "recorded-spot-limit-fills",
+        "scope": asdict(scope),
+        "policy_ref": state["identity"]["policy"]["policy_ref"],
+        "symbol": market.symbol,
+        "balances": state["balances"],
+        "orders": sorted(state["orders"].values(), key=lambda order: order["admission_index"]),
+        "fees_quote": state["fees"],
+        "feed_status": state["feed_status"],
+        "sequence": state["sequence"],
+    }
 
 
 def _lock(path: Path) -> BinaryIO:
@@ -189,7 +218,7 @@ class SpotPaperAccount:
                 "scope": list(scope.key()),
                 "policy": asdict(policy),
                 "market": asdict(market),
-                "version": 1,
+                "version": 2,
                 "initial_balances": balances,
             }
             row = db.execute("SELECT body FROM snapshot WHERE id=1").fetchone()
@@ -229,6 +258,7 @@ class SpotPaperAccount:
                     raise ValueError("simulation snapshot and audit do not reconcile")
             # Price readiness never survives a reconnect/restart, even with open orders.
             state["feed_status"] = "UNSYNCED"
+            db.execute("CREATE TABLE IF NOT EXISTS query_view (id INTEGER PRIMARY KEY, body TEXT)")
             account = cls(db, held, scope, policy, market, state)
             saved = account._change("open/reconcile", lambda _state: None)
             if is_refusal(saved):
@@ -272,7 +302,13 @@ class SpotPaperAccount:
                 )
                 with self.db:
                     self.db.execute("INSERT OR REPLACE INTO snapshot VALUES (1, ?)", (body,))
-                    self.db.execute("INSERT INTO audit(body) VALUES (?)", (audit,))
+                    cursor = self.db.execute("INSERT INTO audit(body) VALUES (?)", (audit,))
+                    view = _query_view(updated, self.scope, self.market)
+                    view["audit_seq"] = cursor.lastrowid
+                    self.db.execute(
+                        "INSERT OR REPLACE INTO query_view VALUES (1, ?)",
+                        (json.dumps(view, sort_keys=True, separators=(",", ":")),),
+                    )
                 self.state = updated
                 return Ok(self.query())
             except (sqlite3.Error, ValueError, InvalidOperation) as exc:
@@ -289,7 +325,9 @@ class SpotPaperAccount:
                 "policy_ref": self.policy.policy_ref,
                 "symbol": self.market.symbol,
                 "balances": state["balances"],
-                "orders": list(state["orders"].values()),
+                "orders": sorted(
+                    state["orders"].values(), key=lambda order: order["admission_index"]
+                ),
                 "fees_quote": state["fees"],
                 "feed_status": state["feed_status"],
                 "sequence": state["sequence"],
@@ -367,7 +405,7 @@ class SpotPaperAccount:
             )
             asset = self.market.quote if side == "buy" else self.market.base
             balance = self.state["balances"][asset]
-            if reserve > _stored(balance["total"]) - exact(balance["reserved"], positive=False):
+            if reserve > _stored(balance["total"]) - _stored(balance["reserved"]):
                 return refusal("insufficient unreserved spot balance", code="POLICY")
 
             def admit(state: dict[str, Any]) -> None:
@@ -381,6 +419,8 @@ class SpotPaperAccount:
                     "status": "OPEN",
                     "reserved": str(reserve),
                     "asset": asset,
+                    "admission_index": len(state["orders"]),
+                    "admitted_ns": now_ns,
                 }
                 state["rate"] = [*rate, (now_ns, weight)]
                 state["clock_ns"] = now_ns
@@ -397,7 +437,7 @@ class SpotPaperAccount:
                 if order["status"] in {"CANCELED", "FILLED"}:
                     return
                 balance = state["balances"][order["asset"]]
-                remaining = _stored(balance["reserved"]) - exact(order["reserved"], positive=False)
+                remaining = _stored(balance["reserved"]) - _stored(order["reserved"])
                 balance["reserved"] = "0" if remaining == 0 else str(remaining)
                 order.update(status="CANCELED", reserved="0")
 
@@ -471,8 +511,12 @@ class SpotPaperAccount:
                     state["feed_status"] = "STALE"
                     return
                 available = quantity
-                for order in state["orders"].values():
+                for order in sorted(
+                    state["orders"].values(), key=lambda order: order["admission_index"]
+                ):
                     if order["status"] not in {"OPEN", "PARTIAL"} or available == 0:
+                        continue
+                    if event < order["admitted_ns"]:
                         continue
                     limit = exact(order["price"])
                     execution = ask if order["side"] == "buy" else bid

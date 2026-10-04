@@ -1,7 +1,7 @@
 """Host-injected read-only spot operation; no venue or node import/authority.
 
-Explicit installation seam for the existing daemon. This module does not alter
-normal-start composition or expose paper submit/cancel to any agent.
+Normal daemon composition also publishes this read descriptor when an operator
+has configured a retained QMN view. No submit/cancel is exposed to any agent.
 """
 
 from collections.abc import Callable, Mapping
@@ -62,6 +62,7 @@ def spot_query_descriptor() -> OperationDescriptor:
             "lifecycle_verbs": ["query-state"],
             "supported_doors": [
                 {"adapter": "library", "door": "qmn.spot.paper.query"},
+                {"adapter": "qma-wire", "door": "start_mission"},
             ],
         }
     )

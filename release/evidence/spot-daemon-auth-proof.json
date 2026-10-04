@@ -1,0 +1,152 @@
+{
+  "seed-auth-proof.json": {
+    "transport": "paired CT-40 websocket",
+    "simulation": true,
+    "query_view": {
+      "audit_seq": 3,
+      "balances": {
+        "BTC": {
+          "reserved": "0",
+          "total": "1"
+        },
+        "USDT": {
+          "reserved": "20.02000000",
+          "total": "1000"
+        }
+      },
+      "behavior": "recorded-spot-limit-fills",
+      "feed_status": "READY",
+      "fees_quote": "0",
+      "format_version": 1,
+      "orders": [
+        {
+          "admission_index": 0,
+          "admitted_ns": 1000,
+          "amount": "0.200",
+          "asset": "USDT",
+          "client_id": "buy",
+          "filled": "0",
+          "price": "100.00",
+          "reserved": "20.02000000",
+          "side": "buy",
+          "status": "OPEN"
+        }
+      ],
+      "paper_state_version": 2,
+      "policy_ref": "policy:a:1000",
+      "retained": true,
+      "scope": {
+        "account_id": "a",
+        "node_id": "singapore",
+        "provider_connection_id": "conn:recorded",
+        "venue_id": "recorded:crypto"
+      },
+      "sequence": 1,
+      "simulation": true,
+      "symbol": "BTC/USDT"
+    },
+    "grant_checked": true,
+    "scope_retarget_denied": true,
+    "execution_grant_denied": true,
+    "grant_revocation_checked": false
+  },
+  "restart-auth-proof.json": {
+    "transport": "paired CT-40 websocket",
+    "simulation": true,
+    "query_view": {
+      "audit_seq": 3,
+      "balances": {
+        "BTC": {
+          "reserved": "0",
+          "total": "1"
+        },
+        "USDT": {
+          "reserved": "20.02000000",
+          "total": "1000"
+        }
+      },
+      "behavior": "recorded-spot-limit-fills",
+      "feed_status": "READY",
+      "fees_quote": "0",
+      "format_version": 1,
+      "orders": [
+        {
+          "admission_index": 0,
+          "admitted_ns": 1000,
+          "amount": "0.200",
+          "asset": "USDT",
+          "client_id": "buy",
+          "filled": "0",
+          "price": "100.00",
+          "reserved": "20.02000000",
+          "side": "buy",
+          "status": "OPEN"
+        }
+      ],
+      "paper_state_version": 2,
+      "policy_ref": "policy:a:1000",
+      "retained": true,
+      "scope": {
+        "account_id": "a",
+        "node_id": "singapore",
+        "provider_connection_id": "conn:recorded",
+        "venue_id": "recorded:crypto"
+      },
+      "sequence": 1,
+      "simulation": true,
+      "symbol": "BTC/USDT"
+    },
+    "grant_checked": true,
+    "scope_retarget_denied": true,
+    "execution_grant_denied": true,
+    "grant_revocation_checked": true
+  },
+  "entrypoint-auth-proof.json": {
+    "entrypoint": "python -m qma.daemon",
+    "transport": "paired CT-40 websocket",
+    "query_view": {
+      "audit_seq": 3,
+      "balances": {
+        "BTC": {
+          "reserved": "0",
+          "total": "1"
+        },
+        "USDT": {
+          "reserved": "20.02000000",
+          "total": "1000"
+        }
+      },
+      "behavior": "recorded-spot-limit-fills",
+      "feed_status": "READY",
+      "fees_quote": "0",
+      "format_version": 1,
+      "orders": [
+        {
+          "admission_index": 0,
+          "admitted_ns": 1000,
+          "amount": "0.200",
+          "asset": "USDT",
+          "client_id": "buy",
+          "filled": "0",
+          "price": "100.00",
+          "reserved": "20.02000000",
+          "side": "buy",
+          "status": "OPEN"
+        }
+      ],
+      "paper_state_version": 2,
+      "policy_ref": "policy:a:1000",
+      "retained": true,
+      "scope": {
+        "account_id": "a",
+        "node_id": "singapore",
+        "provider_connection_id": "conn:recorded",
+        "venue_id": "recorded:crypto"
+      },
+      "sequence": 1,
+      "simulation": true,
+      "symbol": "BTC/USDT"
+    },
+    "restored_grant_checked": true
+  }
+}

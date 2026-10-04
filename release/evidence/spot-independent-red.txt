@@ -1,0 +1,117 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+___________ test_fee_arithmetic_retains_more_than_28_derived_digits ___________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/spot-review/.test-tmp/original-defects3/test_fee_arithmetic_retains_mo0')
+
+    def test_fee_arithmetic_retains_more_than_28_derived_digits(tmp_path: Path) -> None:
+        from decimal import Decimal, localcontext
+
+        payload = market()
+        payload["precision"] = {"amount": "0.00000001", "price": "0.00000001"}
+        opened = SpotPaperAccount.open(
+            tmp_path,
+            scope=AccountScope("conn:recorded", "recorded:crypto", "a", "singapore"),
+            policy=PaperPolicy("policy:precision", "10000", "0.123456789012345678", 100, 2, 10),
+            market_payload=payload,
+            precision_mode="TICK_SIZE",
+            initial_balances={"USDT": "10000", "BTC": "1"},
+        )
+        assert is_ok(opened)
+        a = opened.value
+        try:
+            recorded = {
+                "sequence": 1,
+                "event_ns": 1000,
+                "received_ns": 1000,
+                "bid": "12345.12345677",
+                "ask": "12345.12345678",
+                "quantity": "0.12345678",
+                "snapshot": True,
+                "origin": "synthetic",
+            }
+            assert is_ok(a.ingest(recorded))
+            assert is_ok(a.submit("long", "buy", "0.12345678", "12345.12345678", now_ns=1000))
+            # Derived reservations exceed the foreign-input digit limit. A second
+            # admission and cancellation must still operate on those exact amounts.
+>           assert is_ok(a.submit("second", "buy", "0.12345678", "12345.12345678", now_ns=1000))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+qmn\tests\test_spot_paper_slice.py:230:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task-9\spot-candidate\qmn\src\qmn\venue\spot_paper.py:370: in submit
+    if reserve > _stored(balance["total"]) - exact(balance["reserved"], positive=False):
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = '1712.2483483258767634387304840558605752', positive = False
+
+    def exact(value: object, *, positive: bool = True) -> Decimal:
+        """Finite bounded decimal strings; never silently stringify a binary float."""
+        if not isinstance(value, str) or not value or len(value) > 64:
+            raise ValueError("an exact decimal string is required")
+        try:
+            number = Decimal(value)
+        except InvalidOperation as exc:
+            raise ValueError("invalid decimal") from exc
+        if (
+            not number.is_finite()
+            or number < 0
+            or (positive and number == 0)
+            or len(number.as_tuple().digits) > 28
+            or abs(number.adjusted()) > 18
+        ):
+>           raise ValueError("decimal must be finite, nonnegative and bounded")
+E           ValueError: decimal must be finite, nonnegative and bounded
+
+packages\qmf-venue\src\qmf\venue\spot.py:47: ValueError
+__________ test_restart_preserves_admission_fifo_not_client_id_sort ___________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/spot-review/.test-tmp/original-defects3/test_restart_preserves_admissi0')
+
+    def test_restart_preserves_admission_fifo_not_client_id_sort(tmp_path: Path) -> None:
+        opened = open_account(tmp_path)
+        assert is_ok(opened)
+        a = opened.value
+        try:
+            assert is_ok(tick(a))
+            assert is_ok(a.submit("z-first", "buy", "0.100", "100.00", now_ns=1000))
+            assert is_ok(a.submit("a-second", "buy", "0.100", "100.00", now_ns=1000))
+        finally:
+            a.close()
+        reopened = open_account(tmp_path)
+        assert is_ok(reopened)
+        try:
+            assert is_ok(tick(reopened.value, 2, 1001, True))
+            orders = {o["client_id"]: o for o in reopened.value.query()["orders"]}
+>           assert orders["z-first"]["filled"] == "0.100"
+E           AssertionError: assert '0' == '0.100'
+E
+E             - 0.100
+E             + 0
+
+qmn\tests\test_spot_paper_slice.py:267: AssertionError
+____________ test_delayed_tick_cannot_fill_before_order_admission _____________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/spot-review/.test-tmp/original-defects3/test_delayed_tick_cannot_fill_0')
+
+    def test_delayed_tick_cannot_fill_before_order_admission(tmp_path: Path) -> None:
+        opened = open_account(tmp_path)
+        assert is_ok(opened)
+        a = opened.value
+        try:
+            assert is_ok(tick(a))
+            assert is_ok(a.submit("later", "buy", "0.100", "100.00", now_ns=1050))
+            assert is_ok(tick(a, 2, 1001, False))
+>           assert a.query()["orders"][0]["filled"] == "0"
+E           AssertionError: assert '0.100' == '0'
+E
+E             - 0
+E             + 0.100
+
+qmn\tests\test_spot_paper_slice.py:281: AssertionError
+=========================== short test summary info ===========================
+FAILED qmn/tests/test_spot_paper_slice.py::test_fee_arithmetic_retains_more_than_28_derived_digits
+FAILED qmn/tests/test_spot_paper_slice.py::test_restart_preserves_admission_fifo_not_client_id_sort
+FAILED qmn/tests/test_spot_paper_slice.py::test_delayed_tick_cannot_fill_before_order_admission
+3 failed, 11 deselected in 2.40s

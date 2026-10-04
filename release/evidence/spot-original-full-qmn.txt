@@ -1,0 +1,1257 @@
+......FFFFFF..s.....F................................................... [  6%]
+.......................................FFFFF..FFFFFF..........s......... [ 12%]
+...s.....................FF..s.FFFss........s...............ss.s........ [ 19%]
+............................ssss........................................ [ 25%]
+.............F......................................................F... [ 31%]
+........................................................................ [ 38%]
+.F...................................................................... [ 44%]
+s........................................................s.............. [ 51%]
+..........s.s.s......................................................... [ 57%]
+................................................s....................... [ 63%]
+........................................................................ [ 70%]
+.................FFFFF.....FFFF............................s............ [ 76%]
+........................................................................ [ 82%]
+.....F.......F.......................................................... [ 89%]
+................................sF.FF................................... [ 95%]
+................s................................                        [100%]
+================================== FAILURES ===================================
+___ test_private_ad32_wrapper_persists_real_registry_lineage_as_incomplete ____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_private_ad32_wrapper_pers0')
+
+    def test_private_ad32_wrapper_persists_real_registry_lineage_as_incomplete(
+        tmp_path: Path,
+    ) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "admission-fixture.proto"
+        proto.package = "admission_fixture"
+        proto.syntax = "proto3"
+        descriptor_bytes = descriptor_set.SerializeToString()
+        digest = _ok(descriptor_set_digest(descriptor_bytes))
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(descriptor_bytes)
+        deployment = fixture_deployment(tmp_path, descriptor_path, digest)
+>       assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:153:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+________________ test_lineage_rejects_page_from_another_venue _________________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_lineage_rejects_page_from0')
+
+    def test_lineage_rejects_page_from_another_venue(tmp_path: Path) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "admission-fixture.proto"
+        proto.package = "admission_fixture"
+        proto.syntax = "proto3"
+        digest = _ok(descriptor_set_digest(descriptor_set.SerializeToString()))
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(descriptor_set.SerializeToString())
+        deployment = fixture_deployment(tmp_path, descriptor_path, digest)
+>       assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:188:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+____________ test_reader_rejects_rehashed_boolean_envelope_version ____________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_reader_rejects_rehashed_b0')
+
+    def test_reader_rejects_rehashed_boolean_envelope_version(tmp_path: Path) -> None:
+>       store, reference = _persist_fixture_evidence(tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:199:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:246: in _persist_fixture_evidence
+    assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+_______ test_reader_recomputes_nested_page_identity_after_outer_rehash ________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_reader_recomputes_nested_0')
+
+    def test_reader_recomputes_nested_page_identity_after_outer_rehash(tmp_path: Path) -> None:
+>       store, reference = _persist_fixture_evidence(tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:211:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:246: in _persist_fixture_evidence
+    assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+________ test_nonempty_ct22_ct27_records_survive_ad32_physical_reopen _________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_nonempty_ct22_ct27_record0')
+
+    def test_nonempty_ct22_ct27_records_survive_ad32_physical_reopen(tmp_path: Path) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "admission-nonempty.proto"
+        proto.package = "admission_nonempty"
+        proto.syntax = "proto3"
+        raw = descriptor_set.SerializeToString()
+        digest = _ok(descriptor_set_digest(raw))
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(raw)
+        deployment = fixture_deployment(
+            tmp_path,
+            descriptor_path,
+            digest,
+            nonempty_templates=True,
+        )
+>       assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:290:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+___ test_reader_refuses_correctly_rehashed_malformed_ct27_section_identity ____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_reader_refuses_correctly_0')
+
+    def test_reader_refuses_correctly_rehashed_malformed_ct27_section_identity(
+        tmp_path: Path,
+    ) -> None:
+>       store, reference = _persist_fixture_evidence(tmp_path, nonempty_templates=True)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:310:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:246: in _persist_fixture_evidence
+    assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py:56: AssertionError
+________________ test_typed_failure_ids_have_register_entries _________________
+
+    def test_typed_failure_ids_have_register_entries() -> None:
+        """CI gate: every known typed failure id resolves in FAILURES.md (TN-23)."""
+>       report = _ok(validate_failures_completeness())
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_alerts.py:239:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_alerts.py:52: AssertionError
+__ test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity __
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_v2_profile_is_independent0')
+
+    def test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity(
+        tmp_path: Path,
+    ) -> None:
+        v1_path = _valid_deployment(tmp_path)
+>       v1 = _ok(assess_configured_runtime(v1_path, qmx_root=tmp_path))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:250:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:50: AssertionError
+_____________ test_resolved_profile_freezes_nested_mis_parameters _____________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_resolved_profile_freezes_0')
+
+    def test_resolved_profile_freezes_nested_mis_parameters(tmp_path: Path) -> None:
+>       assessment = _ok(assess_configured_runtime(_valid_deployment(tmp_path), qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:266:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:50: AssertionError
+_ test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection _
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_v2_refuses_descriptor_mut0')
+
+    def test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection(
+        tmp_path: Path,
+    ) -> None:
+>       assessment = _ok(
+            assess_configured_runtime(
+                _valid_deployment(tmp_path), qmx_root=tmp_path
+            )
+        )
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:297:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:50: AssertionError
+_________ test_v2_source_bytes_must_reproduce_admitted_logic_manifest _________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_v2_source_bytes_must_repr0')
+
+    def test_v2_source_bytes_must_reproduce_admitted_logic_manifest(tmp_path: Path) -> None:
+>       assessment = _ok(assess_configured_runtime(_valid_deployment(tmp_path), qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:336:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py:50: AssertionError
+___ test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root ____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_two_accumulated_qmb_front0')
+
+    def test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root(
+        tmp_path: Path,
+    ) -> None:
+        def drive(
+            root: HostedDecisionRoot,
+            snapshot_value: object,
+            journal: JournalStore,
+            intent_state: dict[str, object],
+        ) -> None:
+            assert isinstance(snapshot_value, SignalSnapshot)
+            second = Instant.try_create(snapshot_value.frontier_instant.value_ns + 1_000_000_000)
+            assert is_ok(second)
+            outcomes, transcripts = drive_two_recorded_frontiers(
+                root=root,
+                snapshot=snapshot_value,
+                journal=journal,
+                intent_state=intent_state,
+                frontier_instants=(snapshot_value.frontier_instant, second.value),
+            )
+            assert len(outcomes) == 2
+            assert all(outcome is not None for outcome in outcomes)
+            assert len(transcripts) == 2
+            first = transcripts[0]
+            second_transcript = transcripts[1]
+            assert first.dispatch.commands
+            assert not second_transcript.dispatch.commands
+            assert first.snapshot_fingerprint != second_transcript.snapshot_fingerprint
+            events = JournalReader(journal).read_checked(
+                "hosted-decisions", for_world=World.LIVE
+            )
+            recorded_frontiers = JournalReader(journal).read_checked(
+                "frontier-observations", for_world=World.LIVE
+            )
+            committed_frontiers = JournalReader(journal).read_checked(
+                "frontier-cursor", for_world=World.LIVE
+            )
+            assert is_ok(events)
+            assert is_ok(recorded_frontiers)
+            assert is_ok(committed_frontiers)
+            assert len(recorded_frontiers.value) == 2
+            cursor_commits = [
+                event for event in committed_frontiers.value
+                if event.payload.get("kind") == "interpretation-cursor-commit"
+            ]
+            assert len(cursor_commits) == 2
+            receive_stamps: list[object] = []
+            for event in recorded_frontiers.value:
+                observation = event.payload.get("observation")
+                assert isinstance(observation, Mapping)
+                receive_stamps.append(
+                    cast(Mapping[str, object], observation).get("receive_wall_time_ns")
+                )
+            assert receive_stamps == [
+                snapshot_value.frontier_instant.value_ns,
+                second.value.value_ns,
+            ]
+            decision_rows = [
+                event.payload
+                for event in events.value
+                if event.payload.get("class") == "qmn-hosted-decision-transcript"
+            ]
+            # The first frontier dispatches the admitted entry. The harness then
+            # supplies no intent on the second call; no production duplicate-action
+            # property is inferred from this fixture.
+            assert len(decision_rows) >= 4
+
+>       fixture_exercise_configured_decision_root(tmp_path, after_root_ready=drive)
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_frontier.py:84:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_seat_tunnel.py:1190: in _exercise_configured_decision_root
+    after_root_ready(root, snapshot, world.journal, intent_state)
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_frontier.py:30: in drive
+    outcomes, transcripts = drive_two_recorded_frontiers(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+root = HostedDecisionRoot(seat=AdmittedNodeSeat(seat=GovernedSeat(seat_id='seat-alpha', binding_ref='fp1:sha256:324ed532e36ae...0000011C05D64F60>), timing_for=<function _exercise_configured_decision_root.<locals>.timing_for at 0x0000011C479B7E20>)
+snapshot = SignalSnapshot(frontier_instant=Instant(value_ns=1699999999000000000), environment='demo', feed_state=<CanonicalFeedSt... degraded_sensors=(), decision_freshness_bound=Duration(value_ns=5000000000), lane=<SnapshotLane.GOVERNED: 'governed'>)
+journal = <qmf.data.store.journal.JournalStore object at 0x0000011C47952CF0>
+intent_state = {}
+frontier_instants = (Instant(value_ns=1699999999000000000), Instant(value_ns=1700000000000000000))
+
+    def drive_two_recorded_frontiers(
+        *,
+        root: HostedDecisionRoot,
+        snapshot: SignalSnapshot,
+        journal: JournalStore,
+        intent_state: dict[str, object],
+        frontier_instants: tuple[Instant, Instant],
+    ) -> tuple[tuple[object, object], tuple[HostedDecisionTranscript, HostedDecisionTranscript]]:
+        """Drive two closed observations through accumulator \u2192 QMB \u2192 hosted root."""
+        clear_first_writer_registry()
+        sqs_slot = snapshot.producers.get(SQS_PRODUCER_ID)
+        if sqs_slot is None or sqs_slot.sqs is None:
+            raise AssertionError("the governed snapshot carries its required SQS reading")
+        venue = sqs_slot.sqs.baseline_key.venue
+        account = root.path.account
+        path_venue = root.path.venue_id
+        if (
+            not isinstance(account, Account)
+            or account.venue != venue
+            or not isinstance(path_venue, VenueId)
+            or path_venue != venue
+        ):
+            raise AssertionError("recorded accumulator uses the admitted Book path account/venue")
+        writer = WriterId.try_create(
+            "fixture-node",
+            "recorded-observations",
+            f"{venue.value}:{account.account_id}",
+            "fixture-boot",
+        )
+        if is_refusal(writer):
+            raise AssertionError(writer)
+        input_writer_id = WriterId.try_create(
+            "fixture-node", "recorded-observation", "frontier-observations", "fixture-boot"
+        )
+        cursor_writer_id = WriterId.try_create(
+            "fixture-node", "recording-accumulator", "frontier-cursor", "fixture-boot"
+        )
+        if is_refusal(input_writer_id) or is_refusal(cursor_writer_id):
+            raise AssertionError((input_writer_id, cursor_writer_id))
+        input_writer = JournalWriter.resume(
+            journal, input_writer_id.value, stream_name="frontier-observations"
+        )
+        cursor_writer = JournalWriter.resume(
+            journal, cursor_writer_id.value, stream_name="frontier-cursor"
+        )
+        if is_refusal(input_writer) or is_refusal(cursor_writer):
+            raise AssertionError((input_writer, cursor_writer))
+        accumulator_result = RecordingAccumulator.try_create(
+            venue_id=venue,
+            account=account,
+            writer_id=writer.value,
+            observation_sink=_RecordedObservationSink(input_writer.value),
+            journal_sink=_RecordedJournalSink(cursor_writer.value),
+            accumulator_bound=8,
+            writer_name="fixture-recording-accumulator",
+        )
+        if is_refusal(accumulator_result):
+            raise AssertionError(accumulator_result)
+        handler = _HostedFrontierHandler(root, snapshot, intent_state)
+        native_map = root.path.native_execution_map
+        if not isinstance(native_map, NativeExecutionMap):
+            raise AssertionError("recorded streamset uses the hosted native execution map")
+        mappings = native_map.mappings
+        if not mappings or any(mapping.instrument.venue != venue for mapping in mappings):
+            raise AssertionError("recorded streamset is pinned to the hosted native instrument map")
+        stream_id = mappings[0].instrument.symbol
+        declared = DeclaredStream.try_create(stream_id)
+        if is_refusal(declared):
+            raise AssertionError(declared)
+        stream = StreamSet.try_create([declared.value])
+        if is_refusal(stream):
+            raise AssertionError(stream)
+        clock = DataDrivenClock(
+            boot_epoch_id="fixture-boot",
+            wall_instants=frontier_instants,
+            monotonic_ns=(100, 101, 200, 201),
+        )
+        loop_result = CommandStreamLoop.try_create(
+            accumulator=accumulator_result.value,
+            stream_set=stream.value,
+            clock=clock,
+            max_slice_latency=1_000_000_000,
+            handler=handler,
+        )
+        if is_refusal(loop_result):
+            raise AssertionError(loop_result)
+        loop = loop_result.value
+        outcomes: list[object] = []
+        for index, frontier in enumerate(frontier_instants):
+            pushed = loop.accumulator.push(
+                observation_id=f"frontier-{index}",
+                stream_id=stream_id,
+                receive_wall=frontier,
+                payload={"kind": "tick", "fixture": "recorded-frontier"},
+                kind="tick",
+                closed=True,
+            )
+            if is_refusal(pushed):
+>               raise AssertionError(pushed)
+E               AssertionError: TypedRefusal(category=<RefusalCategory.INVALID_INPUT: 'invalid input'>, retryability=<Retryability.NO: 'no'>, context=mappingproxy({'field': 'value', 'reason': 'unsupported type in identity content; pass a canonical value (a value with fp1_identity, or JSON-native str/int/bool/list/object)', 'given': "'SinkAck'"}), after_condition_descriptor=None)
+
+..\..\task-9\spot-candidate\qmn\tests\hosted_root_fixture_support.py:238: AssertionError
+________________ test_closed_resolver_refuses_missing_profile _________________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_closed_resolver_refuses_m0')
+
+    def test_closed_resolver_refuses_missing_profile(tmp_path: Path) -> None:
+        deployment = valid_deployment(tmp_path)
+>       assessment = _ok(assess_configured_runtime(deployment, qmx_root=tmp_path))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py:27:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py:21: AssertionError
+_____ test_closed_resolver_validates_then_refuses_replay_profile_for_live _____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_closed_resolver_validates0')
+
+    def test_closed_resolver_validates_then_refuses_replay_profile_for_live(
+        tmp_path: Path,
+    ) -> None:
+>       initial = _ok(assess_configured_runtime(valid_deployment(tmp_path), qmx_root=tmp_path))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py:38:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py:21: AssertionError
+________ test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down ________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_missing_pinned_protocol_b0')
+
+    def test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down(tmp_path: Path) -> None:
+        path = _deployment(tmp_path, None, "sha256:" + "b" * 64)
+
+        refused = assess_configured_runtime(path, qmx_root=tmp_path)
+
+        assert is_refusal(refused)
+>       assert refused.context.get("failure_id") == "configured_runtime.proto_missing"
+E       AssertionError: assert None == 'configured_runtime.proto_missing'
+E        +  where None = <built-in method get of mappingproxy object at 0x0000011C077EDD80>('failure_id')
+E        +    where <built-in method get of mappingproxy object at 0x0000011C077EDD80> = mappingproxy({'field': 'deployment_file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}).get
+E        +      where mappingproxy({'field': 'deployment_file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}) = TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None).context
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py:361: AssertionError
+__________ test_valid_local_pins_remain_stand_down_without_admission __________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_valid_local_pins_remain_s0')
+
+    def test_valid_local_pins_remain_stand_down_without_admission(tmp_path: Path) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "fixture.proto"
+        proto.package = "fixture"
+        proto.syntax = "proto3"
+        raw = descriptor_set.SerializeToString()
+        digest = descriptor_set_digest(raw)
+        assert is_ok(digest)
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(raw)
+        path = _deployment(tmp_path, descriptor_path, digest.value)
+
+        assessed = assess_configured_runtime(path, qmx_root=tmp_path)
+
+>       assert is_ok(assessed)
+E       AssertionError: assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py:379: AssertionError
+______ test_nonempty_registered_book_and_bms_reload_as_typed_assessment _______
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_nonempty_registered_book_0')
+
+    def test_nonempty_registered_book_and_bms_reload_as_typed_assessment(
+        tmp_path: Path,
+    ) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "fixture-nonempty.proto"
+        proto.package = "fixture_nonempty"
+        proto.syntax = "proto3"
+        raw = descriptor_set.SerializeToString()
+        digest = descriptor_set_digest(raw)
+        assert is_ok(digest)
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(raw)
+        path = _deployment(
+            tmp_path,
+            descriptor_path,
+            digest.value,
+            nonempty_templates=True,
+        )
+
+        assessed = assess_configured_runtime(path, qmx_root=tmp_path)
+
+>       assert is_ok(assessed), assessed
+E       AssertionError: TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py:416: AssertionError
+__ test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry ___
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_registered_binding_decode0')
+
+    def test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry(
+        tmp_path: Path,
+    ) -> None:
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "fixture.proto"
+        proto.package = "fixture"
+        proto.syntax = "proto3"
+        raw = descriptor_set.SerializeToString()
+        digest = descriptor_set_digest(raw)
+        assert is_ok(digest)
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(raw)
+        path = _deployment(tmp_path, descriptor_path, digest.value)
+        assessed = assess_configured_runtime(path, qmx_root=tmp_path)
+>       assert is_ok(assessed)
+E       AssertionError: assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py:439: AssertionError
+_______ test_init_and_validate_run_pure_scaffold_and_report_boot_block ________
+
+config_mod = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_init_and_validate_run_pur0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000011C0673BA10>
+
+    def test_init_and_validate_run_pure_scaffold_and_report_boot_block(
+        config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+>       assert config_mod.main(["init", "--root", str(tmp_path)]) == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function main at 0x0000011C47941A60>(['init', '--root', 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\test-runs\\original-qmn\\test_init_and_validate_run_pur0'])
+E        +    where <function main at 0x0000011C47941A60> = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>.main
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py:42: AssertionError
+---------------------------- Captured stderr call -----------------------------
+C:\Users\Mubarak\Documents\Codex\2026-10-04\task\runtime-venv\Scripts\python.exe: Error while finding module specification for 'qmn.config.cli' (ModuleNotFoundError: No module named 'qmn.config')
+__________ test_explain_uses_pure_layer_report_without_secret_values __________
+
+config_mod = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_explain_uses_pure_layer_r0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000011C479CC910>
+
+    def test_explain_uses_pure_layer_report_without_secret_values(
+        config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+>       assert config_mod.main(["init", "--root", str(tmp_path)]) == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function main at 0x0000011C47942610>(['init', '--root', 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\test-runs\\original-qmn\\test_explain_uses_pure_layer_r0'])
+E        +    where <function main at 0x0000011C47942610> = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>.main
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py:61: AssertionError
+---------------------------- Captured stderr call -----------------------------
+C:\Users\Mubarak\Documents\Codex\2026-10-04\task\runtime-venv\Scripts\python.exe: Error while finding module specification for 'qmn.config.cli' (ModuleNotFoundError: No module named 'qmn.config')
+______ test_deployment_child_runs_real_host_preflight_for_selected_file _______
+
+config_mod = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_deployment_child_runs_rea0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000011C47B282B0>
+
+    def test_deployment_child_runs_real_host_preflight_for_selected_file(
+        config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        deployment = tmp_path / "qmn-deployment.json"
+        deployment.write_text("{}", encoding="utf-8")
+
+>       assert config_mod.main(["validate-deployment", "--root", str(tmp_path)]) == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <function main at 0x0000011C47A68BF0>(['validate-deployment', '--root', 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\test-runs\\original-qmn\\test_deployment_child_runs_rea0'])
+E        +    where <function main at 0x0000011C47A68BF0> = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>.main
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py:154: AssertionError
+---------------------------- Captured stderr call -----------------------------
+C:\Users\Mubarak\Documents\Codex\2026-10-04\task\runtime-venv\Scripts\python.exe: Error while finding module specification for 'qmn.host.configured_runtime' (ModuleNotFoundError: No module named 'qmn.host')
+_ test_real_governed_deployment_document_passes_child_preflight_without_activation _
+
+config_mod = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_real_governed_deployment_0')
+capsys = <_pytest.capture.CaptureFixture object at 0x0000011C077F6190>
+
+    def test_real_governed_deployment_document_passes_child_preflight_without_activation(
+        config_mod: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        fixture_path = _QMN / "tests" / "test_qmn_configured_runtime.py"
+        spec = spec_from_file_location("qmn_configured_runtime_fixture_for_deploy", fixture_path)
+        assert spec is not None and spec.loader is not None
+        fixture_mod = module_from_spec(spec)
+        sys.modules[spec.name] = fixture_mod
+        spec.loader.exec_module(fixture_mod)
+
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        proto = descriptor_set.file.add()
+        proto.name = "deploy-fixture.proto"
+        proto.package = "fixture"
+        proto.syntax = "proto3"
+        digest = descriptor_set_digest(descriptor_set.SerializeToString())
+        assert is_ok(digest)
+        descriptor_path = tmp_path / "pinned-proto.pb"
+        descriptor_path.write_bytes(descriptor_set.SerializeToString())
+        generated = fixture_mod._deployment(tmp_path, descriptor_path, digest.value)
+        generated.rename(tmp_path / "qmn-deployment.json")
+
+>       assert config_mod.main(["validate-deployment", "--root", str(tmp_path)]) == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function main at 0x0000011C47941850>(['validate-deployment', '--root', 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\test-runs\\original-qmn\\test_real_governed_deployment_0'])
+E        +    where <function main at 0x0000011C47941850> = <module 'qmn_deploy_config_test' from 'C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-9\\spot-candidate\\qmn\\deploy\\config.py'>.main
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py:182: AssertionError
+---------------------------- Captured stderr call -----------------------------
+C:\Users\Mubarak\Documents\Codex\2026-10-04\task\runtime-venv\Scripts\python.exe: Error while finding module specification for 'qmn.host.configured_runtime' (ModuleNotFoundError: No module named 'qmn.host')
+____ test_config_init_rejects_parent_swap_to_symlink_without_outside_write ____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_config_init_rejects_paren0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000011C47AA2170>
+
+    def test_config_init_rejects_parent_swap_to_symlink_without_outside_write(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import qmn.config.cli as config_cli
+
+        root = tmp_path / "root"
+        root.mkdir()
+        parent = root / "configs"
+        parent.mkdir()
+        held = root / "held"
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = parent / "node.json"
+        original_open = os.open
+        swapped = False
+
+        def swap_before_open(
+            path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            nonlocal swapped
+            if (
+                path == "configs"
+                and dir_fd is not None
+                and flags & cast("int", getattr(os, "O_DIRECTORY", 0))
+            ):
+                parent.rename(held)
+                parent.symlink_to(outside, target_is_directory=True)
+                swapped = True
+            return original_open(path, flags, mode, dir_fd=dir_fd)
+
+        monkeypatch.setattr(config_cli.os, "open", swap_before_open)
+        assert config_cli.main(["init", "--root", str(root), "--path", "configs/node.json"]) == 2
+>       assert swapped
+E       assert False
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py:226: AssertionError
+---------------------------- Captured stderr call -----------------------------
+refused: config file unavailable or invalid (OSError)
+___________ test_failures_completeness_gate_passes_on_the_register ____________
+
+    def test_failures_completeness_gate_passes_on_the_register() -> None:
+>       report = _ok(validate_failures_completeness())
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_failures_gate.py:37:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...e_missing', 'configured_runtime.host_profile_unregistered'), 'missing_designed': ()}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_failures_gate.py:32: AssertionError
+________________ test_qmb_qml_and_qma_do_not_import_qmf_venue _________________
+
+    def test_qmb_qml_and_qma_do_not_import_qmf_venue() -> None:
+        roots = (
+            _WORKSPACE / "qmb" / "src",
+            _WORKSPACE / "qml" / "src",
+            _WORKSPACE / "qmx-agents" / "packages" / "qma-core" / "src",
+            _WORKSPACE / "qmx-agents" / "packages" / "qma-daemon" / "src",
+            _WORKSPACE / "qmx-agents" / "packages" / "qma-wire" / "src",
+            _WORKSPACE / "qmn" / "src" / "qmn",
+        )
+        violations: list[str] = []
+        venue_hits = 0
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*.py")):
+                relative = path.relative_to(_WORKSPACE)
+                under_qmn_venue = relative.parts[:4] == ("qmn", "src", "qmn", "venue")
+                for imported in _imported_modules(path):
+                    is_venue = imported == "qmf.venue" or imported.startswith("qmf.venue.")
+                    if not is_venue:
+                        continue
+                    if under_qmn_venue:
+                        venue_hits += 1
+                        continue
+                    violations.append(f"{relative}: {imported}")
+>       assert violations == []
+E       AssertionError: assert ['qmn\\src\\q...enue.ctrader'] == []
+E
+E         Left contains 2 more items, first extra item: 'qmn\\src\\qmn\\ledger\\protection_market.py: qmf.venue.ctrader'
+E         Use -v to get more diff
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_fx_paper.py:703: AssertionError
+_________________ test_qmf_venue_import_only_under_qmn_venue __________________
+
+    def test_qmf_venue_import_only_under_qmn_venue() -> None:
+        violations: list[str] = []
+        for path in sorted(_SRC.rglob("*.py")):
+            relative = path.relative_to(_SRC)
+            under_venue = relative.parts and relative.parts[0] == "venue"
+            for imported in _imported_modules(path):
+                is_venue = imported == "qmf.venue" or imported.startswith("qmf.venue.")
+                if is_venue and not under_venue:
+                    violations.append(f"{relative}: {imported}")
+>       assert violations == []
+E       AssertionError: assert ['ledger\\pro...enue.ctrader'] == []
+E
+E         Left contains 2 more items, first extra item: 'ledger\\protection_market.py: qmf.venue.ctrader'
+E         Use -v to get more diff
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_hygiene.py:151: AssertionError
+__________ test_packet_records_fingerprints_and_branch_base_commits ___________
+
+    def test_packet_records_fingerprints_and_branch_base_commits() -> None:
+>       packet = _ok(_assemble())
+                 ^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:202:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+_______ test_settings_status_reports_seventy_one_rows_and_ftr07_blanks ________
+
+    def test_settings_status_reports_seventy_one_rows_and_ftr07_blanks() -> None:
+        config = _config(skip=FTR07_UNSETTABLE_NAMES)
+        status = _ok(settings_status_from_config(config))
+        assert status.row_count == EXPECTED_ROW_COUNT == 71
+        assert set(status.ftr07_unfilled) == set(FTR07_UNSETTABLE_NAMES)
+        assert "ksa_effect_matrix" in status.blank_soak
+        assert "max_slice_latency" in status.blank_boot
+        assert status.no_boot_live_soak_blanks is False
+>       packet = _ok(_assemble(config=config))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:223:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+__________ test_failure_register_completeness_is_part_of_the_packet ___________
+
+    def test_failure_register_completeness_is_part_of_the_packet() -> None:
+>       packet = _ok(_assemble())
+                 ^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:232:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+______________ test_compiled_demo_roster_has_paired_paper_target ______________
+
+    def test_compiled_demo_roster_has_paired_paper_target() -> None:
+        roster = _roster()
+        assert roster.paired.paper_target.role is AccountRole.DEMO
+        assert roster.paired.world is World.LIVE
+        assert roster.paired.bot_twin_minted is False
+        assert roster.paired.book_twin_minted is False
+        assert roster.as_mapping()["demo_streams"]
+>       packet = _ok(_assemble(demo_roster=roster))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:257:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+______ test_soak_local_human_inputs_are_blocked_acceptance_not_unrelated ______
+
+    def test_soak_local_human_inputs_are_blocked_acceptance_not_unrelated() -> None:
+>       packet = _ok(_assemble())
+                 ^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:263:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+_______________ test_green_settings_path_does_not_invent_values _______________
+
+    def test_green_settings_path_does_not_invent_values() -> None:
+        filled = _config()
+        status = _ok(settings_status_from_config(filled))
+        assert status.no_boot_live_soak_blanks is True
+        assert status.ftr07_unfilled == ()
+        assert status.may_start_soak is True
+>       packet = _ok(_assemble(config=filled))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:373:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+___________ test_failed_gate_keeps_packet_and_clears_machine_green ____________
+
+    def test_failed_gate_keeps_packet_and_clears_machine_green() -> None:
+>       packet = _ok(_assemble(gate_results=_gates(failed="conformance")))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:383:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+_____________ test_blank_init_config_is_honest_about_soak_blanks ______________
+
+    def test_blank_init_config_is_honest_about_soak_blanks() -> None:
+        blank = _ok(config_init())
+        status = _ok(settings_status_from_config(blank))
+        assert status.row_count == 71
+        assert status.may_boot is False
+        assert status.may_start_soak is False
+>       packet = _ok(_assemble(config=blank))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:396:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+________________ test_identical_inputs_fingerprint_identically ________________
+
+    def test_identical_inputs_fingerprint_identically() -> None:
+>       first = _ok(_assemble())
+                ^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:402:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+result = TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+
+    def _ok(result: Result[T]) -> T:
+>       assert is_ok(result), result
+E       AssertionError: TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None)
+E       assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.POLICY_REJECTION: 'policy rejection'>, retryability=<Retryability.NO: 'no'>, co...'readiness.failure_register', 'cause': 'typed failure ids missing from FAILURES.md'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py:53: AssertionError
+________________ test_only_venue_subpackage_imports_qmf_venue _________________
+
+    def test_only_venue_subpackage_imports_qmf_venue() -> None:
+        violations: list[str] = []
+        for path in sorted(_SRC.rglob("*.py")):
+            relative = path.relative_to(_SRC)
+            under_venue = relative.parts and relative.parts[0] == "venue"
+            for imported in _imported_modules(path):
+                is_venue = imported == "qmf.venue" or imported.startswith("qmf.venue.")
+                if is_venue and not under_venue:
+                    violations.append(f"{relative}: imports {imported}")
+>       assert violations == [], f"qmf.venue imports outside qmn.venue: {violations}"
+E       AssertionError: qmf.venue imports outside qmn.venue: ['ledger\\protection_market.py: imports qmf.venue.ctrader', 'seats\\dispatch.py: imports qmf.venue.ctrader']
+E       assert ['ledger\\pro...enue.ctrader'] == []
+E
+E         Left contains 2 more items, first extra item: 'ledger\\protection_market.py: imports qmf.venue.ctrader'
+E         Use -v to get more diff
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_scaffold.py:90: AssertionError
+____________________ test_nothing_outside_qmn_imports_qmn _____________________
+
+    def test_nothing_outside_qmn_imports_qmn() -> None:
+        """Nothing in the workspace imports qmn (AR-73)."""
+        scan_roots = (
+            _WORKSPACE_ROOT / "packages",
+            _WORKSPACE_ROOT / "extensions",
+            _WORKSPACE_ROOT / "qml",
+            _WORKSPACE_ROOT / "qmb",
+            _WORKSPACE_ROOT / "tools",
+        )
+        violations: list[str] = []
+        for root in scan_roots:
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*.py")):
+                # Skip this test file's own package and tools that only name qmn.
+                if "qmn" in path.parts and path.parts[path.parts.index("qmn")] == "qmn":
+                    continue
+                for imported in _imported_modules(path):
+                    if imported == "qmn" or imported.startswith("qmn."):
+                        violations.append(f"{path.relative_to(_WORKSPACE_ROOT)}: {imported}")
+>       assert violations == [], f"workspace imports qmn: {violations}"
+E       AssertionError: workspace imports qmn: ['tools\\spot_paper_journey.py: qmn.venue.spot_recorded', 'tools\\spot_paper_journey.py: qmn.venue.spot_paper']
+E       assert ['tools\\spot...e.spot_paper'] == []
+E
+E         Left contains 2 more items, first extra item: 'tools\\spot_paper_journey.py: qmn.venue.spot_recorded'
+E         Use -v to get more diff
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_scaffold.py:220: AssertionError
+_________ test_supervisor_module_runs_stand_down_and_survives_restart _________
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_supervisor_module_runs_st0')
+
+    def test_supervisor_module_runs_stand_down_and_survives_restart(tmp_path: Path) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        port = _port()
+        for _ in range(2):
+            process = _launch(tmp_path, state, port)
+            try:
+                _wait_status(port, process)
+                try:
+                    with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                        raise AssertionError(
+                            f"trading readiness unexpectedly returned {response.status}"
+                        )
+                except HTTPError as response:
+                    assert response.code == 503
+                    readiness = json.loads(response.read())
+                    assert readiness["state"] == "stand-down-alive"
+                    assert readiness["trading"] == "unavailable"
+            finally:
+                process.terminate()
+                _stdout, stderr = process.communicate(timeout=5)
+>               assert process.returncode == 0
+E               AssertionError: assert 1 == 0
+E                +  where 1 = <Popen: returncode: 1 args: ['C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-...>.returncode
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py:93: AssertionError
+____ test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal ____
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_supervisor_loads_operator0')
+
+    def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
+        tmp_path: Path,
+    ) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        deployment = tmp_path / "deployment.json"
+        deployment.write_text("{}", encoding="utf-8")
+        port = _port()
+        process = _launch(tmp_path, state, port, deployment_file=deployment)
+        try:
+            _wait_status(port, process)
+            try:
+>               with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py:141:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:187: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:493: in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:602: in http_response
+    response = self.parent.error(
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:531: in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:464: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <urllib.request.HTTPDefaultErrorHandler object at 0x0000011C47C0B4D0>
+req = <urllib.request.Request object at 0x0000011C48307D40>
+fp = <http.client.HTTPResponse object at 0x0000011C479DEEC0>, code = 503
+msg = 'Service Unavailable'
+hdrs = <http.client.HTTPMessage object at 0x0000011C47C8CF30>
+
+    def http_error_default(self, req, fp, code, msg, hdrs):
+>       raise HTTPError(req.full_url, code, msg, hdrs, fp)
+E       urllib.error.HTTPError: HTTP Error 503: Service Unavailable
+
+..\..\task\python\cpython-3.14.7-windows-x86_64-none\Lib\urllib\request.py:611: HTTPError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_supervisor_loads_operator0')
+
+    def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
+        tmp_path: Path,
+    ) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        deployment = tmp_path / "deployment.json"
+        deployment.write_text("{}", encoding="utf-8")
+        port = _port()
+        process = _launch(tmp_path, state, port, deployment_file=deployment)
+        try:
+            _wait_status(port, process)
+            try:
+                with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                    raise AssertionError(f"invalid deployment unexpectedly returned {response.status}")
+            except HTTPError as response:
+                assert response.code == 503
+                readiness = json.loads(response.read())
+                assert readiness["trading"] == "unavailable"
+>               assert "versioned configured-runtime fields" in readiness["reason"]
+E               AssertionError: assert 'versioned configured-runtime fields' in 'the operator-pinned deployment file is readable beneath QMX_ROOT'
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py:147: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_supervisor_loads_operator0')
+
+    def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
+        tmp_path: Path,
+    ) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        deployment = tmp_path / "deployment.json"
+        deployment.write_text("{}", encoding="utf-8")
+        port = _port()
+        process = _launch(tmp_path, state, port, deployment_file=deployment)
+        try:
+            _wait_status(port, process)
+            try:
+                with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
+                    raise AssertionError(f"invalid deployment unexpectedly returned {response.status}")
+            except HTTPError as response:
+                assert response.code == 503
+                readiness = json.loads(response.read())
+                assert readiness["trading"] == "unavailable"
+                assert "versioned configured-runtime fields" in readiness["reason"]
+        finally:
+            process.terminate()
+            _stdout, stderr = process.communicate(timeout=5)
+>           assert process.returncode == 0
+E           AssertionError: assert 1 == 0
+E            +  where 1 = <Popen: returncode: 1 args: ['C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-...>.returncode
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py:151: AssertionError
+_ test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile _
+
+tmp_path = WindowsPath('C:/Users/Mubarak/Documents/Codex/2026-10-04/task-10/test-runs/original-qmn/test_supervisor_default_resolv0')
+
+    def test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile(
+        tmp_path: Path,
+    ) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        initial = assess_configured_runtime(valid_deployment(tmp_path), qmx_root=tmp_path)
+>       assert is_ok(initial)
+E       AssertionError: assert False
+E        +  where False = is_ok(TypedRefusal(category=<RefusalCategory.UNAVAILABLE_DEPENDENCY: 'unavailable dependency'>, retryability=<Retryability.N...file', 'reason': 'the operator-pinned deployment file is readable beneath QMX_ROOT'}), after_condition_descriptor=None))
+
+..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py:161: AssertionError
+=========================== short test summary info ===========================
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_private_ad32_wrapper_persists_real_registry_lineage_as_incomplete
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_lineage_rejects_page_from_another_venue
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_reader_rejects_rehashed_boolean_envelope_version
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_reader_recomputes_nested_page_identity_after_outer_rehash
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_nonempty_ct22_ct27_records_survive_ad32_physical_reopen
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_admission_evidence.py::test_reader_refuses_correctly_rehashed_malformed_ct27_section_identity
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_alerts.py::test_typed_failure_ids_have_register_entries
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py::test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py::test_resolved_profile_freezes_nested_mis_parameters
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py::test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_composition.py::test_v2_source_bytes_must_reproduce_admitted_logic_manifest
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_frontier.py::test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py::test_closed_resolver_refuses_missing_profile
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_live_resources.py::test_closed_resolver_validates_then_refuses_replay_profile_for_live
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py::test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py::test_valid_local_pins_remain_stand_down_without_admission
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py::test_nonempty_registered_book_and_bms_reload_as_typed_assessment
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_configured_runtime.py::test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py::test_init_and_validate_run_pure_scaffold_and_report_boot_block
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py::test_explain_uses_pure_layer_report_without_secret_values
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py::test_deployment_child_runs_real_host_preflight_for_selected_file
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py::test_real_governed_deployment_document_passes_child_preflight_without_activation
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_deploy_config.py::test_config_init_rejects_parent_swap_to_symlink_without_outside_write
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_failures_gate.py::test_failures_completeness_gate_passes_on_the_register
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_fx_paper.py::test_qmb_qml_and_qma_do_not_import_qmf_venue
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_hygiene.py::test_qmf_venue_import_only_under_qmn_venue
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_packet_records_fingerprints_and_branch_base_commits
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_settings_status_reports_seventy_one_rows_and_ftr07_blanks
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_failure_register_completeness_is_part_of_the_packet
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_compiled_demo_roster_has_paired_paper_target
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_soak_local_human_inputs_are_blocked_acceptance_not_unrelated
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_green_settings_path_does_not_invent_values
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_failed_gate_keeps_packet_and_clears_machine_green
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_blank_init_config_is_honest_about_soak_blanks
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_readiness.py::test_identical_inputs_fingerprint_identically
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_scaffold.py::test_only_venue_subpackage_imports_qmf_venue
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_scaffold.py::test_nothing_outside_qmn_imports_qmn
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py::test_supervisor_module_runs_stand_down_and_survives_restart
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py::test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal
+FAILED ..\..\task-9\spot-candidate\qmn\tests\test_qmn_supervisor_process.py::test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile
+40 failed, 1066 passed, 23 skipped in 110.34s (0:01:50)

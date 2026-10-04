@@ -124,4 +124,35 @@ class RecordedSpotSource:
         raw = context.provenance.get("raw_tick")
         if not isinstance(raw, Mapping):
             return refusal("recorded spot receipt has no complete raw tick")
-        return account.ingest(cast("Mapping[str, object]", raw))
+        tick = cast("Mapping[str, object]", raw)
+        if (
+            context.license_tag != "synthetic-infrastructure-only"
+            or context.resolution != "tick"
+            or context.side != "bid"
+            or context.provenance.get("origin") != "synthetic"
+            or tick.get("origin") != "synthetic"
+            or context.provenance.get("adapter_version") != 1
+            or context.provenance.get("market") != self.market.symbol
+            or context.provenance.get("amount_step") != self.market.amount_step
+            or context.provenance.get("price_step") != self.market.price_step
+            or tick.get("event_ns") != observed.event_time.value_ns
+            or tick.get("received_ns") != observed.known_at.value_ns
+            or tick.get("received_ns") != observed.receive_wall_time.value_ns
+        ):
+            return refusal("raw tick disagrees with retained CT-10 provenance/time", code="POLICY")
+        try:
+            with localcontext() as arithmetic:
+                arithmetic.prec = 128
+                scale = max(0, -int(exact(self.market.price_step).as_tuple().exponent))
+                foreign = observed.foreign_money
+                if (
+                    foreign is None
+                    or foreign.scale != scale
+                    or foreign.verbatim != int(exact(tick.get("bid")) * Decimal(10) ** scale)
+                ):
+                    return refusal(
+                        "raw bid disagrees with retained CT-10 foreign money", code="POLICY"
+                    )
+        except (ValueError, InvalidOperation) as exc:
+            return refusal(str(exc))
+        return account.ingest(tick)

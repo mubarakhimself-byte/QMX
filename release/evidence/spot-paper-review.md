@@ -1,3 +1,7 @@
+> Historical self-review of candidate `6126874409ab77561c03a1fb8df557e4f57b54ae`.
+> Independent findings and fixes are in `spot-independent-review.md`; original
+> reachability/additions-only statements below describe that earlier candidate.
+
 # Spot paper local review
 
 Self-review of the isolated candidate, not independent certification. All changes

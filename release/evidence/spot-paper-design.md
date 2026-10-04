@@ -115,3 +115,13 @@ acceptance gates. No canonical gap is silently closed by this candidate.
 The tested CT-10 producer admits synthetic infrastructure fixtures only. Public
 recordings require binding the existing CT-15 authority and an explicit license,
 and are refused here. No second native-key authority is introduced.
+
+## Independent integration follow-up
+
+The independent review supersedes the original additions-only/library-only
+reachability limit above. process.py now installs an operator-pinned retained
+QMN read through the existing paired CT-40 operation/grant/session machinery.
+QMN publishes a format-1 query view atomically with simulation state format 2.
+The normal module entrypoint is tested against real pairing and restored grants.
+No QMB contract or shared QMF intake lock file is edited. See
+spot-independent-review.md and the revised DRAFT docs patch for scope and limits.

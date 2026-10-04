@@ -36,7 +36,7 @@ from types import MappingProxyType
 from typing import Final, cast
 from urllib.parse import urlsplit
 
-from qma.core.operations import public_operation_descriptors
+from qma.core.operations import OperationDescriptor, public_operation_descriptors
 from qma.core.plugins.hooks import HookSource
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
 from qma.core.ports.paper import (
@@ -194,6 +194,13 @@ from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
 from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
 from qma.daemon.request_runtime.service import RequestRuntime
+from qma.daemon.request_runtime.spot_state import (
+    SPOT_CONTRIBUTION,
+    SpotStateBinding,
+    configure_spot_host_retry,
+    load_spot_state_bindings,
+)
+from qma.daemon.request_runtime.spot_tools import spot_query_descriptor
 from qma.daemon.retry import HostRetryLoop
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
 from qma.daemon.sessions.product_session import (
@@ -845,6 +852,7 @@ class DaemonProcess:
         self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
         self._agent_requests: AgentRequestBridge | None = None
         self._agent_instance_revisions: Mapping[str, int] = {}
+        self._spot_state_bindings: Mapping[str, SpotStateBinding] = {}
 
     @classmethod
     def compose(
@@ -1079,6 +1087,41 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return activated
+            spot_bindings = load_spot_state_bindings(process.root)
+            if is_refusal(spot_bindings):
+                process._release(release_process_gate=False)
+                return spot_bindings
+            for instance_id, binding in spot_bindings.value.items():
+                loaded_spot = next(
+                    (
+                        item
+                        for plugin_id in roster.loader.loaded_ids()
+                        if (item := roster.loader.get(plugin_id)) is not None
+                        and item.instance_id == instance_id
+                    ),
+                    None,
+                )
+                if loaded_spot is None or not any(
+                    row.point == "tool"
+                    and row.qualified_id == SPOT_CONTRIBUTION
+                    and row.package_version == binding.package_version
+                    and row.availability == "enabled"
+                    for row in loaded_spot.published
+                ):
+                    process._release(release_process_gate=False)
+                    return policy_rejection("spot_binding", "spot read contribution is not enabled")
+            process._spot_state_bindings = spot_bindings.value
+            if spot_bindings.value:
+                restored_spot_sessions = process.product_sessions.restore_from_journal()
+                if is_refusal(restored_spot_sessions):
+                    process._release(release_process_gate=False)
+                    return restored_spot_sessions
+                retry_configured = configure_spot_host_retry(
+                    process.root, process.variables, journal
+                )
+                if is_refusal(retry_configured):
+                    process._release(release_process_gate=False)
+                    return retry_configured
             # Optional host configuration adds no listener, grants or implicit
             # transport. Local import keeps configuration/policy types acyclic.
             from .request_runtime.provider_config import load_agent_request_config  # noqa: PLC0415
@@ -3083,7 +3126,7 @@ class DaemonProcess:
                 req_id,
                 policy_rejection("contribution", "contribution is not enabled for this instance"),
             )
-        descriptors = public_operation_descriptors()
+        descriptors = self._operation_descriptors()
         descriptor = next(
             (
                 item
@@ -3097,6 +3140,21 @@ class DaemonProcess:
                 req_id,
                 policy_rejection("operation", "operation has no published host descriptor"),
             )
+        if envelope.op_id == "qmn.spot.paper.query":
+            spot_binding = self._spot_state_bindings.get(instance_id)
+            raw_spot_payload = params.get("payload")
+            if (
+                spot_binding is None
+                or not isinstance(raw_spot_payload, Mapping)
+                or dict(cast("Mapping[str, object]", raw_spot_payload)) != spot_binding.scope
+                or session.context.account_scope != spot_binding.authority_scope
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "account_scope", "query requires exactly the host account scope"
+                    ),
+                )
         contribution = ContributionRecord(
             qualified_id=published.qualified_id or "",
             package_version=published.package_version,
@@ -3264,26 +3322,33 @@ class DaemonProcess:
                 req_id,
                 policy_rejection("contribution", "contribution is not enabled for this instance"),
             )
-        binding = backtest_binding_for_instance(self.root, loaded.instance_id)
-        if is_refusal(binding):
-            return _jsonrpc_refusal(req_id, binding)
-        if self._mailboxes.quant_for(binding.value[0]) is None:
-            return _jsonrpc_refusal(
-                req_id,
-                TypedRefusal(
-                    category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
-                    retryability=Retryability.AFTER_CONDITION,
-                    context={
-                        "reason": "operator QMB binding owner has no registered Quant record",
-                        "owner_actor_id": binding.value[0].value,
-                    },
-                ),
-            )
-        environment_kind = binding.value[1].removeprefix("env:")
-        if self._runtime_composition.environments.declaration(environment_kind) is None:
-            return _jsonrpc_refusal(
-                req_id, NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
-            )
+        spot_binding = self._spot_state_bindings.get(loaded.instance_id)
+        if published.qualified_id == SPOT_CONTRIBUTION and spot_binding is not None:
+            config_revision = spot_binding.config_revision
+            account_scope = spot_binding.authority_scope
+        else:
+            account_scope = None
+            binding = backtest_binding_for_instance(self.root, loaded.instance_id)
+            if is_refusal(binding):
+                return _jsonrpc_refusal(req_id, binding)
+            if self._mailboxes.quant_for(binding.value[0]) is None:
+                return _jsonrpc_refusal(
+                    req_id,
+                    TypedRefusal(
+                        category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+                        retryability=Retryability.AFTER_CONDITION,
+                        context={
+                            "reason": "operator QMB binding owner has no registered Quant record",
+                            "owner_actor_id": binding.value[0].value,
+                        },
+                    ),
+                )
+            environment_kind = binding.value[1].removeprefix("env:")
+            if self._runtime_composition.environments.declaration(environment_kind) is None:
+                return _jsonrpc_refusal(
+                    req_id, NoEnvironment.of(kind=environment_kind, reason="kind_unbound")
+                )
+            config_revision = binding.value[2]
         # The instance owns one durable app-use session. Returning it makes an
         # open retry after a lost response or browser reload idempotent.
         existing = self._product_sessions.session_for_instance(loaded.instance_id)
@@ -3296,7 +3361,8 @@ class DaemonProcess:
                     "qualified_id": published.qualified_id,
                     "package_version": published.package_version,
                 }
-                or current.context.config_revision != binding.value[2]
+                or current.context.config_revision != config_revision
+                or current.context.account_scope != account_scope
             ):
                 return _jsonrpc_refusal(
                     req_id,
@@ -3322,7 +3388,8 @@ class DaemonProcess:
             },
             instance_id=loaded.instance_id,
             app_instance_id=loaded.instance_id,
-            config_revision=binding.value[2],
+            config_revision=config_revision,
+            account_scope=account_scope,
             as_of=format_utc_iso_z(Instant(value_ns=stamp.value.recorded_at)),
             selected_refs=[{"kind": "instance_id", "id": loaded.instance_id}],
         )
@@ -3438,7 +3505,7 @@ class DaemonProcess:
         descriptor = next(
             (
                 item
-                for item in public_operation_descriptors()
+                for item in self._operation_descriptors()
                 if item.door_key == (op_id, op_version)
             ),
             None,
@@ -3451,11 +3518,13 @@ class DaemonProcess:
             "qma.procedure.start": "graph_template",
             "qmb.backtest.run": "tool",
             "qmb.analysis.project": "tool",
+            "qmn.spot.paper.query": "tool",
         }.get(op_id)
         expected_contribution = {
             "qma.procedure.start": published.qualified_id,
             "qmb.backtest.run": "analysis-backtest:qmb",
             "qmb.analysis.project": "analysis-backtest:qmb",
+            "qmn.spot.paper.query": SPOT_CONTRIBUTION,
         }.get(op_id)
         if (
             required_point is None
@@ -3499,11 +3568,29 @@ class DaemonProcess:
                 req_id,
                 invalid_input("parameter_ceiling", "ceiling must include required operation keys"),
             )
-        binding = backtest_binding(
-            self.root, session.context.instance_id or "", session.context.config_revision
-        )
-        if is_refusal(binding):
-            return _jsonrpc_refusal(req_id, binding)
+        if op_id == "qmn.spot.paper.query":
+            spot_binding = self._spot_state_bindings.get(session.context.instance_id or "")
+            if spot_binding is None:
+                return _jsonrpc_refusal(
+                    req_id, policy_rejection("spot_binding", "no host spot binding")
+                )
+            if session.context.account_scope != spot_binding.authority_scope:
+                return _jsonrpc_refusal(
+                    req_id, policy_rejection("account_scope", "host spot binding changed")
+                )
+            current_target = spot_binding.validate_target(
+                contribution=published.qualified_id or "",
+                package_version=published.package_version,
+                config_revision=session.context.config_revision,
+            )
+            if is_refusal(current_target):
+                return _jsonrpc_refusal(req_id, current_target)
+        else:
+            binding = backtest_binding(
+                self.root, session.context.instance_id or "", session.context.config_revision
+            )
+            if is_refusal(binding):
+                return _jsonrpc_refusal(req_id, binding)
         grant = self._product_sessions.host_grant(
             session_ref,
             expected_context_revision=expected_revision,
@@ -3520,6 +3607,12 @@ class DaemonProcess:
         grant_payload["context_revision"] = expected_revision + 1
         return _jsonrpc_result(req_id, grant_payload)
 
+    def _operation_descriptors(self) -> tuple[OperationDescriptor, ...]:
+        descriptors = tuple(public_operation_descriptors())
+        if self._spot_state_bindings:
+            return (*descriptors, spot_query_descriptor())
+        return descriptors
+
     def _execute_bound_product_operation(
         self,
         bound: BoundInvocation,
@@ -3528,6 +3621,21 @@ class DaemonProcess:
     ) -> Result[object]:
         """Trusted operation adapter; payload fields never supply owner or environment."""
         op_id = bound.envelope.op_id
+        if op_id == "qmn.spot.paper.query":
+            spot_binding = self._spot_state_bindings.get(bound.instance.instance_id)
+            if spot_binding is None:
+                return policy_rejection("spot_binding", "no host spot binding")
+            target = spot_binding.validate_target(
+                contribution=bound.contribution.qualified_id,
+                package_version=bound.contribution.package_version,
+                config_revision=bound.instance.config_revision,
+            )
+            if is_refusal(target):
+                return target
+            queried = spot_binding.query(bound.validated_payload)
+            if is_refusal(queried):
+                return queried
+            return Ok(cast("object", queried.value))
         if op_id == "qma.procedure.start":
             configured = backtest_binding(
                 self.root, bound.instance.instance_id, bound.instance.config_revision
@@ -4221,7 +4329,7 @@ class DaemonProcess:
             await server.wait_closed()
         self._release()
 
-    def _release(self) -> None:
+    def _release(self, *, release_process_gate: bool = True) -> None:
         if self._closed:
             return
         self._closed = True
@@ -4235,9 +4343,10 @@ class DaemonProcess:
                 closer()
         finally:
             self._substrate.close()
-            with _process_gate.lock:
-                if _process_gate.holder is self:
-                    _process_gate.holder = None
+            if release_process_gate:
+                with _process_gate.lock:
+                    if _process_gate.holder is self:
+                        _process_gate.holder = None
 
     def __enter__(self) -> DaemonProcess:
         return self

@@ -1,44 +1,117 @@
 {
   "baseline_sha": "ffb7590bbda1ec8d5dc126b9fdc3205c888dffac",
-  "branch": "codex/spot-paper-vertical-slice",
-  "status": "local simulated infrastructure candidate",
-  "focused_tests": {
-    "passed": 26,
-    "scope": "metadata, account policies/ownership, exact fees, partialfills/cancel/retry/restart, source archive and authority read"
+  "reviewed_candidate_sha": "6126874409ab77561c03a1fb8df557e4f57b54ae",
+  "branch": "codex/spot-paper-independent-review",
+  "status": "independently reviewed bounded synthetic backend integration; full QMN gate red",
+  "original_candidate_claims": {
+    "focused_passed": 26,
+    "selected_passed": 549,
+    "full_qmn": "collection blocked missing prometheus_client/cryptography"
   },
-  "regression_tests": {
+  "original_focused_reproduced": 26,
+  "focused_tests": {
+    "passed": 35,
+    "scope": "metadata, ledger precision/fees/minimum notional, two account policies, reservation rollback, FIFO/time across restart, source consistency, cross-process ownership, paired CT40 scope/grants and normal module entrypoint"
+  },
+  "selected_tests": {
     "passed": 549,
-    "scope": "qmf-venue, existing QMN venue/order/UNKNOWN, QMA session grants/money-path/reachability"
+    "selection": [
+      "packages/qmf-venue/tests",
+      "qmn/tests/test_qmn_venue_selection.py",
+      "qmn/tests/test_qmn_order.py",
+      "qmn/tests/test_qmn_unknown.py",
+      "qmx-agents/packages/qma-daemon/tests/test_product_session_grants.py",
+      "qmx-agents/packages/qma-daemon/tests/test_env_reachability_barrier.py",
+      "qmx-agents/packages/qma-daemon/tests/test_money_path_denial.py",
+      "qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py"
+    ]
+  },
+  "daemon_regression": {
+    "passed": 91,
+    "scope": "daemon process, product host retry, money denial, deployment, desk pack registration, product context/chrome"
+  },
+  "full_qmn_gate": {
+    "passed": 1070,
+    "failed": 39,
+    "skipped": 23,
+    "status": "red; baseline comparison proves no new failures",
+    "comparison": {
+      "original_candidate_failures": 40,
+      "reviewed_failures": 39,
+      "new_failures": [],
+      "resolved_failures": [
+        "test_qmn_scaffold.py::test_nothing_outside_qmn_imports_qmn"
+      ],
+      "remaining_failures": [
+        "test_qmn_admission_evidence.py::test_lineage_rejects_page_from_another_venue",
+        "test_qmn_admission_evidence.py::test_nonempty_ct22_ct27_records_survive_ad32_physical_reopen",
+        "test_qmn_admission_evidence.py::test_private_ad32_wrapper_persists_real_registry_lineage_as_incomplete",
+        "test_qmn_admission_evidence.py::test_reader_recomputes_nested_page_identity_after_outer_rehash",
+        "test_qmn_admission_evidence.py::test_reader_refuses_correctly_rehashed_malformed_ct27_section_identity",
+        "test_qmn_admission_evidence.py::test_reader_rejects_rehashed_boolean_envelope_version",
+        "test_qmn_alerts.py::test_typed_failure_ids_have_register_entries",
+        "test_qmn_configured_composition.py::test_resolved_profile_freezes_nested_mis_parameters",
+        "test_qmn_configured_composition.py::test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity",
+        "test_qmn_configured_composition.py::test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection",
+        "test_qmn_configured_composition.py::test_v2_source_bytes_must_reproduce_admitted_logic_manifest",
+        "test_qmn_configured_frontier.py::test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root",
+        "test_qmn_configured_live_resources.py::test_closed_resolver_refuses_missing_profile",
+        "test_qmn_configured_live_resources.py::test_closed_resolver_validates_then_refuses_replay_profile_for_live",
+        "test_qmn_configured_runtime.py::test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down",
+        "test_qmn_configured_runtime.py::test_nonempty_registered_book_and_bms_reload_as_typed_assessment",
+        "test_qmn_configured_runtime.py::test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry",
+        "test_qmn_configured_runtime.py::test_valid_local_pins_remain_stand_down_without_admission",
+        "test_qmn_deploy_config.py::test_config_init_rejects_parent_swap_to_symlink_without_outside_write",
+        "test_qmn_deploy_config.py::test_deployment_child_runs_real_host_preflight_for_selected_file",
+        "test_qmn_deploy_config.py::test_explain_uses_pure_layer_report_without_secret_values",
+        "test_qmn_deploy_config.py::test_init_and_validate_run_pure_scaffold_and_report_boot_block",
+        "test_qmn_deploy_config.py::test_real_governed_deployment_document_passes_child_preflight_without_activation",
+        "test_qmn_failures_gate.py::test_failures_completeness_gate_passes_on_the_register",
+        "test_qmn_fx_paper.py::test_qmb_qml_and_qma_do_not_import_qmf_venue",
+        "test_qmn_hygiene.py::test_qmf_venue_import_only_under_qmn_venue",
+        "test_qmn_readiness.py::test_blank_init_config_is_honest_about_soak_blanks",
+        "test_qmn_readiness.py::test_compiled_demo_roster_has_paired_paper_target",
+        "test_qmn_readiness.py::test_failed_gate_keeps_packet_and_clears_machine_green",
+        "test_qmn_readiness.py::test_failure_register_completeness_is_part_of_the_packet",
+        "test_qmn_readiness.py::test_green_settings_path_does_not_invent_values",
+        "test_qmn_readiness.py::test_identical_inputs_fingerprint_identically",
+        "test_qmn_readiness.py::test_packet_records_fingerprints_and_branch_base_commits",
+        "test_qmn_readiness.py::test_settings_status_reports_seventy_one_rows_and_ftr07_blanks",
+        "test_qmn_readiness.py::test_soak_local_human_inputs_are_blocked_acceptance_not_unrelated",
+        "test_qmn_scaffold.py::test_only_venue_subpackage_imports_qmf_venue",
+        "test_qmn_supervisor_process.py::test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile",
+        "test_qmn_supervisor_process.py::test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal",
+        "test_qmn_supervisor_process.py::test_supervisor_module_runs_stand_down_and_survives_restart"
+      ]
+    }
   },
   "static": {
-    "ruff": "passed on 10 new Python files",
-    "ruff_format": "passed",
-    "pyright_strict": "0 errors on all 10 new runtime/tool/test Python files"
+    "ruff": "passed on 13 Python files",
+    "format": "passed",
+    "pyright_strict": "0 errors on 13 Python files including process.py"
   },
-  "draft_docs_patch": "git apply --check passed; not applied",
-  "full_qmn_gate": {
-    "status": "blocked during collection",
-    "missing_environment_dependencies": [
-      "prometheus_client",
-      "cryptography"
-    ],
-    "collection_errors": 60
-  },
-  "environment": {
+  "dependencies": {
     "python": "3.14.7",
-    "pytest": "9.1.1",
-    "optuna": "4.9.0",
-    "protobuf": "7.36.0",
-    "dependencies": "existing local installed libraries, read-only references from isolated venv; no package install"
+    "installed_official_pins": [
+      "prometheus-client==0.26.0",
+      "cryptography==50.0.1",
+      "protobuf==7.36.0",
+      "optuna==4.9.0"
+    ],
+    "setup": "isolated review venv references existing installed test/store libraries and newly installed exact pins; source paths select this checkout"
   },
-  "review": "self-review recorded; independent parent review outstanding",
+  "draft_docs_patch": "git apply --check passed; DRAFT not applied",
+  "review": "independent original-candidate review plus review of bounded fixes; see spot-independent-review.md",
+  "source_hashes_kind": "working-tree bytes; final commit SHA is in delivered final-validation.json",
   "source_hashes": {
-    "packages/qmf-venue/src/qmf/venue/spot.py": "55d70bb96feb87139dad6eea7867b6117d79420ad041eb4e41e527030d7ab34f",
-    "qmn/src/qmn/venue/spot_paper.py": "c401607c9c52fe1e28332284a2d8b3f529369c894ce427d8d59eba4eb57a2d27",
-    "qmn/src/qmn/venue/spot_recorded.py": "c5fa74fd08aa9231b06d318ef4fe3afc885d6a64bc1cd9e32db001ad9a12e40a",
-    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "bcb0e2013f18e5bbbb38ffdecef6302accf7811ff6d3b133651685128a68c73c",
-    "tools/spot_paper_journey.py": "fb2c7aa953468eaa75c909ee8e14d2f750f3954a197cdc44a2a438796ba08c3d",
-    "tools/spot-paper-check.ps1": "f263c6493c2746e1d9de0d232dd941dedb3b102187bead46126b5041ee0c4723"
+    "packages/qmf-venue/src/qmf/venue/spot.py": "b183b47d94f62a5e9aab149caf97d87b8d5b39106907499f8ce66c63fe953be1",
+    "qmn/src/qmn/venue/spot_paper.py": "1e0f03ef189c22f160342ffc7715f7ed2272897b5c26ad84103b7dbe44c056c2",
+    "qmn/src/qmn/venue/spot_recorded.py": "a69f4d911e9c9ec6f429396e5c243272b3a77e2c04314dd1c7b25f6bf25905db",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "6fd85961c7300bd1115a2c8ddd30832b426fbc6a2152f581dcd6e0026205a555",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "d8fc6b3e33916decb3058c8cb1a8ba5c28b91f1c139129b346738f3556a4136c",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_state.py": "be34e51a032c6915c6696fa37650451634c5a3288e841cc595dab31ee07ac55c",
+    "qmn/examples/spot_paper_journey.py": "dba2ff164fc9c746faf02d612307beff3be7f089591b036d0e152b9a7e7c4762",
+    "tools/spot-paper-check.ps1": "17323c2b8604f362bae07ed47792ae758296dd092625bedb50d46fd89bdcb4da"
   },
   "journey": {
     "seed": {
@@ -77,7 +150,9 @@
               "filled": "0.100",
               "status": "PARTIAL",
               "reserved": "10.01000000",
-              "asset": "USDT"
+              "asset": "USDT",
+              "admission_index": 0,
+              "admitted_ns": 1000
             }
           ],
           "fees_quote": "0.01000000",
@@ -172,7 +247,7 @@
         "local shared-root writer ownership",
         "synthetic infrastructure",
         "no live exchange",
-        "no normal-start or HTTP binding",
+        "this library journey does not cover the separately tested paired CT40 startup",
         "no Book/BMS risk certification"
       ]
     },
@@ -205,6 +280,8 @@
           },
           "orders": [
             {
+              "admission_index": 0,
+              "admitted_ns": 1000,
               "amount": "0.200",
               "asset": "USDT",
               "client_id": "buy-1",
@@ -307,30 +384,24 @@
         "local shared-root writer ownership",
         "synthetic infrastructure",
         "no live exchange",
-        "no normal-start or HTTP binding",
+        "this library journey does not cover the separately tested paired CT40 startup",
         "no Book/BMS risk certification"
       ]
     }
   },
-  "limits": [
-    "synthetic infrastructure only",
-    "no live orders, secrets, transfer or exchange transport",
-    "no normal daemon/API/mini-app startup binding",
-    "local shared-root writer ownership only; no distributed fencing",
-    "not Book/BMS sizing or venue reconciliation certification",
-    "no deliverable spot FX or paper soak",
-    "canonical documentation/gaps unchanged; draft only"
-  ],
-  "source_hashes_kind": "executed working-tree bytes; Git may normalize line endings",
-  "indexed_source_hashes": {
-    "packages/qmf-venue/src/qmf/venue/spot.py": "55d70bb96feb87139dad6eea7867b6117d79420ad041eb4e41e527030d7ab34f",
-    "qmn/src/qmn/venue/spot_paper.py": "ce7419c299198ec0dc1507bd72fdb2e53cb1591d9dd0ca1765f81ea525e01cba",
-    "qmn/src/qmn/venue/spot_recorded.py": "c5fa74fd08aa9231b06d318ef4fe3afc885d6a64bc1cd9e32db001ad9a12e40a",
-    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "5a5e617bfed4e622ab1ab31585b98dd5b17885a618bd401b25d0ccfc929bf0a5",
-    "tools/spot_paper_journey.py": "241d4bf3139cf27bee0471762f68ceea80fe7702e204826009256a69d62ab8a5",
-    "tools/spot-paper-check.ps1": "f263c6493c2746e1d9de0d232dd941dedb3b102187bead46126b5041ee0c4723"
-  },
+  "daemon_auth_proof": "spot-daemon-auth-proof.json",
   "operation_supported_doors": [
-    "library/in-process only; native agent/HTTP/MCP binding remains uninstalled"
+    "library/in-process",
+    "existing paired CT40 qma-wire start_mission"
+  ],
+  "limits": [
+    "synthetic local infrastructure only; no live/exchange credentials/orders/transfers/provisioning",
+    "writer ownership only on one machine/shared canonical root; no distributed fencing",
+    "QMN execution remains operator infrastructure/Python API; no agent order tools",
+    "one selected account per enabled read-only pack instance; no account browser",
+    "retained projection does not assert current writer/feed liveness",
+    "format-1 paper candidate state refused; preserve historical fixture and use fresh synthetic root",
+    "no Book/BMS sizing, CT32 trading-edge proof, deliverable spot FX, remote UNKNOWN reconciliation or paper week",
+    "39 inherited full-QMN failures remain; canonical docs/gaps unchanged"
   ]
 }

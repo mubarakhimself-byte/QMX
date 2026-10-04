@@ -266,7 +266,7 @@ def run(root: Path, phase: str) -> Mapping[str, object]:
                 "local shared-root writer ownership",
                 "synthetic infrastructure",
                 "no live exchange",
-                "no normal-start or HTTP binding",
+                "this library journey does not cover the separately tested paired CT40 startup",
                 "no Book/BMS risk certification",
             ],
         }
