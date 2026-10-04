@@ -188,13 +188,44 @@ def _is_cli_claim_open(node: ast.Call, tree: ast.Module) -> bool:
         len(node.args) == 1
         and isinstance(node.args[0], ast.Name)
         and node.args[0].id == "claim_path"
+        and all(
+            keyword.arg == "encoding"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value == "utf-8"
+            for keyword in node.keywords
+        )
         and any(
             isinstance(statement, ast.FunctionDef)
             and statement.name == "backtest_run"
-            and node in ast.walk(statement)
+            and any(node in _same_scope_nodes(body) for body in statement.body)
             for statement in tree.body
         )
     )
+
+
+def test_cli_claim_open_allowance_is_read_only_and_same_scope() -> None:
+    def allowed(body: str) -> bool:
+        tree = ast.parse("def backtest_run(claim_path):\n" + body)
+        call = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "open"
+        )
+        return _is_cli_claim_open(call, tree)
+
+    assert allowed("    return open(claim_path, encoding='utf-8')\n")
+    for keywords in (
+        "mode='w'",
+        "mode='a'",
+        "mode='r+'",
+        "mode=mode",
+        "**options",
+        "opener=custom_opener",
+    ):
+        assert not allowed(f"    return open(claim_path, {keywords})\n"), keywords
+    assert not allowed("    def unrelated():\n        return open(claim_path, encoding='utf-8')\n")
 
 
 def _vocabulary_violations(source: str) -> list[str]:
@@ -254,6 +285,11 @@ def _vocabulary_violations(source: str) -> list[str]:
                     isinstance(statement, ast.If)
                     and any(isinstance(node, (ast.Return, ast.Raise)) for node in statement.body)
                     and not statement.orelse
+                    # A condition can evaluate a valid receipt and then rebind
+                    # that subject before falling through to the next statement.
+                    and not any(
+                        isinstance(node, ast.NamedExpr) for node in ast.walk(statement.test)
+                    )
                 ):
                     guards = (
                         statement.test.values
@@ -457,6 +493,22 @@ def test_exact_receipt_member_proof_is_narrow_and_preserves_rebinding_guards() -
     assert _vocabulary_violations(prefix + body.replace("store.engine == 'jsonl'", "True")) == [
         "engine"
     ]
+
+
+def test_receipt_guard_condition_cannot_rebind_its_proved_subject() -> None:
+    prefix = "from qmf.data.store import StoreReceipt\n"
+    for guard, alias in (
+        ("type(receipt.store_receipt) is not StoreReceipt", "receipt.store_receipt"),
+        ("not isinstance(receipt, StoreReceipt)", "receipt"),
+    ):
+        source = (
+            "def f(receipt, other):\n"
+            f"    if {guard} or (receipt := other) is None:\n"
+            "        return False\n"
+            f"    store = {alias}\n"
+            "    return {'engine': store.engine == 'jsonl'}\n"
+        )
+        assert _vocabulary_violations(prefix + source) == ["engine", "engine"]
 
 
 def _is_mutable_literal(value: ast.expr) -> bool:
