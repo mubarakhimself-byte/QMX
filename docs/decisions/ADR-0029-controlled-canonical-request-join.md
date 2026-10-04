@@ -60,6 +60,16 @@ and recovery facade must prove prior reconciliation before relaxing this fence.
 Nested public operations retain one independently admitted nested Mission,
 TaskGraph and JobHandle rather than merging live graphs.
 
+Joined v1 routes are explicitly tool-free. Behavioral aliases are not canonical
+qualified tool IDs; legacy toolset expansion can contain those aliases without
+establishing Agent permissions. Nonempty joined routes therefore refuse before
+inference. A separate host-owned bridge must resolve an actual callback binding
+to an already admitted available ToolRecord, pin its descriptor/target/grant/scope,
+and check both frozen Agent tools and permissions before admission and use.
+The existing research-corpus search tool is not metadata browse. This candidate
+does not register a browse tool, relabel search or invent a mapping from aliases.
+Existing unjoined read workflows retain their ProductSession grant checks.
+
 ## Certainty, cancellation and recovery
 
 Original canonical authority is checked before model/tool continuation. Lost

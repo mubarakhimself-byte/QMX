@@ -17,8 +17,9 @@ from qma.core.ports.capabilities import RoleBase
 from qma.core.vocabulary.enums import JobHandleState, TaskMissionState
 from qma.daemon.capabilities.spawn import SpawnRequest
 from qma.daemon.process import DaemonProcess
+from qma.daemon.request_runtime.actor_workflow import ActorWorkflowProvider
 from qma.daemon.request_runtime.canonical_join import CanonicalJoinPlan, CanonicalRequestJoin
-from qma.daemon.request_runtime.contracts import CopilotProfile, RequestRecord
+from qma.daemon.request_runtime.contracts import CopilotProfile, RequestRecord, RequestSpec
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestPolicy
 from qma.daemon.request_runtime.graph_storage import JournalRecords
 from qma.daemon.request_runtime.providers import ProviderError
@@ -116,6 +117,49 @@ def test_host_admitted_request_has_canonical_owner_without_rewriting_behavior(
     assert len(provider.requests) == 2
     assert process.canonical_requests is not None
     value(process.canonical_requests.bind_task("global", "task:joined"))
+
+
+def test_unqualified_toolset_alias_cannot_bypass_joined_permission_ceiling(
+    joined_host: tuple[DaemonProcess, ScriptedText],
+) -> None:
+    process, provider = joined_host
+    assert process.agent_requests is not None
+    runtime = process.agent_requests.runtime
+    task = process.task_dispatcher.task_for("task:joined")
+    assert task is not None
+    agent = value(
+        process.agent_capabilities.spawn(
+            SpawnRequest(
+                "agent:alias-toolset",
+                task.owner,
+                "session:joined",
+                RoleBase("bounded-worker", toolset_ids=("legacy-aliases",)),
+                base_toolset_tool_ids={"legacy-aliases": ("research_browse",)},
+            )
+        )
+    )
+    assert agent.effective_tool_ids == frozenset({"research_browse"})
+    assert not agent.effective_permissions
+    value(process.task_dispatcher.reassign(task_id=task.id, new_holder_agent_id=agent.id))
+    policy = process.agent_requests.policies["global"]
+    actor = runtime.providers[policy.provider_id]
+    assert isinstance(actor, ActorWorkflowProvider)
+    # A trusted route resolver can supply a tool-equipped route; the join must
+    # enforce its own authority fence even for legacy toolset expansion.
+    actor.routes = tuple(replace(route, tools=("research_browse",)) for route in actor.routes)
+    admitted = runtime.submit(
+        RequestSpec(
+            "alias-ceiling",
+            "operator",
+            "psess:agent",
+            0,
+            policy.profile,
+            "read metadata",
+            policy.provider_id,
+        )
+    )
+    assert is_refusal(admitted), admitted
+    assert provider.requests == []
 
 
 def test_second_request_cannot_claim_same_canonical_task_attempt(

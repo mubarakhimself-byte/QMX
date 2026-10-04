@@ -22,6 +22,11 @@ pluggable memory providers without selecting a backend. The ADR, daemon componen
 note and prepared join contract remain a branch proposal; inherited strict corpus
 failures and implementation acceptance limits are retained in the handoff.
 
+The follow-up containment refuses nonempty joined tool routes until their actual
+qualified binding and Agent permission bridge exists. A real paired read remains
+blocked. The host-retry regression now supplies real dispatched Mission/Task/outbox
+authority before checking one mocked place-run attempt; admission is not bypassed.
+
 ## 2026-10-04 - Mature library runtime branch proposal
 
 [ADR-0028](decisions/ADR-0028-mature-agent-runtime.md) records the authorized local

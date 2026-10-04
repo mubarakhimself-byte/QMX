@@ -550,3 +550,9 @@ Task. It preserves complete provider-neutral memory scopes and records the user'
 pluggable-provider direction without choosing a backend. No production binding,
 release adoption, native provider proof or live operation is inferred. The
 integrator delivery manifest is the acceptance evidence for this branch proposal.
+
+Joined routes with tools explicitly refuse pending an actual qualified callback
+binding and Agent permission bridge. The paired read capability journey is still
+blocked; this containment closes a legacy toolset alias bypass and does not claim
+working joined agents. The host-retry fixture now admits an actual compiled
+Mission, Task and root outbox before its single mocked place-run attempt.

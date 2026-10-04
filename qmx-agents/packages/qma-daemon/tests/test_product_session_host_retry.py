@@ -4,20 +4,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
+from qma.core.control import author_procedure
+from qma.core.ontology import ActorId, DeskSlug, Goal, Quant, RoleName
 from qma.core.operations import OperationDescriptor, public_operation_descriptors
+from qma.core.plugins import analysis_procedure_graph_payload
+from qma.core.ports.capabilities import RoleBase
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration
 from qma.core.vocabulary.enums import (
     ExecutionEnvironmentKind,
     PrincipalClass,
 )
+from qma.daemon.capabilities.spawn import SpawnRequest
 from qma.daemon.journal.variables import HOST_RETRY_ATTEMPT_CEILING_KEY
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
+from qma.daemon.taskgraph import MissionCompiler, instantiate_procedure
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION, WireConnection
 from qma.wire.invocation_envelope import BoundInvocation, compute_input_hash
 from qma.wire.vocabulary import WireCommand
@@ -471,6 +477,71 @@ def test_authenticated_read_retries_same_invocation_and_place_run_does_not_retry
             request_id=11,
         )
         assert place_response is not None and "error" in place_response
-        assert place_calls == [1]
+        assert place_calls == []
+        place_error = cast(dict[str, object], place_response["error"])
+        place_error_data = cast(dict[str, object], place_error["data"])
+        place_error_context = cast(dict[str, object], place_error_data["context"])
+        assert place_error_context["field"] == "logical_invocation_id"
+        # The Study ingress requires actual dispatched Task/outbox authority.
+        # The failure above proves this check is exercised, rather than bypassed
+        # by the host retry executor double. Admit real fixture authority first.
+        spawned = process.agent_capabilities.spawn(
+            SpawnRequest(
+                "agent:host-retry-place",
+                actor.value,
+                "session:host-retry-place",
+                RoleBase("analyst"),
+            )
+        )
+        assert is_ok(spawned), spawned
+        place_payload = {
+            "run_fp1": "fp1:sha256:" + "b" * 64,
+            "evidence_ref": "fp1:sha256:" + "d" * 64,
+        }
+        authored = author_procedure(analysis_procedure_graph_payload())
+        assert is_ok(authored), authored
+        compiled = instantiate_procedure(
+            authored.value,
+            owner=owner,
+            compiler=MissionCompiler(known_quant_actor_ids={owner.actor_id.value}),
+            goal=Goal(text="one place-run retry policy attempt"),
+        )
+        assert is_ok(compiled), compiled
+        task = replace(
+            compiled.value.task_graph.ready_tasks()[0],
+            inputs={
+                **place_payload,
+                "op_id": place_descriptor.op_id,
+                "op_version": place_descriptor.version,
+                "instance_id": loaded.instance_id,
+                "config_revision": 2,
+                "model_deployment_ref": "deployment:offline-retry-test",
+            },
+        )
+        graph = compiled.value.task_graph.replace_task(task)
+        process.task_dispatcher.materialize(graph, mission=compiled.value.mission)
+        dispatched = process.task_dispatcher.dispatch_task(
+            task_id=task.id,
+            holder_agent_id=spawned.value.id,
+            environment_kind=ExecutionEnvironmentKind.LOCAL,
+        )
+        assert is_ok(dispatched), dispatched
+        rows = process.task_graphs.outbox_rows(graph.id)
+        assert len(rows) == 1
+        admitted_place = _request(
+            process,
+            connection,
+            session_id=session_id,
+            contribution=contribution,
+            instance_id=loaded.instance_id,
+            revision=2,
+            descriptor=place_descriptor,
+            grant_id=cast(str, place_grant_result["grant_id"]),
+            logical_id=rows[0].logical_invocation_id,
+            payload=place_payload,
+            request_id=12,
+        )
+        assert admitted_place is not None and "error" in admitted_place
+        assert place_calls == [1], admitted_place
     finally:
         process.close()

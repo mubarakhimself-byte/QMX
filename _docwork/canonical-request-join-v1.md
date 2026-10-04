@@ -175,6 +175,12 @@ uncertainty and refuses missing volatile authority. These explicit v1 limits nar
 the proposed contract, rather than claiming the full lifecycle gate above is done.
 The delivery manifest records exact tests and independent findings/fixes.
 
+Joined v1 accepts tool-free routes only. A nonempty route refuses until its actual
+host callback has an admitted qualified ToolRecord binding and both frozen Agent
+tool and permission ceilings are checked. Behavioral aliases and legacy toolset
+members do not supply that bridge. Real child grant narrowing is verified in the
+existing unjoined actor lane; a joined tool/grant journey remains unimplemented.
+
 - qma.core.ontology.actor_id.ActorId / ontology.records.Quant, Agent, Subagent.
 - qma.daemon.bus.mailbox.MailboxStore.quant_for (actual ontology record lookup).
 - qma.daemon.capabilities.spawn.AgentCapabilityStore (frozen recorded spawn).

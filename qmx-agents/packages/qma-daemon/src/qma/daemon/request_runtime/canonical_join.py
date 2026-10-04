@@ -233,14 +233,12 @@ class CanonicalRequestJoin:
                 r.profile_id == plan.profile_id and r.actor_id == plan.behavioral_actor_id
                 for r in provider.routes
             )
-            or any(
-                set(r.tools) - agent.effective_tool_ids
-                for r in provider.routes
-                if r.profile_id == plan.profile_id
-            )
+            or any(r.tools for r in provider.routes if r.profile_id == plan.profile_id)
         ):
             return policy_rejection(
-                "canonical_agent", "behavioral route cannot widen actual Agent capabilities"
+                "canonical_agent",
+                "joined tool routes require an admitted qualified binding and permission bridge; "
+                "bounded v1 accepts tool-free routes only",
             )
         return Ok(
             {
