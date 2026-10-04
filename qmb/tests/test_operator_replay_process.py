@@ -33,7 +33,7 @@ from qmf.core import Fingerprint, Result, World, fingerprint, is_ok
 from qmf.data.splits import SegmentRole
 from qmf.data.store import EvidenceStore
 from qmf.registry import RegistryPersistence
-from replay_fixture_support import make_recorded_replay_fixture
+from replay_fixture_support import RecordedReplayFixture, make_recorded_replay_fixture
 from test_ql7_host import (  # pyright: ignore[reportPrivateUsage]
     _SEVERITY,  # pyright: ignore[reportPrivateUsage]
     _bms,  # pyright: ignore[reportPrivateUsage]
@@ -280,9 +280,10 @@ def prepare_operator_replay_runtime(
     experiment_spec_fp1: Fingerprint | None = None,
     *,
     register_experiment: Callable[[Fingerprint], Fingerprint] | None = None,
+    recorded_fixture: RecordedReplayFixture | None = None,
 ) -> tuple[dict[str, str], dict[str, Path], Fingerprint]:
     """Build a persisted registered-replay runtime for QMA transport integration tests."""
-    fixture = make_recorded_replay_fixture(tmp_path / "data")
+    fixture = recorded_fixture or make_recorded_replay_fixture(tmp_path / "data")
     request = _ok(
         ReplayInputRequest.try_create(
             split=fixture.split,
@@ -436,6 +437,7 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     original_artifact = artifact_path.read_bytes()
     corrupt_body = {**stored_body, "trade_count": 999}
     artifact_path.write_text(json.dumps(corrupt_body), encoding="utf-8")
+    _refused_reexecution(cli, environment, tmp_path)
     corrupt_query = project_operator_replay(
         runtime_root=environment["QMB_REPLAY_RUNTIME_ROOT"],
         context=context,
@@ -443,6 +445,7 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     )
     assert not is_ok(corrupt_query)
     artifact_path.unlink()
+    _refused_reexecution(cli, environment, tmp_path)
     missing_query = project_operator_replay(
         runtime_root=environment["QMB_REPLAY_RUNTIME_ROOT"],
         context=context,
@@ -451,6 +454,48 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     assert not is_ok(missing_query)
     assert not artifact_path.exists()  # queries never backfill or rerun
     artifact_path.write_bytes(original_artifact)
+    before_recovery = {
+        str(path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()
+    }
+    recovered = subprocess.run(
+        [str(cli), "backtest", "run"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+    )
+    assert recovered.returncode == 0, recovered.stderr
+    assert json.loads(recovered.stdout) == response
+    assert {
+        str(path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()
+    } == before_recovery  # a completed invocation never repeats economic effects
+    changed_payload = {**delegated_payload, "attempt_id": 2}
+    _refused_reexecution(
+        cli,
+        {
+            **environment,
+            "QMA_QMB_DOOR_PAYLOAD": json.dumps(changed_payload),
+            "QMA_QMB_ATTEMPT_ID": "2",
+        },
+        tmp_path,
+    )
+    stream_path = roots["journal"] / context.job_id / "positions" / "000000.jsonl"
+    original_stream = stream_path.read_bytes()
+    lines = original_stream.splitlines(keepends=True)
+    assert json.loads(lines[-1])["payload"]["kind"] == "qmb-operator-terminal-occurrence-v1"
+    stream_path.write_bytes(b"".join(lines[:-1]))
+    _refused_reexecution(cli, environment, tmp_path)
+    stream_path.write_bytes(original_stream)
+    terminal_files = {
+        path: path.read_bytes() for path in roots["terminal_ledger"].rglob("*") if path.is_file()
+    }
+    for path in terminal_files:
+        path.unlink()
+    partial = _refused_reexecution(cli, environment, tmp_path)
+    assert "replay_recovery" in partial.stderr
+    for path, data in terminal_files.items():
+        path.write_bytes(data)
     with tempfile.TemporaryDirectory(prefix="qmb-terminal-verify-test-") as raw:
         claim_path = Path(raw) / "claim.json"
         claim_path.write_text(json.dumps(response), encoding="utf-8")
@@ -499,6 +544,23 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     assert terminal_lines[0].ct32_fingerprint is not None
     assert terminal_lines[0].ct32_fingerprint.value == response["ct32_fp1"]
     assert terminal_lines[0].measures
+
+
+def _refused_reexecution(
+    cli: Path, environment: dict[str, str], root: Path
+) -> subprocess.CompletedProcess[str]:
+    before = {str(path): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        [str(cli), "backtest", "run"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+    )
+    assert result.returncode != 0, result.stdout
+    assert {str(path): path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
+    return result
 
 
 def test_qmb_cli_preflight_rejects_boolean_descriptor_version(

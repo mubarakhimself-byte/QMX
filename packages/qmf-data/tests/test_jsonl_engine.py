@@ -34,6 +34,21 @@ def test_append_writes_one_lf_terminated_object_per_line(tmp_path: Path) -> None
     assert data == a + b"\n" + b + b"\n"
 
 
+def test_held_writer_synchronizes_rotated_prefix_without_changing_bytes(tmp_path: Path) -> None:
+    stream = _stream(tmp_path, rotation=1)
+    expected = [_canon({"n": index}) for index in range(3)]
+    for item in expected:
+        stream.append(item)
+    before = {path.name: path.read_bytes() for path in (tmp_path / "s").glob("*.jsonl")}
+    stream.refresh_and_sync_prefix()
+    assert {path.name: path.read_bytes() for path in (tmp_path / "s").glob("*.jsonl")} == before
+    reader = JsonlAppendStream(tmp_path / "s", writer_token="<reader>")
+    reader.rebuild_index()
+    assert reader.read_all() == expected
+    with pytest.raises(StoreEngineError):
+        reader.refresh_and_sync_prefix()
+
+
 def test_append_assigns_gapless_increasing_sequence(tmp_path: Path) -> None:
     stream = _stream(tmp_path)
     locations = [stream.append(_canon({"n": i})) for i in range(4)]

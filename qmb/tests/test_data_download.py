@@ -64,21 +64,30 @@ class _Process(Protocol):
 
     def join(self, timeout: float | None = None) -> None: ...
 
+    def is_alive(self) -> bool: ...
+
+    def terminate(self) -> None: ...
+
+    def close(self) -> None: ...
+
 
 class _Queue(Protocol):
     def get(self, block: bool = True, timeout: float | None = None) -> object: ...
 
     def put(self, value: object) -> None: ...
 
+    def close(self) -> None: ...
 
-class _ForkContext(Protocol):
+    def join_thread(self) -> None: ...
+
+
+class _ProcessContext(Protocol):
     def Barrier(self, parties: int) -> object: ...
 
     def Queue(self) -> _Queue: ...
 
-    def Process(
-        self, *, target: Callable[..., object], args: tuple[object, ...]
-    ) -> _Process: ...
+    def Process(self, *, target: Callable[..., object], args: tuple[object, ...]) -> _Process: ...
+
 
 _HOUR = datetime(2024, 1, 15, 10, tzinfo=timezone.utc)
 _HOUR_NS = int(_HOUR.timestamp() * 1_000_000_000)
@@ -312,19 +321,33 @@ def test_ct15_resume_initialization_is_serialized_in_process() -> None:
 
 
 def test_ct15_two_process_downloads_share_one_authority_sequence(tmp_path: Path) -> None:
-    context = cast(_ForkContext, multiprocessing.get_context("fork"))
+    # Spawn exercises independent process initialization on both tier-1 OSes;
+    # Windows has no fork context. No in-process lock stand-in is involved.
+    context = cast(_ProcessContext, multiprocessing.get_context("spawn"))
     ready = context.Barrier(2)
     results = context.Queue()
     workers = [
         context.Process(target=_concurrent_download, args=(str(tmp_path), ready, results))
         for _ in range(2)
     ]
-    for worker in workers:
-        worker.start()
-    for worker in workers:
-        worker.join(timeout=20)
-        assert worker.exitcode == 0
-    assert [results.get(timeout=2) for _ in workers] == ["ok", "ok"]
+    started: list[_Process] = []
+    try:
+        for worker in workers:
+            worker.start()
+            started.append(worker)
+        for worker in workers:
+            worker.join(timeout=20)
+            assert worker.exitcode == 0
+        assert [results.get(timeout=2) for _ in workers] == ["ok", "ok"]
+    finally:
+        for worker in started:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=5)
+        for worker in workers:
+            worker.close()
+        results.close()
+        results.join_thread()
 
     evidence = EvidenceStore(tmp_path)
     journal = _ok(evidence.for_world(World.REPLAY)).journal

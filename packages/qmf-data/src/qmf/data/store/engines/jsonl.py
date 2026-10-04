@@ -408,10 +408,13 @@ class JsonlAppendStream:
             )
         try:
             self.rebuild_index()
+            # Windows fsync/_commit requires a writable handle. The held
+            # writer opens without truncation; POSIX retains its read mode.
+            sync_mode = "r+b" if os.name == "nt" else "rb"
             for ordinal in self._ordinals_on_disk():
                 path = self._dir / _ordinal_filename(ordinal)
                 _guard_stream_file(self._dir, path, must_exist=True)
-                with _open_stream_file(self._dir, path, "rb", must_exist=True) as handle:
+                with _open_stream_file(self._dir, path, sync_mode, must_exist=True) as handle:
                     os.fsync(handle.fileno())
             _fsync_directory(self._dir)
             _fsync_directory(self._dir.parent)

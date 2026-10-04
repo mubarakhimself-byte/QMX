@@ -8,8 +8,10 @@ verbatim, so a lost append acknowledgement cannot mint a second observation.
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -44,30 +46,68 @@ _COORDINATORS: dict[
 
 
 class _ProcessLock:
-    """Advisory transaction lock shared by CT-15 handles across processes."""
+    """Native transaction lock shared by CT-15 handles across processes.
+
+    POSIX uses flock; Windows locks the same first byte, even on an empty file.
+    Keep the lock file in place so contenders share one exclusion domain. A
+    native handle close/process exit releases the lock; no stale PID cleanup is
+    required. Contention waits as flock does, never degrades to a thread lock.
+    """
 
     def __init__(self, path: Path) -> None:
-        self._fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        if not stat.S_ISREG(os.fstat(self._fd).st_mode):
-            os.close(self._fd)
-            raise OSError("CT-15 lock path is not a regular file")
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        self._fd: int | None = fd
+        self._windows = os.name == "nt"
         try:
-            fcntl = cast(_Fcntl, import_module("fcntl"))
-            fcntl.flock(self._fd, fcntl.LOCK_EX)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError("CT-15 lock path is not a regular file")
+            if self._windows:
+                native = cast(_Msvcrt, import_module("msvcrt"))
+                os.lseek(fd, 0, os.SEEK_SET)
+                while True:
+                    try:
+                        native.locking(fd, native.LK_NBLCK, 1)
+                        break
+                    except OSError as exc:
+                        if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                            raise
+                        time.sleep(0.05)
+            else:
+                fcntl = cast(_Fcntl, import_module("fcntl"))
+                fcntl.flock(fd, fcntl.LOCK_EX)
         except BaseException:
-            os.close(self._fd)
+            self._fd = None
+            os.close(fd)
             raise
 
     def close(self) -> None:
-        fcntl = cast(_Fcntl, import_module("fcntl"))
-        fcntl.flock(self._fd, fcntl.LOCK_UN)
-        os.close(self._fd)
+        fd = self._fd
+        if fd is None:
+            return
+        self._fd = None
+        try:
+            if self._windows:
+                native = cast(_Msvcrt, import_module("msvcrt"))
+                os.lseek(fd, 0, os.SEEK_SET)
+                native.locking(fd, native.LK_UNLCK, 1)
+            else:
+                fcntl = cast(_Fcntl, import_module("fcntl"))
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
     def __enter__(self) -> _ProcessLock:
         return self
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+class _Msvcrt(Protocol):
+    LK_NBLCK: int
+    LK_UNLCK: int
+
+    def locking(self, fd: int, mode: int, nbytes: int) -> None: ...
 
 
 class _Fcntl(Protocol):

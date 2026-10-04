@@ -183,7 +183,7 @@ def scan_coverage_rows(
     cached: list[dict[str, object]] = []
     for key in columnar.stored_keys():
         try:
-            # Engine annotations do not validate untrusted canonical JSON.
+            # Reader annotations do not validate untrusted canonical JSON.
             raw_artifact = cast("object", columnar.read(key))
         except StoreEngineError:
             return storage(

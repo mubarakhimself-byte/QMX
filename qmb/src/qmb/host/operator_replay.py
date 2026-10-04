@@ -161,6 +161,28 @@ def execute_operator_replay(
     inputs = _load_operator_inputs(binding.value, context)
     if is_refusal(inputs):
         return inputs
+    config = cast(ResolvedRunConfig, inputs.value["config"])
+    prior = read_merge_view(
+        binding.value.roots["terminal_ledger"], world=config.world, role=ROLE_CONFIRMATION
+    )
+    if is_refusal(prior):
+        return prior
+    if any(line.run_id == config.fingerprint for line in prior.value):
+        # An exact verified occurrence may be returned after a transport loss.
+        # Partial, corrupt or differently owned results refuse without rerunning.
+        return _verify_operator_replay_inputs(
+            binding.value, context, inputs.value, claimed_result=None
+        )
+    reader = cast(JournalReader, inputs.value["journal_reader"])
+    admission = cast(BookAdmissionContext, inputs.value["admission"])
+    journal = reader.read_checked(admission.journal_writer.stream_name, for_world=config.world)
+    if is_refusal(journal):
+        return journal
+    if journal.value:
+        return policy(
+            "replay_recovery",
+            "an incomplete prior Book journal requires recovery before any re-execution",
+        )
     from qmb.host.replay_execution import execute_recorded_replay_request  # noqa: PLC0415
 
     result = execute_recorded_replay_request(
@@ -274,7 +296,7 @@ def _verify_operator_replay_inputs(
     claimed_result: object | None,
     require_occurrence: bool = True,
 ) -> Result[Mapping[str, object]]:
-    """Verify one prepared snapshot; projection consumes these same inputs."""
+    """Verify prepared inputs; projection consumes these same values."""
     config = cast(ResolvedRunConfig, inputs["config"])
     request = cast(ResolvedReplayRequest, inputs["request"])
     ledger_root = binding.roots["terminal_ledger"]
