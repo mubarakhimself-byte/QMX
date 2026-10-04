@@ -151,7 +151,7 @@ Use the portable integration runner's `-Suite memory` with the corresponding
 dependency environment for bounded crossmodule checks. General actor-memory
 routing, automatic consolidation/evaluation and agent-authored ledgers remain.
 
-## Accepted quality composition and current gate limits
+## Historical quality composition gate limits at33165e84
 
 The entire reviewed quality `47b15d4e` series is combined through `19f35af9`,
 including cancellation-safe aggregate verdicts. The local join explicitly
@@ -168,3 +168,33 @@ nine existing files, recorded separately from the quality lane's four root
 typing errors. The single ledger and exact evidence JSON describe bounded next
 fixes. Operator startup/API instructions above remain valid; these results do
 not establish native account auth, remote operation or full backend readiness.
+
+## Latest reviewed successor checkpoint
+
+Source checkpoint `cb62b839` adds accepted host-admitted authoring, four exact
+QMA typing patches, the complete QMN series with its required independent repair,
+and the complete QMB series with both mandatory independent repairs. Exact
+composition maps are `backend-reviewed-successor-series-audit-draft.json` and
+`backend-qmb-composition-audit-draft.json`. Existing startup/API instructions above
+remain; opt-in authoring setup and explicit recovery are detailed in
+`backend-admitted-authoring-handoff-draft.md`.
+
+Latest appropriate full checks ran at clean5fa3e9e2: QMA2076passed, zero failed/
+skipped, aggregate79.08%and daemon77.68%; QMN1130passed16platform skips7live tests
+excluded,73.17%. Both gates remain RED at unchanged80%coverage. Full QMA strict
+typing now604files with zero diagnostics. Composed QMB affected check129passed,
+9existing Windows skips; full source QMB1460pass19skip1Studyfailure remains
+historical, not a new successor gate. Exact commands/source proof/hashes are in
+`backend-current-component-gates-draft.json` and the QMB handoff draft.
+
+Directory DELETE sharing is denied; directory WRITE sharing is intentional.
+Tested late junction mutation causes refusal before target writes. Universal
+hardlink alias exclusion, hardware-cache and physical power-cut behavior are not
+proven. Details and actual checked hashes: native repair review draft.
+
+Remaining bounded functionality: owned-DONE read-only projection with original
+verified context, real Alternative Study dispatch/envelope/result verification,
+durable operator actor lifecycle and general workflows, paired data/correction
+folding, coverage and release/hosted quality acceptance. Full native auth is
+unverified; ordinary native tools stay restricted, remote endurance is unproven,
+and DeepSeek policy cap/key support is pending. Full platform acceptance is false.

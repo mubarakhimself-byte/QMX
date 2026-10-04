@@ -4,6 +4,13 @@ Owner: controlled backend integrator. Date: 2026-10-04. Status: reviewed composi
 
 Candidate: `backend-candidate`, active successor branch `backend/admitted-authoring-projection-20261004`, from preserved reviewed `backend/combined-integration-20261004` at `33165e84`. Independent local clone; no shared git directory or hardlinks. No push, merge, publish, deployment, credentials, paid calls or real trading authorized. UI stays Claude-owned.
 
+Latest source checkpoint: `cb62b839`. Reviewed native/skills/data/spot/memory/quality,
+admitted authoring, QMA typing, complete QMN plus mandatory repair, and complete
+QMB plus both mandatory repairs are composed. Latest QMA2076pass and QMN1130pass
+retain coverage red79.08/73.17. Composed QMB129pass9existing skips. Full strict
+QMA604files0diagnostics. Evidence and source-hash audits are linked below;
+activity sections preserve older results rather than replacing them.
+
 ## Source and ownership
 
 | Requirement/source | Module owner | Status/evidence | Dependencies and next bounded work |
@@ -15,9 +22,9 @@ Candidate: `backend-candidate`, active successor branch `backend/admitted-author
 | Reusable core, roles/actors/delegation/workflows | QMA; future lane via parent | Original Oct3 task-3 reconciliation and task-2 brief read; preserve reusable core and specialist hierarchy | Identify clean actor/dispatch seams after composition |
 | Memory/context/agent-authored ledger distinct | QMA memory/context/ledger owners | Original reconciliation records distinct contracts, not interchangeable telemetry | Durable backend from memory lane; context/compaction and authored ledger remain separate |
 | SDK skills/hooks/native/API providers | QMA runtime | Implemented and reviewed in combined candidate; final pinned seams 84 passed, plus bounded native correction 81 focused passes | Full native auth unverified, ordinary native tools restricted; DeepSeek policy/key pending |
-| Governed data/QMB persistence | QMF-data/QMB | Combined locking, real CLI replay/recovery and direct persisted query seams pass; broader mixed-setup gate 1,995 passed, 14 failed, 22 skipped | Paired Dukascopy observations, correction folding and exact broad failures remain |
-| Legitimate CT47 authoring/public projection | QMA/QMB integrator | Task-8 handoff: no fabricated provenance; canonical actor creation/dispatch ingress and projection bridge absent | Inspect dispatched-owner route; compatible host-derived provenance only; document contract decision |
-| Multiaccount/node spot risk, FX/crypto | QMN/QMF-venue | Reviewed spot `8bee17d4`: 35 focused + actual CT40 query; full QMN 1070 pass/39 fail/23 skip, baseline 40 failures | Read-only daemon binding; no execution agent tools; spot FX/live venue work remains |
+| Governed data/QMB persistence | QMF-data/QMB | Complete reviewed QMB series plus mandatory scaffold/native fixes; exact13owned files; composed129pass9existing skips | Earlier14failure history retained; Study production ingress remains. Paired Dukascopy observations/correction folding remain |
+| Legitimate CT47 authoring/public projection | QMA/QMB integrator | Reviewed host-admitted authoring `c149c1b9`, actual synthetic adapter execution and durable authority/provenance153pass; no fake production claim | Full authenticated provider authoring and durable operator actor ingress unproven. Owned-DONE public projection bridge remains |
+| Multiaccount/node spot risk, FX/crypto | QMN/QMF-venue | Reviewed spot plus complete runtime series and mandatory directory repair; latest offline1130pass16existing skips7live excluded | Unchanged73.17%coverage red; read-only daemon binding; no execution agent tools; spot FX/live/remote work remains |
 | QMF/QML/QMB/QMN, analytics/API/DevOps | Respective components; integration owner | Backend vision retained; QMA counts do not certify platform | Crossmodule journeys and appropriate component gates after stable composition |
 | Operator/API handoff for Claude, docs drafts | Integrator | Complete draft handoff, ownership map, evidence manifest, portable test entrypoint and unapplied three-document patch | UI wiring has not started and is not acceptance evidence; canonical docs unchanged |
 | Canonical backlog | Parent/integrator | Desktop QMX BACKLOG.md read; inherited CI/security gate rules retained | No raising security zeros, no fabricated coverage, no broad deletion; later user scope supersedes historical pauses |
