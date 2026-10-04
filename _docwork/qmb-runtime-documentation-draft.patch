@@ -19,9 +19,9 @@
 +final blob and returns a refusal. Junction, mutation, rename, concurrent-writer,
 +flush-failure and fresh-process-reopen regressions execute natively on Windows.
 +The captured native failure was NtCreateFile SYNCHRONIZE access denial on an
-+existing ancestor; attribute-only directory anchors resolve it without changing
-+OS security settings. There is no inferred App Control diagnosis or path-following
-+fallback. Process restart evidence is not a physical power-cut experiment.
++existing ancestor; current anchors add LIST access, share WRITE and deny DELETE.
++Tested late junction mutation refuses before target writes; hardlink aliases are
++not excluded. No ACL/fallback change or physical power-cut claim is made.
 +
 +Analysis examples require an explicit trusted operator source that returns CT32
 +and CT29ProjectionSource reader locators. Projection independently reopens the

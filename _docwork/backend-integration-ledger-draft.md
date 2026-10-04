@@ -170,3 +170,31 @@ typing lane's nine files and QMB/QMN runtime lanes remain disjoint.
 - Coverage, Study production ingress, owned-DONE projection, full native auth,
   ordinary native tool restrictions, remote endurance and DeepSeek policy/key
   limits remain. Passing test inventory does not establish platform readiness.
+
+## Reviewed QMB successor composition
+
+- Seven source commits through `8d762502` plus mandatory independent scaffold
+  repair `faf79b93` and independent native repair `0ccfa7ff` are now composed
+  through `e795bc755c140069f410d0a4a493ee0f47b5075a`. All nine stable patch IDs
+  and13QMB-owned files exactly match the final reviewed source trees. Audit:
+  `backend-qmb-composition-audit-draft.json`. Originals preserved.
+- Source series' scaffold exemption/rebound-proof findings are closed only by
+  the complete accepted fix. Its source/self-review evidence stays historical;
+  independent and peer reports are copied into `_docwork/backend-qmb-*review*`.
+- Native B1 early root movement closes with active directory LIST access and
+  DELETE sharing denial. Directory WRITE sharing is intentional for publication.
+  A tested late junction change can succeed, but the following relative open
+  refuses WinError1921 with no target writes/acknowledgement. No universal
+  hardlink alias exclusion, reparse-tag, power-cut or hardware-cache claim.
+- Independent native21tests plus2consistency controls:23passed5.99s; actual
+  captured consistency observations:2passed2.62s. Owned2files strict/lint/format
+  pass. Restricted-token LIST denial remains a refusal, with no ACL/fallback.
+- Composed QMB affected gate: **129passed**,9existing Windows POSIX/chmod skips,
+  53.27s, exit0 (`qmb-seams-647d971394624e7582e6a3d10afb57f6`). Source-first parent
+  and stripped-child proof matches this candidate. Recorded dirty paths are
+  draft documentation and the new gate selector only; tested QMB tree is exact
+  `e795bc75`. No full QMB repetition during the next feature increment.
+- Earlier full source gate1460pass/19skip/1enabled Study failure remains red
+  historical evidence, not a full run of this successor. Five whole-QMB format
+  failures and Linux/coverage limits remain. Study ingress and public projection
+  are next shared integrator-owned changes; full gates follow coherent changes.

@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('authoring', 'qmn-seams', 'seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('authoring', 'qmb-seams', 'qmn-seams', 'seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -28,6 +28,20 @@ $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'qmb-seams' {
+        $candidateTests = @(
+            'qmb/tests/test_research_windows.py',
+            'qmb/tests/test_research_host_store.py',
+            'qmb/tests/test_ql7_graduation_recovery.py',
+            'qmb/tests/test_qmb_scaffold.py',
+            'qmb/tests/test_sandbox.py',
+            'qmb/tests/test_cli_host.py',
+            'qmb/tests/test_analysis_book_bms_variants.py',
+            'qmb/tests/test_analysis_project.py',
+            'qmb/tests/test_analysis_source_integrity.py'
+        )
+        $candidatePytestOptions += '--no-cov'
+    }
     'qmn-seams' {
         $candidateTests = @(
             'qmn/tests/test_qmn_deployment_reader.py',

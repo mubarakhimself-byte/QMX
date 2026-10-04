@@ -17,14 +17,23 @@ adding SYNCHRONIZE fails, independently of sharing flags. Removing OPEN_IF alone
 did not cure the failure. No App Control cause is inferred and no ACL/settings
 were changed.
 
-Directory anchors now request READ_ATTRIBUTES without synchronous data-I/O
-rights, open existing components first, and create only missing components.
-All anchors remain no-follow and deny write/delete sharing; new NTFS directories
+After independent B1 correction, directory anchors request READ_ATTRIBUTES and
+FILE_LIST_DIRECTORY without SYNCHRONIZE, open existing components first, and
+create only missing components. Anchors are no-follow and deny DELETE sharing.
+Directory WRITE sharing permits NTFS's internal publication target open; it
+does not deny all directory mutation. New NTFS directories
 and temporary files use write-through. File descriptors retain synchronous I/O.
 Publication remains handle-relative, atomic and no-clobber. Named published
 identity and bytes are checked while the original writable handle stays open.
 Readers deny external mutation during read. Leaf traversal and ADS names refuse
 before root creation. Native errno/winerror survive in the typed refusal.
+
+The original attribute-only variant allowed early empty-root movement before
+leaf acquisition. Exact independently accepted repair `0ccfa7ff` adds active
+sharing participation and early root/ancestor/component-walk controls. A late
+directory junction change can succeed under WRITE sharing, but the tested next
+relative open refuses WinError1921 without acknowledgement or target writes.
+Neither universal reparse-tag behavior nor hardlink alias exclusion is claimed.
 
 A red-first retry test exposed acknowledgement without a flush on existing
 bytes. Existing and race-winner blobs now compare and flush under one held
