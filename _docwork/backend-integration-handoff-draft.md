@@ -10,10 +10,13 @@ broker accounts, real orders, paid provider calls or network setup were used.
 
 Use an installed Python 3.14 environment with declared dependencies and the
 installed QMB console entrypoint. SDK extras are needed to verify native peers.
-Do not treat `PYTHONPATH` as package installation. Current local verification uses
+Do not treat `PYTHONPATH` as package installation. Historical verification used
 the existing task-8 QMB interpreter with task-11 SDK packages, task-6 native SDK
 site-packages **and its `win32`/`win32/lib` paths**, and existing runtime packages,
-all read-only. Bytecode is disabled. All QMX source paths point to this candidate.
+all read-only. Current verification uses task12's isolated
+`evidence/combined-runtime-env` with an offline editable QMB entrypoint and recorded
+borrowed third-party distributions. Its .pth source paths point to this candidate,
+including children that strip PYTHONPATH. Bytecode is disabled.
 The primary QMB environment's site-packages precede borrowed SDK packages:
 otherwise DuckDB/Click/Cryptography pins are shadowed. The final pinned setup
 passes dependency integrity; earlier mixed-package broad logs retain their
@@ -27,8 +30,9 @@ Portable checked entrypoint:
   -ExtraDependencyPath $dependencyPaths -Suite seams -EvidenceRoot $evidenceRoot
 ```
 
-Available suites: `seams`, `native`, `qma` (branch coverage and 80% aggregate floor), `qmn`,
-`data-qmb`. Each creates a new evidence folder, records source HEAD/dirty state,
+Available suites: `authoring`, `seams`, `native`, `memory`, `quality`, `qmb-seams`,
+`qmn-seams`, `qma` (branch coverage and80%aggregate floor), `qmn`, `data-qmb`.
+Each creates a new evidence folder, records source HEAD/dirty state,
 script hash, executable/source/dependency paths and exact arguments, then keeps
 stdout, failures, skip reasons and exit status. Evidence roots stay outside Git.
 The QMA tracked-inventory/per-package gate additionally uses
@@ -101,9 +105,11 @@ Experiment Ledger publication.
 
 ## Contract decisions and limits
 
-Keep CT47 Agent-authored. The next legitimate authoring flow must derive the
+Keep CT47 Agent-authored. The accepted optional host-admitted authoring flow derives
 registered owner, dispatched lease, attempt and actually observed provider
-deployment from canonical host state; the model supplies spec content only.
+deployment from canonical host state and actual adapter output; the model supplies
+spec content only. Actual synthetic execution is verified; authenticated provider
+acceptance remains separate. See the admitted authoring handoff for setup/recovery.
 Initial human/no-model authoring would require a separately versioned contract
 amendment. No dummy deployment, minted Agent or fixture identity establishes it.
 
