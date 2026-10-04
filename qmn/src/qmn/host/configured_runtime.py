@@ -186,8 +186,11 @@ def assess_configured_runtime(
         input_root = root.value.absolute()
         input_path = path.value.absolute()
         relative_path = input_path.relative_to(input_root)
+        # QMX_ROOT may be the operator-selected immutable-tree pointer (current).
+        # Resolve that trusted root once, then open every physical component
+        # without following links; a later pointer switch cannot redirect reads.
         resolved_root = input_root.resolve(strict=True)
-        raw_bytes = _read_deployment_no_follow(input_root, relative_path)
+        raw_bytes = _read_deployment_no_follow(resolved_root, relative_path)
     except (OSError, ValueError):
         return unavailable(
             "deployment_file",
@@ -245,7 +248,7 @@ def assess_configured_runtime(
             )
         try:
             relative_profile = Path(profile_path).relative_to(root.value)
-            profile_bytes = _read_deployment_no_follow(input_root, relative_profile)
+            profile_bytes = _read_deployment_no_follow(resolved_root, relative_profile)
         except (OSError, ValueError):
             return unavailable(
                 "host_resource_profile",

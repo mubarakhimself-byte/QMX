@@ -78,14 +78,55 @@ def test_reader_and_preflight_reject_reparse_directory(tmp_path: Path, root_alia
     try:
         with pytest.raises((OSError, ValueError)):
             runtime._read_deployment_no_follow(reader_root, relative)
-        refused = runtime.assess_configured_runtime(reader_root / relative, qmx_root=reader_root)
-        assert is_refusal(refused)
-        assert refused.context.get("field") == "deployment_file"
+        if not root_alias:
+            refused = runtime.assess_configured_runtime(
+                reader_root / relative, qmx_root=reader_root
+            )
+            assert is_refusal(refused)
+            assert "readable beneath QMX_ROOT" in str(refused.context.get("reason"))
     finally:
         if os.name == "nt":
             link.rmdir()
         else:
             link.unlink()
+
+
+def test_preflight_pins_operator_root_before_concurrent_pointer_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmf.core import is_ok
+    from test_qmn_configured_composition import valid_deployment
+
+    physical = tmp_path / "commit-tree"
+    physical.mkdir()
+    deployment = valid_deployment(physical)
+    outside = tmp_path / "other-tree"
+    outside.mkdir()
+    (outside / deployment.name).write_bytes(b"hostile bytes")
+    pointer = tmp_path / "current"
+    _directory_link(pointer, physical)
+    original_read = runtime._read_deployment_no_follow
+
+    def switch_then_read(root: Path, relative: Path) -> bytes:
+        assert root == physical.resolve()
+        if os.name == "nt":
+            pointer.rmdir()
+        else:
+            pointer.unlink()
+        _directory_link(pointer, outside)
+        return original_read(root, relative)
+
+    monkeypatch.setattr(runtime, "_read_deployment_no_follow", switch_then_read)
+    try:
+        assessed = runtime.assess_configured_runtime(pointer / deployment.name, qmx_root=pointer)
+        assert is_ok(assessed), assessed
+        assert assessed.value.stand_down
+        assert not assessed.value.activation_authorized and not assessed.value.provider_ready
+    finally:
+        if os.name == "nt":
+            pointer.rmdir()
+        else:
+            pointer.unlink()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace aliases")
