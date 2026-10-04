@@ -5,12 +5,79 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from qma.core.ontology import ActorId
+from qma.core.ports.execution import ExecutionEnvironmentDeclaration
+from qma.core.vocabulary.enums import ExecutionEnvironmentKind
 from qma.daemon.plugins.packs import research_corpus_plugin_load_config
 from qmf.core import Ok, RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
 
 CONFIG_NAME = "operator-config.json"
+
+
+def load_qmb_local_environment(
+    daemon_root: Path | str,
+) -> Result[ExecutionEnvironmentDeclaration | None]:
+    """Read an opt-in local replay posture; never infer authority from a binding.
+
+    This CT-46 declaration is not an OS network sandbox or a readiness probe.
+    The QMB CLI owns process isolation; no model/worker provenance is minted.
+    """
+    path = Path(daemon_root) / CONFIG_NAME
+    if not path.exists():
+        return Ok(None)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return TypedRefusal(
+            category=RefusalCategory.UNAVAILABLE_DEPENDENCY,
+            retryability=Retryability.AFTER_CONDITION,
+            context={
+                "field": "qmb_local_environment",
+                "reason": "cannot read operator configuration",
+                "error": str(exc),
+            },
+        )
+    if not isinstance(raw, dict):
+        return TypedRefusal(
+            category=RefusalCategory.INVALID_INPUT,
+            retryability=Retryability.NO,
+            context={
+                "field": "qmb_local_environment",
+                "reason": "operator configuration must be an object",
+            },
+        )
+    body = cast("Mapping[str, object]", raw)
+    if "qmb_local_environment" not in body:
+        return Ok(None)
+    row_raw = body["qmb_local_environment"]
+    row: Mapping[str, object] = (
+        cast("Mapping[str, object]", row_raw) if isinstance(row_raw, Mapping) else {}
+    )
+    provider_ref = row.get("provider_ref")
+    if (
+        not isinstance(row_raw, Mapping)
+        or set(row) != {"provider_ref", "network"}
+        or row.get("network") != "none"
+        or not isinstance(provider_ref, str)
+        or not provider_ref.strip()
+    ):
+        return TypedRefusal(
+            category=RefusalCategory.INVALID_INPUT,
+            retryability=Retryability.NO,
+            context={
+                "field": "qmb_local_environment",
+                "reason": "local replay requires exact provider_ref and network=none fields",
+            },
+        )
+    return Ok(
+        ExecutionEnvironmentDeclaration.isolated(
+            ExecutionEnvironmentKind.LOCAL,
+            provider_ref=provider_ref,
+            image="",
+        )
+    )
 
 
 class BootstrapConfigError(ValueError):
@@ -31,7 +98,7 @@ def load_plugin_load_configs(daemon_root: Path | str) -> dict[str, dict[str, obj
         raise BootstrapConfigError(f"cannot read {config_path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise BootstrapConfigError(f"{config_path} must contain a JSON object")
-    corpus_root = raw.get("research_corpus_root_path")
+    corpus_root = cast("Mapping[str, object]", raw).get("research_corpus_root_path")
     if not isinstance(corpus_root, str) or not corpus_root.strip():
         raise BootstrapConfigError(
             f'{config_path} requires non-empty string "research_corpus_root_path"'
@@ -75,8 +142,11 @@ def backtest_binding_for_instance(
                 "error": str(exc),
             },
         )
-    rows = raw.get("qmb_bindings") if isinstance(raw, dict) else None
-    row = rows.get(instance_id) if isinstance(rows, dict) else None
+    rows = cast("Mapping[str, object]", raw).get("qmb_bindings") if isinstance(raw, dict) else None
+    row_raw = (
+        cast("Mapping[str, object]", rows).get(instance_id) if isinstance(rows, dict) else None
+    )
+    row = cast("Mapping[str, object]", row_raw) if isinstance(row_raw, Mapping) else None
     if not isinstance(row, Mapping):
         return TypedRefusal(
             category=RefusalCategory.UNAVAILABLE_DEPENDENCY,

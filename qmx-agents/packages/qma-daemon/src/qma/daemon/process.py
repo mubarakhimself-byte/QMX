@@ -75,7 +75,11 @@ from qma.daemon.artifacts import (
     refuse_interrupted_stage_put,
 )
 from qma.daemon.backtest.service import BacktestingService
-from qma.daemon.bootstrap_config import backtest_binding, backtest_binding_for_instance
+from qma.daemon.bootstrap_config import (
+    backtest_binding,
+    backtest_binding_for_instance,
+    load_qmb_local_environment,
+)
 from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.bus.mailbox_query import (
     LIST_MAILBOX_HTTP_PATH,
@@ -899,6 +903,15 @@ class DaemonProcess:
                     attempted_root=str(root),
                 )
 
+            local_environment = load_qmb_local_environment(root)
+            if is_refusal(local_environment):
+                return local_environment
+            environments = ExecutionEnvironmentRegistry()
+            if local_environment.value is not None:
+                registered_environment = environments.register_declaration(local_environment.value)
+                if is_refusal(registered_environment):
+                    return registered_environment
+
             opened = PersistenceSubstrate.open(
                 root,
                 machine=machine,
@@ -963,6 +976,7 @@ class DaemonProcess:
                 variables=variables,
                 compiler=roster.compiler,
                 artifact_store=substrate.artifact_store,
+                environments=environments,
             )
             roster.backtesting = runtime_composition.backtesting
             roster.backtesting.bind_experiments(experiments)

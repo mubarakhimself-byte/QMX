@@ -342,7 +342,10 @@ def test_door_matrix_is_keyed_by_op_id_and_version() -> None:
     optimize = descriptor_for(descriptors, op_id="qmb.optimize.run", version=1)
     assert project is not None and run is not None and optimize is not None
     assert project.owner == run.owner == "COMP-QMB"
-    assert "evidence_ref" in run.configuration.optional_keys
+    assert run.configuration.required_keys == ("run_fp1", "evidence_ref")
+    assert run.configuration.optional_keys == ("as_of",)
+    assert project.resource_needs.requires_environment is True
+    assert project.resource_needs.occupancy == "query"
     assert optimize.owner == "COMP-QMB"
     assert optimize.effect_class is EffectClass.PLACE_RUN
     assert optimize.resource_needs.occupancy == "run"

@@ -46,9 +46,10 @@ class DaemonRuntimeComposition:
         compiler: MissionCompiler,
         product_sessions: ProductSessionService | None = None,
         artifact_store: AppendStore | None = None,
+        environments: ExecutionEnvironmentRegistry | None = None,
     ) -> DaemonRuntimeComposition:
         """Wire existing services around shared durable graph and routing state."""
-        environments = ExecutionEnvironmentRegistry()
+        environments = environments if environments is not None else ExecutionEnvironmentRegistry()
         router = ComputeRouter(environments=environments)
         task_ledgers = TaskLedgerStore(_journal=journal)
         dispatcher = TaskGraphDispatcher(

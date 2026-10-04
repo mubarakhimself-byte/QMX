@@ -1,0 +1,87 @@
+--- a/docs/components/qma-daemon.md
++++ b/docs/components/qma-daemon.md
+@@ -535,0 +536,13 @@
++
++## DRAFT implementation reconciliation: local QMB declaration
++
++Pending parent/Documentation Factory review (2026-10-04): normal composition
++supports optional operator-config.json `qmb_local_environment` with exact
++`provider_ref` (nonblank) and `network="none"` fields. It registers the existing
++CT46 local declaration before persistence opens and rebinds on restart. Absence
++remains unbound; bad posture refuses. Router/backtesting share one registry.
++This is declared posture, not OS isolation or operation readiness. Existing
++qmb_bindings still require exact instance/config revision and a registered Quant.
++No Agent/model/grant/CT47 provenance is minted by the declaration. Host status
++remains process liveness. See `_docwork/data-qmb-connection-draft.md` for evidence
++and unaccepted authenticated run/projection/cancellation acceptance.
+--- a/docs/components/qmb.md
++++ b/docs/components/qmb.md
+@@ -340,0 +341,14 @@
++
++## DRAFT implementation reconciliation: replay inputs and catalog integrity
++
++Pending parent/Documentation Factory review (2026-10-04): the CT40
++qmb.backtest.run@1 descriptor requires `run_fp1` (registered ExperimentSpec) and
++`evidence_ref` (persisted ReplayInputRequest), not a catalog row. Domain receipt
++identity and trusted CT47 attempt/provenance remain mandatory. Optional as_of
++still returns a transport refusal. qmb.analysis.project@1 requires the configured
++environment declaration while retaining query occupancy/no new CT32. The current
++delegated query CLI still lacks pinned CT32/CT29/predicate loading from run_fp1;
++it is not a normally accepted projection door. Catalog integrity errors now
++refuse authoritative coverage with artifact_ref and coverage_complete=false.
++Successful min/max ranges do not establish continuity. No pinned receipt or
++write semantics changed. Full ingest-to-CT40 acceptance remains unaccepted.
+--- a/docs/architecture/stack.md
++++ b/docs/architecture/stack.md
+@@ -247,0 +248,12 @@
++
++## DRAFT local operation readiness evidence (2026-10-04)
++
++Pending Documentation Factory review: repository-pinned Optuna and installed QMB
++were provisioned from official PyPI in task-8's isolated Python 3.14 environment.
++Real replay CLI fixture execution and terminal reopen passed. Normal Windows
++historical ingestion is blocked by CT15's unconditional POSIX fcntl import;
++no mock lock was used and no QMF lock implementation was edited. A local CT46
++declaration does not certify dependencies, roots, owners, grants or CT47 provenance.
++Backup/telemetry export, cold restore, power loss, installed-artifact release,
++Linux, endurance and remote placement remain separate readiness work. No global
++broker/account/server assumptions or live trading authority are introduced.
+--- a/docs/scenarios/SCN-0012-qmb-replay-run.md
++++ b/docs/scenarios/SCN-0012-qmb-replay-run.md
+@@ -69,0 +70,12 @@
++
++## DRAFT acceptance reconciliation (2026-10-04)
++
++Executed local fixture evidence: real QMB child, persisted replay request, trusted
++descriptor pin, CT32/terminal verification and forged-claim refusal. This is an
++existing synthetic domain fixture, not legitimate CT47/CT40 acceptance. Still
++required: recorded bytes ingest, fresh-process reingest/correction, quality and
++coverage, legitimate Agent/model/attempt provenance, authenticated CT40 actual
++run, CT29/CT32/terminal joins, cancel/recovery with no duplicate effects and saved
++projection readback after daemon restart. Windows CT15 fcntl and missing production
++registration/source-query paths are explicit blockers. Never seed dummy Agent or
++model records to close this scenario. See the exact task-8 refusal fixtures.
+--- a/docs/scenarios/SCN-0016-projection-vs-path-dependent.md
++++ b/docs/scenarios/SCN-0016-projection-vs-path-dependent.md
+@@ -49,0 +50,10 @@
++
++## DRAFT configured query readiness (2026-10-04)
++
++Pending Documentation Factory reconciliation: qmb.analysis.project@1 retains query
++occupancy even though its daemon adapter requires an operator-bound environment
++declaration and registered owner. Those are dependencies, not an occupied run.
++The current query CLI refuses missing pinned CT32/CT29/predicate resources; no
++accepted normal-start CT40 projection fixture/readback is claimed. A projection
++must reopen cited source evidence and remains a saved view, never new admission
++evidence. Source roots and grants remain host/domain owned, not client-selected.
+--- a/docs/contracts/ct-47-qma-experiment-spec.yaml
++++ b/docs/contracts/ct-47-qma-experiment-spec.yaml
+@@ -76,0 +77,8 @@
++
++# DRAFT implementation reconciliation (2026-10-04; pending Factory review):
++# CT40 qmb.backtest.run@1 requires run_fp1 = registered ExperimentSpec identity
++# and evidence_ref = persisted ReplayInputRequest identity. CT32/resolved-run,
++# observation and archive receipt identities remain distinct.
++# This field reconciliation changes no CT47 Agent/model/attempt/dispatch authority.
++# qmb.analysis.project@1 requires its configured environment declaration while
++# retaining query occupancy. Normal authenticated platform acceptance is open.

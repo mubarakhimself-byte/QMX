@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeVar, cast
 
+import pytest
 from click.testing import CliRunner
 from qmb.data import (
     COVERAGE_KIND,
@@ -33,9 +34,10 @@ from qmf.core import (
     WriterId,
     is_ok,
 )
-from qmf.core.refusal import Ok
+from qmf.core.refusal import Ok, RefusalCategory, is_refusal
 from qmf.data import EvidenceStore
 from qmf.data.dukascopy import PERSONAL_USE_LICENSE, DukascopyHourKey
+from qmf.data.store import ParquetColumnarEngine
 
 T = TypeVar("T")
 
@@ -301,3 +303,53 @@ def test_free_catalog_without_rooms_stays_ok_with_empty_entries() -> None:
     assert body["entries"] == []
     for name in cast("tuple[str, ...]", payload["commands"]):
         assert name in clicked.stdout
+
+
+def test_corrupt_archive_refuses_authoritative_coverage(tmp_path: Path) -> None:
+    """A successful scan must not quietly turn damaged raw data into absence."""
+    store = EvidenceStore(tmp_path)
+    world = _ok(store.for_world(World.REPLAY))
+    _ok(world.append_store.append_raw([{"kind": "recorded-corruption-control"}]))
+    raw = tmp_path / "replay" / "immutable-raw-archive"
+    damaged = next(raw.glob("*.parquet"))
+    damaged.write_bytes(b"corrupt recorded fixture")
+    result = catalog({"destination": str(tmp_path), "store": store})
+    assert is_refusal(result), result
+    assert result.category is RefusalCategory.STORAGE_FAILURE
+    assert result.context["coverage_complete"] is False
+    assert result.context["artifact_ref"]
+
+
+def test_invalid_ct10_row_refuses_but_unrelated_raw_artifact_is_allowed(tmp_path: Path) -> None:
+    store = EvidenceStore(tmp_path)
+    world = _ok(store.for_world(World.REPLAY))
+    _ok(world.append_store.append_raw([{"kind": "unrelated-domain-artifact", "value": 1}]))
+    _ok(catalog({"destination": str(tmp_path), "store": store}))
+    _ok(
+        world.append_store.append_raw(
+            [{"event_time_ns": 1, "market_data": {}, "fingerprint": "bad"}]
+        )
+    )
+    result = catalog({"destination": str(tmp_path), "store": store})
+    assert is_refusal(result), result
+    assert result.category is RefusalCategory.STORAGE_FAILURE
+    assert result.context["coverage_complete"] is False
+
+
+@pytest.mark.parametrize("canonical", (b"[]", b"[1]", b"{}", b'[{"kind":"changed"}]'))
+def test_readable_corrupt_canonical_metadata_refuses(
+    tmp_path: Path,
+    canonical: bytes,
+) -> None:
+    store = EvidenceStore(tmp_path)
+    world = _ok(store.for_world(World.REPLAY))
+    _ok(world.append_store.append_raw([{"kind": "original-domain-artifact"}]))
+    room = ParquetColumnarEngine(tmp_path / "replay" / "immutable-raw-archive")
+    key = room.stored_keys()[0]
+    # Corrupt actual Parquet canonical metadata under the original receipt key.
+    room.write(key, [{"kind": "original-domain-artifact"}], canonical)
+    result = catalog({"destination": str(tmp_path), "store": store})
+    assert is_refusal(result), result
+    assert result.category is RefusalCategory.STORAGE_FAILURE
+    assert result.context["coverage_complete"] is False
+    assert result.context["artifact_ref"] == key

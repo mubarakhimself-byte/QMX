@@ -1,0 +1,35 @@
+{
+  "claim_scope": "existing domain fixture; no CT47 registration or CT40 acceptance",
+  "archive_receipt_refs": [
+    "fp1:sha256:bcf36ab680200a33900869262d2342cdf3ef61b509e15c8102324bac467c7b64",
+    "fp1:sha256:6c990842a3627ee31f9e9f6e050a8ae166cb97a5be49f132965d452c030e38df",
+    "fp1:sha256:0214f1ffd6057d86e5dea779a753c80986f939aadf94a9193c72bfb06ad60b21",
+    "fp1:sha256:79d6e5498f206325b4d074a7b2ca9b15b7ea5f7e4cfda087965b90960527750f",
+    "fp1:sha256:60c79ee5bf5a9f1f357faab0c0dac32169bbbefef68ff943791df772cd97b329",
+    "fp1:sha256:d2c897d9ea6ea6e10bde1852a17c0c2d7779a421bf9f7e4f84d0a79c7835f5bc"
+  ],
+  "split_manifest_fp1": "fp1:sha256:5127ad6b3abf40f0f6bf60ec433a3019d00d28d94bbd0bb18eeada8b06aabc84",
+  "split_role": "train",
+  "replay_request_ref": "fp1:sha256:8de10bf73c3e2f730281c05d542099135eecc686e24b6c86d863116ee2aaaabc",
+  "registered_experiment_spec_fp1": null,
+  "synthetic_fixture_spec_fp1": "fp1:sha256:032ce7523c8674b5f05255ec4d17c836d1299cb0a5aff989fbccc77b3ebf376f",
+  "resolved_run_fp1": "fp1:sha256:f9c2493b00c5afd504052463e39b8aaf666db2208a7a617457f6cf3386cfa82d",
+  "ct29_exit_record_refs": [
+    "fp1:sha256:07930205b2d9ce6e70582cc283ecf05f7524ba9809e7fbbf24319327b3df9d2c"
+  ],
+  "ct29_journal_event_refs": [
+    "fp1:sha256:8bbe049291de5005b8ae46f7e219195b44e1313f9c9116947e0b98c92c3a7bda"
+  ],
+  "ct32_fp1": "fp1:sha256:199bc56380353aa71dd84d6d32a1a65de7d0ebcfb5b8b1fc7bc3cdd7a54b1edc",
+  "terminal_line_fp1": "fp1:sha256:8e7e57d1adab1399fd5166a4297527ca6942c2b6098602d95b5a91ddc61c0e7c",
+  "operator_descriptor_fp1": "fp1:sha256:90c018be8d8e42734d92fdf1d7672252aeca81c636e108a1164edb8f22742f34",
+  "occurrence_receipt_refs": [
+    "fp1:sha256:f60b17e906fbd0cb1c8a6cff930365d933c745e1f3cf804d42919270deda466d"
+  ],
+  "terminal_line_count_after_read_only_reopen": 1,
+  "root_owner": {
+    "raw": "QMF",
+    "request_and_descriptor": "QMB",
+    "journal_and_terminal": "QMB"
+  }
+}

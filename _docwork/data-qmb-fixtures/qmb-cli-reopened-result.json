@@ -1,0 +1,48 @@
+{
+  "claim_scope": "existing synthetic domain fixture; no CT47 registration or CT40 acceptance",
+  "request_context": {
+    "job_id": "job-cli-replay",
+    "attempt_id": 1,
+    "experiment_spec_fp1": "fp1:sha256:032ce7523c8674b5f05255ec4d17c836d1299cb0a5aff989fbccc77b3ebf376f",
+    "evidence_ref": "fp1:sha256:8de10bf73c3e2f730281c05d542099135eecc686e24b6c86d863116ee2aaaabc",
+    "environment_ref": "env:local-recorded-fixture",
+    "occupancy_key": "qmb:job-cli-replay",
+    "world": "replay",
+    "recorded": true,
+    "import_edge": false,
+    "owned_by": "qmb",
+    "qma_re_specifies": false,
+    "qmb_owned": [
+      "artifact_contract",
+      "intra_node_parallelism",
+      "run_ledger"
+    ],
+    "route": [
+      "agent",
+      "qma_backtest_tool",
+      "backtesting_service",
+      "qmb_door",
+      "qmb"
+    ],
+    "command": "backtest.run",
+    "occupancy": "run",
+    "mints_ct32": true,
+    "mints_experiment_spec": false,
+    "children_are_qma_jobs": false,
+    "opens_daemon_sqlite": false,
+    "split_manifest_fp1": "fp1:sha256:5127ad6b3abf40f0f6bf60ec433a3019d00d28d94bbd0bb18eeada8b06aabc84",
+    "operator_descriptor_fp1": "fp1:sha256:90c018be8d8e42734d92fdf1d7672252aeca81c636e108a1164edb8f22742f34"
+  },
+  "result": {
+    "class": "qmb-recorded-replay-result-v1",
+    "ct32_fp1": "fp1:sha256:199bc56380353aa71dd84d6d32a1a65de7d0ebcfb5b8b1fc7bc3cdd7a54b1edc",
+    "evidence_ref": "fp1:sha256:8de10bf73c3e2f730281c05d542099135eecc686e24b6c86d863116ee2aaaabc",
+    "run_fp1": "fp1:sha256:f9c2493b00c5afd504052463e39b8aaf666db2208a7a617457f6cf3386cfa82d",
+    "job_id": "job-cli-replay",
+    "attempt_id": 1,
+    "experiment_spec_fp1": "fp1:sha256:032ce7523c8674b5f05255ec4d17c836d1299cb0a5aff989fbccc77b3ebf376f",
+    "split_manifest_fp1": "fp1:sha256:5127ad6b3abf40f0f6bf60ec433a3019d00d28d94bbd0bb18eeada8b06aabc84",
+    "operator_descriptor_fp1": "fp1:sha256:90c018be8d8e42734d92fdf1d7672252aeca81c636e108a1164edb8f22742f34",
+    "terminal_line_fp1": "fp1:sha256:8e7e57d1adab1399fd5166a4297527ca6942c2b6098602d95b5a91ddc61c0e7c"
+  }
+}

@@ -58,7 +58,7 @@ PUBLIC_OPERATION_PAYLOADS: Final[tuple[Mapping[str, object], ...]] = (
         "resource_needs": {
             "occupancy": "query",
             "memory_class": "light",
-            "requires_environment": False,
+            "requires_environment": True,
         },
         "documentation_refs": ["docs/components/qmb.md#analysis-project"],
         "validation_class": "schema+semantic",
@@ -87,8 +87,8 @@ PUBLIC_OPERATION_PAYLOADS: Final[tuple[Mapping[str, object], ...]] = (
         "empty_policy": "refuse",
         "configuration": {
             "defaults": {},
-            "required_keys": ["run_fp1"],
-            "optional_keys": ["as_of", "evidence_ref"],
+            "required_keys": ["run_fp1", "evidence_ref"],
+            "optional_keys": ["as_of"],
         },
         "declared_operation_dependencies": [],
         "resource_needs": {

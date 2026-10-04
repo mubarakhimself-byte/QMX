@@ -1,0 +1,12 @@
+{
+  "category": "invalid input",
+  "retryability": "no",
+  "context": {
+    "field": "input",
+    "reason": "payload failed input_schema required keys",
+    "missing": [
+      "evidence_ref"
+    ],
+    "input_schema": "qmb.backtest.run.v1"
+  }
+}

@@ -428,7 +428,7 @@ def test_authenticated_read_retries_same_invocation_and_place_run_does_not_retry
                         "expected_revision": 2,
                         "op_id": place_descriptor.op_id,
                         "op_version": place_descriptor.version,
-                        "parameter_ceiling": {"allow_keys": ["run_fp1"]},
+                        "parameter_ceiling": {"allow_keys": ["run_fp1", "evidence_ref"]},
                         "expires_at": "2099-01-01T00:00:00Z",
                     },
                 }
@@ -464,7 +464,10 @@ def test_authenticated_read_retries_same_invocation_and_place_run_does_not_retry
             descriptor=place_descriptor,
             grant_id=cast(str, place_grant_result["grant_id"]),
             logical_id="inv:host-retry-place-run",
-            payload={"run_fp1": "fp1:sha256:" + "b" * 64},
+            payload={
+                "run_fp1": "fp1:sha256:" + "b" * 64,
+                "evidence_ref": "fp1:sha256:" + "d" * 64,
+            },
             request_id=11,
         )
         assert place_response is not None and "error" in place_response

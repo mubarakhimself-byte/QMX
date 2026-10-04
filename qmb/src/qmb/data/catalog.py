@@ -13,13 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, cast
 
-from qmf.core.fingerprint import World
+from qmf.core.fingerprint import World, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.data.observation import SourceObservation
 from qmf.data.store import EvidenceStore, ParquetColumnarEngine, StoreEngineError
 from qmf.data.store.rooms import namespace_for_write
 
-from qmb._refuse import clean_token, invalid
+from qmb._refuse import clean_token, invalid, storage
 from qmb.data.ports import DOWNLOAD_SIDES, DownloadSide
 
 __all__ = [
@@ -183,15 +183,52 @@ def scan_coverage_rows(
     cached: list[dict[str, object]] = []
     for key in columnar.stored_keys():
         try:
-            artifact = columnar.read(key)
+            # Engine annotations do not validate untrusted canonical JSON.
+            raw_artifact = cast("object", columnar.read(key))
         except StoreEngineError:
-            continue
+            return storage(
+                "raw_archive",
+                "authoritative coverage cannot omit an unreadable raw artifact",
+                artifact_ref=key,
+                coverage_complete=False,
+            )
+        if not isinstance(raw_artifact, list) or any(
+            not isinstance(row, Mapping) for row in cast("list[object]", raw_artifact)
+        ):
+            return storage(
+                "raw_archive",
+                "authoritative coverage requires an ordered raw row set",
+                artifact_ref=key,
+                coverage_complete=False,
+            )
+        artifact = cast("list[Mapping[str, object]]", raw_artifact)
+        identity = fingerprint(artifact)
+        if is_refusal(identity) or identity.value.value.removeprefix("fp1:sha256:") != key:
+            return storage(
+                "raw_archive",
+                "authoritative coverage raw content must match its artifact identity",
+                artifact_ref=key,
+                coverage_complete=False,
+            )
         for item in artifact:
             if item.get("kind") == COVERAGE_KIND:
                 cached.append(dict(item))
                 continue
+            # Raw rooms also contain other domain artifacts. Only observations
+            # carry these CT-10 fields; unrelated artifacts are not corrupt data.
+            if not any(
+                field in item for field in ("event_time_ns", "source_native_id", "market_data")
+            ):
+                continue
             rebuilt = SourceObservation.from_row(item)
-            if is_refusal(rebuilt) or rebuilt.value.market_data is None:
+            if is_refusal(rebuilt):
+                return storage(
+                    "raw_archive",
+                    "authoritative coverage contains an invalid CT-10 observation",
+                    artifact_ref=key,
+                    coverage_complete=False,
+                )
+            if rebuilt.value.market_data is None:
                 continue
             observations.append(rebuilt.value)
     derived = _derive_coverage_rows(observations)
