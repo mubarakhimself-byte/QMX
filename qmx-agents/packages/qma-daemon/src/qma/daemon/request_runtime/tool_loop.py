@@ -46,7 +46,12 @@ from .contracts import (
     ProviderRequest,
     ProviderResult,
 )
-from .deep_agent import DeepAgentBudget, DeepAgentSelection, create_bounded_deep_agent
+from .deep_agent import (
+    RESERVED_TOOLS,
+    DeepAgentBudget,
+    DeepAgentSelection,
+    create_bounded_deep_agent,
+)
 from .graph_storage import JournalCheckpointer, JournalRecords
 from .providers import ProviderCancelled, ProviderError
 from .sdk_middleware import compose_sdk_middleware
@@ -477,19 +482,7 @@ class ToolLoopProvider:
             pinned["effect_namespace"] = self.effect_namespace
         if deep_agent is not None:
             pinned["harness"] = deep_agent.binding()
-            if allowed.intersection(
-                {
-                    "read_file",
-                    "task",
-                    "execute",
-                    "write_file",
-                    "edit_file",
-                    "ls",
-                    "glob",
-                    "grep",
-                    "compact_conversation",
-                }
-            ):
+            if allowed.intersection(RESERVED_TOOLS):
                 raise ProviderError("tool_denied", "Host operation collides with reserved SDK tool")
         # Round-trip to match journal JSON sequence representation.
         pinned = json.loads(json.dumps(pinned, sort_keys=True))

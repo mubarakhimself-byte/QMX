@@ -24,6 +24,7 @@ MODEL_PROFILE = "qmx:bounded-specialist-v1"
 EXCLUDED_TOOLS = frozenset(
     {"ls", "write_file", "edit_file", "glob", "grep", "execute", "task", "compact_conversation"}
 )
+RESERVED_TOOLS = EXCLUDED_TOOLS | {"read_file"}
 
 
 def _host_name(value: object) -> bool:

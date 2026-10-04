@@ -11,11 +11,11 @@ from qma.daemon.process import DaemonProcess
 from qma.daemon.request_runtime.deep_agent import DeepAgentSelection
 
 
-def select(monkeypatch: pytest.MonkeyPatch, profile: str) -> None:
+def select(monkeypatch: pytest.MonkeyPatch, profile: str, role: str = "analyst:1") -> None:
     original = DaemonProcess.configure_agent_requests
 
     def configure(self: Any, **kwargs: Any) -> Any:
-        return original(self, **kwargs, deep_agent=DeepAgentSelection(profile, "analyst:1"))
+        return original(self, **kwargs, deep_agent=DeepAgentSelection(profile, role))
 
     monkeypatch.setattr(DaemonProcess, "configure_agent_requests", configure)
 
@@ -42,7 +42,20 @@ def test_selected_specialist_grant_ceiling(tmp_path: Path, monkeypatch: pytest.M
 def test_selected_specialist_receipts_disk_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    select(monkeypatch, "app-reader")
+    select(monkeypatch, "app-reader", "reviewer:1")
+    original = actor_contract.app_setup
+
+    def retry_budget(root: Path, patch: pytest.MonkeyPatch) -> Any:
+        result = original(root, patch)
+        import json
+
+        body = json.loads((root / "actor-workflows.json").read_text())
+        body["roles"][1]["max_model_calls"] = 3
+        body["limits"]["max_model_calls"] = 5
+        actor_contract.save_catalog(root, body)
+        return result
+
+    monkeypatch.setattr(actor_contract, "app_setup", retry_budget)
     actor_contract.test_actual_paired_socket_two_child_tool_effects_are_distinct_and_restart_does_not_replay(
         tmp_path, monkeypatch
     )
