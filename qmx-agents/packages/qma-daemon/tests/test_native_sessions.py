@@ -562,6 +562,34 @@ def test_cancellation_during_connect_prevents_query(tmp_path: Path) -> None:
         substrate.close()
 
 
+def test_cancellation_during_active_validation_preserves_observed_interrupt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = FakeBackend()
+    backend.mode = "wait"
+    substrate, _, runtime, _, observed = native_host(tmp_path, backend)
+    request_id = submit(runtime)
+    original_validate = runtime.validate_active_request
+    raced = False
+
+    def cancel_before_validation(current: str, *, now: str) -> Any:
+        nonlocal raced
+        if backend.starts and not raced:
+            raced = True
+            # The provider guard has already read the unset token. Canonical
+            # validation now observes the cancellation committed by the host.
+            value(runtime.cancel(request_id))
+        return original_validate(current, now=now)
+
+    monkeypatch.setattr(runtime, "validate_active_request", cancel_before_validation)
+    try:
+        row = value(runtime.execute(request_id))
+        assert raced and row.status == "cancelled" and row.error == "cancelled", row
+        assert backend.cancelled.is_set() and backend.closed and not observed
+    finally:
+        substrate.close()
+
+
 def test_completed_native_terminal_wins_cancellation_race(tmp_path: Path) -> None:
     backend = FakeBackend()
     backend.mode = "no-tool"

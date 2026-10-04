@@ -163,6 +163,11 @@ class NativeSessionProvider:
             if time.monotonic() >= deadline:
                 raise ProviderError("scope_interrupt", "Native activity deadline elapsed")
             if is_refusal(runtime.validate_active_request(request.request_id, now=self.now())):
+                # cancel() publishes the durable state before setting its token.
+                # Validation may wait on that write after our first token read.
+                # Recheck the token so an observed interrupt keeps its cause.
+                if cancellation.is_set():
+                    raise ProviderError("cancellation_requested", "Host requested interruption")
                 raise ProviderError("scope_interrupt", "Current host scope forbids continuation")
 
         guard()

@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('seams', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('seams', 'native', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -25,6 +25,15 @@ $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'native' {
+        $candidateTests = @(
+            'qmx-agents/packages/qma-daemon/tests/test_native_sessions.py',
+            'qmx-agents/packages/qma-daemon/tests/test_native_codex_bridge.py',
+            'qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py',
+            'qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py',
+            'qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py'
+        )
+    }
     'seams' {
         $candidateTests = @(
             'qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py',

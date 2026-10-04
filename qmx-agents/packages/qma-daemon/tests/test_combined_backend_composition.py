@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from qma.daemon.bootstrap_config import load_plugin_load_configs
@@ -24,6 +24,13 @@ from test_pairing_listener import _pair_over_listener  # pyright: ignore[reportP
 from test_request_runtime_daemon import mint, rpc, submit_params, ws_connect
 from test_request_runtime_tool_loop import ScriptedText
 from test_spot_daemon_binding import invocation, seed
+
+
+def _result(response: dict[str, object]) -> dict[str, Any]:
+    assert "error" not in response, response
+    raw = response["result"]
+    assert isinstance(raw, dict), response
+    return cast("dict[str, Any]", raw)
 
 
 def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
@@ -71,7 +78,7 @@ def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
                 assert "result" in initialized, initialized
                 admitted = await rpc(reader, writer, "submit_agent_request", submit_params())
                 assert "result" in admitted, admitted
-                request_id = admitted["result"]["request_id"]
+                request_id = _result(admitted)["request_id"]
                 deadline = time.monotonic() + 10
                 while True:
                     status = await rpc(
@@ -81,11 +88,11 @@ def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
                         {"product_session_ref": "psess:agent", "request_id": request_id},
                     )
                     assert "result" in status, status
-                    if status["result"]["status"] == "completed":
+                    if _result(status)["status"] == "completed":
                         break
                     assert time.monotonic() < deadline, status
                     await asyncio.sleep(0.01)
-                assert status["result"]["content"] == "Run-1: verified 7 observations"
+                assert _result(status)["content"] == "Run-1: verified 7 observations"
                 assert len(scripted.requests) == 2
                 assert BODY in scripted.requests[1].prompt
                 opened = await rpc(
@@ -99,7 +106,7 @@ def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
                     },
                 )
                 assert "result" in opened, opened
-                session = opened["result"]["product_session_id"]
+                session = str(_result(opened)["product_session_id"])
                 if saved is None:
                     granted = await rpc(
                         reader,
@@ -117,7 +124,7 @@ def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
                         },
                     )
                     assert "result" in granted, granted
-                    grant = granted["result"]["grant_id"]
+                    grant = str(_result(granted)["grant_id"])
                 else:
                     assert session == saved[0]
                     grant = saved[1]
@@ -130,7 +137,7 @@ def test_paired_skills_and_spot_share_startup_and_recover_without_effects(
                     reader, writer, "start_mission", invocation(session, grant, payload, boot)
                 )
                 assert "result" in queried, queried
-                assert queried["result"]["balances"]["USDT"]["reserved"] == "20.02000000"
+                assert _result(queried)["balances"]["USDT"]["reserved"] == "20.02000000"
                 denied = await rpc(
                     reader,
                     writer,
