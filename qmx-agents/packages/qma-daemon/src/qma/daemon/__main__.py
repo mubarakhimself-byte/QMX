@@ -22,7 +22,7 @@ from qma.daemon.process import (
     DaemonProcess,
     run_recover_entry,
 )
-from qmf.core import is_refusal
+from qmf.core import Result, is_refusal
 
 
 def _recover_requested(argv: list[str]) -> bool:
@@ -52,6 +52,14 @@ def _recover_main() -> int:
         )
         return 2
     return 0
+
+
+async def _serve(process: DaemonProcess) -> Result[None]:
+    """Close listeners while their event loop still exists, including interruption."""
+    try:
+        return await process.serve()
+    finally:
+        await process.aclose()
 
 
 def main() -> int:
@@ -87,7 +95,7 @@ def main() -> int:
         return 2
     process = composed.value
     try:
-        served = asyncio.run(process.serve())
+        served = asyncio.run(_serve(process))
         if is_refusal(served):
             _refuse(
                 f"daemon serve refused: {served.category.value}: "
