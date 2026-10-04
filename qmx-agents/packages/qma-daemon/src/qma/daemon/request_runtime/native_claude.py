@@ -8,6 +8,7 @@ import os
 import subprocess
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import replace
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any, cast
@@ -21,11 +22,18 @@ from claude_agent_sdk import (
     ResultMessage,
     SystemMessage,
     TextBlock,
+    ToolUseBlock,
     create_sdk_mcp_server,
     tool,
 )
 
 from .contracts import ProviderRequest
+from .native_boundary import (
+    call_blocking,
+    check_claude_managed_policy,
+    check_directories,
+    check_environment,
+)
 from .native_sessions import SessionEvent
 from .providers import ProviderError
 
@@ -42,39 +50,6 @@ _API_ENV = frozenset(
         "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK",
     }
 )
-
-
-class ClaudeSessionBackend:
-    """Public boundary: managed policy cannot be isolated by this SDK on this host."""
-
-    provider_id = "claude-agent-sdk:0.2.163:cli-2.1.286"
-    binding_identity = provider_id
-    available = False
-
-    async def start(
-        self, request: ProviderRequest, operation: Callable[..., Any], *, check: Callable[[], None]
-    ) -> None:
-        raise ProviderError("unsupported", "Claude managed policy requires host isolation")
-
-    async def resume(
-        self,
-        session_id: str,
-        request: ProviderRequest,
-        operation: Callable[..., Any],
-        *,
-        check: Callable[[], None],
-    ) -> None:
-        await self.start(request, operation, check=check)
-
-    async def events(self) -> AsyncIterator[SessionEvent]:
-        raise ProviderError("unsupported", "Claude native sessions are unavailable on this host")
-        yield  # pragma: no cover - async iterator protocol
-
-    async def cancel(self) -> None:
-        return
-
-    async def close(self) -> None:
-        return
 
 
 class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline reviewed seam
@@ -105,6 +80,8 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
         self.client: Any = None
         self.session_id = ""
         self.operation_error: ProviderError | None = None
+        self.turn_submitted = False
+        self.initialized = False
         self.binding_identity = hashlib.sha256(
             json.dumps(
                 {
@@ -136,6 +113,36 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
         )
         if checked.stdout.strip() != f"{CLAUDE_CLI_VERSION} (Claude Code)":
             raise ProviderError("unsupported", "Claude CLI version differs from reviewed pin")
+        status = subprocess.run(
+            [str(self.executable), "auth", "status"],
+            cwd=request.cwd,
+            env={
+                **os.environ,
+                "CLAUDE_CONFIG_DIR": str(self.dedicated_home),
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        try:
+            account = json.loads(status.stdout)
+        except (ValueError, TypeError) as exc:
+            raise ProviderError("auth_required", "Claude native auth status unavailable") from exc
+        if not isinstance(account, dict):
+            raise ProviderError("auth_required", "Claude native auth status unavailable")
+        account = cast("dict[str, Any]", account)
+        if (
+            status.returncode != 0
+            or account.get("loggedIn") is not True
+            or account.get("authMethod") != "claude.ai"
+            or account.get("apiProvider") not in {None, "firstParty"}
+            or Path(account.get("configDirectory", "")).resolve() != self.dedicated_home.resolve()
+        ):
+            raise ProviderError(
+                "auth_required", "Sign in with a Claude subscription in the dedicated native home"
+            )
         if not self.dedicated_home.is_dir() or not Path(request.cwd).is_dir():
             raise ProviderError("unsupported", "Dedicated native home and workspace required")
         # Metadata only. Authentication is exclusively the human's native flow.
@@ -177,7 +184,10 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
         check: Callable[[], None],
     ) -> None:
         check()
-        self._preflight(request)
+        self.turn_submitted = False
+        self.initialized = False
+        await call_blocking(self._preflight, request)
+        check()
         native_tools: list[Any] = []
         for name, schema in self.tool_schemas.items():
 
@@ -185,6 +195,10 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
                 try:
                     if self.operation_error is not None:
                         raise self.operation_error
+                    if not self.turn_submitted or not self.initialized:
+                        raise ProviderError(
+                            "outcome_unknown", "Claude host callback outside initialized turn"
+                        )
                     result = await operation(op_name, arguments, uuid.uuid4().hex)
                 except ProviderError as exc:
                     self.operation_error = exc
@@ -269,6 +283,7 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
         self.client = self.client_factory(options=options)
         await self.client.connect()
         check()
+        self.turn_submitted = True
         await self.client.query(request.prompt)
 
     async def events(self) -> AsyncIterator[SessionEvent]:
@@ -289,19 +304,35 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
                     or set(cast("list[Any]", advertised)) - permitted
                 ):
                     raise ProviderError("outcome_unknown", "Claude advertised unapproved tools")
+                self.initialized = True
                 yield SessionEvent("started", incoming)
             elif isinstance(message, AssistantMessage):
-                if message.parent_tool_use_id is not None:
+                if (
+                    not self.initialized
+                    or message.parent_tool_use_id is not None
+                    or (message.session_id is not None and message.session_id != self.session_id)
+                ):
                     raise ProviderError("outcome_unknown", "Native subagent output refused")
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         yield SessionEvent("text", self.session_id, text=block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        if block.name not in {f"mcp__qmx__{name}" for name in self.tool_schemas}:
+                            raise ProviderError(
+                                "outcome_unknown", "Ordinary Claude native tool refused"
+                            )
+                    elif type(block).__name__ in {"ServerToolUseBlock", "ServerToolResultBlock"}:
+                        raise ProviderError(
+                            "outcome_unknown", "Claude server-side native tool refused"
+                        )
             elif isinstance(message, ResultMessage):
                 if self.operation_error is not None:
                     raise self.operation_error
                 status = "completed"
-                if message.origin is not None and message.origin.get("kind") == "task-notification":
+                if message.origin is not None and message.origin.get("kind") != "human":
                     raise ProviderError("outcome_unknown", "Native background result refused")
+                if not self.initialized or message.session_id != self.session_id:
+                    raise ProviderError("outcome_unknown", "Claude terminal identity mismatch")
                 if message.terminal_reason in {"aborted_streaming", "aborted_tools"}:
                     status = "interrupted"
                 elif message.is_error or message.subtype != "success":
@@ -310,12 +341,95 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
                     "terminal", message.session_id, text=message.result or "", status=status
                 )
                 return
+            elif isinstance(message, SystemMessage) and message.subtype.startswith("task_"):
+                raise ProviderError("outcome_unknown", "Claude native background task refused")
 
     async def cancel(self) -> None:
-        if self.client is not None:
-            await self.client.interrupt()
+        if self.client is None or not self.turn_submitted:
+            raise ProviderError("interrupt_pending", "Claude query is not yet interruptible")
+        await self.client.interrupt()
 
     async def close(self) -> None:
         if self.client is not None:
             await self.client.disconnect()
             self.client = None
+
+
+class ClaudeSessionBackend(_ClaudeSDKLifecycle):
+    """Personal unmanaged supplied-text launch, conditional on native policy review.
+
+    The review is an operator assertion after native login, not a substitute for
+    QMX grants or an OS sandbox. Managed policy or ordinary native tools need a
+    separately reviewed worker. No daemon configuration accepts an allow-all flag.
+    """
+
+    def __init__(
+        self,
+        *,
+        executable: Path | None = None,
+        dedicated_home: Path | None = None,
+        empty_workspace: Path | None = None,
+        native_policy_reviewed: bool = False,
+        tool_schemas: Mapping[str, dict[str, Any]] | None = None,
+        client_factory: Callable[..., Any] = ClaudeSDKClient,
+        verify_runtime: bool = True,
+    ) -> None:
+        self.available = bool(
+            executable and dedicated_home and empty_workspace and native_policy_reviewed
+        )
+        self.workspace = empty_workspace
+        super().__init__(
+            executable=executable or Path("unconfigured"),
+            dedicated_home=dedicated_home or Path("unconfigured"),
+            tool_schemas=tool_schemas,
+            client_factory=client_factory,
+            verify_runtime=verify_runtime,
+        )
+        self.binding_identity = hashlib.sha256(
+            json.dumps(
+                {
+                    "lifecycle": self.binding_identity,
+                    "mode": "supplied_text",
+                    "workspace": str(empty_workspace),
+                    "policy_reviewed": native_policy_reviewed,
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+
+    def _preflight(self, request: ProviderRequest) -> None:
+        if not self.available or self.workspace is None:
+            raise ProviderError(
+                "unsupported",
+                "Claude supplied-text configuration and policy review required; "
+                "ordinary tools need isolation",
+            )
+        check_environment(provider="Claude")
+        check_claude_managed_policy()
+        check_directories(
+            self.dedicated_home,
+            self.workspace,
+            configuration_names=(
+                "settings.json",
+                "settings.local.json",
+                "hooks.json",
+                "plugins",
+                "agents",
+                "skills",
+                "CLAUDE.md",
+            ),
+        )
+        super()._preflight(request)
+
+    async def _connect(
+        self,
+        session_id: str | None,
+        request: ProviderRequest,
+        operation: Callable[..., Any],
+        check: Callable[[], None],
+    ) -> None:
+        if self.workspace is None:
+            self._preflight(request)
+        await super()._connect(
+            session_id, replace(request, cwd=str(self.workspace)), operation, check
+        )

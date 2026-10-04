@@ -147,7 +147,7 @@ def test_native_start_resume_real_domain_receipts_and_restart(tmp_path: Path) ->
         third = value(runtime.execute(submit(runtime, key="three")))
         assert third.status == "completed"
         assert backend.resumes == ["native-session-1", "native-session-1"]
-        assert journal.read_events().value
+        assert value(journal.read_events())
     finally:
         substrate.close()
 
@@ -400,7 +400,7 @@ def test_claude_checks_scope_after_connect_before_query(tmp_path: Path) -> None:
     def check() -> None:
         nonlocal calls
         calls += 1
-        if calls > 1:
+        if calls > 2:
             raise ProviderError("scope_interrupt", "Scope revoked during connect")
 
     async def scenario() -> None:

@@ -1,177 +1,199 @@
-# Native session SDK lane: reviewed boundary and handoff
+# Native subscription session adapters: reviewed handoff
 
-Base: `ecda9c06c191eab34469bddbf41041a8d5c7bb76`, isolated linked worktree
-`task-6/native-sessions`, branch `native-subscription-sessions`. This addendum
-preserves the migration acceptance matrix. The parent's combined candidate
-`ffb7590bbda1ec8d5dc126b9fdc3205c888dffac` is not modified or merged here.
+Base: `ecda9c06c191eab34469bddbf41041a8d5c7bb76`, isolated worktree
+`task-6/native-sessions`, branch `native-subscription-sessions`. The first local
+checkpoint is `4d92bf216863c68656a1fe649af02a3ce97a4e5f`. This increment replaces
+that checkpoint's blanket refusal with a narrow supplied-text configuration.
+The parent's combined candidate and UI are untouched.
 
-## Result and admission decision
+## Implemented boundary
 
-**Neither public native subscription backend is admitted on this Windows host.**
-Both reject before constructing an SDK client, advertise `available=False`, and
-advertise `resume=False` through `NativeSessionProvider`. There is no operator
-configuration escape hatch. Existing generic API inference remains separate.
-No subscription connection, authentication, live inference or spend is verified.
+Both public backends implement native start/resume, events, interruption and
+cleanup through official SDKs. The host provider supplies result access and one
+bounded activity for LangGraph. Native sessions are not `BaseChatModel` instances.
+No live subscription connection, login, account-status call or model call was
+performed during this task. Passing offline checks does not verify authentication.
 
-The SDK lifecycle implementations and host activity are concrete, tested code,
-not fabricated SDK methods or a custom JSONL transport. They are retained as
-private offline seams pending an enforceable host boundary:
+| Provider | Pinned pair | Supported configuration | Remaining gate |
+| --- | --- | --- | --- |
+| Codex | `openai-codex==0.160.0`, `openai-codex-cli-bin==0.160.0` | Supplied text; dedicated native home; empty workspace; verified effective configuration; empty native environments; explicitly registered host metadata callback | Ordinary native tools and subagents unavailable. Installed 0.159.3 is inspected, but not selected by this implementation. |
+| Claude | `claude-agent-sdk==0.2.163`, native CLI 2.1.286 | Supplied text; dedicated native home; empty workspace; removed builtins; strict SDK MCP host callback; native subscription auth metadata | Operator must first review the personal unmanaged native policy. No managed-policy isolation claim. Ordinary tools and subagents unavailable. |
 
-| Provider | Reviewed official pair | Concrete blocker |
-| --- | --- | --- |
-| Codex | `openai-codex==0.160.0`, `openai-codex-cli-bin==0.160.0` | Both installed 0.159.3 and bundled 0.160.0 generated read-only policies have only `type` and `networkAccess`. No restricted read roots. Approval denial/hook coverage cannot enforce the complete host-approved read scope. |
-| Claude | `claude-agent-sdk==0.2.163`, existing CLI 2.1.286 (also SDK expected CLI version) | Builtins can be removed, but managed machine/account policy hooks can execute outside that tool boundary. `disableAllHooks` does not disable managed hooks. This Python SDK has no reviewed managed-policy isolation option. Empty settings sources alone cannot certify account-delivered policy. |
+Unconfigured constructors advertise unavailable. Configured Codex can be composed
+now; configured Claude additionally needs `native_policy_reviewed=True`. That
+operator attestation is not a QMX grant or an OS security guarantee. Both expose
+`native_tools=False`; unavailable configuration fails before client construction.
+Authentication is checked only on a later, explicitly authorized launch.
 
-The separate optional [requirements](native-session-requirements.txt) and
-[hashed lock](native-session-requirements.lock) preserve dependency-file ownership.
-The native test module skips when these optional SDKs are absent. Native testing
-must install them; a skipped test is not native readiness evidence.
+This is a **trusted pinned native-launcher configuration**, not OS isolation.
+It relies on the unmodified official runtime honoring tool/environment settings.
+A compromised executable or hostile local process is outside that boundary.
+No VM, container, firewall, hosted subscription setup or persistent permission
+rule was provisioned. Ordinary native tools need a separate enforceable worker
+boundary before admission: read-only base, scratch workspace/native home only,
+provider HTTPS egress, no host home/repository/money storage/broker configuration,
+admin sockets or localhost/private-network control surfaces.
 
-### What must change to run
+Codex uses the public `CodexClient`, with an explicit server-request handler.
+The SDK's permissive default approval handler is never used. Command/file approvals
+are declined; permission grants are empty; unexpected requests fail the activity.
+The pinned runtime's ordinary shell, patch and image tools require environments;
+`thread/start` and `turn/start` use `environments=[]`. Configuration inspection,
+feature flags, instruction sources, workspace, identities and every emitted item
+are validated. The SDK owns all process/protocol encoding and decoding.
+Production does not add a custom JSONL transport.
 
-No dangerous configured Claude policy was discovered in the metadata checks:
-`C:\Program Files\ClaudeCode\managed-settings.json`, its fragment directory,
-and the HKLM/HKCU `SOFTWARE\Policies\ClaudeCode` keys were absent. Those checks
-do not inspect credential values or prove the later authenticated account has
-no server-managed policy. The blocker is an unreviewed native launcher policy
-boundary, not a finding that malicious hooks are configured on this machine.
+Claude uses `tools=[]`, no agents/skills/plugins/discovered MCP, empty setting
+sources, strict MCP, no fallback model, denied unexpected tool requests and
+verbatim prompts. These are not claims that `can_use_tool` or Python hooks cover
+managed policy. Known local Windows managed settings/registry presence is refused;
+authenticated account policy must be reviewed separately. Metadata checks found
+no dangerous local managed policy configured; account policy remains unverified.
+A future start accepts native `claude.ai` authentication in the dedicated home
+and rejects API/provider-token routing. QMX never reads a credential file.
 
-The smallest plausible **Claude smoke scope** is supplied text, native session
-storage/authentication in the dedicated home, official provider HTTPS, and one
-host-mediated corpus-metadata callback. Ordinary tools stay removed with
-`tools=[]`; no Agent/Task/Skill, discovered MCP, project/user settings, CLAUDE.md,
-prompt @file expansion, arbitrary filesystem/network tool, or API fallback is
-part of that scope. Effective managed policy must first be reviewed after an
-authorized human login. On a confirmed personal unmanaged native installation,
-that review may be sufficient for a separately authorized one-time smoke under
-the trusted native-launcher boundary; the present task cannot establish that
-authenticated condition. Merely setting `can_use_tool` is not the proposal.
-
-For **ordinary native tool access or a hard process boundary**, the concrete
-proposal is a local Linux container/VM worker with a read-only base filesystem,
-only its scratch workspace and dedicated native auth/session home mounted,
-and provider-only HTTPS egress. Deny localhost/private-network access and mount
-no QMX realmoney storage, broker/exchange configuration, daemon/admin sockets,
-Docker socket, host home, or general repository roots. Native login occurs in
-the worker through the unmodified CLI; no credentials are copied into QMX.
-QMX remains outside the worker and admits host operations through the official
-SDK's control/MCP channels. Each callback rechecks the original job's current
-grant; the worker cannot invoke QMX control-plane operations by ordinary tools.
-
-That proposal needs approval for the worker setup and egress rule, an available
-container/VM runtime, and independent adversarial file/network boundary tests.
-It changes where the native process runs, stores its auth/session home there,
-and adds local isolation infrastructure; it does not change realmoney security
-rules or authorize hosted subscription use. None was configured here. Codex's
-official SDK supports a launch command override; Claude's official SDK supports
-a transport seam. Their worker-launch bindings require implementation and
-verification while leaving protocol encoding/decoding to the SDK. They are not
-claimed implemented in this lane. No permanent provider prohibition is proposed.
-
-## Entry points and ownership
+## Entry points and authority
 
 - `native_sessions.SessionBackend`: explicit `start`, `resume`, `cancel`,
-  `events`, `close`, provider availability and immutable backend binding identity.
-- `NativeSessionProvider.bind_runtime(runtime)`: host-only QMX composition.
-  `execute` implements the existing synchronous daemon provider seam;
-  `activity` is one async bounded activity usable by LangGraph;
-  `results(request_id)` revalidates host scope before returning observed results.
-- `native_codex.CodexSessionBackend` and `native_claude.ClaudeSessionBackend`:
-  public, unavailable production boundaries. Provider config is deliberately not
-  extended to advertise an unsafe runnable protocol.
-- `_CodexSDKLifecycle`: official `AsyncCodex.thread_start/thread_resume`,
-  `AsyncThread.turn`, typed `AsyncTurnHandle.stream`, `interrupt` and `close`.
-- `_ClaudeSDKLifecycle`: official `ClaudeSDKClient.connect/query`,
-  `ClaudeAgentOptions.resume`, `receive_response`, `interrupt`, `disconnect`;
-  official `tool/create_sdk_mcp_server` for host-mediated operations.
+  `events`, `close`, availability and stable configuration binding identity.
+- `NativeSessionProvider.bind_runtime(runtime)`: QMX composition. `execute`
+  serves the synchronous daemon provider seam; `activity` is one bounded async
+  LangGraph activity; `results(request_id)` revalidates current host scope.
+- `native_codex.CodexSessionBackend`: public official `CodexClient` methods
+  `thread_start`, `thread_resume`, `turn_start`, `turn_interrupt`, typed
+  notifications and SDK-owned lifecycle/control channel. Experimental dynamic
+  host tools require the explicit pinned initialization setting.
+- `native_claude.ClaudeSessionBackend`: official `ClaudeSDKClient.connect/query`,
+  options `resume`, `receive_response`, `interrupt`, `disconnect`, and official
+  `tool/create_sdk_mcp_server` host callbacks.
+- `native_composition.compose_native_metadata_provider`: real programmatic
+  composition accepting an existing host-owned `qml.research.browse@1` binding,
+  exact retained snapshot/locators and current `RequestRuntime`. One metadata
+  operation per activity, no general host tool registry.
 
-The native harness owns its inner reasoning/tool loop and session context.
-LangGraph owns only a surrounding activity cursor. No native session becomes
-`BaseChatModel`, and no second agent loop calls the native harness repeatedly.
-The existing `ToolLoopProvider.dispatch` is reused only for QMX admission and
-durable effect receipts; its inference `execute` is never invoked.
+QMX owns job identity, grants, authoritative journal and domain effects. The native
+harness owns its inner loop and session context. LangGraph surrounds that activity
+without issuing a second inference/tool loop. Existing `ToolLoopProvider.dispatch`
+is reused only for host admission and durable effect receipts, never inference.
+Explicit QMX operations are admitted by current grants; ordinary native tools
+cannot acquire money-control access through the supported tool manifest.
 
-Conversation resume is selected from the authoritative journal, never from a
-model-supplied native ID. The binding includes principal, product session,
-profile/instructions, provider/model, context/grant fingerprint, workspace,
-backend home/runtime identity and tool manifests. Each operation's effect ID
-includes the current QMX request/job ID. Current grants are revalidated before
-start/resume, after connection before query, during monitoring, before dispatch,
-after the host callback before disclosure, and before result access.
+Resume IDs come only from the journal. Binding includes principal/product session,
+profile/instructions, provider/model, context/grants, tool schema, workspace and
+native home/runtime identity. Each domain effect ID includes the current request
+identity. Checks occur before launch, after preflight/connect before query, during
+monitoring, before dispatch, after callback before disclosure, and on result access.
+Subagent/peer identities and nonhuman Claude origins are refused.
 
-Missing/mismatched terminal evidence leaves a pending native record and refuses
-automatic replay or fallback. Cancellation requests SDK interruption and drains
-terminal evidence; only an explicit interrupted terminal proves cancellation.
-Claude uses `terminal_reason=aborted_streaming|aborted_tools`, not an invented
-error subtype. Cleanup has a separate two-second cooperative deadline. Session
-activity serialization prevents duplicate calls within one provider instance.
-This is not distributed ownership or forced termination of arbitrary callbacks.
+Missing/mismatched terminal evidence leaves an unknown pending native record,
+preventing automatic replay or paid fallback. Cancellation requests SDK interruption
+and drains terminal evidence; only an explicit interrupted terminal proves it.
+Claude uses actual `terminal_reason=aborted_streaming|aborted_tools`, not an
+invented error subtype. Proven pre-turn refusals permit retry after correction;
+a possibly submitted turn stays pending. Cleanup has a separate two-second
+cooperative deadline. Blocking SDK calls use fenced daemon workers so timeout
+cannot hang the Python default executor or launch after a cancelled preflight.
+Serialization is per provider instance, not distributed ownership or forced
+termination of arbitrary host callbacks.
 
-## Offline verification
+## Offline evidence and remaining integration
+
+The optional [requirements](native-session-requirements.txt) and
+[hashed lock](native-session-requirements.lock) keep shared dependency files
+untouched. Missing SDKs cause explicit test skips, not native readiness evidence.
+Python test environment: 3.14.7.
 
 `tests/test_native_sessions.py` exercises real RequestRuntime, ProductSession
-grant dispatch, authoritative journal and retained-corpus metadata operation.
-Native processes/models are fakes. One test uses the released Claude SDK's
-actual MCP server and released MCP client over in-memory protocol streams,
-executes `qml.research.browse@1`, then resumes the same native session ID.
-Codex fakes use the released SDK's typed notification models.
+admission, authoritative journal and retained-corpus metadata. It includes the
+released Claude SDK's actual MCP server/client protocol with fake native models.
+`tests/test_native_codex_bridge.py` uses the released public CodexClient subprocess
+transport against a test-only SDK-compatible protocol peer. The peer is a fixture,
+not a production transport or a claim of live native-runtime behavior.
 
-Regressions cover retained resume IDs and reconstruction, changed native home
-binding, missing/wrong terminal IDs, cancellation drain and connection races,
-cleanup deadlines, real grant expiry/revocation, result access after revocation,
-subagent refusal, API routing environment rejection and absence of paid fallback.
-No runtime hook enforcement is claimed: the Python hook callback test verifies
-the callback decision only. Public production backends remain blocked.
+Regressions cover retained/reconstructed resume IDs, cancellation/startup races,
+slow preflight, cleanup, unexpected native tools/approvals, terminal identity,
+subagent authority, real scope expiry/revocation, result disclosure checks,
+subscription-only routing, missing API fallback, effective configuration and pins.
+They do not prove CLI hook coverage or account authentication.
 
-From `qmx-agents`, with the isolated SDK interpreter:
+Final selected regression run: **209 passed**, including **59 native tests**.
+All ten owned Python files pass Ruff lint/format checks and strict Pyright
+with zero errors/warnings. Independent requested Sol 6.1 High review found no
+remaining material blocker, including the final documentation/proof additions.
+The full repository suite was not run in this lane.
 
 ```powershell
-python -m pytest packages/qma-daemon/tests/test_native_sessions.py -q
-python examples/native_sdk_offline_check.py --installed-codex <installed-codex.exe> --claude <claude.exe> --output <report.json>
+python -m pytest packages/qma-daemon/tests/test_native_sessions.py packages/qma-daemon/tests/test_native_codex_bridge.py -q
+python examples/native_sdk_offline_check.py --installed-codex '<installed-codex.exe>' --claude '<claude.exe>' --output '<report.json>'
 ```
 
-The offline checker uses only `--version` and schema generation, binds public SDK
-method signatures, and verifies the released Claude transport constructs empty
-tools, empty settings sources and strict MCP flags. It never starts app-server,
-reads account state, performs login or sends a prompt. The checked runtime report
-is [native-session-runtime-check.json](native-session-runtime-check.json).
-Codex 0.159.3 passes the SDK's nominal version floor (0.151.0); that is not full
-session/permission compatibility proof. The installed executable is not selected
-as a production override. Python test environment is 3.14.7.
+The [runtime report](native-session-runtime-check.json) records only executable
+versions, generated schemas and public SDK signatures. It does not initialize
+app-server, read account state or send prompts. `native_session_admitted=false`
+in that report means admission was not performed by this offline checker; the
+public configured backend boundary above is implemented. Codex 0.159.3 satisfies
+the SDK's nominal 0.151.0 floor, but only exact 0.160.0 is accepted by this bridge.
+Both generated read-only policies lack restricted read roots; ordinary tools
+remain gated. Claude 2.1.286 matches the SDK expected CLI and verbatim-prompt floor.
 
-## Minimal human login and later live proof
+Programmatic composition and the runnable proof are implemented. Shared operator
+JSON parsing and daemon provider-selection wiring are **integrator-owned follow-up**:
+`provider_config.py` and existing inference-only wrappers were not edited. They
+must route `agent_session` explicitly and resolve current host-owned bindings;
+passing native sessions through a chat-model adapter is not supported. Generic
+LangChain API provider options remain independent.
 
-1. Resolve and independently verify the host isolation/policy blocker first.
-   A login does not resolve it. Do not enable the private lifecycles directly.
-2. After separate parent approval, the human signs into the official native CLI
-   in its dedicated native home. Reuse the prepared Codex login helper only if
-   its exact executable/home match the subsequently reviewed runtime. Claude
-   likewise uses its unmodified native login. Do not copy credentials into QMX,
-   translate tokens, configure API keys or create persistent permission rules.
-3. After explicit live-proof authorization, perform exactly two bounded native
-   turns: start a synthetic session with one harmless granted corpus-metadata
-   operation; resume its retained ID and verify the prior marker plus operation
-   receipt. Persist native IDs, matching terminal evidence and QMX receipts.
-   An ordinary text reply or two fresh native sessions does not satisfy proof.
-   Stop on unknown outcome; do not retry/fallback. Interruption proof is a
-   separate authorized test requiring an explicit interrupted terminal.
+[Documentation drafts](NATIVE_SESSION_DOCS_DRAFT.md) propose canonical component,
+stack and contract updates. They are not ratified or applied to canonical docs;
+this lane does not claim completion of every migration acceptance-matrix row.
 
-There is currently no admitted live command to run. No UI, shared migration or
-integrator files, protected branch, remote repository or credential store changed.
+## Minimal human login and separately approved live proof
 
-## Official evidence
+1. Obtain parent approval for authentication. Use the unmodified official CLI in
+   a dedicated home; do not copy credentials into QMX or supply API keys.
+   Codex must use the pinned bundled 0.160.0 executable. The prepared Oct 3 login
+   helper currently targets 0.159.3; reuse requires reviewing its exact executable
+   and home first. Claude additionally requires the native personal unmanaged
+   policy review; absence of local managed files alone is insufficient.
+2. Human-only login commands, after approval (not executed by this task):
+
+   ```powershell
+   $env:CODEX_HOME = '<dedicated-codex-home>'
+   & '<sdk-venv>/Lib/site-packages/codex_cli_bin/bin/codex.exe' login
+   # Or, for the separately reviewed Claude installation:
+   $env:CLAUDE_CONFIG_DIR = '<dedicated-claude-home>'
+   & 'C:/Users/Mubarak/.local/bin/claude.exe' auth login
+   ```
+
+3. The proof's default command is dry and makes zero auth/model calls or host-store
+   writes. Supply existing dedicated home and empty workspace paths, and a new
+   synthetic host-store path:
+
+   ```powershell
+   python examples/native_session_proof.py --provider codex --executable '<bundled-0.160.0-codex.exe>' --native-home '<dedicated-home>' --empty-workspace '<empty-directory>' --root '<new-proof-root>'
+   ```
+
+4. Only after a separate live-proof approval, add `--allow-live`. For Claude use
+   `--provider claude`, its pinned executable, and `--native-policy-reviewed` after
+   the actual review. The script executes two bounded 60-second native turns,
+   requires one real granted metadata operation/observed receipt, retains the
+   native session ID, and verifies a previous random marker that is not repeated
+   in the resume prompt. It writes IDs/results/receipts to `proof-result.json` and
+   the authoritative journal. It stops on failure/unknown outcome and refuses an
+   existing proof store. Text-only output does not satisfy acceptance.
+   Cancellation proof is a separate authorized exercise requiring an explicit
+   interrupted terminal. No live proof has been run.
+
+## Official references
 
 - [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) and
-  [Python API reference](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md)
-  establish native lifecycle ownership. Context7 `/openai/codex` was consulted;
-  installed published package source and generated schemas supply version evidence.
-- [Claude Python SDK](https://code.claude.com/docs/en/agent-sdk/python),
-  [permissions](https://code.claude.com/docs/en/agent-sdk/permissions), and Context7
-  `/anthropics/claude-agent-sdk-python` distinguish tool availability from approval.
-- [System prompts](https://code.claude.com/docs/en/agent-sdk/modifying-system-prompts)
-  says empty settings sources disable CLAUDE.md loading. Installed SDK source
-  confirms `verbatim_prompts` requires CLI >=2.1.248; 2.1.286 meets that floor.
-- [Managed settings](https://code.claude.com/docs/en/settings) and
-  [hooks](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks) establish
-  the remaining Claude boundary. Independent review identified this blocker;
-  the public backend was made unavailable instead of weakening host authority.
+  [app-server](https://learn.chatgpt.com/docs/app-server).
+- Pinned runtime [tool-plan source](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/core/src/tools/spec_plan.rs)
+  and [feature registry](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/features/src/lib.rs).
+- [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview),
+  [permissions](https://code.claude.com/docs/en/agent-sdk/permissions),
+  [CLI reference](https://code.claude.com/docs/en/cli-reference),
+  [settings](https://code.claude.com/docs/en/settings) and
+  [hooks](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks).
+- Context7 `/openai/codex` and `/anthropics/claude-agent-sdk-python` were consulted;
+  published package source and generated pinned schemas provide offline evidence.

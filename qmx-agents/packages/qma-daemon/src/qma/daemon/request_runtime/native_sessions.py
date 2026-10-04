@@ -180,7 +180,10 @@ class NativeSessionProvider:
             )
         backend = self.backend_factory()
         if not backend.available:
-            raise ProviderError("unsupported", "Native SDK lacks an enforceable host tool boundary")
+            raise ProviderError(
+                "unsupported",
+                "Native supplied-text configuration or required policy review is missing",
+            )
         body = asdict(spec)
         for key in ("idempotency_key", "prompt", "timeout_seconds"):
             body.pop(key)
@@ -204,7 +207,7 @@ class NativeSessionProvider:
         key = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
         records = JournalRecords(runtime.journal)
         previous = records.get("native_session", key)
-        if previous and previous["status"] not in {"completed", "interrupted"}:
+        if previous and previous["status"] not in {"completed", "interrupted", "not_submitted"}:
             raise ProviderError("outcome_unknown", "Native turn requires external reconciliation")
         allowed = self.profile_tools.get(spec.profile.profile_id, frozenset())
         if allowed - self.tools.keys():
@@ -389,6 +392,35 @@ class NativeSessionProvider:
             raise ProviderError("outcome_unknown", "Native terminal outcome unobserved") from exc
         except Exception as exc:
             if status == "unknown":
+                if (
+                    getattr(backend, "turn_submitted", True) is False
+                    and calls == 0
+                    and isinstance(exc, ProviderError)
+                    and exc.code
+                    in {
+                        "unsupported",
+                        "unsafe_config",
+                        "auth_required",
+                        "subscription_required",
+                        "invalid_input",
+                        "interrupt_pending",
+                        "scope_interrupt",
+                        "cancellation_requested",
+                    }
+                ):
+                    # Known pre-turn refusal is safe to fix/retry. Preserve a
+                    # previous proven native session; no turn was submitted.
+                    records.put(
+                        "native_session",
+                        key,
+                        previous
+                        or {
+                            "status": "not_submitted",
+                            "session_id": "",
+                            "request_id": request.request_id,
+                        },
+                    )
+                    raise
                 raise ProviderError(
                     "outcome_unknown", "Native terminal outcome unobserved"
                 ) from exc

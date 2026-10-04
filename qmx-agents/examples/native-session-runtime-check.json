@@ -15,7 +15,20 @@
         "type"
       ],
       "restricted_read_roots_available": false,
-      "native_session_admitted": false
+      "native_session_admitted": false,
+      "ordinary_native_tools_supported": false,
+      "configuration_only_exact_pin": false,
+      "experimental_start_dynamic_tools": true,
+      "experimental_start_empty_environments": true,
+      "experimental_turn_empty_environments": true,
+      "resume_restores_tools_without_new_manifest": true,
+      "dynamic_call_required_identity": [
+        "arguments",
+        "callId",
+        "threadId",
+        "tool",
+        "turnId"
+      ]
     },
     {
       "executable": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\codex_cli_bin\\bin\\codex.exe",
@@ -26,7 +39,20 @@
         "type"
       ],
       "restricted_read_roots_available": false,
-      "native_session_admitted": false
+      "native_session_admitted": false,
+      "ordinary_native_tools_supported": false,
+      "configuration_only_exact_pin": true,
+      "experimental_start_dynamic_tools": true,
+      "experimental_start_empty_environments": true,
+      "experimental_turn_empty_environments": true,
+      "resume_restores_tools_without_new_manifest": true,
+      "dynamic_call_required_identity": [
+        "arguments",
+        "callId",
+        "threadId",
+        "tool",
+        "turnId"
+      ]
     }
   ],
   "claude": {
