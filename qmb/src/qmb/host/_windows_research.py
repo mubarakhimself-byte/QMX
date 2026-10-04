@@ -128,9 +128,13 @@ def _open(
         c.sizeof(_ObjectAttributes), parent, c.pointer(string), 0x40, None, None
     )  # OBJ_CASE_INSENSITIVE
     handle, status = c.c_void_p(), _IoStatus()
-    # SYNCHRONOUS_IO_NONALERT | OPEN_REPARSE_POINT; directory/non-directory only.
-    options = 0x20 | 0x200000 | (1 if directory else 0x40)
-    access = 0x100080 if directory else 0x80100000  # sync/attributes or generic read
+    # Directory handles are anchors, never data-I/O handles. READ_ATTRIBUTES
+    # suffices for reparse/type verification and avoids unnecessary SYNCHRONIZE
+    # rights on read-only ancestors. File descriptors require synchronous I/O.
+    options = 0x200000 | (1 if directory else 0x60)
+    access = 0x80 if directory else 0x80100000
+    if directory and create:
+        options |= 2  # NTFS directory-creation metadata is write-through too.
     if writable:
         access |= 0x40010000  # GENERIC_WRITE | DELETE for handle-only rename/cleanup
         options |= 2  # FILE_WRITE_THROUGH: includes NTFS rename metadata flushing
@@ -189,7 +193,15 @@ def _root(root: Path, *, create: bool):
         if filesystem.value != "NTFS":
             raise UnsafePath("Windows research_root requires NTFS write-through publication")
         for part in root.parts[1:]:
-            handles.append(_open(part, handles[-1], directory=True, create=create))
+            # FILE_OPEN_IF can require creation rights even for an existing ancestor.
+            # Do not request mutation of read-only ancestors outside research_root.
+            try:
+                child = _open(part, handles[-1], directory=True)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                child = _open(part, handles[-1], directory=True, create=True)
+            handles.append(child)
         yield handles[-1]
     finally:
         for handle in reversed(handles):
@@ -206,14 +218,14 @@ def _fd(handle: int, *, writable: bool = False) -> int:
 
 def _read(fd: int) -> bytes:
     os.lseek(fd, 0, os.SEEK_SET)
-    chunks = []
+    chunks: list[bytes] = []
     while chunk := os.read(fd, 65_536):
         chunks.append(chunk)
     return b"".join(chunks)
 
 
 def _read_at(root: int, name: str) -> bytes:
-    fd = _fd(_open(name, root, directory=False, share=7))
+    fd = _fd(_open(name, root, directory=False))
     try:
         return _read(fd)
     finally:
@@ -221,8 +233,19 @@ def _read_at(root: int, name: str) -> bytes:
 
 
 def read_blob(root: Path, name: str) -> bytes:
+    _validate_leaf(name)
     with _root(root, create=False) as directory:
         return _read_at(directory, name)
+
+
+def _validate_leaf(name: str) -> None:
+    if (
+        not name
+        or name in {".", ".."}
+        or name.endswith((".", " "))
+        or any(character in name for character in ("/", "\\", ":", "\0"))
+    ):
+        raise UnsafePath("research blob names are single unambiguous path components")
 
 
 def _rename(handle: int, root: int, name: str) -> None:
@@ -249,15 +272,32 @@ def _delete_temp(handle: int) -> None:
         raise c.WinError(c.get_last_error())
 
 
+def _flush_existing(root: int, name: str, payload: bytes) -> bool:
+    """Validate and flush one held existing blob before acknowledging a retry.
+
+    Deny external writes/deletes for the entire comparison and flush. A racing
+    publisher still holding its writable handle causes a sharing refusal; the
+    caller may retry after that publisher completes. Never claim durability from
+    a read alone, including after a previous post-publication flush failure.
+    """
+    try:
+        handle = _open(name, root, directory=False, writable=True)
+    except FileNotFoundError:
+        return False
+    fd = _fd(handle, writable=True)
+    try:
+        if _read(fd) != payload:
+            raise UnsafePath("an existing content-addressed blob cannot be overwritten")
+        os.fsync(fd)
+        return True
+    finally:
+        os.close(fd)
+
+
 def write_blob(root: Path, name: str, payload: bytes) -> None:
+    _validate_leaf(name)
     with _root(root, create=True) as directory:
-        try:
-            old = _read_at(directory, name)
-        except FileNotFoundError:
-            old = None
-        if old is not None:
-            if old != payload:
-                raise UnsafePath("an existing content-addressed blob cannot be overwritten")
+        if _flush_existing(directory, name, payload):
             return
         temporary = f".{name}.write-{uuid.uuid4().hex}"
         handle = _open(temporary, directory, directory=False, create=True, writable=True)
@@ -281,8 +321,8 @@ def write_blob(root: Path, name: str, payload: bytes) -> None:
             try:
                 _rename(handle, directory, name)
             except FileExistsError as exc:
-                if _read_at(directory, name) != payload:
-                    raise UnsafePath("concurrent blob creation has different bytes") from exc
+                if not _flush_existing(directory, name, payload):
+                    raise UnsafePath("concurrent blob disappeared before verification") from exc
                 return
             published = True
             os.fsync(fd)

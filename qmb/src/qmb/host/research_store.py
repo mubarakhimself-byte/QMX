@@ -253,6 +253,8 @@ def _persist_os_error(path: Path, exc: OSError) -> TypedRefusal:
         _PERSIST_FAIL_REASON,
         given=type(exc).__name__,
         path=str(path),
+        errno=exc.errno,
+        winerror=getattr(exc, "winerror", None),
     )
 
 
@@ -299,9 +301,8 @@ def _verify_published_blob(
     try:
         published_stat = os.fstat(published_fd)
         source_stat = os.fstat(temp_fd)
-        if (
-            not stat.S_ISREG(published_stat.st_mode)
-            or not _same_file_identity(published_stat, source_stat)
+        if not stat.S_ISREG(published_stat.st_mode) or not _same_file_identity(
+            published_stat, source_stat
         ):
             return policy(
                 _FIELD_RESEARCH_ROOT,

@@ -48,7 +48,7 @@ def _ok(result: Result[T]) -> T:
     return result.value
 
 
-def _hypothesis() -> Hypothesis:
+def fixture_hypothesis() -> Hypothesis:
     cite = DictionaryCite("dictionary/a.md", "swing-high")
     return _ok(
         mint_hypothesis(
@@ -64,7 +64,7 @@ def _hypothesis() -> Hypothesis:
 
 
 def test_explicit_save_returns_canonical_bytes_and_research_ref() -> None:
-    hyp = _hypothesis()
+    hyp = fixture_hypothesis()
     saved = save_hypothesis(hyp)
     assert is_ok(saved)
     assert isinstance(saved.value, SavedHypothesis)
@@ -86,7 +86,7 @@ def test_explicit_save_returns_canonical_bytes_and_research_ref() -> None:
 def test_host_persists_only_canonical_bytes_under_research_root(
     tmp_path: Path,
 ) -> None:
-    hyp = _hypothesis()
+    hyp = fixture_hypothesis()
     research_root = tmp_path / "research_root"
     seed_root = tmp_path / "seed_root"
     seed_root.mkdir()
@@ -144,7 +144,7 @@ def test_viewing_cited_seed_without_save_mints_no_research_ref(
 
 
 def test_persist_rejects_non_bytes_payload(tmp_path: Path) -> None:
-    hyp = _hypothesis()
+    hyp = fixture_hypothesis()
     ref = _ok(fingerprint_hypothesis(hyp))
     refused = persist_research_blob(
         research_root=tmp_path / "research_root",
@@ -158,7 +158,7 @@ def test_persist_rejects_non_bytes_payload(tmp_path: Path) -> None:
 def test_persist_rejects_noncanonical_and_foreign_ref_bytes_before_filesystem_effects(
     tmp_path: Path,
 ) -> None:
-    hypothesis = _hypothesis()
+    hypothesis = fixture_hypothesis()
     saved = _ok(save_hypothesis(hypothesis))
     research_root = tmp_path / "research_root"
     malformed = persist_research_blob(
@@ -194,7 +194,7 @@ def test_persist_rejects_noncanonical_and_foreign_ref_bytes_before_filesystem_ef
 def test_research_blob_leaf_symlink_is_refused_for_read_and_write(tmp_path: Path) -> None:
     if os.name != "posix":
         pytest.skip("no-follow descriptor path is unsupported on this platform")
-    hypothesis = _hypothesis()
+    hypothesis = fixture_hypothesis()
     saved = _ok(save_research_hypothesis(hypothesis, research_root=tmp_path / "research"))
     outside = tmp_path / "outside.txt"
     outside.write_bytes(b"benign outside sentinel")
@@ -218,7 +218,7 @@ def test_research_blob_leaf_symlink_is_refused_for_read_and_write(tmp_path: Path
 def test_research_root_and_ancestor_symlinks_are_refused(tmp_path: Path) -> None:
     if os.name != "posix":
         pytest.skip("no-follow descriptor path is unsupported on this platform")
-    saved = _ok(save_hypothesis(_hypothesis()))
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
     outside = tmp_path / "outside"
     outside.mkdir()
     root_link = tmp_path / "root-link"
@@ -243,7 +243,7 @@ def test_research_root_and_ancestor_symlinks_are_refused(tmp_path: Path) -> None
 
 
 def test_content_address_collision_does_not_overwrite_existing_bytes(tmp_path: Path) -> None:
-    hypothesis = _hypothesis()
+    hypothesis = fixture_hypothesis()
     saved = _ok(save_hypothesis(hypothesis))
     root = tmp_path / "research"
     root.mkdir()
@@ -281,7 +281,7 @@ def test_malformed_nominal_fingerprint_refuses_before_filesystem_access(
 def test_failed_blob_fsync_removes_temporary_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    saved = _ok(save_hypothesis(_hypothesis()))
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
     root = tmp_path / "research"
     original_fsync = os.fsync
     failed_fd: int | None = None
@@ -310,7 +310,7 @@ def test_temporary_leaf_swap_to_symlink_is_refused_before_ack(
 ) -> None:
     if os.name != "posix":
         pytest.skip("no-follow descriptor path is unsupported on this platform")
-    saved = _ok(save_hypothesis(_hypothesis()))
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
     root = tmp_path / "research"
     outside = tmp_path / "outside-sentinel"
     outside.write_bytes(b"benign outside sentinel")
@@ -359,7 +359,7 @@ def test_descriptor_pinned_read_survives_research_root_path_swap(
 ) -> None:
     if os.name != "posix":
         pytest.skip("no-follow descriptor path is unsupported on this platform")
-    saved = _ok(save_research_hypothesis(_hypothesis(), research_root=tmp_path / "research"))
+    saved = _ok(save_research_hypothesis(fixture_hypothesis(), research_root=tmp_path / "research"))
     root = saved.research_root
     held_root = tmp_path / "held-research"
     outside = tmp_path / "outside"
@@ -395,7 +395,7 @@ def test_descriptor_pinned_write_survives_research_root_path_swap(
 ) -> None:
     if os.name != "posix":
         pytest.skip("no-follow descriptor path is unsupported on this platform")
-    saved = _ok(save_hypothesis(_hypothesis()))
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
     root = tmp_path / "research"
     held_root = tmp_path / "held-research"
     outside = tmp_path / "outside"
