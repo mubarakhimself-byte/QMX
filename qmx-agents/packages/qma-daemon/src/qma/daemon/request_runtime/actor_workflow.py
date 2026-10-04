@@ -44,6 +44,7 @@ from .contracts import (
     RequestSpec,
 )
 from .daemon_bridge import AgentRequestPolicy
+from .deep_agent import DeepAgentSelection
 from .durable_memory import ActorMemoryScope, DurableMemory, JournalMemoryProvider, MemorySource
 from .graph_storage import JournalCheckpointer, JournalRecords
 from .providers import ProviderError
@@ -79,6 +80,7 @@ class ActorWorkflowProvider:
         admission_tools: Callable[[RequestSpec], Mapping[str, ToolBinding]] | None = None,
         extensions: AgentExtensions | None = None,
         hooks: HookRegistry | None = None,
+        deep_agent: DeepAgentSelection | None = None,
     ) -> None:
         if provider.capabilities != ProviderCapabilities(provider.capabilities.provider_id):
             raise ValueError("actor steps require a bounded inference adapter")
@@ -86,6 +88,7 @@ class ActorWorkflowProvider:
         self.catalog, self.routes, self.tools, self.now = catalog, routes, tools, now
         self.extensions, self.hooks = extensions, hooks
         self.admission_tools = admission_tools
+        self.deep_agent = deep_agent
         self.capabilities = ProviderCapabilities(identity)
 
     def bindings_for_spec(self, spec: RequestSpec) -> Mapping[str, ToolBinding]:
@@ -132,20 +135,18 @@ class ActorWorkflowProvider:
             route.actor_id,
             {"actor_id": route.actor_id, "principal": row.spec.principal},
         )
-        _pin(
-            records,
-            "actor_job",
-            request.request_id,
-            {
-                "actor_id": route.actor_id,
-                "workflow": flow.key,
-                "catalog": self.catalog.identity,
-                "authority": row.context_binding,
-                "session": row.spec.product_session_id,
-                "execution_agent": f"agent:{request.request_id}",
-                "thread": f"{request.request_id}:workflow",
-            },
-        )
+        job_binding: dict[str, Any] = {
+            "actor_id": route.actor_id,
+            "workflow": flow.key,
+            "catalog": self.catalog.identity,
+            "authority": row.context_binding,
+            "session": row.spec.product_session_id,
+            "execution_agent": f"agent:{request.request_id}",
+            "thread": f"{request.request_id}:workflow",
+        }
+        if self.deep_agent is not None and self.deep_agent.profile_id == route.profile_id:
+            job_binding["harness"] = self.deep_agent.binding()
+        _pin(records, "actor_job", request.request_id, job_binding)
         needed = set(route.tools)
         bindings = dict(self.tools(request)) if needed else {}
         if needed - set(bindings):
@@ -245,6 +246,7 @@ class ActorWorkflowProvider:
                         extensions=self.extensions,
                         workflow_id=role.key,
                         effect_namespace=activity_id,
+                        deep_agent=self.deep_agent,
                     )
                     child.bind_runtime(self.runtime)
                     try:
@@ -363,10 +365,21 @@ def bind_actor_workflows(
     now: Callable[[], str],
     extensions: AgentExtensions | None = None,
     hooks: HookRegistry | None = None,
+    deep_agent: DeepAgentSelection | None = None,
 ) -> tuple[Mapping[str, ProviderAdapter], Mapping[str, AgentRequestPolicy]]:
     catalog = load_actor_catalog(root)
     if catalog is None:
+        if deep_agent is not None:
+            raise ValueError("Deep Agents specialist requires an existing host actor catalog")
         return wrapped, policies
+    if deep_agent is not None:
+        deep_agent.binding()
+        selected = [route for route in catalog.routes if route.profile_id == deep_agent.profile_id]
+        if len(selected) != 1 or not any(
+            step.kind == "agent" and step.role == deep_agent.workflow_id
+            for step in catalog.workflow(selected[0].workflow).steps
+        ):
+            raise ValueError("Deep Agents selection must name one existing host specialist role")
     records = JournalRecords(runtime.journal)
     try:
         for role in catalog.roles:
@@ -410,6 +423,7 @@ def bind_actor_workflows(
             now=now,
             extensions=extensions,
             hooks=hooks,
+            deep_agent=deep_agent,
         )
         for route in routes:
             bound_policies[route.profile_id] = replace(

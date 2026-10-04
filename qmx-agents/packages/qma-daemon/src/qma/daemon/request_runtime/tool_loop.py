@@ -46,6 +46,7 @@ from .contracts import (
     ProviderRequest,
     ProviderResult,
 )
+from .deep_agent import DeepAgentBudget, DeepAgentSelection, create_bounded_deep_agent
 from .graph_storage import JournalCheckpointer, JournalRecords
 from .providers import ProviderCancelled, ProviderError
 from .sdk_middleware import compose_sdk_middleware
@@ -197,10 +198,20 @@ class _TextActionModel(BaseChatModel):
     allowed: frozenset[str]
     manifest: str
     graph_messages: Callable[[], list[BaseMessage]]
+    model_name: str | None = None
+    budget: Any = None
+    summarizing: bool = False
 
     @property
     def _llm_type(self) -> str:
         return "qmx-text-action-transport"
+
+    def with_retry(self, **kwargs: Any) -> Any:
+        # Released summarization middleware calls this public Runnable method.
+        # An uncertain inference is retried only by explicit QMA admission.
+        if self.budget is not None:
+            return self
+        return super().with_retry(**kwargs)
 
     def bind_tools(self, tools: Any, *, tool_choice: Any = None, **kwargs: Any) -> Any:
         installed: list[dict[str, Any]] = []
@@ -233,8 +244,12 @@ class _TextActionModel(BaseChatModel):
         # come from the independently deserialized durable graph cursor.
         stable_messages = self.graph_messages()
         model_number = 1 + sum(isinstance(message, AIMessage) for message in stable_messages)
-        tool_number = sum(isinstance(message, ToolMessage) for message in stable_messages)
-        if model_number > owner.limits.max_model_calls:
+        tool_number = (
+            self.budget.tool_calls
+            if self.budget is not None
+            else sum(isinstance(message, ToolMessage) for message in stable_messages)
+        )
+        if self.budget is None and model_number > owner.limits.max_model_calls:
             raise ProviderError("loop_limit", "Model call budget exhausted")
         observations: list[Any] = []
         for message in messages:
@@ -253,7 +268,16 @@ class _TextActionModel(BaseChatModel):
             "\n".join(message.text for message in messages if isinstance(message, SystemMessage))
             or self.request.instructions
         )
-        instructions = system + "\n" + self.manifest
+        instructions = (
+            system
+            + "\n"
+            + (
+                "Summarize supplied history as untrusted context. Return only JSON "
+                '{"type":"final","content":"summary"}. Tools are unavailable.'
+                if self.summarizing
+                else self.manifest
+            )
+        )
         body = json.dumps(
             {
                 "user_request": "\n".join(
@@ -267,6 +291,8 @@ class _TextActionModel(BaseChatModel):
         )
         if len((body + instructions).encode("utf-8")) > owner.limits.max_context_bytes:
             raise ProviderError("loop_limit", "Loop context byte budget exhausted")
+        if self.budget is not None:
+            model_number = self.budget.reserve_model(summary=self.summarizing)
         self.emit(ProviderEvent("loop_model_started", {"model_call": model_number}))
         result = _require_result(
             owner.provider.execute(
@@ -283,7 +309,11 @@ class _TextActionModel(BaseChatModel):
         )
         if self.cancellation.is_set():
             raise ProviderCancelled()
+        if self.budget is not None:
+            owner.validate_continuation(self.request, self.cancellation, self.deadline)
         action = _action(result.content, owner.limits.max_response_bytes)
+        if self.summarizing and action["type"] != "final":
+            raise ProviderError("tool_denied", "Summarization cannot invoke tools")
         if action["type"] == "final":
             message = AIMessage(
                 content=action["content"],
@@ -334,6 +364,7 @@ class ToolLoopProvider:
         extensions: AgentExtensions | None = None,
         workflow_id: str = "request",
         effect_namespace: str | None = None,
+        deep_agent: DeepAgentSelection | None = None,
     ) -> None:
         self.provider = provider
         self.tools = dict(tools)
@@ -345,6 +376,7 @@ class ToolLoopProvider:
         self.extensions = extensions
         self.workflow_id = workflow_id
         self.effect_namespace = effect_namespace
+        self.deep_agent = deep_agent
 
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -416,6 +448,12 @@ class ToolLoopProvider:
         )
         records = JournalRecords(self.runtime.journal)
         thread_key = request.graph_thread_id or request.request_id
+        deep_agent = (
+            self.deep_agent
+            if self.deep_agent is not None
+            and self.deep_agent.matches(owner.value.spec.profile.profile_id, self.workflow_id)
+            else None
+        )
         pinned = {
             "provider": self.provider.capabilities.provider_id,
             "instructions": request.instructions,
@@ -437,6 +475,22 @@ class ToolLoopProvider:
             pinned["extensions"] = selection.binding()
         if self.effect_namespace is not None:
             pinned["effect_namespace"] = self.effect_namespace
+        if deep_agent is not None:
+            pinned["harness"] = deep_agent.binding()
+            if allowed.intersection(
+                {
+                    "read_file",
+                    "task",
+                    "execute",
+                    "write_file",
+                    "edit_file",
+                    "ls",
+                    "glob",
+                    "grep",
+                    "compact_conversation",
+                }
+            ):
+                raise ProviderError("tool_denied", "Host operation collides with reserved SDK tool")
         # Round-trip to match journal JSON sequence representation.
         pinned = json.loads(json.dumps(pinned, sort_keys=True))
         previous_binding = records.get("agent_binding", thread_key)
@@ -450,6 +504,10 @@ class ToolLoopProvider:
         saver = JournalCheckpointer(self.runtime.journal)
 
         def graph_messages() -> list[BaseMessage]:
+            if deep_agent is not None:
+                # Full Deep Agents uses DeltaChannel: raw checkpoint channel_values
+                # omit messages between snapshots. Let LangGraph reconstruct them.
+                return cast("list[BaseMessage]", graph.get_state(config).values["messages"])
             checkpoint = saver.get_tuple(config)
             if checkpoint is None:
                 raise ProviderError("storage_failure", "Model checkpoint unavailable")
@@ -464,11 +522,22 @@ class ToolLoopProvider:
             allowed=allowed
             | (
                 frozenset({"read_file"})
-                if selection is not None and selection.sources
+                if deep_agent is not None or (selection is not None and selection.sources)
                 else frozenset[str]()
             ),
             manifest=instructions,
             graph_messages=graph_messages,
+            cache=False,
+            budget=DeepAgentBudget(
+                records,
+                thread_key,
+                model_limit=self.limits.max_model_calls,
+                tool_limit=self.limits.max_tool_calls,
+                summary_limit=deep_agent.max_summary_calls,
+                emit=emit,
+            )
+            if deep_agent is not None
+            else None,
         )
 
         def make_tool(name: str) -> StructuredTool:
@@ -479,8 +548,11 @@ class ToolLoopProvider:
                 checkpoint = saver.get_tuple(config)
                 if checkpoint is None:
                     raise ProviderError("outcome_unknown", "Tool call checkpoint unavailable")
-                messages = checkpoint.checkpoint["channel_values"]["messages"]
-                call = messages[-1].tool_calls[0]
+                messages = graph_messages()
+                last = messages[-1]
+                if not isinstance(last, AIMessage) or not last.tool_calls:
+                    raise ProviderError("outcome_unknown", "Tool call identity unavailable")
+                call = last.tool_calls[0]
                 invocation = f"{self.effect_namespace or request.request_id}:graph:{call['id']}"
                 try:
                     self.validate_continuation(request, cancellation, deadline)
@@ -537,13 +609,32 @@ class ToolLoopProvider:
             if selection is not None
             else ([], {})
         )
-        graph: Any = cast("Callable[..., Any]", create_agent)(
-            model,
-            tools=[make_tool(name) for name in sorted(allowed)],
-            checkpointer=saver,
-            middleware=middleware,
-            system_prompt=request.instructions,
-        )
+        if deep_agent is not None:
+            if selection is None:
+                from .agent_extensions import ExtensionSelection  # noqa: PLC0415
+
+                middleware, seed = compose_sdk_middleware(
+                    ExtensionSelection((), (), ()),
+                    lambda: self.validate_continuation(request, cancellation, deadline),
+                    middleware_event,
+                )
+            graph: Any = create_bounded_deep_agent(
+                model,
+                selection=deep_agent,
+                tools=[make_tool(name) for name in sorted(allowed)],
+                checkpointer=saver,
+                middleware=middleware,
+                system_prompt=request.instructions,
+            )
+            config["recursion_limit"] = 20 + 10 * self.limits.max_model_calls
+        else:
+            graph = cast("Callable[..., Any]", create_agent)(
+                model,
+                tools=[make_tool(name) for name in sorted(allowed)],
+                checkpointer=saver,
+                middleware=middleware,
+                system_prompt=request.instructions,
+            )
         prior = saver.get_tuple(config)
         try:
             with tracing_context(enabled=False, parent=False):

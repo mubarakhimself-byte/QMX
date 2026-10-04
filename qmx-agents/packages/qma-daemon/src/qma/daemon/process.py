@@ -194,6 +194,7 @@ from qma.daemon.request_runtime.agent_extensions import AgentExtensions
 from qma.daemon.request_runtime.canonical_join import CanonicalJoinPlan, CanonicalRequestJoin
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
+from qma.daemon.request_runtime.deep_agent import DeepAgentSelection
 from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
 from qma.daemon.request_runtime.experiment_authoring import ExperimentAuthoring
 from qma.daemon.request_runtime.service import RequestRuntime
@@ -1278,6 +1279,7 @@ class DaemonProcess:
         research_browse: Mapping[str, object] | None = None,
         research_workflow: Mapping[str, object] | None = None,
         agent_extensions: AgentExtensions | None = None,
+        deep_agent: DeepAgentSelection | None = None,
         instance_revisions: Mapping[str, int] | None = None,
         max_workers: int = 2,
         max_inflight: int = 16,
@@ -1342,6 +1344,7 @@ class DaemonProcess:
                 now=self._agent_request_now,
                 extensions=agent_extensions,
                 hooks=self._artifacts.hooks,
+                deep_agent=deep_agent,
             )
             runtime.providers = dict(actor_providers)
             canonical = None
