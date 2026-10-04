@@ -8,7 +8,7 @@ name: QA Battery
 #                 never up).
 #   * mutation  - nightly mutmut on qmf-core exact.py + chrono.py with a 68% kill-rate floor,
 #                 plus node money-path modules (door wiring, command mint, equity, drift,
-#                 sizing, virtual-ledger folds). Zero classified mutants fail closed.
+#                 sizing, virtual-ledger folds). Incomplete or failed runs fail closed.
 #                 Mutmut is not a factory gate.
 #
 # Runner-side setup mirrors the workspace pins: CPython from .python-version (3.14, AR-04) and a
@@ -123,38 +123,34 @@ jobs:
       - name: Sync the workspace (default groups)
         run: uv sync
       - name: Stage the node mutmut config into qmn (disposable checkout)
-        run: cat qa/_trace/battery/mutmut/qmn_mutmut_config.toml >> qmn/pyproject.toml
+        run: python tools/stage_mutation_config.py qmn/pyproject.toml qa/_trace/battery/mutmut/qmn_mutmut_config.toml
       - name: Run mutmut on node money-path modules
         working-directory: qmn
-        run: uv run --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut run 2>&1 | tee mutmut-run.log || true
+        run: |
+          set +e
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut run > mutmut-run.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > mutmut-run.status
+          cat mutmut-run.log
       - name: Collect the per-mutant results
         working-directory: qmn
-        run: uv run --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results > mutmut-results.txt 2>&1 || true
-      - name: Zero-classified-mutant fail-closed gate
-        working-directory: qmn
         run: |
-          python - <<'PY'
-          import pathlib
-          import re
-          import sys
-
-          run_log = pathlib.Path("mutmut-run.log").read_text(encoding="utf-8", errors="replace")
-          killed_counts = re.findall("\U0001F389\\s*(\\d+)", run_log)
-          survived_counts = re.findall("\U0001F641\\s*(\\d+)", run_log)
-          if killed_counts and survived_counts:
-              killed, survived = int(killed_counts[-1]), int(survived_counts[-1])
-          else:
-              results = pathlib.Path("mutmut-results.txt").read_text(encoding="utf-8", errors="replace")
-              killed = sum(1 for line in results.splitlines() if line.rstrip().endswith(": killed"))
-              survived = sum(1 for line in results.splitlines() if line.rstrip().endswith(": survived"))
-
-          total = killed + survived
-          if total == 0:
-              print("::error::qmn mutation gate: parsed no classified mutants - failing closed")
-              sys.exit(2)
-          print(f"qmn mutation gate: {killed} killed / {survived} survived")
-          print("qmn mutation gate: classified run ok (survivors require evidence triage)")
-          PY
+          set +e
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all > mutmut-results.txt 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > mutmut-results.status
+          cat mutmut-results.txt
+      - name: Complete classified-mutant gate (survivors advisory)
+        working-directory: qmn
+        run: >
+          python "$GITHUB_WORKSPACE/tools/mutation_gate.py"
+          --results mutmut-results.txt --run-status mutmut-run.status
+          --results-status mutmut-results.status
+          --module qmn.order.door --module qmn.order.path
+          --module qmn.ledger.binding_ledger --module qmn.reconcile.residuals
+          --module qmn.capital.kill_line --module qmn.ledger.virtual
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
@@ -162,6 +158,8 @@ jobs:
           path: |
             qmn/mutmut-run.log
             qmn/mutmut-results.txt
+            qmn/mutmut-run.status
+            qmn/mutmut-results.status
           if-no-files-found: warn
           retention-days: 30
 
@@ -186,51 +184,36 @@ jobs:
       - name: Sync the workspace (default groups)
         run: uv sync
       - name: Stage the mutmut config into qmf-core (disposable checkout)
-        # The committed packages/qmf-core/pyproject.toml carries no [tool.mutmut]; append the
-        # battery config so mutmut reads it from the current directory. Nothing is pushed.
-        run: cat qa/_trace/battery/mutmut/mutmut_config.toml >> packages/qmf-core/pyproject.toml
+        # Translate the declarative scope into options supported by pinned mutmut 3.3.
+        # Sibling sources are copied but not mutated. The checkout is disposable.
+        run: python tools/stage_mutation_config.py packages/qmf-core/pyproject.toml qa/_trace/battery/mutmut/mutmut_config.toml
       - name: Run mutmut
         working-directory: packages/qmf-core
-        # mutmut exits nonzero whenever survivors exist; the kill-rate gate below is what decides,
-        # so this step must not fail the job on survivors alone.
-        run: uv run --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut run 2>&1 | tee mutmut-run.log || true
+        # mutmut 3.3 returns normally with survivors. Capture the actual exit status;
+        # the gate requires successful commands and a complete --all results listing.
+        run: |
+          set +e
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut run > mutmut-run.log 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > mutmut-run.status
+          cat mutmut-run.log
       - name: Collect the per-mutant results
         working-directory: packages/qmf-core
-        run: uv run --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results > mutmut-results.txt 2>&1 || true
-      - name: Kill-rate gate (floor 68%)
-        working-directory: packages/qmf-core
-        # Primary signal: mutmut's final run tally (🎉 killed / 🙁 survived), read as the LAST such
-        # counts in the captured run log so the progress spinner does not confuse it. Fallback: the
-        # per-mutant results listing (`<name>: killed` / `<name>: survived`). Fail-closed if neither
-        # yields any classified mutant - an empty parse means the run broke, not that it passed.
         run: |
-          python - <<'PY'
-          import pathlib
-          import re
-          import sys
-
-          run_log = pathlib.Path("mutmut-run.log").read_text(encoding="utf-8", errors="replace")
-          killed_counts = re.findall("\U0001F389\\s*(\\d+)", run_log)   # party popper = killed
-          survived_counts = re.findall("\U0001F641\\s*(\\d+)", run_log)  # frowning face = survived
-          if killed_counts and survived_counts:
-              killed, survived = int(killed_counts[-1]), int(survived_counts[-1])
-          else:
-              results = pathlib.Path("mutmut-results.txt").read_text(encoding="utf-8", errors="replace")
-              killed = sum(1 for line in results.splitlines() if line.rstrip().endswith(": killed"))
-              survived = sum(1 for line in results.splitlines() if line.rstrip().endswith(": survived"))
-
-          total = killed + survived
-          if total == 0:
-              print("::error::mutation gate: parsed no killed/survived mutants - the run broke; "
-                    "refusing to treat that as a pass")
-              sys.exit(2)
-          rate = 100.0 * killed / total
-          print(f"mutation gate: {killed} killed / {survived} survived = {rate:.2f}% kill-rate (floor 68%)")
-          if rate < 68.0:
-              print(f"::error::mutation gate: kill-rate {rate:.2f}% is below the 68% floor")
-              sys.exit(1)
-          print("mutation gate: OK")
-          PY
+          set +e
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all > mutmut-results.txt 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > mutmut-results.status
+          cat mutmut-results.txt
+      - name: Complete classified-run and kill-rate gate (floor 68%)
+        working-directory: packages/qmf-core
+        run: >
+          python "$GITHUB_WORKSPACE/tools/mutation_gate.py"
+          --results mutmut-results.txt --run-status mutmut-run.status
+          --results-status mutmut-results.status
+          --module qmf.core.exact --module qmf.core.chrono --min-kill-rate 68
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
@@ -238,5 +221,7 @@ jobs:
           path: |
             packages/qmf-core/mutmut-run.log
             packages/qmf-core/mutmut-results.txt
+            packages/qmf-core/mutmut-run.status
+            packages/qmf-core/mutmut-results.status
           if-no-files-found: warn
           retention-days: 30
