@@ -150,3 +150,21 @@ This follows [uv's optional-dependency sync contract](https://docs.astral.sh/uv/
 Use the portable integration runner's `-Suite memory` with the corresponding
 dependency environment for bounded crossmodule checks. General actor-memory
 routing, automatic consolidation/evaluation and agent-authored ledgers remain.
+
+## Accepted quality composition and current gate limits
+
+The entire reviewed quality `47b15d4e` series is combined through `19f35af9`,
+including cancellation-safe aggregate verdicts. The local join explicitly
+installs the memory extra in nested CI and preserves it through all five tasks.
+CI controls and source coverage enforcement keep their original floors. Hosted
+CI execution, actual workflow cancellation and full mutation strength remain
+unverified. The portable integration runner adds `-Suite quality`.
+
+The completed composed QMA run has 2049 passing tests and no failed/skipped tests;
+its gate remains red at 78.98% aggregate and77.54% daemon coverage. Subprocess
+measurement now includes the real daemon entrypoint and all tracked source.
+Full QMA lint/format pass; full nested strict source typing has68 errors across
+nine existing files, recorded separately from the quality lane's four root
+typing errors. The single ledger and exact evidence JSON describe bounded next
+fixes. Operator startup/API instructions above remain valid; these results do
+not establish native account auth, remote operation or full backend readiness.

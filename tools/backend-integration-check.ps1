@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('seams', 'native', 'memory', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -23,10 +23,21 @@ $env:PYTHONIOENCODING = 'utf-8'
 $env:LANGSMITH_TRACING = 'false'
 $env:LANGCHAIN_TRACING_V2 = 'false'
 $env:RUFF_CACHE_DIR = Join-Path $candidateEvidence 'ruff-cache'
+$env:COVERAGE_FILE = Join-Path $candidateEvidence '.coverage'
 $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'quality' {
+        $candidateTests = @(
+            'tools/tests/test_readiness_gate.py',
+            'tools/tests/test_mutation_workflow.py',
+            'tools/tests/test_mutation_gate.py',
+            'tools/tests/test_stage_mutation_config.py',
+            'tools/tests/test_coverage_report.py'
+        )
+        $candidatePytestOptions += '--no-cov'
+    }
     'memory' {
         $candidateTests = @(
             'qmx-agents/packages/qma-daemon/tests/test_durable_memory.py',

@@ -47,6 +47,8 @@ QMA_DAEMON_ALLOWED_DEPS: Final[frozenset[str]] = frozenset(
         "tzdata",
         "langchain",
         "langgraph",
+        "deepagents",
+        "PyYAML",
     }
 )
 

@@ -81,6 +81,8 @@ def test_daemon_deps_limited_to_declared_parent_set() -> None:
                 "tzdata",
                 "langchain",
                 "langgraph",
+                "deepagents",
+                "PyYAML",
             }
         )
         == QMA_DAEMON_ALLOWED_DEPS

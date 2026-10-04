@@ -1,0 +1,32 @@
+{
+  "native": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-5\\native-combined-candidate",
+    "head": "1f3b98f6b6f268e98f0f14edbb918b727069eb9c",
+    "status": []
+  },
+  "skills": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\skills-hooks-native",
+    "head": "bf3c6b592e89917c17747eb1072203a28241e74a",
+    "status": []
+  },
+  "data": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate",
+    "head": "4122420d685a36499bd30ff15d343d0c97e7a291",
+    "status": []
+  },
+  "spot": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\spot-review",
+    "head": "8bee17d4a49985894ed17b4d3eba2348baf1acb9",
+    "status": []
+  },
+  "memory": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-14\\memory-lane",
+    "head": "916832bdbc0a28aec00d8a22ca3b8a239c8ba564",
+    "status": []
+  },
+  "quality": {
+    "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-13\\quality-lane",
+    "head": "47b15d4eed5763935b68f8cafc547f7b94c89279",
+    "status": []
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "full_platform_acceptance": false,
+  "source_gate": {
+    "suite": "qma",
+    "head": "19f35af9b0b651987798a3fc0d31fbc6852ffd67",
+    "status": [
+      " M ../.github/workflows/battery.yml",
+      " M examples/BOUNDED_DURABLE_MEMORY.md",
+      " M examples/MEMORY_INTEGRATION_DRAFT.patch",
+      " M packages/qma-core/src/qma/core/barriers/dependencies.py",
+      " M packages/qma-core/tests/test_barriers.py",
+      " M pyproject.toml",
+      " M ../tools/backend-integration-check.ps1",
+      " M ../tools/tests/test_readiness_gate.py"
+    ],
+    "script_sha256": "6EE0E5FEBED54A79A72269FDEADB9C13CFE540947694F45CAFBD81118AF25BF4",
+    "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+    "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+    "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+    "dependencies": [
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\memory-locked-packages",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+      "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+    ],
+    "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\memory-locked-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+    "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents",
+    "arguments": [
+      "-m",
+      "pytest",
+      "packages",
+      "tests",
+      "-q",
+      "-ra",
+      "-o",
+      "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-8ae624d1a1b440dba37ed38fe815df58\\pytest-cache",
+      "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-8ae624d1a1b440dba37ed38fe815df58\\pytest-temp",
+      "--cov=packages/qma-core/src",
+      "--cov=packages/qma-wire/src",
+      "--cov=packages/qma-daemon/src",
+      "--cov-branch",
+      "--cov-fail-under=80",
+      "--cov-report=term",
+      "--cov-report=json:C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-8ae624d1a1b440dba37ed38fe815df58\\coverage.json"
+    ]
+  },
+  "test_result": "2049 passed, no test failures/skips, one upstream warning, 290.03s",
+  "aggregate_coverage": 78.98048815609475,
+  "required_floor": 80,
+  "package_gate": "nested source coverage: FAIL: qma-daemon: 77.54% coverage is below the 80% per-package floor (AR-20) [37577/48460 line+branch units]\n",
+  "full_nested_type_source_scan": {
+    "filesAnalyzed": 601,
+    "errorCount": 68,
+    "warningCount": 0,
+    "informationCount": 0,
+    "timeInSec": 37.932
+  },
+  "type_errors_by_file": {
+    "qmx-agents\\packages\\qma-core\\src\\qma\\core\\ports\\qmb.py": 1,
+    "qmx-agents\\packages\\qma-core\\tests\\test_qmb_door.py": 1,
+    "qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\artifacts\\store.py": 1,
+    "qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\taskgraph\\outbox.py": 2,
+    "qmx-agents\\packages\\qma-daemon\\tests\\test_daemon_process.py": 55,
+    "qmx-agents\\packages\\qma-daemon\\tests\\test_epic73_cancel_wire.py": 1,
+    "qmx-agents\\packages\\qma-daemon\\tests\\test_local_proxy_broker_egress.py": 4,
+    "qmx-agents\\packages\\qma-daemon\\tests\\test_stage_artifact_restart.py": 1,
+    "qmx-agents\\packages\\qma-daemon\\tests\\test_task_graph_outbox.py": 2
+  },
+  "entrypoint_coverage": {
+    "packages\\qma-daemon\\src\\qma\\daemon\\__main__.py": {
+      "covered_lines": 35,
+      "num_statements": 61,
+      "percent_covered": 53.42465753424658,
+      "percent_covered_display": "53",
+      "missing_lines": 26,
+      "excluded_lines": 0,
+      "percent_statements_covered": 57.377049180327866,
+      "percent_statements_covered_display": "57",
+      "num_branches": 12,
+      "num_partial_branches": 4,
+      "covered_branches": 4,
+      "missing_branches": 8,
+      "percent_branches_covered": 33.333333333333336,
+      "percent_branches_covered_display": "33"
+    },
+    "packages\\qma-daemon\\src\\qma\\daemon\\request_runtime\\__main__.py": {
+      "covered_lines": 108,
+      "num_statements": 121,
+      "percent_covered": 83.43558282208589,
+      "percent_covered_display": "83",
+      "missing_lines": 13,
+      "excluded_lines": 0,
+      "percent_statements_covered": 89.25619834710744,
+      "percent_statements_covered_display": "89",
+      "num_branches": 42,
+      "num_partial_branches": 12,
+      "covered_branches": 28,
+      "missing_branches": 14,
+      "percent_branches_covered": 66.66666666666667,
+      "percent_branches_covered_display": "67"
+    }
+  },
+  "lint": "All checks passed!\n",
+  "format": "634 files already formatted\n",
+  "three_inherited_formatter_fixes_ast_identical": true,
+  "pytest.txt_sha256": "ccb6a3601ab467927eefe76480d6b9a6f05c375877a2f9547bf99d9d60a89a14",
+  "coverage.json_sha256": "baa73c9be56c081d91145e32e2f44f5453b641f48c8fd7c2269d5dbe5b5deeca"
+}

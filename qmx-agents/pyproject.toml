@@ -113,3 +113,7 @@ cov-report = "python ../tools/nested_coverage_report.py"
 [tool.poe.tasks.check]
 sequence = ["fmt-check", "lint", "types", "test", "cov-report"]
 default_item_type = "ref"
+
+[tool.coverage.run]
+# Match the parent workspace: measure real daemon/worker subprocess entrypoints.
+patch = ["subprocess"]

@@ -289,7 +289,8 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
             raise ValueError("bounded nonempty provider and profile maps required")
         extensions = (
             load_agent_extensions(Path(root), sdk["agent_extensions"])
-            if "agent_extensions" in sdk else None
+            if "agent_extensions" in sdk
+            else None
         )
         manifest = {
             "runtime_revision": "langchain-agent-1",

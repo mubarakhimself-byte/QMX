@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -45,6 +46,21 @@ def test_both_native_matrices_and_dead_code_scan_must_complete() -> None:
     payload = {name: {"result": "success"} for name in MANDATORY}
     assert run_gate(json.dumps(payload)) == 0
     assert run_gate(json.dumps({"agent-suites": {"result": "success"}}), ("agent-suites",)) == 0
+
+
+def test_nested_test_environment_keeps_optional_extraction_available() -> None:
+    """A later default uv run must not uninstall deps required by extraction tests."""
+    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = document["jobs"]["agent-suites"]["steps"]
+    sync = next(step for step in steps if step.get("id") == "sync")
+    command = shlex.split(sync["run"])
+    assert command[:2] == ["uv", "sync"]
+    assert "--frozen" in command and "--all-packages" in command
+    assert command[command.index("--extra") + 1] == "memory-extraction"
+    for step in steps:
+        run = shlex.split(step.get("run", ""))
+        if run[:2] == ["uv", "run"]:
+            assert "--no-sync" in run, step["name"]
 
 
 @pytest.mark.parametrize("job", MANDATORY)

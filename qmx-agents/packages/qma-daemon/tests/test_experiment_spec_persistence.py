@@ -93,8 +93,6 @@ def test_registration_refuses_non_integer_attempt_without_retaining() -> None:
         assert is_refusal(service.resolve(spec.spec_fp1))
 
 
-
-
 def test_daemon_restart_restores_spec_ledger_and_successor_edges(tmp_path: Path) -> None:
     process = _compose(tmp_path, boot="boot-36-3-a")
     try:

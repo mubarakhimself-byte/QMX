@@ -44,7 +44,8 @@ The ordinary research path requires no new dependency beyond the base lock.
 The later combined integrator accepted the reviewed patch as `4400ac05`, added
 the proposed optional extra and generated the nested lock without changing any
 previous package version. The repaired `MEMORY_INTEGRATION_DRAFT.patch` records
-the three applied additive changes. Combined acceptance evidence is in
+the three applied additive changes (zero-context patch; use `--unidiff-zero`
+for a reverse check against the integrated files). Combined acceptance evidence is in
 `_docwork/backend-integration-ledger-draft.md` at the repository root. Provision
 the optional test environment with `uv sync --frozen --all-packages --extra
 memory-extraction`, and run tests with `uv run --no-sync` to retain the extra.

@@ -167,6 +167,7 @@ def test_sqlite_stays_one_connection_and_qmb_jsonl_is_not_merged(tmp_path: Path)
     finally:
         process.close()
 
+
 def test_unauthenticated_and_plaintext_non_loopback_are_startup_refusals(
     tmp_path: Path,
 ) -> None:
@@ -330,8 +331,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         second_published = next(
             row
             for row in second_loaded.published
-            if row.point == "graph_template"
-            and row.qualified_id == "analysis-backtest:procedure"
+            if row.point == "graph_template" and row.qualified_id == "analysis-backtest:procedure"
         )
         second_contribution = {
             "qualified_id": second_published.qualified_id,
