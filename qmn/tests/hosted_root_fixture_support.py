@@ -72,10 +72,19 @@ class _RecordedJournalSink:
         instant = Instant.try_create(row.get("receive_wall_time_ns"))
         if is_refusal(instant):
             return instant
+        observation_ack = row.get("_observation_ack")
+        if row.get("kind") == "accumulator-journal":
+            if type(observation_ack) is not SinkAck:
+                raise AssertionError(
+                    "recorded cursor consumes the exact observation acknowledgment"
+                )
+        # SinkAck is a transient sink handoff, not canonical CT-13 identity.
+        # Production intake verifies its physical joins and omits this key too.
+        payload = {key: value for key, value in row.items() if key != "_observation_ack"}
         recorded = self.writer.record_control_action(
             "recorded-frontier-cursor",
             instant=instant.value,
-            payload=cast(Mapping[str, object], _omit_absent(row)),
+            payload=cast(Mapping[str, object], _omit_absent(payload)),
         )
         if is_refusal(recorded):
             return recorded
