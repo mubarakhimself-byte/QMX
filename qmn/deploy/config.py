@@ -50,6 +50,15 @@ def _run(module: str, argv: list[str]) -> int:
         "TZ": "UTC",
         "PYTHONNOUSERSITE": "1",
     }
+    if os.name == "nt":
+        # Windows DLL/side-by-side resolution requires the OS system directory.
+        # Preserve this single OS input; credential and Python-path variables
+        # remain excluded from the deployment child's allow-list.
+        system_root = os.environ.get("SYSTEMROOT")
+        if not system_root:
+            print("refused: Windows deployment child requires SYSTEMROOT", file=sys.stderr)
+            return 2
+        safe_environment["SYSTEMROOT"] = system_root
     completed = subprocess.run(
         [sys.executable, "-m", module, *argv],
         check=False,

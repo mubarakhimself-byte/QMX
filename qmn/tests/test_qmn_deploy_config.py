@@ -143,6 +143,9 @@ def test_valid_pinned_deployment_uses_actual_preflight_module_no_credentials(
     environment = cast("dict[str, str]", arguments["env"])
     assert "SYSTEMD_CREDENTIALS_DIRECTORY" not in environment
     assert "VENUE_CLIENT_SECRET" not in environment
+    assert "PYTHONPATH" not in environment
+    if os.name == "nt":
+        assert environment.get("SYSTEMROOT") == os.environ["SYSTEMROOT"]
 
 
 def test_deployment_child_runs_real_host_preflight_for_selected_file(
