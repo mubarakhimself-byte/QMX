@@ -1,0 +1,336 @@
+{
+  "baseline_sha": "ffb7590bbda1ec8d5dc126b9fdc3205c888dffac",
+  "branch": "codex/spot-paper-vertical-slice",
+  "status": "local simulated infrastructure candidate",
+  "focused_tests": {
+    "passed": 26,
+    "scope": "metadata, account policies/ownership, exact fees, partialfills/cancel/retry/restart, source archive and authority read"
+  },
+  "regression_tests": {
+    "passed": 549,
+    "scope": "qmf-venue, existing QMN venue/order/UNKNOWN, QMA session grants/money-path/reachability"
+  },
+  "static": {
+    "ruff": "passed on 10 new Python files",
+    "ruff_format": "passed",
+    "pyright_strict": "0 errors on all 10 new runtime/tool/test Python files"
+  },
+  "draft_docs_patch": "git apply --check passed; not applied",
+  "full_qmn_gate": {
+    "status": "blocked during collection",
+    "missing_environment_dependencies": [
+      "prometheus_client",
+      "cryptography"
+    ],
+    "collection_errors": 60
+  },
+  "environment": {
+    "python": "3.14.7",
+    "pytest": "9.1.1",
+    "optuna": "4.9.0",
+    "protobuf": "7.36.0",
+    "dependencies": "existing local installed libraries, read-only references from isolated venv; no package install"
+  },
+  "review": "self-review recorded; independent parent review outstanding",
+  "source_hashes": {
+    "packages/qmf-venue/src/qmf/venue/spot.py": "55d70bb96feb87139dad6eea7867b6117d79420ad041eb4e41e527030d7ab34f",
+    "qmn/src/qmn/venue/spot_paper.py": "c401607c9c52fe1e28332284a2d8b3f529369c894ce427d8d59eba4eb57a2d27",
+    "qmn/src/qmn/venue/spot_recorded.py": "c5fa74fd08aa9231b06d318ef4fe3afc885d6a64bc1cd9e32db001ad9a12e40a",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "bcb0e2013f18e5bbbb38ffdecef6302accf7811ff6d3b133651685128a68c73c",
+    "tools/spot_paper_journey.py": "fb2c7aa953468eaa75c909ee8e14d2f750f3954a197cdc44a2a438796ba08c3d",
+    "tools/spot-paper-check.ps1": "f263c6493c2746e1d9de0d232dd941dedb3b102187bead46126b5041ee0c4723"
+  },
+  "journey": {
+    "seed": {
+      "phase": "seed",
+      "simulation": true,
+      "network_calls": 0,
+      "operation": "qmn.spot.paper.query@1",
+      "read": {
+        "paper": {
+          "simulation": true,
+          "behavior": "recorded-spot-limit-fills",
+          "scope": {
+            "provider_connection_id": "conn:recorded",
+            "venue_id": "recorded:crypto",
+            "account_id": "a",
+            "node_id": "singapore"
+          },
+          "policy_ref": "policy:a",
+          "symbol": "BTC/USDT",
+          "balances": {
+            "USDT": {
+              "total": "989.99000000",
+              "reserved": "10.01000000"
+            },
+            "BTC": {
+              "total": "1.100",
+              "reserved": "0"
+            }
+          },
+          "orders": [
+            {
+              "client_id": "buy-1",
+              "side": "buy",
+              "amount": "0.200",
+              "price": "100.00",
+              "filled": "0.100",
+              "status": "PARTIAL",
+              "reserved": "10.01000000",
+              "asset": "USDT"
+            }
+          ],
+          "fees_quote": "0.01000000",
+          "feed_status": "READY",
+          "sequence": 2,
+          "writer_available": true
+        },
+        "market_data": {
+          "event_time_ns": 1000,
+          "known_at_ns": 1000,
+          "source": "source:synthetic-spot",
+          "source_native_id": "tick:1",
+          "revision": "v1",
+          "receive_wall_time_ns": 1000,
+          "writer": {
+            "machine": "local",
+            "role": "recorded-spot",
+            "stream": "source:synthetic-spot",
+            "boot_epoch_id": "fixture-epoch"
+          },
+          "sequence": 0,
+          "world": "replay",
+          "fingerprint": "fp1:sha256:a2c10aa38fcadbc80a933210d5d7df55bfa63a78b55f044d0dabc833620677aa",
+          "format_version": 1,
+          "foreign_timestamp": {
+            "verbatim": "1000",
+            "zone": "UTC",
+            "offset": "+00:00",
+            "resolution": "nanoseconds"
+          },
+          "foreign_money": {
+            "verbatim": 9900,
+            "scale": 2
+          },
+          "market_data": {
+            "venue": "recorded:crypto",
+            "symbol": "BTC/USDT",
+            "resolution": "tick",
+            "side": "bid",
+            "license_tag": "synthetic-infrastructure-only",
+            "provenance": {
+              "adapter_version": 1,
+              "amount_step": "0.001",
+              "market": "BTC/USDT",
+              "origin": "synthetic",
+              "price_step": "0.01",
+              "raw_tick": {
+                "ask": "100.00",
+                "bid": "99.00",
+                "event_ns": 1000,
+                "origin": "synthetic",
+                "quantity": "0.100",
+                "received_ns": 1000,
+                "sequence": 1,
+                "snapshot": true
+              }
+            },
+            "format_version": 1
+          }
+        },
+        "archive_ref": "fp1:sha256:25872cb4e084dbe7f1ed11b1a03f42f31ba062ac110e88cbb3b94689135d7de2"
+      },
+      "other_account": {
+        "simulation": true,
+        "behavior": "recorded-spot-limit-fills",
+        "scope": {
+          "provider_connection_id": "conn:recorded",
+          "venue_id": "recorded:crypto",
+          "account_id": "b",
+          "node_id": "new-york"
+        },
+        "policy_ref": "policy:b",
+        "symbol": "BTC/USDT",
+        "balances": {
+          "USDT": {
+            "total": "1000",
+            "reserved": "0"
+          },
+          "BTC": {
+            "total": "1",
+            "reserved": "0"
+          }
+        },
+        "orders": [],
+        "fees_quote": "0",
+        "feed_status": "READY",
+        "sequence": 1,
+        "writer_available": true
+      },
+      "callback_count": 1,
+      "limitations": [
+        "local shared-root writer ownership",
+        "synthetic infrastructure",
+        "no live exchange",
+        "no normal-start or HTTP binding",
+        "no Book/BMS risk certification"
+      ]
+    },
+    "verify": {
+      "phase": "verify",
+      "simulation": true,
+      "network_calls": 0,
+      "operation": "qmn.spot.paper.query@1",
+      "read": {
+        "paper": {
+          "simulation": true,
+          "behavior": "recorded-spot-limit-fills",
+          "scope": {
+            "provider_connection_id": "conn:recorded",
+            "venue_id": "recorded:crypto",
+            "account_id": "a",
+            "node_id": "singapore"
+          },
+          "policy_ref": "policy:a",
+          "symbol": "BTC/USDT",
+          "balances": {
+            "BTC": {
+              "reserved": "0",
+              "total": "1.100"
+            },
+            "USDT": {
+              "reserved": "0",
+              "total": "989.99000000"
+            }
+          },
+          "orders": [
+            {
+              "amount": "0.200",
+              "asset": "USDT",
+              "client_id": "buy-1",
+              "filled": "0.100",
+              "price": "100.00",
+              "reserved": "0",
+              "side": "buy",
+              "status": "CANCELED"
+            }
+          ],
+          "fees_quote": "0.01000000",
+          "feed_status": "UNSYNCED",
+          "sequence": 2,
+          "writer_available": true
+        },
+        "market_data": {
+          "event_time_ns": 1000,
+          "known_at_ns": 1000,
+          "source": "source:synthetic-spot",
+          "source_native_id": "tick:1",
+          "revision": "v1",
+          "receive_wall_time_ns": 1000,
+          "writer": {
+            "machine": "local",
+            "role": "recorded-spot",
+            "stream": "source:synthetic-spot",
+            "boot_epoch_id": "fixture-epoch"
+          },
+          "sequence": 0,
+          "world": "replay",
+          "fingerprint": "fp1:sha256:a2c10aa38fcadbc80a933210d5d7df55bfa63a78b55f044d0dabc833620677aa",
+          "format_version": 1,
+          "foreign_timestamp": {
+            "verbatim": "1000",
+            "zone": "UTC",
+            "offset": "+00:00",
+            "resolution": "nanoseconds"
+          },
+          "foreign_money": {
+            "verbatim": 9900,
+            "scale": 2
+          },
+          "market_data": {
+            "venue": "recorded:crypto",
+            "symbol": "BTC/USDT",
+            "resolution": "tick",
+            "side": "bid",
+            "license_tag": "synthetic-infrastructure-only",
+            "provenance": {
+              "adapter_version": 1,
+              "amount_step": "0.001",
+              "market": "BTC/USDT",
+              "origin": "synthetic",
+              "price_step": "0.01",
+              "raw_tick": {
+                "ask": "100.00",
+                "bid": "99.00",
+                "event_ns": 1000,
+                "origin": "synthetic",
+                "quantity": "0.100",
+                "received_ns": 1000,
+                "sequence": 1,
+                "snapshot": true
+              }
+            },
+            "format_version": 1
+          }
+        },
+        "archive_ref": "fp1:sha256:25872cb4e084dbe7f1ed11b1a03f42f31ba062ac110e88cbb3b94689135d7de2"
+      },
+      "other_account": {
+        "simulation": true,
+        "behavior": "recorded-spot-limit-fills",
+        "scope": {
+          "provider_connection_id": "conn:recorded",
+          "venue_id": "recorded:crypto",
+          "account_id": "b",
+          "node_id": "new-york"
+        },
+        "policy_ref": "policy:b",
+        "symbol": "BTC/USDT",
+        "balances": {
+          "BTC": {
+            "reserved": "0",
+            "total": "1"
+          },
+          "USDT": {
+            "reserved": "0",
+            "total": "1000"
+          }
+        },
+        "orders": [],
+        "fees_quote": "0",
+        "feed_status": "UNSYNCED",
+        "sequence": 1,
+        "writer_available": true
+      },
+      "callback_count": 1,
+      "limitations": [
+        "local shared-root writer ownership",
+        "synthetic infrastructure",
+        "no live exchange",
+        "no normal-start or HTTP binding",
+        "no Book/BMS risk certification"
+      ]
+    }
+  },
+  "limits": [
+    "synthetic infrastructure only",
+    "no live orders, secrets, transfer or exchange transport",
+    "no normal daemon/API/mini-app startup binding",
+    "local shared-root writer ownership only; no distributed fencing",
+    "not Book/BMS sizing or venue reconciliation certification",
+    "no deliverable spot FX or paper soak",
+    "canonical documentation/gaps unchanged; draft only"
+  ],
+  "source_hashes_kind": "executed working-tree bytes; Git may normalize line endings",
+  "indexed_source_hashes": {
+    "packages/qmf-venue/src/qmf/venue/spot.py": "55d70bb96feb87139dad6eea7867b6117d79420ad041eb4e41e527030d7ab34f",
+    "qmn/src/qmn/venue/spot_paper.py": "ce7419c299198ec0dc1507bd72fdb2e53cb1591d9dd0ca1765f81ea525e01cba",
+    "qmn/src/qmn/venue/spot_recorded.py": "c5fa74fd08aa9231b06d318ef4fe3afc885d6a64bc1cd9e32db001ad9a12e40a",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "5a5e617bfed4e622ab1ab31585b98dd5b17885a618bd401b25d0ccfc929bf0a5",
+    "tools/spot_paper_journey.py": "241d4bf3139cf27bee0471762f68ceea80fe7702e204826009256a69d62ab8a5",
+    "tools/spot-paper-check.ps1": "f263c6493c2746e1d9de0d232dd941dedb3b102187bead46126b5041ee0c4723"
+  },
+  "operation_supported_doors": [
+    "library/in-process only; native agent/HTTP/MCP binding remains uninstalled"
+  ]
+}
