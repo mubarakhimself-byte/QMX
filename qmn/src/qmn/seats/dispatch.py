@@ -42,7 +42,6 @@ from qmf.risk.door import (
 )
 from qmf.risk.exit_policy import ExitPolicy, resolve_exit_policy_entry
 from qmf.risk.paper import ExecutionTarget
-from qmf.venue.ctrader import RoundingMode
 
 from qmn.capital.ratchet import (
     BreakevenRatchetOrigin,
@@ -79,7 +78,7 @@ from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.seats._refuse import invalid, policy
 from qmn.seats.admission import AdmittedNodeSeat
 from qmn.seats.host import GovernedSeat, drive_governed_seat
-from qmn.venue import CloseScope, Command, CommandIdBinding, ProtectionAmendment
+from qmn.venue import CloseScope, Command, CommandIdBinding, ProtectionAmendment, RoundingMode
 
 __all__ = [
     "INTENT_PATH_HOPS",

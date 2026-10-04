@@ -24,9 +24,9 @@ from qmf.data import JournalEvent, JournalEventType, JournalReader
 from qmf.data.observation import SourceObservation
 from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.store import EvidenceStore, JournalStore
-from qmf.venue.ctrader import decode_market_data_price
 
 from qmn.ledger._refuse import invalid, policy
+from qmn.venue import decode_market_data_price
 
 __all__ = ["CheckedSpotPrices", "resolve_checked_live_spot_prices"]
 
