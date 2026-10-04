@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('seams', 'native', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('seams', 'native', 'memory', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -20,11 +20,24 @@ $env:PYTHONPATH = ($candidateSources + @($ExtraDependencyPath)) -join [IO.Path]:
 $env:PYTHONDONTWRITEBYTECODE = '1'
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
+$env:LANGSMITH_TRACING = 'false'
+$env:LANGCHAIN_TRACING_V2 = 'false'
 $env:RUFF_CACHE_DIR = Join-Path $candidateEvidence 'ruff-cache'
 $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'memory' {
+        $candidateTests = @(
+            'qmx-agents/packages/qma-daemon/tests/test_durable_memory.py',
+            'qmx-agents/packages/qma-daemon/tests/test_memory_extraction.py',
+            'qmx-agents/packages/qma-daemon/tests/test_durable_memory_requests.py',
+            'qmx-agents/packages/qma-daemon/tests/test_research_workflow.py',
+            'qmx-agents/packages/qma-daemon/tests/test_agent_extensions.py',
+            'qmx-agents/packages/qma-daemon/tests/test_agent_extensions_daemon.py',
+            'qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py'
+        )
+    }
     'native' {
         $candidateTests = @(
             'qmx-agents/packages/qma-daemon/tests/test_native_sessions.py',

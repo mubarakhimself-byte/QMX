@@ -131,3 +131,22 @@ and [checkpointed unit-test threads](https://docs.langchain.com/oss/python/langc
 Those SDK mechanisms supply hook/checkpoint behavior; QMX admission and operation
 authority remain host-owned. Local released native SDK source/protocol fixtures
 provide offline adapter evidence, not real account authorization.
+
+## Accepted memory increment
+
+Reviewed memory `916832bd` is combined as `4400ac05`. Configured research requests
+now recall/retain typed summary revisions through the existing workflow. The
+canonical journal owns records and supersession; LangGraph Store is a disposable
+authorized projection. Fresh jobs and disk restart retain scope/source pins.
+Memory, invocation context and authored ledger remain separate contracts.
+
+LangMem extraction is opt-in and accepts an explicit injected BaseChatModel;
+startup never calls extraction or initializes embeddings. Exact extra pins and
+transitive hashes are in the nested lock, with no existing package upgrade.
+To provision the optional test environment from qmx-agents, use
+`uv sync --frozen --all-packages --extra memory-extraction`, then
+`uv run --no-sync poe check` so a default sync cannot remove the extra.
+This follows [uv's optional-dependency sync contract](https://docs.astral.sh/uv/concepts/projects/sync/#syncing-optional-dependencies).
+Use the portable integration runner's `-Suite memory` with the corresponding
+dependency environment for bounded crossmodule checks. General actor-memory
+routing, automatic consolidation/evaluation and agent-authored ledgers remain.

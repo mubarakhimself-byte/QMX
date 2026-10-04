@@ -1,5 +1,7 @@
 # Mature agent runtime: acceptance and operator handoff
 
+The later bounded durable-memory lane is documented in [BOUNDED_DURABLE_MEMORY.md](BOUNDED_DURABLE_MEMORY.md). It upgrades the existing research request summary path to typed supersession history and adds host-only bounded Store retrieval/context and optional injected LangMem proposals. Historical latest-summary limitations below describe the earlier increment; actor routing, consolidation, evaluation and agent-authored ledgers remain unfinished.
+
 Current generic skills/hooks increment: [SDK_SKILLS_HOOKS.md](SDK_SKILLS_HOOKS.md)
 documents released SDK middleware wired through operator configuration and
 authenticated daemon requests, host-scoped progressive skills, bounded parsing,

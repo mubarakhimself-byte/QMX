@@ -1,5 +1,7 @@
 # Bounded generic SDK skills and hooks
 
+A separate bounded memory lane is described in [BOUNDED_DURABLE_MEMORY.md](BOUNDED_DURABLE_MEMORY.md). Skills still grant no memory or tool authority; memory stays behind the existing host binding, live validator and admission gate.
+
 This local increment is based on native-combined candidate
 `1f3b98f6b6f268e98f0f14edbb918b727069eb9c`. It implements the generic
 inference skills/middleware path in real authenticated request composition.

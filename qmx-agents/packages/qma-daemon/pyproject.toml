@@ -19,6 +19,10 @@ dependencies = [
     "PyYAML==6.0.3",
 ]
 
+[project.optional-dependencies]
+# Explicit opt-in only; ordinary research memory uses existing LangGraph.
+memory-extraction = ["langmem==0.0.30", "trustcall==0.0.39", "dydantic==0.0.8"]
+
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"

@@ -41,6 +41,14 @@ until the existing `MemoryAdmissionGate` admitted the resulting candidate.
 Trustcall **0.0.39** and dydantic **0.0.8** are the tested extraction dependencies.
 The ordinary research path requires no new dependency beyond the base lock.
 
+The later combined integrator accepted the reviewed patch as `4400ac05`, added
+the proposed optional extra and generated the nested lock without changing any
+previous package version. The repaired `MEMORY_INTEGRATION_DRAFT.patch` records
+the three applied additive changes. Combined acceptance evidence is in
+`_docwork/backend-integration-ledger-draft.md` at the repository root. Provision
+the optional test environment with `uv sync --frozen --all-packages --extra
+memory-extraction`, and run tests with `uv run --no-sync` to retain the extra.
+
 Context7 documentation and current official docs/blog were reviewed before
 selection: [LangMem launch](https://www.langchain.com/blog/langmem-sdk-launch),
 [stateless extraction](https://langchain-ai.github.io/langmem/guides/extract_semantic_memories/),
