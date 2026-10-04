@@ -277,9 +277,14 @@ def test_milestone_harness_opencodex_over_wire_preserves_provenance() -> None:
     )
     assert is_ok(registry.register(record))
     router = ModelRouter(registry)
+
+    def respond(*, prompt: str, bind: str, request: ModelClassRequest) -> str:
+        assert request.model_class is record.model_class
+        return f"fixture:{prompt}:{bind}"
+
     deployment = OpenCodexDeployment(
         record=record,
-        test_handler=lambda *, prompt, bind, request: f"fixture:{prompt}:{bind}",
+        test_handler=respond,
     )
 
     # OpenCodex refuses a crossed secret.

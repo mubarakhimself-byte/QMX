@@ -2,9 +2,24 @@
 
 from pathlib import Path
 
+from qma.daemon.plugins import research_corpus_plugin_load_config
+from qma.daemon.process import DaemonProcess
 from qmf.core import is_ok, is_refusal
 from qmf.core.fingerprint import fingerprint_bytes
-from test_stage_artifact_put import _compose
+
+
+def _compose(tmp_path: Path, *, boot: str) -> DaemonProcess:
+    seed = tmp_path / "seed-corpus"
+    seed.mkdir(exist_ok=True)
+    composed = DaemonProcess.compose(
+        tmp_path,
+        machine="test-host",
+        boot_epoch_id=boot,
+        bind_port=0,
+        plugin_load_configs=research_corpus_plugin_load_config(seed),
+    )
+    assert is_ok(composed), composed
+    return composed.value
 
 
 def test_complete_stage_deduplicates_and_restores_without_draft(tmp_path: Path) -> None:

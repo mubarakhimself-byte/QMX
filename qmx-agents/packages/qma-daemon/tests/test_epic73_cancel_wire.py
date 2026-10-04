@@ -64,7 +64,7 @@ def _persist_task(process: DaemonProcess, slug: str) -> tuple[ActorId, str]:
         role=RoleName.RESEARCHER,
         name=f"Quant {slug}",
     )
-    assert is_ok(process._mailboxes.open_for_quant(quant))
+    assert is_ok(process.mailboxes.open_for_quant(quant))
     compiled = process.roster.compiler.compile(CompileRequest(goal=Goal(text=slug), owner=quant))
     assert is_ok(compiled), compiled
     persisted = process.task_graphs.persist(compiled.value.task_graph)
