@@ -17,6 +17,7 @@ from qma.core.barriers.reachability import is_forbidden_model_adapter
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import invalid_input
 
+from .agent_extensions import AgentExtensions, load_agent_extensions
 from .contracts import (
     CopilotProfile,
     ProviderAdapter,
@@ -42,6 +43,7 @@ class AgentRequestConfiguration:
     max_workers: int = 2
     max_inflight: int = 16
     shutdown_timeout_seconds: float = 2
+    agent_extensions: AgentExtensions | None = None
 
 
 class _ConfiguredProvider:
@@ -274,6 +276,7 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 "max_workers",
                 "max_inflight",
                 "shutdown_timeout_seconds",
+                "agent_extensions",
             },
         )
         if not isinstance(sdk.get("enabled"), bool):
@@ -284,6 +287,10 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
         raw_profiles = _mapping(sdk.get("profiles"))
         if not 0 < len(raw_providers) <= 16 or not 0 < len(raw_profiles) <= 32:
             raise ValueError("bounded nonempty provider and profile maps required")
+        extensions = (
+            load_agent_extensions(Path(root), sdk["agent_extensions"])
+            if "agent_extensions" in sdk else None
+        )
         manifest = {
             "runtime_revision": "langchain-agent-1",
             "research_browse": sdk.get("research_browse", {}),
@@ -293,6 +300,8 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 key: _mapping(row).get("tools", []) for key, row in raw_profiles.items()
             },
         }
+        if extensions is not None:
+            manifest["agent_extensions"] = extensions.manifest()
         aliases = {
             _text(alias): _provider(alias, _mapping(row), manifest)
             for alias, row in raw_providers.items()
@@ -300,6 +309,13 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
         policies = {
             _text(key): _policy(_mapping(row), aliases, key) for key, row in raw_profiles.items()
         }
+        if extensions is not None:
+            for association in extensions.profiles:
+                if association.profile_id not in policies:
+                    raise ValueError("extension profile is not configured")
+                alias = _text(_mapping(raw_profiles[association.profile_id]).get("provider_id"))
+                if aliases[alias].capabilities.execution_kind != "inference":
+                    raise ValueError("generic extensions require an inference profile")
         tools: dict[str, frozenset[str]] = {}
         for profile_id, raw in raw_profiles.items():
             values = _sequence(_mapping(raw).get("tools", []))
@@ -367,6 +383,7 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 max_workers=workers,
                 max_inflight=inflight,
                 shutdown_timeout_seconds=_duration(sdk.get("shutdown_timeout_seconds", 2), 10),
+                agent_extensions=extensions,
             )
         )
     except OSError, UnicodeError, ValueError, TypeError, KeyError:

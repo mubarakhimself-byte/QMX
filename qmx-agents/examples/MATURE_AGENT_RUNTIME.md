@@ -1,5 +1,14 @@
 # Mature agent runtime: acceptance and operator handoff
 
+Current generic skills/hooks increment: [SDK_SKILLS_HOOKS.md](SDK_SKILLS_HOOKS.md)
+documents released SDK middleware wired through operator configuration and
+authenticated daemon requests, host-scoped progressive skills, bounded parsing,
+ordering, refusals and replay. The historical acceptance below remains the
+earlier increment's snapshot; generic skills/hooks are core requirements and now
+have this working bounded path. Their installation/improvement, general agent
+authoring, broader autonomous workflows and final platform integration remain
+unfinished. Native backend capabilities retain their separate native contracts.
+
 This is a working local bounded backend increment, based on candidate
 `6cb4cbbda7fd554af092e137e362e09588af3ac8`. No UI, merge, push, credentials,
 provider spend or remote service was authorized. Deterministic provider fakes

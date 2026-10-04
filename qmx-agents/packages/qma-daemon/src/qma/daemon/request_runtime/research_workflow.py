@@ -27,6 +27,7 @@ from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.knowledge.service import KnowledgeService
 from qmf.core import is_refusal
 
+from .agent_extensions import AgentExtensions
 from .contracts import (
     ProviderAdapter,
     ProviderCapabilities,
@@ -143,6 +144,7 @@ class ResearchWorkflowProvider:
         now: Callable[[], str],
         limits: LoopLimits | None = None,
         hooks: HookRegistry | None = None,
+        agent_extensions: AgentExtensions | None = None,
     ) -> None:
         if (
             provider.capabilities.execution_kind != "inference"
@@ -160,7 +162,9 @@ class ResearchWorkflowProvider:
         self.profile_tools = dict(profile_tools)
         self.now = now
         self.limits = limits or LoopLimits(max_model_calls=1, max_tool_calls=1)
+        self._explicit_limits = limits is not None
         self.hooks = hooks
+        self.agent_extensions = agent_extensions
         self.runtime: RequestRuntime | None = None
 
     @property
@@ -188,6 +192,17 @@ class ResearchWorkflowProvider:
         deadline = time.monotonic() + request.timeout_seconds
         records = JournalRecords(runtime.journal)
         definition_key = f"{self.specialist.specialist_id}:{self.specialist.version}"
+        selection = (
+            self.agent_extensions.select(
+                profile_id, row.value.spec.product_session_id, definition_key
+            )
+            if self.agent_extensions is not None
+            else None
+        )
+        extensions_enabled = bool(selection and (selection.sources or selection.middleware))
+        child_limits = (
+            LoopLimits() if extensions_enabled and not self._explicit_limits else self.limits
+        )
         definition = asdict(self.specialist)
         definition["allowed_tools"] = list(self.specialist.allowed_tools)
         known_definition = records.get("specialist", definition_key)
@@ -216,6 +231,9 @@ class ResearchWorkflowProvider:
             "provider": self.provider.capabilities.provider_id,
             "limits": asdict(self.limits),
         }
+        if self.agent_extensions is not None:
+            manifest["extensions"] = selection.binding() if selection is not None else {}
+            manifest["child_limits"] = asdict(child_limits)
         manifest = json.loads(json.dumps(manifest, sort_keys=True))
         prior_manifest = records.get("workflow", request.request_id)
         if prior_manifest is None:
@@ -300,7 +318,9 @@ class ResearchWorkflowProvider:
                 tools={},
                 profile_tools={profile_id: frozenset()},
                 now=self.now,
-                limits=self.limits,
+                limits=child_limits,
+                extensions=self.agent_extensions if extensions_enabled else None,
+                workflow_id=definition_key,
             )
             child.bind_runtime(runtime)
             emit(

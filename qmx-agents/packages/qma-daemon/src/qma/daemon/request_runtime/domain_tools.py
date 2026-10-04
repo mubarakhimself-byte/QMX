@@ -20,6 +20,7 @@ from qma.wire.invocation_envelope import ContributionRecord, InstanceRecord
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input
 
+from .agent_extensions import AgentExtensions
 from .contracts import (
     ProviderAdapter,
     ProviderEvent,
@@ -114,8 +115,10 @@ class _SessionScopedBinding:
         now: Callable[[], str],
         research_workflow: Mapping[str, object] | None = None,
         hooks: HookRegistry | None = None,
+        agent_extensions: AgentExtensions | None = None,
     ) -> None:
         self.hooks = hooks
+        self.agent_extensions = agent_extensions
         self.runtime = runtime
         self.provider = provider
         self.profile_tools = dict(profile_tools)
@@ -191,12 +194,31 @@ class _SessionScopedTools(_SessionScopedBinding):
         workflow_selected = bool(self.research_workflow) and spec.profile.profile_id in cast(
             "Sequence[str]", selected_profiles
         )
+        selection = (
+            self.agent_extensions.select(
+                spec.profile.profile_id, spec.product_session_id, "request"
+            )
+            if self.agent_extensions is not None
+            else None
+        )
+        extensions_enabled = bool(selection and (selection.sources or selection.middleware))
         if not self.profile_tools.get(spec.profile.profile_id) and not (
             workflow_selected and self.provider.capabilities.execution_kind == "inference"
         ):
             active = self.runtime.validate_active_request(request.request_id, now=self.now())
             if is_refusal(active):
                 raise ProviderError("context_changed", "Active request scope forbids disclosure")
+            if self.provider.capabilities.execution_kind == "inference" and extensions_enabled:
+                loop = ToolLoopProvider(
+                    self.provider,
+                    provider_id=self.capabilities.provider_id,
+                    tools={},
+                    profile_tools=self.profile_tools,
+                    now=self.now,
+                    extensions=self.agent_extensions,
+                )
+                loop.bind_runtime(self.runtime)
+                return loop.execute(request, emit, cancellation)
             return self.provider.execute(request, emit, cancellation)
         if workflow_selected and "research_browse" not in self.profile_tools.get(
             spec.profile.profile_id, frozenset()
@@ -234,6 +256,7 @@ class _SessionScopedTools(_SessionScopedBinding):
                 profile_tools=self.profile_tools,
                 now=self.now,
                 hooks=self.hooks,
+                agent_extensions=self.agent_extensions,
             )
             workflow.bind_runtime(self.runtime)
             return workflow.execute(request, emit, cancellation)
@@ -243,7 +266,10 @@ class _SessionScopedTools(_SessionScopedBinding):
             tools={"research_browse": binding},
             profile_tools=self.profile_tools,
             now=self.now,
-            limits=LoopLimits(max_model_calls=2, max_tool_calls=1),
+            limits=LoopLimits()
+            if extensions_enabled
+            else LoopLimits(max_model_calls=2, max_tool_calls=1),
+            extensions=self.agent_extensions if extensions_enabled else None,
         )
         loop.bind_runtime(self.runtime)
         return loop.execute(request, emit, cancellation)
@@ -307,6 +333,7 @@ def bind_daemon_tool_providers(
     now: Callable[[], str],
     research_workflow: Mapping[str, object] | None = None,
     hooks: HookRegistry | None = None,
+    agent_extensions: AgentExtensions | None = None,
 ) -> Result[Mapping[str, ProviderAdapter]]:
     """Install one trusted operation family while retaining configured identities.
 
@@ -323,7 +350,20 @@ def bind_daemon_tool_providers(
                     _SessionScopedNative
                     if isinstance(provider, NativeProviderConfiguration)
                     else _SessionScopedTools
-                )(runtime, provider, profile_tools, knowledge, "", "", (), target_resolver, now)
+                )(
+                    runtime,
+                    provider,
+                    profile_tools,
+                    knowledge,
+                    "",
+                    "",
+                    (),
+                    target_resolver,
+                    now,
+                    research_workflow,
+                    hooks,
+                    agent_extensions,
+                )
                 for name, provider in providers.items()
             }
         )
@@ -362,6 +402,7 @@ def bind_daemon_tool_providers(
                 now,
                 research_workflow,
                 hooks,
+                agent_extensions,
             )
             for name, provider in providers.items()
         }

@@ -185,6 +185,7 @@ from qma.daemon.plugins.pack_ui import (
     restore_plugin_install_records_projection,
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.request_runtime.agent_extensions import AgentExtensions
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
 from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
@@ -1082,6 +1083,7 @@ class DaemonProcess:
                     profile_tools=sdk.profile_tools,
                     research_browse=sdk.research_browse,
                     research_workflow=sdk.research_workflow,
+                    agent_extensions=sdk.agent_extensions,
                     instance_revisions=sdk.instance_revisions,
                     max_workers=sdk.max_workers,
                     max_inflight=sdk.max_inflight,
@@ -1196,6 +1198,7 @@ class DaemonProcess:
         profile_tools: Mapping[str, frozenset[str]] | None = None,
         research_browse: Mapping[str, object] | None = None,
         research_workflow: Mapping[str, object] | None = None,
+        agent_extensions: AgentExtensions | None = None,
         instance_revisions: Mapping[str, int] | None = None,
         max_workers: int = 2,
         max_inflight: int = 16,
@@ -1223,6 +1226,7 @@ class DaemonProcess:
                 target_resolver=self._agent_tool_target,
                 now=self._agent_request_now,
                 research_workflow=research_workflow,
+                agent_extensions=agent_extensions,
                 hooks=self._artifacts.hooks,
             )
             if is_refusal(wrapped):

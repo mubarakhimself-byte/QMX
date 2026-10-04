@@ -1,5 +1,10 @@
 # Bounded agent SDK request runtime
 
+The optional generic `agent_sdk.agent_extensions` startup configuration is
+documented in [SDK_SKILLS_HOOKS.md](SDK_SKILLS_HOOKS.md). It selects reviewed local
+skills and trusted released-SDK middleware for admitted inference profiles,
+sessions and workflows. Paired request parameters and QMX grants are unchanged.
+
 October 4: generic sequencing now uses released LangChain/LangGraph with durable
 checkpoints. See [mature runtime acceptance](MATURE_AGENT_RUNTIME.md) for research,
 scoped memory, explicit daemon resume, native-worker limits and source evidence.
