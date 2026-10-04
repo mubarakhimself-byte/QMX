@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('authoring', 'seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('authoring', 'qmn-seams', 'seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -28,6 +28,20 @@ $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'qmn-seams' {
+        $candidateTests = @(
+            'qmn/tests/test_qmn_deployment_reader.py',
+            'qmn/tests/test_qmn_deploy_config.py',
+            'qmn/tests/test_qmn_supervisor_process.py',
+            'qmn/tests/test_qmn_failures_gate.py',
+            'qmn/tests/test_qmn_hygiene.py',
+            'qmn/tests/test_qmn_conformance.py',
+            'qmn/tests/test_qmn_configured_frontier.py',
+            'qmn/tests/test_qmn_protection_market.py',
+            'qmn/tests/test_qmn_scaffold.py'
+        )
+        $candidatePytestOptions += @('--no-cov', '-m', 'not live')
+    }
     'authoring' {
         $candidateTests = @(
             'qmx-agents/packages/qma-daemon/tests/test_experiment_authoring_requests.py',
@@ -101,13 +115,22 @@ switch ($Suite) {
         $candidateTests = @('packages', 'tests')
         $candidatePytestOptions += @('--cov=packages/qma-core/src', '--cov=packages/qma-wire/src', '--cov=packages/qma-daemon/src', '--cov-branch', '--cov-fail-under=80', '--cov-report=term', ('--cov-report=json:' + (Join-Path $candidateEvidence 'coverage.json')))
     }
-    'qmn' { $candidateTests = @('qmn/tests') }
+    'qmn' {
+        $candidateTests = @('qmn/tests')
+        $candidatePytestOptions += @('-m', 'not live', '--cov=qmn/src/qmn', '--cov-branch', '--cov-fail-under=80', '--cov-report=term', ('--cov-report=json:' + (Join-Path $candidateEvidence 'coverage.json')))
+    }
     'data-qmb' { $candidateTests = @('packages/qmf-data/tests', 'qmb/tests') }
 }
 Push-Location -LiteralPath $candidateCwd
 try {
-    $candidateIdentity = [ordered]@{ suite = $Suite; head = (& git rev-parse HEAD); status = @(& git status --short); script_sha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash; python = $PythonExe; scripts_path = $candidateScripts; qmb_entrypoint = $candidateQmb; dependencies = $ExtraDependencyPath; pythonpath = $env:PYTHONPATH; cwd = $candidateCwd; arguments = @('-m', 'pytest') + $candidateTests + $candidatePytestOptions }
+    $candidateHead = & git -c "safe.directory=$candidateRepo" rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Candidate identity is unavailable; no test acceptance without provenance.' }
+    $candidateStatus = @(& git -c "safe.directory=$candidateRepo" status --short)
+    if ($LASTEXITCODE -ne 0) { throw 'Candidate dirty-state identity is unavailable.' }
+    $candidateIdentity = [ordered]@{ suite = $Suite; head = $candidateHead; status = $candidateStatus; script_sha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash; python = $PythonExe; scripts_path = $candidateScripts; qmb_entrypoint = $candidateQmb; dependencies = $ExtraDependencyPath; pythonpath = $env:PYTHONPATH; cwd = $candidateCwd; arguments = @('-m', 'pytest') + $candidateTests + $candidatePytestOptions }
     $candidateIdentity | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $candidateEvidence 'command.json') -Encoding utf8
+    & $PythonExe (Join-Path $candidateRepo 'tools/backend-source-provenance.py') $candidateRepo (Join-Path $candidateEvidence 'source-provenance.json') *> (Join-Path $candidateEvidence 'source-provenance.txt')
+    if ($LASTEXITCODE -ne 0) { throw "Source provenance failed; inspect $candidateEvidence/source-provenance.txt" }
     & $PythonExe -m pytest @candidateTests @candidatePytestOptions *> (Join-Path $candidateEvidence 'pytest.txt')
     $candidateExit = $LASTEXITCODE
     $candidateExit | Set-Content (Join-Path $candidateEvidence 'pytest.exit')

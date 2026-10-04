@@ -109,3 +109,40 @@ typing lane's nine files and QMB/QMN runtime lanes remain disjoint.
   QMB-owned CLI bridge to `project_operator_replay`. `run_fp1` must not masquerade
   as an ExperimentSpec fingerprint; a read grant must not publish ledger evidence.
   Authenticated data→backtest→projection awaits this bridge and QMB runtime repairs.
+
+## Reviewed typing and QMN successor composition
+
+- Authoring checkpoint is committed as `c149c1b9633d4f3a75de12cdff99b243ac845449`.
+- All four reviewed QMA typing commits applied through `2e1fd143`; all eleven QMN
+  runtime commits plus mandatory independently accepted containment repair applied
+  through `11e77c4ea55dba7726aa2ef3864b17cf637a30b1`. Sixteen stable patch IDs match;
+  all21lane-owned files exactly match their final reviewed trees. Detailed map:
+  `backend-reviewed-successor-series-audit-draft.json`. No conflicts or other lane
+  workingtrees were imported.
+- Combined strict QMA scan:604files, **zero errors/warnings/information**,40.477s
+  (`types-authoring-typing-composed.json`). Broad former68errors are resolved.
+- Combined module seam gate: **84passed**, no skips/failures,181.61s,
+  `seams-bbcac23487c84ba680bdc68ad4772e8a`. Uses a new task-12 isolated Python
+  environment, local offline editable QMB CLI install and borrowed third-party
+  distributions. Parent and child with PYTHONPATH stripped resolve only current
+  candidate QMA/QMF/QMB/QMN sources (`combined-runtime-env-provenance.json`). This
+  is not a frozen dependency installation. No original environment was changed.
+- QMN affected diagnostic under sandbox:12failed/59passed/3skipped/1deselected;
+  actual ancestor metadata WinError5 blocks native reads. Same source under normal
+  user token:71passed/3existing platform skips/1live deselected. This latter runner
+  lost Git HEAD because of differing ownership and is retained as diagnostic only,
+  not canonical acceptance. Fixed runner uses a command-local exact safe.directory,
+  requires valid HEAD/status, and proves stripped-child source provenance before
+  tests. Full appropriate component checks are next; unchanged coverage floors.
+- QMB source `8d76250280b4566cb4fe61a3528f3d7eccc4de5c` is held, not applied.
+  Its self-review and1460pass/19skip/1Studyfailure do not establish independent
+  acceptance. Separate composition review reproduced a pre-leaf Windows root
+  rename containment gap: read and acknowledged write use a moved-outside root.
+  Exact proof `evidence/qmb-native-independent/probe-preleaf.txt`, with additional
+  normal-token reproduction. Attribute-only anchors are insufficient. Adding list
+  access fences the rename under normal host token but exposes a write-sharing
+  seam; a complete repair and independent sign-off remain necessary.
+- Study additionally needs exclusive AlternativeStudy selection, delegated
+  optimize.run envelope handling and shape-correct verified seven-field result
+  parsing. Incomplete verification must never execute trials or mint a witness.
+  Details retained in the source lane's `qmb-study-ingress-blocker-draft.md`.
