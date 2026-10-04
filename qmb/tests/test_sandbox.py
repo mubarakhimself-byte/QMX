@@ -177,7 +177,9 @@ def test_v1_enforcement_identity_names_the_honest_scope() -> None:
 
 def test_runner_uses_stdlib_subprocess_and_not_os_confinement() -> None:
     imported: set[str] = set()
-    for path in sorted(_HOST.glob("*.py")):
+    # The no-OS-confinement rule is for the Layer-2 runner/worker. Filesystem
+    # no-follow adapters elsewhere in host are independent of bot confinement.
+    for path in (_HOST / "runner.py", _HOST / "worker.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
