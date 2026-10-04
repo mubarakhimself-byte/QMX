@@ -109,6 +109,17 @@ class ScopedResearchMemory:
             ):
                 raise ProviderError("memory_denied", "Legacy memory is outside current host pins")
             self.validate()
+            expires = candidate.content.get("expires_at_ns")
+            if expires is not None:
+                if type(expires) is not int or expires <= candidate.occurrence_time:
+                    raise ProviderError("storage_failure", "Invalid legacy memory expiration")
+                now = self.provider.now_ns()
+                if type(now) is not int:
+                    raise ProviderError(
+                        "memory_denied", "Host memory clock must supply integer nanoseconds"
+                    )
+                if now >= expires:
+                    return None
             return dict(candidate.content)
 
     def retain(

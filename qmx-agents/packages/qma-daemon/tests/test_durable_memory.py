@@ -608,3 +608,46 @@ def test_legacy_summary_with_wrong_source_pin_refuses(bound: Bound) -> None:
     m = ScopedResearchMemory(provider.records, scope, host.validate, now_ns=lambda: host.now)
     with pytest.raises(ProviderError, match="outside current host pins"):
         m.recall()
+
+
+def test_legacy_summary_deadline_is_read_only_and_survives_restart(tmp_path: Path) -> None:
+    root = tmp_path / "legacy-deadline"
+    host = Host()
+    scope = ResearchMemoryScope(
+        "owner",
+        "app:one",
+        "reader",
+        SOURCE.authority_binding,
+        SOURCE.source_id,
+        SOURCE.snapshot_ref,
+        SOURCE.locators,
+    )
+    substrate, journal = open_journal(root)
+    try:
+        records = JournalRecords(journal)
+        old = replace(
+            candidate(),
+            scope=scope.namespace,
+            content={"summary": "legacy deadline", "expires_at_ns": 150},
+        ).with_admission(0.5)
+        records.put("memory", scope.namespace, dict(old.to_payload()))
+        memory = ScopedResearchMemory(records, scope, host.validate, now_ns=lambda: host.now)
+        before = len(value(journal.read_events()))
+        assert memory.recall() == {"summary": "legacy deadline", "expires_at_ns": 150}
+        host.now = 150
+        assert memory.recall() is None
+        assert len(value(journal.read_events())) == before
+    finally:
+        journal.close()
+        substrate.close()
+    substrate, journal = open_journal(root)
+    try:
+        memory = ScopedResearchMemory(
+            JournalRecords(journal), scope, host.validate, now_ns=lambda: host.now
+        )
+        before = len(value(journal.read_events()))
+        assert memory.recall() is None
+        assert len(value(journal.read_events())) == before
+    finally:
+        journal.close()
+        substrate.close()
