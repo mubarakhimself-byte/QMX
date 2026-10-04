@@ -20,7 +20,8 @@ The session transcript is `C:\Users\Mubarak\.claude\projects\C--Users-Mubarak-De
 
 ## Where the UI stands
 
-- **Screens:** Lab (Strategies and Pods benches), Portfolio (pods, live, road to live, kill grid), Library (shelves, where-used, templates), and Copilot (sessions, sub-agents, panels the copilot builds, a right panel with activity, diff, terminal and browser).
-- **Still to do:** Home rethink, Settings depth, mini apps, and the start-up screen.
+- **Screens:** Lab (Strategies and Pods benches), Portfolio (pods, live, road to live, kill grid), Library (shelves, where-used, templates), and Copilot (the desk: errands, sub-agents, panels the copilot builds, a drawer with activity, diff, terminal and browser).
+- **Built, awaiting operator review:** Home (one tile board, Needs you), the Copilot "desk" (errands, receipts, drawer), and Settings (exchanges, servers, providers, MCP, copilots, mini apps, safety). Text base is 17px with a Text size setting.
+- **Next:** Mini apps, then the start-up screen and day one with no demo data. The copilot terminal and browser are still demo (echo and iframe).
 - **Data:** everything runs on labelled demo data. Every value needs a backend source before it ships.
 - **Previewing:** run `pnpm build`, then `pnpm preview` (port 4173) in `apps/qmx-ui`.

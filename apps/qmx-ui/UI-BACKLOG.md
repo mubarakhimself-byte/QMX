@@ -9,6 +9,30 @@ Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each w
 
 ---
 
+## Operator rulings 2026-10-04 (after Copilot pass 2)
+
+Added from the resume brief. Later rulings win over older notes below.
+
+- **Our own design, not borrowed.** "have our own spin... not borrow it from other applications... Not borrowing from anyone." He also said there was "literally no intention behind the design". Inspiration is allowed ("where you want inspiration, you can look for it"), copying is not. Other apps may still be studied for mechanics (how plugins work, how the copilot adds UI), not for look or interaction.
+- **Bigger fonts, less compact, as a standing rule.** Base text is 17px. Settings, Appearance has a Text size choice: Standard, Large, Larger. No fixed pixel font sizes: use rem so the choice scales everything. Judge spacing at full-screen desktop (1920 to 2560). He dislikes both unused space and cramming.
+- **Status of the rebuilds.** Home (7fa36fb5), the Copilot "desk" (6b4d247a) and Settings (56036fcc, fixed up in 8ef175ad) are built and committed. None has been reviewed by him. Home and the desk skipped the options-then-pick step.
+
+Not in the backlog before this; all open:
+- [ ] 1. Own spin, no borrowed references, and "no intention behind the design" (the rule above). The old StrategyQuant "borrow" section is a reference list only.
+- [ ] 2. The desk redesign itself: awaiting his review. Present it first (`pnpm build`, then `pnpm preview` on port 4173; stop the stale server first).
+- [ ] 3. Bigger fonts rule. Fixed-pixel text sizes were replaced by rem in 8ef175ad; check any that remain and check the Text size setting at every width.
+- [ ] 4. Mini apps (details in handoff/MINI-APPS-AND-COPILOT-CONTRACT.md): a road to live like paper trading, "QMX's own CI"; approval that depends on the type; a container or sandbox per mini app (Docker or similar) with circuit breakers, logging, monitoring and observability; full access inside the box; a mode where the copilot builds overnight; one session crossing modes (portfolio, Lab, mini app); mini apps feeding other mini apps and providing widgets or panels.
+- [ ] 5. Opus 5.5 as the copilot's daily-driver model (2026-10-03). It shows only in Settings demo text.
+- [ ] 6. Idea: "maybe make this open source and free for everyone" (2026-10-03). Not UI work; recorded so it is not lost.
+- [ ] 7. Desktop start-up in detail: "QMX then... the world is filling slowly by slowly based off the theme." The start-up screen is in the backlog only loosely.
+- [ ] 8. Background art "not just lines", and a generator that changes the wallpaper every so often.
+- [ ] 9. Learning from papers as diagrams and video ("turning the paper... into a video", Karpathy post). Only "Explain it as" exists.
+- [ ] 10. Monitoring as a workflow or cron the copilot sets up. Open question: where does it live, is it a mini app?
+- [ ] Real terminal and real browser in the copilot work area. Today the terminal only echoes typed commands with a demo note, and the browser is an iframe that most sites refuse. Do not tick until both are real.
+- [ ] The disliked new-session greeting: 8ef175ad removed the greeting from the new-errand screen; confirm with him that `HowDoI` is acceptable as it now stands.
+
+---
+
 ## Session review (2026-10-04) — read this first
 
 An independent review re-read every message from 2026-10-01 to 2026-10-03 and checked the code (scratchpad `session-review.md`). Verdict on Copilot pass 1: a good-looking storyboard of one scripted conversation, not a working screen; it skipped the agreed method (study, options, you pick, click-through). Ticks above were corrected.
@@ -16,7 +40,7 @@ An independent review re-read every message from 2026-10-01 to 2026-10-03 and ch
 New facts from the operator (2026-10-04):
 - The agentic layer moved to **LangChain and LangGraph**; the own agent SDK is dropped.
 - Two SDKs: the **agent SDK** and the **mini-app SDK** (for mini apps and widgets). The mini-app SDK's **UI part is undecided**; research how others do it before designing.
-- The main copilot should be like the **Codex, ChatGPT and Claude desktop apps**, including a real terminal. Look at those apps, don't design from memory. Permissions are parked for now.
+- The main copilot should be like the **Codex, ChatGPT and Claude desktop apps**, including a real terminal. Look at those apps, don't design from memory. SUPERSEDED for look and interaction by the own-design ruling above (2026-10-04, 09:50); studying their mechanics is still fine. Permissions are parked for now.
 
 Missing from this backlog until now:
 - [ ] Demo copilot can receive a message and answer (a scripted responder that streams blocks).
@@ -52,7 +76,7 @@ Copilot (next pass; operator: "needs a rethink"):
 - [x] Rethink "aim this message at" (the target menu). Built as mode, reach and who answers; the operator parked permissions on 2026-10-04, so revisit in Copilot pass 2.
 - [ ] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot. PARTLY: groups exist; side-copilot sessions are a separate list and the hand-off carries nothing.
 - [ ] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation. PARTLY: one scripted sample; you cannot send a message.
-- [ ] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app. PARTLY: shown in one sample; no skills anywhere; browser empty, terminal plain text, every artifact previews the same numbers, Stop and Save are toasts.
+- [ ] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app (SUPERSEDED for visual and interaction design by the own-design ruling of 2026-10-04; mechanics may still be studied). PARTLY: shown in one sample; no skills anywhere; browser empty, terminal plain text, every artifact previews the same numbers, Stop and Save are toasts.
 - [ ] Terminal (look at shadcn's terminal component) and browser integration.
 - [ ] Rules for what the copilot builds in the UI (see "Copilot pass: rules" above), plus: new things load in place without restarting the app; heavy things load in the background.
 - [ ] The copilot designs components from shadcn (registry) or its own design style.
@@ -131,6 +155,8 @@ UNCLEAR
 
 ## Copilot (main copilot chat)
 
+Redesigned as "the desk" in 6b4d247a (errands, one at a time, a "What it did" receipt, the decision where you type, a drawer for helpers, reports, changes, terminal and browser). 8ef175ad added an empty new-errand screen with no greeting (errands waiting on you, then templates); blank errands are hidden and New errand reuses a blank one. Built fast with no options step; awaiting his review. The list below was written against passes 1 and 2 and is not updated for the desk. Terminal and browser stay unticked: they are a demo echo and an iframe only.
+
 NOT DONE
 - [NOT DONE] Session column on the left must collapse by itself while keeping Browser/Terminal/Diff open (today only Focus mode hides it, and Focus also hides the work area). — (2026-10-02, "I want it to be able to collapse on its own") — routes/copilot/+page.svelte:178-227.
 - [NOT DONE] Sub-agent preview in the main copilot. — (2026-10-02, "You haven't also done the sub-agents preview") — Sub-agents appear only in the Lab Agents panel (lib/lab/panels/AgentsPanel.svelte) and Home Agents widget; nothing in routes/copilot.
@@ -172,21 +198,23 @@ SUPERSEDED
 
 ## Home
 
+Rebuilt in 7fa36fb5: one tile board, tabs Today, Markets and Research plus your own saved tabs, an editable ticker, a bell and a "Needs you" panel (copilot questions, promotions to sign, paper runs ready for live, raised kill switches, failed runs), Pods and News reused from Portfolio, a screener drawn from a panel description. Items marked BUILT below are addressed by that rebuild but he has not seen it; do not tick them. The lines under them still describe the pre-rebuild code. Still open: many parallel jobs in "while you were away", news with room, a Markets view for one broker, templates on Home, a richer approval flow, and checking the rebuild against the own-spin and bigger-text rulings.
+
 NOT DONE
-- [NOT DONE] Add your own tabs so Home is your dashboard. — (2026-10-02, "I want to be able to add new tabs") — Views fixed to Today, Markets, Agents (routes/home/+page.svelte:225-243); WidgetBoard has no "add view" (lib/workbench/board.svelte.ts).
-- [NOT DONE] Notifications area at the top for things needing attention. — (2026-10-02, "give it some spacing on top") — None; approvals live in a widget only.
+- [BUILT, awaiting operator review] Add your own tabs so Home is your dashboard. — (2026-10-02, "I want to be able to add new tabs") — Views fixed to Today, Markets, Agents (routes/home/+page.svelte:225-243); WidgetBoard has no "add view" (lib/workbench/board.svelte.ts).
+- [BUILT, awaiting operator review] Notifications area at the top for things needing attention. — (2026-10-02, "give it some spacing on top") — None; approvals live in a widget only.
 - [NOT DONE] Drop the word "Home" in the header, keep the ticker. — (2026-10-02, "we don't need this home word") — Header still prints it (lib/workbench/MiniAppShell.svelte:102; routes/home/+page.svelte:320).
-- [NOT DONE] Home tabs are previews that link through to the full pages (Markets to Portfolio, Agents, main Copilot). — (2026-10-02, "markets ... can connect the portfolio page agents main co-pilot") — Only the brief cards and pipeline cards link out.
+- [PARTLY BUILT, awaiting operator review] Home tabs are previews that link through to the full pages (Markets to Portfolio, Agents, main Copilot). — (2026-10-02, "markets ... can connect the portfolio page agents main co-pilot") — Only the brief cards and pipeline cards link out.
 - [NOT DONE] "While you were away" must carry many parallel jobs (for example nine models training on a GPU provider). — (2026-10-02, "this thing will not give me enough information") — Three fixed brief cards and four jobs (routes/home/+page.svelte:61-105).
-- [NOT DONE] Minimising a widget must free its space (it docks at the bottom, others fill up). — (2026-10-02, "protection goes all the way to the bottom and the top fills up") — Done in Lab/Portfolio tiling, not on Home, which still uses the older grid where a minimised card only shrinks in place (lib/workbench/MiniAppShell.svelte:160-169).
-- [NOT DONE] Tiling quality for the Markets view. — (2026-10-02, "the tiling is very poor") — Same old grid; no tiling engine on Home.
-- [NOT DONE] Home on spot crypto with many accounts (Binance, Coinbase, Bybit) and a Markets view for one specific broker. — (2026-10-02, "crypto can have more than one broker") — Home still shows FX demo data, "Paper · 3 books", and promotions to "book FX-P" (routes/home/+page.svelte:21-47, :292); ledger says "Home still FX: next".
+- [BUILT, awaiting operator review] Minimising a widget must free its space (it docks at the bottom, others fill up). — (2026-10-02, "protection goes all the way to the bottom and the top fills up") — Done in Lab/Portfolio tiling, not on Home, which still uses the older grid where a minimised card only shrinks in place (lib/workbench/MiniAppShell.svelte:160-169).
+- [BUILT, awaiting operator review] Tiling quality for the Markets view. — (2026-10-02, "the tiling is very poor") — Same old grid; no tiling engine on Home.
+- [BUILT, awaiting operator review] Home on spot crypto with many accounts (Binance, Coinbase, Bybit) and a Markets view for one specific broker. — (2026-10-02, "crypto can have more than one broker") — Home still shows FX demo data, "Paper · 3 books", and promotions to "book FX-P" (routes/home/+page.svelte:21-47, :292); ledger says "Home still FX: next".
 - [NOT DONE] Agents view and News widget use their space (news too thin, empty space below). — (2026-10-02, "why would news be this thin") — Same widgets as round 5; no change recorded.
 - [NOT DONE] Richer approval flow in the review dialog. — (2026-10-01, "I don't know if I can do better") — Open in backlog.
 - [NOT DONE] Templates on Home. — (2026-10-03, "even the home section") — None.
 
 PARTLY
-- [PARTLY] Rename Books to Pods everywhere. — (2026-10-03, "let's call them pods") — Done in Portfolio and Lab; Home, Library detail and Settings still say books.
+- [PARTLY] Rename Books to Pods everywhere (the Home rebuild reuses Portfolio's pod panels; Library detail and Settings still need a check). — (2026-10-03, "let's call them pods") — Done in Portfolio and Lab; Home, Library detail and Settings still say books.
 
 DONE
 - [DONE] Remove the sidebar from Home. — (2026-10-01, "remove that bloody sidebar on the home page") — Home uses no sidebar (routes/home/+page.svelte:320).
@@ -205,12 +233,14 @@ UNCLEAR
 
 ## Settings
 
+Regrouped in 56036fcc into Exchanges, Servers, Connections (providers, MCP), Copilots, Mini apps and Safety sections. It was committed without a visual check; 8ef175ad then checked it with screenshots at 1600 and 1280 wide (no overflow, no console errors) and put the cards on a solid backing over the art. He has not reviewed it. Items marked BUILT are addressed but not ticked. Still open: Data & sources (CSV or Excel upload, cron, scraping), real API keys (OS credential store only), per-mini-app depth, the storyboard reference, remaining design styles, the art generator.
+
 NOT DONE
-- [NOT DONE] Every tab needs depth and things to do; fewer words, nothing only readable. — (2026-10-02, "I can't click a thing") — General tab is a static readiness list with disabled Pair/Check buttons (routes/settings/+page.svelte:207-262).
-- [NOT DONE] Each tab gets its own layout for its job (he liked the pill tabs, not the same card everywhere). — (2026-10-02, "you didn't have to design everything every section like that") — Same card pattern on all tabs.
-- [NOT DONE] Trading nodes tab: a node is a VPS; show server, provider, region, IP, latency, status, who uses it; kill it from here; paper and live may not be separate nodes. — (2026-10-02, "who's the provider the latency is it active") — Still a static two-row table "Paper node / Live node", "Not connected", column "Books" (routes/settings/+page.svelte, nodes tab). The actions exist in Portfolio Live (lib/portfolio/panels/NodesPanel.svelte, ServersStrip.svelte) but not here.
+- [PARTLY BUILT, awaiting operator review] Every tab needs depth and things to do; fewer words, nothing only readable. — (2026-10-02, "I can't click a thing") — General tab is a static readiness list with disabled Pair/Check buttons (routes/settings/+page.svelte:207-262).
+- [PARTLY BUILT, awaiting operator review] Each tab gets its own layout for its job (he liked the pill tabs, not the same card everywhere). — (2026-10-02, "you didn't have to design everything every section like that") — Same card pattern on all tabs.
+- [BUILT, awaiting operator review] Trading nodes tab (now a Servers section): a node is a VPS; show server, provider, region, IP, latency, status, who uses it; kill it from here; paper and live may not be separate nodes. — (2026-10-02, "who's the provider the latency is it active") — Still a static two-row table "Paper node / Live node", "Not connected", column "Books" (routes/settings/+page.svelte, nodes tab). The actions exist in Portfolio Live (lib/portfolio/panels/NodesPanel.svelte, ServersStrip.svelte) but not here.
 - [NOT DONE] Data & sources: add new sources (Excel/CSV upload, API providers), keys, scraping workflows, cron schedules, use by mini apps. — (2026-10-02, "I can't add data I can't add anything") — Only six disabled switches (routes/settings/+page.svelte, data tab).
-- [NOT DONE] Models/providers tab will change (Claude CLI proxy for model providers). — (2026-10-02, "we are going to use something claude CLI proxy") — Static three-row list.
+- [BUILT, awaiting operator review] Models/providers tab will change (Claude CLI proxy for model providers). 8ef175ad adds provider routes: Claude through your plan (CLI), Anthropic API, OpenAI, Gemini, OpenRouter, local. Routes are demo; nothing calls a provider. — (2026-10-02, "we are going to use something claude CLI proxy") — Static three-row list.
 - [NOT DONE] Appearance text contradicts the 2026-10-03 ruling: it still says trading screens never show the background. — (2026-10-03, "I don't think the themes are removed. I think keep them") — routes/settings/+page.svelte Appearance card. Fix the wording.
 - [NOT DONE] Background art generator (new wallpaper every so often). — (2026-10-03, "changing the background art generation of its own") — Rotation among saved/built-in variants exists (workbench.artRotate); no generator.
 - [NOT DONE] Remaining design styles he asked about (neumorphism, claymorphism, skeuomorphism, minimalism). — (2026-10-03, "what do you think is viable for us here") — Styles offered: Glass, Liquid glass, Solid, Brutalist (lib/workbench/look.ts:9-30).
