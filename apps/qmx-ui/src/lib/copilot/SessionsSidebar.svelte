@@ -53,9 +53,16 @@
     done: { dot: "bg-muted-foreground/40", text: "" },
   };
   const q = $derived(query.trim().toLowerCase());
+  // Sub-agent sessions sit under their parent, not in the groups.
   const shown = $derived(
-    sessions.filter((s) => !q || s.title.toLowerCase().includes(q)),
+    sessions.filter(
+      (s) => !s.parent && (!q || s.title.toLowerCase().includes(q)),
+    ),
   );
+  const activeParent = $derived(
+    sessions.find((s) => s.id === active)?.parent ?? null,
+  );
+  const kids = (id: string) => sessions.filter((s) => s.parent === id);
   const live = $derived(shown.filter((s) => s.status !== "done"));
   const groups = $derived([
     {
@@ -89,7 +96,9 @@
       <Icon class="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
       <span class="min-w-0 flex-1">
         <span class="block truncate text-sm">{s.title}</span>
-        <span class="text-muted-foreground flex items-center gap-1.5 text-xs">
+        <span
+          class="text-muted-foreground flex items-center gap-1.5 text-[13px]"
+        >
           <span class={cn("size-1.5 rounded-full", STATUS[s.status].dot)}
           ></span>
           {STATUS[s.status].text || s.age}{#if s.status !== "done"}
@@ -98,6 +107,31 @@
         </span>
       </span>
     </button>
+    {#if kids(s.id).length && (active === s.id || activeParent === s.id)}
+      <ul class="border-border ml-4 border-l pl-2">
+        {#each kids(s.id) as k (k.id)}
+          <li>
+            <button
+              type="button"
+              class={cn(
+                "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px]",
+                active === k.id && "bg-muted",
+              )}
+              aria-current={active === k.id ? "true" : undefined}
+              onclick={() => onopen(k.id)}
+            >
+              <span
+                class={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  STATUS[k.status].dot,
+                )}
+              ></span>
+              <span class="min-w-0 flex-1 truncate">{k.title}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </li>
 {/snippet}
 
@@ -119,7 +153,7 @@
   <div class="min-h-0 flex-1 overflow-auto">
     {#if live.length}
       <div class="bg-muted/25 mb-2 rounded-lg p-1">
-        <p class="text-muted-foreground px-1 py-1 text-xs font-semibold">
+        <p class="text-muted-foreground px-1 py-1 text-[13px] font-semibold">
           Going on now
         </p>
         <ul>
@@ -132,7 +166,7 @@
       <div class="mb-1">
         <button
           type="button"
-          class="text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 px-1 py-1.5 text-xs font-semibold"
+          class="text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 px-1 py-1.5 text-[13px] font-semibold"
           aria-expanded={!shut}
           onclick={() =>
             (folded = shut

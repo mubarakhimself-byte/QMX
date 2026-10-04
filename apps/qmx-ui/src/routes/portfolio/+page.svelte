@@ -27,10 +27,7 @@
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { PORTFOLIO_PANELS } from "$lib/portfolio/catalog";
   import { portfolio } from "$lib/portfolio/portfolio.svelte";
-  import {
-    PORTFOLIO_CONTEXT,
-    PORTFOLIO_SESSIONS,
-  } from "$lib/portfolio/copilot";
+  import { PORTFOLIO_CONTEXT } from "$lib/portfolio/copilot";
   import { MODE_BORDER } from "$lib/portfolio/bits";
   import TemplatesDialog from "$lib/portfolio/TemplatesDialog.svelte";
   import ServersStrip from "$lib/portfolio/ServersStrip.svelte";
@@ -246,7 +243,7 @@
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={PORTFOLIO_CONTEXT}
-          sessions={PORTFOLIO_SESSIONS}
+          origin="Portfolio"
           starters={[
             "Let the Bybit account take on Alt momentum and grow faster",
             "Why is SOL near its cap in Alt momentum?",

@@ -54,6 +54,8 @@ import Swords from "@lucide/svelte/icons/swords";
 import Wallet from "@lucide/svelte/icons/wallet";
 import Radio from "@lucide/svelte/icons/radio";
 import Rocket from "@lucide/svelte/icons/rocket";
+import Pin from "@lucide/svelte/icons/pin";
+import PinnedPanel from "./panels/PinnedPanel.svelte";
 
 import Layers from "@lucide/svelte/icons/layers";
 
@@ -221,5 +223,17 @@ export const LAB_PANELS: Record<string, LabPanel> = {
     icon: Rocket,
     note: "Checks before promotion",
     view: GraduatePanel,
+  },
+  logs: {
+    title: "Log",
+    icon: ScrollText,
+    note: "Output of the selected run",
+    view: LogsPanel,
+  },
+  pinned: {
+    title: "Pinned by the copilot",
+    icon: Pin,
+    note: "A panel the copilot built from a description",
+    view: PinnedPanel,
   },
 };

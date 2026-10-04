@@ -26,6 +26,8 @@
     size = "md",
     context = MAIN_CONTEXT,
     seed = "",
+    onsend,
+    busy = false,
   }: {
     placeholder?: string;
     label?: string;
@@ -37,6 +39,10 @@
     context?: CopilotContext;
     /** Text placed in the box when a suggestion is picked. */
     seed?: string;
+    /** When set, the surface handles sending itself (the demo responder, or the daemon). */
+    onsend?: (text: string, refs: string[]) => void;
+    /** A reply is streaming; sending waits. */
+    busy?: boolean;
   } = $props();
 
   let draft = $state("");
@@ -45,7 +51,14 @@
     if (seed) draft = seed;
   });
   // Send goes through dispatchChat once a transport is bound; never faked.
-  const online = $derived(workbench.connection === "connected");
+  const online = $derived(workbench.connection === "connected" || !!onsend);
+  function submit() {
+    const text = draft.trim();
+    if (!text || !onsend || busy) return;
+    onsend(text, [...refs]);
+    draft = "";
+    for (const r of refs) onremoveref?.(r);
+  }
   const model = $derived(
     MODELS.find((m) => m.id === workbench.model) ?? MODELS[0],
   );
@@ -87,7 +100,10 @@
 
 <form
   class="surface focus-within:border-ring/50 flex flex-col rounded-xl transition-colors"
-  onsubmit={(e) => e.preventDefault()}
+  onsubmit={(e) => {
+    e.preventDefault();
+    submit();
+  }}
 >
   {#if refs.length}
     <ul class="flex flex-wrap gap-1.5 px-3 pt-3" aria-label="Context">
@@ -135,7 +151,10 @@
     {placeholder}
     onkeydown={(e) => {
       // Enter sends, Shift+Enter adds a line (send is gated while offline).
-      if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
     }}
     class={cn(
       // Grows with its content up to a cap, then scrolls; the form owns focus styling.
@@ -310,7 +329,7 @@
         size="icon-sm"
         aria-label={online ? "Send" : "Send (needs the daemon)"}
         title={online ? "Send" : "Sending needs a connection to the QMX daemon"}
-        disabled={!online || !draft.trim()}
+        disabled={!online || !draft.trim() || busy}
       >
         <ArrowUp />
       </Button>

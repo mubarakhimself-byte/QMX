@@ -31,7 +31,7 @@
   import { lab } from "$lib/lab/lab.svelte";
   import { ASSETS, ENVIRONMENTS, activity } from "$lib/lab/demo";
   import EnvChip from "$lib/lab/EnvChip.svelte";
-  import { LAB_CONTEXT, LAB_SESSIONS } from "$lib/lab/copilot";
+  import { LAB_CONTEXT } from "$lib/lab/copilot";
   import StartDialog from "$lib/lab/StartDialog.svelte";
   import MachinePicker from "$lib/lab/MachinePicker.svelte";
   import MachineEmpty from "$lib/lab/MachineEmpty.svelte";
@@ -293,7 +293,7 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-64">
-          {#each Object.entries(LAB_PANELS) as [id, p] (id)}
+          {#each Object.entries(LAB_PANELS).filter(([id]) => id !== "pinned") as [id, p] (id)}
             <DropdownMenu.Item onclick={() => addPanel(id)}>
               <p.icon />
               <span class="flex flex-col">
@@ -344,7 +344,7 @@
         >
           {#snippet panel(p)}
             {@const View = LAB_PANELS[p.panel].view}
-            <View link={p.link} />
+            <View link={p.link} tile={p.id} />
           {/snippet}
         </TileBoard>
       {/if}
@@ -366,7 +366,7 @@
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={LAB_CONTEXT}
-          sessions={LAB_SESSIONS}
+          origin="Lab"
           starters={lab.bench === "pods"
             ? [
                 `Why did ${pod.name} refuse the AVAX entry this morning?`,

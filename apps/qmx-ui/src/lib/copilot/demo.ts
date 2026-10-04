@@ -6,6 +6,7 @@
  */
 import { DEMO_ENTITIES } from "$lib/demo/assets";
 import type { Entity } from "$lib/qmx/entities";
+import { SAMPLE_PANEL, type PanelSpec } from "$lib/sdk/spec";
 
 export type Origin = "Main" | "Lab" | "Portfolio" | "Library" | "Mini apps";
 export type SessionStatus = "running" | "waiting" | "done";
@@ -19,12 +20,20 @@ export type Session = {
   age: string;
   agents?: number;
   pinned?: boolean;
+  /** Sub-agent sessions point at the session that started them. */
+  parent?: string;
 };
 
 export type StepState = "done" | "running" | "waiting" | "scheduled";
 export type Block =
   | { kind: "user"; text: string; attached?: string[] }
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; demo?: boolean }
+  | {
+      kind: "panel";
+      spec: PanelSpec;
+      /** draft until you keep, discard or pin it */
+      state: "draft" | "kept" | "discarded" | "pinned";
+    }
   | {
       kind: "plan";
       title: string;
@@ -128,6 +137,58 @@ export const SESSIONS: Session[] = [
     status: "done",
     age: "Sep 30",
   },
+  {
+    id: "lab-sweep",
+    title: "Sweep the top coins on 1h and 4h",
+    origin: "Lab",
+    status: "done",
+    age: "Today",
+  },
+  {
+    id: "lab-import",
+    title: "Import the vol forecaster",
+    origin: "Lab",
+    status: "done",
+    age: "Yesterday",
+  },
+  {
+    id: "pf-bybit",
+    title: "Let Bybit take on Alt momentum",
+    origin: "Portfolio",
+    status: "done",
+    age: "Today",
+  },
+  {
+    id: "pf-volpod",
+    title: "Bring the vol-target pod from the Lab",
+    origin: "Portfolio",
+    status: "done",
+    age: "Yesterday",
+  },
+  {
+    id: "weekend/tester",
+    title: "Tester: replays, stress, head to head",
+    origin: "Main",
+    status: "running",
+    age: "2 days",
+    parent: "weekend",
+  },
+  {
+    id: "weekend/builder",
+    title: "Builder: writes the pod's blocks",
+    origin: "Main",
+    status: "done",
+    age: "2 days",
+    parent: "weekend",
+  },
+  {
+    id: "weekend/reader",
+    title: "Researcher: weekend liquidity",
+    origin: "Main",
+    status: "done",
+    age: "2 days",
+    parent: "weekend",
+  },
 ];
 
 const breakout = DEMO_ENTITIES.find((e) => e.id === "btc-breakout")!;
@@ -146,6 +207,114 @@ const tightened: Entity = {
 };
 
 export const THREADS: Record<string, Block[]> = {
+  "weekend/tester": [
+    {
+      kind: "user",
+      text: "Task from the main session: replay Weekend rider and Trend rider on SOL and AVAX momentum, 2023–2025, run the stress board with FTX week and weekend thin book, then put them head to head.",
+    },
+    {
+      kind: "tools",
+      calls: [
+        {
+          name: "pod.test",
+          args: "2 pods · 3 bots · full rerun",
+          ms: 41200,
+          ok: true,
+        },
+        {
+          name: "pod.stress_scenario",
+          args: "FTX week, weekend thin book",
+          ms: 9800,
+          ok: true,
+        },
+        {
+          name: "pod.monte_carlo",
+          args: "1,000 paths · running",
+          ms: 0,
+          ok: true,
+        },
+      ],
+    },
+    {
+      kind: "text",
+      text: "Replay and stress board done. Monte Carlo is at 640 of 1,000 paths; head to head follows when it finishes.",
+    },
+  ],
+  "weekend/builder": [
+    {
+      kind: "user",
+      text: "Task: copy Trend rider into a new pod and halve size from Friday 20:00 to Sunday 20:00 UTC.",
+    },
+    {
+      kind: "tools",
+      calls: [
+        {
+          name: "pod.edit",
+          args: "copy Trend rider → Weekend rider",
+          ms: 300,
+          ok: true,
+        },
+        { name: "pod.edit", args: "add Thin hours ×0.5", ms: 210, ok: true },
+      ],
+    },
+    { kind: "text", text: "Saved Weekend rider v1 as a draft in the Lab." },
+  ],
+  "weekend/reader": [
+    {
+      kind: "user",
+      text: "Task: find what is known about crypto liquidity on weekends.",
+    },
+    {
+      kind: "text",
+      text: "Read 3 papers; 2 were useful. Weekend order books are thinner and gaps are larger after Asian Sunday sessions. Notes saved to the Library.",
+    },
+  ],
+  "lab-sweep": [
+    { kind: "handoff", from: "Lab", note: "Started in the Lab copilot." },
+    {
+      kind: "user",
+      text: "Sweep BTC breakout across the top coins on 1h and 4h.",
+    },
+    {
+      kind: "text",
+      text: "Queued 12 cells on this laptop; 11 finished. LINK 15m has too little data. Best: SOL 4h, then BTC 1h.",
+    },
+  ],
+  "lab-import": [
+    { kind: "handoff", from: "Lab", note: "Started in the Lab copilot." },
+    { kind: "user", text: "Import the vol forecaster I trained on Colab." },
+    {
+      kind: "text",
+      text: "Imported as an ONNX model, fingerprinted, and placed in Model slots under “Risk throttle”. It needs a leakage check before use.",
+    },
+  ],
+  "pf-bybit": [
+    {
+      kind: "handoff",
+      from: "Portfolio",
+      note: "Started in the Portfolio copilot.",
+    },
+    { kind: "user", text: "Should Bybit take on Alt momentum's paper side?" },
+    {
+      kind: "text",
+      text: "Bybit is at YELLOW today, so I'd wait. The paper side can move to the Bybit testnet without touching live money; say if you want me to draft it.",
+    },
+  ],
+  "pf-volpod": [
+    {
+      kind: "handoff",
+      from: "Portfolio",
+      note: "Started in the Portfolio copilot.",
+    },
+    {
+      kind: "user",
+      text: "Bring the vol-target pod from the Lab into Portfolio.",
+    },
+    {
+      kind: "text",
+      text: "Vol-targeted core v1 passed its paper soak. The promotion card is ready for your signature on Road to live.",
+    },
+  ],
   weekend: [
     {
       kind: "user",
@@ -506,12 +675,19 @@ export const TASKS = [
 ];
 
 /** Things the copilot made, across sessions. */
-export const ARTIFACTS = [
+export const ARTIFACTS: {
+  id: string;
+  title: string;
+  type: string;
+  session: string;
+  spec?: PanelSpec;
+}[] = [
   {
     id: "art-h2h",
     title: "Weekend rider against Trend rider",
     type: "Interactive report",
     session: "weekend",
+    spec: SAMPLE_PANEL,
   },
   {
     id: "art-notes",

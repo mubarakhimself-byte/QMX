@@ -26,6 +26,8 @@
   import EntityCard from "$lib/qmx/EntityCard.svelte";
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
+  import Pin from "@lucide/svelte/icons/pin";
+  import SpecView from "$lib/sdk/SpecView.svelte";
   import type { Block, StepState } from "./demo";
 
   let {
@@ -34,26 +36,38 @@
     onagent,
     oncontinue,
     onresolve,
+    answers,
+    onanswer,
+    onopenagent,
+    onpanel,
+    compact = false,
   }: {
     blocks: Block[];
+    /** Narrow side columns: less padding, smaller text. */
+    compact?: boolean;
     onartifact?: (id: string) => void;
     onagent?: () => void;
     oncontinue?: () => void;
     /** A question or permission card was answered. */
     onresolve?: () => void;
+    /** Answers kept by the session store (so the composer can take over). */
+    answers?: Record<number, string>;
+    onanswer?: (index: number, value: string) => void;
+    /** Open a sub-agent's own thread. */
+    onopenagent?: (agentId: string) => void;
+    /** Keep, discard or pin a draft panel. */
+    onpanel?: (index: number, state: "kept" | "discarded" | "pinned") => void;
   } = $props();
 
-  let answered = $state<Record<number, string>>({});
+  let local = $state<Record<number, string>>({});
+  const got = $derived(answers ?? local);
   function answer(i: number, v: string) {
-    if (!answered[i]) onresolve?.();
-    answered[i] = v;
-  }
-  function decide(i: number, v: string) {
-    if (!decided[i]) onresolve?.();
-    decided[i] = v;
+    if (got[i]) return;
+    if (onanswer) onanswer(i, v);
+    else local[i] = v;
+    onresolve?.();
   }
   let other = $state<Record<number, string>>({});
-  let decided = $state<Record<number, string>>({});
 
   const STEP: Record<
     StepState,
@@ -79,7 +93,10 @@
 </script>
 
 <div
-  class="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-6 text-[15px] leading-relaxed"
+  class={cn(
+    "mx-auto flex max-w-4xl flex-col leading-relaxed",
+    compact ? "gap-3 px-3 py-3 text-sm" : "gap-4 px-6 py-6 text-[15px]",
+  )}
 >
   {#each blocks as b, i (i)}
     {#if b.kind === "user"}
@@ -98,7 +115,13 @@
         {/if}
       </div>
     {:else if b.kind === "text"}
-      <p>{b.text}</p>
+      <div>
+        <p>{b.text}</p>
+        {#if b.demo}<span
+            class="text-muted-foreground mt-1 inline-block rounded border px-1.5 text-xs"
+            >Demo reply · scripted, no model connected</span
+          >{/if}
+      </div>
     {:else if b.kind === "handoff"}
       <div
         class="border-info/40 bg-info/8 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm"
@@ -132,7 +155,7 @@
                 )}>{s.text}</span
               >
               {#if s.where}<span
-                  class="text-muted-foreground shrink-0 rounded border px-1.5 text-[11px]"
+                  class="text-muted-foreground shrink-0 rounded border px-1.5 text-xs"
                   >{s.where}</span
                 >{/if}
             </li>
@@ -151,7 +174,15 @@
         </p>
         <ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {#each b.agents as a (a.id)}
-            <li class="bg-background/40 rounded-lg border p-2.5">
+            <li
+              class="bg-background/40 hover:border-ring/60 relative rounded-lg border p-2.5"
+            >
+              {#if onopenagent}<button
+                  type="button"
+                  class="absolute inset-0 rounded-lg"
+                  aria-label={`Open ${a.name}'s thread`}
+                  onclick={() => onopenagent(a.id)}
+                ></button>{/if}
               <div class="flex items-center gap-2">
                 <span
                   class={cn(
@@ -162,7 +193,7 @@
                   )}
                 ></span>
                 <span class="text-sm font-medium">{a.name}</span>
-                <span class="text-muted-foreground ml-auto text-[11px]"
+                <span class="text-muted-foreground ml-auto text-xs"
                   >{a.where}</span
                 >
               </div>
@@ -183,7 +214,8 @@
         <summary
           class="text-muted-foreground flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
         >
-          <Wrench class="size-3.5" /> Used {b.calls.length} tools ·
+          <Wrench class="size-3.5" /> Used {b.calls.length}
+          {b.calls.length === 1 ? "tool" : "tools"} ·
           <span class="num"
             >{(b.calls.reduce((t, c) => t + c.ms, 0) / 1000).toFixed(1)}s</span
           >
@@ -321,11 +353,10 @@
         <p class={cn(head, "text-foreground text-sm")}>
           <CircleHelp class="text-warning size-4" />{b.question}
         </p>
-        {#if answered[i]}
+        {#if got[i]}
           <p class="text-sm">
             <Check class="text-success mr-1 inline size-4" />You chose
-            <span class="font-medium">{answered[i]}</span>. It carries on with
-            that.
+            <span class="font-medium">{got[i]}</span>. It carries on with that.
           </p>
         {:else}
           <div class="grid gap-1.5">
@@ -369,28 +400,75 @@
         </p>
         <p class="text-sm">{b.detail}</p>
         <p class="text-muted-foreground mt-1 text-xs">{b.guard}</p>
-        {#if decided[i]}
+        {#if got[i]}
           <p class="mt-2 text-sm">
-            <Check class="text-success mr-1 inline size-4" />{decided[i]}. In
-            the demo nothing runs.
+            <Check class="text-success mr-1 inline size-4" />{got[i]}. In the
+            demo nothing runs.
           </p>
         {:else}
           <div class="mt-2.5 flex flex-wrap gap-2">
-            <Button size="sm" onclick={() => decide(i, "Allowed once")}
+            <Button size="sm" onclick={() => answer(i, "Allowed once")}
               >Allow</Button
             >
             <Button
               size="sm"
               variant="outline"
-              onclick={() => decide(i, "Allowed for the rest of this session")}
+              onclick={() => answer(i, "Allowed for the rest of this session")}
               >Allow for this session</Button
             >
             <Button
               size="sm"
               variant="ghost"
-              onclick={() => decide(i, "Not now; it will ask again later")}
+              onclick={() => answer(i, "Not now; it will ask again later")}
               >Not now</Button
             >
+          </div>
+        {/if}
+      </section>
+    {:else if b.kind === "panel"}
+      <section
+        class={cn(
+          "rounded-xl border",
+          b.state === "draft" && "border-primary/50",
+          b.state === "discarded" && "opacity-50",
+        )}
+      >
+        <div class="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+          <span class="text-sm font-medium">{b.spec.title}</span>
+          <span class="text-muted-foreground text-[13px]"
+            >{b.state === "draft"
+              ? "Draft panel"
+              : b.state === "kept"
+                ? "Kept in this session"
+                : b.state === "pinned"
+                  ? "Pinned to the Lab"
+                  : "Thrown away"}</span
+          >
+          {#if b.state === "draft" && onpanel}
+            <div class="ml-auto flex gap-1.5">
+              <Button size="sm" onclick={() => onpanel(i, "pinned")}
+                ><Pin />Pin to the Lab</Button
+              >
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => onpanel(i, "kept")}>Keep here</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() => onpanel(i, "discarded")}>Throw away</Button
+              >
+            </div>
+          {/if}
+        </div>
+        {#if b.state !== "discarded"}
+          <div class="p-3">
+            <SpecView
+              spec={b.spec}
+              onaction={(op) =>
+                workbench.notify(`The panel asked the host to run ${op}.`)}
+            />
           </div>
         {/if}
       </section>

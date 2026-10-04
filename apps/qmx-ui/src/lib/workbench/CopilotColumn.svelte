@@ -19,6 +19,9 @@
   import Composer from "./Composer.svelte";
   import { resolve } from "$app/paths";
   import type { CopilotContext } from "./copilot-context";
+  import Thread from "$lib/copilot/Thread.svelte";
+  import { copilot } from "$lib/copilot/store.svelte";
+  import type { Origin } from "$lib/copilot/demo";
 
   type Session = { id: string; title: string; when: string };
 
@@ -34,6 +37,7 @@
     sessions = [],
     starters = [],
     seed = "",
+    origin,
   }: {
     title?: string;
     profile?: string;
@@ -48,25 +52,54 @@
     starters?: string[];
     /** Text the surface drafts into the composer (e.g. from a "+ Scenario" menu). */
     seed?: string;
+    /** Sessions live in the shared copilot store under this origin. */
+    origin?: Origin;
   } = $props();
   let draftSeed = $state("");
   $effect(() => {
     if (seed) draftSeed = seed;
   });
 
+  // With an origin, sessions come from the shared store (so the main
+  // copilot can continue them); without one, the sample list is local.
   // svelte-ignore state_referenced_locally
-  let list = $state<Session[]>([...sessions]);
+  let localList = $state<Session[]>([...sessions]);
+  const list = $derived<Session[]>(
+    origin
+      ? copilot.sessions
+          .filter((s) => s.origin === origin && !s.parent)
+          .map((s) => ({ id: s.id, title: s.title, when: s.age }))
+      : localList,
+  );
   let current = $state<string | null>(null);
   const active = $derived(list.find((s) => s.id === current));
+  const blocks = $derived(origin ? copilot.blocks(current) : []);
 
   function newSession() {
+    if (origin) {
+      current = copilot.create(origin);
+      return;
+    }
     const s = {
       id: `n-${Date.now().toString(36)}`,
       title: "New session",
       when: "Now",
     };
-    list = [s, ...list];
+    localList = [s, ...localList];
     current = s.id;
+  }
+  function send(text: string, refs: string[]) {
+    if (!origin) return;
+    const id = current ?? copilot.create(origin);
+    current = id;
+    copilot.send(id, text, refs);
+  }
+  function continueInMain() {
+    if (origin && current) {
+      copilot.absorb(current);
+      // eslint-disable-next-line svelte/no-navigation-without-resolve
+      goto(`${resolve("/copilot")}?session=${current}`);
+    } else goto(resolve("/copilot"));
   }
 </script>
 
@@ -101,7 +134,7 @@
           >
         {/each}
         <DropdownMenu.Separator />
-        <DropdownMenu.Item onclick={() => goto(resolve("/copilot"))}
+        <DropdownMenu.Item onclick={continueInMain}
           ><MessagesSquare />Continue in the main copilot</DropdownMenu.Item
         >
       </DropdownMenu.Content>
@@ -134,8 +167,14 @@
       {/if}
     </div>
   </header>
-  <div class="flex min-h-0 flex-1 flex-col justify-end overflow-auto p-3">
-    {#if active}
+  <div
+    class="flex min-h-0 flex-1 flex-col overflow-auto {blocks.length
+      ? ''
+      : 'justify-end p-3'}"
+  >
+    {#if active && blocks.length}
+      <Thread {blocks} compact />
+    {:else if active && !origin}
       <p class="text-muted-foreground text-sm">
         {active.title}: messages load from the daemon once it is connected.
       </p>
@@ -164,6 +203,8 @@
       {onremoveref}
       {context}
       seed={draftSeed}
+      busy={!!(current && copilot.busy[current])}
+      onsend={origin ? send : undefined}
     />
   </div>
 </aside>
