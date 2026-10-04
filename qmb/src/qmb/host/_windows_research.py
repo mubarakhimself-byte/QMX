@@ -65,7 +65,7 @@ _nt = c.WinDLL("ntdll")
 _kernel = c.WinDLL("kernel32", use_last_error=True)
 _create = _nt.NtCreateFile
 _create.restype = c.c_long
-_create.argtypes = [
+_create.argtypes = (
     c.POINTER(c.c_void_p),
     c.c_ulong,
     c.POINTER(_ObjectAttributes),
@@ -77,24 +77,24 @@ _create.argtypes = [
     c.c_ulong,
     c.c_void_p,
     c.c_ulong,
-]
+)
 _error = _nt.RtlNtStatusToDosError
-_error.argtypes = [c.c_long]
+_error.argtypes = (c.c_long,)
 _error.restype = c.c_ulong
 _nt_set_info = _nt.NtSetInformationFile
-_nt_set_info.argtypes = [c.c_void_p, c.POINTER(_IoStatus), c.c_void_p, c.c_ulong, c.c_int]
+_nt_set_info.argtypes = (c.c_void_p, c.POINTER(_IoStatus), c.c_void_p, c.c_ulong, c.c_int)
 _nt_set_info.restype = c.c_long
 _close = _kernel.CloseHandle
-_close.argtypes = [c.c_void_p]
+_close.argtypes = (c.c_void_p,)
 _close.restype = c.c_int
 _get_info = _kernel.GetFileInformationByHandle
-_get_info.argtypes = [c.c_void_p, c.POINTER(_FileInfo)]
+_get_info.argtypes = (c.c_void_p, c.POINTER(_FileInfo))
 _get_info.restype = c.c_int
 _set_info = _kernel.SetFileInformationByHandle
-_set_info.argtypes = [c.c_void_p, c.c_int, c.c_void_p, c.c_ulong]
+_set_info.argtypes = (c.c_void_p, c.c_int, c.c_void_p, c.c_ulong)
 _set_info.restype = c.c_int
 _volume_info = _kernel.GetVolumeInformationByHandleW
-_volume_info.argtypes = [
+_volume_info.argtypes = (
     c.c_void_p,
     c.c_wchar_p,
     c.c_ulong,
@@ -103,10 +103,10 @@ _volume_info.argtypes = [
     c.c_void_p,
     c.c_wchar_p,
     c.c_ulong,
-]
+)
 _volume_info.restype = c.c_int
 _drive_type = _kernel.GetDriveTypeW
-_drive_type.argtypes = [c.c_wchar_p]
+_drive_type.argtypes = (c.c_wchar_p,)
 _drive_type.restype = c.c_uint
 
 

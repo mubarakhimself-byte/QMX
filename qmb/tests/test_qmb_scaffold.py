@@ -99,6 +99,9 @@ def test_source_never_imports_banned_modules() -> None:
         in_orchestrator = relative.parts[:1] == ("orchestrator",)
         is_host_runner = relative.parts == ("host", "runner.py")
         is_cli_host = relative.parts == ("doors", "cli", "host.py")
+        # This entrypoint is the CLI composition root. It reads a bounded result
+        # claim for verification; the library and other door modules still forbid open().
+        is_cli_root = relative.parts == ("doors", "cli", "__init__.py")
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             names: list[str] = []
@@ -111,7 +114,12 @@ def test_source_never_imports_banned_modules() -> None:
                 and isinstance(node.func, ast.Name)
                 and node.func.id == "open"
             ):
-                if not (in_orchestrator or is_host_runner or is_cli_host):
+                if not (
+                    in_orchestrator
+                    or is_host_runner
+                    or is_cli_host
+                    or (is_cli_root and _is_cli_claim_open(node, tree))
+                ):
                     violations.append(f"{path}: open()")
                 continue
             for name in names:
@@ -175,6 +183,20 @@ def _same_scope_nodes(node: ast.AST) -> Iterator[ast.AST]:
         yield from _same_scope_nodes(child)
 
 
+def _is_cli_claim_open(node: ast.Call, tree: ast.Module) -> bool:
+    return (
+        len(node.args) == 1
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == "claim_path"
+        and any(
+            isinstance(statement, ast.FunctionDef)
+            and statement.name == "backtest_run"
+            and node in ast.walk(statement)
+            for statement in tree.body
+        )
+    )
+
+
 def _vocabulary_violations(source: str) -> list[str]:
     """Keep QMB vocabulary separate from narrowed external receipt members."""
     tree = ast.parse(source)
@@ -200,22 +222,25 @@ def _vocabulary_violations(source: str) -> list[str]:
             and alias.asname is None
         )
     }
-    proof_names_shadowed = bool(import_bindings & {"StoreReceipt", "isinstance"}) or any(
+    proof_names_shadowed = bool(import_bindings & {"StoreReceipt", "isinstance", "type"}) or any(
         (
             isinstance(node, ast.Name)
             and isinstance(node.ctx, (ast.Store, ast.Del))
-            and node.id in {"StoreReceipt", "isinstance"}
+            and node.id in {"StoreReceipt", "isinstance", "type"}
         )
-        or (isinstance(node, ast.arg) and node.arg in {"StoreReceipt", "isinstance"})
+        or (isinstance(node, ast.arg) and node.arg in {"StoreReceipt", "isinstance", "type"})
         or (
             isinstance(node, (ast.FunctionDef, ast.ClassDef))
-            and node.name in {"StoreReceipt", "isinstance"}
+            and node.name in {"StoreReceipt", "isinstance", "type"}
         )
         or (
             isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
-            and node.name in {"StoreReceipt", "isinstance"}
+            and node.name in {"StoreReceipt", "isinstance", "type"}
         )
-        or (isinstance(node, ast.MatchMapping) and node.rest in {"StoreReceipt", "isinstance"})
+        or (
+            isinstance(node, ast.MatchMapping)
+            and node.rest in {"StoreReceipt", "isinstance", "type"}
+        )
         for node in ast.walk(tree)
     )
     if receipt_imported and not proof_names_shadowed:
@@ -238,6 +263,24 @@ def _vocabulary_violations(source: str) -> list[str]:
                     )
                     found_proof = False
                     for guard in guards:
+                        # Host receipt validation also uses exact nominal guards
+                        # on a receipt member before assigning it to a local alias.
+                        if (
+                            isinstance(guard, ast.Compare)
+                            and len(guard.ops) == 1
+                            and isinstance(guard.ops[0], ast.IsNot)
+                            and isinstance(guard.left, ast.Call)
+                            and isinstance(guard.left.func, ast.Name)
+                            and guard.left.func.id == "type"
+                            and len(guard.left.args) == 1
+                            and isinstance(guard.comparators[0], ast.Name)
+                            and guard.comparators[0].id == "StoreReceipt"
+                        ):
+                            subject = _receipt_subject(guard.left.args[0])
+                            if subject is not None:
+                                narrowed.add(subject)
+                                found_proof = True
+                            continue
                         if not (isinstance(guard, ast.UnaryOp) and isinstance(guard.op, ast.Not)):
                             continue
                         call = guard.operand
@@ -262,7 +305,13 @@ def _vocabulary_violations(source: str) -> list[str]:
                     if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
                 }
                 for node in ast.walk(statement):
-                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    if isinstance(node, ast.Attribute) and isinstance(
+                        node.ctx, (ast.Store, ast.Del)
+                    ):
+                        subject = _receipt_subject(node)
+                        if subject is not None:
+                            assigned.add(subject.split(".")[0])
+                    elif isinstance(node, (ast.Import, ast.ImportFrom)):
                         assigned.update(
                             alias.asname or alias.name.split(".")[0] for alias in node.names
                         )
@@ -279,14 +328,11 @@ def _vocabulary_violations(source: str) -> list[str]:
                     elif isinstance(node, ast.MatchMapping) and node.rest is not None:
                         assigned.add(node.rest)
                 old_narrowed = narrowed.copy()
-                narrowed.difference_update(assigned)
+                narrowed = {name for name in narrowed if name.split(".")[0] not in assigned}
                 if isinstance(statement, ast.Assign):
                     for target in statement.targets:
                         if isinstance(target, ast.Name):
-                            if (
-                                isinstance(statement.value, ast.Name)
-                                and statement.value.id in old_narrowed
-                            ):
+                            if _receipt_subject(statement.value) in old_narrowed:
                                 narrowed.add(target.id)
                             else:
                                 narrowed.discard(target.id)
@@ -300,12 +346,34 @@ def _vocabulary_violations(source: str) -> list[str]:
                         and node.end_col_offset is not None
                     ):
                         allowed.add((node.end_lineno, node.end_col_offset - len(node.attr)))
+                    if isinstance(node, ast.Dict):
+                        # A diagnostic label for that same external receipt field
+                        # is allowed only when paired with its proved comparison.
+                        for key, value in zip(node.keys, node.values, strict=True):
+                            if (
+                                isinstance(key, ast.Constant)
+                                and key.value == "engine"
+                                and isinstance(value, ast.Compare)
+                                and isinstance(value.left, ast.Attribute)
+                                and value.left.attr == "engine"
+                                and isinstance(value.left.value, ast.Name)
+                                and value.left.value.id in narrowed
+                            ):
+                                allowed.add((key.lineno, key.col_offset + 1))
     violations: list[str] = []
     for line_number, line in enumerate(source.splitlines(), start=1):
         for match in _BANNED_WORDS.finditer(line):
             if (line_number, match.start()) not in allowed:
                 violations.append(match.group())
     return violations
+
+
+def _receipt_subject(value: ast.expr) -> str | None:
+    if isinstance(value, ast.Name):
+        return value.id
+    if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name):
+        return value.value.id + "." + value.attr
+    return None
 
 
 def test_source_avoids_banned_vocabulary() -> None:
@@ -355,6 +423,40 @@ def test_receipt_proof_rejects_import_and_definition_rebinding() -> None:
     )
     for body in bodies:
         assert _vocabulary_violations(prefix + body) == ["engine"]
+
+
+def test_exact_receipt_member_proof_is_narrow_and_preserves_rebinding_guards() -> None:
+    prefix = "from qmf.data.store import StoreReceipt\n"
+    body = (
+        "def f(receipt):\n"
+        "    if type(receipt.store_receipt) is not StoreReceipt:\n"
+        "        return False\n"
+        "    store = receipt.store_receipt\n"
+        "    return {'engine': store.engine == 'jsonl'}\n"
+    )
+    assert _vocabulary_violations(prefix + body) == []
+    for replacement in (
+        "store = object()",
+        "receipt = object(); store = receipt.store_receipt",
+        "receipt.store_receipt = object(); store = receipt.store_receipt",
+    ):
+        assert _vocabulary_violations(
+            prefix + body.replace("store = receipt.store_receipt", replacement)
+        ) == ["engine", "engine"]
+    assert _vocabulary_violations(prefix + body.replace("StoreReceipt:", "object:")) == [
+        "engine",
+        "engine",
+    ]
+    assert _vocabulary_violations(
+        prefix + body.replace("def f(receipt):", "def f(receipt, type):")
+    ) == ["engine", "engine"]
+    assert _vocabulary_violations(prefix + body.replace("return False", "pass")) == [
+        "engine",
+        "engine",
+    ]
+    assert _vocabulary_violations(prefix + body.replace("store.engine == 'jsonl'", "True")) == [
+        "engine"
+    ]
 
 
 def _is_mutable_literal(value: ast.expr) -> bool:

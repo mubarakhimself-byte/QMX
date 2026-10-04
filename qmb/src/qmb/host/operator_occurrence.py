@@ -42,7 +42,7 @@ __all__ = [
 
 OPERATOR_OCCURRENCE_KIND = "qmb-operator-terminal-occurrence-v1"
 _OCCURRENCE_MISSING_REASON = "no durable invocation-to-terminal witness exists yet"
-_EMPTY_MAPPING: Mapping[str, object] = {}
+_EMPTY_MAPPING: Mapping[str, object] = MappingProxyType({})
 _MAPPING_PROXY_TYPE = type(MappingProxyType(_EMPTY_MAPPING))
 
 
