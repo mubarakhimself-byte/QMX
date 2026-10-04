@@ -664,11 +664,11 @@ def test_paired_rejects_noncompiled_graph(tmp_path: Any, monkeypatch: Any, mutat
         return original(self, graph, **kwargs)
 
     monkeypatch.setattr(TaskGraphDispatcher, "materialize", corrupt)
-    process, task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
+    process, _task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
 
     async def journey() -> None:
         value(await process.bind())
-        reader, writer, opening = await ws_connect(process)
+        reader, writer, _opening = await ws_connect(process)
         try:
             receipt(
                 await rpc(
@@ -725,11 +725,11 @@ def test_mixed_host_rejects_stale_unjoined_operation_before_acceptance(
         return original(self, **kwargs)
 
     monkeypatch.setattr(DaemonProcess, "configure_agent_requests", configure)
-    process, task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
+    process, _task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
 
     async def journey() -> None:
         value(await process.bind())
-        reader, writer, opening = await ws_connect(process)
+        reader, writer, _opening = await ws_connect(process)
         try:
             receipt(
                 await rpc(
