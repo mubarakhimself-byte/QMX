@@ -131,11 +131,6 @@ class Member:
         return not self.is_extension and not self.is_application
 
     @property
-    def import_name(self) -> str:
-        """The importable module, e.g. ``qmf.core`` or ``qml``."""
-        return self.module_name
-
-    @property
     def roster_dependencies(self) -> frozenset[str]:
         """The member's workspace (``qmf-*``) dependencies only, third-party dropped."""
         return frozenset(d for d in self.dependencies if d.startswith("qmf-"))
