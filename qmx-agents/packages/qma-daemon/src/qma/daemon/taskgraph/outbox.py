@@ -524,13 +524,14 @@ def build_initial_outbox_row(
     *,
     graph: TaskGraph,
     task: TaskRecord,
-    config_revision: int,
-    operation_input_hash: str,
+    config_revision: object,
+    operation_input_hash: object,
 ) -> Result[TaskGraphOutboxRow]:
     """Publish one actual root READY Task through the existing outbox projection.
 
     Root publication has no predecessor. It uses a distinct reserved partition
     and an explicit null predecessor; it never fabricates a completed node.
+    Revision and hash inputs are validated before constructing the typed target.
     """
     if task.node_id is None or graph.task_by_id(task.id) != task:
         return _invalid("task", "root publication names an exact Task in its graph")

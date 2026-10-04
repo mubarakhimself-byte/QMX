@@ -77,7 +77,7 @@ class ArtifactStore:
     _artifacts: dict[str, StagedArtifact] = field(default_factory=dict[str, StagedArtifact])
     journal: AuthoritativeJournal | None = None
     durable_store: AppendStore | None = None
-    _durable_fp1s: set[str] = field(default_factory=set, init=False)
+    _durable_fp1s: set[str] = field(default_factory=set[str], init=False)
 
     def get(self, fp1: str) -> StagedArtifact | None:
         return self._artifacts.get(fp1)

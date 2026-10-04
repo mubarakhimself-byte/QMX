@@ -49,6 +49,7 @@ from qma.daemon.taskgraph import (
     instantiate_procedure,
     refuse_merge_remote_worker_outbox,
 )
+from qma.daemon.taskgraph.outbox import build_initial_outbox_row
 from qma.daemon.taskgraph.projection import (
     TaskGraphOutboxSchemaError,
     TaskGraphStateSqliteStore,
@@ -218,6 +219,55 @@ def test_one_transaction_publishes_terminal_ready_and_outbox(tmp_path: Path) -> 
         _ = _dispatcher_obj
     finally:
         process.close()
+
+
+@pytest.mark.parametrize(
+    ("config_revision", "operation_input_hash", "refused_field"),
+    [
+        (True, f"fp1:sha256:{'a' * 64}", "config_revision"),
+        (False, f"fp1:sha256:{'a' * 64}", "config_revision"),
+        (-1, f"fp1:sha256:{'a' * 64}", "config_revision"),
+        ("4", f"fp1:sha256:{'a' * 64}", "config_revision"),
+        (4.0, f"fp1:sha256:{'a' * 64}", "config_revision"),
+        (None, f"fp1:sha256:{'a' * 64}", "config_revision"),
+        (4, None, "operation_input_hash"),
+        (4, 123, "operation_input_hash"),
+        (4, b"fp1:sha256:" + b"a" * 64, "operation_input_hash"),
+        (4, "fp1:sha256:short", "operation_input_hash"),
+        (4, "a" * 64, "operation_input_hash"),
+    ],
+)
+def test_initial_root_validates_untrusted_revision_and_hash(
+    config_revision: object, operation_input_hash: object, refused_field: str
+) -> None:
+    _, compiled = _compile()
+    graph = compiled.task_graph
+    root = replace(
+        graph.ready_tasks()[0],
+        inputs={
+            "op_id": "qmb.backtest.run",
+            "op_version": 1,
+            "instance_id": "analysis-backtest-instance",
+            "config_revision": 4,
+        },
+    )
+    graph = graph.replace_task(root)
+    valid = build_initial_outbox_row(
+        graph=graph,
+        task=root,
+        config_revision=4,
+        operation_input_hash=f"fp1:sha256:{'a' * 64}",
+    )
+    assert is_ok(valid), valid
+    refused = build_initial_outbox_row(
+        graph=graph,
+        task=root,
+        config_revision=config_revision,
+        operation_input_hash=operation_input_hash,
+    )
+    assert is_refusal(refused), refused
+    assert refused.context["field"] == refused_field
+    assert graph.task_by_id(root.id) == root
 
 
 def test_initial_root_task_publishes_without_fabricated_predecessor(tmp_path: Path) -> None:

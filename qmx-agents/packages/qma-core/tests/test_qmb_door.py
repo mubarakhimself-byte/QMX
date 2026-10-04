@@ -231,7 +231,7 @@ def test_query_door_invocation_carries_a_positive_attempt_id() -> None:
     )
     assert is_ok(invocation)
     assert invocation.value.payload["attempt_id"] == 3
-    for bad in (True, 0, -1, "3"):
+    for bad in (True, False, 0, -1, "3", 3.0, None):
         refused = build_qmb_query_invocation(
             job_id="qmbq:local:job-1",
             attempt_id=bad,
@@ -240,6 +240,7 @@ def test_query_door_invocation_carries_a_positive_attempt_id() -> None:
             occupancy_key="local",
         )
         assert is_refusal(refused)
+        assert refused.context["field"] == "attempt_id"
 
 
 def test_queries_and_process_children_do_not_consume_occupancy() -> None:
