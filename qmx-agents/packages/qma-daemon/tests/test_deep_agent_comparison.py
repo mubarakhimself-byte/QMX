@@ -189,6 +189,30 @@ def test_skill_snapshot_change_refuses_resume(comparison: Any, tmp_path: Path) -
     extension_contract.test_changed_snapshot_refuses_checkpoint_resume(comparison, tmp_path)
 
 
+@pytest.mark.parametrize("change", ["disable", "summary-budget"])
+def test_host_harness_change_refuses_explicit_retry(comparison: Any, change: str) -> None:
+    runtime, loop, provider, calls, _, submit, _ = comparison
+    request_id = submit()
+
+    def lose_model(_: int) -> None:
+        raise ProviderError("outcome_unknown", "fixture unknown inference")
+
+    provider.after = lose_model
+    interrupted = runtime.execute(request_id).value
+    assert interrupted.status == "interrupted"
+    selected = loop.deep_agent
+    loop.deep_agent = (
+        None
+        if selected is not None and change == "disable"
+        else DeepAgentSelection("reader", "request", max_summary_calls=2)
+    )
+    provider.after = None
+    assert is_ok(runtime.retry_interrupted(request_id))
+    result = runtime.execute(request_id).value
+    assert result.error == "context_changed", result
+    assert len(provider.requests) == 1 and calls == []
+
+
 @pytest.mark.parametrize("capability", ["native_tools", "resume", "agent_session"])
 def test_native_harness_ownership_refuses_before_launch(comparison: Any, capability: str) -> None:
     _, _, provider, calls, _, _, _ = comparison
