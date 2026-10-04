@@ -6,6 +6,7 @@ import inspect
 import json
 import runpy
 import shutil
+import sys
 from pathlib import Path
 
 from pytest import MonkeyPatch
@@ -22,6 +23,7 @@ from qma.core.ports.qmb import (
     QMB_ROUTE,
     QMB_WORLD_REPLAY,
     QmbDoorKind,
+    build_qmb_query_invocation,
     refuse_qmb_import_edge,
 )
 from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState
@@ -107,6 +109,26 @@ def test_default_transport_is_cli_not_recording() -> None:
     assert "else CliQmbDoorTransport()" in source
     assert "else RecordingQmbDoorTransport()" not in source
     assert "source-inspected" not in inspect.getsource(CliQmbDoorTransport)
+
+
+def test_nonzero_query_child_is_a_refusal(tmp_path: Path) -> None:
+    child = tmp_path / "refused_query.py"
+    child.write_text("raise SystemExit(7)\n", encoding="utf-8")
+    invocation = build_qmb_query_invocation(
+        job_id="query-refused",
+        attempt_id=1,
+        command="analysis.project",
+        environment_ref="env:local",
+        occupancy_key="local",
+    )
+    assert is_ok(invocation)
+    transport = CliQmbDoorTransport(argv0=(sys.executable, str(child)))
+    try:
+        result = transport.submit(invocation.value)
+        assert is_refusal(result)
+        assert result.context["exit_code"] == 7
+    finally:
+        transport.close()
 
 
 def test_cli_transport_spawns_documented_double_not_recording(tmp_path: Path) -> None:

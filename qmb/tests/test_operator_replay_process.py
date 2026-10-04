@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar, cast
+from unittest.mock import patch
 
 from qmb.config.compiler import ResolvedRunConfig
 from qmb.execution.binder import BoundExecution
@@ -21,6 +22,7 @@ from qmb.host.operator_replay import (
     _decode_binding,  # pyright: ignore[reportPrivateUsage]
     _entrypoint,  # pyright: ignore[reportPrivateUsage]
     _load_builder,  # pyright: ignore[reportPrivateUsage]
+    _load_operator_inputs,  # pyright: ignore[reportPrivateUsage]
     _materialize_builder,  # pyright: ignore[reportPrivateUsage]
     _runtime_policy_identity,  # pyright: ignore[reportPrivateUsage]
 )
@@ -124,7 +126,8 @@ def build(context, binding, port, book_fragment, bms_fragment):
             **dict(request.value.hosted.assignment),
             STREAM_SET_KEY: (request.value.source.stream_id,),
         },
-        invocation_flags={OPERATOR_BINDING_CONFIG_KEY: binding.descriptor_fp1.value},
+        invocation_flags={OPERATOR_BINDING_CONFIG_KEY: binding.descriptor_fp1.value,
+            "registry_as_of": binding.registry_as_of},
         workspace_defaults=defaults)
     if is_refusal(compiled):
         return compiled
@@ -159,7 +162,7 @@ def build(context, binding, port, book_fragment, bms_fragment):
         exit_logic_ref=exit_ref.value, exit_logic_module=StopLogic(), requested_r=risk.value,
         r_unit_price=rate.value, value_factor=factor.value, money_scale=2,
         lot_step=step.value, position_cap=cap.value, execution_target=target.value,
-        result_label=result_label.value, opening_bot_id="qmb-cli-fixture-bot",
+        result_label=result_label.value, opening_bot_id=compiled.value.bot_fp1.value,
         close_reason_by_code={"exit:family:protective_stop": CloseReason.PROTECTIVE_STOP_FILL},
         order_policy_by_code={"entry:family:breakout": BookOrderPolicy(OrderType.MARKET),
             "exit:family:protective_stop": BookOrderPolicy(OrderType.STOP)},
@@ -400,6 +403,54 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
     assert response["evidence_ref"] == request_ref.value
     assert response["ct32_fp1"].startswith("fp1:sha256:")
     assert response["terminal_line_fp1"].startswith("fp1:sha256:")
+    from qmb.host.operator_replay import project_operator_replay
+    from qmb.results.ct32 import load_stored_ct32, stored_ct32_fingerprint
+
+    context = _ok(
+        decode_qma_backtest_context(
+            payload_text=environment["QMA_QMB_DOOR_PAYLOAD"], environ=environment
+        )
+    )
+    result_dir = roots["journal"] / "qmb-results" / response["run_fp1"].split(":")[-1]
+    stored_body = _ok(load_stored_ct32(result_dir))
+    assert _ok(stored_ct32_fingerprint(result_dir)).value == response["ct32_fp1"]
+    before_query = {str(path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    with patch(
+        "qmb.host.operator_replay._load_operator_inputs", wraps=_load_operator_inputs
+    ) as load:
+        view = _ok(
+            project_operator_replay(
+                runtime_root=environment["QMB_REPLAY_RUNTIME_ROOT"],
+                context=context,
+                predicate={"max_trades": 1},
+            )
+        )
+        assert load.call_count == 1
+    assert {
+        str(path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()
+    } == before_query
+    assert view.source_ct32 == response["ct32_fp1"]
+    assert view.matched_count == 1
+    assert view.mints_ct32 is False
+    artifact_path = result_dir / "results" / "ct-32.json"
+    original_artifact = artifact_path.read_bytes()
+    corrupt_body = {**stored_body, "trade_count": 999}
+    artifact_path.write_text(json.dumps(corrupt_body), encoding="utf-8")
+    corrupt_query = project_operator_replay(
+        runtime_root=environment["QMB_REPLAY_RUNTIME_ROOT"],
+        context=context,
+        predicate={"max_trades": 1},
+    )
+    assert not is_ok(corrupt_query)
+    artifact_path.unlink()
+    missing_query = project_operator_replay(
+        runtime_root=environment["QMB_REPLAY_RUNTIME_ROOT"],
+        context=context,
+        predicate={"max_trades": 1},
+    )
+    assert not is_ok(missing_query)
+    assert not artifact_path.exists()  # queries never backfill or rerun
+    artifact_path.write_bytes(original_artifact)
     with tempfile.TemporaryDirectory(prefix="qmb-terminal-verify-test-") as raw:
         claim_path = Path(raw) / "claim.json"
         claim_path.write_text(json.dumps(response), encoding="utf-8")

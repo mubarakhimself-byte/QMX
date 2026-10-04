@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from qmf.core import Fingerprint, Instant, Ok, Result, World, WriterId, fingerprint, is_refusal
 from qmf.data.journal_producer import JournalReader
@@ -31,7 +31,7 @@ from qmf.risk.templates import (
     BOOK_KNOWN_FORMAT_VERSIONS,
 )
 
-from qmb._refuse import invalid, policy, unavailable
+from qmb._refuse import invalid, policy, storage, unavailable
 from qmb.config import materialize_bms_fragment, materialize_book_fragment
 from qmb.config.compiler import ResolvedRunConfig
 from qmb.config.fragments import ConfigFragment
@@ -47,12 +47,16 @@ from qmb.host.replay_request import ResolvedReplayRequest
 from qmb.orchestrator.ledger import ROLE_CONFIRMATION, LedgerSink, read_merge_view
 from qmb.registryread import AsOfSet, PassiveHub, RegistryReadPort
 
+if TYPE_CHECKING:
+    from qmb.analysis.project import ProjectionView
+
 __all__ = [
     "OPERATOR_BINDING_CONFIG_KEY",
     "OPERATOR_BINDING_FORMAT_VERSION",
     "OPERATOR_BINDING_KIND",
     "OperatorReplayBinding",
     "execute_operator_replay",
+    "project_operator_replay",
     "read_operator_replay_binding",
     "verify_operator_replay_result",
 ]
@@ -173,6 +177,24 @@ def execute_operator_replay(
     ct32 = result.value.performance_result.fingerprint()
     if is_refusal(ct32):
         return ct32
+    # Keep the canonical CT-32 body, not only the terminal's digest. Queries
+    # reopen this QMB-owned container and never rerun to manufacture a source.
+    from qmb.results.ct32 import assemble_run_performance_result  # noqa: PLC0415
+
+    output_dir = _operator_result_dir(binding.value, result.value.run_fp1)
+    if is_refusal(output_dir):
+        return output_dir
+    try:
+        output_dir.value.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return storage("ct32_artifact", "the operator result directory is writable", error=str(exc))
+    stored = assemble_run_performance_result(
+        result.value.performance_result, output_dir=output_dir.value
+    )
+    if is_refusal(stored):
+        return stored
+    if stored.value != ct32.value:
+        return policy("ct32_artifact", "stored CT-32 matches the completed economic result")
     terminal_stamp = fingerprint(result.value.terminal_line.fp1_identity())
     if is_refusal(terminal_stamp):
         return terminal_stamp
@@ -235,9 +257,27 @@ def verify_operator_replay_result(
     inputs = _load_operator_inputs(binding.value, context)
     if is_refusal(inputs):
         return inputs
-    config = cast(ResolvedRunConfig, inputs.value["config"])
-    request = cast(ResolvedReplayRequest, inputs.value["request"])
-    ledger_root = binding.value.roots["terminal_ledger"]
+    return _verify_operator_replay_inputs(
+        binding.value,
+        context,
+        inputs.value,
+        claimed_result=cast(object, claimed_result),
+        require_occurrence=_require_occurrence,
+    )
+
+
+def _verify_operator_replay_inputs(
+    binding: OperatorReplayBinding,
+    context: QmaBacktestContext,
+    inputs: Mapping[str, object],
+    *,
+    claimed_result: object | None,
+    require_occurrence: bool = True,
+) -> Result[Mapping[str, object]]:
+    """Verify one prepared snapshot; projection consumes these same inputs."""
+    config = cast(ResolvedRunConfig, inputs["config"])
+    request = cast(ResolvedReplayRequest, inputs["request"])
+    ledger_root = binding.roots["terminal_ledger"]
     merged = read_merge_view(ledger_root, world=config.world, role=ROLE_CONFIRMATION)
     if is_refusal(merged):
         return merged
@@ -251,6 +291,16 @@ def verify_operator_replay_result(
     line = matching[0]
     if line.ct32_fingerprint is None:
         return policy("ct32_fp1", "durable Book confirmation carries a CT-32 fingerprint")
+    from qmb.results.ct32 import stored_ct32_fingerprint  # noqa: PLC0415
+
+    output_dir = _operator_result_dir(binding, config.fingerprint)
+    if is_refusal(output_dir):
+        return output_dir
+    stored = stored_ct32_fingerprint(output_dir.value)
+    if is_refusal(stored):
+        return stored
+    if stored.value != line.ct32_fingerprint:
+        return policy("ct32_artifact", "stored CT-32 matches the pinned terminal ledger row")
     inputs_raw = line.result_label.get("input_fingerprints")
     if (
         line.role != ROLE_CONFIRMATION
@@ -276,7 +326,7 @@ def verify_operator_replay_result(
         "attempt_id": context.attempt_id,
         "experiment_spec_fp1": context.experiment_spec_fp1.value,
         "split_manifest_fp1": context.split_manifest_fp1.value,
-        "operator_descriptor_fp1": binding.value.descriptor_fp1.value,
+        "operator_descriptor_fp1": binding.descriptor_fp1.value,
         "terminal_line_fp1": line_stamp.value.value,
     }
     if claimed_result is not None and not _matches_terminal_claim(
@@ -286,17 +336,17 @@ def verify_operator_replay_result(
             "terminal_result",
             "the prior subprocess response has the exact typed body of the reopened ledger row",
         )
-    if _require_occurrence:
+    if require_occurrence:
         occurrence = _book_occurrence_identity(
-            binding.value,
+            binding,
             context,
-            inputs.value,
+            inputs,
             terminal_fp1=line_stamp.value,
             domain_result_fp1=line.ct32_fingerprint,
         )
         if is_refusal(occurrence):
             return occurrence
-        reader = cast(JournalReader, inputs.value["journal_reader"])
+        reader = cast(JournalReader, inputs["journal_reader"])
         witnessed = read_operator_occurrence(
             identity=occurrence.value,
             journal_reader=reader,
@@ -304,6 +354,77 @@ def verify_operator_replay_result(
         if is_refusal(witnessed):
             return witnessed
     return Ok(actual)
+
+
+def _operator_result_dir(binding: OperatorReplayBinding, run_fp1: Fingerprint) -> Result[Path]:
+    """One fixed artifact location within the existing trusted journal root."""
+    root = binding.roots["journal"]
+    parent = root / "qmb-results"
+    target = parent / run_fp1.digest
+    try:
+        if (
+            parent.is_symlink()
+            or target.is_symlink()
+            or not target.resolve().is_relative_to(root.resolve())
+        ):
+            return policy("ct32_artifact", "operator results remain inside the pinned journal root")
+    except OSError as exc:
+        return storage("ct32_artifact", "operator result path resolves", error=str(exc))
+    return Ok(target)
+
+
+def project_operator_replay(
+    *, runtime_root: object, context: object, predicate: object, as_of: object = None
+) -> Result[ProjectionView]:
+    """Read a completed pinned replay through the existing projection authority.
+
+    ``context`` is the original verified run's context, not a new query's job.
+    No roots, source rows, builder or output path are selected by a query caller.
+    This function publishes no Experiment Ledger entry and claims no Agent lease.
+    """
+    binding = read_operator_replay_binding(runtime_root=runtime_root, context=context)
+    if is_refusal(binding):
+        return binding
+    if not isinstance(context, QmaBacktestContext) or context.operator_descriptor_fp1 is None:
+        return invalid("operator_descriptor_fp1", "projection reopens the original pinned run")
+    inputs = _load_operator_inputs(binding.value, context)
+    if is_refusal(inputs):
+        return inputs
+    verified = _verify_operator_replay_inputs(
+        binding.value, context, inputs.value, claimed_result=None
+    )
+    if is_refusal(verified):
+        return verified
+    config = cast(ResolvedRunConfig, inputs.value["config"])
+    admission = cast(BookAdmissionContext, inputs.value["admission"])
+    from qmb.analysis.project import CT29ProjectionSource, project  # noqa: PLC0415
+    from qmb.results.ct32 import load_stored_ct32  # noqa: PLC0415
+
+    output_dir = _operator_result_dir(binding.value, config.fingerprint)
+    if is_refusal(output_dir):
+        return output_dir
+    body = load_stored_ct32(output_dir.value)
+    if is_refusal(body):
+        return body
+    source = CT29ProjectionSource.try_create(
+        journal_reader=inputs.value["journal_reader"],
+        stream_name=admission.journal_writer.stream_name,
+        writer=admission.journal_writer.writer,
+        binding_epoch=admission.binding.fingerprint,
+        result_label=admission.result_label,
+        run_config=config,
+        replay_request=inputs.value["request"],
+        terminal_ledger_root=binding.value.roots["terminal_ledger"],
+        ledger_role=ROLE_CONFIRMATION,
+    )
+    if is_refusal(source):
+        return source
+    return project(
+        source_ct32=body.value,
+        source_ct29=source.value,
+        predicate=predicate,
+        as_of=binding.value.registry_as_of if as_of is None else as_of,
+    )
 
 
 def _matches_terminal_claim(claimed: object, actual: Mapping[str, object]) -> bool:

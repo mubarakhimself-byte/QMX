@@ -633,6 +633,12 @@ class CliQmbDoorTransport:
                     occupancy=QMB_OCCUPANCY_QUERY,
                 )
             captured = out if isinstance(out, str) else (out.decode("utf-8") if out else "")
+            if proc.returncode != 0:
+                return policy_rejection(
+                    "qmb_query",
+                    "the QMB query child must complete successfully",
+                    exit_code=proc.returncode,
+                )
             self._stdout_by_job[job_id] = captured
         pid = int(proc.pid)
         self._processes[job_id] = proc
