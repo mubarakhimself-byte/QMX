@@ -241,7 +241,7 @@ jobs:
         working-directory: qmn
         run: |
           set +e
-          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all > mutmut-results.txt 2>&1
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all true > mutmut-results.txt 2>&1
           status=$?
           set -e
           printf '%s\n' "$status" > mutmut-results.status
@@ -308,7 +308,7 @@ jobs:
         working-directory: packages/qmf-core
         run: |
           set +e
-          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all > mutmut-results.txt 2>&1
+          uv run --frozen --project "$GITHUB_WORKSPACE" --with "mutmut==3.3.0" mutmut results --all true > mutmut-results.txt 2>&1
           status=$?
           set -e
           printf '%s\n' "$status" > mutmut-results.status
