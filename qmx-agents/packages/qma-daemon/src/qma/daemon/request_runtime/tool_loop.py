@@ -318,6 +318,7 @@ class ToolLoopProvider:
         limits: LoopLimits | None = None,
         extensions: AgentExtensions | None = None,
         workflow_id: str = "request",
+        effect_namespace: str | None = None,
     ) -> None:
         self.provider = provider
         self.tools = dict(tools)
@@ -328,6 +329,7 @@ class ToolLoopProvider:
         self.runtime: RequestRuntime | None = None
         self.extensions = extensions
         self.workflow_id = workflow_id
+        self.effect_namespace = effect_namespace
 
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -418,6 +420,8 @@ class ToolLoopProvider:
         }
         if selection is not None:
             pinned["extensions"] = selection.binding()
+        if self.effect_namespace is not None:
+            pinned["effect_namespace"] = self.effect_namespace
         # Round-trip to match journal JSON sequence representation.
         pinned = json.loads(json.dumps(pinned, sort_keys=True))
         previous_binding = records.get("agent_binding", thread_key)
@@ -462,7 +466,7 @@ class ToolLoopProvider:
                     raise ProviderError("outcome_unknown", "Tool call checkpoint unavailable")
                 messages = checkpoint.checkpoint["channel_values"]["messages"]
                 call = messages[-1].tool_calls[0]
-                invocation = f"{request.request_id}:graph:{call['id']}"
+                invocation = f"{self.effect_namespace or request.request_id}:graph:{call['id']}"
                 try:
                     self.validate_continuation(request, cancellation, deadline)
                 except ProviderError as exc:
@@ -645,6 +649,10 @@ class ToolLoopProvider:
         ) -> None:
             if cancellation.is_set():
                 raise ProviderCancelled()
+            if set(_bound.validated_payload) - set(_bound.grant.parameter_ceiling.allow_keys):
+                raise ProviderError(
+                    "tool_denied", "Arguments exceed the bound parent grant ceiling"
+                )
             try:
                 output: object = _binding.execute(_bound.validated_payload)
             except ProviderCancelled:

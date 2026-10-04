@@ -48,9 +48,16 @@ class SubmitAgentRequest:
 class AgentRequestReference:
     request_id: str
     product_session_ref: str
+    activity_id: str | None = None
 
     def to_payload(self) -> dict[str, object]:
-        return {"request_id": self.request_id, "product_session_ref": self.product_session_ref}
+        body: dict[str, object] = {
+            "request_id": self.request_id,
+            "product_session_ref": self.product_session_ref,
+        }
+        if self.activity_id is not None:
+            body["activity_id"] = self.activity_id
+        return body
 
 
 def require_agent_request_capability(capabilities: object, method: str) -> Result[None]:
@@ -137,7 +144,25 @@ def parse_get_agent_request(value: object) -> Result[AgentRequestReference]:
 
 
 def parse_cancel_agent_request(value: object) -> Result[AgentRequestReference]:
-    return _reference(value)
+    raw = cast("Mapping[object, object]", value) if isinstance(value, Mapping) else None
+    if raw is not None and "activity_id" in raw:
+        body = _body(raw, frozenset({"product_session_ref", "request_id", "activity_id"}))
+        if is_refusal(body):
+            return body
+        reference = _reference(
+            {key: body.value[key] for key in ("product_session_ref", "request_id")}
+        )
+        activity = _identity(body.value, "activity_id", prefix="req:")
+        if is_refusal(reference):
+            return reference
+        if is_refusal(activity):
+            return activity
+        return Ok(
+            AgentRequestReference(
+                reference.value.request_id, reference.value.product_session_ref, activity.value
+            )
+        )
+    return _reference(cast("object", value))
 
 
 def parse_resume_agent_request(value: object) -> Result[AgentRequestReference]:

@@ -1314,10 +1314,25 @@ class DaemonProcess:
             )
             if is_refusal(wrapped):
                 return wrapped
-            runtime.providers = dict(wrapped.value)
+            from qma.daemon.request_runtime.actor_workflow import (  # noqa: PLC0415
+                bind_actor_workflows,
+            )
+
+            actor_providers, actor_policies = bind_actor_workflows(
+                self.root,
+                runtime,
+                providers,
+                wrapped.value,
+                policies,
+                profile_tools or {},
+                now=self._agent_request_now,
+                extensions=agent_extensions,
+                hooks=self._artifacts.hooks,
+            )
+            runtime.providers = dict(actor_providers)
             bridge = AgentRequestBridge(
                 runtime=runtime,
-                policies=policies,
+                policies=actor_policies,
                 now=self._agent_request_now,
                 max_workers=max_workers,
                 max_inflight=max_inflight,

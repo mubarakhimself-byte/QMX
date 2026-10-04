@@ -347,7 +347,13 @@ class AgentRequestBridge:
             receipt["content_withheld"] = True
             receipt["disclosure_error"] = "context_changed"
             return Ok(receipt)
-        return Ok(request_receipt(disclosure.value, disclose_result=True))
+        from .actor_workflow import activity_receipts  # noqa: PLC0415
+
+        body = dict(request_receipt(disclosure.value, disclose_result=True))
+        activities = activity_receipts(self.runtime, params.request_id)
+        if activities:
+            body["activities"] = activities
+        return Ok(body)
 
     def cancel(
         self, params: AgentRequestReference, *, principal: PrincipalClass
@@ -355,6 +361,17 @@ class AgentRequestBridge:
         owned = self._owned(params, principal, disclosure=False)
         if is_refusal(owned):
             return owned
+        if params.activity_id is not None:
+            from .actor_workflow import activity_receipts  # noqa: PLC0415
+
+            activities = activity_receipts(self.runtime, params.request_id)
+            child = next(
+                (item for item in activities if item["activity_id"] == params.activity_id), None
+            )
+            if child is None:
+                return invalid_input("activity_id", "activity does not belong to this owned job")
+            if child["status"] in {"completed", "cancelled", "failed", "not_started"}:
+                return Ok({"activity_id": params.activity_id, "status": child["status"]})
         cancelled = self.runtime.cancel(owned.value.request_id)
         if is_refusal(cancelled):
             return cancelled
