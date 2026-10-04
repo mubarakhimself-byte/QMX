@@ -124,7 +124,10 @@ class _NativeReader:
             c.sizeof(_ObjectAttributes), parent, c.pointer(string), 0x40, None, None
         )  # OBJ_CASE_INSENSITIVE; names below the anchor are single components.
         handle, status = c.c_void_p(), _IoStatus()
-        access = 0x100080 if directory else 0x80100000  # sync/attributes or generic read
+        # Include FILE_LIST_DIRECTORY so the directory handle participates in
+        # read/write/delete sharing. A metadata-only open cannot exclude rename
+        # before the next child is opened, even with FILE_SHARE_READ alone.
+        access = 0x100081 if directory else 0x80100000  # sync/attributes/list or generic read
         options = 0x20 | 0x200000 | (1 if directory else 0x40)
         # SYNCHRONOUS_IO_NONALERT | OPEN_REPARSE_POINT | DIRECTORY/NON_DIRECTORY_FILE
         result = cast(

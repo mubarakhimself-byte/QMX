@@ -137,6 +137,48 @@ def test_reader_rejects_windows_namespace_aliases(tmp_path: Path, name: str) -> 
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows handle sharing")
+@pytest.mark.parametrize("move_root", [False, True])
+def test_reader_locks_directories_before_opening_the_next_component(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, move_root: bool
+) -> None:
+    from qmn.host import _windows_deployment as native
+
+    root = tmp_path / "root"
+    parent = root / "nested"
+    parent.mkdir(parents=True)
+    (parent / "deployment.json").write_bytes(b"checked bytes")
+    target = root if move_root else parent
+    outside = tmp_path / "outside"
+    target.rename(outside)
+    outside.rename(target)
+    original_open = native._NativeReader.open
+    attempted: list[int | None] = []
+
+    def move_held_directory() -> None:
+        with pytest.raises(PermissionError) as raised:
+            target.rename(outside)
+        attempted.append(raised.value.winerror)
+
+    def open_with_attacker(
+        self: native._NativeReader, name: str, held: int | None, *, directory: bool
+    ) -> int:
+        # Attack immediately after this directory is held, before any child
+        # handle can independently prevent its rename. Metadata-only directory
+        # opens do not participate in Windows read/write/delete share checks.
+        if name == ("nested" if move_root else "deployment.json"):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(move_held_directory).result(timeout=5)
+        return original_open(self, name, held, directory=directory)
+
+    monkeypatch.setattr(native._NativeReader, "open", open_with_attacker)
+    assert (
+        runtime._read_deployment_no_follow(root, Path("nested/deployment.json")) == b"checked bytes"
+    )
+    assert attempted == [32]  # ERROR_SHARING_VIOLATION, not an ACL denial.
+    target.rename(outside)  # The same rename succeeds after the reader closes.
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows handle sharing")
 def test_reader_blocks_concurrent_parent_leaf_replacement_and_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
