@@ -146,3 +146,27 @@ typing lane's nine files and QMB/QMN runtime lanes remain disjoint.
   optimize.run envelope handling and shape-correct verified seven-field result
   parsing. Incomplete verification must never execute trials or mint a witness.
   Details retained in the source lane's `qmb-study-ingress-blocker-draft.md`.
+
+## Stable successor full component checks
+
+- Checked clean head `5fa3e9e20a7aa2e38077e9393fb23a782cad0053` once after
+  reviewed typing/QMN/authoring composition settled. Both runner records have
+  valid HEAD, empty status and current parent/stripped-child source provenance.
+- Full QMA: **2076 passed**, no test failures/skips, one upstream warning,
+  236.91s. Gate remains **RED, exit1**: aggregate79.08%, daemon77.68%, below
+  unchanged80%. Source coverage measures288runtime files; no new exclusions.
+  Evidence: `qma-aa66bbcf6da241bd8567b30f05f61dc0`.
+- Full offline QMN under the normal host token: **1130 passed**,16existing
+  platform skips,7live tests deselected,165.02s. Gate remains **RED, exit1**:
+  73.17%coverage below unchanged80%,201measured runtime files. Evidence:
+  `qmn-765358731b1d4dac8f48ee2053be57c7`. No live venue/provider calls.
+- Exact commands, source proof, coverage totals and artifact hashes are in
+  `backend-current-component-gates-draft.json`. Earlier red histories remain.
+- QMB remains held pending two repairs: independently accepted scaffold fix
+  `faf79b93499056fe9f999be51c13b48f5aff40a7` and integrator-owned native directory
+  sharing repair, separately independently reviewed before acceptance. Native
+  work occurs only in task12's isolated `qmb-containment-repair` checkout;
+  originals and this candidate's runtime tree remain untouched while reviewed.
+- Coverage, Study production ingress, owned-DONE projection, full native auth,
+  ordinary native tool restrictions, remote endurance and DeepSeek policy/key
+  limits remain. Passing test inventory does not establish platform readiness.
