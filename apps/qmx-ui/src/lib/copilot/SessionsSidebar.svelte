@@ -1,14 +1,12 @@
 <script lang="ts">
   /**
-   * Every copilot session in one place: what is running now and what is
-   * waiting for you on top, then sessions grouped by where they started
-   * (operator, 2026-10-03: collections per page). Any of them can be opened
-   * here and continued by the main copilot. Sessions can run for days.
+   * Your errands, by what they need: the ones waiting for you, the ones
+   * working on their own, and earlier ones. Where an errand started (Lab,
+   * Portfolio, Library, a mini app) is a small icon, not a separate list.
+   * Helpers sit under their errand when it is open.
    */
   import Plus from "@lucide/svelte/icons/plus";
   import Search from "@lucide/svelte/icons/search";
-  import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import Pin from "@lucide/svelte/icons/pin";
   import MessagesSquare from "@lucide/svelte/icons/messages-square";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business";
@@ -17,29 +15,24 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { cn } from "$lib/utils";
-  import type { Origin, Session } from "./demo";
+  import type { Session } from "./demo";
 
   let {
     sessions,
     active,
     onopen,
     onnew,
+    waitingIds = [],
   }: {
     sessions: Session[];
     active: string | null;
     onopen: (id: string) => void;
     onnew: () => void;
+    /** Errands with a question or approval pending. */
+    waitingIds?: string[];
   } = $props();
 
   let query = $state("");
-  let folded = $state<string[]>([]);
-  const ORIGINS: Origin[] = [
-    "Main",
-    "Lab",
-    "Portfolio",
-    "Library",
-    "Mini apps",
-  ];
   const ICON = {
     Main: MessagesSquare,
     Lab: FlaskConical,
@@ -47,145 +40,108 @@
     Library: LibraryBig,
     "Mini apps": AppWindow,
   };
-  const STATUS = {
-    running: { dot: "bg-info remote-pulse", text: "Running" },
-    waiting: { dot: "bg-warning", text: "Waiting for you" },
-    done: { dot: "bg-muted-foreground/40", text: "" },
-  };
   const q = $derived(query.trim().toLowerCase());
-  // Sub-agent sessions sit under their parent, not in the groups.
-  const shown = $derived(
+  const top = $derived(
     sessions.filter(
       (s) => !s.parent && (!q || s.title.toLowerCase().includes(q)),
     ),
   );
+  const isWaiting = (s: Session) =>
+    s.status === "waiting" || waitingIds.includes(s.id);
+  const groups = $derived([
+    { label: "Needs you", list: top.filter(isWaiting) },
+    {
+      label: "Working",
+      list: top.filter((s) => s.status === "running" && !isWaiting(s)),
+    },
+    {
+      label: "Earlier",
+      list: top.filter((s) => s.status === "done" && !isWaiting(s)),
+    },
+  ]);
   const activeParent = $derived(
     sessions.find((s) => s.id === active)?.parent ?? null,
   );
   const kids = (id: string) => sessions.filter((s) => s.parent === id);
-  const live = $derived(shown.filter((s) => s.status !== "done"));
-  const groups = $derived([
-    {
-      label: "Pinned",
-      list: shown.filter((s) => s.pinned && s.status === "done"),
-    },
-    ...ORIGINS.map((o) => ({
-      label:
-        o === "Main"
-          ? "Main copilot"
-          : `From ${o === "Mini apps" ? "mini apps" : `the ${o}`}`,
-      list: shown.filter(
-        (s) => s.origin === o && !s.pinned && s.status === "done",
-      ),
-    })),
-  ]);
 </script>
 
-{#snippet row(s: Session)}
-  {@const Icon = ICON[s.origin]}
-  <li>
-    <button
-      type="button"
-      class={cn(
-        "hover:bg-muted flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left",
-        active === s.id && "bg-muted",
-      )}
-      aria-current={active === s.id ? "true" : undefined}
-      onclick={() => onopen(s.id)}
-    >
-      <Icon class="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
-      <span class="min-w-0 flex-1">
-        <span class="block truncate text-sm">{s.title}</span>
-        <span
-          class="text-muted-foreground flex items-center gap-1.5 text-[13px]"
-        >
-          <span class={cn("size-1.5 rounded-full", STATUS[s.status].dot)}
-          ></span>
-          {STATUS[s.status].text || s.age}{#if s.status !== "done"}
-            · {s.age}{/if}{#if s.agents && s.status === "running"}
-            · {s.agents} agents{/if}
-        </span>
-      </span>
-    </button>
-    {#if kids(s.id).length && (active === s.id || activeParent === s.id)}
-      <ul class="border-border ml-4 border-l pl-2">
-        {#each kids(s.id) as k (k.id)}
+<aside aria-label="Errands" class="bg-panel flex h-full flex-col gap-3 p-3">
+  <Button variant="outline" class="justify-start" onclick={onnew}>
+    <Plus /> New errand
+  </Button>
+  <div class="relative">
+    <Search
+      class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+    />
+    <Input
+      bind:value={query}
+      placeholder="Search errands"
+      aria-label="Search errands"
+      class="h-9 pl-9"
+    />
+  </div>
+  <div class="min-h-0 flex-1 overflow-auto">
+    {#each groups.filter((g) => g.list.length) as g (g.label)}
+      <p class="text-muted-foreground mt-2 mb-1 px-2 text-sm font-medium">
+        {g.label}
+      </p>
+      <ul class="flex flex-col gap-0.5">
+        {#each g.list as s (s.id)}
+          {@const Icon = ICON[s.origin]}
           <li>
             <button
               type="button"
               class={cn(
-                "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px]",
-                active === k.id && "bg-muted",
+                "hover:bg-muted flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left",
+                active === s.id && "bg-muted",
               )}
-              aria-current={active === k.id ? "true" : undefined}
-              onclick={() => onopen(k.id)}
+              aria-current={active === s.id ? "true" : undefined}
+              title={`Started in ${s.origin === "Main" ? "the main copilot" : s.origin}`}
+              onclick={() => onopen(s.id)}
             >
-              <span
-                class={cn(
-                  "size-1.5 shrink-0 rounded-full",
-                  STATUS[k.status].dot,
-                )}
-              ></span>
-              <span class="min-w-0 flex-1 truncate">{k.title}</span>
+              <Icon class="text-muted-foreground mt-1 size-4 shrink-0" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{s.title}</span>
+                <span class="text-muted-foreground block text-sm">{s.age}</span>
+              </span>
+              {#if g.label !== "Earlier"}<span
+                  class={cn(
+                    "mt-2 size-2 shrink-0 rounded-full",
+                    g.label === "Needs you"
+                      ? "bg-warning"
+                      : "bg-info remote-pulse",
+                  )}
+                ></span>{/if}
             </button>
+            {#if kids(s.id).length && (active === s.id || activeParent === s.id)}
+              <ul class="border-border my-1 ml-5 flex flex-col border-l pl-2">
+                {#each kids(s.id) as k (k.id)}
+                  <li>
+                    <button
+                      type="button"
+                      class={cn(
+                        "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                        active === k.id && "bg-muted",
+                      )}
+                      onclick={() => onopen(k.id)}
+                    >
+                      <span
+                        class={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          k.status === "running"
+                            ? "bg-info remote-pulse"
+                            : "bg-success",
+                        )}
+                      ></span>
+                      <span class="min-w-0 flex-1 truncate">{k.title}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           </li>
         {/each}
       </ul>
-    {/if}
-  </li>
-{/snippet}
-
-<aside aria-label="Sessions" class="bg-panel flex h-full flex-col gap-2 p-2">
-  <Button variant="outline" size="sm" class="justify-start" onclick={onnew}>
-    <Plus /> New session
-  </Button>
-  <div class="relative">
-    <Search
-      class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-    />
-    <Input
-      bind:value={query}
-      placeholder="Search sessions"
-      aria-label="Search sessions"
-      class="h-8 pl-8"
-    />
-  </div>
-  <div class="min-h-0 flex-1 overflow-auto">
-    {#if live.length}
-      <div class="bg-muted/25 mb-2 rounded-lg p-1">
-        <p class="text-muted-foreground px-1 py-1 text-[13px] font-semibold">
-          Going on now
-        </p>
-        <ul>
-          {#each live as s (s.id)}{@render row(s)}{/each}
-        </ul>
-      </div>
-    {/if}
-    {#each groups.filter((g) => g.list.length) as g (g.label)}
-      {@const shut = folded.includes(g.label)}
-      <div class="mb-1">
-        <button
-          type="button"
-          class="text-muted-foreground hover:text-foreground flex w-full items-center gap-1.5 px-1 py-1.5 text-[13px] font-semibold"
-          aria-expanded={!shut}
-          onclick={() =>
-            (folded = shut
-              ? folded.filter((x) => x !== g.label)
-              : [...folded, g.label])}
-        >
-          {#if g.label === "Pinned"}<Pin class="size-3" />{/if}
-          <span class="flex-1 text-left">{g.label}</span>
-          <span class="num font-normal">{g.list.length}</span>
-          <ChevronRight
-            class={cn("size-3.5 transition-transform", !shut && "rotate-90")}
-          />
-        </button>
-        {#if !shut}
-          <ul>
-            {#each g.list as s (s.id)}{@render row(s)}{/each}
-          </ul>
-        {/if}
-      </div>
     {/each}
   </div>
 </aside>

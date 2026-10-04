@@ -1,13 +1,12 @@
 <script lang="ts">
   /**
-   * The main copilot (Copilot pass 2, 2026-10-04), modelled on T3 Code,
-   * bb and DeepSeek Harness rather than invented: sessions on the left
-   * (folding on their own), one shared session store with the Lab and
-   * Portfolio copilots, sub-agents as child threads with a bar back to the
-   * parent, questions and approvals that take over the message box, panels
-   * the copilot builds as descriptions (keep, throw away or pin to the Lab),
-   * and a right panel with Activity, Diff, Terminal, Browser and Preview.
-   * DEMO: replies are scripted and labelled; the daemon streams real ones.
+   * The copilot as a desk of errands (redesign, 2026-10-04). You hand it
+   * errands that can run for days; the screen shows one at a time, told
+   * plainly: what it is for, how far it has got, the conversation as
+   * letters, and the one decision it needs from you where you type. Its
+   * work (helpers, reports, changes, terminal, browser) opens in a drawer
+   * only when you ask. Errands from the Lab and Portfolio copilots live in
+   * the same list. DEMO: replies are scripted and say so.
    * Params: ?session=, ?start=train|import|workflow, ?ask=, ?focus=1.
    */
   import { page } from "$app/state";
@@ -16,18 +15,16 @@
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import PanelRight from "@lucide/svelte/icons/panel-right";
   import PanelLeft from "@lucide/svelte/icons/panel-left";
-  import CornerUpLeft from "@lucide/svelte/icons/corner-up-left";
-  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import X from "@lucide/svelte/icons/x";
   import * as Resizable from "$lib/components/ui/resizable";
   import { Button } from "$lib/components/ui/button";
   import Composer from "$lib/workbench/Composer.svelte";
   import GuidedStart from "$lib/workbench/GuidedStart.svelte";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { addPane, pane } from "$lib/workbench/tiles/tiles";
-  import { cn } from "$lib/utils";
   import Thread from "$lib/copilot/Thread.svelte";
+  import ErrandHeader from "$lib/copilot/ErrandHeader.svelte";
   import SessionsSidebar from "$lib/copilot/SessionsSidebar.svelte";
   import WorkArea from "$lib/copilot/WorkArea.svelte";
   import HowDoI from "$lib/copilot/HowDoI.svelte";
@@ -40,7 +37,7 @@
   const demo = workbench.demoMode;
   let focus = $state(params.get("focus") === "1");
   let showSessions = $state(true);
-  let showWork = $state(true);
+  let drawer = $state<string | null>(null);
   function popOut() {
     window.open(
       resolve("/copilot") + "?focus=1",
@@ -69,7 +66,6 @@
           : null,
   );
   let seed = $state(params.get("ask") ?? "");
-  let workTab = $state("activity");
   let artifact = $state<string | null>(null);
   let writing = $state(false);
 
@@ -80,10 +76,8 @@
   const blocks = $derived(copilot.blocks(active));
   const pending = $derived(copilot.pending(active));
   const busy = $derived(!!(active && copilot.busy[active]));
-  const running = $derived(
-    blocks
-      .flatMap((b) => (b.kind === "agents" ? b.agents : []))
-      .filter((a) => a.state === "running"),
+  const waitingIds = $derived(
+    copilot.sessions.filter((s) => copilot.pending(s.id)).map((s) => s.id),
   );
 
   function open(id: string) {
@@ -91,7 +85,7 @@
     startKind = null;
     writing = false;
   }
-  function newSession() {
+  function newErrand() {
     open(copilot.create("Main"));
     seed = "";
   }
@@ -104,10 +98,7 @@
   function openAgent(agentId: string) {
     const child = active ? `${active}/${agentId}` : null;
     if (child && copilot.session(child)) open(child);
-    else {
-      workTab = "activity";
-      showWork = true;
-    }
+    else drawer = "activity";
   }
   function onpanel(i: number, state: "kept" | "discarded" | "pinned") {
     if (!active) return;
@@ -141,34 +132,13 @@
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={showSessions ? "Hide sessions" : "Show sessions"}
-        title={showSessions ? "Hide sessions" : "Show sessions"}
+        aria-label={showSessions ? "Hide errands" : "Show errands"}
+        title={showSessions ? "Hide errands" : "Show errands"}
         aria-pressed={showSessions}
         onclick={() => (showSessions = !showSessions)}><PanelLeft /></Button
       >
     {/if}
     <h1 class="text-base font-semibold">Copilot</h1>
-    {#if session}
-      <span class="text-muted-foreground min-w-0 truncate text-sm"
-        >{session.title}</span
-      >
-      {#if busy}
-        <span
-          class="bg-info/15 text-info flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-          ><LoaderCircle class="size-3 animate-spin" />Replying</span
-        >
-      {:else if session.status !== "done"}
-        <span
-          class={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-xs",
-            session.status === "running"
-              ? "bg-info/15 text-info"
-              : "bg-warning/15 text-warning",
-          )}
-          >{session.status === "running" ? "Running" : "Waiting for you"} · {session.age}</span
-        >
-      {/if}
-    {/if}
     <div class="ml-auto flex items-center gap-1">
       <Button
         variant={focus ? "secondary" : "ghost"}
@@ -177,83 +147,62 @@
         title={focus ? "Exit focus" : "Focus"}
         onclick={() => (focus = !focus)}
       >
-        {#if focus}<Minimize2 /><span class="hidden xl:inline">Exit focus</span
-          >{:else}<Maximize2 /><span class="hidden xl:inline">Focus</span>{/if}
+        {#if focus}<Minimize2 />Exit focus{:else}<Maximize2 />Focus{/if}
       </Button>
       <Button variant="ghost" size="sm" title="New window" onclick={popOut}>
-        <ExternalLink /><span class="hidden xl:inline">New window</span>
+        <ExternalLink />New window
       </Button>
-      {#if !focus}
-        <Button
-          variant={showWork ? "secondary" : "ghost"}
-          size="icon-sm"
-          aria-label="Activity and work area"
-          title="Activity and work area"
-          aria-pressed={showWork}
-          onclick={() => (showWork = !showWork)}><PanelRight /></Button
-        >
-      {/if}
     </div>
   </header>
 
   <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
     {#if !focus && showSessions}
       <Resizable.Pane
-        id="sessions"
+        id="errands"
         order={1}
-        defaultSize={18}
-        minSize={13}
-        maxSize={28}
+        defaultSize={20}
+        minSize={15}
+        maxSize={30}
       >
         <SessionsSidebar
           sessions={copilot.sessions}
           {active}
+          {waitingIds}
           onopen={open}
-          onnew={newSession}
+          onnew={newErrand}
         />
       </Resizable.Pane>
       <Resizable.Handle />
     {/if}
 
-    <Resizable.Pane id="thread" order={2} defaultSize={52} minSize={30}>
-      <section aria-label="Conversation" class="bg-panel flex h-full flex-col">
-        {#if parent}
-          <div
-            class="bg-muted/40 flex shrink-0 items-center gap-2 border-b px-4 py-2 text-sm"
-          >
-            <span class="text-muted-foreground">Sub-agent of</span>
-            <span class="truncate font-medium">{parent.title}</span>
-            <span class="text-muted-foreground hidden md:inline"
-              >· gets only its task, not the whole conversation</span
-            >
-            <Button
-              size="sm"
-              variant="outline"
-              class="ml-auto"
-              onclick={() => open(parent.id)}><CornerUpLeft />Back</Button
-            >
-          </div>
-        {/if}
+    <Resizable.Pane id="errand" order={2} defaultSize={80} minSize={40}>
+      <section aria-label="Errand" class="solid-backing flex h-full flex-col">
         <div class="min-h-0 flex-1 overflow-auto">
           {#if startKind}
             <GuidedStart kind={startKind} />
-          {:else if blocks.length}
+          {:else if session && blocks.length}
+            <ErrandHeader
+              {session}
+              {blocks}
+              {parent}
+              {busy}
+              waiting={!!pending}
+              onopen={(tab) => (drawer = tab)}
+              onback={parent ? () => open(parent.id) : undefined}
+            />
             <Thread
               {blocks}
+              pendingBelow
               answers={active ? (copilot.answers[active] ?? {}) : {}}
               onanswer={(i, v) => active && copilot.answer(active, i, v)}
               onopenagent={openAgent}
               {onpanel}
               onartifact={(id) => {
                 artifact = id;
-                workTab = "preview";
-                showWork = true;
+                drawer = "preview";
               }}
-              onagent={() => {
-                workTab = "activity";
-                showWork = true;
-              }}
-              oncontinue={session && session.origin !== "Main"
+              onagent={() => (drawer = "activity")}
+              oncontinue={session.origin !== "Main"
                 ? () => active && copilot.absorb(active)
                 : undefined}
             />
@@ -264,18 +213,7 @@
             />
           {/if}
         </div>
-        <div class="mx-auto w-full max-w-4xl px-6 pb-5">
-          {#if running.length && !pending}
-            <p
-              class="text-muted-foreground mb-2 flex items-center gap-1.5 text-[13px]"
-            >
-              <span class="bg-info remote-pulse size-1.5 rounded-full"></span>
-              {running.length}
-              {running.length === 1 ? "agent" : "agents"} working on {[
-                ...new Set(running.map((a) => a.where)),
-              ].join(", ")}
-            </p>
-          {/if}
+        <div class="mx-auto w-full max-w-[46rem] px-8 pb-6">
           {#if pending && !writing && active}
             <PendingPanel
               block={pending.block}
@@ -285,7 +223,7 @@
             />
           {:else}
             <Composer
-              size={focus ? "lg" : "md"}
+              size="lg"
               {seed}
               {busy}
               refs={workbench.copilotRefs}
@@ -297,15 +235,24 @@
       </section>
     </Resizable.Pane>
 
-    {#if !focus && showWork}
+    {#if !focus && drawer}
       <Resizable.Handle />
-      <Resizable.Pane id="work" order={3} defaultSize={30} minSize={20}>
-        <WorkArea
-          bind:tab={workTab}
-          bind:artifact
-          session={active}
-          onopenagent={(sessionId) => open(sessionId)}
-        />
+      <Resizable.Pane id="drawer" order={3} defaultSize={32} minSize={22}>
+        <div class="relative h-full">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            class="absolute top-1.5 right-1.5 z-10"
+            aria-label="Close the drawer"
+            onclick={() => (drawer = null)}><X /></Button
+          >
+          <WorkArea
+            bind:tab={() => drawer ?? "activity", (v) => (drawer = v)}
+            bind:artifact
+            session={active}
+            onopenagent={(sessionId) => open(sessionId)}
+          />
+        </div>
       </Resizable.Pane>
     {/if}
   </Resizable.PaneGroup>

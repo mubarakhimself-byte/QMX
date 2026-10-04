@@ -43,6 +43,7 @@
     const st = document.documentElement.style;
     const c = workbench.custom;
     for (const k of CUSTOM_PROPS) st.removeProperty(k);
+    st.setProperty("font-size", `${workbench.textSize}px`);
     if (!c.on) return;
     st.setProperty("--primary", c.accent);
     st.setProperty("--ring", c.accent);

@@ -36,9 +36,9 @@
   } = $props();
 
   const TABS = [
-    { id: "activity", label: "Activity", icon: Activity },
-    { id: "preview", label: "Artifacts", icon: FileText },
-    { id: "diff", label: "Diff", icon: FileDiff },
+    { id: "activity", label: "Helpers and jobs", icon: Activity },
+    { id: "preview", label: "Reports", icon: FileText },
+    { id: "diff", label: "Changes", icon: FileDiff },
     { id: "terminal", label: "Terminal", icon: SquareTerminal },
     { id: "browser", label: "Browser", icon: Globe },
   ];
@@ -112,7 +112,7 @@
 
 <div class="bg-panel @container flex h-full flex-col">
   <div
-    class="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-1.5"
+    class="flex h-11 shrink-0 items-center gap-0.5 overflow-x-auto border-b pr-11 pl-1.5"
     role="tablist"
     aria-label="Work area"
   >
@@ -123,13 +123,13 @@
         aria-selected={tab === t.id}
         title={t.label}
         class={cn(
-          "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px]",
+          "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm",
           tab === t.id
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:text-foreground",
         )}
         onclick={() => (tab = t.id)}
-        ><t.icon class="size-4" /><span class="hidden @[26rem]:inline"
+        ><t.icon class="size-4" /><span class="hidden @[20rem]:inline"
           >{t.label}</span
         ></button
       >
@@ -139,10 +139,7 @@
   <div class="min-h-0 flex-1 overflow-auto">
     {#if tab === "activity"}
       <div class="flex items-center gap-2 px-3 pt-3">
-        <div
-          class="bg-muted flex rounded-md p-0.5 text-[13px]"
-          role="radiogroup"
-        >
+        <div class="bg-muted flex rounded-md p-0.5 text-sm" role="radiogroup">
           {#each [["all", "Everything"], ["this", "This session"]] as const as [v, label] (v)}
             <button
               type="button"
@@ -160,7 +157,7 @@
         </div>
       </div>
       <section class="px-3 pt-3">
-        <h3 class="text-muted-foreground mb-1.5 text-[13px] font-semibold">
+        <h3 class="text-muted-foreground mb-1.5 text-sm font-semibold">
           Sub-agents
         </h3>
         <ul class="flex flex-col gap-1.5">
@@ -193,7 +190,7 @@
                   >
                 {/if}
               </div>
-              <p class="text-muted-foreground mt-0.5 truncate text-[13px]">
+              <p class="text-muted-foreground mt-0.5 truncate text-sm">
                 From: {copilot.session(a.parent ?? null)?.title} · {a.age}
               </p>
             </li>
@@ -203,7 +200,7 @@
         </ul>
       </section>
       <section class="px-3 py-3">
-        <h3 class="text-muted-foreground mb-1.5 text-[13px] font-semibold">
+        <h3 class="text-muted-foreground mb-1.5 text-sm font-semibold">
           Background jobs
         </h3>
         <ul class="flex flex-col gap-1.5">
@@ -222,7 +219,7 @@
                   >{t.where}</span
                 >
               </div>
-              <p class="text-muted-foreground mt-1 truncate text-[13px]">
+              <p class="text-muted-foreground mt-1 truncate text-sm">
                 {t.log[t.log.length - 1]}
               </p>
               {#if t.state === "running"}
@@ -261,7 +258,7 @@
               <FileText class="text-primary size-4 shrink-0" />
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-sm">{a.title}</span>
-                <span class="text-muted-foreground text-[13px]"
+                <span class="text-muted-foreground text-sm"
                   >{a.type} · {copilot.session(a.session)?.title}</span
                 >
               </span>
@@ -289,7 +286,7 @@
           <span class="text-muted-foreground"> · from “Weekend-safe pod”</span>
         </p>
         <pre
-          class="overflow-x-auto rounded-lg border font-mono text-[13px] leading-6">{#each DIFF as d, i (i)}<span
+          class="overflow-x-auto rounded-lg border font-mono text-sm leading-6">{#each DIFF as d, i (i)}<span
               class={cn(
                 "block px-3",
                 d.t === "+" && "bg-success/12 text-success",
@@ -321,7 +318,7 @@
             <button
               type="button"
               class={cn(
-                "shrink-0 rounded px-2 py-1 text-[13px]",
+                "shrink-0 rounded px-2 py-1 text-sm",
                 termTask === t.id
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -333,16 +330,16 @@
           {/each}
         </div>
         <pre
-          class="m-2 min-h-0 flex-1 overflow-auto rounded-md bg-black/85 p-3 font-mono text-[13px] leading-relaxed text-green-300">{[
+          class="m-2 min-h-0 flex-1 overflow-auto rounded-md bg-black/85 p-3 font-mono text-sm leading-relaxed text-green-300">{[
             ...term.log.map((l) => `${term.where} $ ${l}`),
             ...(typed[termTask] ?? []),
           ].join("\n")}{term.state === "running" ? "\n▍" : ""}</pre>
         <form class="m-2 mt-0 flex items-center gap-2" onsubmit={run}>
-          <span class="text-muted-foreground font-mono text-[13px]"
+          <span class="text-muted-foreground font-mono text-sm"
             >{term.where} $</span
           >
           <input
-            class="bg-background/40 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-[13px]"
+            class="bg-background/40 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-sm"
             placeholder="type a command"
             aria-label="Command"
             bind:value={command}
@@ -368,7 +365,7 @@
             onclick={() => reload++}><RotateCw /></Button
           >
           <input
-            class="bg-background/40 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-[13px]"
+            class="bg-background/40 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-sm"
             aria-label="Address"
             bind:value={address}
           />
@@ -382,7 +379,7 @@
             referrerpolicy="no-referrer"
           ></iframe>
         {/key}
-        <p class="text-muted-foreground border-t px-3 py-1.5 text-[13px]">
+        <p class="text-muted-foreground border-t px-3 py-1.5 text-sm">
           Some sites refuse to show inside other apps; the desktop app gives the
           copilot a real browser it can drive, with stop and take over.
         </p>

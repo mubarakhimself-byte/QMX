@@ -22,6 +22,8 @@ export type Session = {
   pinned?: boolean;
   /** Sub-agent sessions point at the session that started them. */
   parent?: string;
+  /** The errand in one sentence, shown at the top. */
+  goal?: string;
 };
 
 export type StepState = "done" | "running" | "waiting" | "scheduled";
@@ -95,6 +97,7 @@ export const SESSIONS: Session[] = [
   {
     id: "weekend",
     title: "Weekend-safe pod, end to end",
+    goal: "A pod for the momentum bots that stays safe over weekends, tested on two years and the FTX crash, then on paper next to Trend rider.",
     origin: "Main",
     status: "waiting",
     age: "2 days",
@@ -104,6 +107,7 @@ export const SESSIONS: Session[] = [
   {
     id: "regime",
     title: "Regime study v3 against v1",
+    goal: "Find which regime labels hold up out of sample, v3 or v1.",
     origin: "Lab",
     status: "running",
     age: "3 days",

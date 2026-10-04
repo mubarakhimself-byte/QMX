@@ -228,6 +228,18 @@ class Workbench {
   custom = $state<CustomTheme>(parseCustom(storedJson("qmx.customTheme")));
   artRotate = $state<Rotation>(parseRotation(storedJson("qmx.art.rotate")));
 
+  /** Base text size in pixels; everything scales with it (operator, 2026-10-04: "bigger fonts"). */
+  textSize = $state<number>(
+    [15, 17, 19].includes(Number(storedJson("qmx.textSize")))
+      ? Number(storedJson("qmx.textSize"))
+      : 17,
+  );
+
+  setTextSize(px: number) {
+    this.textSize = px;
+    store("qmx.textSize", px);
+  }
+
   setSurface(s: Surface) {
     this.surface = s;
     store("qmx.surface", s);
