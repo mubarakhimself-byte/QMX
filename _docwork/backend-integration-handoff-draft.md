@@ -2,7 +2,8 @@
 
 This candidate composes reviewed native/SDK skills, governed QMB data/replay,
 and recorded spot paper reads. It is an isolated local branch, not a deployment
-or a whole-backend acceptance certificate. Claude owns UI. No credentials,
+or a whole-backend acceptance certificate. Claude owns UI; UI wiring has not
+started and no frontend integration is assumed or exercised here. No credentials,
 broker accounts, real orders, paid provider calls or network setup were used.
 
 ## Start and test
@@ -13,6 +14,10 @@ Do not treat `PYTHONPATH` as package installation. Current local verification us
 the existing task-8 QMB interpreter with task-11 SDK packages, task-6 native SDK
 site-packages **and its `win32`/`win32/lib` paths**, and existing runtime packages,
 all read-only. Bytecode is disabled. All QMX source paths point to this candidate.
+The primary QMB environment's site-packages precede borrowed SDK packages:
+otherwise DuckDB/Click/Cryptography pins are shadowed. The final pinned setup
+passes dependency integrity; earlier mixed-package broad logs retain their
+actual versions and are not canonical dependency-gate certification.
 `task-12/run-local-check.ps1` records that local setup. No registry install occurs.
 
 Portable checked entrypoint:
@@ -22,7 +27,7 @@ Portable checked entrypoint:
   -ExtraDependencyPath $dependencyPaths -Suite seams -EvidenceRoot $evidenceRoot
 ```
 
-Available suites: `seams`, `qma` (branch coverage and 80% aggregate floor), `qmn`,
+Available suites: `seams`, `native`, `qma` (branch coverage and 80% aggregate floor), `qmn`,
 `data-qmb`. Each creates a new evidence folder, records source HEAD/dirty state,
 script hash, executable/source/dependency paths and exact arguments, then keeps
 stdout, failures, skip reasons and exit status. Evidence roots stay outside Git.
@@ -36,6 +41,11 @@ operator's OS ownership. Config needs an existing `research_corpus_root_path`.
 `QMA_DAEMON_BIND_PORT` defaults to 8765; binding remains loopback. Do not launch
 this candidate against existing production/paper data while evaluating fixtures.
 The combined test seeds fresh explicitly labelled simulation data.
+
+Final pinned offline seam selection:84passed/no skips. Native correction also
+received independent review and81focused passes. Full component gates remain
+red and retain their pre-correction/mixed-import setup in the work ledger and
+evidence manifest. No final whole-platform certificate follows from these runs.
 
 Optional `qmb_local_environment` contains an explicit `provider_ref` and
 `network: none`. This is an execution-environment declaration, not an OS network
@@ -114,3 +124,10 @@ remain visible in the single work ledger; passing QMA does not certify them.
 
 No protected merge/push/publish/deploy is authorized. Canonical documentation is
 unchanged; this handoff and any produced documentation patch remain drafts.
+
+Current official LangChain documentation was consulted through Context7 for
+[middleware ordering/state](https://docs.langchain.com/oss/python/langchain/middleware/custom)
+and [checkpointed unit-test threads](https://docs.langchain.com/oss/python/langchain/test/unit-testing).
+Those SDK mechanisms supply hook/checkpoint behavior; QMX admission and operation
+authority remain host-owned. Local released native SDK source/protocol fixtures
+provide offline adapter evidence, not real account authorization.

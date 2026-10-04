@@ -1,0 +1,450 @@
+{
+  "platform_acceptance": false,
+  "source_checkpoint": "d11e1f3a42226f2b6619a08882b3d054fdabd624",
+  "working_tree_status": "M _docwork/backend-integration-handoff-draft.md\n M _docwork/backend-integration-ledger-draft.md\n M tools/backend-integration-check.ps1\n?? _docwork/backend-integration-evidence-draft.json",
+  "branch": "backend/combined-integration-20261004",
+  "originals": {
+    "native": {
+      "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-5\\native-combined-candidate",
+      "head": "1f3b98f6b6f268e98f0f14edbb918b727069eb9c",
+      "status": ""
+    },
+    "skills": {
+      "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\skills-hooks-native",
+      "head": "bf3c6b592e89917c17747eb1072203a28241e74a",
+      "status": ""
+    },
+    "data": {
+      "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate",
+      "head": "4122420d685a36499bd30ff15d343d0c97e7a291",
+      "status": ""
+    },
+    "spot": {
+      "path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-10\\spot-review",
+      "head": "8bee17d4a49985894ed17b4d3eba2348baf1acb9",
+      "status": ""
+    }
+  },
+  "gates": [
+    {
+      "folder": "evidence\\data-qmb-fae5327ee9f0445fb7e435074dafa699",
+      "command": {
+        "suite": "data-qmb",
+        "head": "6ea6da67433d7e47878b019db01ed20ec366caad",
+        "status": [
+          "?? qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "?? tools/backend-integration-check.ps1"
+        ],
+        "script_sha256": "E8AA8D035A5C07B8D2AF4F00E81ED01B40EF6201CC1C7D7814A91436EB0D7C52",
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+        "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "packages/qmf-data/tests",
+          "qmb/tests",
+          "-q",
+          "-ra",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\data-qmb-fae5327ee9f0445fb7e435074dafa699\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\data-qmb-fae5327ee9f0445fb7e435074dafa699\\pytest-temp"
+        ]
+      },
+      "exit": 1,
+      "summary": "14 failed, 1995 passed, 22 skipped in 1117.39s (0:18:37)",
+      "failures": [
+        "qmb/tests/test_cli_host.py::test_start_failure_points_to_persistent_daemon_diagnostics",
+        "qmb/tests/test_cli_tree.py::test_click_runtime_matches_pyproject_pin",
+        "qmb/tests/test_optimize_atc_cli_ingress_characterization.py::test_backtest_preflight_selects_operator_bound_alternative_study_descriptor",
+        "qmb/tests/test_ql7_graduation_recovery.py::test_host_reopens_saved_hypothesis_and_ct07_promoted_from_edge",
+        "qmb/tests/test_qmb_examples.py::test_analysis_project_usage_example_runs_clean",
+        "qmb/tests/test_qmb_examples.py::test_analysis_compare_runs_usage_example_runs_clean",
+        "qmb/tests/test_qmb_scaffold.py::test_source_never_imports_banned_modules",
+        "qmb/tests/test_qmb_scaffold.py::test_library_has_no_module_global_mutable_state",
+        "qmb/tests/test_qmb_scaffold.py::test_source_avoids_banned_vocabulary",
+        "qmb/tests/test_research_host_store.py::test_host_persists_only_canonical_bytes_under_research_root",
+        "qmb/tests/test_research_host_store.py::test_failed_blob_fsync_removes_temporary_file",
+        "qmb/tests/test_research_windows.py::test_native_idempotent_save_reopen_and_no_clobber",
+        "qmb/tests/test_research_windows.py::test_native_post_publication_flush_failure_never_acknowledges_or_deletes_final",
+        "qmb/tests/test_sandbox.py::test_runner_uses_stdlib_subprocess_and_not_os_confinement"
+      ],
+      "log_sha256": "624ca192b8eb1a1a940181317e9887a8db89bea718866c6cd3860bab8b95d207"
+    },
+    {
+      "folder": "evidence\\native-cb1701638c36408b8ae61745d02f7335",
+      "command": {
+        "suite": "native",
+        "head": "db8bd82b2010cd79bfd148108c7e190c99cd4013",
+        "status": [
+          " M qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/native_sessions.py",
+          " M qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          " M qmx-agents/packages/qma-daemon/tests/test_native_sessions.py",
+          " M tools/backend-integration-check.ps1"
+        ],
+        "script_sha256": "7F818F60873BDFD77B6EBD110B6D5EE59152D672DF286A3EE6A3427034817969",
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+        "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "qmx-agents/packages/qma-daemon/tests/test_native_sessions.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_codex_bridge.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "-q",
+          "-ra",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\native-cb1701638c36408b8ae61745d02f7335\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\native-cb1701638c36408b8ae61745d02f7335\\pytest-temp"
+        ]
+      },
+      "exit": 0,
+      "summary": "81 passed in 78.66s (0:01:18)",
+      "failures": [],
+      "log_sha256": "00838f8cca41e18ccff04e5bd400cfebd62780954d2f9805a5637eeb574bc9f1"
+    },
+    {
+      "folder": "evidence\\qma-f323bd7ce45e4a0893f5d67778ef8972",
+      "command": {
+        "suite": "qma",
+        "head": "6ea6da67433d7e47878b019db01ed20ec366caad",
+        "status": [
+          "?? packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "?? ../tools/backend-integration-check.ps1"
+        ],
+        "script_sha256": "E8AA8D035A5C07B8D2AF4F00E81ED01B40EF6201CC1C7D7814A91436EB0D7C52",
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+        "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents",
+        "arguments": [
+          "-m",
+          "pytest",
+          "packages",
+          "tests",
+          "-q",
+          "-ra",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-f323bd7ce45e4a0893f5d67778ef8972\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-f323bd7ce45e4a0893f5d67778ef8972\\pytest-temp",
+          "--cov=packages/qma-core/src",
+          "--cov=packages/qma-wire/src",
+          "--cov=packages/qma-daemon/src",
+          "--cov-branch",
+          "--cov-fail-under=80",
+          "--cov-report=term",
+          "--cov-report=json:C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qma-f323bd7ce45e4a0893f5d67778ef8972\\coverage.json"
+        ]
+      },
+      "exit": 1,
+      "summary": "2 failed, 2010 passed in 285.07s (0:04:45)",
+      "failures": [
+        "packages/qma-core/tests/test_barriers.py::test_daemon_deps_limited_to_declared_parent_set",
+        "packages/qma-daemon/tests/test_native_configured_daemon.py::test_authenticated_native_cancel_scope_denial_and_revocation_after_restart"
+      ],
+      "log_sha256": "22c06016d4184f83e2575462cf3c780d865832ff3ea31e7b1a0a0bb2c0b09419"
+    },
+    {
+      "folder": "evidence\\qmn-9c94369783f549a08d82ff6227a5d6f3",
+      "command": {
+        "suite": "qmn",
+        "head": "6ea6da67433d7e47878b019db01ed20ec366caad",
+        "status": [
+          "?? qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "?? tools/backend-integration-check.ps1"
+        ],
+        "script_sha256": "E8AA8D035A5C07B8D2AF4F00E81ED01B40EF6201CC1C7D7814A91436EB0D7C52",
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+        "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "qmn/tests",
+          "-q",
+          "-ra",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qmn-9c94369783f549a08d82ff6227a5d6f3\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\qmn-9c94369783f549a08d82ff6227a5d6f3\\pytest-temp"
+        ]
+      },
+      "exit": 1,
+      "summary": "40 failed, 1069 passed, 23 skipped in 199.71s (0:03:19)",
+      "failures": [
+        "qmn/tests/test_qmn_admission_evidence.py::test_private_ad32_wrapper_persists_real_registry_lineage_as_incomplete",
+        "qmn/tests/test_qmn_admission_evidence.py::test_lineage_rejects_page_from_another_venue",
+        "qmn/tests/test_qmn_admission_evidence.py::test_reader_rejects_rehashed_boolean_envelope_version",
+        "qmn/tests/test_qmn_admission_evidence.py::test_reader_recomputes_nested_page_identity_after_outer_rehash",
+        "qmn/tests/test_qmn_admission_evidence.py::test_nonempty_ct22_ct27_records_survive_ad32_physical_reopen",
+        "qmn/tests/test_qmn_admission_evidence.py::test_reader_refuses_correctly_rehashed_malformed_ct27_section_identity",
+        "qmn/tests/test_qmn_alerts.py::test_typed_failure_ids_have_register_entries",
+        "qmn/tests/test_qmn_configured_composition.py::test_v2_profile_is_independently_pinned_and_resolves_only_closed_identity",
+        "qmn/tests/test_qmn_configured_composition.py::test_resolved_profile_freezes_nested_mis_parameters",
+        "qmn/tests/test_qmn_configured_composition.py::test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection",
+        "qmn/tests/test_qmn_configured_composition.py::test_v2_source_bytes_must_reproduce_admitted_logic_manifest",
+        "qmn/tests/test_qmn_configured_frontier.py::test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root",
+        "qmn/tests/test_qmn_configured_live_resources.py::test_closed_resolver_refuses_missing_profile",
+        "qmn/tests/test_qmn_configured_live_resources.py::test_closed_resolver_validates_then_refuses_replay_profile_for_live",
+        "qmn/tests/test_qmn_configured_runtime.py::test_missing_pinned_protocol_bytes_refuse_as_typed_stand_down",
+        "qmn/tests/test_qmn_configured_runtime.py::test_valid_local_pins_remain_stand_down_without_admission",
+        "qmn/tests/test_qmn_configured_runtime.py::test_nonempty_registered_book_and_bms_reload_as_typed_assessment",
+        "qmn/tests/test_qmn_configured_runtime.py::test_registered_binding_decoder_refuses_stale_tuple_and_incomplete_carry",
+        "qmn/tests/test_qmn_deploy_config.py::test_init_and_validate_run_pure_scaffold_and_report_boot_block",
+        "qmn/tests/test_qmn_deploy_config.py::test_explain_uses_pure_layer_report_without_secret_values",
+        "qmn/tests/test_qmn_deploy_config.py::test_deployment_child_runs_real_host_preflight_for_selected_file",
+        "qmn/tests/test_qmn_deploy_config.py::test_real_governed_deployment_document_passes_child_preflight_without_activation",
+        "qmn/tests/test_qmn_deploy_config.py::test_config_init_rejects_parent_swap_to_symlink_without_outside_write",
+        "qmn/tests/test_qmn_failures_gate.py::test_failures_completeness_gate_passes_on_the_register",
+        "qmn/tests/test_qmn_fx_paper.py::test_qmb_qml_and_qma_do_not_import_qmf_venue",
+        "qmn/tests/test_qmn_hygiene.py::test_qmf_venue_import_only_under_qmn_venue",
+        "qmn/tests/test_qmn_readiness.py::test_packet_records_fingerprints_and_branch_base_commits",
+        "qmn/tests/test_qmn_readiness.py::test_settings_status_reports_seventy_one_rows_and_ftr07_blanks",
+        "qmn/tests/test_qmn_readiness.py::test_failure_register_completeness_is_part_of_the_packet",
+        "qmn/tests/test_qmn_readiness.py::test_compiled_demo_roster_has_paired_paper_target",
+        "qmn/tests/test_qmn_readiness.py::test_soak_local_human_inputs_are_blocked_acceptance_not_unrelated",
+        "qmn/tests/test_qmn_readiness.py::test_green_settings_path_does_not_invent_values",
+        "qmn/tests/test_qmn_readiness.py::test_failed_gate_keeps_packet_and_clears_machine_green",
+        "qmn/tests/test_qmn_readiness.py::test_blank_init_config_is_honest_about_soak_blanks",
+        "qmn/tests/test_qmn_readiness.py::test_identical_inputs_fingerprint_identically",
+        "qmn/tests/test_qmn_scaffold.py::test_only_venue_subpackage_imports_qmf_venue",
+        "qmn/tests/test_qmn_supervisor_process.py::test_supervisor_module_runs_stand_down_and_survives_restart",
+        "qmn/tests/test_qmn_supervisor_process.py::test_supervisor_fails_actionably_without_configured_directories",
+        "qmn/tests/test_qmn_supervisor_process.py::test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal",
+        "qmn/tests/test_qmn_supervisor_process.py::test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile"
+      ],
+      "log_sha256": "45c698e832ee1da81c7d62f0b4bff394fcdf07b4217e9d2e3ab81d840d211f0a"
+    },
+    {
+      "folder": "evidence\\seams-02d9e1e05a2848039a28276ea0abd60b",
+      "command": {
+        "suite": "seams",
+        "head": "d11e1f3a42226f2b6619a08882b3d054fdabd624",
+        "status": [
+          " M _docwork/backend-integration-ledger-draft.md",
+          " M tools/backend-integration-check.ps1",
+          "?? _docwork/backend-integration-evidence-draft.json"
+        ],
+        "script_sha256": "FB9F28826B077004F1E2C53B85FA3DA8DB53AE5E6EAE907AC484B83CE3E58ECF",
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "scripts_path": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts",
+        "qmb_entrypoint": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\qmb.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\win32\\lib;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "qmx-agents/packages/qma-daemon/tests/test_agent_extensions_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_request_runtime_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_sessions.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_daemon_binding.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_local_startup.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_cli_transport.py",
+          "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py",
+          "qmx-agents/packages/qma-wire/tests/test_qmb_required_evidence.py",
+          "qmb/tests/test_operator_replay_process.py",
+          "qmb/tests/test_download_replay_connection.py",
+          "packages/qmf-data/tests/test_intake_process_lock.py",
+          "qmn/tests/test_spot_paper_process.py",
+          "-q",
+          "-ra",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-02d9e1e05a2848039a28276ea0abd60b\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-02d9e1e05a2848039a28276ea0abd60b\\pytest-temp"
+        ]
+      },
+      "exit": 0,
+      "summary": "84 passed in 227.25s (0:03:47)",
+      "failures": [],
+      "log_sha256": "9d40cfad0ad00728b06e8f39a181a70ea4366b430cdfbc673e566beb5972b99b"
+    },
+    {
+      "folder": "evidence\\seams-7df354202b8e475cac214334f4aba29a",
+      "command": {
+        "suite": "seams",
+        "head": "6ea6da67433d7e47878b019db01ed20ec366caad",
+        "status": [
+          "?? qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "?? tools/backend-integration-check.ps1"
+        ],
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Scripts\\python.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py",
+          "qmx-agents/packages/qma-daemon/tests/test_agent_extensions_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_request_runtime_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_daemon_binding.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_local_startup.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_cli_transport.py",
+          "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py",
+          "qmx-agents/packages/qma-wire/tests/test_qmb_required_evidence.py",
+          "qmb/tests/test_operator_replay_process.py",
+          "qmb/tests/test_download_replay_connection.py",
+          "packages/qmf-data/tests/test_intake_process_lock.py",
+          "qmn/tests/test_spot_paper_process.py",
+          "-q",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-7df354202b8e475cac214334f4aba29a\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-7df354202b8e475cac214334f4aba29a\\pytest-temp"
+        ]
+      },
+      "exit": 0,
+      "summary": "56 passed, 2 skipped in 187.60s (0:03:07)",
+      "failures": [],
+      "log_sha256": "f9ac36263962124dbe01625513cff618c50c8117e34a5a0e19ebde1b77f26a49"
+    },
+    {
+      "folder": "evidence\\seams-800ec466812a4930a99b89bf61372da2",
+      "command": {
+        "suite": "seams",
+        "head": "6ea6da67433d7e47878b019db01ed20ec366caad",
+        "status": [
+          "?? tools/backend-integration-check.ps1"
+        ],
+        "python": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Scripts\\python.exe",
+        "dependencies": [
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages",
+          "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages"
+        ],
+        "pythonpath": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-11\\sdk-deps;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-8\\backend-candidate\\.venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task\\runtime-venv\\Lib\\site-packages;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-data\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-indicators\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-registry\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-risk\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-structure\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\packages\\qmf-venue\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\extensions\\qmf-calendar-forex\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qml\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-core\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-wire\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\src;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmb\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmn\\tests;C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate\\qmx-agents\\packages\\qma-daemon\\tests",
+        "cwd": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\backend-candidate",
+        "arguments": [
+          "-m",
+          "pytest",
+          "qmx-agents/packages/qma-daemon/tests/test_agent_extensions_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_request_runtime_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py",
+          "qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_daemon_binding.py",
+          "qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_local_startup.py",
+          "qmx-agents/packages/qma-daemon/tests/test_qmb_cli_transport.py",
+          "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py",
+          "qmx-agents/packages/qma-wire/tests/test_qmb_required_evidence.py",
+          "qmb/tests/test_operator_replay_process.py",
+          "qmb/tests/test_download_replay_connection.py",
+          "packages/qmf-data/tests/test_intake_process_lock.py",
+          "qmn/tests/test_spot_paper_process.py",
+          "-q",
+          "-o",
+          "cache_dir=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-800ec466812a4930a99b89bf61372da2\\pytest-cache",
+          "--basetemp=C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\seams-800ec466812a4930a99b89bf61372da2\\pytest-temp"
+        ]
+      },
+      "exit": 1,
+      "summary": "3 failed, 57 passed in 106.91s (0:01:46)",
+      "failures": [
+        "qmb/tests/test_operator_replay_process.py::test_qmb_cli_executes_registered_replay_to_durable_economic_result",
+        "qmb/tests/test_operator_replay_process.py::test_qmb_cli_preflight_rejects_boolean_descriptor_version",
+        "qmb/tests/test_download_replay_connection.py::test_synthetic_bytes_intake_restart_revision_to_real_qmb_and_projection"
+      ],
+      "log_sha256": "760c2c0041257c80bb5b615e5532fdc7381eee9ae28dfcda214dcf458e00438e"
+    }
+  ],
+  "source_hashes": {
+    "packages/qmf-data/src/qmf/data/intake_authority.py": "ba93a67770cdd1a429093b272b967f8bcb3d15a898c3a9c22ea22b14f747b431",
+    "packages/qmf-data/src/qmf/data/store/engines/jsonl.py": "4afb85d52689ab132abc820a73942ef18918165d6649532d9e71d816a818faa8",
+    "packages/qmf-data/tests/test_intake_process_lock.py": "c3c361bc8715b09b02d60fb11eae21204e34fe92a3c64c489b81597d7c75cc7a",
+    "packages/qmf-data/tests/test_jsonl_engine.py": "fea399ab0336f1a8d19aa476f7ca88184ade939ee1f68e1a37e5528f5c84ef8c",
+    "packages/qmf-venue/src/qmf/venue/spot.py": "b183b47d94f62a5e9aab149caf97d87b8d5b39106907499f8ce66c63fe953be1",
+    "packages/qmf-venue/tests/test_spot_metadata.py": "04e787152799a5c67932f809c35b6e3ca50461fa5443fe68b6dc7ba755e8753b",
+    "qmb/src/qmb/data/catalog.py": "8609a450b92904f712a27e6c58bec2c687091656742694d3cc0a8b78e4169b43",
+    "qmb/src/qmb/host/operator_replay.py": "efd6caa075d52342260c8d5cd462d473c75040c12e40840b374e92a29ddf9204",
+    "qmb/tests/test_data_catalog.py": "3c3be83a4bde8adaae2bab7dfede970088d870dd664e9b92ad6cc64c7572b91d",
+    "qmb/tests/test_data_download.py": "1711d0a61e07fef08e6393c447f0101e610f8200418c63dac769051707a88303",
+    "qmb/tests/test_download_replay_connection.py": "e81af5f76a8ae809fe2a3c5769c62d3e06e6d94f74c575010069b7eda330df7c",
+    "qmb/tests/test_operator_replay_process.py": "1bdea189085b8f0e3d071a131b11e1b79e1839c59a54726146cf03f6b6f4d49a",
+    "qmn/examples/spot_paper_journey.py": "dba2ff164fc9c746faf02d612307beff3be7f089591b036d0e152b9a7e7c4762",
+    "qmn/src/qmn/venue/spot_paper.py": "1e0f03ef189c22f160342ffc7715f7ed2272897b5c26ad84103b7dbe44c056c2",
+    "qmn/src/qmn/venue/spot_recorded.py": "a69f4d911e9c9ec6f429396e5c243272b3a77e2c04314dd1c7b25f6bf25905db",
+    "qmn/tests/test_spot_paper_process.py": "fb576acb3540cbfef7ac3c46ee182a4c08a6c5f710168331cb0b37b7b22fef0b",
+    "qmn/tests/test_spot_paper_slice.py": "3fca02ec3968f27d45f4723897eab72bc10258beed1668ffb77f09d136769bac",
+    "qmn/tests/test_spot_recorded_source.py": "cf12994d061e18439cd6bc65099a49b92c05c5ea2d70e9ae91fcdaf99dff0d98",
+    "qmx-agents/packages/qma-core/src/qma/core/operations/catalog.py": "fc40e4fe1301827800fb93c0c0f473da63eb1b85de2d6d0278f2a9787f26510b",
+    "qmx-agents/packages/qma-core/tests/test_operation_descriptor.py": "17a58faa0e3cea06effa96c1bc5dad3a647211ef757a2408afef3f3991d85041",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py": "4a59b375c1560195f6d32263bfade7f6e2770a9afb0a5f19664cb5b4019f7989",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/bootstrap_config.py": "56030ad86e633748a9ad22773fb3f33c2580d5b99d12b9075db072ff49cc20df",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/composition.py": "992b84c91a2d86db30f1d1ba5116d3c36a2f5e984b4ec60c62b7e34909b89028",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "54c60ad5ae57a6adbefce42f3ab77ff7a9317cadec413baa0e813160f4455030",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/native_sessions.py": "ea06094303c60c2d05cb8e96455422c6fb8b35db0e76882fde55b38b4547558f",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_state.py": "1267596a7749abad41d4d88c6f91e588ce0840533239eeced2153218ec492a54",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/spot_tools.py": "d8fc6b3e33916decb3058c8cb1a8ba5c28b91f1c139129b346738f3556a4136c",
+    "qmx-agents/packages/qma-daemon/tests/test_combined_backend_composition.py": "712140d98d7ee46c27c73e20741ca3bdf72668299c86053094b212d803c44afc",
+    "qmx-agents/packages/qma-daemon/tests/test_native_sessions.py": "e3804f489bac457ce9eebb8db2e21177e2c13259bb2ee12c8d44b1075d971930",
+    "qmx-agents/packages/qma-daemon/tests/test_product_session_host_retry.py": "dacce064274aae2406eb4200b68d3b810686441ed4b6ba172192b766a37bb6af",
+    "qmx-agents/packages/qma-daemon/tests/test_qmb_cli_transport.py": "2e02dff9ac6a0d5f351a27d06c3c1ebaf11e87ace3a9d8206e74881b4d509f95",
+    "qmx-agents/packages/qma-daemon/tests/test_qmb_local_startup.py": "ebb1150b7fdd872a2b33018b203793dcdcf969c4251b41dbf73ba65499ea6267",
+    "qmx-agents/packages/qma-daemon/tests/test_spot_daemon_binding.py": "3e608c6cea60228abf156c7479e4fa5f9264b73c27ff4cd7ba744dcbb3ebdf6c",
+    "qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py": "0ae156a54dfb9f8d88f6bd7ceea0d471ba334ec0428e89354a81ca1d3074ec69",
+    "qmx-agents/packages/qma-wire/tests/test_qmb_required_evidence.py": "49fd80dc7fc499d7e51875953ae84f55650665021e9452b23bda6637a63d137d",
+    "tools/backend-integration-check.ps1": "fb9f28826b077004f1e2c53b85fa3da8db53ae5e6eae907ac484b83ce3e58ecf",
+    "tools/spot-paper-check.ps1": "a93c8a225facf292346f718899c3831f0280a3871c0c33d094007b230446aac0"
+  },
+  "limits": [
+    "Full gates precede bounded cancellation correction; focused native test proves correction only.",
+    "No authenticated real-provider or remote-endurance proof.",
+    "No legitimate production CT47 authoring or public persisted projection bridge.",
+    "No publish, deploy, protected merge or push."
+  ]
+}

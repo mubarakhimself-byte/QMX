@@ -41,6 +41,7 @@ switch ($Suite) {
             'qmx-agents/packages/qma-daemon/tests/test_request_runtime_configured_daemon.py',
             'qmx-agents/packages/qma-daemon/tests/test_native_operator_routing.py',
             'qmx-agents/packages/qma-daemon/tests/test_native_configured_daemon.py',
+            'qmx-agents/packages/qma-daemon/tests/test_native_sessions.py',
             'qmx-agents/packages/qma-daemon/tests/test_spot_daemon_binding.py',
             'qmx-agents/packages/qma-daemon/tests/test_spot_query_door.py',
             'qmx-agents/packages/qma-daemon/tests/test_qmb_local_startup.py',
