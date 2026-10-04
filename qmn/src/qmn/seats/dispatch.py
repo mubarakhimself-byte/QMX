@@ -840,9 +840,7 @@ def _authorize_native_ratchet(
     )
     if is_refusal(stop_distance):
         return stop_distance
-    spot_events = authority.spot_events_by_position_ref.get(
-        intent.virtual_position_ref.value
-    )
+    spot_events = authority.spot_events_by_position_ref.get(intent.virtual_position_ref.value)
     if type(spot_events) is not tuple or not spot_events:
         return policy("spot_events", "ratchet reads recorded live spot frontiers after admission")
     best_excursion = ExactRational.try_create(0, 1, UnitKind.R_MULTIPLE)
