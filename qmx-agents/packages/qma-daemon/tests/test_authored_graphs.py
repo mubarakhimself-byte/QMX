@@ -648,7 +648,9 @@ def test_legacy_catalog_identity_matches_immutable_reviewed_base(tmp_path: Path)
     assert loaded.identity == "468bc3ee613d11da94e2e87ced4fa493cb251697a8cbc8edfc85553c83943942"
 
 
-@pytest.mark.parametrize("mutation", ["duplicate-node", "wrong-task-anchor"])
+@pytest.mark.parametrize(
+    "mutation", ["duplicate-node", "wrong-task-anchor", "masked-node-kind", "extra-config-kind"]
+)
 def test_paired_rejects_noncompiled_graph(tmp_path: Any, monkeypatch: Any, mutation: Any) -> None:
     sdk, instance, contribution, provider = configure_graph(tmp_path, monkeypatch, "specialist")
     original = TaskGraphDispatcher.materialize
@@ -656,6 +658,17 @@ def test_paired_rejects_noncompiled_graph(tmp_path: Any, monkeypatch: Any, mutat
     def corrupt(self: Any, graph: Any, **kwargs: Any) -> Any:
         if mutation == "duplicate-node":
             graph = replace(graph, nodes=(*graph.nodes, graph.nodes[0]))
+        elif mutation in {"masked-node-kind", "extra-config-kind"}:
+            node = graph.nodes[0]
+            assert node.kind is NodeKind.ARTIFACT_DEPENDENCY
+            mutated = replace(
+                node,
+                kind=(
+                    NodeKind.DETERMINISTIC_SCRIPT if mutation == "masked-node-kind" else node.kind
+                ),
+                config={**dict(node.config), "kind": node.kind.value},
+            )
+            graph = replace(graph, nodes=(mutated, *graph.nodes[1:]))
         else:
             task = replace(
                 graph.tasks[0], node_id="metadata", node_kind=NodeKind.ARTIFACT_DEPENDENCY

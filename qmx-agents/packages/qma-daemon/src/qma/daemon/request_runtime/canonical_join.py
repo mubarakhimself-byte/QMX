@@ -263,9 +263,12 @@ class CanonicalRequestJoin:
             or [(e.from_node, e.to_node, e.mapping.value) for e in graph.edges]
             != [(e["from"], e["to"], e["mapping"]) for e in json.loads(flow.edges_json or "[]")]
             or len(graph.tasks) != 1
-            or {n.id: {"kind": n.kind.value, **dict(n.config)} for n in graph.nodes}
+            or {n.id: (n.kind.value, dict(n.config)) for n in graph.nodes}
             != {
-                str(n["id"]): {k: v for k, v in n.items() if k != "id"}
+                str(n["id"]): (
+                    n["kind"],
+                    {k: v for k, v in n.items() if k not in {"id", "kind"}},
+                )
                 for n in flow.template().nodes
             }
         ):
