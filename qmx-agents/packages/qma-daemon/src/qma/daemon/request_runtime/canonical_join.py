@@ -619,14 +619,16 @@ class CanonicalRequestJoin:
         events = self.runtime.journal.read_events()
         if is_refusal(events):
             raise ProviderError("storage_failure", "Canonical effect certainty unavailable")
-        effects: dict[str, dict[str, Any]] = {}
+        effects: dict[tuple[str, str], dict[str, Any]] = {}
         for event in events.value:
             if (
                 event.event == "agent_graph.record"
-                and event.payload.get("kind") == "effect"
+                and event.payload.get("kind") in {"effect", "memory_projection_effect"}
                 and str(event.payload.get("key", "")).startswith(request_id + ":")
             ):
-                effects[str(event.payload["key"])] = json.loads(str(event.payload["body"]))
+                effects[(str(event.payload["kind"]), str(event.payload["key"]))] = json.loads(
+                    str(event.payload["body"])
+                )
         return any(e.get("status") != "observed" for e in effects.values())
 
     def allow_canonical_cancel(self, handle: JobHandle) -> Result[None]:

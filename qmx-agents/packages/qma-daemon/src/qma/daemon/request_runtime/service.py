@@ -49,7 +49,6 @@ def _require_mapping(value: object) -> Mapping[str, object]:
     return cast("Mapping[str, object]", value)
 
 
-
 def _nonempty_text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
