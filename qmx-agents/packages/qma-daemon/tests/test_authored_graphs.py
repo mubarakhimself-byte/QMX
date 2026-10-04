@@ -6,6 +6,7 @@ import asyncio
 import json
 import threading
 import time
+from copy import deepcopy
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
@@ -17,7 +18,7 @@ from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.ports.capabilities import RoleBase
 from qma.core.ports.permissions import PermissionPolicy
 from qma.core.ports.tools import ToolKind, ToolRecord
-from qma.core.vocabulary.enums import TaskMissionState
+from qma.core.vocabulary.enums import NodeKind, TaskMissionState
 from qma.daemon.capabilities.spawn import SpawnRequest
 from qma.daemon.knowledge.service import KnowledgeService
 from qma.daemon.plugins import research_corpus_plugin_load_config
@@ -33,6 +34,7 @@ from qma.daemon.request_runtime.contracts import CopilotProfile
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestPolicy
 from qma.daemon.request_runtime.graph_storage import JournalRecords
 from qma.daemon.request_runtime.providers import ProviderError
+from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.records import TaskRecord
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION
 from test_actor_workflow import app_setup, catalog, final, save_catalog
@@ -644,3 +646,114 @@ def test_legacy_catalog_identity_matches_immutable_reviewed_base(tmp_path: Path)
     loaded = load_actor_catalog(tmp_path)
     assert loaded is not None
     assert loaded.identity == "468bc3ee613d11da94e2e87ced4fa493cb251697a8cbc8edfc85553c83943942"
+
+
+@pytest.mark.parametrize("mutation", ["duplicate-node", "wrong-task-anchor"])
+def test_paired_rejects_noncompiled_graph(tmp_path: Any, monkeypatch: Any, mutation: Any) -> None:
+    sdk, instance, contribution, provider = configure_graph(tmp_path, monkeypatch, "specialist")
+    original = TaskGraphDispatcher.materialize
+
+    def corrupt(self: Any, graph: Any, **kwargs: Any) -> Any:
+        if mutation == "duplicate-node":
+            graph = replace(graph, nodes=(*graph.nodes, graph.nodes[0]))
+        else:
+            task = replace(
+                graph.tasks[0], node_id="metadata", node_kind=NodeKind.ARTIFACT_DEPENDENCY
+            )
+            graph = replace(graph, tasks=(task,))
+        return original(self, graph, **kwargs)
+
+    monkeypatch.setattr(TaskGraphDispatcher, "materialize", corrupt)
+    process, task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
+
+    async def journey() -> None:
+        value(await process.bind())
+        reader, writer, opening = await ws_connect(process)
+        try:
+            receipt(
+                await rpc(
+                    reader,
+                    writer,
+                    "initialize",
+                    {"protocolVersion": WIRE_PROTOCOL_VERSION, "capabilities": {}},
+                )
+            )
+            response = await rpc(
+                reader,
+                writer,
+                "submit_agent_request",
+                submit_params(session="psess:configured-app", profile="app-reader"),
+            )
+            assert "error" in response, "noncompiled authored graph was admitted"
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            await process.aclose()
+
+    try:
+        asyncio.run(journey())
+    finally:
+        process.close()
+
+
+def test_mixed_host_rejects_stale_unjoined_operation_before_acceptance(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    sdk, instance, contribution, provider = configure_graph(tmp_path, monkeypatch, "specialist")
+    body = json.loads((tmp_path / "actor-workflows.json").read_text())
+    stale = deepcopy(body["workflows"][0])
+    stale["id"] = "fixture:stale-assessment"
+    stale["graph"]["operations"]["metadata"]["version"] = 99
+    body["workflows"].append(stale)
+    route = deepcopy(body["routes"][0])
+    route["profile_id"] = "other-reader"
+    route["workflow"] = "fixture:stale-assessment:1"
+    body["routes"].append(route)
+    save_catalog(tmp_path, body)
+    original = DaemonProcess.configure_agent_requests
+
+    def configure(self: Any, **kwargs: Any) -> Any:
+        policies = dict(kwargs["policies"])
+        source = policies["app-reader"]
+        policies["other-reader"] = replace(
+            source, profile=replace(source.profile, profile_id="other-reader")
+        )
+        kwargs["policies"] = policies
+        tools = dict(kwargs["profile_tools"])
+        tools["other-reader"] = tools["app-reader"]
+        kwargs["profile_tools"] = tools
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(DaemonProcess, "configure_agent_requests", configure)
+    process, task_id = graph_host(tmp_path, sdk, instance, contribution, provider, joined=True)
+
+    async def journey() -> None:
+        value(await process.bind())
+        reader, writer, opening = await ws_connect(process)
+        try:
+            receipt(
+                await rpc(
+                    reader,
+                    writer,
+                    "initialize",
+                    {"protocolVersion": WIRE_PROTOCOL_VERSION, "capabilities": {}},
+                )
+            )
+            response = await rpc(
+                reader,
+                writer,
+                "submit_agent_request",
+                submit_params(session="psess:configured-app", profile="other-reader"),
+            )
+            assert "error" in response, (
+                "stale authored operation was accepted before execution in a mixed host"
+            )
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            await process.aclose()
+
+    try:
+        asyncio.run(journey())
+    finally:
+        process.close()

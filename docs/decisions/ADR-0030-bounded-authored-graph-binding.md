@@ -1,5 +1,9 @@
 ---
 id: ADR-0030
+title: Bounded authored graph binding and prompt proposals
+generated: 2026-10-04
+verified: 2026-10-04
+stale_after: 30d
 type: adr
 status: draft
 depends_on: [COMP-QMA-DAEMON, COMP-QMA-CORE, COMP-QMA-WIRE]

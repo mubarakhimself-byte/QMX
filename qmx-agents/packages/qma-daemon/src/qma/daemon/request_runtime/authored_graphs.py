@@ -12,6 +12,7 @@ from qma.daemon.taskgraph.compiler import (
     MissionCompiler,
 )
 from qmf.core import Result, is_refusal
+from qmf.data.store.refusals import invalid_input
 
 from .actor_profiles import (
     ActorCatalog,
@@ -19,6 +20,7 @@ from .actor_profiles import (
     digest,
     parse_graph_job_data,
     require_host_text,
+    validate_authored_path,
 )
 
 
@@ -71,6 +73,10 @@ def compile_authored_graph(
     collect nodes create no additional executor. This adapter never marks work
     terminal or dispatches Agents.
     """
+    try:
+        validate_authored_path(flow)
+    except ValueError, KeyError, TypeError:
+        return invalid_input("authored_graph", "bounded authored path binding required")
     templates = GraphTemplateCatalog()
     registered = templates.register(flow.template())
     if is_refusal(registered):

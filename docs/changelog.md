@@ -460,7 +460,7 @@ Independent consistency and source-blind adversarial reviews identified wiring a
 The remaining human gate is intentional: the two conflicts, open decisions, and blocking gaps must be ruled on and the provisional packet signed before strict release validation can pass.
 
 
-## 2026-10-04 — local authored graph candidate
+## 2026-10-04 - local authored graph candidate
 
 Draft [ADR-0030](decisions/ADR-0030-bounded-authored-graph-binding.md) records a
 bounded reusable path/compiler binding and prompt graph proposals. Canonical

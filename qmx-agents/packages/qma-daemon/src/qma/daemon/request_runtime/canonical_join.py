@@ -19,6 +19,7 @@ from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.capabilities.spawn import AgentCapabilityStore
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
+from qma.daemon.taskgraph.execution import deterministic_task_id
 from qma.daemon.tools.registry import ToolRegistry
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import policy_rejection
@@ -244,8 +245,19 @@ class CanonicalRequestJoin:
             )
         route = next(r for r in provider.routes if r.profile_id == plan.profile_id)
         flow = provider.catalog.workflow(route.workflow)
+        anchor = (
+            next((n for n in flow.template().nodes if n["kind"] in {"task", "agent"}), None)
+            if flow.graph_sha256 is not None
+            else None
+        )
         if flow.graph_sha256 is not None and (
             graph.graph_template_ref != flow.workflow_id
+            or len(graph.nodes) != len(flow.steps)
+            or anchor is None
+            or task.node_id != anchor["id"]
+            or task.node_kind is None
+            or task.node_kind.value != anchor["kind"]
+            or task.id != deterministic_task_id(graph.id, str(anchor["id"]))
             or {n.id for n in graph.nodes} != {s.step_id for s in flow.steps}
             or any(n.config.get("graph_sha256") != flow.graph_sha256 for n in graph.nodes)
             or [(e.from_node, e.to_node, e.mapping.value) for e in graph.edges]
@@ -434,6 +446,22 @@ class CanonicalRequestJoin:
             self.jobs.store.atomic(),
             self.dispatcher.authority_lock,
         ):
+            provider = self.runtime.providers.get(row.spec.provider_id)
+            if isinstance(provider, ActorWorkflowProvider):
+                route = next(
+                    (r for r in provider.routes if r.profile_id == row.spec.profile.profile_id),
+                    None,
+                )
+                if (
+                    route is not None
+                    and provider.catalog.workflow(route.workflow).graph_sha256 is not None
+                ):
+                    try:
+                        provider.bindings_for_spec(row.spec)
+                    except ProviderError:
+                        return policy_rejection(
+                            "authored_graph", "exact host operation binding required"
+                        )
             plan = self.plans.get(row.spec.profile.profile_id)
             if plan is None:
                 return (

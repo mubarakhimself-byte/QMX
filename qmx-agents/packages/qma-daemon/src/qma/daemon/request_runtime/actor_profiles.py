@@ -276,27 +276,7 @@ def load_actor_catalog(root: Path) -> ActorCatalog | None:
                     json.dumps(edges, sort_keys=True),
                     json.dumps(operations, sort_keys=True),
                 )
-                validated = GraphTemplateCatalog().register(flow.template())
-                if is_refusal(validated):
-                    raise ValueError("authored topology refused")
-                # The first adapter admits only explicit one-to-one paths. No
-                # implicit ordering, collection fanout, branch or join semantics.
-                expected = [(a.step_id, b.step_id) for a, b in pairwise(steps)]
-                if (
-                    len(edges) != len(expected)
-                    or [(e.get("from"), e.get("to")) for e in edges] != expected
-                ):
-                    raise ValueError(
-                        "authored path requires one explicit predecessor; ambiguous join refused"
-                    )
-                for edge in edges:
-                    if (
-                        set(edge) != {"from", "to", "mapping", "from_port", "to_port"}
-                        or edge["mapping"] != "one"
-                        or edge["from_port"] != "data"
-                        or edge["to_port"] != "data"
-                    ):
-                        raise ValueError("authored adapter requires one data value per predecessor")
+                validate_authored_path(flow)
                 if "sha256" in graph and graph["sha256"] != flow.graph_sha256:
                     raise ValueError("stale authored graph digest")
             workflows.append(flow)
@@ -363,3 +343,50 @@ def parse_graph_job_data(model_output: str) -> dict[str, Any]:
 
 def require_host_text(value: object) -> str:
     return _text(value)
+
+
+def validate_authored_path(flow: ActorWorkflow) -> None:
+    """Same bounded structural gate for file loading and direct host compilation."""
+    if flow.author is None or not 1 <= len(flow.steps) <= 12:
+        raise ValueError("bounded authored binding required")
+    if len({s.step_id for s in flow.steps}) != len(flow.steps):
+        raise ValueError("unique authored nodes required")
+    if sum(s.kind == "agent" for s in flow.steps) > 1:
+        raise ValueError("one authored specialist required")
+    for step in flow.steps:
+        _node_id(step.step_id)
+        if step.kind not in {"normalize", "read", "agent", "collect"}:
+            raise ValueError("unsupported authored node binding")
+        if (step.kind == "agent") != (step.role is not None) or (step.kind == "read") != (
+            step.tool is not None
+        ):
+            raise ValueError("exact authored node binding required")
+        if not isinstance(json.loads(step.arguments_json), dict):
+            raise ValueError("authored read requires data arguments")
+    raw_edges = json.loads(flow.edges_json or "[]")
+    if not isinstance(raw_edges, list):
+        raise ValueError("authored edges required")
+    fields = {"from", "to", "mapping", "from_port", "to_port"}
+    edges = [_object(edge, fields) for edge in cast("list[object]", raw_edges)]
+    expected = [(a.step_id, b.step_id) for a, b in pairwise(flow.steps)]
+    if len(edges) != len(expected) or [(e.get("from"), e.get("to")) for e in edges] != expected:
+        raise ValueError("authored path requires one explicit predecessor; ambiguous join refused")
+    if any(
+        set(e) != fields
+        or e["mapping"] != "one"
+        or e["from_port"] != "data"
+        or e["to_port"] != "data"
+        for e in edges
+    ):
+        raise ValueError("one data value per authored predecessor required")
+    reads = {s.step_id for s in flow.steps if s.kind == "read"}
+    operations = _object(json.loads(flow.operations_json or "{}"), reads)
+    if set(operations) != reads:
+        raise ValueError("exact authored operation pins required")
+    for operation in operations.values():
+        pin = _object(operation, {"op_id", "version"})
+        _text(pin["op_id"])
+        _limit(pin["version"], 2147483647)
+    validated = GraphTemplateCatalog().register(flow.template())
+    if is_refusal(validated):
+        raise ValueError("authored topology refused")
