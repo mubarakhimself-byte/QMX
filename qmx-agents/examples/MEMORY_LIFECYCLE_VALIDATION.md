@@ -18,7 +18,7 @@ owners. No Task/Job cardinality or canonical actor join is decided here.
 | --- | --- | --- |
 | Request/run | RequestRuntime admits principal, ProductSession, context revision, host behavior profile and provider. Graph and child threads are per request; memory IDs carry request/activity provenance. | Request/thread ID is not itself a memory grant or namespace. No dedicated Task/run memory provider scope is implemented by this adapter. Canonical Task attachment belongs to the integration lane. |
 | Research workflow | ResearchMemoryScope hashes all seven fields: principal, application, profile, authority_binding, source_id, snapshot_ref, locators. Existing `research-summary:` encoding is retained. | Exact unchanged scope recalls across fresh jobs and disk reopen. Changing any field withholds previous memory. Specialist/version is provenance, not a separate field in this namespace; do not claim specialist-version isolation here. |
-| Actor specialist | ActorMemoryScope hashes principal, behavioral actor_id, collection and complete MemorySource (source_id, snapshot_ref, locators, authority_binding), with existing `actor-memory:` encoding. | ActorWorkflowProvider supplies role:version as collection/locator, host-workflow:workflow:version as source_id, the full workflow digest as snapshot_ref, and admitted row.context_binding. New role/workflow pins withhold old memory; unchanged scope recalls after restart with new child threads. These behavioral actor IDs are not canonical ActorIds/leases. |
+| Actor specialist | ActorMemoryScope hashes principal, behavioral actor_id, collection and complete MemorySource (source_id, snapshot_ref, locators, authority_binding), with existing `actor-memory:` encoding. | ActorWorkflowProvider supplies role:version as collection/locator, host-workflow:workflow:version as source_id, the full workflow digest as snapshot_ref, and admitted row.context_binding. Daemon restart journeys verify a workflow-version change and a combined role/workflow-version change. The immutable workflow pin requires a new workflow version for changed role references; independent role-only daemon isolation is not claimed. Lower-level tests vary each namespace field separately. Unchanged scope recalls after restart with new child threads. These behavioral actor IDs are not canonical ActorIds/leases. |
 | Application | Research scope includes host-resolved app_instance_id (or home); actor scope includes the admitted context binding, not a separate app field. | No automatic cross-app pooling or namespace migration. Actor app separation depends on the host context binding and its validator. |
 | Copilot session | ProductSession is authority/context; QMA Session and SDK thread are different identities. RequestRuntime hashes context payload, authority profile, app instance, selected refs, granted operation IDs and relevant revocations. | Session ID is not a direct field in either memory scope. Sessions with identical complete authorized inputs can address the same scope; any continuity beyond that requires its own admitted policy. |
 | User/global | Principal participates in both namespaces. `global` is a behavior profile, not an all-memory disclosure grant. | No dedicated global preference scope, user-wide aggregation, sharing policy, cross-app consent bridge or native transcript continuity is implemented. Future sharing must be explicit and host admitted. |
@@ -83,9 +83,12 @@ and wire contracts stay with their owners. Preserve complete current namespaces
 through canonical attribution; a canonical join never implicitly rewrites IDs
 or enables pooling. The integration lane owns any future binding adaptation.
 
-The user reserved provider selection at 17:24. Existing optional LangMem
-extraction is preserved and tested with its installed pinned extra; no provider
-or default is selected. CT-43/DEC-0317/DEC-0342 NoMemoryProvider/no-in-house-engine
+The user reserved provider selection at 17:24 and subsequently authorized
+evaluation of the Hermes pattern for pluggable memory providers/configuration.
+That pattern evaluation is recorded in HERMES_MEMORY_PROVIDER_FIT.md; it does
+not activate a backend. Existing optional LangMem extraction is preserved and
+tested with its installed pinned extra; no provider or default is selected.
+CT-43/DEC-0317/DEC-0342 NoMemoryProvider/no-in-house-engine
 wording and current JournalMemoryProvider usage remain an admission-provenance
 and possible scoped-amendment discrepancy. Selection/admission blocks production
 provider ratification, not these bounded provider-neutral lifecycle checks.

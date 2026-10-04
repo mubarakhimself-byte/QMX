@@ -10,7 +10,7 @@ from test_actor_workflow import accepted, final, save_catalog, setup, wait_statu
 from test_request_runtime_daemon import compose, connection, mint
 
 
-@pytest.mark.parametrize("change", ["role_version", "workflow_version"])
+@pytest.mark.parametrize("change", ["role_and_workflow_version", "workflow_version"])
 def test_new_host_role_or_workflow_pin_withholds_prior_actor_memory_after_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
@@ -32,7 +32,7 @@ def test_new_host_role_or_workflow_pin_withholds_prior_actor_memory_after_restar
     finally:
         process.close()
     body = json.loads((tmp_path / "actor-workflows.json").read_text(encoding="utf-8"))
-    if change == "role_version":
+    if change == "role_and_workflow_version":
         body["roles"][0]["version"] = "2"
         body["workflows"][0]["steps"][1]["role"] = "analyst:2"
     body["workflows"][0]["version"] = "2"
