@@ -184,7 +184,7 @@ def assess_configured_runtime(
         input_path = path.value.absolute()
         relative_path = input_path.relative_to(input_root)
         resolved_root = input_root.resolve(strict=True)
-        raw_bytes = _read_deployment_no_follow(resolved_root, relative_path)
+        raw_bytes = _read_deployment_no_follow(input_root, relative_path)
     except (OSError, ValueError):
         return unavailable(
             "deployment_file",
@@ -242,7 +242,7 @@ def assess_configured_runtime(
             )
         try:
             relative_profile = Path(profile_path).relative_to(root.value)
-            profile_bytes = _read_deployment_no_follow(resolved_root, relative_profile)
+            profile_bytes = _read_deployment_no_follow(input_root, relative_profile)
         except (OSError, ValueError):
             return unavailable(
                 "host_resource_profile",
@@ -914,14 +914,18 @@ def _absolute_path(value: object, field: str) -> Result[Path]:
 
 def _read_deployment_no_follow(root: Path, relative_path: Path) -> bytes:
     """Read a bounded deployment file through a no-follow descriptor chain."""
-    if _O_NOFOLLOW == 0 or _O_DIRECTORY == 0 or os.open not in os.supports_dir_fd:
-        raise OSError("descriptor-relative no-follow reads are unavailable")
     if (
         not relative_path.parts
         or relative_path.is_absolute()
         or any(part in {"", ".", ".."} for part in relative_path.parts)
     ):
         raise ValueError("deployment path is not a normalized relative path")
+    if os.name == "nt":
+        from qmn.host._windows_deployment import read_deployment
+
+        return read_deployment(root, relative_path, limit=_MAX_DEPLOYMENT_BYTES)
+    if _O_NOFOLLOW == 0 or _O_DIRECTORY == 0 or os.open not in os.supports_dir_fd:
+        raise OSError("descriptor-relative no-follow reads are unavailable")
     directory_fd = os.open("/", os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
     leaf_fd: int | None = None
     try:
