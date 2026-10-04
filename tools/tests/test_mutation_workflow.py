@@ -57,9 +57,7 @@ def test_nightly_shell_cli_and_verdict(tmp_path: Path, job: str, scenario: str) 
         bash = str(git_bash) if git_bash and git_bash.is_file() else None
     if bash is None:
         pytest.skip("nightly Linux shell is unavailable on this host")
-    document = yaml.safe_load(
-        (ROOT / ".github/workflows/battery.yml").read_text(encoding="utf-8")
-    )
+    document = yaml.safe_load((ROOT / ".github/workflows/battery.yml").read_text(encoding="utf-8"))
     steps = cast("list[dict[str, str]]", document["jobs"][job]["steps"])
     commands = [
         step["run"]

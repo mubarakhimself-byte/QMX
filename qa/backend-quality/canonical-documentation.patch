@@ -2,7 +2,8 @@
 +++ b/docs/architecture/stack.md
 @@ -245,3 +245,26 @@
  ## Related
- 
+-
++
  Layers, containers, and external systems: `docs/architecture/overview.md`. Component graph: `docs/architecture/dependencies.yaml`. Values: `docs/registry/variables.yaml`. Interface schemas: `docs/contracts/`. Ratified spine: `_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md`. Trading node component spec: `docs/components/trading-node.md`. Trading node decision: `docs/decisions/ADR-0019-trading-node.md`. Trading node spine: `_bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md`.
 +
 +## Backend CI configuration and evidence boundary
@@ -31,7 +32,8 @@
 +++ b/docs/lenses/testing/fixtures-and-scenarios.md
 @@ -127,3 +127,20 @@
  | [SCN-0011](../../scenarios/SCN-0011-qualifying-loss-bench.md) — qualifying-loss bench | `qmn/bench-fold` over the CT-29 exit-record stream | The bench fold benching a seat on qualifying losses, the seat routing to the paired target while the Book stays LIVE; and SCN-0011 wired and proven (DEC-0208). |
- 
+-
++
  Each binding draws its values from the CT contract fields and registry rows the scenario cites, never from scenario-local literals; a fixture that cannot resolve a value carries its `GAP(GAP-*)` marker and stays blocked rather than inventing one (DEC-0157, DEC-0208).
 +
 +## Quality-pipeline regression evidence

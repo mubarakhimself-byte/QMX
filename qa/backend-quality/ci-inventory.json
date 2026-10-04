@@ -1,6 +1,6 @@
 {
   "baseline": "bf3c6b592e89917c17747eb1072203a28241e74a",
-  "code_checkpoint": "c4dba14a5d731768ad3df3eb3758b411e05d5949",
+  "code_checkpoint": "4eb37335fa077a7a60d8f880276e10dbad8c64d3",
   "execution_status": "local controls only; hosted CI/full mutation execution unverified",
   "python_version_file": "3.14",
   "workspaces": {
