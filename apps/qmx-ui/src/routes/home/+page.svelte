@@ -36,12 +36,12 @@
   const APPROVALS: Approval[] = [
     {
       id: "a1",
-      title: "Promote EURUSD H1 GBM to paper book FX-P",
+      title: "Put BTC breakout v7 on the Trend rider paper side",
       meta: "Asked 2h ago by the Researcher quant",
       card: [
-        ["Bot", "EURUSD H1 GBM v7 · fp1:9c41…e2a0"],
-        ["Book", "FX-P (paper)"],
-        ["Risk per trade", "0.5% of book"],
+        ["Bot", "BTC breakout v7 · fp1:9c41…e2a0"],
+        ["Pod", "Trend rider (paper side)"],
+        ["Risk per trade", "0.75% of the pod"],
         [
           "Evidence",
           "2 confirmation runs: walk-forward Sharpe 1.42, significance p = 0.012",
@@ -54,11 +54,11 @@
     },
     {
       id: "a2",
-      title: "Raise Gold Fade drawdown limit to 5%",
+      title: "Raise ETH mean reversion drawdown limit to 5%",
       meta: "Paused at −4.0% · asked 40m ago",
       card: [
-        ["Bot", "Gold Fade v5 · fp1:41ab…77c3"],
-        ["Book", "GOLD-P (paper)"],
+        ["Bot", "ETH mean reversion v5 · fp1:41ab…77c3"],
+        ["Pod", "Mean reversion (paper)"],
         ["Change", "Drawdown limit 4% → 5%"],
         [
           "Why",
@@ -74,7 +74,7 @@
       tone: "text-success",
       dot: "bg-success",
       kind: "Finished",
-      title: "EURUSD H1 model beat its benchmark",
+      title: "BTC breakout beat holding BTC",
       body: "Walk-forward 2024–2026: Sharpe 1.42, max drawdown −6.8%.",
       href: "/library/btc-breakout",
     },
@@ -90,7 +90,7 @@
       tone: "text-destructive",
       dot: "bg-destructive",
       kind: "Heads up",
-      title: "Gold Fade hit its drawdown limit",
+      title: "ETH mean reversion hit its drawdown limit",
       body: "Paused at −4.0% on paper. No live exposure.",
       href: "/library/eth-mr",
     },

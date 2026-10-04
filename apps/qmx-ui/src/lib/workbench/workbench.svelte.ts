@@ -27,14 +27,7 @@ export type OpenedApp = {
   attention?: "running" | "unknown" | "failed";
 };
 
-export const DEMO_APPS: OpenedApp[] = [
-  {
-    instanceId: "demo-research",
-    label: "Research (demo)",
-    icon: "chart",
-    attention: "running",
-  },
-];
+export const DEMO_APPS: OpenedApp[] = [];
 
 /**
  * Model and tool choices shown in the composer. The real lists come from

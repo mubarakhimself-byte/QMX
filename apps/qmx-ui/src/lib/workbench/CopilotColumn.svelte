@@ -101,8 +101,7 @@
           >
         {/each}
         <DropdownMenu.Separator />
-        <DropdownMenu.Item
-          onclick={() => goto(resolve("/copilot"))}
+        <DropdownMenu.Item onclick={() => goto(resolve("/copilot"))}
           ><MessagesSquare />Continue in the main copilot</DropdownMenu.Item
         >
       </DropdownMenu.Content>

@@ -360,7 +360,7 @@
             : `Knows ${subject.name}, the open layout and every run. Ask it to build a step, a panel, a test or a sweep.`}
           placeholder={lab.bench === "pods"
             ? "Make a stress scenario where…"
-            : "Sweep this across the majors on H1 and H4…"}
+            : "Sweep this across the top coins on 1h and 4h…"}
           seed={lab.copilotSeed}
           onclose={() => (lab.copilotOpen = false)}
           refs={workbench.copilotRefs}
@@ -375,7 +375,7 @@
                 "Split $20,000 across the ticked pods to keep dips under 8%",
               ]
             : [
-                `Sweep ${subject.name} across the majors on H1 and H4`,
+                `Sweep ${subject.name} across the top coins on 1h and 4h`,
                 "Why did the LINK M15 run fail?",
                 "Compare the three ticked runs and say what changed",
                 "Build a panel showing drawdown by session",

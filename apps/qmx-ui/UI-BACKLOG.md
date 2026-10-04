@@ -9,6 +9,32 @@ Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each w
 
 ---
 
+## Session review (2026-10-04) — read this first
+
+An independent review re-read every message from 2026-10-01 to 2026-10-03 and checked the code (scratchpad `session-review.md`). Verdict on Copilot pass 1: a good-looking storyboard of one scripted conversation, not a working screen; it skipped the agreed method (study, options, you pick, click-through). Ticks above were corrected.
+
+New facts from the operator (2026-10-04):
+- The agentic layer moved to **LangChain and LangGraph**; the own agent SDK is dropped.
+- Two SDKs: the **agent SDK** and the **mini-app SDK** (for mini apps and widgets). The mini-app SDK's **UI part is undecided**; research how others do it before designing.
+- The main copilot should be like the **Codex, ChatGPT and Claude desktop apps**, including a real terminal. Look at those apps, don't design from memory. Permissions are parked for now.
+
+Missing from this backlog until now:
+- [ ] Demo copilot can receive a message and answer (a scripted responder that streams blocks).
+- [ ] Diff tab in the copilot work area.
+- [ ] One session store shared by the main and side copilots; "Continue in the main copilot" opens that exact session.
+- [ ] The copilot builds a panel end to end (json-render or the chosen mini-app UI format): draft in chat, keep, discard or pin to a screen.
+- [ ] MCP Apps (sandboxed app windows) renderer, if the mini-app SDK chooses it.
+- [ ] Settings per mini app, beside global settings.
+- [ ] Settings per copilot: instructions, tools, skills, model, permission defaults.
+- [ ] Text-size floor as a rule (most copilot text is under 12px today).
+- [ ] A one-page design-style sheet for the new look (glass, ink art, themes, surfaces), for the copilot and Codex.
+- [ ] One widget system: move Home off the old MiniAppShell grid onto the tiling board.
+- [ ] The desktop app wrapper as its own pass (needed for the in-app browser, pop-outs and the start-up screen).
+- [ ] Components contract for Codex in BACKEND-REQUIREMENTS.md (panel format, catalog registry, copilot build tools, drafts, loading without restart, new component code).
+- [ ] A terminal ruling written into the architecture (the 2026-09-23 contract says preview only; the operator wants a real terminal like the desktop apps).
+
+Top fixes for Copilot pass 2 (from the review): it answers; it builds a panel; one session model; the sessions column collapses on its own; a real work area (diff, terminal, browser, per-artifact preview); readability (13px floor, fits 1280 wide); skills and per-copilot settings; drill into an agent; pop out any screen kept in sync; attachments shown as cards in messages.
+
 ## Operator review of Library pass 1 (2026-10-03, evening) — new requests
 
 Library (pass 2 built the first six):
@@ -23,10 +49,10 @@ Library (pass 2 built the first six):
 - [ ] The Library still lacks personality (an identity, an icon of its own).
 
 Copilot (next pass; operator: "needs a rethink"):
-- [x] Rethink "aim this message at" (the target menu).
-- [x] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot.
-- [x] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation.
-- [x] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app.
+- [x] Rethink "aim this message at" (the target menu). Built as mode, reach and who answers; the operator parked permissions on 2026-10-04, so revisit in Copilot pass 2.
+- [ ] Sessions grouped into collections by where they started (Lab, Portfolio, …); reopen any old session from the main copilot. PARTLY: groups exist; side-copilot sessions are a separate list and the hand-off carries nothing.
+- [ ] One main-copilot session can act across everything: start a Lab experiment, train a model, change a pod, look at Portfolio, in one conversation. PARTLY: one scripted sample; you cannot send a message.
+- [ ] Show how it works: artifacts in chat, skills, sub-agents, tools, commands, the ask-you-a-question card, permissions, delegation, background tasks and running agents (what each is doing right now). References: Codex desktop app, Claude desktop app. PARTLY: shown in one sample; no skills anywhere; browser empty, terminal plain text, every artifact previews the same numbers, Stop and Save are toasts.
 - [ ] Terminal (look at shadcn's terminal component) and browser integration.
 - [ ] Rules for what the copilot builds in the UI (see "Copilot pass: rules" above), plus: new things load in place without restarting the app; heavy things load in the background.
 - [ ] The copilot designs components from shadcn (registry) or its own design style.
@@ -109,7 +135,7 @@ NOT DONE
 - [NOT DONE] Session column on the left must collapse by itself while keeping Browser/Terminal/Diff open (today only Focus mode hides it, and Focus also hides the work area). — (2026-10-02, "I want it to be able to collapse on its own") — routes/copilot/+page.svelte:178-227.
 - [NOT DONE] Sub-agent preview in the main copilot. — (2026-10-02, "You haven't also done the sub-agents preview") — Sub-agents appear only in the Lab Agents panel (lib/lab/panels/AgentsPanel.svelte) and Home Agents widget; nothing in routes/copilot.
 - [NOT DONE] Show how a message looks with an attached document, a Library item, or a mini-app item. — (2026-10-02, "I want to see how a message looks like when I attach") — Attachments show only as chips in the composer (lib/workbench/Composer.svelte:82-100); no message shows one.
-- [NOT DONE] "New session" and "Search sessions" buttons work. — (implied by sessions list) — Both are disabled (routes/copilot/+page.svelte:184, :195).
+- [DONE] "New session" and "Search sessions" buttons work (Copilot pass 1). — (implied by sessions list) — Both are disabled (routes/copilot/+page.svelte:184, :195).
 - [NOT DONE] Sessions that run for days, using sub-agents (replaces agent requests). — (2026-10-03, "that session can run for days") — No long-running session state, progress or sub-agent tree in the session list. Ledger says "Copilot pass".
 - [NOT DONE] Main copilot can take in a conversation from another screen (for example a Lab chat), and its changes show live there, even with the Lab popped out on a second monitor. — (2026-10-03, "I can bring in conversations from other pages") — No bring-in action, no Lab pop-out (only the copilot has pop-out, routes/copilot/+page.svelte:55).
 - [NOT DONE] Built-in help or guide ("how do I train something new?"). — (2026-10-03, "some sort of helping thing feature") — Only the three copilot-led walks exist (lib/lab/guides.ts); no general help.
@@ -130,12 +156,12 @@ PARTLY
 DONE
 - [DONE] Copilot input: no focus box, grows with text then scrolls. — (2026-10-01, "I don't know why there is a box that forms") — lib/workbench/Composer.svelte:112-117.
 - [DONE] Model picker in the chat box. — (2026-10-01, "I haven't seen a model picker") — lib/workbench/Composer.svelte:45-48.
-- [DONE] Model choice also lives in Settings, set per copilot. — (2026-10-01, "model selection actually is meant to be inside the settings") — routes/settings/+page.svelte (Models tab, default model per copilot).
-- [DONE] Pop-out copilot to a bigger screen or new window. — (2026-10-01, "detached to a bigger screen") — routes/copilot/+page.svelte:55-61, Focus mode.
+- [PARTLY] Model choice also lives in Settings, set per copilot (three generic profiles only). — (2026-10-01, "model selection actually is meant to be inside the settings") — routes/settings/+page.svelte (Models tab, default model per copilot).
+- [PARTLY] Pop-out copilot to a bigger screen or new window (an unsynced copy, not a second-monitor view). — (2026-10-01, "detached to a bigger screen") — routes/copilot/+page.svelte:55-61, Focus mode.
 - [DONE] Tools, Target, Attach and messaging differ per context (main, Lab, Portfolio). — (2026-10-02, "tools in every mini app are not going to be the same") — lib/workbench/copilot-context.ts, lib/lab/copilot.ts, lib/portfolio/copilot.ts.
-- [DONE] App copilot has multiple sessions with history and its own settings (VS Code style header). — (2026-10-02, "multiple sessions in application co-pilot") — lib/workbench/CopilotColumn.svelte:60-117.
+- [PARTLY] App copilot has multiple sessions with history and its own settings (VS Code style header): every session is empty. — (2026-10-02, "multiple sessions in application co-pilot") — lib/workbench/CopilotColumn.svelte:60-117.
 - [DONE] Composer icons with count badges, no Offline label, better new-session empty state. — (2026-10-02, "Things like tools, you can just use an icon") — Composer.svelte:70-73.
-- [DONE] Copilot settings link to Settings (agents and models). — (2026-10-02, "Settings for the copilot, it should take us straight to settings") — ledger L12, CopilotColumn.svelte:117.
+- [PARTLY] Copilot settings link to Settings (agents and models): a generic Models tab, no per-copilot instructions, tools, skills or permissions. — (2026-10-02, "Settings for the copilot, it should take us straight to settings") — ledger L12, CopilotColumn.svelte:117.
 - [DONE] A chat session demo with tool calls, result table and a preview tab. — (2026-10-01, "I would like to see a chat session") — routes/copilot/+page.svelte:234-395.
 - [DONE] "Add to copilot" on widgets shows a chip and a toast. — (2026-10-01, "Can I add it to chat? Bloody hell") — WidgetFrame onmessage; workbench.addRef.
 
@@ -219,7 +245,7 @@ PARTLY
 - [PARTLY] Customisable component library: can the operator create new components? — (2026-10-01, "I can create new components of my own freaking") — Gallery lists the catalog (routes/gallery); backlog still says "decide".
 
 DONE
-- [DONE] Same widget controls everywhere (add to copilot, minimise, expand, close, add). — (2026-10-01, "where is the minimization maximization") — lib/workbench/WidgetFrame.svelte, MiniAppShell.
+- [PARTLY] Same widget controls everywhere (add to copilot, minimise, expand, close, add): Home's old widget grid still behaves differently from the Lab and Portfolio tiles. — (2026-10-01, "where is the minimization maximization") — lib/workbench/WidgetFrame.svelte, MiniAppShell.
 - [DONE] Add widgets, edit layout, resize in edit mode. — (2026-10-02, "I can add widgets? Heck no way!") — MiniAppShell.svelte:123-130, :173-190.
 - [DONE] Mini apps render well in small views. — (2026-10-01, "mini apps look good though in small views") — no change needed.
 
@@ -332,7 +358,7 @@ PARTLY
 
 DONE
 - [DONE] Scrap the Grok UI; rebuild from the storyboard as a web app first. — (2026-10-01, "scrap the entire bloody thing") — SvelteKit app.
-- [DONE] Build on shadcn-svelte and community components, with a component library page. — (2026-10-01, "SHAD CN has MCPs ... you don't have to work from scratch") — lib/components/ui, routes/gallery.
+- [PARTLY] Build on shadcn-svelte and community components, with a component library page: 17 primitives and an 11-entry catalog; community extras never added. — (2026-10-01, "SHAD CN has MCPs ... you don't have to work from scratch") — lib/components/ui, routes/gallery.
 - [DONE] Seven themes with frosted glass, ink background made trading-themed (fractals), themed scrollbars, larger text. — (2026-10-01, "they're scroll bars. They're ugly as hell") — lib/themes.css:287; lib/workbench/InkBackground.svelte; app.css font-size.
 - [DONE] OpenBB-style widget controls (minimise, expand, close, add to copilot). — (2026-10-01, "that widget thing where I can close, minimize, maximize") — lib/workbench/WidgetFrame.svelte.
 - [DONE] Unknown widget renders a typed "unsupported" frame, never an error. — (2026-10-01) — MiniAppShell.svelte:61.

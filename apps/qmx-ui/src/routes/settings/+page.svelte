@@ -136,12 +136,23 @@
   ];
   const NODES = [
     {
-      name: "Paper node",
-      where: "This machine",
-      mode: "Paper",
-      books: "GOLD-P · FX-P",
+      name: "Tokyo",
+      where: "AWS ap-northeast-1",
+      mode: "Live",
+      books: "BTC & ETH core, Alt momentum",
     },
-    { name: "Live node", where: "VPS · London", mode: "Live", books: "IDX-L" },
+    {
+      name: "Frankfurt",
+      where: "Hetzner FSN1",
+      mode: "Live",
+      books: "Weekly rotation",
+    },
+    {
+      name: "This laptop",
+      where: "Dell Precision 5550",
+      mode: "Paper",
+      books: "Paper sides, Mean reversion",
+    },
   ];
   const SOURCES = [
     {
@@ -357,10 +368,9 @@
         <table class="w-full text-sm">
           <thead class="text-muted-foreground text-left text-xs">
             <tr
-              ><th class="py-2 font-medium">Node</th><th class="font-medium"
+              ><th class="py-2 font-medium">Server</th><th class="font-medium"
                 >Where</th
-              ><th class="font-medium">Mode</th><th class="font-medium"
-                >Books</th
+              ><th class="font-medium">Mode</th><th class="font-medium">Pods</th
               ><th class="text-right font-medium">Status</th></tr
             >
           </thead>
@@ -433,8 +443,8 @@
         <div>
           <h2 id="s-theme" class="text-lg font-semibold">Theme</h2>
           <p class="text-muted-foreground text-sm">
-            Glass panels over an ink map of fractal price paths. Trading screens
-            never show the background.
+            Glass panels over an ink map of fractal price paths. Charts and
+            trading panels sit on a solid backing so they stay readable.
           </p>
         </div>
         <div

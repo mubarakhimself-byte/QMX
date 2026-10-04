@@ -1,5 +1,8 @@
 # QMX UI: what the screens need from the backend
 
+> **Read first (2026-10-04).** Later operator rulings supersede parts of this file: "Books" are now **pods**; **agent requests** were removed (long-running copilot sessions instead); **Allocate** left Portfolio (it is "Run together" in the Lab's pod Test); **Authoring** merged into the **Lab**; spot crypto only. The agentic layer moved to **LangChain and LangGraph**, so anything below that assumes the QMA daemon's own agent SDK needs re-checking. A components contract (how mini apps and the copilot put screens into QMX) is still to be written once the mini-app SDK's UI format is chosen.
+
+
 Owner of this file: the UI lane (`apps/qmx-ui`). Audience: Codex / backend lane.
 Status: 2026-10-01. The UI is rebuilt on branch `ui-review/repair`. No transport is bound.
 Every daemon-backed control is visibly disabled with a reason. Nothing is faked.
