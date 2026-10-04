@@ -9,7 +9,7 @@ import runpy
 import sqlite3
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from typing import cast
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.operations import public_operation_descriptors
@@ -26,16 +26,63 @@ from qma.daemon.process import (
     SIXTH_APPLICATION_MINTED,
     DaemonProcess,
 )
+from qma.daemon.taskgraph.nested import ParentMissionRun
 from qma.daemon.taskgraph.records import GraphTemplate
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION, WireConnection
-from qma.wire.invocation_envelope import compute_input_hash
+from qma.wire.invocation_envelope import (
+    AuthoritativeStores,
+    BoundInvocation,
+    ContributionRecord,
+    GrantRecord,
+    InstanceRecord,
+    compute_input_hash,
+    public_call_in_process,
+)
 from qma.wire.listener import DEFAULT_BIND_HOST, ListenerBindConfig
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER
-from qmf.core import RefusalCategory, is_ok, is_refusal
+from qmf.core import RefusalCategory, Result, is_ok, is_refusal
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "daemon_process_usage.py"
 PROCESS_SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon" / "process.py"
+
+
+class ProcessHarness(DaemonProcess):
+    """Expose protected adapter seams only within this test's composed subclass."""
+
+    def dispatch_paired(
+        self,
+        connection: WireConnection,
+        payload: bytes,
+        *,
+        session_key: str,
+        connection_token: str,
+    ) -> dict[str, object] | None:
+        return self._dispatch_paired_ct40(
+            connection, payload, session_key=session_key, connection_token=connection_token
+        )
+
+    def execute_bound(self, bound: BoundInvocation) -> Result[object]:
+        return self._execute_bound_product_operation(bound)
+
+
+def _json_object(value: object) -> dict[str, object]:
+    assert isinstance(value, dict), value
+    checked: dict[str, object] = {}
+    for key, item in cast(dict[object, object], value).items():
+        assert isinstance(key, str), key
+        checked[key] = item
+    return checked
+
+
+def _json_string(value: object) -> str:
+    assert isinstance(value, str), value
+    return value
+
+
+def _json_object_list(value: object) -> tuple[dict[str, object], ...]:
+    assert isinstance(value, list), value
+    return tuple(_json_object(item) for item in cast(list[object], value))
 
 
 def _seed_configs(tmp_path: Path) -> dict[str, dict[str, object]]:
@@ -44,8 +91,8 @@ def _seed_configs(tmp_path: Path) -> dict[str, dict[str, object]]:
     return research_corpus_plugin_load_config(seed)
 
 
-def _compose(tmp_path: Path, *, boot: str = "boot-36-1") -> DaemonProcess:
-    result = DaemonProcess.compose(
+def _compose(tmp_path: Path, *, boot: str = "boot-36-1") -> ProcessHarness:
+    result = ProcessHarness.compose(
         tmp_path,
         machine="test-host",
         boot_epoch_id=boot,
@@ -53,6 +100,7 @@ def _compose(tmp_path: Path, *, boot: str = "boot-36-1") -> DaemonProcess:
         plugin_load_configs=_seed_configs(tmp_path),
     )
     assert is_ok(result), result
+    assert isinstance(result.value, ProcessHarness)
     return result.value
 
 
@@ -242,7 +290,7 @@ def test_procedure_start_compiles_registered_template_for_registered_quant(
             role=RoleName.RESEARCHER,
             name="Quant alpha",
         )
-        assert is_ok(process._mailboxes.open_for_quant(quant))
+        assert is_ok(process.mailboxes.open_for_quant(quant))
         assert is_ok(
             process.execution_environments.register_declaration(
                 ExecutionEnvironmentDeclaration.isolated(
@@ -271,13 +319,65 @@ def test_procedure_start_compiles_registered_template_for_registered_quant(
             ),
             encoding="utf-8",
         )
-        bound = SimpleNamespace(
-            envelope=SimpleNamespace(op_id="qma.procedure.start", logical_invocation_id="inv:one"),
-            instance=SimpleNamespace(instance_id="instance:one", config_revision=2),
-            validated_payload={"procedure_id": "research-corpus:host-start"},
+        descriptor = next(
+            item for item in public_operation_descriptors() if item.op_id == "qma.procedure.start"
         )
-        launched = process._execute_bound_product_operation(bound)
+        payload = {"procedure_id": template.qualified_id}
+        hashed = compute_input_hash(payload, descriptor=descriptor)
+        assert is_ok(hashed), hashed
+        contribution = ContributionRecord(
+            qualified_id=template.qualified_id,
+            package_version=template.version,
+            availability="enabled",
+        )
+        grant = GrantRecord.try_create(
+            grant_id="grant:host-start",
+            principal="operator",
+            audience="psess:host-start",
+            contribution={
+                "qualified_id": template.qualified_id,
+                "package_version": template.version,
+            },
+            instance_id="instance:one",
+            config_revision=2,
+            op_id=descriptor.op_id,
+            op_version=descriptor.version,
+            effect_class=descriptor.effect_class,
+            parameter_ceiling={"allow_keys": ["procedure_id"]},
+            expires_at="2099-01-01T00:00:00Z",
+        )
+        assert is_ok(grant), grant
+        instance = InstanceRecord(instance_id="instance:one", config_revision=2)
+        bound = public_call_in_process(
+            {
+                "logical_invocation_id": "inv:one",
+                "attempt_id": 1,
+                "op_id": descriptor.op_id,
+                "op_version": descriptor.version,
+                "contribution": dict(grant.value.contribution.to_payload()),
+                "instance_id": instance.instance_id,
+                "config_revision": instance.config_revision,
+                "grant_id": grant.value.grant_id,
+                "effect_class": descriptor.effect_class.value,
+                "idempotency_key": "idem:host-start",
+                "reconcile_policy": "query-then-decide",
+                "input_hash": hashed.value,
+                "call_depth": 0,
+                "caller_kind": "user",
+                "caller_session_ref": "psess:host-start",
+            },
+            payload,
+            AuthoritativeStores(
+                contributions={contribution.as_tuple(): contribution},
+                descriptors={(descriptor.op_id, descriptor.version): descriptor},
+                grants={grant.value.grant_id: grant.value},
+                instances={(instance.instance_id, instance.config_revision): instance},
+            ),
+        )
+        assert is_ok(bound), bound
+        launched = process.execute_bound(bound.value)
         assert is_ok(launched), launched
+        assert isinstance(launched.value, ParentMissionRun)
         assert launched.value.owner.actor_id == actor.value
         assert process.jobs.handle_for(launched.value.handle.job_id) is not None
     finally:
@@ -317,7 +417,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             role=RoleName.RESEARCHER,
             name="Quant alpha",
         )
-        assert is_ok(process._mailboxes.open_for_quant(quant))
+        assert is_ok(process.mailboxes.open_for_quant(quant))
         assert is_ok(
             process.execution_environments.register_declaration(
                 ExecutionEnvironmentDeclaration.isolated(
@@ -359,7 +459,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         connection = WireConnection()
         assert is_ok(connection.authenticate_pairing("prid:ct40positive"))
         connection_token = "ct40-test-connection"
-        initialized = process._dispatch_paired_ct40(
+        initialized = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -376,7 +476,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert initialized is not None and "error" not in initialized, initialized
-        injected_binding = process._dispatch_paired_ct40(
+        injected_binding = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -395,7 +495,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert injected_binding is not None and "error" in injected_binding
-        opened = process._dispatch_paired_ct40(
+        opened = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -413,11 +513,9 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert opened is not None and "error" not in opened, opened
-        opened_result = opened.get("result")
-        assert isinstance(opened_result, dict)
-        session_id = opened_result.get("product_session_id")
-        assert isinstance(session_id, str)
-        reopened = process._dispatch_paired_ct40(
+        opened_result = _json_object(opened["result"])
+        session_id = _json_string(opened_result["product_session_id"])
+        reopened = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -435,8 +533,8 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert reopened is not None and "error" not in reopened
-        assert reopened["result"]["product_session_id"] == session_id
-        granted = process._dispatch_paired_ct40(
+        assert _json_object(reopened["result"])["product_session_id"] == session_id
+        granted = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -457,11 +555,12 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert granted is not None and "error" not in granted, granted
-        grant_result = granted.get("result")
-        assert isinstance(grant_result, dict)
+        grant_result = _json_object(granted["result"])
         assert grant_result["context_revision"] == 1
-        assert process.product_sessions.get(session_id).value.context_revision == 1
-        recovered_session = process._dispatch_paired_ct40(
+        stored_session = process.product_sessions.get(session_id)
+        assert is_ok(stored_session), stored_session
+        assert stored_session.value.context_revision == 1
+        recovered_session = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -475,13 +574,13 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert recovered_session is not None and "error" not in recovered_session
-        recovered_result = recovered_session["result"]
+        recovered_result = _json_object(recovered_session["result"])
         assert recovered_result["product_session_id"] == session_id
-        recovered_grants = recovered_result["grant_records"]
+        recovered_grants = _json_object_list(recovered_result["grant_records"])
         assert len(recovered_grants) == 1
         assert recovered_grants[0]["grant_id"] == grant_result["grant_id"]
         assert recovered_grants[0]["op_id"] == descriptor.op_id
-        injected_query = process._dispatch_paired_ct40(
+        injected_query = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -498,7 +597,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert injected_query is not None and "error" in injected_query
-        stale_grant = process._dispatch_paired_ct40(
+        stale_grant = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -519,7 +618,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert stale_grant is not None and "error" in stale_grant
-        envelope = {
+        envelope: dict[str, object] = {
             "logical_invocation_id": "inv:ct40-positive",
             "attempt_id": 1,
             "op_id": descriptor.op_id,
@@ -527,7 +626,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             "contribution": contribution,
             "instance_id": loaded.instance_id,
             "config_revision": 2,
-            "grant_id": grant_result["grant_id"],
+            "grant_id": _json_string(grant_result["grant_id"]),
             "effect_class": descriptor.effect_class.value,
             "idempotency_key": "idem:ct40-positive",
             "reconcile_policy": "query-then-decide",
@@ -536,7 +635,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             "caller_kind": "user",
             "caller_session_ref": session_id,
         }
-        response = process._dispatch_paired_ct40(
+        response = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -554,13 +653,11 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert response is not None and "error" not in response, response
-        result = response.get("result")
-        assert isinstance(result, dict)
-        job_id = result.get("job_id")
-        assert isinstance(job_id, str)
+        result = _json_object(response["result"])
+        job_id = _json_string(result["job_id"])
         assert process.jobs.handle_for(job_id) is not None
 
-        second_open = process._dispatch_paired_ct40(
+        second_open = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -578,8 +675,8 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert second_open is not None and "error" not in second_open, second_open
-        second_session = second_open["result"]["product_session_id"]
-        second_grant = process._dispatch_paired_ct40(
+        second_session = _json_string(_json_object(second_open["result"])["product_session_id"])
+        second_grant = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -600,9 +697,10 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert second_grant is not None and "error" not in second_grant, second_grant
-        assert second_grant["result"]["context_revision"] == 1
+        second_grant_result = _json_object(second_grant["result"])
+        assert second_grant_result["context_revision"] == 1
         # A tool operation is not declared by this pack's graph-template contribution.
-        foreign_grant = process._dispatch_paired_ct40(
+        foreign_grant = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -627,7 +725,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         second_payload = {"procedure_id": second_published.qualified_id}
         second_input_hash = compute_input_hash(second_payload, descriptor=descriptor)
         assert is_ok(second_input_hash), second_input_hash
-        second_envelope = {
+        second_envelope: dict[str, object] = {
             "logical_invocation_id": "inv:ct40-second-pack",
             "attempt_id": 1,
             "op_id": descriptor.op_id,
@@ -635,7 +733,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             "contribution": second_contribution,
             "instance_id": second_loaded.instance_id,
             "config_revision": 2,
-            "grant_id": second_grant["result"]["grant_id"],
+            "grant_id": _json_string(second_grant_result["grant_id"]),
             "effect_class": descriptor.effect_class.value,
             "idempotency_key": "idem:ct40-second-pack",
             "reconcile_policy": "query-then-decide",
@@ -644,7 +742,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             "caller_kind": "user",
             "caller_session_ref": second_session,
         }
-        second_started = process._dispatch_paired_ct40(
+        second_started = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -662,7 +760,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=connection_token,
         )
         assert second_started is not None and "error" not in second_started
-        second_job_id = second_started["result"]["job_id"]
+        second_job_id = _json_string(_json_object(second_started["result"])["job_id"])
         assert second_job_id != job_id
         assert process.jobs.handle_for(second_job_id) is not None
 
@@ -671,7 +769,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         forged["idempotency_key"] = "idem:ct40-forged"
         forged["grant_id"] = "grant:caller-invented"
         forged["input_hash"] = input_hash.value
-        refused = process._dispatch_paired_ct40(
+        refused = process.dispatch_paired(
             connection,
             json.dumps(
                 {
@@ -710,7 +808,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
         reconnect = WireConnection()
         assert is_ok(reconnect.authenticate_pairing("prid:ct40positive"))
         reconnect_token = "ct40-restart-connection"
-        initialized_again = restarted._dispatch_paired_ct40(
+        initialized_again = restarted.dispatch_paired(
             reconnect,
             json.dumps(
                 {
@@ -727,7 +825,7 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=reconnect_token,
         )
         assert initialized_again is not None and "error" not in initialized_again
-        recovered_job = restarted._dispatch_paired_ct40(
+        recovered_job = restarted.dispatch_paired(
             reconnect,
             json.dumps(
                 {
@@ -741,9 +839,10 @@ def test_public_ct40_start_mission_uses_minted_product_session_grant(
             connection_token=reconnect_token,
         )
         assert recovered_job is not None and "error" not in recovered_job
-        assert recovered_job["result"]["job_id"] == job_id
-        assert recovered_job["result"]["state"] == "queued"
-        stolen_job = restarted._dispatch_paired_ct40(
+        recovered_job_result = _json_object(recovered_job["result"])
+        assert recovered_job_result["job_id"] == job_id
+        assert recovered_job_result["state"] == "queued"
+        stolen_job = restarted.dispatch_paired(
             reconnect,
             json.dumps(
                 {
