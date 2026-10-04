@@ -149,7 +149,7 @@ def test_reader_blocks_concurrent_parent_leaf_replacement_and_write(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows handle errors")
-def test_reader_native_query_and_read_errors_fail_closed_and_release_handles(
+def test_reader_read_errors_fail_closed_and_release_handles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from qmn.host import _windows_deployment as native
@@ -168,3 +168,32 @@ def test_reader_native_query_and_read_errors_fail_closed_and_release_handles(
     leaf.rename(tmp_path / "released.json")
     monkeypatch.setattr(native._NativeReader, "read", original_read)
     assert runtime._read_deployment_no_follow(tmp_path, Path("released.json")) == b"checked bytes"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows query/read errors")
+@pytest.mark.parametrize("failed_api", ["get_info_ex", "read_file"])
+def test_reader_refuses_failed_native_apis_and_closes_directory_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_api: str
+) -> None:
+    import ctypes
+
+    from qmn.host import _windows_deployment as native
+
+    parent = tmp_path / "nested"
+    parent.mkdir()
+    (parent / "deployment.json").write_bytes(b"checked bytes")
+    original_init = native._NativeReader.__init__
+
+    def unavailable(*_args: object) -> int:
+        ctypes.set_last_error(50)  # ERROR_NOT_SUPPORTED, never interpreted as success.
+        return 0
+
+    def inject(self: native._NativeReader) -> None:
+        original_init(self)
+        monkeypatch.setattr(self, failed_api, unavailable)
+
+    monkeypatch.setattr(native._NativeReader, "__init__", inject)
+    with pytest.raises(OSError) as raised:
+        runtime._read_deployment_no_follow(tmp_path, Path("nested/deployment.json"))
+    assert raised.value.winerror == 50
+    parent.rename(tmp_path / "released")

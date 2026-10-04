@@ -48,6 +48,9 @@ from qmn.promotion.journal import ActivationReconstruction, reconstruct_activati
 from qmn.seats.state import OPERATOR_PRINCIPAL, GovernedSeatState
 from qmn.venue.proto_runtime import compile_pinned_descriptor
 
+if os.name == "nt":
+    from qmn.host._windows_deployment import read_deployment
+
 __all__ = [
     "CONFIGURED_REGISTRY_REFERENCE_KINDS",
     "CONFIGURED_RUNTIME_FORMAT_VERSION",
@@ -921,8 +924,6 @@ def _read_deployment_no_follow(root: Path, relative_path: Path) -> bytes:
     ):
         raise ValueError("deployment path is not a normalized relative path")
     if os.name == "nt":
-        from qmn.host._windows_deployment import read_deployment
-
         return read_deployment(root, relative_path, limit=_MAX_DEPLOYMENT_BYTES)
     if _O_NOFOLLOW == 0 or _O_DIRECTORY == 0 or os.open not in os.supports_dir_fd:
         raise OSError("descriptor-relative no-follow reads are unavailable")
