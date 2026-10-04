@@ -42,6 +42,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from threading import RLock
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -69,6 +70,7 @@ from qma.daemon.sessions.grant_binding import (
     moment_for_transport,
     require_session_grant_id,
 )
+from qma.daemon.taskgraph.authority import serialized
 from qma.wire.envelope import SCOPE_KIND_ORDER
 from qma.wire.grant_record import (
     AcceptedGrantWork,
@@ -1440,6 +1442,15 @@ class ProductSessionService:
             self._grant_store = GrantSqliteStore(self.sqlite)
 
     @property
+    def authority_lock(self) -> RLock:
+        """Session context and its canonical grant ledger share one fence.
+
+        Authoring holds runtime→Task→session through registration. Public
+        dispatch releases this lock before executing any host adapter.
+        """
+        return self.ledger.authority_lock
+
+    @property
     def occupancy(self) -> str:
         return PRODUCT_SESSION_OCCUPANCY
 
@@ -1471,6 +1482,7 @@ class ProductSessionService:
     def restored_from_journal(self) -> bool:
         return self._restored_from_journal
 
+    @serialized
     def _index(self, session: ProductSession) -> None:
         self._rows[session.product_session_id] = session
         if session.app_instance_id is not None:
@@ -1488,6 +1500,7 @@ class ProductSessionService:
             return folded
         return Ok(None)
 
+    @serialized
     def mint(
         self,
         *,
@@ -1689,6 +1702,7 @@ class ProductSessionService:
         self._index(session)
         return Ok(session)
 
+    @serialized
     def get(self, product_session_id: object) -> Result[ProductSession]:
         parsed = _parse_psess_id(product_session_id)
         if is_refusal(parsed):
@@ -1869,6 +1883,7 @@ class ProductSessionService:
             return existing
         return self.attach_tab(existing.value.product_session_id, tab_id)
 
+    @serialized
     def restore_from_journal(self) -> Result[tuple[ProductSession, ...]]:
         """Rebuild product_session rows from journal events, not RAM."""
         if self.journal is None:
@@ -2013,6 +2028,7 @@ class ProductSessionService:
             )
         )
 
+    @serialized
     def _hydrate_grants(self) -> Result[None]:
         if self._grants_hydrated:
             return Ok(None)
@@ -2173,6 +2189,7 @@ class ProductSessionService:
             return appended
         return Ok((appended.value.record.journal_seq, appended.value.record.recorded_at))
 
+    @serialized
     def _persist_session(
         self,
         session: ProductSession,
@@ -2200,6 +2217,7 @@ class ProductSessionService:
         self._index(written)
         return Ok(written)
 
+    @serialized
     def resolve_grant(
         self,
         product_session_id: object,
@@ -2227,6 +2245,7 @@ class ProductSessionService:
             )
         return Ok(record)
 
+    @serialized
     def granted_records(
         self,
         product_session_id: object,
@@ -2243,6 +2262,7 @@ class ProductSessionService:
             collected.append(resolved.value)
         return Ok(tuple(collected))
 
+    @serialized
     def host_grant(
         self,
         product_session_id: object,
@@ -2354,6 +2374,7 @@ class ProductSessionService:
                 return persisted
         return Ok(record)
 
+    @serialized
     def accept_work(
         self,
         product_session_id: object,
@@ -2445,6 +2466,7 @@ class ProductSessionService:
             )
         return Ok(work)
 
+    @serialized
     def record_retry_attempt(
         self,
         product_session_id: object,
@@ -2539,6 +2561,7 @@ class ProductSessionService:
         )
         return Ok(work)
 
+    @serialized
     def revoke_grant(
         self,
         product_session_id: object,
@@ -2591,6 +2614,7 @@ class ProductSessionService:
         token = resolved.value.grant_id
         return refuse_in_place_upgrade(grant_id=token, changes=sorted(changes), in_place=True)
 
+    @serialized
     def regrant(
         self,
         product_session_id: object,

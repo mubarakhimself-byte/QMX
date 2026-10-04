@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import wraps
+from threading import RLock
 from types import MappingProxyType
-from typing import Final, cast
+from typing import Concatenate, Final, cast
 
 from qma.core.operations.descriptor import OperationDescriptor
 from qma.core.refusals.variants import (
@@ -433,6 +435,17 @@ def _inactive_reason(*, revoked: bool, expired: bool) -> str:
     return "expired"
 
 
+def _serialized[**P, T](
+    method: Callable[Concatenate[HostGrantLedger, P], T],
+) -> Callable[Concatenate[HostGrantLedger, P], T]:
+    @wraps(method)
+    def call(owner: HostGrantLedger, /, *args: P.args, **kwargs: P.kwargs) -> T:
+        with owner.authority_lock:
+            return method(owner, *args, **kwargs)
+
+    return call
+
+
 @dataclass
 class HostGrantLedger:
     """In-memory host grant authority. Manifests request; the host grants.
@@ -448,6 +461,7 @@ class HostGrantLedger:
     _accepted: dict[str, str] = field(default_factory=dict[str, str])
     _context_revision: int = 0
     _next_serial: int = 1
+    authority_lock: RLock = field(default_factory=RLock, repr=False, compare=False, kw_only=True)
 
     @property
     def context_revision(self) -> int:
@@ -468,6 +482,7 @@ class HostGrantLedger:
         """grant_ids for product_session.granted_ops (Story 55.2)."""
         return ProductSessionGrantedOps.try_create(tuple(self._grants))
 
+    @_serialized
     def import_grant(self, record: GrantRecord) -> Result[GrantRecord]:
         """Hydrate an already-minted GrantRecord. Does not re-issue."""
         if record.grant_id in self._grants:
@@ -486,6 +501,7 @@ class HostGrantLedger:
             self._next_serial = serial + 1
         return Ok(record)
 
+    @_serialized
     def import_revocation(self, revocation: GrantRevocation) -> Result[GrantRevocation]:
         """Hydrate an append-only GrantRevocation. Minted bytes stay."""
         record = self._grants.get(revocation.grant_id)
@@ -508,6 +524,7 @@ class HostGrantLedger:
             )
         return Ok(revocation)
 
+    @_serialized
     def import_accepted(
         self,
         *,
@@ -536,6 +553,7 @@ class HostGrantLedger:
             )
         )
 
+    @_serialized
     def authoritative_stores(
         self,
         *,
@@ -550,6 +568,7 @@ class HostGrantLedger:
             instances=instances,
         )
 
+    @_serialized
     def mint(
         self,
         *,
@@ -604,6 +623,7 @@ class HostGrantLedger:
         self._minted_bytes[record.grant_id] = minted.value
         return Ok(record)
 
+    @_serialized
     def revoke(
         self,
         *,
@@ -661,6 +681,7 @@ class HostGrantLedger:
             return False
         return self._accepted.get(logical_invocation_id) == grant_id
 
+    @_serialized
     def evaluate(
         self,
         *,
@@ -729,6 +750,7 @@ class HostGrantLedger:
             already_accepted=accepted_here,
         )
 
+    @_serialized
     def accept(
         self,
         *,
@@ -770,6 +792,7 @@ class HostGrantLedger:
             in_place=True,
         )
 
+    @_serialized
     def regrant(
         self,
         previous_grant_id: object,

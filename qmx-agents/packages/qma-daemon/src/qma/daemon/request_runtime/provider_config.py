@@ -204,6 +204,7 @@ def _policy(
             "timeout_seconds",
             "max_prompt_bytes",
             "tools",
+            "authoring_task_id",
         },
     )
     role = row.get("role")
@@ -247,6 +248,7 @@ def _policy(
         timeout_seconds=_duration(row.get("timeout_seconds", 120), 600),
         max_prompt_bytes=_integer(row.get("max_prompt_bytes", 32768), 262144),
         session_app_instance_id=session_app,
+        authoring_task_id=_text(row["authoring_task_id"]) if "authoring_task_id" in row else None,
     )
 
 

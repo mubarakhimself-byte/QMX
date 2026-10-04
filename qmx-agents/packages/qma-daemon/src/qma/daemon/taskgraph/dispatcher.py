@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from threading import RLock
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ from qma.core.vocabulary.enums import (
 )
 from qma.daemon.envs.registry import EnvironmentLease, ExecutionEnvironmentRegistry
 from qma.daemon.envs.router import ComputeRouter, PlacementDecision, QueuedPlacement
+from qma.daemon.taskgraph.authority import serialized
 from qma.daemon.taskgraph.outbox import (
     OutboxTransportState,
     ReceiverAcceptance,
@@ -56,6 +58,7 @@ from qmf.data.store.refusals import invalid_input, policy_rejection
 
 if TYPE_CHECKING:
     from qma.daemon.ledgers.task import TaskLedgerStore
+
 
 __all__ = [
     "DispatchDecision",
@@ -277,6 +280,7 @@ class TaskGraphStore:
     _dispatched: set[str] = field(default_factory=set[str])
     slot_router: ComputeRouter | None = None
     durable: TaskGraphStateService | None = None
+    authority_lock: RLock = field(default_factory=RLock, repr=False, compare=False, kw_only=True)
 
     def _persist(self, graph: TaskGraph) -> None:
         if self.durable is None:
@@ -286,6 +290,7 @@ class TaskGraphStore:
             msg = "task_graph_state persist refused"
             raise RuntimeError(msg)
 
+    @serialized
     def materialize(self, graph: TaskGraph) -> TaskGraph:
         """Persist the compiled Task Graph projection for its Mission."""
         self._by_graph_id[graph.id] = graph
@@ -293,6 +298,7 @@ class TaskGraphStore:
         self._persist(graph)
         return graph
 
+    @serialized
     def put_mission(self, mission: MissionRecord) -> MissionRecord:
         self._missions[mission.id] = mission
         return mission
@@ -309,11 +315,13 @@ class TaskGraphStore:
             return None
         return self._by_graph_id.get(graph_id)
 
+    @serialized
     def put(self, graph: TaskGraph) -> None:
         self._by_graph_id[graph.id] = graph
         self._by_mission_id[graph.mission_id] = graph.id
         self._persist(graph)
 
+    @serialized
     def remember(self, graph: TaskGraph) -> None:
         """Update the in-memory cache after a durable completion transaction."""
         self._by_graph_id[graph.id] = graph
@@ -331,10 +339,12 @@ class TaskGraphStore:
     def was_dispatched(self, task_id: str) -> bool:
         return task_id in self._dispatched
 
+    @serialized
     def record_lease(self, lease: DispatchLease) -> None:
         self._dispatch_leases[lease.task_id] = lease
         self._dispatched.add(lease.task_id)
 
+    @serialized
     def record_environment_lease(self, lease: EnvironmentLease) -> None:
         self._environment_leases[lease.task_id] = lease
         if self.durable is None:
@@ -350,14 +360,17 @@ class TaskGraphStore:
         self._by_graph_id[graph.id] = occupied.value
         self._by_mission_id[graph.mission_id] = graph.id
 
+    @serialized
     def record_job_handle(self, evidence: JobHandleEvidence) -> None:
         self._job_handles[evidence.task_id] = evidence
 
+    @serialized
     def release_leases(self, task_id: str) -> None:
         self._dispatch_leases.pop(task_id, None)
         self._environment_leases.pop(task_id, None)
         self._release_router_slot(task_id)
 
+    @serialized
     def release_environment_lease(self, task_id: str) -> bool:
         """Release ``environment_lease`` only; retain ``dispatch_lease`` (FR-Q33)."""
         released = self._environment_leases.pop(task_id, None) is not None
@@ -457,6 +470,9 @@ class TaskGraphDispatcher:
             self._ledgers = _TaskLedgerStore()
         else:
             self._ledgers = ledgers
+        self._ledgers.authority_lock = self._store.authority_lock
+        if self._store.durable is not None:
+            self._store.durable.authority_lock = self._store.authority_lock
         self._default_kind = (
             default_environment_kind.value
             if isinstance(default_environment_kind, ExecutionEnvironmentKind)
@@ -466,6 +482,10 @@ class TaskGraphDispatcher:
     @property
     def store(self) -> TaskGraphStore:
         return self._store
+
+    @property
+    def authority_lock(self) -> RLock:
+        return self._store.authority_lock
 
     @property
     def environments(self) -> ExecutionEnvironmentRegistry:
@@ -590,6 +610,7 @@ class TaskGraphDispatcher:
             )
         return Ok((task, lease, row))
 
+    @serialized
     def accept_worker_invocation(self, logical_invocation_id: object) -> Result[ReceiverAcceptance]:
         """Persist the daemon's worker-acceptance receipt for the current successor Task.
 
@@ -633,6 +654,7 @@ class TaskGraphDispatcher:
             return payload
         return durable.accept_logical(logical_invocation_id, result=payload.value)
 
+    @serialized
     def materialize(
         self,
         graph: TaskGraph,
@@ -643,6 +665,7 @@ class TaskGraphDispatcher:
             self._store.put_mission(mission)
         return self._store.materialize(graph)
 
+    @serialized
     def dispatch_next(
         self,
         *,
@@ -674,6 +697,7 @@ class TaskGraphDispatcher:
             requirement=requirement,
         )
 
+    @serialized
     def dispatch_task(
         self,
         *,
@@ -888,6 +912,7 @@ class TaskGraphDispatcher:
             return published
         return Ok(None)
 
+    @serialized
     def reassign(
         self,
         *,
@@ -933,6 +958,7 @@ class TaskGraphDispatcher:
         self._store.put(graph.replace_task(updated))
         return Ok(lease)
 
+    @serialized
     def apply_proposed_transition(
         self,
         proposal: ProposedTransition,
@@ -955,6 +981,7 @@ class TaskGraphDispatcher:
         self._refresh_mission(task.mission_id, updated_graph)
         return Ok(updated)
 
+    @serialized
     def cancel_never_dispatched(
         self,
         *,
@@ -999,6 +1026,7 @@ class TaskGraphDispatcher:
             )
         )
 
+    @serialized
     def apply_job_handle_evidence(
         self,
         evidence: JobHandleEvidence,
@@ -1122,6 +1150,7 @@ class TaskGraphDispatcher:
             )
         )
 
+    @serialized
     def resolve_unknown_job_handle(
         self,
         evidence: JobHandleEvidence,

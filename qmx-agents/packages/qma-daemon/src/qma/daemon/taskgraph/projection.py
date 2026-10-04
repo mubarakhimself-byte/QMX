@@ -14,6 +14,7 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from threading import RLock
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -34,6 +35,7 @@ from qma.daemon.envs.registry import EnvironmentLease
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.stores import StoreClass
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
+from qma.daemon.taskgraph.authority import serialized
 from qma.daemon.taskgraph.join import (
     JOIN_LATE_EVENT_TABLE,
     JOIN_PARTITION_TABLE,
@@ -864,6 +866,7 @@ class TaskGraphStateService:
     """Persist Task Graph edges, outbox, and AD-26 join algebra (Stories 57.1–57.4)."""
 
     journal: AuthoritativeJournal | None = None
+    authority_lock: RLock = field(default_factory=RLock, repr=False, compare=False, kw_only=True)
     sqlite: SingleSqliteWriter | None = None
     _rows: dict[str, TaskGraph] = field(default_factory=dict[str, TaskGraph], init=False)
     _occupancy: dict[str, dict[str, object]] = field(
@@ -917,6 +920,7 @@ class TaskGraphStateService:
     def existed_at_inspect_sha(self) -> bool:
         return DURABLE_EDGES_EXISTED_AT_INSPECT_SHA
 
+    @serialized
     def bind_durable(
         self,
         *,
@@ -943,6 +947,7 @@ class TaskGraphStateService:
             )
         return self.reload()
 
+    @serialized
     def drop_memory_cache(self) -> None:
         self._rows.clear()
         self._occupancy.clear()
@@ -952,6 +957,7 @@ class TaskGraphStateService:
         self._joins.clear()
         self._restored = False
 
+    @serialized
     def reload(self) -> Result[int]:
         store = self._sqlite_store
         if store is None:
@@ -1076,6 +1082,7 @@ class TaskGraphStateService:
                 records.append(MappingProxyType(handle))
         return Ok(tuple(records))
 
+    @serialized
     def record_job_handle(self, payload: Mapping[str, object]) -> Result[None]:
         """Persist an exact JobHandle snapshot on its existing Task Graph row."""
         admitted = JobHandle.from_payload(payload)
@@ -1144,6 +1151,7 @@ class TaskGraphStateService:
             return persisted
         return Ok(None)
 
+    @serialized
     def persist(
         self,
         graph: TaskGraph,
@@ -1207,6 +1215,7 @@ class TaskGraphStateService:
         self._occupancy[graph.id] = occupancy_body
         return Ok(graph)
 
+    @serialized
     def publish_initial_task(
         self,
         graph: TaskGraph,
@@ -1327,6 +1336,7 @@ class TaskGraphStateService:
         occupancy_body.setdefault("slots", {})
         return occupancy_body
 
+    @serialized
     def complete_predecessor(
         self,
         graph: TaskGraph,
@@ -1506,6 +1516,7 @@ class TaskGraphStateService:
     def replayable_rows(self, graph_run_id: str | None = None) -> tuple[TaskGraphOutboxRow, ...]:
         return replayable_outbox(self.outbox_rows(graph_run_id))
 
+    @serialized
     def ack_dispatch(
         self,
         *,
@@ -1570,6 +1581,7 @@ class TaskGraphStateService:
             )
         return Ok(self.replayable_rows(graph_run_id))
 
+    @serialized
     def accept_logical(
         self,
         logical_invocation_id: str,
@@ -1624,6 +1636,7 @@ class TaskGraphStateService:
                 self._outbox[key] = row.with_acceptance(receiver_acceptance_id=acceptance_id)
         return Ok(accepted)
 
+    @serialized
     def mark_effected(self, logical_invocation_id: str) -> Result[TaskGraphOutboxRow]:
         """Record effect completion. The outbox still does not prove exactly-once."""
         if not logical_invocation_id:
@@ -1658,6 +1671,7 @@ class TaskGraphStateService:
             )
         return Ok(matched[0])
 
+    @serialized
     def persist_join(
         self,
         state: JoinState,
@@ -1706,6 +1720,7 @@ class TaskGraphStateService:
         self._joins[state.join_id] = state
         return Ok(state)
 
+    @serialized
     def open_join(
         self,
         *,
@@ -1748,6 +1763,7 @@ class TaskGraphStateService:
             return Ok(cached)
         return _invalid("join_id", "task_graph_state has no JoinState", given=join_id)
 
+    @serialized
     def apply_join_arrival(
         self,
         join_id: str,
@@ -1763,6 +1779,7 @@ class TaskGraphStateService:
             return applied
         return self.persist_join(applied.value)
 
+    @serialized
     def close_join_watermark(
         self,
         join_id: str,
@@ -1779,6 +1796,7 @@ class TaskGraphStateService:
             return closed
         return self.persist_join(closed.value)
 
+    @serialized
     def retry_failed_join(
         self,
         join_id: str,
@@ -1795,6 +1813,7 @@ class TaskGraphStateService:
             join_revision=join_revision,
         )
 
+    @serialized
     def apply_join_retry_result(
         self,
         join_id: str,
@@ -1826,6 +1845,7 @@ class TaskGraphStateService:
             return applied
         return self.persist_join(applied.value)
 
+    @serialized
     def occupy_run_step(
         self,
         graph: TaskGraph,
@@ -1891,6 +1911,7 @@ class TaskGraphStateService:
         """Refused — RoutineScheduler / Mission Compiler remain the runtime."""
         return refuse_second_scheduler(given=given)
 
+    @serialized
     def get(self, graph_id: str) -> Result[TaskGraph]:
         cached = self._rows.get(graph_id)
         if cached is not None:

@@ -56,6 +56,8 @@ class RequestSpec:
     provider_id: str
     model: str | None = None
     timeout_seconds: float = 120
+    authoring_task_id: str | None = None
+    authoring_authority_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

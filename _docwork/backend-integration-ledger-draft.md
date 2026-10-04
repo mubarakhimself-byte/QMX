@@ -2,7 +2,7 @@
 
 Owner: controlled backend integrator. Date: 2026-10-04. Status: reviewed composition established; component gates red; platform acceptance false.
 
-Candidate: `backend-candidate`, branch `backend/combined-integration-20261004`. Independent local clone; no shared git directory or hardlinks. No push, merge, publish, deployment, credentials, paid calls or real trading authorized. UI stays Claude-owned.
+Candidate: `backend-candidate`, active successor branch `backend/admitted-authoring-projection-20261004`, from preserved reviewed `backend/combined-integration-20261004` at `33165e84`. Independent local clone; no shared git directory or hardlinks. No push, merge, publish, deployment, credentials, paid calls or real trading authorized. UI stays Claude-owned.
 
 ## Source and ownership
 
@@ -72,3 +72,40 @@ Initial combined milestone is coherent, reviewed and handoff-ready; **platform a
 - Independent read-only quality composition review approved all joins, patch equivalence and preserved gates (`backend-quality-composition-review-draft.md`). Full gate details and hashes in `backend-qma-composition-gate-draft.json`. The illustrative memory patch is zero-context to avoid diff-text trailing-space warnings; reverse validation uses `git apply --reverse --check --unidiff-zero`.
 
 Current bounded next work: fix the explicit nine-file QMA type set and investigate uncovered daemon behavior through meaningful integration journeys; accept the parent's disjoint QMN runtime patch after review. QMB native-store cause/legitimate Study ingress/example provenance, actors/workflows/CT47/public projection and receipt-preserving paired corrections remain owned work. The 14/40 component history and separate quality 26-QMB/40-QMN mixed-source diagnostic history must not be conflated. Root 20-format/25-strict-doc findings are historical quality-lane evidence, not new clean-candidate acceptance. Full platform acceptance remains false.
+
+## Admitted authoring successor
+
+Source: parent-delegated launch functionality milestone after `33165e84`. Integrator
+owns request-runtime authoring/contracts/bridge/config/process and necessary Task
+dispatcher/projection/Task Ledger authority joins. Expanded ownership announced
+for ProductSession, wire HostGrantLedger and ExperimentSpecService readback; parent
+typing lane's nine files and QMB/QMN runtime lanes remain disjoint.
+
+- Implemented opt-in `authoring_task_id` host policy and immutable accepted authority
+  digest; current durable RUNNING Task/lease/attempt, frozen Agent/session and
+  `experiment.register` permission authorize actual provider output registration.
+- Registered provenance derives from the actual executed adapter deployment and
+  recipe bytes. Exact SQLite spec/lease/attempt/deployment/ledger and authored
+  deployment entry readback is required. Registration entries now survive SQLite
+  reopen; optimistic caches cannot authorize a receipt or repair.
+- Reviewed fault/concurrency gaps were corrected: mutable Task pins, global dedupe
+  returned provenance, lazy projection cache fill, grant revocation, receipt
+  failures and lost final request snapshots. Observed uncertain effects fence
+  provider retry; explicit host repair cannot mint or replay them.
+- Expanded focused gate **153 passed**, zero failures/skips,31.89s:
+  `authoring-77481702f6a1448a9c4d39c12f92f71c`, exact commands and source-first setup
+  recorded. Owned strict typing/lint/format pass. Independent successor review
+  ACCEPT; five corrected fault/concurrency cases independently pass in5.40s,
+  with verified source provenance. Initial review HOLD and every earlier red remain.
+- Evidence is explicitly offline synthetic actual execution. Full production
+  CT47/provider auth and canonical durable operator Actor ingress remain unproven.
+  Detailed host/API/recovery handoff: `backend-admitted-authoring-handoff-draft.md`.
+- Next bounded work: after this checkpoint is reviewed, compose the four reviewed
+  QMA typing commits through `d9fe293e240f13d8d0802e2f51f1d73b66dcd76b`; compose the
+  full eleven-commit QMN series ending `42bc87e2` ONLY together with independently
+  accepted containment repair `2b48d5d5bb8eb383e5bffc3cb034f84b20b1c206`. The unrepaired
+  QMN tip remains blocked. Preserve its73.17% coverage/ten format/Linux limits.
+- Continue QMA owned-DONE public projection with verified original context and a
+  QMB-owned CLI bridge to `project_operator_replay`. `run_fp1` must not masquerade
+  as an ExperimentSpec fingerprint; a read grant must not publish ledger evidence.
+  Authenticated data→backtest→projection awaits this bridge and QMB runtime repairs.

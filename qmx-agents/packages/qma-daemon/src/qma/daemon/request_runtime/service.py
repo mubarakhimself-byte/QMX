@@ -13,7 +13,7 @@ import json
 import math
 import threading
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
 from dataclasses import asdict, replace
 from typing import Any, cast
 
@@ -112,11 +112,17 @@ class RequestRuntime:
         product_sessions: ProductSessionService,
         providers: Mapping[str, ProviderAdapter],
         provider_workspace: str = "",
+        execution_admission: Callable[[RequestRecord], Result[None]] | None = None,
+        execution_completion: Callable[[RequestRecord], Result[None]] | None = None,
+        acceptance_binding: Callable[[RequestSpec], Result[str | None]] | None = None,
     ) -> None:
         self.journal = journal
         self.product_sessions = product_sessions
         self.providers = dict(providers)
         self.provider_workspace = provider_workspace
+        self.execution_admission = execution_admission
+        self.execution_completion = execution_completion
+        self.acceptance_binding = acceptance_binding
         self._lock = threading.RLock()
         self._records: dict[str, RequestRecord] = {}
         self._keys: dict[tuple[str, str, str], str] = {}
@@ -124,6 +130,12 @@ class RequestRuntime:
         self._active_conversations: set[str] = set()
         self._frozen_requests: set[str] = set()
         self._restored = False
+
+    @contextlib.contextmanager
+    def completion_guard(self) -> Generator[None]:
+        """Serialize trusted result reconciliation with request lifecycle changes."""
+        with self._lock:
+            yield
 
     def _persist(self, record: RequestRecord) -> Result[RequestRecord]:
         body = asdict(record)
@@ -171,6 +183,22 @@ class RequestRuntime:
             self._records = records
             self._keys = {_key(row.spec): row.request_id for row in records.values()}
             for row in tuple(records.values()):
+                if row.status in {"running", "cancellation_requested", "interrupted"}:
+                    observed = self._observed_authoring_result(row)
+                    if is_refusal(observed):
+                        return observed
+                    if observed.value is not None:
+                        recovered = self._persist(
+                            replace(
+                                row,
+                                status="failed",
+                                error="authoring_effect_uncertain",
+                                result=observed.value,
+                            )
+                        )
+                        if is_refusal(recovered):
+                            return recovered
+                        continue
                 if row.status in {"running", "cancellation_requested"}:
                     interrupted = self._persist(
                         replace(row, status="interrupted", error="owner_lost")
@@ -179,6 +207,50 @@ class RequestRuntime:
                         return interrupted
             self._restored = True
             return Ok(tuple(self._records.values()))
+
+    def _observed_authoring_result(self, row: RequestRecord) -> Result[ProviderResult | None]:
+        """Durable pre-effect output fences replay even when the final snapshot is lost.
+
+        This recovers the host-observed proposal, never an SDK resume handle or
+        a fabricated receipt. Registration still requires explicit readback.
+        """
+        if row.spec.authoring_task_id is None:
+            return Ok(None)
+        events = self.journal.read_events()
+        if is_refusal(events):
+            return events
+        matches = [
+            event.payload
+            for event in events.value
+            if event.event == "experiment.authoring_output_observed"
+            and event.payload.get("request_id") == row.request_id
+            and event.payload.get("request_attempt") == row.attempt
+        ]
+        if not matches:
+            return Ok(None)
+        if len(matches) != 1:
+            return storage_failure("authoring recovery requires one execution observation")
+        observation = matches[0]
+        raw = observation.get("provider_result")
+        if not isinstance(raw, Mapping):
+            return storage_failure("authoring observation has no recoverable provider result")
+        body = cast("Mapping[str, object]", raw)
+        content, deployment = body.get("content"), body.get("deployment_id")
+        if (
+            not isinstance(content, str)
+            or not isinstance(deployment, str)
+            or not deployment.strip()
+            or observation.get("authority_sha256") != row.spec.authoring_authority_sha256
+            or observation.get("observed_deployment_ref") != deployment
+        ):
+            return storage_failure("authoring observation disagrees with accepted authority")
+        try:
+            digest = hashlib.sha256(content.encode()).hexdigest()
+        except UnicodeError:
+            return storage_failure("authoring observation is not UTF-8")
+        if observation.get("provider_output_sha256") != digest:
+            return storage_failure("authoring observation output digest disagrees")
+        return Ok(ProviderResult(content, deployment_id=deployment))
 
     def _ensure_restored(self) -> Result[None]:
         if self._restored:
@@ -254,6 +326,11 @@ class RequestRuntime:
                 )
             if not _duration(spec.timeout_seconds):
                 return invalid_input("timeout_seconds", "expected a positive finite duration")
+            if self.acceptance_binding is not None:
+                binding = self.acceptance_binding(spec)
+                if is_refusal(binding):
+                    return binding
+                spec = replace(spec, authoring_authority_sha256=binding.value)
             prior_id = self._keys.get(_key(spec))
             if prior_id is not None:
                 prior = self._records[prior_id]
@@ -319,9 +396,12 @@ class RequestRuntime:
             # not establish an authorized handoff. Every turn starts fresh until
             # the host can construct and audit that canonical handoff.
             thread_id = None
-            running = self._persist(
-                replace(row, status="running", attempt=row.attempt + 1, error=None)
-            )
+            candidate = replace(row, status="running", attempt=row.attempt + 1, error=None)
+            if self.execution_admission is not None:
+                admitted = self.execution_admission(candidate)
+                if is_refusal(admitted):
+                    return self._persist(replace(row, status="failed", error="authoring_admission"))
+            running = self._persist(candidate)
             if is_refusal(running):
                 return running
             token = threading.Event()
@@ -369,7 +449,36 @@ class RequestRuntime:
                     # The daemon already recorded lost ownership before closing
                     # its journal. A late provider return cannot write afterward.
                     return Ok(current)
-                return self._persist(replace(current, status=status, result=result, error=error))
+                completed = replace(current, status=status, result=result, error=error)
+                if self.execution_completion is not None:
+                    try:
+                        completion = self.execution_completion(completed)
+                        if is_refusal(completion):
+                            completed = replace(
+                                completed,
+                                status="failed",
+                                error="authoring_effect_uncertain"
+                                if completion.context.get("effect_may_have_occurred") is True
+                                else "authoring_registration",
+                            )
+                    except Exception:
+                        # The provider already returned. A host persistence
+                        # failure cannot turn this into a safe provider retry.
+                        completed = replace(
+                            completed, status="failed", error="authoring_effect_uncertain"
+                        )
+                saved = self._persist(completed)
+                if is_refusal(saved) and completed.spec.authoring_task_id is not None:
+                    # The pre-effect observation is already durable. A failed
+                    # final snapshot must not leave a replayable running owner.
+                    uncertain = replace(
+                        completed, status="failed", error="authoring_effect_uncertain"
+                    )
+                    repaired = self._persist(uncertain)
+                    if not is_refusal(repaired):
+                        return repaired
+                    self._records[request_id] = uncertain
+                return saved
             finally:
                 self._tokens.pop(request_id, None)
                 self._active_conversations.discard(conversation)
@@ -483,6 +592,15 @@ class RequestRuntime:
             if row.status != "interrupted":
                 return policy_rejection(
                     "request_state", "only interrupted turns use explicit retry"
+                )
+            observed = self._observed_authoring_result(row)
+            if is_refusal(observed):
+                return observed
+            if observed.value is not None:
+                return policy_rejection(
+                    "authoring_effect",
+                    "observed authoring output requires host reconciliation; "
+                    "provider replay is refused",
                 )
             bound = self._bound(row.spec, row.context_binding)
             if is_refusal(bound):

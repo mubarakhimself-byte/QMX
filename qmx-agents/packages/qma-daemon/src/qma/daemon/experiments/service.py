@@ -783,6 +783,47 @@ class ExperimentSpecService:
             return resolved
         return Ok(resolved.value.ledger)
 
+    def resolve_durable(self, spec_fp1: object) -> Result[RegisteredExperiment]:
+        """Read actual SQLite registration, never the optimistic memory cache."""
+        if self._durable is None:
+            return policy_rejection(
+                "registration", "authoring receipts require SQLite product truth"
+            )
+        loaded = self._durable.load_all()
+        if is_refusal(loaded):
+            return loaded
+        for snapshot in loaded.value:
+            if snapshot.spec.spec_fp1 == spec_fp1:
+                if (
+                    snapshot.spec.experiment_ledger_ref != snapshot.ledger.ledger_ref
+                    or snapshot.ledger.owner != snapshot.lease.owner
+                    or snapshot.ledger.registering_task_id != snapshot.lease.task_id
+                    or snapshot.ledger.author_agent_id != snapshot.lease.holder_agent_id
+                    or not any(
+                        entry.authored_by == snapshot.lease.holder_agent_id
+                        and entry.model_deployment_ref == snapshot.registering_deployment_ref
+                        and entry.spec_fp1 == snapshot.spec.spec_fp1
+                        and entry.body.get("kind") == "registered_model_deployment"
+                        for entry in snapshot.ledger.entries
+                    )
+                ):
+                    return policy_rejection(
+                        "registration", "durable registration and ledger bind one author"
+                    )
+                return Ok(
+                    RegisteredExperiment(
+                        spec=snapshot.spec,
+                        ledger=snapshot.ledger,
+                        dispatch_lease=snapshot.lease,
+                        registering_attempt_no=snapshot.registering_attempt_no,
+                        registering_deployment_ref=snapshot.registering_deployment_ref,
+                        lineage_edge=snapshot.lineage_edge,
+                    )
+                )
+        return invalid_input(
+            "spec_fp1", "no durable ExperimentSpec registration", spec_fp1=spec_fp1
+        )
+
     def lineage_edges(self, spec_fp1: object) -> tuple[LineageEdge, ...]:
         """CT-07 edges whose ``from_ref`` or ``to_ref`` is this spec."""
         if not isinstance(spec_fp1, str):
@@ -826,6 +867,8 @@ class ExperimentSpecService:
             registering_deployment_ref=registering_deployment_ref,
         )
         store.put_ledger(ledger)
+        for entry in ledger.entries:
+            store.put_entry(entry)
         return Ok(None)
 
     def _persist_ledger(self, ledger: ExperimentLedger) -> Result[None]:

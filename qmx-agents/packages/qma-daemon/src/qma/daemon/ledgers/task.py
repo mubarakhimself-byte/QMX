@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from threading import RLock
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -33,6 +34,7 @@ from qma.daemon.ledgers.announcements import (
     LedgerAppendAnnouncement,
     agent_ref_from_authored_by,
 )
+from qma.daemon.taskgraph.authority import serialized
 from qma.daemon.taskgraph.records import DispatchLease, TaskLedger, TaskRecord
 from qma.wire.envelope import WireEnvelope
 from qma.wire.vocabulary import WireEvent, WireQuery
@@ -128,6 +130,7 @@ class TaskLedgerStore:
     """Independent Task Ledger store — one ledger per Task, daemon-owned."""
 
     _ledgers: dict[str, TaskLedger] = field(default_factory=dict[str, TaskLedger])
+    authority_lock: RLock = field(default_factory=RLock, repr=False, compare=False, kw_only=True)
     _leases: dict[str, DispatchLease] = field(default_factory=dict[str, DispatchLease])
     _owners: dict[str, ActorId] = field(default_factory=dict[str, ActorId])
     _clock: Clock = field(default_factory=_default_clock)
@@ -147,6 +150,7 @@ class TaskLedgerStore:
     def quarantine(self) -> LedgerQuarantineStream:
         return self._quarantine
 
+    @serialized
     def open_for_task(self, task: TaskRecord | str, *, owner: ActorId | None = None) -> TaskLedger:
         """Create or return the one Task-owned ledger for this Task's life."""
         if isinstance(task, TaskRecord):
@@ -177,6 +181,7 @@ class TaskLedgerStore:
     def announcements(self) -> tuple[LedgerAppendAnnouncement, ...]:
         return tuple(self._announcements)
 
+    @serialized
     def grant(self, lease: DispatchLease) -> Result[DispatchLease]:
         """Record ``dispatch_lease`` without writing a ``reassigned`` entry."""
         kind = named_lease_kind(lease)
@@ -189,6 +194,7 @@ class TaskLedgerStore:
         self._owners[lease.task_id] = lease.owner
         return Ok(lease)
 
+    @serialized
     def append(
         self,
         entry: Mapping[str, object],
@@ -231,6 +237,7 @@ class TaskLedgerStore:
             attempted_result=attempted_result,
         )
 
+    @serialized
     def record_reassignment(
         self,
         *,
@@ -286,6 +293,7 @@ class TaskLedgerStore:
             return announced
         return Ok(updated)
 
+    @serialized
     def resume_from_defer(
         self,
         *,
@@ -315,6 +323,7 @@ class TaskLedgerStore:
         ledger = self.open_for_task(task_id, owner=dispatch_lease.owner)
         return Ok(ledger)
 
+    @serialized
     def record_unknown_tail(
         self,
         *,
@@ -357,6 +366,7 @@ class TaskLedgerStore:
             return announced
         return Ok(updated)
 
+    @serialized
     def record_hook_ledger_entry(
         self,
         entry: Mapping[str, object],
@@ -401,6 +411,7 @@ class TaskLedgerStore:
             return announced
         return Ok(updated)
 
+    @serialized
     def propose_completion(
         self,
         entry: Mapping[str, object],
@@ -445,6 +456,7 @@ class TaskLedgerStore:
             )
         )
 
+    @serialized
     def persist_via_wire(
         self,
         envelope: WireEnvelope,

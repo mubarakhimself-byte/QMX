@@ -32,6 +32,10 @@ def _integer(value: object, maximum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and 0 < value <= maximum
 
 
+def _task_binding(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def _duration(value: object, maximum: int) -> bool:
     return (
         isinstance(value, (int, float))
@@ -50,6 +54,7 @@ class AgentRequestPolicy:
     timeout_seconds: float = 120
     max_prompt_bytes: int = 32768
     session_app_instance_id: str | None = None
+    authoring_task_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.authority_profile not in {"authoring", "app-use"} or not self.provider_id:
@@ -63,6 +68,10 @@ class AgentRequestPolicy:
             raise ValueError("behavior and session instance bindings must agree")
         if self.authority_profile == "app-use" and not self.bound_instance:
             raise ValueError("app-use policy requires an exact host instance binding")
+        if self.authoring_task_id is not None and (
+            self.authority_profile != "authoring" or not _task_binding(self.authoring_task_id)
+        ):
+            raise ValueError("experiment authoring requires an explicit authoring Task binding")
 
     @property
     def bound_instance(self) -> str | None:
@@ -262,6 +271,7 @@ class AgentRequestBridge:
                     provider_id=config.provider_id,
                     model=config.model,
                     timeout_seconds=config.timeout_seconds,
+                    authoring_task_id=config.authoring_task_id,
                 )
             )
             if is_refusal(accepted):
@@ -312,7 +322,14 @@ class AgentRequestBridge:
             policy.value.provider_id,
             policy.value.model,
             policy.value.timeout_seconds,
-        ) != (row.spec.profile, row.spec.provider_id, row.spec.model, row.spec.timeout_seconds):
+            policy.value.authoring_task_id,
+        ) != (
+            row.spec.profile,
+            row.spec.provider_id,
+            row.spec.model,
+            row.spec.timeout_seconds,
+            row.spec.authoring_task_id,
+        ):
             return policy_rejection(
                 "request_id", "accepted host policy differs from current configuration"
             )

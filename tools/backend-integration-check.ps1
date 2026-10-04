@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [string[]]$ExtraDependencyPath = @(),
-    [ValidateSet('seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
+    [ValidateSet('authoring', 'seams', 'native', 'memory', 'quality', 'qma', 'qmn', 'data-qmb')][string]$Suite = 'seams',
     [Parameter(Mandatory = $true)][string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
@@ -28,6 +28,24 @@ $candidateTests = @()
 $candidatePytestOptions = @('-q', '-ra', '-o', ('cache_dir=' + (Join-Path $candidateEvidence 'pytest-cache')), ('--basetemp=' + (Join-Path $candidateEvidence 'pytest-temp')))
 $candidateCwd = $candidateRepo
 switch ($Suite) {
+    'authoring' {
+        $candidateTests = @(
+            'qmx-agents/packages/qma-daemon/tests/test_experiment_authoring_requests.py',
+            'qmx-agents/packages/qma-daemon/tests/test_request_runtime.py',
+            'qmx-agents/packages/qma-daemon/tests/test_request_runtime_daemon.py',
+            'qmx-agents/packages/qma-daemon/tests/test_request_runtime_configured_daemon.py',
+            'qmx-agents/packages/qma-daemon/tests/test_task_graph_state_edges.py',
+            'qmx-agents/packages/qma-daemon/tests/test_task_graph_outbox.py',
+            'qmx-agents/packages/qma-daemon/tests/test_request_runtime_tool_loop.py',
+            'qmx-agents/packages/qma-daemon/tests/test_product_session_grants.py',
+            'qmx-agents/packages/qma-daemon/tests/test_product_session_context.py',
+            'qmx-agents/packages/qma-daemon/tests/test_product_session_journal.py',
+            'qmx-agents/packages/qma-daemon/tests/test_experiment_spec_persistence.py',
+            'qmx-agents/packages/qma-daemon/tests/test_daemon_experiment_spec.py',
+            'qmx-agents/packages/qma-wire/tests/test_grant_record.py'
+        )
+        $candidatePytestOptions += '--no-cov'
+    }
     'quality' {
         $candidateTests = @(
             'tools/tests/test_readiness_gate.py',

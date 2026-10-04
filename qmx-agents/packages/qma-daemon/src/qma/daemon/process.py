@@ -86,6 +86,7 @@ from qma.daemon.bus.mailbox_query import (
     handle_list_mailbox_query,
     query_string_to_args,
 )
+from qma.daemon.capabilities.spawn import AgentCapabilityStore
 from qma.daemon.composition import DaemonRuntimeComposition
 from qma.daemon.diagnosis import (
     DIAGNOSIS_EXISTED_AT_INSPECT_SHA,
@@ -193,6 +194,7 @@ from qma.daemon.request_runtime.agent_extensions import AgentExtensions
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
 from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
+from qma.daemon.request_runtime.experiment_authoring import ExperimentAuthoring
 from qma.daemon.request_runtime.service import RequestRuntime
 from qma.daemon.request_runtime.spot_state import (
     SPOT_CONTRIBUTION,
@@ -851,6 +853,8 @@ class DaemonProcess:
         self._live_producers = LiveProducerRegistry()
         self._initialize_capabilities: dict[str, Mapping[str, object]] = {}
         self._agent_requests: AgentRequestBridge | None = None
+        self._agent_capabilities = AgentCapabilityStore()
+        self._experiment_authoring: ExperimentAuthoring | None = None
         self._agent_instance_revisions: Mapping[str, int] = {}
         self._spot_state_bindings: Mapping[str, SpotStateBinding] = {}
 
@@ -1190,6 +1194,17 @@ class DaemonProcess:
     def agent_requests(self) -> AgentRequestBridge | None:
         return self._agent_requests
 
+    @property
+    def agent_capabilities(self) -> AgentCapabilityStore:
+        """Canonical spawn-time records; startup must explicitly admit each Agent."""
+        return self._agent_capabilities
+
+    def reconcile_experiment_authoring(self, request_id: str) -> Result[Mapping[str, object]]:
+        """Explicit trusted host recovery; no model replay or implicit query effect."""
+        if self._experiment_authoring is None:
+            return policy_rejection("authoring", "authoring runtime is not configured")
+        return self._experiment_authoring.reconcile_receipt(request_id)
+
     def _agent_request_now(self) -> str:
         value = self._now_ns()
         if value is None:
@@ -1273,6 +1288,17 @@ class DaemonProcess:
         runtime = RequestRuntime(
             journal=self.journal, product_sessions=self.product_sessions, providers=providers
         )
+        authoring = ExperimentAuthoring(
+            runtime=runtime,
+            policies=policies,
+            dispatcher=self.task_dispatcher,
+            agents=self.agent_capabilities,
+            experiments=self.experiments,
+            now=self._agent_request_now,
+        )
+        runtime.execution_admission = authoring.admit
+        runtime.execution_completion = authoring.complete
+        runtime.acceptance_binding = authoring.bind_acceptance
         try:
             wrapped = bind_daemon_tool_providers(
                 runtime,
@@ -1300,6 +1326,7 @@ class DaemonProcess:
         except ValueError:
             return invalid_input("agent_requests", "host SDK policy could not be installed")
         self._agent_requests = bridge
+        self._experiment_authoring = authoring
         return Ok(None)
 
     def mount_pack_ui_view(
@@ -3026,6 +3053,20 @@ class DaemonProcess:
             )
         if is_refusal(result):
             return _jsonrpc_refusal(req_id, result)
+        if (
+            method == GET_AGENT_REQUEST_CAPABILITY
+            and self._experiment_authoring is not None
+            and result.value.get("content_withheld") is not True
+        ):
+            request_id = result.value.get("request_id")
+            if isinstance(request_id, str):
+                authored = self._experiment_authoring.receipt(request_id)
+                if is_refusal(authored):
+                    return _jsonrpc_refusal(req_id, authored)
+                if authored.value is not None:
+                    return _jsonrpc_result(
+                        req_id, {**result.value, "experiment_authoring": dict(authored.value)}
+                    )
         return _jsonrpc_result(req_id, result.value)
 
     def _dispatch_product_session_invoke(

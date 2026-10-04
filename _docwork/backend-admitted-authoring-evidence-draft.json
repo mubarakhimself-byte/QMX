@@ -1,0 +1,47 @@
+{
+  "base": "33165e84146b2a6da32c7e536b698c4fa609be3f",
+  "branch": "backend/admitted-authoring-projection-20261004",
+  "claim": "Bounded opt-in offline actual-adapter authoring seam, independently accepted; platform acceptance false",
+  "focused": {
+    "result": "153 passed, zero failed/skipped",
+    "seconds": 31.89,
+    "command": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\authoring-77481702f6a1448a9c4d39c12f92f71c\\command.json",
+    "command_sha256": "52364b3e734f02d5616b0f85a8ece29bd2c46ae122dc9456d37105ef4672b209",
+    "log": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\authoring-77481702f6a1448a9c4d39c12f92f71c\\pytest.txt",
+    "log_sha256": "fefa5d1eda85e6078f384f0999deeb24fa75f730c1fbb4aef54b2ed61d3becbf"
+  },
+  "independent": {
+    "result": "5 passed, 11 deselected",
+    "seconds": 5.4,
+    "directory": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\evidence\\authoring-independent-review",
+    "review": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-12\\authoring-implementation-review.md",
+    "review_sha256": "712d4dad9c5f74d1b03fc921bd4664cf59f984534155f0f60b7ad674a709e88a"
+  },
+  "checks": {
+    "format-authoring-checkpoint.txt": "2afb1c293434bc55d84b35d54454a0bf9aa84e41cda426817a5c6693d432e37a",
+    "lint-authoring-checkpoint.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "types-authoring-checkpoint.txt": "6d88a1b220adb7a3d62092b6e38431f0b3fe8babe9864fab90e5849766260332"
+  },
+  "source_sha256": {
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/experiments/service.py": "312da74ed7d239b6ab32c1be7f0052751959ab367b99c33c15f713efd02cdb4c",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/ledgers/task.py": "931e319868d6a3d62b1cede81e5e5baaf60e979f1dd14d295184337fb23338b7",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "2ae9428d3a2eca92f22f2419aee8c0df8ce016889b9d467231c80b5384c66956",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/contracts.py": "28985235ce9a035dc8257e85c445ef033aa097f675df86b154647008df148084",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/daemon_bridge.py": "27b8016a8e8b96038be418e9ed73ca7990299d0246df6099f1c87ab664d7c456",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/provider_config.py": "f6e16d18bf3feb3466bfdfa43388c02c6a1e2ff24cc8b969f2c3e6c5def670a6",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/service.py": "5874435781bb26b993bf8c64359e3d7a46c2a8bcc1187f7b9f7213802401bb34",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/sessions/product_session.py": "395a173ce2678483b2e6c290c342212c1fe4250c8dc12f195bc883f2f69ea549",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/dispatcher.py": "a9f29807c51afbe499ebab2fba5eea940ea83e56bccdb598841c9b438d630906",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/projection.py": "c6a928784b188f6c5c06fcafa79ec4fa54fb11e195958cb7ad6b9411071b6379",
+    "qmx-agents/packages/qma-wire/src/qma/wire/grant_record.py": "48849bd4488de5f60ada13c46dc80c9edffb92d3cb3cbdd847ecc8743d35730e",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/request_runtime/experiment_authoring.py": "99ab40074f2963ae5a63aede5edc2f425ffd2f3613bb3b000ba99fe889d00706",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/taskgraph/authority.py": "ade238d7e5621a4ddbe8de487e5c45920a44b01e9f2e99460ac4d266f20ff2d3",
+    "qmx-agents/packages/qma-daemon/tests/test_experiment_authoring_requests.py": "6ff2ae6bfc2aa870fb7eb43dd47cd858c6566a0b1b13f6d1ce966af2dde64073"
+  },
+  "limits": [
+    "Explicit synthetic offline provider; no live/native authentication",
+    "Actual admitted host Agent/Task authority required; no automatic running-Agent resurrection",
+    "Public owned-DONE QMB projection and actual data/backtest journey remain next",
+    "No publish, push, protected merge, deployment, credentials, paid calls or actual broker trades"
+  ]
+}
