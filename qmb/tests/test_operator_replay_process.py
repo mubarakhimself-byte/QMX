@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -33,8 +34,11 @@ from qmf.core import Fingerprint, Result, World, fingerprint, is_ok
 from qmf.data.splits import SegmentRole
 from qmf.data.store import EvidenceStore
 from qmf.registry import RegistryPersistence
-from replay_fixture_support import RecordedReplayFixture, make_recorded_replay_fixture
-from test_ql7_host import (  # pyright: ignore[reportPrivateUsage]
+from replay_fixture_support import (  # pyright: ignore[reportMissingTypeStubs]
+    RecordedReplayFixture,
+    make_recorded_replay_fixture,
+)
+from test_ql7_host import (  # pyright: ignore[reportPrivateUsage,reportMissingTypeStubs]
     _SEVERITY,  # pyright: ignore[reportPrivateUsage]
     _bms,  # pyright: ignore[reportPrivateUsage]
     _book,  # pyright: ignore[reportPrivateUsage]
@@ -51,6 +55,7 @@ def _ok(result: Result[T]) -> T:
 
 def _builder_source() -> str:
     return """from pathlib import Path
+from hashlib import sha256
 from qmb.config import STARTING_CAPITAL_KEY, compile_run_config
 from qmb.execution import (COST_ADAPTER_KEY, COST_ADAPTER_PER_LOT, COST_CALIBRATION_KEY,
     FILL_ADAPTER_DECLARED_PATH, FILL_ADAPTER_KEY, FILL_BASIS_KEY,
@@ -134,7 +139,9 @@ def build(context, binding, port, book_fragment, bms_fragment):
     bound = bind_execution_ports(compiled.value)
     if is_refusal(bound):
         return bound
-    journal = JournalStore(World.REPLAY, journal_dir=binding.roots["journal"] / context.job_id,
+    # Opaque QMA job ids are preserved in occurrence identity, not used as paths.
+    storage_label = sha256(context.job_id.encode("utf-8")).hexdigest()
+    journal = JournalStore(World.REPLAY, journal_dir=binding.roots["journal"] / storage_label,
         open_stream=jsonl_opener())
     writer_id = WriterId.try_create("qmb-cli-fixture", "replay", "positions", "boot-1")
     if is_refusal(writer_id):
@@ -171,7 +178,7 @@ def build(context, binding, port, book_fragment, bms_fragment):
     if is_refusal(admission):
         return admission
     ledger = LedgerSink.try_create(binding.roots["terminal_ledger"],
-        machine="qmb-cli-fixture", worker_slot=f"{context.job_id}-{context.attempt_id}",
+        machine="qmb-cli-fixture", worker_slot=f"{storage_label}-{context.attempt_id}",
         boot_epoch_id="boot-1")
     if is_refusal(ledger):
         return ledger
@@ -480,7 +487,8 @@ def test_qmb_cli_executes_registered_replay_to_durable_economic_result(
         },
         tmp_path,
     )
-    stream_path = roots["journal"] / context.job_id / "positions" / "000000.jsonl"
+    storage_label = hashlib.sha256(context.job_id.encode("utf-8")).hexdigest()
+    stream_path = roots["journal"] / storage_label / "positions" / "000000.jsonl"
     original_stream = stream_path.read_bytes()
     lines = original_stream.splitlines(keepends=True)
     assert json.loads(lines[-1])["payload"]["kind"] == "qmb-operator-terminal-occurrence-v1"

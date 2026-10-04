@@ -24,10 +24,12 @@ from qmb.host.operator_alternative import (
 from qmb.host.qma_cli import QmaBacktestContext, validate_qma_backtest_context
 
 __all__ = [
+    "decode_operator_alternative_binding",
     "execute_operator_alternative_replay",
     "operator_alternative_binding_present",
     "read_operator_alternative_binding",
     "verify_operator_alternative_result",
+    "with_operator_alternative_inputs",
 ]
 
 _BINDING_FILENAME = "operator-alternative-binding.json"
@@ -114,7 +116,19 @@ def read_operator_alternative_binding(
     descriptor = _read_object(directory / _BINDING_FILENAME)
     if is_refusal(descriptor):
         return descriptor
-    body = cast(Mapping[str, object], descriptor.value)
+    return decode_operator_alternative_binding(descriptor.value, context=context)
+
+
+def decode_operator_alternative_binding(
+    descriptor: object, *, context: QmaBacktestContext
+) -> Result[OperatorAlternativeBinding]:
+    """Decode a complete pinned Alternative binding, including a Study's nested base."""
+    checked = validate_qma_backtest_context(context)
+    if is_refusal(checked):
+        return checked
+    if context.mints_ct32 is not False or not isinstance(descriptor, Mapping):
+        return invalid("operator_binding", "Alternative binding is a non-CT-32 object")
+    body = cast(Mapping[str, object], descriptor)
     if frozenset(body) != _BINDING_FIELDS:
         return invalid(
             "operator_binding",
@@ -326,6 +340,39 @@ def execute_operator_alternative_replay(
             if is_refusal(validated):
                 return validated
             return Ok(result.value.payload)
+        finally:
+            _remove_builder_modules(builder_root)
+
+
+def with_operator_alternative_inputs(
+    binding: OperatorAlternativeBinding,
+    operation: Callable[[OperatorAlternativeInputs], Result[Mapping[str, object]]],
+) -> Result[Mapping[str, object]]:
+    """Resolve pinned builder ports for an internal composition and discard its modules."""
+    with tempfile.TemporaryDirectory(prefix="qmb-operator-study-") as raw:
+        builder_root = Path(raw)
+        materialized = _materialize(binding.builder_files, builder_root)
+        if is_refusal(materialized):
+            return materialized
+        module = _load_builder(builder_root, binding.entrypoint)
+        if is_refusal(module):
+            return module
+        try:
+            entry = _resolve_entrypoint(module.value, binding.entrypoint)
+            if is_refusal(entry):
+                return entry
+            try:
+                built = entry.value(binding.context, binding)
+            except Exception as exc:
+                return policy("operator_builder", "pinned Study ports resolve", error=str(exc))
+            if is_refusal(built):
+                return built
+            if not is_ok(built):
+                return invalid("operator_runtime", "Study builder returns a typed Result")
+            inputs = _validate_runtime_inputs(built.value, binding)
+            if is_refusal(inputs):
+                return inputs
+            return operation(inputs.value)
         finally:
             _remove_builder_modules(builder_root)
 

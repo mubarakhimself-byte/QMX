@@ -1000,20 +1000,28 @@ class BacktestingService:
         self, payload: Mapping[str, object], expected: Mapping[str, object]
     ) -> Result[Mapping[str, object]]:
         study_result = expected.get("class") == "qmb-operator-alternative-study-result-v1"
+        book_result = (
+            expected.get("class") == "qmb-recorded-replay-result-v1"
+            and expected.get("composition_class") == "book"
+        )
         for field_name, field_value in expected.items():
-            if field_name in {"mints_ct32", "operator_descriptor_fp1"} or (
-                study_result
-                and field_name
-                in {
-                    "job_id",
-                    "attempt_id",
-                    "experiment_spec_fp1",
-                    "evidence_ref",
-                    "split_manifest_fp1",
-                    "composition_class",
-                    "generation_count",
-                    "batch_size",
-                }
+            if (
+                field_name in {"mints_ct32", "operator_descriptor_fp1"}
+                or (book_result and field_name == "composition_class")
+                or (
+                    study_result
+                    and field_name
+                    in {
+                        "job_id",
+                        "attempt_id",
+                        "experiment_spec_fp1",
+                        "evidence_ref",
+                        "split_manifest_fp1",
+                        "composition_class",
+                        "generation_count",
+                        "batch_size",
+                    }
+                )
             ):
                 continue
             actual = payload.get(field_name)
@@ -1345,6 +1353,132 @@ class BacktestingService:
         if isinstance(exit_code, bool) or not isinstance(exit_code, int):
             return invalid_input("exit_code", "QMB process wait returns an integer exit code")
         return self._record_process_exit(job_id, exit_code)
+
+    def read_completed_result(
+        self, job_id: str, *, owner: ActorId, environment_ref: str | None = None
+    ) -> Result[Mapping[str, object]]:
+        """Resolve an owned DONE handle to its immutable proof and fresh QMB readback."""
+        return self._read_completed_result(
+            job_id, owner=owner, environment_ref=environment_ref, verify_source=True
+        )
+
+    def _read_completed_result(
+        self, job_id: str, *, owner: ActorId, environment_ref: str | None, verify_source: bool
+    ) -> Result[Mapping[str, object]]:
+        handle = self._jobs.handle_for(job_id)
+        if handle is None or handle.state is not JobHandleState.DONE or handle.owner != owner:
+            return policy_rejection("job_id", "result reads require an owned DONE JobHandle")
+        restored = self._restore_expected_context(job_id)
+        if is_refusal(restored):
+            return restored
+        context = cast(Mapping[str, object], restored.value["context"])
+        if context.get("owner") != owner.value:
+            return policy_rejection("owner", "durable expected context retains the handle owner")
+        invocation = _invocation_from_payload(context.get("invocation"))
+        if is_refusal(invocation):
+            return invocation
+        if (
+            environment_ref is not None
+            and invocation.value.payload.get("environment_ref") != environment_ref
+        ):
+            return policy_rejection(
+                "environment_ref", "result belongs to the operator-bound environment"
+            )
+        store = self._expected_context_store()
+        if is_refusal(store):
+            return store
+        proofs: list[Mapping[str, object]] = []
+        for artifact in handle.artifacts:
+            if artifact.completeness is not ArtifactCompleteness.COMPLETE:
+                continue
+            proof = read_verified_context(
+                store=store.value,
+                reference_fp1=artifact.fp1,
+                job_id=job_id,
+                expected_reference_fp1=restored.value["context_artifact_fp1"],
+                expected_sha256=context.get("sha256"),
+            )
+            if not is_refusal(proof):
+                proofs.append(proof.value)
+        if len(proofs) != 1:
+            return policy_rejection("verified_context", "DONE result has exactly one checked proof")
+        result = cast(Mapping[str, object], proofs[0]["result"])
+        expected = cast(Mapping[str, object], restored.value["expected_result"])
+        compared = self._validate_terminal_payload(result, expected)
+        if is_refusal(compared):
+            return compared
+        if not verify_source:
+            return Ok({"result": dict(result), "invocation": invocation.value, "job_id": job_id})
+        verifier = getattr(self._transport, "verify_persisted_result", None)
+        if not callable(verifier):
+            return invalid_input("transport", "completed results require QMB verify-only readback")
+        reopened = cast(Callable[[str, QmbDoorInvocation], Result[Mapping[str, object]]], verifier)(
+            job_id, invocation.value
+        )
+        if is_refusal(reopened):
+            return reopened
+        if json.dumps(dict(reopened.value), sort_keys=True) != json.dumps(
+            dict(result), sort_keys=True
+        ):
+            return policy_rejection(
+                "verified_result", "current domain readback equals the durable proof"
+            )
+        return Ok({"result": dict(result), "invocation": invocation.value})
+
+    def project_completed_run(
+        self, *, owner: ActorId, environment_ref: str, run_fp1: object, as_of: object = None
+    ) -> Result[Mapping[str, object]]:
+        """Read one exact owned verified Book run; query authority cannot publish evidence."""
+        candidates: list[Mapping[str, object]] = []
+        for handle in self._jobs.store.all():
+            if handle.owner != owner or handle.state is not JobHandleState.DONE:
+                continue
+            restored = self._restore_expected_context(handle.job_id)
+            if is_refusal(restored):
+                continue
+            context = cast(Mapping[str, object], restored.value["context"])
+            raw = context.get("invocation")
+            invocation = _invocation_from_payload(raw)
+            if (
+                is_refusal(invocation)
+                or invocation.value.payload.get("environment_ref") != environment_ref
+            ):
+                continue
+            # run_fp1 is the QMB result's declared run fingerprint, never its spec.
+            readback = self._read_completed_result(
+                handle.job_id, owner=owner, environment_ref=environment_ref, verify_source=False
+            )
+            if is_refusal(readback):
+                continue
+            result = cast(Mapping[str, object], readback.value["result"])
+            if (
+                result.get("class") == "qmb-recorded-replay-result-v1"
+                and result.get("run_fp1") == run_fp1
+            ):
+                candidates.append(readback.value)
+        if len(candidates) != 1:
+            return policy_rejection(
+                "run_fp1", "projection resolves exactly one owned DONE verified Book run"
+            )
+        projector = getattr(self._transport, "project_verified_run", None)
+        if not callable(projector):
+            return invalid_input(
+                "transport", "QMB transport supports governed read-only projection"
+            )
+        candidate = candidates[0]
+        readback = self.read_completed_result(
+            cast(str, candidate["job_id"]), owner=owner, environment_ref=environment_ref
+        )
+        if is_refusal(readback):
+            return readback
+        return cast(Callable[..., Result[Mapping[str, object]]], projector)(
+            invocation=cast(QmbDoorInvocation, candidate["invocation"]),
+            source_result=cast(Mapping[str, object], candidate["result"]),
+            # Public v1 exposes no filter field. QMB's canonical empty exclusion
+            # predicate retains every source trade without inventing a new schema.
+            predicate={"exclude": []},
+            as_of=as_of,
+        )
 
     def _record_process_exit(self, job_id: str, exit_code: int) -> Result[JobHandle]:
         with self._observer_lock:

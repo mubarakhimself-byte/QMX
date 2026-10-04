@@ -1,0 +1,231 @@
+{
+  "base": "5acb4a6483567976be771880d57b30482da4ec6b",
+  "platform_acceptance": false,
+  "provider": "synthetic offline injected fixture; one executed request; no model/paid call claim",
+  "gates": {
+    "public_authenticated_api": ".........                                                                [100%]\n9 passed in 222.95s (0:03:42)",
+    "focused_regressions": "................................................................         [100%]\n64 passed in 284.54s (0:04:44)",
+    "lint": "All checks passed!",
+    "format": "15 files already formatted",
+    "owned_qma_strict_types": "0 errors, 0 warnings, 0 informations",
+    "owned_qmb_strict_types": "0 errors, 0 warnings, 0 informations",
+    "independent_review": "No blocking findings. 7 targeted passed in7.61s; actual Book projection/restart1passed83.01s; independent incomplete/complete Study no-write probe."
+  },
+  "actual_authoring": {
+    "class": "qma-experiment-authoring-receipt-v1",
+    "dispatch_lease": {
+      "holder_agent_id": "agent:admitted-study-author",
+      "lease": "dispatch_lease",
+      "mission_id": "mission:da5e3fc5feeb6d7a",
+      "owner": "quant:analysis/authenticated-study",
+      "task_id": "task:taskgraph:da5e3fc5feeb6d7a:study:0:0"
+    },
+    "observed_deployment_ref": "synthetic:offline-authoring-v1",
+    "product_session_ref": "psess:agent",
+    "provider_output_sha256": "711e7e4478f5f08450f30255dad614413f007b0806593a8989e12e9d26c24d9c",
+    "request_attempt": 1,
+    "request_id": "req:98b7d555416d486cbcc7e61b467c4f5a",
+    "spec_fp1": "fp1:sha256:a0097859149e6bb3ee3ade777d3b7f4daef3ce39b63defd5af7f4e1c854f0bf8",
+    "task_attempt": 0
+  },
+  "task_id": "task:taskgraph:da5e3fc5feeb6d7a:study:0:0",
+  "holder_agent_id": "agent:admitted-study-author",
+  "actual_public_study_result": {
+    "class": "qmb-operator-alternative-study-result-v1",
+    "format_version": 1,
+    "generation_run": {
+      "class": "qmb-study-generation-run",
+      "completed_generations": [
+        [
+          {
+            "ask_index": 0,
+            "class": "qmb-prior-trial",
+            "generation_index": 0,
+            "objective_den": 1,
+            "objective_num": 1,
+            "parameters": {
+              "max_gross": 10
+            }
+          }
+        ],
+        [
+          {
+            "ask_index": 0,
+            "class": "qmb-prior-trial",
+            "generation_index": 1,
+            "objective_den": 1,
+            "objective_num": 1,
+            "parameters": {
+              "max_gross": 5
+            }
+          }
+        ]
+      ],
+      "generation_count": 2,
+      "study_fp": "fp1:sha256:dd12be4ef76df849b4f6f3c5b5fc6dffcc503971a693efd6d1ff2fcd7e717dd3",
+      "writes_evidence": false
+    },
+    "occurrence_event_fp1": "fp1:sha256:0e1bac19b40fd71c31ca07748c94b2550ec30ef42cced6ec95f7bb3c076284d1",
+    "operational_fp1": "fp1:sha256:197512bc780c7fff5e0972d017374919bdbd39423aa7943d30d79072c7210e27",
+    "study_fp1": "fp1:sha256:dd12be4ef76df849b4f6f3c5b5fc6dffcc503971a693efd6d1ff2fcd7e717dd3",
+    "terminal_artifact_fp1s": [
+      "fp1:sha256:d72bb7a798306ffe3409bcc8b3ca4db864a97a77abacc6b502d4ee55b18a67eb",
+      "fp1:sha256:9cd29373620e238cb1669de1857f105b71e879ddf99800ee62b9c64cfcccea37"
+    ]
+  },
+  "fresh_module_restart_pid": 11600,
+  "fresh_module_readback_identical": true,
+  "actual_public_projection": {
+    "fp1": "fp1:sha256:4226df3022367538f44536d98e3dac1b7e963138f0ee6b3bec20e3f8f9ef960e",
+    "kind": "saved-view",
+    "body": {
+      "as_of": {
+        "class": "instant",
+        "value_ns": 1800000000000000000,
+        "format_version": 1
+      },
+      "method": "projection",
+      "predicate": {
+        "exclude": []
+      },
+      "source_ct29": "ct-13:ct-29:fp1:sha256:5bc9759b51860db56725f0679a5b06f0d766c616242c359816e7d9cb742fefcc",
+      "source_ct32": "fp1:sha256:b7b59b15b4fe91549ae1811d9d40a052e6d295115d5adacc8f1ceec0c9c24ad7"
+    }
+  },
+  "persisted_qmb_file_sha256": {
+    "terminals\\replay\\alternative\\study-fixture__study-terminal\\ledger.jsonl": "ba9d511ad809555db7b3a3a0e21da94042cf81b96f4207c3afa51f6ae6202ef8",
+    "registry\\replay\\registry-room\\records.sqlite": "dd79d9c456947994fcbfacee270976c8f8e8854389e78f47702952a17811cf69",
+    "registry\\replay\\registry-room\\lineage\\qmb-alternative-terminal-policy-pair\\.writer": "d41d91217ce4c726e34e0e50c8eef7940fba8fee26cb69d2cda470c2841e25df",
+    "registry\\replay\\registry-room\\lineage\\qmb-alternative-terminal-policy-pair\\000000.jsonl": "3a1072f6cce12fdde5cafdb6de4e27f25ad68b679fbea4c161870133ec62e933",
+    "journal\\study-decisions\\.writer": "59e547422e3944e7a3a6286dc893389479ddbaa63db4a57acad47cdd467fd874",
+    "journal\\study-decisions\\000000.jsonl": "e84724d1c7a93f161fa18aeb679cd27e16423d919d74d8584a3696fc2c2858db",
+    "data\\ct10-room\\replay-requests\\fp1-sha256-8de10bf73c3e2f730281c05d542099135eecc686e24b6c86d863116ee2aaaabc": "8de10bf73c3e2f730281c05d542099135eecc686e24b6c86d863116ee2aaaabc",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\0214f1ffd6057d86e5dea779a753c80986f939aadf94a9193c72bfb06ad60b21.parquet": "c0c9b6a7c20902f6a40e3fc3d42727a03a418a6ca1e36648149dae2aa318f218",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\60c79ee5bf5a9f1f357faab0c0dac32169bbbefef68ff943791df772cd97b329.parquet": "87536326372c1bbfaf37cfa916f1783ea8773c9cbb67ef9092ab7dab66155d76",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\6c990842a3627ee31f9e9f6e050a8ae166cb97a5be49f132965d452c030e38df.parquet": "fe71fe0e1374fc3cb9e52e43f32e5d503c8e1ddf27ac19d275e41dc01d2d537a",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\79d6e5498f206325b4d074a7b2ca9b15b7ea5f7e4cfda087965b90960527750f.parquet": "b7af101858f9dc900d206209ccc0fc4aef4aef20d1d1dbc7b5af108b2cb3b57c",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\bcf36ab680200a33900869262d2342cdf3ef61b509e15c8102324bac467c7b64.parquet": "ab9968adbdca5e8ffb155109bbbe4b1f543246f9f32b3ad9fecb0d955ff2a47b",
+    "data\\ct10-room\\replay\\immutable-raw-archive\\d2c897d9ea6ea6e10bde1852a17c0c2d7779a421bf9f7e4f84d0a79c7835f5bc.parquet": "be296027effa0177cbfbb620f9a6bc3a0dcdfec9400a91a5c2a90bcc639a5210"
+  },
+  "source_provenance": {
+    "base": "5acb4a6483567976be771880d57b30482da4ec6b",
+    "checkout": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public",
+    "interpreter": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\runtime\\Scripts\\python.exe",
+    "python_version": "3.14.7 (main, Sep  1 2026, 14:17:30) [MSC v.1944 64 bit (AMD64)]",
+    "parent_imports": {
+      "qmb.host.operator_study_replay": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmb\\src\\qmb\\host\\operator_study_replay.py",
+      "qmb.host.delegated_cli": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmb\\src\\qmb\\host\\delegated_cli.py",
+      "qma.daemon.process": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\process.py",
+      "qma.daemon.backtest.cli": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\backtest\\cli.py",
+      "qmf.core": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\packages\\qmf-core\\src\\qmf\\core\\__init__.py",
+      "qmf.data": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\packages\\qmf-data\\src\\qmf\\data\\__init__.py",
+      "qml": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qml\\src\\qml\\__init__.py"
+    },
+    "stripped_child_imports": {
+      "qma.daemon.backtest.cli": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\backtest\\cli.py",
+      "qma.daemon.process": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmx-agents\\packages\\qma-daemon\\src\\qma\\daemon\\process.py",
+      "qmb.host.delegated_cli": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmb\\src\\qmb\\host\\delegated_cli.py",
+      "qmb.host.operator_study_replay": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qmb\\src\\qmb\\host\\operator_study_replay.py",
+      "qmf.core": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\packages\\qmf-core\\src\\qmf\\core\\__init__.py",
+      "qmf.data": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\packages\\qmf-data\\src\\qmf\\data\\__init__.py",
+      "qml": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\study-public\\qml\\src\\qml\\__init__.py"
+    },
+    "tested_python_files_sha256": {
+      "qa/integration/test_qma_authenticated_study.py": "7bea381d33abf1abbd222d6d17efa54aba00e440b3af243057e3c88f09ba1605",
+      "qa/integration/test_qma_registered_replay.py": "e96ef3380880d1c761989586d1367236de3955425dedd50a4ee592702a289275",
+      "qmb/src/qmb/doors/cli/__init__.py": "0b994b142a05b02a4276d640e28d8adae866c36ad9a457c87adbc6446de7fb6f",
+      "qmb/src/qmb/host/delegated_cli.py": "09e59306338e4cbd2d21ee23fbd98e27da14821648ae8369bf3a1eff145719ea",
+      "qmb/src/qmb/host/operator_alternative_replay.py": "4e43bc13633c89e4a1affe5057e68da92e1857950bc23a8a41a19c3211d49e37",
+      "qmb/src/qmb/host/operator_alternative_study.py": "5325d0f66deec1073d3dc8163785ecb23845c45da6877ef93d27ffd44df4fa85",
+      "qmb/src/qmb/host/operator_study_replay.py": "5dec0f2c3577f5c13e4472cff0c6746ea89fffa688ddeb5d66972cb65a062114",
+      "qmb/src/qmb/host/qma_cli.py": "16faf45d4583ca7db8c7fba27099af46b644d64d975f66c39da2201b8b9472fa",
+      "qmb/tests/operator_study_fixture_support.py": "27cbc9e123f494b227df43dd313048c1f7920bbdbb64ee10120d88e621300951",
+      "qmb/tests/test_operator_replay_process.py": "9e954d804e4a40d866a7b23e0962d1d2702268ec73ac514531cd52224699ef32",
+      "qmb/tests/test_operator_study_cli.py": "9edc09b143316964e847115f8f5289e897624a3ed057bb04a71ba439ca9e2faa",
+      "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py": "416c030c27dd6140bb3700d2b4db338b17b6430edb414c5852fd29a0b944ffae",
+      "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/expected.py": "819b74f7d363f0737885d6a7e7f96e1f919e87906662721450a713443796c934",
+      "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py": "f5b6a5bce2b0c008a92dacdaced068aad2fba961a9effe811ed5c5a11bd587fa",
+      "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "1cf344cea2e248d752845abbdb783ac4647008afcdd5c4cb0a9088ea9c9d02e8"
+    },
+    "distributions": {
+      "qmb": "0.1.0",
+      "optuna": "4.9.0",
+      "langchain": "1.4.3",
+      "langgraph": "1.2.12",
+      "deepagents": "0.7.21"
+    },
+    "dependency_setup": "Isolated interpreter; borrowed pinned third-party distributions, not fresh frozen install"
+  },
+  "artifacts": {
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\public-final-accepted-tests.txt": {
+      "bytes": 112,
+      "sha256": "2b80e752083f47fae92345f38376002670563e70d21f24dfccd97417693fb587"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\focused-accepted-tests.txt": {
+      "bytes": 113,
+      "sha256": "129c7d20f0a9bc5de5aefc83220dd679b81d945630a17b5f7227debf0533a5e0"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\lint-final-accepted.txt": {
+      "bytes": 20,
+      "sha256": "a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\format-final-accepted.txt": {
+      "bytes": 28,
+      "sha256": "bc73a77dd86a8368b7787c2f9370d35f886cf551e8c354f321136d3dd1997b0a"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\types-qma-final-accepted.txt": {
+      "bytes": 38,
+      "sha256": "c584b21ee012de391dc2799d5455db619d3fefbb192ab07ea4ba83fb0d704c14"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\types-qmb-green.txt": {
+      "bytes": 38,
+      "sha256": "c584b21ee012de391dc2799d5455db619d3fefbb192ab07ea4ba83fb0d704c14"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\focused-source-final-proof.json": {
+      "bytes": 4656,
+      "sha256": "8215e54f75b1614ed0a0b87803cc20a30df8494459a2e0c96e9385614a609d13"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\proof-public-final-accepted\\test_authenticated_author_to_s1\\authenticated-study-proof.json": {
+      "bytes": 14595,
+      "sha256": "e78cc07f3cf08a88492cb57297b57676b1cfe1a74574d839160f0a992d9e62f3"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\proof-public-final-accepted\\test_authenticated_ct40_run_gr0\\public-projection-proof.json": {
+      "bytes": 624,
+      "sha256": "050cd53186d56f6995372a228811305e1a1611c39f60a0d9072168bf7497e1a6"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\review-artifacts\\independent-study-review.md": {
+      "bytes": 4905,
+      "sha256": "5fde03e686820f8f55049ff8804738da5b266f47f35290b9ef7245ff074c9c30"
+    },
+    "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-20\\review-artifacts\\study-readonly-1\\review-proof.json": {
+      "bytes": 1696,
+      "sha256": "7484e076842baf759bd950befcf549672e5a967c8745edcd7e90174f91fd56ef"
+    }
+  },
+  "limits": [
+    "Public actor creation belongs to separate actor lane; this proof declares Quant using existing mailbox API and admits actual same TaskAgent through host capability store.",
+    "Borrowed pinned third-party distributions; not a fresh frozen installation.",
+    "Normal Windows user token; native restricted-token refusal retained.",
+    "Broader QMA borrowed-env typing attempt had optional langmem/cross-test stub diagnostics; owned production strict types pass.",
+    "Inherited QMA/QMN coverage floors, full QMB formatting and broader release/platform acceptance are not cleared by focused tests.",
+    "Central permission-ceiling fix and actor wiring still require parent controlled composition; this lane did not edit grant binder."
+  ],
+  "tested_source_git_blob_ids": {
+    "qa/integration/test_qma_authenticated_study.py": "279b0eab23fdc64a110b7417ab1d1f2cb26ea25c",
+    "qa/integration/test_qma_registered_replay.py": "5d30c492ac05915b02d9c62622762c054ec159c9",
+    "qmb/src/qmb/doors/cli/__init__.py": "d057bc23b850634e41efacd9e9100acd38db3109",
+    "qmb/src/qmb/host/delegated_cli.py": "c51eb974ec545cac2dac436f22de022a35047e6a",
+    "qmb/src/qmb/host/operator_alternative_replay.py": "9c9242ee21f333f85673e0284f5a995fe6e06ba7",
+    "qmb/src/qmb/host/operator_alternative_study.py": "22fe25d78ad415464e4d867ee66fdae5aa227015",
+    "qmb/src/qmb/host/operator_study_replay.py": "9c3a8576ea0d9caab697358c9067397d73542abb",
+    "qmb/src/qmb/host/qma_cli.py": "0b0effac3fc4d9a6951b45b83e4f88dec68a814e",
+    "qmb/tests/operator_study_fixture_support.py": "1c18c46be745075c02540403db8119801e7797c0",
+    "qmb/tests/test_operator_replay_process.py": "67049c712720ff5ea6606d4f588e356e6d48f679",
+    "qmb/tests/test_operator_study_cli.py": "cb24dd8562b46323acbf7d9a73045b7fe792848b",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/cli.py": "2b9bf3ec0817fed5933b586ed9995a8e08b70957",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/expected.py": "36efc5a11ab5f7adc3555a83d19abdb65980d7f9",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/backtest/service.py": "559c18631292b9f6d4dffb21950a11c33faed63c",
+    "qmx-agents/packages/qma-daemon/src/qma/daemon/process.py": "65a2d8cf6441cd7d2e201ffcd198781fe4c59e22"
+  },
+  "alternative_policy_fixture": "Explicit registered local synthetic interpreter; observed_frontier_count unit-count objective; actual QMB invocation and persisted trial artifacts, no profit/live-market claim; fixture not production source."
+}

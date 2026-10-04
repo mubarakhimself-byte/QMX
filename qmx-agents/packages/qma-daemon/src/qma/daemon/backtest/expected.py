@@ -170,7 +170,19 @@ def write_verified_context(
             "expected_sha256", "verification references the intact expected-context artifact"
         )
     result_map = cast(Mapping[str, object], result)
-    if result_map.get("job_id") != checked_job.value:
+    expected_result = expected.value.get("expected_result")
+    expected_result_map: Mapping[str, object] = (
+        cast(Mapping[str, object], expected_result)
+        if isinstance(expected_result, Mapping)
+        else dict[str, object]()
+    )
+    study_matches = (
+        expected_result_map.get("class") == "qmb-operator-alternative-study-result-v1"
+        and result_map.get("class") == expected_result_map.get("class")
+        and result_map.get("study_fp1") == expected_result_map.get("study_fp1")
+        and result_map.get("operational_fp1") == expected_result_map.get("operational_fp1")
+    )
+    if not study_matches and result_map.get("job_id") != checked_job.value:
         return invalid_input("job_id", "verified result matches its durable QMA job")
     return _write_record(
         store=checked_store.value,

@@ -55,7 +55,7 @@ from qma.core.ports.qmb import (
 )
 from qma.core.ports.telemetry import TelemetryRecord
 from qma.core.refusals import NoEnvironment
-from qma.core.vocabulary.enums import EffectClass, PrincipalClass, TaskMissionState
+from qma.core.vocabulary.enums import EffectClass, JobHandleState, PrincipalClass, TaskMissionState
 from qma.daemon.artifacts import (
     ArtifactStore,
     DestControlHandle,
@@ -295,7 +295,7 @@ from qma.wire.stage_artifact import (
 from qma.wire.transfer_artifact import require_transfer_artifact_capability
 from qma.wire.transfer_complete import require_transfer_complete_capability
 from qma.wire.vocabulary import WIRE_VOCABULARY_OWNER, WireCommand, WireQuery
-from qmf.core import Ok, RefusalCategory, Result, World, WriterId, is_ok, is_refusal
+from qmf.core import Ok, RefusalCategory, Result, World, WriterId, fingerprint, is_ok, is_refusal
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
@@ -2948,7 +2948,13 @@ class DaemonProcess:
                     req_id,
                     policy_rejection("principal", "ProductSession is not operator-owned"),
                 )
-            return _jsonrpc_result(req_id, handle.to_payload())
+            job_payload = dict(handle.to_payload())
+            if handle.state is JobHandleState.DONE and handle.job_id.startswith("qmb:"):
+                verified = self.backtesting.read_completed_result(handle.job_id, owner=handle.owner)
+                if is_refusal(verified):
+                    return _jsonrpc_refusal(req_id, verified)
+                job_payload["verified_result"] = verified.value["result"]
+            return _jsonrpc_result(req_id, job_payload)
         if method == WireCommand.TRANSFER_ARTIFACT.value:
             return self._dispatch_transfer_artifact(connection, request, req_id)
         if method == WireCommand.TRANSFER_COMPLETE.value:
@@ -3224,6 +3230,29 @@ class DaemonProcess:
         execution: list[Result[object]] = []
 
         def execute(bound: BoundInvocation) -> None:
+            if bound.envelope.op_id in {"qmb.backtest.run", "qmb.optimize.run"}:
+                # Canonical dispatch has checked the current grant. Refuse
+                # altered Task inputs before consuming this place-run binding.
+                dispatched_task = self.task_dispatcher.dispatched_task_for_invocation(
+                    bound.envelope.logical_invocation_id
+                )
+                if is_refusal(dispatched_task):
+                    execution.append(dispatched_task)
+                    return
+                expected_hash = self.task_dispatcher.expected_operation_input_hash(
+                    dispatched_task.value[0].id
+                )
+                if is_refusal(expected_hash):
+                    execution.append(expected_hash)
+                    return
+                if expected_hash.value != bound.envelope.input_hash:
+                    execution.append(
+                        policy_rejection(
+                            "input_hash",
+                            "QMB invocation retains the complete dispatched Task payload",
+                        )
+                    )
+                    return
             current_session = self._product_sessions.get(session_ref)
             if is_refusal(current_session):
                 execution.append(current_session)
@@ -3309,6 +3338,10 @@ class DaemonProcess:
             serialized = cast("Callable[[], object]", payload_method)()
             if isinstance(serialized, Mapping):
                 payload_out = cast("Mapping[str, object]", serialized)
+        else:
+            runtime_value: object = result.value
+            if isinstance(runtime_value, Mapping):
+                payload_out = cast("Mapping[str, object]", runtime_value)
         return _jsonrpc_result(req_id, payload_out)
 
     def _dispatch_open_product_session(
@@ -3573,12 +3606,14 @@ class DaemonProcess:
         required_point = {
             "qma.procedure.start": "graph_template",
             "qmb.backtest.run": "tool",
+            "qmb.optimize.run": "tool",
             "qmb.analysis.project": "tool",
             "qmn.spot.paper.query": "tool",
         }.get(op_id)
         expected_contribution = {
             "qma.procedure.start": published.qualified_id,
             "qmb.backtest.run": "analysis-backtest:qmb",
+            "qmb.optimize.run": "analysis-backtest:qmb",
             "qmb.analysis.project": "analysis-backtest:qmb",
             "qmn.spot.paper.query": SPOT_CONTRIBUTION,
         }.get(op_id)
@@ -3731,7 +3766,8 @@ class DaemonProcess:
             if is_refusal(compiled_parent):
                 return compiled_parent
             return Ok(cast("object", compiled_parent.value))
-        if op_id == "qmb.backtest.run":
+        if op_id in {"qmb.backtest.run", "qmb.optimize.run"}:
+            qmb_command = op_id.removeprefix("qmb.")
             binding = backtest_binding(
                 self.root, bound.instance.instance_id, bound.instance.config_revision
             )
@@ -3868,6 +3904,7 @@ class DaemonProcess:
                 environment_ref=environment_ref,
                 experiment_spec_fp1=resolved.value.spec.spec_fp1,
                 evidence_ref=evidence_ref,
+                command=qmb_command,
             )
             if is_refusal(runtime_preflight):
                 return runtime_preflight
@@ -3949,6 +3986,7 @@ class DaemonProcess:
                 model_deployment_ref=pinned_deployment,
                 worker_acceptance=worker_acceptance,
                 originating_product_session_ref=originating_product_session_ref,
+                command=qmb_command,
             )
             if is_refusal(placement):
                 return placement
@@ -3987,19 +4025,22 @@ class DaemonProcess:
             return policy_rejection(
                 "payload", "QMB owner and environment are operator-bound fields"
             )
-        task_id = bound.envelope.logical_invocation_id
-        placed = self.backtesting.place_query(
-            "analysis.project",
+        projected = self.backtesting.project_completed_run(
             owner=quant.actor_id,
-            task_id=task_id,
             environment_ref=environment_ref,
-            extra=payload,
-            persist_projection=True,
-            experiment_spec_fp1=cast("str", payload.get("run_fp1")),
+            run_fp1=payload.get("run_fp1"),
+            as_of=payload.get("as_of"),
         )
-        if is_refusal(placed):
-            return placed
-        return Ok(cast("object", placed.value))
+        if is_refusal(projected):
+            return projected
+        view_ref = fingerprint(dict(projected.value))
+        if is_refusal(view_ref):
+            return view_ref
+        # v1 returns a content reference and its inline bytes. This read does
+        # not persist a view or publish analysis into the Experiment Ledger.
+        return Ok(
+            {"fp1": view_ref.value.value, "kind": "saved-view", "body": dict(projected.value)}
+        )
 
     def _dispatch_cancel_job(
         self,

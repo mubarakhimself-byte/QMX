@@ -59,6 +59,7 @@ class QmaBacktestContext:
     occupancy_key: str
     mints_ct32: bool = True
     operator_descriptor_fp1: Fingerprint | None = None
+    command: str = "backtest.run"
 
 
 def validate_qma_backtest_context(context: object) -> Result[QmaBacktestContext]:
@@ -72,6 +73,10 @@ def validate_qma_backtest_context(context: object) -> Result[QmaBacktestContext]
     if type(context) is not QmaBacktestContext:
         return invalid("qma_context", "the QMB runtime receives a decoded CT-47 context")
     value = context
+    if type(value.command) is not str or value.command not in {"backtest.run", "optimize.run"}:
+        return policy("command", "delegated QMB runs use the backtest or Study door")
+    if value.command == "optimize.run" and value.mints_ct32 is not False:
+        return policy("mints_ct32", "Alternative Study is explicitly non-CT-32")
     for field, item in (
         ("job_id", value.job_id),
         ("environment_ref", value.environment_ref),
@@ -140,7 +145,6 @@ def decode_qma_backtest_context(
         "qma_re_specifies": False,
         "qmb_owned": list(_OWNED_CONCERNS),
         "route": list(_ROUTE),
-        "command": "backtest.run",
         "occupancy": "run",
         "mints_experiment_spec": False,
         "children_are_qma_jobs": False,
@@ -150,6 +154,11 @@ def decode_qma_backtest_context(
         if type(body.get(key)) is not type(expected) or body.get(key) != expected:
             return policy("qma_payload", "delegated QMB command semantics are fixed", key=key)
     mints_ct32 = body.get("mints_ct32")
+    command = body.get("command")
+    if type(command) is not str or command not in {"backtest.run", "optimize.run"}:
+        return policy("command", "delegated QMB runs use the backtest or Study door")
+    if command == "optimize.run" and mints_ct32 is not False:
+        return policy("mints_ct32", "Alternative Study is explicitly non-CT-32")
     if type(mints_ct32) is not bool:
         return invalid("mints_ct32", "the QMB result mode is an exact boolean")
     text_fields = ("job_id", "environment_ref", "occupancy_key")
@@ -205,6 +214,7 @@ def decode_qma_backtest_context(
             occupancy_key=values["occupancy_key"],
             mints_ct32=mints_ct32,
             operator_descriptor_fp1=parsed.get("operator_descriptor_fp1"),
+            command=command,
         )
     )
 

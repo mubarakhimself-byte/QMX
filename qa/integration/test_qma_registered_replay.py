@@ -9,6 +9,7 @@ import asyncio
 import importlib
 import json
 import os
+import shutil
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -21,11 +22,12 @@ from qma.core.operations import public_operation_descriptors
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration
 from qma.core.ports.experiments import ExperimentSpec
 from qma.core.ports.qmb import QMB_BACKTEST_TOOL_ID
-from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState
+from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState, PrincipalClass
 from qma.daemon.backtest import BacktestingService, CliQmbDoorTransport
 from qma.daemon.envs import ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.experiments import ExperimentSpecService
+from qma.daemon.journal.variables import HOST_RETRY_ATTEMPT_CEILING_KEY
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.daemon.taskgraph.compiler import CompileRequest
@@ -33,7 +35,8 @@ from qma.daemon.taskgraph.records import DispatchLease, GraphTemplate
 from qma.daemon.tools import ToolRegistry
 from qma.wire.invocation_envelope import compute_input_hash
 from qma.wire.vocabulary import WireCommand, WireQuery
-from qmf.core import Fingerprint, Result, is_ok
+from qmf.core import Fingerprint, Result, fingerprint, is_ok
+from test_qma_authenticated_study import rpc as projection_rpc
 
 ROOT = Path(__file__).resolve().parents[2]
 QMB_TESTS = ROOT / "qmb" / "tests"
@@ -131,7 +134,7 @@ def test_registered_spec_runs_through_backtesting_service_and_real_qmb_child(
         )
     )
     configured_cli = os.environ.get("QMB_EXECUTABLE")
-    cli = Path(configured_cli) if configured_cli else Path(sys.executable).with_name("qmb")
+    cli = Path(configured_cli or shutil.which("qmb") or str(Path(sys.executable).with_name("qmb")))
     assert cli.is_file(), f"QMB executable is missing: {cli}"
     transport = CliQmbDoorTransport(argv0=(str(cli),))
     service = BacktestingService(
@@ -389,11 +392,7 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
         )
 
         async def request(req_id: int, method: str, params: dict[str, object]) -> dict[str, object]:
-            listener_helpers._ws_write(
-                writer,
-                {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params},
-            )
-            return await listener_helpers._ws_read_json(reader)
+            return await projection_rpc(reader, writer, method, params, req_id=req_id)
 
         try:
             initialized = await listener_helpers._initialize_ws(writer, reader, capabilities={})
@@ -542,7 +541,110 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 }:
                     break
                 await asyncio.sleep(0.05)
-            assert terminal_result["state"] == JobHandleState.DONE.value
+            assert terminal_result["state"] == JobHandleState.DONE.value, (
+                process.backtesting.observer_failure_for(job_id)
+            )
+
+            # A distinct read grant uses the verified result's declared run
+            # fingerprint. It cannot publish evidence or reinterpret a spec fp1.
+            projection_descriptor = next(
+                item
+                for item in public_operation_descriptors()
+                if item.op_id == "qmb.analysis.project" and item.version == 1
+            )
+            source_result = cast(dict[str, object], terminal_result["verified_result"])
+            projection_payload = {"run_fp1": source_result["run_fp1"]}
+            _ok(
+                process.variables.variable_set(
+                    HOST_RETRY_ATTEMPT_CEILING_KEY,
+                    1,
+                    principal_class=PrincipalClass.OPERATOR,
+                    journal=process.journal,
+                )
+            )
+            projection_grant = await projection_rpc(
+                reader,
+                writer,
+                "grant_product_session",
+                {
+                    "product_session_ref": session_ref,
+                    "expected_revision": 1,
+                    "op_id": projection_descriptor.op_id,
+                    "op_version": 1,
+                    "parameter_ceiling": {"allow_keys": ["run_fp1", "as_of"]},
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+            )
+            assert "error" not in projection_grant, projection_grant
+            projection_envelope = {
+                **envelope,
+                "logical_invocation_id": "inv:verified-book-projection",
+                "op_id": projection_descriptor.op_id,
+                "grant_id": projection_grant["result"]["grant_id"],
+                "effect_class": projection_descriptor.effect_class.value,
+                "idempotency_key": "idem:verified-book-projection",
+                "input_hash": _ok(
+                    compute_input_hash(projection_payload, descriptor=projection_descriptor)
+                ),
+            }
+            before_handles = len(process.jobs.store.all())
+            before_entries = len(
+                _ok(process.experiments.resolve(registered_spec.spec_fp1)).ledger.entries
+            )
+            source_bytes = {
+                str(path): path.read_bytes()
+                for root in roots.values()
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+            projected = await projection_rpc(
+                reader,
+                writer,
+                "start_mission",
+                {
+                    "product_session_ref": session_ref,
+                    "envelope": projection_envelope,
+                    "payload": projection_payload,
+                },
+            )
+            assert "error" not in projected, projected
+            saved = projected["result"]
+            assert set(saved) == {"fp1", "kind", "body"} and saved["kind"] == "saved-view"
+            assert saved["fp1"] == _ok(fingerprint(saved["body"])).value
+            assert saved["body"]["method"] == "projection"
+            assert saved["body"]["predicate"] == {"exclude": []}
+            assert saved["body"]["source_ct32"] == source_result["ct32_fp1"]
+            assert len(process.jobs.store.all()) == before_handles
+            assert (
+                len(_ok(process.experiments.resolve(registered_spec.spec_fp1)).ledger.entries)
+                == before_entries
+            )
+            assert all(Path(path).read_bytes() == content for path, content in source_bytes.items())
+            assert process.backtesting.occupying_job("env:local") is None
+            (tmp_path / "public-projection-proof.json").write_text(
+                json.dumps(projected, indent=2), encoding="utf-8"
+            )
+            # A spec fingerprint is not the public projection run fingerprint.
+            wrong_payload = {"run_fp1": registered_spec.spec_fp1}
+            wrong_envelope = {
+                **projection_envelope,
+                "logical_invocation_id": "inv:wrong-projection-fingerprint",
+                "idempotency_key": "idem:wrong-projection-fingerprint",
+                "input_hash": _ok(
+                    compute_input_hash(wrong_payload, descriptor=projection_descriptor)
+                ),
+            }
+            refused = await projection_rpc(
+                reader,
+                writer,
+                "start_mission",
+                {
+                    "product_session_ref": session_ref,
+                    "envelope": wrong_envelope,
+                    "payload": wrong_payload,
+                },
+            )
+            assert "error" in refused, refused
 
             # Revoking the retained dispatch authority prevents a second child
             # even though the ProductSession grant still names the same operation.
@@ -582,14 +684,13 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                 assert "error" not in recovered_session, recovered_session
                 session_payload = cast(dict[str, object], recovered_session["result"])
                 assert session_payload["product_session_id"] == session_ref
-                assert len(cast(list[object], session_payload["grant_records"])) == 1
-                recovered_job = await request_on(
-                    listener_helpers,
-                    reconnect_writer,
+                assert len(cast(list[object], session_payload["grant_records"])) == 2
+                recovered_job = await projection_rpc(
                     reconnect_reader,
-                    7,
+                    reconnect_writer,
                     WireQuery.GET_JOB.value,
                     {"product_session_ref": session_ref, "handle_id": job_id},
+                    req_id=7,
                 )
                 assert "error" not in recovered_job, recovered_job
                 assert (
@@ -648,13 +749,12 @@ def test_authenticated_ct40_run_grant_reaches_real_registered_qmb_child(
                     {"product_session_ref": session_ref},
                 )
                 assert "error" not in recovered_session, recovered_session
-                recovered_job = await request_on(
-                    listener_helpers,
-                    writer,
+                recovered_job = await projection_rpc(
                     reader,
-                    9,
+                    writer,
                     WireQuery.GET_JOB.value,
                     {"product_session_ref": session_ref, "handle_id": job_id},
+                    req_id=9,
                 )
                 assert "error" not in recovered_job, recovered_job
                 assert (

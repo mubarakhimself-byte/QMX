@@ -12,6 +12,7 @@ line and QMA does not.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -189,6 +191,9 @@ def _door_env(
 ) -> dict[str, str]:
     env = {str(key): str(value) for key, value in os.environ.items()}
     payload = dict(invocation.payload)
+    if payload.get("command") == "optimize.run" and payload.get("operator_descriptor_fp1") is None:
+        # The delegated optimize door selects the Alternative Study composition.
+        payload["mints_ct32"] = False
     identity_env_keys = (
         "QMA_QMB_JOB_ID",
         "QMA_QMB_ATTEMPT_ID",
@@ -239,7 +244,12 @@ def _supports_runtime_preflight(argv0: tuple[str, ...]) -> bool:
     """Only the production QMB executable implements the internal preflight."""
     if argv0 == (QMB_CLI_PROGRAM,):
         return True
-    return len(argv0) == 1 and Path(argv0[0]).name == Path(QMB_CLI_PROGRAM).name
+    if len(argv0) != 1:
+        return False
+    name = Path(argv0[0]).name
+    if sys.platform == "win32":
+        return name.casefold() in {QMB_CLI_PROGRAM.casefold(), QMB_CLI_PROGRAM.casefold() + ".exe"}
+    return name == Path(QMB_CLI_PROGRAM).name
 
 
 def _runtime_preflight(
@@ -396,6 +406,7 @@ class CliQmbDoorTransport:
     _spawned: list[SpawnedQmbProcess] = field(default_factory=list[SpawnedQmbProcess])
     _abort_invocations: list[str] = field(default_factory=list[str])
     _cancel_paths: dict[str, str] = field(default_factory=dict[str, str])
+    _cancel_namespace: str = field(default_factory=lambda: uuid.uuid4().hex, repr=False)
     _stdout_by_job: dict[str, str] = field(default_factory=dict[str, str])
     _invocations_by_job: dict[str, QmbDoorInvocation] = field(
         default_factory=dict[str, QmbDoorInvocation]
@@ -433,10 +444,12 @@ class CliQmbDoorTransport:
             return existing
         if self.cancel_path:
             return self.cancel_path
-        safe = job_id.replace(":", "_").replace("/", "_")
+        safe = hashlib.sha256(job_id.encode("utf-8")).hexdigest()
         if self.receipt_path:
-            return f"{self.receipt_path}.{safe}.cancel"
-        return f"{safe}.qmb.cancel"
+            return f"{self.receipt_path}.{self._cancel_namespace}.{safe}.cancel"
+        # Each owned transport has its own control channel. A stale signal from
+        # another daemon or attempt cannot cancel this otherwise identical job id.
+        return str(Path(tempfile.gettempdir()) / f"qma-qmb-{self._cancel_namespace}-{safe}.cancel")
 
     def preflight(self, invocation: QmbDoorInvocation) -> Result[Mapping[str, object] | None]:
         """Resolve and cache the trusted runtime mode without placing a child."""
@@ -891,12 +904,12 @@ class CliQmbDoorTransport:
                 "operator_descriptor_fp1",
             )
         )
-        for field_name in (
-            "evidence_ref",
-            "experiment_spec_fp1",
-            "split_manifest_fp1",
-            *fingerprint_fields,
-        ):
+        placement_fields = (
+            ()
+            if result_class == "qmb-operator-alternative-study-result-v1"
+            else ("evidence_ref", "experiment_spec_fp1", "split_manifest_fp1")
+        )
+        for field_name in (*placement_fields, *fingerprint_fields):
             if field_name == "terminal_artifact_fp1s":
                 continue
             field_value = result.get(field_name)
@@ -907,7 +920,7 @@ class CliQmbDoorTransport:
                 or any(char not in "0123456789abcdef" for char in field_value[11:])
             ):
                 return invalid_input(field_name, "terminal result carries canonical fingerprints")
-        if (
+        if result_class != "qmb-operator-alternative-study-result-v1" and (
             isinstance(result.get("attempt_id"), bool)
             or not isinstance(result.get("attempt_id"), int)
             or cast(int, result.get("attempt_id")) < 1
@@ -937,6 +950,58 @@ class CliQmbDoorTransport:
     ) -> Result[Mapping[str, object]]:
         """Run QMB verify-only from the durable expected invocation after restart."""
         return self._reopen_terminal_record(job_id, None, invocation=invocation)
+
+    def project_verified_run(
+        self,
+        *,
+        invocation: QmbDoorInvocation,
+        source_result: Mapping[str, object],
+        predicate: Mapping[str, object],
+        as_of: object = None,
+    ) -> Result[Mapping[str, object]]:
+        """Adapt an original checked run context to the QMB read-only projection door."""
+        if not _supports_runtime_preflight(self.argv0):
+            return invalid_input("transport", "projection requires the production QMB entrypoint")
+        env = _door_env(
+            invocation, receipt_path=None, cancel_path=None, ledger_path=None, hang=False
+        )
+        env["QMA_QMB_DOOR_PAYLOAD"] = json.dumps(
+            {
+                "command": "analysis.project",
+                "original_run": dict(invocation.payload),
+                "source_result": dict(source_result),
+                "predicate": dict(predicate),
+                "as_of": as_of,
+            },
+            separators=(",", ":"),
+        )
+        command = (*(self.argv0 or (QMB_CLI_PROGRAM,)), "analysis", "project")
+        try:
+            completed = subprocess.run(
+                command,
+                env=env,
+                capture_output=True,
+                text=True,
+                # Projection reopens durable recorded economics and lineage,
+                # so it uses the same bounded deadline as terminal verification.
+                timeout=30.0,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return invalid_input("projection", "QMB projection child completed", error=str(exc))
+        if completed.returncode != 0:
+            return invalid_input(
+                "projection",
+                "QMB refuses an unverified projection source",
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+        decoded = _decode_terminal_result(completed.stdout)
+        if is_refusal(decoded):
+            return decoded
+        if decoded.value.get("method") != "projection":
+            return invalid_input("projection", "QMB returns its canonical saved view")
+        return decoded
 
     def _reopen_terminal_record(
         self,

@@ -26,7 +26,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.exact import MONEY_STORAGE_SCALE, Money, RoundingMode
-from qmf.data.journal_producer import JournalWriter
+from qmf.data.journal_producer import JournalReader, JournalWriter
 from qmf.data.store import JournalStore
 from qmf.registry import RegistryPersistence
 from qml.declaration.parameters import ParameterType
@@ -45,6 +45,7 @@ from qmb.host.operator_alternative import (
 from qmb.host.operator_occurrence import (
     OperatorOccurrenceIdentity,
     OperatorOccurrenceReceipt,
+    read_operator_occurrence,
     record_operator_occurrence,
 )
 from qmb.host.qma_cli import validate_qma_backtest_context
@@ -71,6 +72,7 @@ __all__ = [
     "OperatorAlternativeStudyPlan",
     "OperatorAlternativeStudyResult",
     "run_operator_alternative_study",
+    "verify_operator_alternative_study",
 ]
 
 OPERATOR_ALTERNATIVE_STUDY_CLASS = "qmb-operator-alternative-study-v1"
@@ -252,9 +254,7 @@ def _base_identity(inputs: OperatorAlternativeInputs) -> Result[dict[str, object
         or not inputs.journal_root.is_absolute()
         or not inputs.terminal_store.root.is_absolute()
     ):
-        return invalid(
-            "runtime_roots", "operator source, journal, and terminal roots are absolute"
-        )
+        return invalid("runtime_roots", "operator source, journal, and terminal roots are absolute")
     try:
         raw_root = str(inputs.raw_store_root.resolve(strict=True))
         journal_root = str(inputs.journal_root.resolve(strict=True))
@@ -271,45 +271,50 @@ def _base_identity(inputs: OperatorAlternativeInputs) -> Result[dict[str, object
     if is_refusal(trial_label_fp):
         return trial_label_fp
     computation: dict[str, object] = {
-            "composition_class": "alternative",
-            "composition_fp1": inputs.config.composition_fp.value,
-            "policy_pair_identity": inputs.config.policy_pair.identity(),
-            "resolved_config_fp1": inputs.config.fingerprint.value,
-            "source_fp1": source.fingerprint.value,
-            "split_fp1": source.split_fp1.value,
-            "split_role": source.split_role.value,
-            "registry_fp1": inputs.registry.fingerprint.value,
-            "interpreter_registration_fp1": registration.value.fingerprint.value,
-            "initial_accounting_state_fp1": state_fp.value.value,
-            "command_owner_epoch": inputs.expected_command_owner_epoch,
-            "experiment_spec_fp1": context.experiment_spec_fp1.value,
-            "evidence_ref": context.evidence_ref.value,
-            "split_manifest_fp1": context.split_manifest_fp1.value,
-            "registry_as_of_ns": inputs.registry_as_of.value_ns,
-            "registry_writer": _writer_identity(inputs.registry_writer),
-            "input_trial_label_fp1": trial_label_fp.value.value,
-        }
+        "composition_class": "alternative",
+        "composition_fp1": inputs.config.composition_fp.value,
+        "policy_pair_identity": inputs.config.policy_pair.identity(),
+        "resolved_config_fp1": inputs.config.fingerprint.value,
+        "source_fp1": source.fingerprint.value,
+        "split_fp1": source.split_fp1.value,
+        "split_role": source.split_role.value,
+        "registry_fp1": inputs.registry.fingerprint.value,
+        "interpreter_registration_fp1": registration.value.fingerprint.value,
+        "initial_accounting_state_fp1": state_fp.value.value,
+        "command_owner_epoch": inputs.expected_command_owner_epoch,
+        "experiment_spec_fp1": context.experiment_spec_fp1.value,
+        "evidence_ref": context.evidence_ref.value,
+        "split_manifest_fp1": context.split_manifest_fp1.value,
+        "registry_as_of_ns": inputs.registry_as_of.value_ns,
+        "registry_writer": _writer_identity(inputs.registry_writer),
+        "input_trial_label_fp1": trial_label_fp.value.value,
+    }
     operational: dict[str, object] = {
-            "qma_occurrence": {
-                "job_id": context.job_id,
-                "attempt_id": context.attempt_id,
-                "environment_ref": context.environment_ref,
-                "occupancy_key": context.occupancy_key,
+        "qma_occurrence": {
+            "job_id": context.job_id,
+            "attempt_id": context.attempt_id,
+            "environment_ref": context.environment_ref,
+            "occupancy_key": context.occupancy_key,
+        },
+        "journal_writer": _writer_identity(inputs.journal_writer.writer),
+        "journal_stream": inputs.journal_writer.stream_name,
+        "terminal_writer": _writer_identity(inputs.terminal_store.writer),
+        "lineage_writer": _writer_identity(inputs.lineage_writer),
+        "runtime_descriptor_fp1": inputs.runtime_descriptor_fp1.value,
+        "raw_store_root": raw_root,
+        "journal_root": journal_root,
+        "terminal_root": terminal_root,
+        "registry_root": str(inputs.registry_persistence.root.absolute()),
+    }
+    return Ok(
+        cast(
+            "dict[str, object]",
+            {
+                "computation": computation,
+                "operational": operational,
             },
-            "journal_writer": _writer_identity(inputs.journal_writer.writer),
-            "journal_stream": inputs.journal_writer.stream_name,
-            "terminal_writer": _writer_identity(inputs.terminal_store.writer),
-            "lineage_writer": _writer_identity(inputs.lineage_writer),
-            "runtime_descriptor_fp1": inputs.runtime_descriptor_fp1.value,
-            "raw_store_root": raw_root,
-            "journal_root": journal_root,
-            "terminal_root": terminal_root,
-            "registry_root": str(inputs.registry_persistence.root.absolute()),
-        }
-    return Ok(cast("dict[str, object]", {
-        "computation": computation,
-        "operational": operational,
-    }))
+        )
+    )
 
 
 def _objective_value(
@@ -413,9 +418,7 @@ def _candidate_identity(
     recorded_registration = body.get("interpreter_registration")
     if not isinstance(recorded_registration, Mapping):
         return invalid("interpreter_registration", "terminal stores registered code identity")
-    recorded_registration_fp = fingerprint(
-        cast("Mapping[str, object]", recorded_registration)
-    )
+    recorded_registration_fp = fingerprint(cast("Mapping[str, object]", recorded_registration))
     expected_registration_fp = fingerprint(rebound.value.identity())
     if is_refusal(recorded_registration_fp) or is_refusal(expected_registration_fp):
         return invalid("interpreter_registration", "registered code identity is canonical")
@@ -664,6 +667,8 @@ def _record_study_occurrence(
     plan: OperatorAlternativeStudyPlan,
     generation_run: StudyGenerationRun,
     artifacts: tuple[AlternativeTerminalArtifact, ...],
+    *,
+    verify_only: bool = False,
 ) -> Result[OperatorOccurrenceReceipt]:
     if not artifacts:
         return policy("study_history", "complete Study history includes checked terminal artifacts")
@@ -702,6 +707,11 @@ def _record_study_occurrence(
     )
     if is_refusal(identity):
         return identity
+    if verify_only:
+        return read_operator_occurrence(
+            identity=identity.value,
+            journal_reader=JournalReader(inputs.journal_store),
+        )
     return record_operator_occurrence(
         identity=identity.value,
         journal_writer=inputs.journal_writer,
@@ -764,6 +774,19 @@ def run_operator_alternative_study(
     cancelled: object = None,
 ) -> Result[OperatorAlternativeStudyResult]:
     """Run/reopen an operator-bound ATC Study with internally fixed execution ports."""
+    return _operator_alternative_study(inputs, plan, cancelled=cancelled, verify_only=False)
+
+
+def verify_operator_alternative_study(
+    inputs: object, plan: object
+) -> Result[OperatorAlternativeStudyResult]:
+    """Read checked complete history and its existing witness; never execute or append."""
+    return _operator_alternative_study(inputs, plan, cancelled=None, verify_only=True)
+
+
+def _operator_alternative_study(
+    inputs: object, plan: object, *, cancelled: object, verify_only: bool
+) -> Result[OperatorAlternativeStudyResult]:
     if type(inputs) is not OperatorAlternativeInputs:
         return invalid("operator_inputs", "ATC Study uses trusted resolved operator inputs")
     if type(plan) is not OperatorAlternativeStudyPlan:
@@ -837,6 +860,8 @@ def run_operator_alternative_study(
     if resume_plan.completed_generations > plan.generation_count:
         return policy("generation_count", "durable history does not exceed the frozen Study budget")
     additional_generations = plan.generation_count - resume_plan.completed_generations
+    if verify_only and additional_generations:
+        return unavailable("study_history", "verify-only requires the entire durable Study budget")
     if additional_generations:
         completed = run_alternative_study(
             plan.stepper(),
@@ -941,7 +966,9 @@ def run_operator_alternative_study(
         for generation in range(plan.generation_count)
         for ask_index in range(plan.batch_size)
     )
-    occurrence = _record_study_occurrence(inputs, plan, generation_run, ordered_artifacts)
+    occurrence = _record_study_occurrence(
+        inputs, plan, generation_run, ordered_artifacts, verify_only=verify_only
+    )
     if is_refusal(occurrence):
         return occurrence
     return Ok(
