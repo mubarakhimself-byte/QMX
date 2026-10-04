@@ -5,6 +5,7 @@ import LibraryBig from "@lucide/svelte/icons/library-big";
 import FlaskConical from "@lucide/svelte/icons/flask-conical";
 import Briefcase from "@lucide/svelte/icons/briefcase-business";
 import Settings from "@lucide/svelte/icons/settings";
+import LayoutGrid from "@lucide/svelte/icons/layout-grid";
 
 /**
  * Platform rail destinations (UI EXPERIENCE-AND-LAYOUT §1).
@@ -12,7 +13,8 @@ import Settings from "@lucide/svelte/icons/settings";
  * Settings is chrome, pinned to the rail foot.
  */
 export type Destination = {
-  id: "home" | "copilot" | "library" | "lab" | "portfolio" | "settings";
+  id:
+    "home" | "copilot" | "library" | "lab" | "portfolio" | "apps" | "settings";
   label: string;
   href: string;
   icon: Component;
@@ -52,6 +54,14 @@ export const PRODUCT_DESTINATIONS: readonly Destination[] = [
     href: "/portfolio",
     icon: Briefcase,
     shortcut: "5",
+  },
+  {
+    // Mini apps on their road to live (pass 1, 2026-10-04).
+    id: "apps",
+    label: "Apps",
+    href: "/apps",
+    icon: LayoutGrid,
+    shortcut: "6",
   },
 ];
 

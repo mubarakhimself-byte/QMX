@@ -1,40 +1,14 @@
 <script lang="ts">
   /**
-   * Installed mini apps, each with its own settings: where its code runs
-   * (its own sandbox), what it may do, its budget, and its stage on the
-   * mini app's road to live. Safe mode turns off everything not shipped
-   * with QMX in one switch. Proposal: handoff/MINI-APPS-AND-COPILOT-CONTRACT.md.
+   * Mini apps in Settings: the same list as the Apps screen (one source),
+   * with the switches you'd look for here: safe mode, each app on or off,
+   * and its box at a glance. Details, evidence and logs live in Apps.
    */
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import { resolve } from "$app/paths";
   import { Switch } from "$lib/components/ui/switch";
   import { cn } from "$lib/utils";
-  import { workbench } from "$lib/workbench/workbench.svelte";
-
-  let safe = $state(false);
-  let apps = $state([
-    {
-      name: "News & sentiment",
-      kind: "Headless",
-      risk: "Shows things",
-      stage: "Live",
-      runs: "Its own container on vps-fsn",
-      budget: "2 CPU hours a day · network: news sites only",
-      ops: ["news.refresh", "news.windows"],
-      on: true,
-    },
-    {
-      name: "Research · Crypto",
-      kind: "Screens and a copilot",
-      risk: "Shows things",
-      stage: "Shadow run, day 3 of 7",
-      runs: "Its own container on this laptop",
-      budget: "1 CPU hour a day · network: exchanges only",
-      ops: ["crypto.quote", "crypto.signals", "crypto.correlation"],
-      on: true,
-    },
-  ]);
-  const STEPS = ["Build", "Tests", "Sandbox", "Shadow run", "Live"];
-  const at = (stage: string) =>
-    stage.startsWith("Live") ? 4 : stage.startsWith("Shadow") ? 3 : 2;
+  import { RISK, STEPS, apps } from "$lib/apps/apps.svelte";
 </script>
 
 <div class="flex flex-col gap-6">
@@ -46,60 +20,39 @@
         something misbehaves.
       </p>
     </div>
-    <Switch
-      checked={safe}
-      onCheckedChange={(v) => {
-        safe = v;
-        workbench.notify(
-          v ? "Safe mode on: add-ons are off." : "Safe mode off.",
-        );
-      }}
-      aria-label="Safe mode"
-    />
+    <Switch bind:checked={apps.safe} aria-label="Safe mode" />
   </section>
 
-  {#each apps as a, i (a.name)}
-    <section
-      class={cn("solid-backing rounded-2xl border p-5", safe && "opacity-50")}
-    >
-      <div class="flex items-center gap-3">
-        <h3 class="text-lg font-semibold">{a.name}</h3>
-        <span class="text-muted-foreground">{a.kind} · {a.risk}</span>
+  <ul class="solid-backing flex flex-col rounded-2xl border">
+    {#each apps.all as a (a.id)}
+      <li
+        class={cn(
+          "flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-5 py-4 last:border-b-0",
+          (apps.safe || !a.on) && "opacity-55",
+        )}
+      >
+        <span class="min-w-56 flex-1">
+          <span class="block font-semibold">{a.name}</span>
+          <span class="text-muted-foreground text-sm"
+            >{RISK[a.risk].label} · {a.runsOn} · {a.budget}</span
+          >
+        </span>
+        <span class="text-muted-foreground w-44 text-sm"
+          >{a.health === "tripped" ? "Stopped itself" : STEPS[a.stage]}</span
+        >
+        <a
+          href={resolve("/apps")}
+          class="text-primary flex items-center gap-1"
+          onclick={() => (apps.selected = a.id)}
+          >Details<ArrowRight class="size-4" /></a
+        >
         <Switch
-          class="ml-auto"
-          checked={a.on && !safe}
-          disabled={safe}
-          onCheckedChange={(v) => (apps[i].on = v)}
+          checked={a.on && !apps.safe}
+          disabled={apps.safe}
+          onCheckedChange={(v) => apps.toggle(a.id, v)}
           aria-label={`Turn ${a.name} on`}
         />
-      </div>
-      <div class="mt-4 flex gap-1.5" aria-label={`Road to live: ${a.stage}`}>
-        {#each STEPS as s, k (s)}
-          <span class="flex-1">
-            <span
-              class={cn(
-                "block h-1.5 rounded-full",
-                k < at(a.stage)
-                  ? "bg-success"
-                  : k === at(a.stage)
-                    ? "bg-info"
-                    : "bg-muted",
-              )}
-            ></span>
-            <span class="text-muted-foreground mt-1 block text-sm">{s}</span>
-          </span>
-        {/each}
-      </div>
-      <dl class="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-[10rem_1fr]">
-        <dt class="text-muted-foreground">Stage</dt>
-        <dd>{a.stage}</dd>
-        <dt class="text-muted-foreground">Runs in</dt>
-        <dd>{a.runs}</dd>
-        <dt class="text-muted-foreground">Budget</dt>
-        <dd>{a.budget}</dd>
-        <dt class="text-muted-foreground">May do</dt>
-        <dd class="font-mono text-sm">{a.ops.join(", ")}</dd>
-      </dl>
-    </section>
-  {/each}
+      </li>
+    {/each}
+  </ul>
 </div>

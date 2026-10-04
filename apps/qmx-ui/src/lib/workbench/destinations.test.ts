@@ -9,6 +9,7 @@ describe("platform rail destinations", () => {
       "library",
       "lab",
       "portfolio",
+      "apps",
     ]);
   });
 

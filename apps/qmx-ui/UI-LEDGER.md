@@ -219,3 +219,18 @@ Ruling that drove these (09:50): the copilot "references were a bit poor", text 
 - [x] Settings regroup (56036fcc). Sections for exchange accounts, servers, connections (providers, MCP), copilots, mini apps and safety. Committed without a visual check.
 - [x] Fixes (8ef175ad). Settings checked with screenshots at 1600 and 1280 wide: no overflow, no console errors; its cards now sit on a solid backing over the art. Pixel font sizes (9 to 17px) replaced with rem so the Text size setting scales them. New-errand screen has no greeting: errands waiting on you, then templates. Blank errands no longer pile up under Earlier; New errand reuses a blank one. Model providers: Claude through your plan (CLI), Anthropic API, OpenAI, Gemini, OpenRouter, local (demo, no calls).
 - [ ] Next: present the desk to him and take his verdict; check Home and Settings against the rulings; then Mini apps, the start-up screen, day one with no demo data.
+- [x] Pod cards (6a50bc28): the sparkline had no size and drew over the equity figure on Home and Portfolio; fixed.
+
+### 2026-10-04, later: Mini apps pass 1 (awaiting operator review)
+
+Design intent (our own): judge an app the way you judge a pod, by what it can touch and how far it has got on its road to live, never by how it was built.
+
+- [x] New rail place **Apps** (/apps). Bands: Live, Proving itself (tests, sandbox on recorded data, shadow run on live data nothing uses), Being built. Each card: health dot, risk class (Shows things / Runs work / Touches money), a five-step track and one line on where it stands. A tripped app sorts first with a red border.
+- [x] Detail pane per app: risk class and its go-live rule; "It stopped itself" with Restart and Ask the copilot why when the circuit breaker trips; road to live with what each step proved (evidence, not logs); what it gives you, what it feeds, its schedule; its box (where it runs, budget used today, network allow-list, circuit breaker, operations it may call); last log lines; Open it / Run now / Pause / Ask the copilot / Remove.
+- [x] Eight demo apps covering every case: news and sentiment, a screener, a weekend watcher (headless), exchange status (tripped), market mood (shadow run), whale alerts (sandbox), a DCA proposer (touches money, failing tests), a correlation map (built overnight).
+- [x] New app: describe it to the copilot, make it from widgets (pick Home and Portfolio widgets, name it, it opens at once on the tile board and starts at Build), or one of eight templates.
+- [x] An app's own screen (/apps/<id>) on the same tile board, with Edit layout and + Widget; "Not live yet" banner until it reaches Live.
+- [x] Safe mode on the Apps screen and in Settings share one switch; Settings, Mini apps now reads the same list. Research demo app retired.
+- [x] Checked by click-through at 1600 and 1280 (select, tripped app, money app, make from widgets, open app, Settings): no overflow, no console errors.
+- [ ] Not done: Lab panels as widgets; opened apps on the rail; extensions (in-app code) as a third kind; real runs, logs and evidence (backend, contract sections 4-6).
+

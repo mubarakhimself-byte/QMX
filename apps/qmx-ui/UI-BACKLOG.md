@@ -262,11 +262,13 @@ DONE
 
 ## Mini apps
 
+Pass 1 built 2026-10-04 (Apps screen, see UI-LEDGER.md), awaiting operator review. Items below marked BUILT are addressed, not ticked.
+
 NOT DONE
-- [NOT DONE] Many more mini apps (news and sentiment, and others); three kinds: remix screens, headless apps, extensions. — (2026-10-03, "we can have way more mini-apps") — Backlog line, nothing built.
-- [NOT DONE] Retire the Research demo mini app. — (2026-10-03, "this research mini app is very useless now") — Still on the rail in demo mode (lib/workbench/workbench.svelte.ts:32; routes/apps/demo-research/+page.svelte).
-- [NOT DONE] Show how mini apps are made and rendered, including building a variant from widgets taken from Portfolio or the Lab. — (2026-10-03, "combine certain functionalities from portfolio and then ... create a mini app") — No flow. He asked the agent to help him think this through.
-- [NOT DONE] Headless mini apps and workflows: how they are presented and run in the UI. — (2026-10-02, "mini apps and workflows that don't use the front end") — Only the Operations tab in the Library; no run surface.
+- [BUILT, awaiting review] Many more mini apps (news and sentiment, and others); three kinds: remix screens, headless apps, extensions. — (2026-10-03, "we can have way more mini-apps") — Backlog line, nothing built.
+- [DONE] Retire the Research demo mini app. — (2026-10-03, "this research mini app is very useless now") — Still on the rail in demo mode (lib/workbench/workbench.svelte.ts:32; routes/apps/demo-research/+page.svelte).
+- [BUILT, awaiting review: Home and Portfolio widgets only, Lab not yet] Show how mini apps are made and rendered, including building a variant from widgets taken from Portfolio or the Lab. — (2026-10-03, "combine certain functionalities from portfolio and then ... create a mini app") — No flow. He asked the agent to help him think this through.
+- [BUILT, awaiting review: Run now, Pause, schedule, log, circuit breaker] Headless mini apps and workflows: how they are presented and run in the UI. — (2026-10-02, "mini apps and workflows that don't use the front end") — Only the Operations tab in the Library; no run surface.
 - [NOT DONE] News and sentiment workflow shipped as a template. — (2026-10-03, "one of the workflows we should have as a template is one for news") — Portfolio events panel has an "Add a source or a news workflow" button that only shows a message (lib/portfolio/panels/EventsPanel.svelte:101).
 
 PARTLY
