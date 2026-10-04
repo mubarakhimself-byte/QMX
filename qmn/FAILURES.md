@@ -1438,3 +1438,51 @@ designed failure; every typed refusal the node can emit belongs here.
   pinned inputs. Inspect `read_failure_detail` on the evidence channel, correct
   the registered reference or protocol pin, then restart. Do not treat the
   stand-down supervisor as a loaded or active trading composition.
+
+### FR-80: Configured host profile or closed callback refused
+
+- **Failure class:** unavailable dependency / invalid input / policy rejection
+- **Detection:** the v2 descriptor does not match its independent fp1 pin
+  (`configured_runtime.host_profile_identity_mismatch`); v1 has no host profile
+  (`configured_runtime.host_profile_missing`); the requested profile is absent
+  from the closed registry (`configured_runtime.host_profile_unregistered`);
+  its authority citations differ from the checked registered/activation records
+  (`configured_runtime.host_profile_authority_mismatch`); its logic fp1 or source
+  manifest differs from CT-33 (`configured_runtime.host_profile_logic_mismatch`);
+  its callback is unregistered (`configured_runtime.callback_unregistered`),
+  installed FunctionFactory source cannot be located
+  (`configured_runtime.callback_implementation_missing`), or the callback source
+  is not the exact registered no-intent offline implementation
+  (`configured_runtime.callback_logic_unregistered`).
+- **Auto-recovery / retry:** none - correct and independently pin the descriptor
+  through the operator configuration path; supply the registered implementation
+  and matching CT-33 identity, then rerun `node-config-validate`. Arbitrary module
+  imports, callbacks, profile substitutions and LIVE resource production are not
+  recovery actions.
+- **Visible degraded state:** profile/factory resolution refuses. Configured
+  startup remains in stand-down with provider readiness and activation closed;
+  the built-in replay conformance profile supplies no LIVE resource producer.
+- **Notification tier:** operator-visible (journaled).
+- **Product-user affordance:** Inspect `read_failure_detail`, correct the pinned
+  profile and registered callback identity, then rerun `node-config-validate`.
+  A valid offline profile is not permission to activate or connect a provider.
+
+### FR-81: Configured admission page lacks derived binding evidence
+
+- **Failure class:** unavailable dependency / policy rejection
+- **Detection:** admission artifacts cannot derive a typed CT-27 fingerprint
+  (`configured_runtime.admission_page_bms_missing`) or checked CT-28 capability
+  satisfaction (`configured_runtime.admission_page_capabilities_missing`) from
+  shakedown evidence. The resolved CT-27 lacks a `control_rank_table` section
+  (`configured_runtime.admission_rank_table_missing`) or that section fails to
+  rank every CT-30 control-action kind
+  (`configured_runtime.admission_rank_table_incomplete`).
+- **Auto-recovery / retry:** none - correct the authoritative CT-27/CT-28 records
+  and regenerate checked shakedown/admission evidence. Do not invent ranks,
+  capability satisfaction or signature-page authority to complete an artifact.
+- **Visible degraded state:** artifact/page derivation refuses. Incomplete
+  admission evidence cannot grant activation or provider readiness.
+- **Notification tier:** operator-visible (journaled).
+- **Product-user affordance:** Inspect `read_failure_detail` and correct the
+  authoritative binding and control-rank evidence before regenerating the
+  admission page. Keep incomplete evidence and stand-down visible.
