@@ -15,13 +15,16 @@ import threading
 import uuid
 from collections.abc import Callable, Generator, Mapping
 from dataclasses import asdict, replace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from .tool_loop import ToolBinding
 
 from qma.core.vocabulary.enums import GrantEvaluationMoment
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.sessions.grant_binding import BoundSessionGrant
 from qma.daemon.sessions.product_session import ProductSessionService
-from qma.wire.invocation_envelope import parse_invocation_envelope
+from qma.wire.invocation_envelope import BoundInvocation, parse_invocation_envelope
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
@@ -35,6 +38,13 @@ from .contracts import (
     RequestSpec,
     RequestStatus,
 )
+from .providers import ProviderCancelled, ProviderError
+
+
+def _require_mapping(value: object) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise ProviderError("outcome_unknown", "Tool result violated its host contract")
+    return cast("Mapping[str, object]", value)
 
 
 def _nonempty_text(value: object) -> bool:
@@ -125,6 +135,9 @@ class RequestRuntime:
         self.acceptance_binding = acceptance_binding
         self.submission_admission: Callable[[RequestRecord], Result[RequestRecord]] | None = None
         self.lifecycle_admission: Callable[[str, RequestRecord], Result[None]] | None = None
+        self.tool_binding_admission: (
+            Callable[[RequestRecord, str, ToolBinding], Result[None]] | None
+        ) = None
         self.outcome_observation: Callable[[RequestRecord], Result[None]] | None = None
         self.canonical_projection: (
             Callable[[RequestRecord], Result[dict[str, Any] | None]] | None
@@ -708,7 +721,35 @@ class RequestRuntime:
                 return bound
             return self._persist(replace(row, status="queued", result=None, error=None))
 
-    def dispatch_tool(self, request_id: str, **kwargs: object) -> Result[BoundSessionGrant]:
+    def validate_tool_binding(
+        self, request_id: str, name: str, binding: ToolBinding
+    ) -> Result[None]:
+        """Check the actual resolved callback before exposing it to a joined child."""
+        with self._lock:
+            loaded = self.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
+            if not row.spec.canonical_join_required:
+                return Ok(None)
+            if row.status != "running" or self.tool_binding_admission is None:
+                return policy_rejection(
+                    "canonical_tool", "active original callback authority required"
+                )
+            authority = self._admit_lifecycle("tool", row)
+            if is_refusal(authority):
+                return authority
+            return self.tool_binding_admission(row, name, binding)
+
+    def dispatch_tool(
+        self,
+        request_id: str,
+        *,
+        tool_name: str | None = None,
+        tool_binding: ToolBinding | None = None,
+        tool_results: list[Mapping[str, object]] | None = None,
+        **kwargs: object,
+    ) -> Result[BoundSessionGrant]:
         """Host-only seam: grants/envelopes remain owned by ProductSessionService.
 
         The bounded ToolLoopProvider resolves model tool intents through this
@@ -722,6 +763,14 @@ class RequestRuntime:
             row = loaded.value
             if row.status != "running":
                 return policy_rejection("request_state", "tool dispatch requires an active turn")
+            if row.spec.canonical_join_required:
+                if self.tool_binding_admission is None or tool_name is None or tool_binding is None:
+                    return policy_rejection(
+                        "canonical_tool", "actual host callback binding required"
+                    )
+                checked = self.tool_binding_admission(row, tool_name, tool_binding)
+                if is_refusal(checked):
+                    return checked
             canonical = self._admit_lifecycle("tool", row)
             if is_refusal(canonical):
                 return canonical
@@ -751,6 +800,75 @@ class RequestRuntime:
                 or envelope.value.callee_session_ref is not None
             ):
                 return policy_rejection("tool_scope", "cross-session tool dispatch is not enabled")
+            if tool_binding is not None:
+                # A checked binding is the complete execution authority. Never
+                # let a caller substitute an executor or independently describe
+                # a different operation after presenting a permitted decoy.
+                if "execute" in kwargs:
+                    return policy_rejection("tool_scope", "binding owns the callback executor")
+                env = envelope.value
+                descriptor = tool_binding.descriptor
+                if (
+                    env.op_id != descriptor.op_id
+                    or env.op_version != descriptor.version
+                    or env.contribution.qualified_id != tool_binding.contribution.qualified_id
+                    or env.contribution.package_version != tool_binding.contribution.package_version
+                    or env.instance_id != tool_binding.instance.instance_id
+                    or env.config_revision != tool_binding.instance.config_revision
+                    or env.grant_id != tool_binding.grant_id
+                    or env.effect_class != descriptor.effect_class
+                    or env.caller_kind.value != "agent"
+                    or env.call_depth != 0
+                    or env.parent_logical_invocation_id is not None
+                ):
+                    return policy_rejection("tool_scope", "envelope differs from checked binding")
+                authority: dict[str, object] = {
+                    "contributions": {
+                        tool_binding.contribution.as_tuple(): tool_binding.contribution
+                    },
+                    "descriptors": {(descriptor.op_id, descriptor.version): descriptor},
+                    "instances": {
+                        (
+                            tool_binding.instance.instance_id,
+                            tool_binding.instance.config_revision,
+                        ): tool_binding.instance
+                    },
+                }
+                for key, expected in authority.items():
+                    if key in kwargs and kwargs[key] != expected:
+                        return policy_rejection(
+                            "tool_scope", "authority differs from checked binding"
+                        )
+                    kwargs[key] = expected
+
+                def execute(invocation: BoundInvocation) -> None:
+                    if token.is_set():
+                        raise ProviderCancelled()
+                    if set(invocation.validated_payload) - set(
+                        invocation.grant.parameter_ceiling.allow_keys
+                    ):
+                        raise ProviderError(
+                            "tool_denied", "Arguments exceed the bound grant ceiling"
+                        )
+                    try:
+                        output: object = tool_binding.execute(invocation.validated_payload)
+                    except ProviderCancelled:
+                        raise
+                    except ProviderError as exc:
+                        if exc.code == "tool_denied":
+                            raise
+                        raise ProviderError(
+                            "outcome_unknown", "Host tool outcome requires reconciliation"
+                        ) from exc
+                    except Exception as exc:
+                        raise ProviderError(
+                            "outcome_unknown", "Host tool outcome requires reconciliation"
+                        ) from exc
+                    result = _require_mapping(output)
+                    if tool_results is not None:
+                        tool_results.append(result)
+
+                kwargs["execute"] = execute
             dispatch = cast(
                 "Callable[..., Result[BoundSessionGrant]]",
                 self.product_sessions.dispatch_public_call,

@@ -60,15 +60,44 @@ and recovery facade must prove prior reconciliation before relaxing this fence.
 Nested public operations retain one independently admitted nested Mission,
 TaskGraph and JobHandle rather than merging live graphs.
 
-Joined v1 routes are explicitly tool-free. Behavioral aliases are not canonical
-qualified tool IDs; legacy toolset expansion can contain those aliases without
-establishing Agent permissions. Nonempty joined routes therefore refuse before
-inference. A separate host-owned bridge must resolve an actual callback binding
-to an already admitted available ToolRecord, pin its descriptor/target/grant/scope,
-and check both frozen Agent tools and permissions before admission and use.
-The existing research-corpus search tool is not metadata browse. This candidate
-does not register a browse tool, relabel search or invent a mapping from aliases.
-Existing unjoined read workflows retain their ProductSession grant checks.
+The reviewed v1 checkpoint was tool-free because aliases and legacy toolset
+expansion did not establish a qualified callback or an Agent permission ceiling.
+The bounded v2 host-binding increment replaces that refusal only for explicitly
+installed matching callbacks. A trusted metadata-browse startup manifest may
+select `canonical_tool_id` for an already registered ToolRecord. Its concrete
+factory seals the callback with host adapter `qma.research-metadata-browse` revision
+1. Model output and behavioral catalog names do not populate that identity.
+The source builder revision must advance when callback semantics change.
+
+Admission resolves the candidate RequestSpec without inserting a temporary row.
+It requires exact registry schema keys and compatible act, current availability,
+qualified membership in the actual frozen Agent tools, descriptor permission
+requests within the frozen Agent permissions, and one matching live ProductSession
+grant. Accepted internal receipts use version 2 for tool-equipped joins and pin
+aliases, adapter revision, complete descriptor/registry/instance JSON, contribution,
+grant bytes digest, source identity, snapshot and locator scope. Nullable metadata
+is retained inside canonical JSON strings because journal identity maps omit null.
+Tool-free version 1 receipts remain readable. Neither receipt is a new wire contract.
+
+The actual resolved binding is checked before exposing tools to a joined child,
+then the executor's captured binding is checked before existing grant dispatch.
+Continuation resolves and compares the full alias set, including an empty set;
+colliding qualified callback identities refuse. The live callable seal prevents a
+replacement callback from retaining another callback's identity. Pins remain in
+the journal across restart; no process callback address is persisted. Grant
+acceptance, cancellation responsiveness and accepted-operation completion semantics
+stay with the existing ProductSession dispatcher. Registry availability or a host
+manifest never creates a tool or grant.
+
+The concrete installed family remains `qml.research.browse` read-only metadata
+browse, with `library.read`, over retained CorpusSnapshot metadata. The host must
+register and explicitly select a compatible browse ToolRecord; this increment
+registers none and does not select a production provider. The existing research
+corpus search tool is not metadata browse and is never relabeled. Unsupported or
+unpinned callbacks continue to refuse joined admission. Bounded child roles retain
+their narrower alias set and validated argument ceiling. Unjoined workflows keep
+their existing ProductSession ownership. Detailed startup example and exact limits
+are in `_docwork/canonical-host-binding-v2.md`.
 
 ## Certainty, cancellation and recovery
 

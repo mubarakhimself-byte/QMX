@@ -14,6 +14,7 @@ from dataclasses import replace
 from typing import cast
 
 from qma.core.operations import public_operation_descriptors
+from qma.core.vocabulary.enums import GrantEvaluationMoment
 from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.knowledge.service import KnowledgeService
 from qma.wire.invocation_envelope import ContributionRecord, InstanceRecord
@@ -26,12 +27,13 @@ from .contracts import (
     ProviderEvent,
     ProviderRequest,
     ProviderResult,
+    RequestSpec,
 )
 from .native_configuration import NativeProviderConfiguration
 from .providers import ProviderError
 from .research_workflow import ResearchWorkflowProvider, RetainedCorpus, SpecialistDefinition
 from .service import RequestRuntime
-from .tool_loop import LoopLimits, ToolBinding, ToolLoopProvider
+from .tool_loop import HostCallbackIdentity, LoopLimits, ToolBinding, ToolLoopProvider
 
 
 def create_research_browse_binding(
@@ -43,6 +45,7 @@ def create_research_browse_binding(
     contribution: ContributionRecord,
     instance: InstanceRecord,
     grant_id: str,
+    canonical_tool_id: str | None = None,
 ) -> ToolBinding:
     """Pin existing source bytes and fail closed on any host manifest mismatch.
 
@@ -93,6 +96,10 @@ def create_research_browse_binding(
         grant_id,
         browse,
         (("snapshot_ref", snapshot.id), ("locator", tuple(sorted(permitted)))),
+        HostCallbackIdentity(canonical_tool_id, "qma.research-metadata-browse", 1, browse)
+        if canonical_tool_id is not None
+        else None,
+        (("source_id", source_id),),
     )
 
 
@@ -116,8 +123,10 @@ class _SessionScopedBinding:
         research_workflow: Mapping[str, object] | None = None,
         hooks: HookRegistry | None = None,
         agent_extensions: AgentExtensions | None = None,
+        canonical_tool_id: str | None = None,
     ) -> None:
         self.hooks = hooks
+        self.canonical_tool_id = canonical_tool_id
         self.agent_extensions = agent_extensions
         self.runtime = runtime
         self.provider = provider
@@ -136,7 +145,10 @@ class _SessionScopedBinding:
         loaded = self.runtime.get(request.request_id)
         if is_refusal(loaded):
             raise ProviderError("tool_denied", "Request is not bound to host authority")
-        spec = loaded.value.spec
+        return self.binding_for_spec(loaded.value.spec)
+
+    def binding_for_spec(self, spec: RequestSpec) -> ToolBinding:
+        """Resolve a candidate before persistence and the same target at execution."""
         target = self.target_resolver(spec.product_session_id)
         records = self.runtime.product_sessions.granted_records(spec.product_session_id)
         if is_refusal(target) or is_refusal(records):
@@ -151,6 +163,11 @@ class _SessionScopedBinding:
             and grant.contribution.package_version == contribution.package_version
             and grant.instance_id == instance.instance_id
             and grant.config_revision == instance.config_revision
+            and not is_refusal(
+                self.runtime.product_sessions.ledger.evaluate(
+                    grant_id=grant.grant_id, moment=GrantEvaluationMoment.ACCEPT, now=self.now()
+                )
+            )
         ]
         if len(grants) != 1:
             raise ProviderError("tool_denied", "Exactly one matching session grant is required")
@@ -163,6 +180,7 @@ class _SessionScopedBinding:
                 contribution=contribution,
                 instance=instance,
                 grant_id=grants[0].grant_id,
+                canonical_tool_id=self.canonical_tool_id,
             )
         except ValueError as exc:
             raise ProviderError("tool_denied", "Configured corpus pin is unavailable") from exc
@@ -174,7 +192,13 @@ class _SessionScopedBinding:
                 raise ProviderError("tool_denied", "Current target changed before dispatch")
             return original_execute(arguments)
 
-        return replace(binding, execute=current_read)
+        return replace(
+            binding,
+            execute=current_read,
+            host_identity=replace(binding.host_identity, execute=current_read)
+            if binding.host_identity is not None
+            else None,
+        )
 
 
 class _SessionScopedTools(_SessionScopedBinding):
@@ -367,6 +391,11 @@ def bind_daemon_tool_providers(
                 for name, provider in providers.items()
             }
         )
+    canonical_tool_id = research_browse.get("canonical_tool_id")
+    if canonical_tool_id is not None and (
+        not isinstance(canonical_tool_id, str) or ":" not in canonical_tool_id
+    ):
+        return invalid_input("canonical_tool_id", "qualified trusted host tool identity required")
     source = research_browse.get("source_id")
     snapshot = research_browse.get("snapshot_ref")
     locators = research_browse.get("allowed_locators")
@@ -403,6 +432,7 @@ def bind_daemon_tool_providers(
                 research_workflow,
                 hooks,
                 agent_extensions,
+                canonical_tool_id,
             )
             for name, provider in providers.items()
         }

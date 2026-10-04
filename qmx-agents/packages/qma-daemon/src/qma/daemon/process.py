@@ -1347,9 +1347,11 @@ class DaemonProcess:
                     agents=self.agent_capabilities,
                     mailboxes=self.mailboxes,
                     jobs=self.jobs,
+                    tools=self.backtesting.tools,
                 )
                 runtime.submission_admission = canonical.accept
                 runtime.lifecycle_admission = canonical.guard
+                runtime.tool_binding_admission = canonical.guard_binding
                 runtime.outcome_observation = canonical.observe
                 runtime.canonical_projection = canonical.projection
                 self.jobs.cancel_admission = canonical.allow_canonical_cancel

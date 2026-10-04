@@ -14,11 +14,12 @@ from typing import Any
 
 from qma.core.ontology import ActorId, Agent
 from qma.core.ports.jobs import JobHandle
-from qma.core.vocabulary.enums import JobHandleState, TaskMissionState
+from qma.core.vocabulary.enums import GrantEvaluationMoment, JobHandleState, TaskMissionState
 from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.capabilities.spawn import AgentCapabilityStore
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
+from qma.daemon.tools.registry import ToolRegistry
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import policy_rejection
 
@@ -27,6 +28,7 @@ from .actor_workflow import ActorWorkflowProvider
 from .contracts import RequestRecord
 from .providers import ProviderError
 from .service import RequestRuntime
+from .tool_loop import ToolBinding
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +64,13 @@ class CanonicalRequestJoin:
         agents: AgentCapabilityStore,
         mailboxes: MailboxStore,
         jobs: JobHandleService,
+        tools: ToolRegistry | None = None,
     ) -> None:
         if len({p.profile_id for p in plans}) != len(plans):
             raise ValueError("one canonical join plan per behavioral profile")
         self.runtime, self.dispatcher, self.agents = runtime, dispatcher, agents
         self.mailboxes, self.jobs = mailboxes, jobs
+        self.tools = tools
         self.plans = {p.profile_id: p for p in plans}
         for plan in plans:
             registered = self._register(plan)
@@ -233,15 +237,17 @@ class CanonicalRequestJoin:
                 r.profile_id == plan.profile_id and r.actor_id == plan.behavioral_actor_id
                 for r in provider.routes
             )
-            or any(r.tools for r in provider.routes if r.profile_id == plan.profile_id)
         ):
             return policy_rejection(
                 "canonical_agent",
-                "joined tool routes require an admitted qualified binding and permission bridge; "
-                "bounded v1 accepts tool-free routes only",
+                "one exact host actor route must resolve",
             )
+        pins = self._tool_pins(row, provider, agent)
+        if is_refusal(pins):
+            return pins
         return Ok(
             {
+                "tool_bindings": pins.value,
                 "canonical_owner": task.owner.value,
                 "execution_agent_id": agent.id,
                 "agent_session_ref": agent.session_id,
@@ -259,6 +265,150 @@ class CanonicalRequestJoin:
                 ),
             }
         )
+
+    def _binding_pin(
+        self,
+        row: RequestRecord,
+        provider: ActorWorkflowProvider,
+        agent: Agent,
+        binding: ToolBinding,
+    ) -> Result[dict[str, Any]]:
+        identity = binding.host_identity
+        if identity is None or binding.execute is not identity.execute or self.tools is None:
+            return policy_rejection("canonical_tool", "versioned actual host callback required")
+        record = self.tools.get(identity.tool_id)
+        if record is None or identity.tool_id not in agent.effective_tool_ids:
+            return policy_rejection("canonical_tool", "registered qualified tool is outside Agent")
+        if not set(binding.descriptor.permission_requests) <= agent.effective_permissions:
+            return policy_rejection(
+                "canonical_permission", "operation exceeds frozen Agent permissions"
+            )
+        try:
+            available = self.tools.is_available(identity.tool_id)
+        except Exception:
+            available = False
+        expected_schema = {
+            "required_keys": list(binding.descriptor.configuration.required_keys),
+            "optional_keys": list(binding.descriptor.configuration.optional_keys),
+        }
+        if (
+            not available
+            or record.schema != expected_schema
+            or binding.descriptor.op_id not in record.acts
+        ):
+            return policy_rejection(
+                "canonical_tool", "available registry schema and act must match callback"
+            )
+        with self.runtime.product_sessions.authority_lock:
+            granted = self.runtime.product_sessions.resolve_grant(
+                row.spec.product_session_id, binding.grant_id
+            )
+            live = self.runtime.product_sessions.ledger.evaluate(
+                grant_id=binding.grant_id, moment=GrantEvaluationMoment.ACCEPT, now=provider.now()
+            )
+            if is_refusal(granted) or is_refusal(live):
+                return policy_rejection("canonical_grant", "current session grant is required")
+            grant = granted.value
+            if (
+                grant.principal != row.spec.principal
+                or grant.contribution.qualified_id != binding.contribution.qualified_id
+                or grant.contribution.package_version != binding.contribution.package_version
+                or grant.instance_id != binding.instance.instance_id
+                or grant.config_revision != binding.instance.config_revision
+                or grant.op_id != binding.descriptor.op_id
+                or grant.op_version != binding.descriptor.version
+                or grant.effect_class != binding.descriptor.effect_class
+            ):
+                return policy_rejection(
+                    "canonical_grant", "grant must authorize exact callback target"
+                )
+            grant_bytes = grant.canonical_bytes()
+            if is_refusal(grant_bytes):
+                return grant_bytes
+        return Ok(
+            {
+                "binding_version": 1,
+                "canonical_tool_id": identity.tool_id,
+                "adapter_id": identity.adapter_id,
+                "adapter_revision": identity.revision,
+                "descriptor_json": json.dumps(
+                    dict(binding.descriptor.to_payload()), sort_keys=True
+                ),
+                "contribution": list(binding.contribution.as_tuple()),
+                "instance_json": json.dumps(asdict(binding.instance), sort_keys=True),
+                "grant_id": binding.grant_id,
+                "grant_sha256": hashlib.sha256(grant_bytes.value).hexdigest(),
+                "argument_scope": json.loads(json.dumps(binding.argument_scope)),
+                "resource_identity": dict(binding.resource_identity),
+                "registry_json": json.dumps(
+                    {
+                        "tool_id": record.tool_id,
+                        "kind": record.kind.value,
+                        "capability_rung": record.capability_rung.value,
+                        "plugin_id": record.plugin_id,
+                        "schema": dict(record.schema),
+                        "acts": sorted(record.acts),
+                        "tags": sorted(record.tags),
+                        "requires_environment_kind": record.requires_environment_kind,
+                        "money_path_act": record.money_path_act,
+                    },
+                    sort_keys=True,
+                ),
+            }
+        )
+
+    def _tool_pins(
+        self,
+        row: RequestRecord,
+        provider: ActorWorkflowProvider,
+        agent: Agent,
+    ) -> Result[dict[str, Any]]:
+        try:
+            bindings = provider.bindings_for_spec(row.spec)
+        except ProviderError, ValueError:
+            return policy_rejection("canonical_tool", "host binding resolver refused candidate")
+        pins: dict[str, Any] = {}
+        identities: set[str] = set()
+        for alias, binding in sorted(bindings.items()):
+            pinned = self._binding_pin(row, provider, agent, binding)
+            if is_refusal(pinned):
+                return pinned
+            identity = pinned.value["canonical_tool_id"]
+            if identity in identities:
+                return policy_rejection(
+                    "canonical_tool", "aliases cannot collide on qualified callback identity"
+                )
+            identities.add(identity)
+            pins[alias] = pinned.value
+        return Ok(pins)
+
+    def guard_binding(self, row: RequestRecord, alias: str, binding: ToolBinding) -> Result[None]:
+        """Check the binding captured by the executor, before grant dispatch.
+
+        This runs under runtime -> Job -> Task -> session order, never from
+        underneath the grant dispatcher's callback/permission lock. Work already
+        accepted by that dispatcher retains its existing completion semantics.
+        """
+        with (
+            self.runtime.completion_guard(),
+            self.jobs.store.atomic(),
+            self.dispatcher.authority_lock,
+        ):
+            accepted = self._accepted(row)
+            if accepted is None:
+                return policy_rejection("canonical_tool", "original binding receipt required")
+            provider = self.runtime.providers.get(row.spec.provider_id)
+            agent = self.agents.get(accepted["execution_agent_id"])
+            if not isinstance(provider, ActorWorkflowProvider) or not isinstance(agent, Agent):
+                return policy_rejection("canonical_tool", "original callback authority unavailable")
+            checked = self._binding_pin(row, provider, agent, binding)
+            if is_refusal(checked):
+                return checked
+            if accepted.get("tool_bindings", {}).get(alias) != checked.value:
+                return policy_rejection(
+                    "canonical_tool", "captured callback differs from accepted host pin"
+                )
+            return Ok(None)
 
     def accept(self, row: RequestRecord) -> Result[RequestRecord]:
         with (
@@ -309,7 +459,10 @@ class CanonicalRequestJoin:
                 if (
                     receipt["request_sha256"] != content_sha256
                     or receipt["context_binding"] != row.context_binding
-                    or any(receipt[k] != v for k, v in authority.value.items())
+                    or any(
+                        receipt.get(k, {} if k == "tool_bindings" else None) != v
+                        for k, v in authority.value.items()
+                    )
                 ):
                     return policy_rejection(
                         "canonical_task", "one logical Request per canonical Task attempt"
@@ -319,7 +472,7 @@ class CanonicalRequestJoin:
             if is_refusal(catalog):
                 return catalog
             body = {
-                "contract_version": 1,
+                "contract_version": 2 if authority.value["tool_bindings"] else 1,
                 "request_id": row.request_id,
                 "request_sha256": content_sha256,
                 "principal": plan.principal,
@@ -388,7 +541,10 @@ class CanonicalRequestJoin:
             if is_refusal(catalog):
                 return catalog
             if (
-                any(receipt[k] != v for k, v in current.value.items())
+                any(
+                    receipt.get(k, {} if k == "tool_bindings" else None) != v
+                    for k, v in current.value.items()
+                )
                 or catalog.value != receipt["catalog_sha256"]
             ):
                 return policy_rejection(
@@ -433,7 +589,8 @@ class CanonicalRequestJoin:
             )
             current = self._authority(row, original_plan)
             authority_lost = is_refusal(current) or any(
-                receipt[k] != v for k, v in current.value.items()
+                receipt.get(k, {} if k == "tool_bindings" else None) != v
+                for k, v in current.value.items()
             )
             if (
                 row.status == "interrupted"
@@ -552,6 +709,7 @@ class CanonicalRequestJoin:
                     )
                 }
                 | {
+                    "tool_bindings": receipt.get("tool_bindings", {}),
                     "canonical_state": "unknown" if handle is None else handle.state.value,
                     "request_status": row.status,
                     "certainty": certainty,

@@ -30,7 +30,6 @@ from langsmith.run_helpers import (
 )
 from qma.core.operations import OperationDescriptor
 from qma.wire.invocation_envelope import (
-    BoundInvocation,
     ContributionRecord,
     InstanceRecord,
     PublicCallTransport,
@@ -54,6 +53,26 @@ from .service import RequestRuntime
 
 
 @dataclass(frozen=True, slots=True)
+class HostCallbackIdentity:
+    """Host builder revision and live callback seal; never a model/catalog field.
+
+    Only the stable identity is persisted. The callable seal detects substitution
+    of a captured callback while avoiding process addresses in durable receipts.
+    """
+
+    tool_id: str
+    adapter_id: str
+    revision: int
+    execute: Callable[[Mapping[str, object]], Mapping[str, object]]
+
+    def __post_init__(self) -> None:
+        if ":" not in self.tool_id or not self.adapter_id.strip():
+            raise ValueError("qualified tool and explicit host adapter identity required")
+        if type(self.revision) is not int or self.revision < 1:
+            raise ValueError("positive host callback revision required")
+
+
+@dataclass(frozen=True, slots=True)
 class ToolBinding:
     """Trusted host configuration; never populated from model output.
 
@@ -68,6 +87,8 @@ class ToolBinding:
     grant_id: str
     execute: Callable[[Mapping[str, object]], Mapping[str, object]]
     argument_scope: tuple[tuple[str, str | tuple[str, ...]], ...] = ()
+    host_identity: HostCallbackIdentity | None = None
+    resource_identity: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.descriptor.effect_class != "read":
@@ -82,12 +103,6 @@ def _require_result(value: object) -> ProviderResult:
     if not isinstance(value, ProviderResult):
         raise ProviderError("invalid_action", "Provider returned an invalid result")
     return value
-
-
-def _require_mapping(value: object) -> Mapping[str, object]:
-    if not isinstance(value, Mapping):
-        raise ProviderError("outcome_unknown", "Tool result violated its host contract")
-    return cast("Mapping[str, object]", value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -641,37 +656,11 @@ class ToolLoopProvider:
         }
         captured: list[Mapping[str, object]] = []
 
-        def execute(
-            _bound: BoundInvocation,
-            *,
-            _binding: ToolBinding = binding,
-            _captured: list[Mapping[str, object]] = captured,
-        ) -> None:
-            if cancellation.is_set():
-                raise ProviderCancelled()
-            if set(_bound.validated_payload) - set(_bound.grant.parameter_ceiling.allow_keys):
-                raise ProviderError(
-                    "tool_denied", "Arguments exceed the bound parent grant ceiling"
-                )
-            try:
-                output: object = _binding.execute(_bound.validated_payload)
-            except ProviderCancelled:
-                raise
-            except ProviderError as exc:
-                if exc.code == "tool_denied":
-                    raise
-                raise ProviderError(
-                    "outcome_unknown", "Host tool outcome requires reconciliation"
-                ) from exc
-            except Exception as exc:
-                raise ProviderError(
-                    "outcome_unknown", "Host tool outcome requires reconciliation"
-                ) from exc
-            _captured.append(_require_mapping(output))
-
         emit(ProviderEvent("loop_tool_proposed", {"tool": name, "invocation_id": invocation}))
         admitted = self.runtime.dispatch_tool(
             request.request_id,
+            tool_name=name,
+            tool_binding=binding,
             transport=PublicCallTransport.IN_PROCESS,
             envelope=envelope,
             payload=arguments,
@@ -686,7 +675,7 @@ class ToolLoopProvider:
                     binding.instance.config_revision,
                 ): binding.instance
             },
-            execute=execute,
+            tool_results=captured,
         )
         if is_refusal(admitted):
             raise ProviderError("tool_denied", "Product session refused the tool operation")

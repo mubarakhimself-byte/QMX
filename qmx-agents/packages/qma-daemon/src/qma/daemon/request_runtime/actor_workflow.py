@@ -41,6 +41,7 @@ from .contracts import (
     ProviderEvent,
     ProviderRequest,
     ProviderResult,
+    RequestSpec,
 )
 from .daemon_bridge import AgentRequestPolicy
 from .durable_memory import ActorMemoryScope, DurableMemory, JournalMemoryProvider, MemorySource
@@ -75,6 +76,7 @@ class ActorWorkflowProvider:
         routes: tuple[ActorRoute, ...],
         tools: Callable[[ProviderRequest], Mapping[str, ToolBinding]],
         now: Callable[[], str],
+        admission_tools: Callable[[RequestSpec], Mapping[str, ToolBinding]] | None = None,
         extensions: AgentExtensions | None = None,
         hooks: HookRegistry | None = None,
     ) -> None:
@@ -83,7 +85,19 @@ class ActorWorkflowProvider:
         self.runtime, self.provider = runtime, provider
         self.catalog, self.routes, self.tools, self.now = catalog, routes, tools, now
         self.extensions, self.hooks = extensions, hooks
+        self.admission_tools = admission_tools
         self.capabilities = ProviderCapabilities(identity)
+
+    def bindings_for_spec(self, spec: RequestSpec) -> Mapping[str, ToolBinding]:
+        route = next(r for r in self.routes if r.profile_id == spec.profile.profile_id)
+        if not route.tools:
+            return {}
+        if self.admission_tools is None:
+            raise ProviderError("tool_denied", "Joined route has no host admission resolver")
+        bindings = self.admission_tools(spec)
+        if set(route.tools) - set(bindings):
+            raise ProviderError("tool_denied", "Required host callback is unavailable")
+        return {name: bindings[name] for name in route.tools}
 
     def execute(
         self,
@@ -139,6 +153,12 @@ class ActorWorkflowProvider:
         # The resolver revalidates independently available resources. It creates
         # no grant; every actual dispatch still runs ProductSession invocation.
         tools = {name: bindings[name] for name in needed}
+        for name, binding in tools.items():
+            checked = self.runtime.validate_tool_binding(request.request_id, name, binding)
+            if is_refusal(checked):
+                raise ProviderError(
+                    "tool_denied", "Actual host callback differs from admitted authority"
+                )
         gateway.tools = tools
         gateway.profile_tools = {route.profile_id: frozenset(route.tools)}
 
@@ -367,6 +387,11 @@ def bind_actor_workflows(
         ) -> Mapping[str, ToolBinding]:
             return {"research_browse": adapter._binding(request)}
 
+        def resolve_spec(
+            spec: RequestSpec, adapter: Any = wrapped[alias]
+        ) -> Mapping[str, ToolBinding]:
+            return {"research_browse": adapter.binding_for_spec(spec)}
+
         bound_providers[identity] = ActorWorkflowProvider(
             runtime,
             providers[alias],
@@ -374,6 +399,7 @@ def bind_actor_workflows(
             catalog=catalog,
             routes=routes,
             tools=resolve,
+            admission_tools=resolve_spec,
             now=now,
             extensions=extensions,
             hooks=hooks,
