@@ -281,9 +281,9 @@ def test_memory_isolates_actor_and_application_and_obeys_host_write_hook(tmp_pat
         first = value(runtime.execute(submit(runtime)))
         events = value(journal.read_events())
         body = next(
-            json.loads(str(e.payload["body"]))
+            json.loads(str(e.payload["body"]))["revisions"][-1]
             for e in events
-            if e.event == "agent_graph.record" and e.payload.get("kind") == "memory"
+            if e.event == "agent_graph.record" and e.payload.get("kind") == "typed_memory"
         )
         assert body["provenance"]["request_id"] == first.request_id
         scope = ResearchMemoryScope(

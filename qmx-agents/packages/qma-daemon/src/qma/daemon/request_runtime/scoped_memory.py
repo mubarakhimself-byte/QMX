@@ -1,25 +1,23 @@
-"""Persistent research summaries behind QMX's existing memory admission gate.
+"""Research request facade over bounded typed durable memory.
 
-This bounded provider stores the latest admitted summary per host-derived scope.
-It is separate from invocation context and LangGraph checkpoints. LangMem may
-later propose extracted candidates through the same gate; it is not a storage
-or authorization substitute and no embedding/model service is enabled here.
+This scope belongs to the admitted application/profile/corpus. It is not a
+persistent actor identity. Actor memory uses explicit ActorMemoryScope instead.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
 from qma.core.ports.memory import MemoryCandidate, parse_memory_candidate
 from qma.core.vocabulary.enums import MemoryValidationState
 from qma.daemon.hooks.registry import HookRegistry
-from qma.daemon.memory.admission import MemoryAdmissionGate
-from qmf.core import Ok, Result, is_refusal
-from qmf.data.store.refusals import invalid_input, policy_rejection
+from qmf.core import is_refusal
 
+from .durable_memory import DurableMemory, JournalMemoryProvider, MemoryLimits, MemorySource
 from .graph_storage import JournalRecords
 from .providers import ProviderError
 
@@ -42,77 +40,8 @@ class ResearchMemoryScope:
         )
 
 
-class _JournalSummaryProvider:
-    """One exact scope, one latest summary; unsupported mutations fail closed."""
-
-    def __init__(self, records: JournalRecords, scope: str, validate: Callable[[], None]) -> None:
-        self.records = records
-        self.scope = scope
-        self.validate = validate
-
-    def propose(self, candidate: MemoryCandidate) -> Result[MemoryCandidate]:
-        return Ok(candidate)
-
-    def admit(self, candidate: MemoryCandidate) -> Result[MemoryCandidate]:
-        self.validate()
-        if (
-            candidate.scope != self.scope
-            or candidate.validation_state != MemoryValidationState.ADMITTED
-        ):
-            return policy_rejection(
-                "memory_scope", "Only gate-admitted memory in this scope is stored"
-            )
-        self.records.put("memory", self.scope, dict(candidate.to_payload()))
-        return Ok(candidate)
-
-    def recall(self, scope: str, token_budget: int) -> Result[tuple[MemoryCandidate, ...]]:
-        self.validate()
-        if scope != self.scope:
-            return policy_rejection("memory_scope", "Memory recall cannot retarget host authority")
-        body = self.records.get("memory", scope)
-        if body is None or token_budget <= 0:
-            return Ok(())
-        # Conservative UTF-8 byte bound, not a count of returned memories.
-        # No tokenizer or paid embedding service is needed for a bounded summary.
-        if len(json.dumps(body, ensure_ascii=False).encode("utf-8")) > token_budget:
-            return Ok(())
-        parsed = parse_memory_candidate(body)
-        if is_refusal(parsed):
-            return parsed
-        if parsed.value.validation_state != MemoryValidationState.ADMITTED:
-            return Ok(())
-        return Ok((parsed.value,))
-
-    def get(self, memory_id: str) -> Result[MemoryCandidate]:
-        recalled = self.recall(self.scope, 65_536)
-        if is_refusal(recalled):
-            return recalled
-        if recalled.value and recalled.value[0].id == memory_id:
-            return Ok(recalled.value[0])
-        return invalid_input("memory_id", "No admitted summary with this id in the host scope")
-
-    def list(self, scope: str) -> Result[tuple[MemoryCandidate, ...]]:
-        return self.recall(scope, 65_536)
-
-    def history(self, memory_id: str) -> Result[tuple[MemoryCandidate, ...]]:
-        return policy_rejection("memory_history", "Historical memory queries are not exposed here")
-
-    def supersede(self, memory_id: str, successor: MemoryCandidate) -> Result[MemoryCandidate]:
-        return policy_rejection("memory_supersede", "Explicit memory editing is not enabled here")
-
-    def invalidate(self, memory_id: str) -> Result[MemoryCandidate]:
-        return policy_rejection("memory_invalidate", "Explicit memory editing is not enabled here")
-
-    def expire(self, memory_id: str) -> Result[MemoryCandidate]:
-        return policy_rejection("memory_expire", "Explicit memory editing is not enabled here")
-
-    def scopes(self) -> Result[tuple[str, ...]]:
-        self.validate()
-        return Ok((self.scope,))
-
-
 class ScopedResearchMemory:
-    """Job-bound access to durable cross-job summaries with source provenance."""
+    """Keep the existing request API; supersession now preserves typed history."""
 
     def __init__(
         self,
@@ -122,25 +51,65 @@ class ScopedResearchMemory:
         *,
         hooks: HookRegistry | None = None,
         max_bytes: int = 8192,
+        now_ns: Callable[[], int] = time.time_ns,
     ) -> None:
-        self.scope = scope
-        self.max_bytes = max_bytes
-        self.gate = MemoryAdmissionGate(hooks=hooks)
-        bound = self.gate.bind(
-            "research", _JournalSummaryProvider(records, scope.namespace, validate)
+        self.scope, self.max_bytes = scope, max_bytes
+        self.records, self.validate = records, validate
+        self.provider = JournalMemoryProvider(
+            records,
+            scope.namespace,
+            MemorySource(
+                scope.source_id, scope.snapshot_ref, scope.locators, scope.authority_binding
+            ),
+            validate,
+            now_ns=now_ns,
+            limits=MemoryLimits(max_record_bytes=min(65536, max_bytes + 8192)),
         )
-        if is_refusal(bound):
-            raise ProviderError("memory_denied", "Research memory provider binding refused")
+        self.memory = DurableMemory(self.provider, hooks=hooks)
+        self.gate = self.memory.gate
 
     def recall(self) -> dict[str, object] | None:
-        recalled = self.gate.recall(
-            "research", scope=self.scope.namespace, token_budget=self.max_bytes
-        )
+        recalled = self.provider.search(memory_type="summary")
         if is_refusal(recalled):
             raise ProviderError("memory_denied", "Research memory recall refused")
-        if not recalled.value:
-            return None
-        return dict(recalled.value[-1].content)
+        for candidate in recalled.value:
+            body = dict(candidate.content)
+            # Preserve the workflow's summary field without duplicating text
+            # in the invocation's byte budget or canonical record.
+            body["summary"] = body.pop("text")
+            if len(json.dumps(body, ensure_ascii=False).encode("utf-8")) <= self.max_bytes:
+                self.provider.validate_selection((candidate,))
+                return body
+        # Read-only compatibility for previous exact-scope summaries. Once typed
+        # state exists, never fall back and resurrect invalidated memory.
+        with self.provider.lock:
+            self.validate()
+            if self.records.get("typed_memory", self.scope.namespace) is not None:
+                return None
+            legacy = self.records.get("memory", self.scope.namespace)
+            if (
+                legacy is None
+                or len(json.dumps(legacy, ensure_ascii=False).encode("utf-8")) > self.max_bytes
+            ):
+                return None
+            parsed = parse_memory_candidate(legacy)
+            if is_refusal(parsed):
+                raise ProviderError("storage_failure", "Invalid legacy research memory")
+            candidate = parsed.value
+            source = self.provider.source
+            if (
+                candidate.scope != self.scope.namespace
+                or candidate.validation_state != MemoryValidationState.ADMITTED
+                or not candidate.provenance
+                or any(
+                    candidate.provenance.get(key) != getattr(source, key)
+                    for key in ("source_id", "snapshot_ref", "authority_binding")
+                )
+                or candidate.provenance.get("locators") != list(source.locators)
+            ):
+                raise ProviderError("memory_denied", "Legacy memory is outside current host pins")
+            self.validate()
+            return dict(candidate.content)
 
     def retain(
         self,
@@ -151,28 +120,43 @@ class ScopedResearchMemory:
         occurrence_time: int,
         result_ref: str,
     ) -> None:
-        if len(summary.encode("utf-8")) > self.max_bytes // 2:
+        if not summary.strip() or len(summary.encode("utf-8")) > self.max_bytes // 2:
             raise ProviderError("loop_limit", "Research summary exceeds memory byte budget")
-        candidate = MemoryCandidate(
-            id=f"{request_id}:summary",
-            scope=self.scope.namespace,
-            proposer=specialist,
-            occurrence_time=occurrence_time,
-            provenance={
-                "request_id": request_id,
-                "source_id": self.scope.source_id,
-                "snapshot_ref": self.scope.snapshot_ref,
-                "locators": list(self.scope.locators),
-                "authority_binding": self.scope.authority_binding,
-                "summary_sha256": hashlib.sha256(summary.encode("utf-8")).hexdigest(),
-            },
-            supporting_artifacts=(result_ref,),
-            content={
-                "summary": summary,
-                "request_id": request_id,
-                "snapshot_ref": self.scope.snapshot_ref,
-            },
-        )
-        admitted = self.gate.admit("research", candidate)
-        if is_refusal(admitted):
-            raise ProviderError("memory_denied", "Research summary admission refused")
+        with self.provider.lock:
+            active = self.provider.search(memory_type="summary")
+            if is_refusal(active):
+                raise ProviderError("memory_denied", "Research memory predecessor lookup refused")
+            memory_id = f"{request_id}:summary"
+            # Freeze retry identity, including predecessor. An interrupted retain
+            # never recomputes supersession to point at itself or a newer job.
+            history = self.provider.history(memory_id)
+            if is_refusal(history):
+                raise ProviderError("memory_denied", "Research memory history refused")
+            prior = (
+                history.value[0].supersession
+                if history.value
+                else (active.value[0].id if active.value else None)
+            )
+            candidate = MemoryCandidate(
+                id=memory_id,
+                scope=self.scope.namespace,
+                proposer=specialist,
+                occurrence_time=occurrence_time,
+                supersession=prior,
+                provenance={
+                    "request_id": request_id,
+                    "source_id": self.scope.source_id,
+                    "snapshot_ref": self.scope.snapshot_ref,
+                    "locators": list(self.scope.locators),
+                    "authority_binding": self.scope.authority_binding,
+                    "summary_sha256": hashlib.sha256(summary.encode("utf-8")).hexdigest(),
+                },
+                supporting_artifacts=(result_ref,),
+                content={
+                    "memory_type": "summary",
+                    "text": summary,
+                    "request_id": request_id,
+                    "snapshot_ref": self.scope.snapshot_ref,
+                },
+            )
+            self.memory.admit(candidate)
