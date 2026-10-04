@@ -1,7 +1,7 @@
 name: QA Battery
 # Permanent CI for the QA battery (card FC-34; OR-10a/b, NFR-02 / AR-11). Three gates on top of
-# the separate Skylos gate (skylos.yml, deliberately left untouched):
-#   * check     - `uv run poe check` in full: the four Tier-1 static scanners (money-path float,
+# the separate Skylos gate (skylos.yml):
+#   * check     - the tasks in `poe check` as independently observed CI steps: the four Tier-1 static scanners (money-path float,
 #                 ambient-nondeterminism, mock-data, secret) plus fmt-check / lint / strict types /
 #                 tests + coverage / the workspace-tool suite.
 #   * vulture   - the dead-code finding count held at or below a committed baseline (ratchet DOWN,
@@ -11,18 +11,20 @@ name: QA Battery
 #                 sizing, virtual-ledger folds). Incomplete or failed runs fail closed.
 #                 Mutmut is not a factory gate.
 #
+# Independent steps continue after failures to retain test/scanner evidence; any
+# failed step still fails its job. Ubuntu and Windows run native backend suites.
 # Runner-side setup mirrors the workspace pins: CPython from .python-version (3.14, AR-04) and a
-# pinned uv, then `uv sync` for the default groups. Fail-closed throughout, the same discipline as
-# skylos.yml: a gate that cannot run reads RED, never clean. Action SHAs are the exact pins copied
-# from skylos.yml.
+# pinned uv, then `uv sync --frozen` for the default groups. A gate that cannot run reads RED.
+# Action SHAs are the Node 24 pins shared with skylos.yml.
 on:
   push:
-    branches: [integration]
+    branches: [main, integration]
+    tags: ['factory-candidate/**']
   pull_request:
     branches: [main, integration]
   schedule:
     # Nightly at 02:17 UTC drives the mutation job only. GitHub runs scheduled workflows on the
-    # default branch (main), which is exactly where the ratified exact.py / chrono.py live.
+    # default branch. This does not measure an unmerged candidate's mutation strength.
     - cron: "17 2 * * *"
 
 # Read-only; nothing here writes to the repo. Job artifacts need no token.
@@ -30,13 +32,18 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  backend:
     # The Tier-1 gate in full - the four scanners plus fmt/lint/types/tests/coverage. On every
-    # push to integration and every PR into main; not on the nightly schedule (that drives
+    # push to main/integration, candidate tags and PRs into either branch; not on schedule (that drives
     # mutation only).
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: ${{ matrix.runner == 'ubuntu-24.04' && 'backend-linux' || 'backend-windows' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -50,18 +57,59 @@ jobs:
       - name: Install uv (pinned)
         run: python -m pip install --disable-pip-version-check "uv==0.12.6"
       - name: Sync the workspace (default groups)
-        run: uv sync
-      - name: poe check (Tier-1 - four scanners + fmt/lint/types/tests/coverage)
-        run: uv run poe check
+        id: sync
+        run: uv sync --frozen
+      - name: Tier-1 fmt-check
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe fmt-check
+      - name: Tier-1 lint
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe lint
+      - name: Tier-1 types
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe types
+      - name: Tier-1 test
+        env:
+          COVERAGE_FILE: .coverage-backend
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe test
+      - name: Tier-1 cov-report
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe cov-report
+      - name: Tier-1 test-tools
+        env:
+          COVERAGE_FILE: .coverage-tools
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe test-tools
+      - name: Tier-1 money-path-scan
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe money-path-scan
+      - name: Tier-1 ambient-scan
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe ambient-scan
+      - name: Tier-1 mock-data-scan
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe mock-data-scan
+      - name: Tier-1 secret-scan
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe secret-scan
 
-  agents:
-    # Nested qmx-agents workspace. Name must match the required check on integration.
+  agent-suites:
+    # Nested qmx-agents workspace; the agents result job below preserves its check name.
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    name: ${{ matrix.runner == 'ubuntu-24.04' && 'agents-linux' || 'agents-windows' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     defaults:
       run:
+        shell: bash
         working-directory: qmx-agents
+    # The environment is independent of the parent workspace on both platforms.
+    # The matrix must complete on both runners before its result gate can succeed.
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -70,10 +118,28 @@ jobs:
         with:
           python-version-file: .python-version
       - run: python -m pip install --disable-pip-version-check "uv==0.12.6"
-      - name: Use an isolated uv environment
+      - name: Isolate the nested environment on the runner
         run: echo "UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/qmx-agents-venv" >> "$GITHUB_ENV"
-      - run: uv sync --frozen
-      - run: uv run poe check
+      - name: Sync the nested workspace
+        id: sync
+        run: uv sync --frozen
+      - name: Nested Tier-1 fmt-check
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe fmt-check
+      - name: Nested Tier-1 lint
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe lint
+      - name: Nested Tier-1 types
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe types
+      - name: Nested Tier-1 test
+        env:
+          COVERAGE_FILE: .coverage-agents
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe test
+      - name: Nested Tier-1 cov-report
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run --frozen poe cov-report
 
   vulture:
     # Dead-code ratchet: fail only if the finding count rises above the committed baseline.
@@ -99,7 +165,43 @@ jobs:
         run: >
           uv run --no-project --with "vulture==2.14" python tools/vulture_gate.py
           --baseline qa/_trace/battery/vulture/gate-baseline-min80.txt
-          --min-confidence 80 -- packages extensions qml qmb tools
+          --min-confidence 80 -- packages extensions qml qmb qmn tools
+
+  agents:
+    # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
+    if: ${{ always() && github.event_name != 'schedule' }}
+    needs: [agent-suites]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0; Node 24
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c  # v6.0.0; Node 24
+        with:
+          python-version-file: .python-version
+      - name: Require every mandatory suite to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python tools/readiness_gate.py agent-suites
+
+  check:
+    # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
+    if: ${{ always() && github.event_name != 'schedule' }}
+    needs: [backend, agent-suites, vulture]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0; Node 24
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c  # v6.0.0; Node 24
+        with:
+          python-version-file: .python-version
+      - name: Require every mandatory suite to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python tools/readiness_gate.py backend agent-suites vulture
 
   mutation-qmn:
     # Nightly mutation testing on the node money-path modules (Story 28.6 / AR-86).
@@ -121,9 +223,11 @@ jobs:
       - name: Install uv (pinned)
         run: python -m pip install --disable-pip-version-check "uv==0.12.6"
       - name: Sync the workspace (default groups)
-        run: uv sync
+        run: uv sync --frozen
       - name: Stage the node mutmut config into qmn (disposable checkout)
-        run: python tools/stage_mutation_config.py qmn/pyproject.toml qa/_trace/battery/mutmut/qmn_mutmut_config.toml
+        run: >
+          python tools/stage_mutation_config.py qmn/pyproject.toml
+          qa/_trace/battery/mutmut/qmn_mutmut_config.toml
       - name: Run mutmut on node money-path modules
         working-directory: qmn
         run: |
@@ -182,11 +286,13 @@ jobs:
       - name: Install uv (pinned)
         run: python -m pip install --disable-pip-version-check "uv==0.12.6"
       - name: Sync the workspace (default groups)
-        run: uv sync
+        run: uv sync --frozen
       - name: Stage the mutmut config into qmf-core (disposable checkout)
         # Translate the declarative scope into options supported by pinned mutmut 3.3.
         # Sibling sources are copied but not mutated. The checkout is disposable.
-        run: python tools/stage_mutation_config.py packages/qmf-core/pyproject.toml qa/_trace/battery/mutmut/mutmut_config.toml
+        run: >
+          python tools/stage_mutation_config.py packages/qmf-core/pyproject.toml
+          qa/_trace/battery/mutmut/mutmut_config.toml
       - name: Run mutmut
         working-directory: packages/qmf-core
         # mutmut 3.3 returns normally with survivors. Capture the actual exit status;

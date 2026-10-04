@@ -8,7 +8,8 @@ name: QMN ubuntu-24.04 lane
 # contract (systemd-analyze when available).
 on:
   push:
-    branches: [integration]
+    branches: [main, integration]
+    tags: ['factory-candidate/**']
   pull_request:
     branches: [main, integration]
 
@@ -34,7 +35,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check "uv==0.12.6"
 
       - name: Sync the workspace (default groups)
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Assert runner pin is ubuntu-24.04 (never latest)
         run: |
