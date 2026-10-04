@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -90,6 +91,8 @@ def test_supervisor_module_runs_stand_down_and_survives_restart(tmp_path: Path) 
         finally:
             process.terminate()
             _stdout, stderr = process.communicate(timeout=5)
+            # Windows terminate() calls TerminateProcess (forced code 1), while
+            # POSIX sends SIGTERM and exercises the supervisor's clean drain.
             assert process.returncode == (1 if os.name == "nt" else 0)
             assert stderr is not None and b"RuntimeWarning" not in stderr
 
@@ -124,6 +127,41 @@ def test_supervisor_fails_actionably_without_configured_directories(tmp_path: Pa
     )
     assert completed.returncode == 2
     assert "qmx_root" in completed.stderr
+
+
+def test_disconnected_status_clients_do_not_stall_supervisor(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    initial = assess_configured_runtime(valid_deployment(tmp_path), qmx_root=tmp_path)
+    assert is_ok(initial)
+    deployment = write_v2_deployment(tmp_path, offline_profile(initial.value, tmp_path))
+    port = _port()
+    process = _launch(tmp_path, state, port, deployment_file=deployment)
+    try:
+        deadline = time.monotonic() + 8
+        aborted = 0
+        while time.monotonic() < deadline and aborted < 12:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2) as sock:
+                    # RST the connection after issuing GET, before consuming a
+                    # reply. The linger struct uses Windows' ushort ABI.
+                    sock.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_LINGER,
+                        struct.pack("HH" if os.name == "nt" else "ii", 1, 0),
+                    )
+                    sock.sendall(b"GET /healthz HTTP/1.0\r\n\r\n")
+                aborted += 1
+            except OSError:
+                time.sleep(0.05)
+        assert aborted == 12
+        _wait_status(port, process)
+    finally:
+        process.terminate()
+        _stdout, stderr = process.communicate(timeout=5)
+    assert process.returncode == (1 if os.name == "nt" else 0)
+    assert stderr is not None
+    assert b"Traceback" not in stderr
 
 
 def test_supervisor_loads_operator_config_and_stays_stand_down_on_refusal(
@@ -166,9 +204,7 @@ def test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile(
         _wait_status(port, process)
         try:
             with urlopen(f"http://127.0.0.1:{port}/readiness", timeout=2) as response:
-                raise AssertionError(
-                    f"replay-only profile unexpectedly returned {response.status}"
-                )
+                raise AssertionError(f"replay-only profile unexpectedly returned {response.status}")
         except HTTPError as response:
             assert response.code == 503
             readiness = json.loads(response.read())
@@ -192,6 +228,4 @@ def test_supervisor_default_resolver_durably_stands_down_for_checked_v1_profile(
     attempt = last_payload.get("attempt")
     assert isinstance(attempt, Mapping)
     assert attempt["stage"] == "preflight"
-    assert attempt["failure_id"] == (
-        "configured_runtime.hosted_resources_missing"
-    )
+    assert attempt["failure_id"] == ("configured_runtime.hosted_resources_missing")

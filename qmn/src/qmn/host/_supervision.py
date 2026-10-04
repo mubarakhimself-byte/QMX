@@ -296,6 +296,15 @@ def main(
     signal.signal(signal.SIGINT, request_stop)
 
     class StatusHandler(BaseHTTPRequestHandler):
+        def handle(self) -> None:
+            try:
+                super().handle()
+            except ConnectionError:
+                # A status client can disconnect during request/response I/O.
+                # Repeated peer resets must not fill a captured stderr pipe and
+                # stall the supervisor before the next status request.
+                return
+
         def do_GET(self) -> None:
             if self.path == "/healthz":
                 status = 200
