@@ -2,7 +2,11 @@
 
 Executable::
 
-    python qmb/examples/analysis_compare_runs_usage.py
+    python qmb/examples/analysis_compare_runs_usage.py --operator-builder your_sources:analysis_source --runtime-root YOUR_REPLAY_ROOT
+
+The projection uses the operator-supplied completed CT-32 and CT29ProjectionSource.
+The comparison and rerun illustrations retain their explicit local toy inputs;
+they provide no production admission or live financial authority.
 
 Shows the things Story 35.5 / FR-W26 / FR-W28 / FR-W21 / SCN-0016 pin down:
 
@@ -24,7 +28,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
 
-from qmb.analysis import compare_runs, project, rerun
+from qmb.analysis import CT29ProjectionSource, compare_runs, project, rerun
+from analysis_source_usage import operator_analysis_source
 from qmb.config import ResolvedRunConfig
 from qmb.results import ClosedTrade, TradeSide, mint_run_performance_result
 from qmb.results.ct32 import load_stored_ct32
@@ -132,7 +137,7 @@ def _sink(root: Path, *, slot: object = 0) -> qmb.LedgerSink:
     )
 
 
-def main() -> None:
+def main(*, source_ct32: object, source_ct29: CT29ProjectionSource) -> None:
     left = _result(tag="left", trades=(_trade(hour=10),))
     right = _result(tag="right", trades=(_trade(hour=18),))
     readout = _unwrap(compare_runs(left, right), "compare")
@@ -152,13 +157,15 @@ def main() -> None:
     assert "lane" not in identity
     print("CT-32 and B-4 gain no lane or analysis_method field")
 
-    as_of = _at(hour=0)
-    trades = (_trade(hour=10),)
-    artifact = _result(tag="proj", trades=trades)
+    config = source_ct29.run_config
+    assert isinstance(config, ResolvedRunConfig)
+    as_of = config.keys["registry_as_of"]
+    assert isinstance(as_of, Instant)
+    artifact = source_ct32
     view = _unwrap(
         project(
             source_ct32=artifact,
-            source_ct29=trades,
+            source_ct29=source_ct29,
             predicate={"max_trades": 1},
             as_of=as_of,
         ),
@@ -171,7 +178,7 @@ def main() -> None:
     print("projection has no B-4 role, claim-class projection, inherited world, never confirmed")
     gated = project(
         source_ct32=artifact,
-        source_ct29=trades,
+        source_ct29=source_ct29,
         predicate={"max_trades": 1},
         as_of=as_of,
         gating_live=True,
@@ -215,7 +222,7 @@ def main() -> None:
 
     f07 = project(
         source_ct32=artifact,
-        source_ct29=trades,
+        source_ct29=source_ct29,
         predicate={"max_trades": 1},
         as_of=as_of,
         portfolio=True,
@@ -237,4 +244,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    artifact, source = operator_analysis_source()
+    main(source_ct32=artifact, source_ct29=source)

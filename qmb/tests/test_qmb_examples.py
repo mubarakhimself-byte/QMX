@@ -1453,12 +1453,19 @@ def test_library_search_usage_example_runs_clean() -> None:
     assert "fourth store refused" in completed.stdout
 
 
-def test_analysis_project_usage_example_runs_clean() -> None:
+def test_analysis_project_usage_example_runs_clean(tmp_path: Path) -> None:
     completed = subprocess.run(
-        [sys.executable, str(_QMB_ROOT / "examples" / "analysis_project_usage.py")],
+        [
+            sys.executable,
+            str(_QMB_ROOT / "examples" / "analysis_project_usage.py"),
+            "--operator-builder",
+            "analysis_example_fixture:analysis_source",
+            "--runtime-root",
+            str(tmp_path / "recorded-example"),
+        ],
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": pythonpath()},
+        env={**os.environ, "PYTHONPATH": pythonpath() + os.pathsep + str(_QMB_ROOT / "tests")},
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
@@ -1497,12 +1504,19 @@ def test_analysis_rerun_usage_example_runs_clean() -> None:
     assert "coordinated Experiment Ledger is Epic 36" in completed.stdout
 
 
-def test_analysis_compare_runs_usage_example_runs_clean() -> None:
+def test_analysis_compare_runs_usage_example_runs_clean(tmp_path: Path) -> None:
     completed = subprocess.run(
-        [sys.executable, str(_QMB_ROOT / "examples" / "analysis_compare_runs_usage.py")],
+        [
+            sys.executable,
+            str(_QMB_ROOT / "examples" / "analysis_compare_runs_usage.py"),
+            "--operator-builder",
+            "analysis_example_fixture:analysis_source",
+            "--runtime-root",
+            str(tmp_path / "recorded-example"),
+        ],
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": pythonpath()},
+        env={**os.environ, "PYTHONPATH": pythonpath() + os.pathsep + str(_QMB_ROOT / "tests")},
         check=False,
     )
     assert completed.returncode == 0, completed.stderr

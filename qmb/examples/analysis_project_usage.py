@@ -2,7 +2,11 @@
 
 Executable::
 
-    python qmb/examples/analysis_project_usage.py
+    python qmb/examples/analysis_project_usage.py --operator-builder your_sources:analysis_source --runtime-root YOUR_REPLAY_ROOT
+
+The operator builder returns an Ok containing the completed CT-32 and its
+CT29ProjectionSource. This example expects two recorded closes at hours 10 and 18.
+No copied in-memory trade list can stand in for that durable source.
 
 Shows the things Story 35.1 / 35.2 / FR-W21 / FR-W22 / FR-W23 / FR-W24 / SCN-0016 pin down:
 
@@ -24,13 +28,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
 
-from qmb.analysis import PROJECTION_SIDECAR_FILENAME, cite_projection, project
+from qmb.analysis import CT29ProjectionSource, PROJECTION_SIDECAR_FILENAME, cite_projection, project
+from analysis_source_usage import operator_analysis_source
 from qmb.config import ResolvedRunConfig
-from qmb.results import ClosedTrade, TradeSide, mint_run_performance_result
-from qmb.runloop import STREAM_SET_KEY, SilentSliceHandler, SliceObservation, run
 from qmf.core.chrono import Instant
-from qmf.core.exact import Money
-from qmf.core.fingerprint import World, fingerprint
+from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 
 import qmb
@@ -54,65 +56,16 @@ def _at(*, hour: int) -> Instant:
     return _instant(int(stamp.timestamp()) * 1_000_000_000)
 
 
-def _money(value: int) -> Money:
-    return _unwrap(Money.try_create(value, "USD", 2), "money")
-
-
-def _trade(*, hour: int) -> ClosedTrade:
-    return _unwrap(
-        ClosedTrade.try_create(_money(100), _money(0), TradeSide.LONG, _at(hour=hour)),
-        "trade",
-    )
-
-
-def _obs(ns: int) -> SliceObservation:
-    return _unwrap(SliceObservation.try_create("eurusd", _instant(ns), True), "obs")
-
-
-def main() -> None:
-    as_of = _at(hour=0)
-    stamp = _unwrap(fingerprint({"n": "analysis-project-example", "as_of": as_of.value_ns}), "fp")
-    config = ResolvedRunConfig(
-        format_version=1,
-        book_fp1=stamp,
-        bms_fp1=stamp,
-        bot_fp1=stamp,
-        book_fragment_fp1=stamp,
-        bms_fragment_fp1=stamp,
-        keys={STREAM_SET_KEY: ("eurusd",), "registry_as_of": as_of},
-        clock="replay",
-        data_provenance="recorded",
-        world=World.REPLAY,
-        fingerprint=stamp,
-        binding_fp1=stamp,
-    )
-    outcome = _unwrap(
-        run(
-            slices=((_obs(_NS),), (_obs(_NS + 1),)),
-            config=config,
-            handler=SilentSliceHandler(),
-        ),
-        "run",
-    )
-    trades = (_trade(hour=10), _trade(hour=18))
-    artifact = _unwrap(
-        mint_run_performance_result(
-            config,
-            evidence_range=outcome.evidence_range,
-            stream_order=outcome.stream_order,
-            slice_count=2,
-            filled_count=0,
-            resting_count=0,
-            data_points_processed=2,
-            outcome_identity=outcome.fp1_identity(),
-            trades=trades,
-        ),
-        "ct32",
-    )
+def main(*, source_ct32: object, source_ct29: CT29ProjectionSource) -> None:
+    artifact = source_ct32
+    config = source_ct29.run_config
+    assert isinstance(config, ResolvedRunConfig)
+    as_of = config.keys["registry_as_of"]
+    assert isinstance(as_of, Instant)
     view = _unwrap(
         project(
             source_ct32=artifact,
-            source_ct29=trades,
+            source_ct29=source_ct29,
             predicate={"hours": {"start": 8, "end": 16}},
             as_of=as_of,
         ),
@@ -144,7 +97,7 @@ def main() -> None:
     print("copied trade list is not a saved view")
     query_time = project(
         source_ct32=artifact,
-        source_ct29=trades,
+        source_ct29=source_ct29,
         predicate={"hours": {"start": 8, "end": 16}},
         as_of=_at(hour=12),
     )
@@ -153,7 +106,7 @@ def main() -> None:
 
     size = project(
         source_ct32=artifact,
-        source_ct29=trades,
+        source_ct29=source_ct29,
         predicate={"hours": {"start": 8, "end": 16}},
         as_of=as_of,
         starting_capital=10_000,
@@ -173,7 +126,7 @@ def main() -> None:
         governed = _unwrap(
             project(
                 source_ct32=artifact,
-                source_ct29=trades,
+                source_ct29=source_ct29,
                 predicate={"hours": {"start": 8, "end": 16}},
                 as_of=as_of,
                 home="governed-without-qma",
@@ -191,7 +144,7 @@ def main() -> None:
         print("governed sidecar written")
         coordinated = project(
             source_ct32=artifact,
-            source_ct29=trades,
+            source_ct29=source_ct29,
             predicate={"hours": {"start": 8, "end": 16}},
             as_of=as_of,
             home="coordinated",
@@ -207,4 +160,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    artifact, source = operator_analysis_source()
+    main(source_ct32=artifact, source_ct29=source)
