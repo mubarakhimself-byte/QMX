@@ -242,6 +242,24 @@ class CanonicalRequestJoin:
                 "canonical_agent",
                 "one exact host actor route must resolve",
             )
+        route = next(r for r in provider.routes if r.profile_id == plan.profile_id)
+        flow = provider.catalog.workflow(route.workflow)
+        if flow.graph_sha256 is not None and (
+            graph.graph_template_ref != flow.workflow_id
+            or {n.id for n in graph.nodes} != {s.step_id for s in flow.steps}
+            or any(n.config.get("graph_sha256") != flow.graph_sha256 for n in graph.nodes)
+            or [(e.from_node, e.to_node, e.mapping.value) for e in graph.edges]
+            != [(e["from"], e["to"], e["mapping"]) for e in json.loads(flow.edges_json or "[]")]
+            or len(graph.tasks) != 1
+            or {n.id: {"kind": n.kind.value, **dict(n.config)} for n in graph.nodes}
+            != {
+                str(n["id"]): {k: v for k, v in n.items() if k != "id"}
+                for n in flow.template().nodes
+            }
+        ):
+            return policy_rejection(
+                "authored_graph", "host must compile and admit the exact authored graph"
+            )
         pins = self._tool_pins(row, provider, agent)
         if is_refusal(pins):
             return pins

@@ -6,8 +6,13 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
+
+from qma.daemon.taskgraph.compiler import GraphTemplateCatalog
+from qma.daemon.taskgraph.records import GraphTemplate
+from qmf.core import is_refusal
 
 
 def canonical(value: object) -> Any:
@@ -95,6 +100,53 @@ class ActorWorkflow:
     workflow_id: str
     version: str
     steps: tuple[WorkflowStep, ...]
+    author: str | None = None
+    edges_json: str | None = None
+    operations_json: str | None = None
+
+    @property
+    def graph_sha256(self) -> str | None:
+        if self.author is None:
+            return None
+        return digest(
+            {
+                "id": self.workflow_id,
+                "version": self.version,
+                "author": self.author,
+                "steps": [asdict(s) for s in self.steps],
+                "edges": json.loads(self.edges_json or "[]"),
+                "operations": json.loads(self.operations_json or "{}"),
+            }
+        )
+
+    def template(self) -> GraphTemplate:
+        if self.author is None:
+            raise ValueError("authored graph binding required")
+        has_agent = any(s.kind == "agent" for s in self.steps)
+        return GraphTemplate(
+            self.workflow_id,
+            self.version,
+            tuple(
+                {
+                    "id": s.step_id,
+                    "kind": (
+                        "agent"
+                        if s.kind == "agent"
+                        else "task"
+                        if not has_agent and s == self.steps[-1]
+                        else "join"
+                        if s.kind == "collect"
+                        else "artifact_dependency"
+                        if s.kind == "read"
+                        else "deterministic_script"
+                    ),
+                    "binding": asdict(s),
+                    "graph_sha256": self.graph_sha256,
+                }
+                for s in self.steps
+            ),
+            tuple(json.loads(self.edges_json or "[]")),
+        )
 
     @property
     def key(self) -> str:
@@ -120,7 +172,9 @@ class ActorCatalog:
 
     @property
     def identity(self) -> str:
-        return digest(asdict(self))
+        payload = asdict(self)
+        payload["workflows"] = [workflow_payload(flow) for flow in self.workflows]
+        return digest(payload)
 
     def role(self, key: str) -> ActorRole:
         return next(role for role in self.roles if role.key == key)
@@ -169,7 +223,7 @@ def load_actor_catalog(root: Path) -> ActorCatalog | None:
             )
         workflows: list[ActorWorkflow] = []
         for raw_item in _items(row["workflows"]):
-            item = _object(raw_item, {"id", "version", "steps"})
+            item = _object(raw_item, {"id", "version", "steps", "graph"})
             steps: list[WorkflowStep] = []
             for raw_step in _items(item["steps"], 12):
                 step = _object(raw_step, {"id", "kind", "role", "tool", "arguments"})
@@ -193,7 +247,59 @@ def load_actor_catalog(root: Path) -> ActorCatalog | None:
                 )
             if not 1 <= len(steps) <= 12 or len({s.step_id for s in steps}) != len(steps):
                 raise ValueError("finite unique steps required")
-            workflows.append(ActorWorkflow(_text(item["id"]), _text(item["version"]), tuple(steps)))
+            flow = ActorWorkflow(_text(item["id"]), _text(item["version"]), tuple(steps))
+            if "graph" in item:
+                if sum(s.kind == "agent" for s in steps) > 1:
+                    raise ValueError("bounded authored adapter admits one inference specialist")
+                graph = _object(item["graph"], {"author", "edges", "sha256", "operations"})
+                raw_edges = graph["edges"]
+                if not isinstance(raw_edges, list) or len(cast("list[object]", raw_edges)) > 11:
+                    raise ValueError("bounded authored edges required")
+                edges = [
+                    _object(edge, {"from", "to", "mapping", "from_port", "to_port"})
+                    for edge in cast("list[object]", raw_edges)
+                ]
+                operations = _object(
+                    graph.get("operations", {}), {s.step_id for s in steps if s.kind == "read"}
+                )
+                if set(operations) != {s.step_id for s in steps if s.kind == "read"}:
+                    raise ValueError("every authored read requires an exact operation/version pin")
+                for operation in operations.values():
+                    pin = _object(operation, {"op_id", "version"})
+                    _text(pin["op_id"])
+                    _limit(pin["version"], 2147483647)
+                flow = ActorWorkflow(
+                    flow.workflow_id,
+                    flow.version,
+                    flow.steps,
+                    _text(graph["author"]),
+                    json.dumps(edges, sort_keys=True),
+                    json.dumps(operations, sort_keys=True),
+                )
+                validated = GraphTemplateCatalog().register(flow.template())
+                if is_refusal(validated):
+                    raise ValueError("authored topology refused")
+                # The first adapter admits only explicit one-to-one paths. No
+                # implicit ordering, collection fanout, branch or join semantics.
+                expected = [(a.step_id, b.step_id) for a, b in pairwise(steps)]
+                if (
+                    len(edges) != len(expected)
+                    or [(e.get("from"), e.get("to")) for e in edges] != expected
+                ):
+                    raise ValueError(
+                        "authored path requires one explicit predecessor; ambiguous join refused"
+                    )
+                for edge in edges:
+                    if (
+                        set(edge) != {"from", "to", "mapping", "from_port", "to_port"}
+                        or edge["mapping"] != "one"
+                        or edge["from_port"] != "data"
+                        or edge["to_port"] != "data"
+                    ):
+                        raise ValueError("authored adapter requires one data value per predecessor")
+                if "sha256" in graph and graph["sha256"] != flow.graph_sha256:
+                    raise ValueError("stale authored graph digest")
+            workflows.append(flow)
         routes: list[ActorRoute] = []
         for raw_item in _items(row["routes"]):
             item = _object(raw_item, {"profile_id", "actor_id", "workflow", "tools"})
@@ -233,3 +339,27 @@ def load_actor_catalog(root: Path) -> ActorCatalog | None:
         return catalog
     except (KeyError, TypeError, StopIteration, UnicodeError, RecursionError) as exc:
         raise ValueError("invalid actor catalog") from exc
+
+
+def workflow_payload(flow: ActorWorkflow) -> dict[str, Any]:
+    """Preserve all pre-authored catalog, definition and memory source hashes."""
+    payload = asdict(flow)
+    if flow.author is None:
+        for field in ("author", "edges_json", "operations_json"):
+            payload.pop(field)
+    return payload
+
+
+def parse_graph_job_data(model_output: str) -> dict[str, Any]:
+    row = _object(
+        json.loads(model_output, object_pairs_hook=_duplicates),
+        {"workflow", "graph_sha256", "goal"},
+    )
+    if set(row) != {"workflow", "graph_sha256", "goal"}:
+        raise ValueError("proposal requires exact graph/job fields")
+    _text(row["goal"])
+    return row
+
+
+def require_host_text(value: object) -> str:
+    return _text(value)

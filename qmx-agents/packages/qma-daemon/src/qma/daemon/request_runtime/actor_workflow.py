@@ -24,7 +24,8 @@ from langsmith.run_helpers import (
 )
 from qma.core.ports.memory import MemoryCandidate
 from qma.daemon.hooks.registry import HookRegistry
-from qmf.core import is_refusal
+from qmf.core import Ok, Result, is_refusal
+from qmf.data.store.refusals import policy_rejection
 
 from .actor_profiles import (
     ActorCatalog,
@@ -33,6 +34,7 @@ from .actor_profiles import (
     canonical,
     digest,
     load_actor_catalog,
+    workflow_payload,
 )
 from .agent_extensions import AgentExtensions
 from .contracts import (
@@ -41,6 +43,7 @@ from .contracts import (
     ProviderEvent,
     ProviderRequest,
     ProviderResult,
+    RequestRecord,
     RequestSpec,
 )
 from .daemon_bridge import AgentRequestPolicy
@@ -100,6 +103,14 @@ class ActorWorkflowProvider:
         bindings = self.admission_tools(spec)
         if set(route.tools) - set(bindings):
             raise ProviderError("tool_denied", "Required host callback is unavailable")
+        flow = self.catalog.workflow(route.workflow)
+        for step_id, operation in json.loads(flow.operations_json or "{}").items():
+            step = next(s for s in flow.steps if s.step_id == step_id)
+            actual = bindings[step.tool or ""].descriptor
+            if actual.op_id != operation["op_id"] or actual.version != operation["version"]:
+                raise ProviderError(
+                    "tool_denied", "Authored operation version differs from host callback"
+                )
         return {name: bindings[name] for name in route.tools}
 
     def execute(
@@ -144,9 +155,18 @@ class ActorWorkflowProvider:
             "execution_agent": f"agent:{request.request_id}",
             "thread": f"{request.request_id}:workflow",
         }
+        if flow.graph_sha256 is not None:
+            job_binding["authored_graph"] = {
+                "qualified_id": flow.workflow_id,
+                "version": flow.version,
+                "sha256": flow.graph_sha256,
+                "author": flow.author,
+            }
         if self.deep_agent is not None and self.deep_agent.profile_id == route.profile_id:
             job_binding["harness"] = self.deep_agent.binding()
         _pin(records, "actor_job", request.request_id, job_binding)
+        if flow.graph_sha256 is not None:
+            self.bindings_for_spec(row.spec)
         needed = set(route.tools)
         bindings = dict(self.tools(request)) if needed else {}
         if needed - set(bindings):
@@ -166,10 +186,26 @@ class ActorWorkflowProvider:
         def run_step(step: WorkflowStep, state: WorkflowState) -> dict[str, Any]:
             validate()
             output: Any
+            selected_outputs = state["outputs"]
+            if flow.graph_sha256 is not None:
+                index = flow.steps.index(step)
+                selected_outputs = (
+                    {flow.steps[index - 1].step_id: state["outputs"][flow.steps[index - 1].step_id]}
+                    if index
+                    else {}
+                )
             if step.kind == "normalize":
-                return {"input": " ".join(state["input"].split())}
+                normalized = " ".join(state["input"].split())
+                if flow.graph_sha256 is not None:
+                    return {
+                        "input": normalized,
+                        "outputs": {**state["outputs"], step.step_id: normalized},
+                    }
+                return {"input": normalized}
             if step.kind == "collect":
-                return {}
+                if flow.graph_sha256 is None:
+                    return {}
+                return {"outputs": {**state["outputs"], step.step_id: dict(selected_outputs)}}
             if step.kind == "read":
                 output = gateway.dispatch(
                     request,
@@ -186,7 +222,7 @@ class ActorWorkflowProvider:
                 child_thread = f"{activity_id}:thread"
                 source = MemorySource(
                     "host-workflow:" + flow.key,
-                    digest(asdict(flow)),
+                    digest(workflow_payload(flow)),
                     (role.key,),
                     row.context_binding,
                 )
@@ -208,7 +244,7 @@ class ActorWorkflowProvider:
                         "body": json.dumps(
                             {
                                 "request": state["input"],
-                                "outputs": state["outputs"],
+                                "outputs": selected_outputs,
                                 "actor_memory": memory.context(max_bytes=8192, max_tokens=8192),
                             },
                             sort_keys=True,
@@ -385,7 +421,7 @@ def bind_actor_workflows(
         for role in catalog.roles:
             _pin(records, "actor_role", role.key, asdict(role))
         for flow in catalog.workflows:
-            _pin(records, "actor_definition", flow.key, asdict(flow))
+            _pin(records, "actor_definition", flow.key, workflow_payload(flow))
     except ProviderError as exc:
         raise ValueError("versioned host actor definition refused") from exc
     for route in catalog.routes:
@@ -429,6 +465,25 @@ def bind_actor_workflows(
             bound_policies[route.profile_id] = replace(
                 policies[route.profile_id], provider_id=identity
             )
+    previous_admission = runtime.submission_admission
+
+    def admit_authored(row: RequestRecord) -> Result[RequestRecord]:
+        provider = bound_providers.get(row.spec.provider_id)
+        if isinstance(provider, ActorWorkflowProvider):
+            route = next(r for r in provider.routes if r.profile_id == row.spec.profile.profile_id)
+            flow = provider.catalog.workflow(route.workflow)
+            if flow.graph_sha256 is not None:
+                try:
+                    provider.bindings_for_spec(row.spec)
+                except ProviderError:
+                    return policy_rejection(
+                        "authored_graph", "exact host operation binding required"
+                    )
+        return previous_admission(row) if previous_admission is not None else Ok(row)
+
+    # The canonical join later owns this same hook and performs the same exact
+    # binding validation through _tool_pins; request-only routes retain preflight.
+    runtime.submission_admission = admit_authored
     return bound_providers, bound_policies
 
 
