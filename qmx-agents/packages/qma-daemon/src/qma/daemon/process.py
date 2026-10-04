@@ -191,6 +191,7 @@ from qma.daemon.plugins.pack_ui import (
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
 from qma.daemon.request_runtime.agent_extensions import AgentExtensions
+from qma.daemon.request_runtime.canonical_join import CanonicalJoinPlan, CanonicalRequestJoin
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
 from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
@@ -855,6 +856,7 @@ class DaemonProcess:
         self._agent_requests: AgentRequestBridge | None = None
         self._agent_capabilities = AgentCapabilityStore()
         self._experiment_authoring: ExperimentAuthoring | None = None
+        self._canonical_requests: CanonicalRequestJoin | None = None
         self._agent_instance_revisions: Mapping[str, int] = {}
         self._spot_state_bindings: Mapping[str, SpotStateBinding] = {}
 
@@ -1199,6 +1201,11 @@ class DaemonProcess:
         """Canonical spawn-time records; startup must explicitly admit each Agent."""
         return self._agent_capabilities
 
+    @property
+    def canonical_requests(self) -> CanonicalRequestJoin | None:
+        """Trusted host join administration, never a wire authority mint."""
+        return self._canonical_requests
+
     def reconcile_experiment_authoring(self, request_id: str) -> Result[Mapping[str, object]]:
         """Explicit trusted host recovery; no model replay or implicit query effect."""
         if self._experiment_authoring is None:
@@ -1275,6 +1282,7 @@ class DaemonProcess:
         max_workers: int = 2,
         max_inflight: int = 16,
         shutdown_timeout_seconds: float = 2,
+        canonical_joins: tuple[CanonicalJoinPlan, ...] = (),
     ) -> Result[None]:
         """Trusted startup seam; paired clients never mutate provider or tool policy."""
         if self._agent_requests is not None or self._closed or self._server is not None:
@@ -1330,6 +1338,21 @@ class DaemonProcess:
                 hooks=self._artifacts.hooks,
             )
             runtime.providers = dict(actor_providers)
+            canonical = None
+            if canonical_joins:
+                canonical = CanonicalRequestJoin(
+                    runtime=runtime,
+                    plans=canonical_joins,
+                    dispatcher=self.task_dispatcher,
+                    agents=self.agent_capabilities,
+                    mailboxes=self.mailboxes,
+                    jobs=self.jobs,
+                )
+                runtime.submission_admission = canonical.accept
+                runtime.lifecycle_admission = canonical.guard
+                runtime.outcome_observation = canonical.observe
+                runtime.canonical_projection = canonical.projection
+                self.jobs.cancel_admission = canonical.allow_canonical_cancel
             bridge = AgentRequestBridge(
                 runtime=runtime,
                 policies=actor_policies,
@@ -1342,6 +1365,7 @@ class DaemonProcess:
             return invalid_input("agent_requests", "host SDK policy could not be installed")
         self._agent_requests = bridge
         self._experiment_authoring = authoring
+        self._canonical_requests = canonical
         return Ok(None)
 
     def mount_pack_ui_view(
@@ -4124,7 +4148,13 @@ class DaemonProcess:
                     ),
                 ),
             )
-        cancelled = self.backtesting.cancel_from_product_session(
+        cancel = (
+            self.jobs.cancel_from_product_session
+            if self._canonical_requests is not None
+            and self._canonical_requests.owns_job(handle.job_id)
+            else self.backtesting.cancel_from_product_session
+        )
+        cancelled = cancel(
             params,
             principal_class=connection.principal_class or "",
             operator_principal=authenticated_operator,

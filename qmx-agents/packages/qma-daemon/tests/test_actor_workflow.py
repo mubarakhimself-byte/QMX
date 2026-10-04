@@ -178,8 +178,10 @@ def children(process: Any, conn: Any, request_id: str) -> list[dict[str, Any]]:
     )
 
 
-def wait_status(process: Any, conn: Any, request_id: str, status: str) -> dict[str, Any]:
-    deadline = time.monotonic() + 10
+def wait_status(
+    process: Any, conn: Any, request_id: str, status: str, *, timeout_seconds: float = 10
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
     while True:
         row = receipt(
             dispatch(

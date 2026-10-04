@@ -123,6 +123,12 @@ class RequestRuntime:
         self.execution_admission = execution_admission
         self.execution_completion = execution_completion
         self.acceptance_binding = acceptance_binding
+        self.submission_admission: Callable[[RequestRecord], Result[RequestRecord]] | None = None
+        self.lifecycle_admission: Callable[[str, RequestRecord], Result[None]] | None = None
+        self.outcome_observation: Callable[[RequestRecord], Result[None]] | None = None
+        self.canonical_projection: (
+            Callable[[RequestRecord], Result[dict[str, Any] | None]] | None
+        ) = None
         self._lock = threading.RLock()
         self._records: dict[str, RequestRecord] = {}
         self._keys: dict[tuple[str, str, str], str] = {}
@@ -150,6 +156,18 @@ class RequestRuntime:
         self._records[saved.request_id] = saved
         self._keys[_key(saved.spec)] = saved.request_id
         return Ok(saved)
+
+    def _admit_lifecycle(self, action: str, row: RequestRecord) -> Result[None]:
+        if self.lifecycle_admission is not None:
+            return self.lifecycle_admission(action, row)
+        if row.spec.canonical_join_required:
+            return policy_rejection("canonical_join", "original host join is unavailable")
+        return Ok(None)
+
+    def _observe_outcome(self, row: RequestRecord) -> Result[None]:
+        if self.outcome_observation is not None:
+            return self.outcome_observation(row)
+        return Ok(None)
 
     def restore(self) -> Result[tuple[RequestRecord, ...]]:
         """Fold snapshots and mark lost running owners interrupted exactly once."""
@@ -184,6 +202,22 @@ class RequestRuntime:
             self._keys = {_key(row.spec): row.request_id for row in records.values()}
             for row in tuple(records.values()):
                 if row.status in {"running", "cancellation_requested", "interrupted"}:
+                    if row.spec.canonical_join_required and row.result is None:
+                        canonical_result = self._observed_canonical_result(row)
+                        if is_refusal(canonical_result):
+                            return canonical_result
+                        if canonical_result.value is not None:
+                            recovered = self._persist(
+                                replace(
+                                    row,
+                                    status="interrupted",
+                                    error="owner_lost",
+                                    result=canonical_result.value,
+                                )
+                            )
+                            if is_refusal(recovered):
+                                return recovered
+                            continue
                     observed = self._observed_authoring_result(row)
                     if is_refusal(observed):
                         return observed
@@ -207,6 +241,41 @@ class RequestRuntime:
                         return interrupted
             self._restored = True
             return Ok(tuple(self._records.values()))
+
+    def _observed_canonical_result(self, row: RequestRecord) -> Result[ProviderResult | None]:
+        """Recover observed bytes only; disclosure and canonical state stay guarded."""
+        events = self.journal.read_events()
+        if is_refusal(events):
+            return events
+        accepted = any(
+            e.event == "canonical_request.accepted"
+            and e.payload.get("request_id") == row.request_id
+            and e.payload.get("context_binding") == row.context_binding
+            and e.payload.get("principal") == row.spec.principal
+            and e.payload.get("product_session_ref") == row.spec.product_session_id
+            for e in events.value
+        )
+        if not accepted:
+            return Ok(None)
+        for event in reversed(events.value):
+            if (
+                event.event == "canonical_request.observed"
+                and event.payload.get("request_id") == row.request_id
+                and event.payload.get("result_json") is not None
+            ):
+                try:
+                    result = _provider_result(
+                        ProviderResult(**json.loads(str(event.payload["result_json"])))
+                    )
+                    if (
+                        event.payload.get("result_sha256")
+                        != hashlib.sha256(result.content.encode()).hexdigest()
+                    ):
+                        return storage_failure("canonical result output digest disagrees")
+                    return Ok(result)
+                except TypeError, ValueError, KeyError, UnicodeError:
+                    return storage_failure("invalid canonical result observation")
+        return Ok(None)
 
     def _observed_authoring_result(self, row: RequestRecord) -> Result[ProviderResult | None]:
         """Durable pre-effect output fences replay even when the final snapshot is lost.
@@ -334,7 +403,9 @@ class RequestRuntime:
             prior_id = self._keys.get(_key(spec))
             if prior_id is not None:
                 prior = self._records[prior_id]
-                if _spec_hash(prior.spec) != _spec_hash(spec):
+                if _spec_hash(prior.spec) != _spec_hash(
+                    replace(spec, canonical_join_required=prior.spec.canonical_join_required)
+                ):
                     return policy_rejection(
                         "idempotency_key", "key already accepted with different request content"
                     )
@@ -342,11 +413,17 @@ class RequestRuntime:
             bound = self._bound(spec)
             if is_refusal(bound):
                 return bound
-            return self._persist(
-                RequestRecord(
-                    request_id="req:" + uuid.uuid4().hex, spec=spec, context_binding=bound.value
-                )
+            candidate = RequestRecord(
+                request_id="req:" + uuid.uuid4().hex, spec=spec, context_binding=bound.value
             )
+            if self.submission_admission is not None:
+                admitted = self.submission_admission(candidate)
+                if is_refusal(admitted):
+                    return admitted
+                candidate = admitted.value
+            elif spec.canonical_join_required:
+                return policy_rejection("canonical_join", "canonical admission is unavailable")
+            return self._persist(candidate)
 
     def get(self, request_id: str) -> Result[RequestRecord]:
         with self._lock:
@@ -397,6 +474,9 @@ class RequestRuntime:
             # the host can construct and audit that canonical handoff.
             thread_id = None
             candidate = replace(row, status="running", attempt=row.attempt + 1, error=None)
+            canonical = self._admit_lifecycle("execute", candidate)
+            if is_refusal(canonical):
+                return canonical
             if self.execution_admission is not None:
                 admitted = self.execution_admission(candidate)
                 if is_refusal(admitted):
@@ -467,7 +547,14 @@ class RequestRuntime:
                         completed = replace(
                             completed, status="failed", error="authoring_effect_uncertain"
                         )
+                observed = self._observe_outcome(completed)
+                if is_refusal(observed):
+                    completed = replace(completed, status="interrupted", error="outcome_unknown")
                 saved = self._persist(completed)
+                if is_refusal(saved) and completed.spec.canonical_join_required:
+                    self._observe_outcome(
+                        replace(completed, status="interrupted", error="storage_failure")
+                    )
                 if is_refusal(saved) and completed.spec.authoring_task_id is not None:
                     # The pre-effect observation is already durable. A failed
                     # final snapshot must not leave a replayable running owner.
@@ -503,6 +590,9 @@ class RequestRuntime:
                 return policy_rejection(
                     "request_state", "model continuation requires an active uncancelled turn"
                 )
+            canonical = self._admit_lifecycle("continuation", row)
+            if is_refusal(canonical):
+                return canonical
             return self.validate_request_context(request_id, now=now)
 
     def validate_request_context(
@@ -514,6 +604,9 @@ class RequestRuntime:
             if is_refusal(loaded):
                 return loaded
             row = loaded.value
+            canonical = self._admit_lifecycle("read", row)
+            if is_refusal(canonical):
+                return canonical
             bound = self._bound(row.spec, row.context_binding)
             if is_refusal(bound):
                 return bound
@@ -550,7 +643,9 @@ class RequestRuntime:
                 token.set()
             self._frozen_requests.add(request_id)
             if row.status in {"running", "cancellation_requested"}:
-                return self._persist(replace(row, status="interrupted", error="daemon_shutdown"))
+                interrupted = replace(row, status="interrupted", error="daemon_shutdown")
+                self._observe_outcome(interrupted)
+                return self._persist(interrupted)
             return Ok(row)
 
     def fail_queued_request(self, request_id: str) -> Result[RequestRecord]:
@@ -574,6 +669,9 @@ class RequestRuntime:
             row = loaded.value
             if row.status in {"completed", "failed", "cancelled", "interrupted"}:
                 return Ok(row)
+            canonical = self._admit_lifecycle("cancel", row)
+            if is_refusal(canonical):
+                return canonical
             status: RequestStatus = (
                 "cancelled" if row.status == "queued" else "cancellation_requested"
             )
@@ -593,6 +691,9 @@ class RequestRuntime:
                 return policy_rejection(
                     "request_state", "only interrupted turns use explicit retry"
                 )
+            canonical = self._admit_lifecycle("retry", row)
+            if is_refusal(canonical):
+                return canonical
             observed = self._observed_authoring_result(row)
             if is_refusal(observed):
                 return observed
@@ -621,6 +722,9 @@ class RequestRuntime:
             row = loaded.value
             if row.status != "running":
                 return policy_rejection("request_state", "tool dispatch requires an active turn")
+            canonical = self._admit_lifecycle("tool", row)
+            if is_refusal(canonical):
+                return canonical
             token = self._tokens.get(request_id)
             if token is None or token.is_set():
                 return policy_rejection(

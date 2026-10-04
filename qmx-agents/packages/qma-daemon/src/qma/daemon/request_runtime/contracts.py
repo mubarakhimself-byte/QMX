@@ -58,6 +58,7 @@ class RequestSpec:
     timeout_seconds: float = 120
     authoring_task_id: str | None = None
     authoring_authority_sha256: str | None = None
+    canonical_join_required: bool = False
 
 
 @dataclass(frozen=True, slots=True)

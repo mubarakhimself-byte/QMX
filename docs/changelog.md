@@ -12,6 +12,16 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-04 - Controlled canonical request integration candidate
+
+[ADR-0029](decisions/ADR-0029-controlled-canonical-request-join.md) records the
+local host identity/Task/Request join, child uncertainty and cancellation fences,
+observed-result restart repair, preserved Study/CT-47 ownership and explicit
+canonical completion/reassignment limits. It records the attended direction for
+pluggable memory providers without selecting a backend. The ADR, daemon component
+note and prepared join contract remain a branch proposal; inherited strict corpus
+failures and implementation acceptance limits are retained in the handoff.
+
 ## 2026-10-04 - Mature library runtime branch proposal
 
 [ADR-0028](decisions/ADR-0028-mature-agent-runtime.md) records the authorized local

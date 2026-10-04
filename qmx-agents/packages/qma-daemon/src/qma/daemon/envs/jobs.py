@@ -292,6 +292,7 @@ class JobHandleService:
         self._durable = durable
         self._streams: dict[str, list[JobStreamEvent]] = {}
         self._wakes: dict[str, JobWake] = {}
+        self.cancel_admission: Callable[[JobHandle], Result[None]] | None = None
         if dispatcher is not None and dispatcher.router is not self._router:
             self._router = dispatcher.router
 
@@ -616,6 +617,10 @@ class JobHandleService:
                 "recorded action, never by cancel (CT-46; FR-Q51)",
                 job_id=job_id,
             )
+        if self.cancel_admission is not None and not handle.is_terminal:
+            admitted = self.cancel_admission(handle)
+            if is_refusal(admitted):
+                return admitted
         return self._transition(handle, JobHandleState.CANCELLED, event="cancel")
 
     def cancel_from_product_session(
@@ -823,6 +828,10 @@ class JobHandleService:
         authorized = authorize_coordinated_cancel(COORDINATED_CANCEL_AUTHORITY)
         if is_refusal(authorized):
             return authorized
+        if self.cancel_admission is not None:
+            admitted = self.cancel_admission(handle)
+            if is_refusal(admitted):
+                return admitted
         if before_cancel is not None:
             side_effect = before_cancel(handle)
             if is_refusal(side_effect):

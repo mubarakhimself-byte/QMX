@@ -163,6 +163,18 @@ is required before calling the composed join accepted.
 
 ## Source anchors
 
+Implementation checkpoint clarification (2026-10-04): the host admission/continuation
+guard and owned result observation are implemented as a local candidate. Bounded
+success remains observed while the canonical JobHandle stays running until its
+existing owner completes it; no Task Ledger fact is manufactured. Interrupted
+joined Requests cannot retry. Reassignment to a second Task attempt is conservatively
+refused and needs a separate reconciliation facade; independently admitted fresh
+Tasks remain supported. Missing final snapshots recover observed bytes into an
+interrupted Request only, with unchanged disclosure checks. Restart retains durable
+uncertainty and refuses missing volatile authority. These explicit v1 limits narrow
+the proposed contract, rather than claiming the full lifecycle gate above is done.
+The delivery manifest records exact tests and independent findings/fixes.
+
 - qma.core.ontology.actor_id.ActorId / ontology.records.Quant, Agent, Subagent.
 - qma.daemon.bus.mailbox.MailboxStore.quant_for (actual ontology record lookup).
 - qma.daemon.capabilities.spawn.AgentCapabilityStore (frozen recorded spawn).

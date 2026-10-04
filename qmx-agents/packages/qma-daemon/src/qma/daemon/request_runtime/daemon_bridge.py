@@ -353,6 +353,12 @@ class AgentRequestBridge:
         activities = activity_receipts(self.runtime, params.request_id)
         if activities:
             body["activities"] = activities
+        if self.runtime.canonical_projection is not None:
+            projected = self.runtime.canonical_projection(disclosure.value)
+            if is_refusal(projected):
+                return projected
+            if projected.value is not None:
+                body["canonical_join"] = projected.value
         return Ok(body)
 
     def cancel(
