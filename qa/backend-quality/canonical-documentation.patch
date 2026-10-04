@@ -1,0 +1,52 @@
+--- a/docs/architecture/stack.md
++++ b/docs/architecture/stack.md
+@@ -245,3 +245,26 @@
+ ## Related
+ 
+ Layers, containers, and external systems: `docs/architecture/overview.md`. Component graph: `docs/architecture/dependencies.yaml`. Values: `docs/registry/variables.yaml`. Interface schemas: `docs/contracts/`. Ratified spine: `_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md`. Trading node component spec: `docs/components/trading-node.md`. Trading node decision: `docs/decisions/ADR-0019-trading-node.md`. Trading node spine: `_bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md`.
++
++## Backend CI configuration and evidence boundary
++
++The backend quality checkpoint configures native Ubuntu 24.04 and Windows Server
++2025 root and nested-workspace suites for main/integration pushes, pull requests
++and factory-candidate tags. Existing quality tasks run independently after frozen
++environment synchronization; failed tasks still fail their jobs. Aggregate checks
++require every declared prerequisite to succeed, including after cancellation.
++
++These are configured checks, not a record of successful hosted execution. General
++typing configurations still target Windows; Linux-specific QMN typing is separate.
++Ordinary workflows do not run the complete check-integration/check-release or
++qa-verify task trees. Hosted Windows Server is not native Windows 11 workstation
++release evidence. No branch-protection configuration was inspected or changed.
++
++Mutation jobs remain nightly/default-branch only. Pinned Mutmut 3.3 options and full
++classified results are staged/read explicitly; command errors, incomplete results
++and missing target modules fail. The core 68% threshold and advisory QMN survivor
++policy remain. Current kill rates and full mutation execution are unverified.
++
++Source: .github/workflows/battery.yml, .github/workflows/qmn-ubuntu-24.04.yml,
++.github/workflows/skylos.yml and qa/backend-quality/REPORT.md. Existing verification
++metadata above has not been refreshed by this source-level configuration review.
+--- a/docs/lenses/testing/fixtures-and-scenarios.md
++++ b/docs/lenses/testing/fixtures-and-scenarios.md
+@@ -127,3 +127,20 @@
+ | [SCN-0011](../../scenarios/SCN-0011-qualifying-loss-bench.md) — qualifying-loss bench | `qmn/bench-fold` over the CT-29 exit-record stream | The bench fold benching a seat on qualifying losses, the seat routing to the paired target while the Book stays LIVE; and SCN-0011 wired and proven (DEC-0208). |
+ 
+ Each binding draws its values from the CT contract fields and registry rows the scenario cites, never from scenario-local literals; a fixture that cannot resolve a value carries its `GAP(GAP-*)` marker and stays blocked rather than inventing one (DEC-0157, DEC-0208).
++
++## Quality-pipeline regression evidence
++
++The backend quality lane adds controls for candidate-bound coverage paths,
++incomplete/crashed mutation runs and aggregate CI prerequisites. Coverage must
++resolve to the exact candidate source inventory; unrelated absolute or relative
++checkout paths fail. Existing 80% aggregate/per-package floors and exact/chrono
++100% contract floors remain unchanged.
++
++Workflow tests execute actual nightly shell steps against a controlled CLI with
++the pinned Mutmut option contract, and execute the actual aggregate verdict body.
++They establish local command/validation behavior. They do not establish hosted
++GitHub scheduler cancellation behavior, a completed mutation campaign, live-provider
++correctness or component release acceptance. The nested full suite and clean
++composed-candidate native acceptance remain pending. See qa/backend-quality/REPORT.md
++for provenance limits and inherited red gates; do not equate configured CI with
++complete tier-2/3 or component acceptance.

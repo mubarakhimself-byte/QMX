@@ -1,0 +1,714 @@
+{
+  "baseline": "bf3c6b592e89917c17747eb1072203a28241e74a",
+  "code_checkpoint": "c4dba14a5d731768ad3df3eb3758b411e05d5949",
+  "execution_status": "local controls only; hosted CI/full mutation execution unverified",
+  "python_version_file": "3.14",
+  "workspaces": {
+    ".": {
+      "tasks": {
+        "fmt": "ruff format packages extensions qml qmb qmn tools",
+        "fmt-check": "ruff format --check packages extensions qml qmb qmn tools",
+        "lint": "ruff check packages extensions qml qmb qmn tools",
+        "types": "python -m pyright",
+        "test": "python -m pytest packages extensions qml qmb qmn --cov=packages/qmf-core/src --cov=packages/qmf-data/src --cov=packages/qmf-registry/src --cov=packages/qmf-indicators/src --cov=packages/qmf-structure/src --cov=packages/qmf-risk/src --cov=packages/qmf-venue/src --cov=extensions/qmf-calendar-forex/src --cov=qml/src --cov=qmb/src --cov=qmn/src --cov=qmn/deploy --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80",
+        "qa-verify": "python qa/run_qa_verify.py",
+        "cov-report": "python tools/coverage_report.py",
+        "test-tools": "python -m pytest tools/tests --cov=money_path_scan --cov=ambient_scan --cov=secret_scan --cov=mock_data_scan --cov=coverage_report --cov=workspace_meta --cov-branch --cov-report=term-missing --cov-fail-under=80",
+        "secret-scan": "python tools/secret_scan.py",
+        "money-path-scan": "python tools/money_path_scan.py",
+        "ambient-scan": "python tools/ambient_scan.py",
+        "mock-data-scan": "python tools/mock_data_scan.py",
+        "build-all": "uv build --all-packages",
+        "isolated-build": "python tools/isolated_build_check.py",
+        "check": {
+          "sequence": [
+            "fmt-check",
+            "lint",
+            "types",
+            "test",
+            "cov-report",
+            "test-tools",
+            "money-path-scan",
+            "ambient-scan",
+            "mock-data-scan",
+            "secret-scan"
+          ],
+          "default_item_type": "ref"
+        },
+        "check-integration": {
+          "sequence": [
+            "check",
+            "build-all",
+            "isolated-build"
+          ],
+          "default_item_type": "ref"
+        },
+        "check-release": {
+          "sequence": [
+            "check-integration",
+            "release-evidence"
+          ],
+          "default_item_type": "ref"
+        },
+        "release-evidence": {
+          "cmd": "python tools/release_gate.py release/acceptance.json"
+        }
+      },
+      "dev_dependencies": [
+        "mypy",
+        "types-PyYAML",
+        "pydantic",
+        "python-dotenv",
+        "pyyaml",
+        "rich",
+        "ruff==0.16.3",
+        "pyright==1.1.411",
+        "pytest>=9,<10",
+        "pytest-cov>=7,<8",
+        "poethepoet==0.48.0"
+      ],
+      "typing": {
+        "include": [
+          "packages",
+          "extensions",
+          "qml",
+          "qmb",
+          "qmn",
+          "tools"
+        ],
+        "pythonPlatform": "Windows",
+        "exclude": [
+          "**/node_modules",
+          "**/__pycache__",
+          "**/.*",
+          "tools/tests/fixtures"
+        ],
+        "extraPaths": [
+          "packages/qmf-core/src",
+          "packages/qmf-registry/src",
+          "packages/qmf-data/src",
+          "packages/qmf-indicators/src",
+          "packages/qmf-structure/src",
+          "packages/qmf-venue/src",
+          "packages/qmf-risk/src",
+          "extensions/qmf-calendar-forex/src",
+          "qml/src",
+          "qmb/src",
+          "qmn/src",
+          "tools"
+        ],
+        "typeCheckingMode": "strict",
+        "pythonVersion": "3.14"
+      }
+    },
+    "qmx-agents": {
+      "tasks": {
+        "fmt": "ruff format packages tests examples plugins",
+        "fmt-check": "ruff format --check packages tests examples plugins",
+        "lint": "ruff check packages tests examples plugins",
+        "types": "python -m pyright",
+        "test": "pytest packages tests --cov=packages/qma-core/src --cov=packages/qma-wire/src --cov=packages/qma-daemon/src --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80",
+        "cov-report": "python ../tools/nested_coverage_report.py",
+        "check": {
+          "sequence": [
+            "fmt-check",
+            "lint",
+            "types",
+            "test",
+            "cov-report"
+          ],
+          "default_item_type": "ref"
+        }
+      },
+      "dev_dependencies": [
+        "ruff==0.16.5",
+        "pyright==1.1.411",
+        "pytest>=9,<10",
+        "pytest-cov>=7,<8",
+        "poethepoet==0.48.0"
+      ],
+      "typing": {
+        "include": [
+          "packages",
+          "tests",
+          "examples",
+          "plugins"
+        ],
+        "exclude": [
+          "**/node_modules",
+          "**/__pycache__",
+          "**/.*",
+          "packages/qma-ui-contract"
+        ],
+        "extraPaths": [
+          "packages/qma-core/src",
+          "packages/qma-wire/src",
+          "packages/qma-daemon/src",
+          "../packages/qmf-core/src",
+          "../packages/qmf-data/src",
+          "../packages/qmf-registry/src",
+          "../packages/qmf-risk/src"
+        ],
+        "typeCheckingMode": "strict",
+        "pythonVersion": "3.14",
+        "pythonPlatform": "Windows"
+      }
+    }
+  },
+  "workflows": {
+    "battery.yml": {
+      "on": {
+        "push": {
+          "branches": [
+            "main",
+            "integration"
+          ],
+          "tags": [
+            "factory-candidate/**"
+          ]
+        },
+        "pull_request": {
+          "branches": [
+            "main",
+            "integration"
+          ]
+        },
+        "schedule": [
+          {
+            "cron": "17 2 * * *"
+          }
+        ]
+      },
+      "name": "QA Battery",
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "backend": {
+          "if": "github.event_name != 'schedule'",
+          "name": "${{ matrix.runner == 'ubuntu-24.04' && 'backend-linux' || 'backend-windows' }}",
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "runner": [
+                "ubuntu-24.04",
+                "windows-2025"
+              ]
+            }
+          },
+          "runs-on": "${{ matrix.runner }}",
+          "timeout-minutes": 45,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "name": "Install uv (pinned)",
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Sync the workspace (default groups)",
+              "id": "sync",
+              "run": "uv sync --frozen"
+            },
+            {
+              "name": "Tier-1 fmt-check",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe fmt-check"
+            },
+            {
+              "name": "Tier-1 lint",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe lint"
+            },
+            {
+              "name": "Tier-1 types",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe types"
+            },
+            {
+              "name": "Tier-1 test",
+              "env": {
+                "COVERAGE_FILE": ".coverage-backend"
+              },
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe test"
+            },
+            {
+              "name": "Tier-1 cov-report",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe cov-report"
+            },
+            {
+              "name": "Tier-1 test-tools",
+              "env": {
+                "COVERAGE_FILE": ".coverage-tools"
+              },
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe test-tools"
+            },
+            {
+              "name": "Tier-1 money-path-scan",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe money-path-scan"
+            },
+            {
+              "name": "Tier-1 ambient-scan",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe ambient-scan"
+            },
+            {
+              "name": "Tier-1 mock-data-scan",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe mock-data-scan"
+            },
+            {
+              "name": "Tier-1 secret-scan",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe secret-scan"
+            }
+          ]
+        },
+        "agent-suites": {
+          "if": "github.event_name != 'schedule'",
+          "name": "${{ matrix.runner == 'ubuntu-24.04' && 'agents-linux' || 'agents-windows' }}",
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "runner": [
+                "ubuntu-24.04",
+                "windows-2025"
+              ]
+            }
+          },
+          "runs-on": "${{ matrix.runner }}",
+          "timeout-minutes": 45,
+          "defaults": {
+            "run": {
+              "shell": "bash",
+              "working-directory": "qmx-agents"
+            }
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Isolate the nested environment on the runner",
+              "run": "echo \"UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/qmx-agents-venv\" >> \"$GITHUB_ENV\""
+            },
+            {
+              "name": "Sync the nested workspace",
+              "id": "sync",
+              "run": "uv sync --frozen"
+            },
+            {
+              "name": "Nested Tier-1 fmt-check",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe fmt-check"
+            },
+            {
+              "name": "Nested Tier-1 lint",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe lint"
+            },
+            {
+              "name": "Nested Tier-1 types",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe types"
+            },
+            {
+              "name": "Nested Tier-1 test",
+              "env": {
+                "COVERAGE_FILE": ".coverage-agents"
+              },
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe test"
+            },
+            {
+              "name": "Nested Tier-1 cov-report",
+              "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}",
+              "run": "uv run --frozen poe cov-report"
+            }
+          ]
+        },
+        "vulture": {
+          "if": "github.event_name != 'schedule'",
+          "runs-on": "ubuntu-latest",
+          "timeout-minutes": 15,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "name": "Install uv (pinned)",
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Vulture count-vs-baseline gate (min-confidence 80)",
+              "run": "uv run --no-project --with \"vulture==2.14\" python tools/vulture_gate.py --baseline qa/_trace/battery/vulture/gate-baseline-min80.txt --min-confidence 80 -- packages extensions qml qmb qmn tools\n"
+            }
+          ]
+        },
+        "agents": {
+          "if": "${{ always() && github.event_name != 'schedule' }}",
+          "needs": [
+            "agent-suites"
+          ],
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 5,
+          "steps": [
+            {
+              "name": "Require every mandatory suite to succeed",
+              "if": "${{ always() }}",
+              "shell": "bash",
+              "env": {
+                "NEEDS_JSON": "${{ toJSON(needs) }}",
+                "REQUIRED_JOBS": "agent-suites"
+              },
+              "run": "python3 - <<'PY'\nimport json\nimport os\nimport sys\n\nrequired = os.environ[\"REQUIRED_JOBS\"].split()\ntry:\n    needs = json.loads(os.environ.get(\"NEEDS_JSON\", \"\"))\nexcept ValueError:\n    needs = None\nvalid = (\n    bool(required)\n    and len(set(required)) == len(required)\n    and isinstance(needs, dict)\n    and set(needs) == set(required)\n    and all(\n        isinstance(needs.get(job), dict)\n        and needs[job].get(\"result\") == \"success\"\n        for job in required\n    )\n)\nprint(\"All mandatory jobs succeeded\" if valid else \"::error::Mandatory jobs did not all succeed\")\nsys.exit(0 if valid else 1)\nPY\n"
+            }
+          ]
+        },
+        "check": {
+          "if": "${{ always() && github.event_name != 'schedule' }}",
+          "needs": [
+            "backend",
+            "agent-suites",
+            "vulture"
+          ],
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 5,
+          "steps": [
+            {
+              "name": "Require every mandatory suite to succeed",
+              "if": "${{ always() }}",
+              "shell": "bash",
+              "env": {
+                "NEEDS_JSON": "${{ toJSON(needs) }}",
+                "REQUIRED_JOBS": "backend agent-suites vulture"
+              },
+              "run": "python3 - <<'PY'\nimport json\nimport os\nimport sys\n\nrequired = os.environ[\"REQUIRED_JOBS\"].split()\ntry:\n    needs = json.loads(os.environ.get(\"NEEDS_JSON\", \"\"))\nexcept ValueError:\n    needs = None\nvalid = (\n    bool(required)\n    and len(set(required)) == len(required)\n    and isinstance(needs, dict)\n    and set(needs) == set(required)\n    and all(\n        isinstance(needs.get(job), dict)\n        and needs[job].get(\"result\") == \"success\"\n        for job in required\n    )\n)\nprint(\"All mandatory jobs succeeded\" if valid else \"::error::Mandatory jobs did not all succeed\")\nsys.exit(0 if valid else 1)\nPY\n"
+            }
+          ]
+        },
+        "mutation-qmn": {
+          "if": "github.event_name == 'schedule'",
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 60,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "name": "Install uv (pinned)",
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Sync the workspace (default groups)",
+              "run": "uv sync --frozen"
+            },
+            {
+              "name": "Stage the node mutmut config into qmn (disposable checkout)",
+              "run": "python tools/stage_mutation_config.py qmn/pyproject.toml qa/_trace/battery/mutmut/qmn_mutmut_config.toml\n"
+            },
+            {
+              "name": "Run mutmut on node money-path modules",
+              "working-directory": "qmn",
+              "run": "set +e\nuv run --frozen --project \"$GITHUB_WORKSPACE\" --with \"mutmut==3.3.0\" mutmut run > mutmut-run.log 2>&1\nstatus=$?\nset -e\nprintf '%s\\n' \"$status\" > mutmut-run.status\ncat mutmut-run.log\n"
+            },
+            {
+              "name": "Collect the per-mutant results",
+              "working-directory": "qmn",
+              "run": "set +e\nuv run --frozen --project \"$GITHUB_WORKSPACE\" --with \"mutmut==3.3.0\" mutmut results --all true > mutmut-results.txt 2>&1\nstatus=$?\nset -e\nprintf '%s\\n' \"$status\" > mutmut-results.status\ncat mutmut-results.txt\n"
+            },
+            {
+              "name": "Complete classified-mutant gate (survivors advisory)",
+              "working-directory": "qmn",
+              "run": "python \"$GITHUB_WORKSPACE/tools/mutation_gate.py\" --results mutmut-results.txt --run-status mutmut-run.status --results-status mutmut-results.status --module qmn.order.door --module qmn.order.path --module qmn.ledger.binding_ledger --module qmn.reconcile.residuals --module qmn.capital.kill_line --module qmn.ledger.virtual\n"
+            },
+            {
+              "uses": "actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4",
+              "if": "always()",
+              "with": {
+                "name": "mutmut-qmn-results",
+                "path": "qmn/mutmut-run.log\nqmn/mutmut-results.txt\nqmn/mutmut-run.status\nqmn/mutmut-results.status\n",
+                "if-no-files-found": "warn",
+                "retention-days": 30
+              }
+            }
+          ]
+        },
+        "mutation": {
+          "if": "github.event_name == 'schedule'",
+          "runs-on": "ubuntu-latest",
+          "timeout-minutes": 60,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "name": "Install uv (pinned)",
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Sync the workspace (default groups)",
+              "run": "uv sync --frozen"
+            },
+            {
+              "name": "Stage the mutmut config into qmf-core (disposable checkout)",
+              "run": "python tools/stage_mutation_config.py packages/qmf-core/pyproject.toml qa/_trace/battery/mutmut/mutmut_config.toml\n"
+            },
+            {
+              "name": "Run mutmut",
+              "working-directory": "packages/qmf-core",
+              "run": "set +e\nuv run --frozen --project \"$GITHUB_WORKSPACE\" --with \"mutmut==3.3.0\" mutmut run > mutmut-run.log 2>&1\nstatus=$?\nset -e\nprintf '%s\\n' \"$status\" > mutmut-run.status\ncat mutmut-run.log\n"
+            },
+            {
+              "name": "Collect the per-mutant results",
+              "working-directory": "packages/qmf-core",
+              "run": "set +e\nuv run --frozen --project \"$GITHUB_WORKSPACE\" --with \"mutmut==3.3.0\" mutmut results --all true > mutmut-results.txt 2>&1\nstatus=$?\nset -e\nprintf '%s\\n' \"$status\" > mutmut-results.status\ncat mutmut-results.txt\n"
+            },
+            {
+              "name": "Complete classified-run and kill-rate gate (floor 68%)",
+              "working-directory": "packages/qmf-core",
+              "run": "python \"$GITHUB_WORKSPACE/tools/mutation_gate.py\" --results mutmut-results.txt --run-status mutmut-run.status --results-status mutmut-results.status --module qmf.core.exact --module qmf.core.chrono --min-kill-rate 68\n"
+            },
+            {
+              "uses": "actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4",
+              "if": "always()",
+              "with": {
+                "name": "mutmut-results",
+                "path": "packages/qmf-core/mutmut-run.log\npackages/qmf-core/mutmut-results.txt\npackages/qmf-core/mutmut-run.status\npackages/qmf-core/mutmut-results.status\n",
+                "if-no-files-found": "warn",
+                "retention-days": 30
+              }
+            }
+          ]
+        }
+      }
+    },
+    "qmn-ubuntu-24.04.yml": {
+      "on": {
+        "push": {
+          "branches": [
+            "main",
+            "integration"
+          ],
+          "tags": [
+            "factory-candidate/**"
+          ]
+        },
+        "pull_request": {
+          "branches": [
+            "main",
+            "integration"
+          ]
+        }
+      },
+      "name": "QMN ubuntu-24.04 lane",
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "qmn-ubuntu-24-04": {
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 45,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version-file": ".python-version"
+              }
+            },
+            {
+              "name": "Install uv (pinned)",
+              "run": "python -m pip install --disable-pip-version-check \"uv==0.12.6\""
+            },
+            {
+              "name": "Sync the workspace (default groups)",
+              "run": "uv sync --frozen"
+            },
+            {
+              "name": "Assert runner pin is ubuntu-24.04 (never latest)",
+              "run": "python - <<'PY'\nimport os, sys\nlabel = os.environ.get(\"ImageOS\") or os.environ.get(\"RUNNER_OS\", \"\")\n# GitHub sets ImageOS=ubuntu24 for ubuntu-24.04 runners.\nprint(f\"ImageOS={os.environ.get('ImageOS')!r} RUNNER_OS={os.environ.get('RUNNER_OS')!r}\")\nimage = (os.environ.get(\"ImageOS\") or \"\").casefold()\nif image and \"ubuntu24\" not in image and image != \"ubuntu24\":\n    # Soft signal \u2014 the workflow YAML pin is authoritative.\n    print(\"warning: ImageOS did not advertise ubuntu24; workflow pin still ubuntu-24.04\")\nprint(\"runner pin ok\")\nPY\n"
+            },
+            {
+              "name": "Linux typing (pythonPlatform=Linux) for qmn",
+              "run": "uv run pyright --pythonplatform Linux --project pyproject.toml qmn/src qmn/deploy\n"
+            },
+            {
+              "name": "Unit-file / IaC scan + check-mode + scratch-credstore + upgrade contract",
+              "run": "uv run python qmn/deploy/ci_lane.py --out \"$RUNNER_TEMP/qmn-ci-lane.json\""
+            },
+            {
+              "name": "Isolated clean install (qmn)",
+              "run": "uv run python qmn/deploy/ci_lane.py --isolated-install --out \"$RUNNER_TEMP/qmn-ci-lane-isolated.json\""
+            },
+            {
+              "name": "Switch / rollback fixture proof (atomic current flip, paired record)",
+              "run": "ROOT=\"$RUNNER_TEMP/opt-qmx\"\nmkdir -p \"$ROOT\"\nuv run python qmn/deploy/switch.py node-switch \\\n  --commit aaaaaaaa --config-version cfg-a \\\n  --fixture-root \"$ROOT\" --out \"$RUNNER_TEMP/switch-a.json\"\nuv run python qmn/deploy/switch.py node-switch \\\n  --commit bbbbbbbb --config-version cfg-b \\\n  --fixture-root \"$ROOT\" --out \"$RUNNER_TEMP/switch-b.json\"\nuv run python qmn/deploy/switch.py node-rollback \\\n  --fixture-root \"$ROOT\" --out \"$RUNNER_TEMP/rollback.json\"\npython - <<'PY'\nimport json, os, pathlib\nroot = pathlib.Path(os.environ[\"RUNNER_TEMP\"]) / \"opt-qmx\"\ncurrent = root / \"current\"\nassert current.exists() or current.is_symlink(), current\nif current.is_symlink():\n    commit = pathlib.Path(os.readlink(current)).name\nelse:\n    commit = current.read_text(encoding=\"utf-8\").strip()\nassert commit == \"aaaaaaaa\", commit\nrecord = json.loads((root / \"deployments\" / \"aaaaaaaa.json\").read_text(encoding=\"utf-8\"))\nassert record[\"commit\"] == \"aaaaaaaa\"\nassert record[\"config_version\"] == \"cfg-a\"\nassert (root / \"trees\" / \"aaaaaaaa\").is_dir()\nassert (root / \"trees\" / \"bbbbbbbb\").is_dir(), \"previous tree must stay recoverable\"\nprint(\"switch/rollback fixture proof ok\")\nPY\n"
+            },
+            {
+              "uses": "actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4",
+              "if": "always()",
+              "with": {
+                "name": "qmn-ubuntu-24-04-lane",
+                "path": "${{ runner.temp }}/qmn-ci-lane.json\n${{ runner.temp }}/qmn-ci-lane-isolated.json\n${{ runner.temp }}/switch-a.json\n${{ runner.temp }}/switch-b.json\n${{ runner.temp }}/rollback.json\n",
+                "if-no-files-found": "warn",
+                "retention-days": 14
+              }
+            }
+          ]
+        }
+      }
+    },
+    "skylos.yml": {
+      "on": {
+        "push": {
+          "branches": [
+            "main",
+            "integration"
+          ],
+          "tags": [
+            "factory-candidate/**"
+          ]
+        },
+        "pull_request": {
+          "branches": [
+            "main",
+            "integration"
+          ]
+        }
+      },
+      "name": "Skylos",
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "skylos": {
+          "runs-on": "ubuntu-latest",
+          "timeout-minutes": 20,
+          "permissions": {
+            "contents": "read"
+          },
+          "steps": [
+            {
+              "uses": "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+              "with": {
+                "python-version": "3.12"
+              }
+            },
+            {
+              "name": "Install Skylos",
+              "run": "python -m pip install --disable-pip-version-check \"skylos==4.33.2\""
+            },
+            {
+              "name": "Scope the tree and declare our own package names",
+              "run": "python - <<'PY' >> \"$GITHUB_ENV\"\nimport pathlib\nimport sys\nimport tomllib\n\nroot = pathlib.Path(\".\")\nconfig = tomllib.loads((root / \"pyproject.toml\").read_text(encoding=\"utf-8\"))\nexcluded = set(config[\"tool\"][\"skylos\"][\"exclude\"])\n\n# CLOSE THE ONE HOLE IN THE EXCLUDE LIST - surgically.\n#\n# Skylos honours [tool.skylos].exclude everywhere except one place: the\n# prompt-injection pass ALSO probes a hard-coded set of high-priority\n# locations - \"\", \"docs\", \"prompt(s)\", \"config(s)\", \".github\", \".continue\" -\n# for AGENTS.md / CLAUDE.md / README.md and friends, and that probe reads no\n# exclude list at all (skylos/analyzer.py). That is why docs/AGENTS.md was\n# flagged CRITICAL with \"docs\" sitting in the exclude list. Passing --exclude\n# on the CLI changes nothing: it feeds the very set the probe ignores. Only\n# removing the file from this checkout binds.\n#\n# Round 2 deleted the whole excluded trees, and that was too blunt: the\n# diff-aware AI-defect rules read git, not the working tree, so wiping adws/\n# read as \"every CLI flag in adws was deleted in this diff\" and invented 51\n# SKY-A104 findings. So we delete only what the probe can actually reach - the\n# agent-instruction basenames inside excluded trees. Today that is exactly one\n# file, and it is markdown, so no diff-aware rule has anything to say about it.\n#\n# Coupled to skylos==4.33.2 (pinned above). If a later version widens that\n# probe, the leak returns as a visible CI failure, never as a silent hole.\n# Safe by construction: this checkout is disposable and nothing is pushed from\n# this job (persist-credentials: false, permissions contents: read).\nprobe_names = {\n    \"readme.md\", \"readme.rst\", \"readme.txt\", \"security.md\",\n    \"contributing.md\", \"contributing.rst\", \"prompt.md\", \"prompts.md\",\n    \"prompts.yaml\", \"prompts.yml\", \"agents.md\", \"claude.md\",\n    \".cursorrules\", \".clinerules\", \".windsurfrules\",\n}\nfor name in sorted(excluded):\n    tree = root / name\n    if not tree.is_dir():\n        continue\n    for candidate in sorted(tree.rglob(\"*\")):\n        if candidate.is_file() and candidate.name.lower() in probe_names:\n            candidate.unlink()\n            print(f\"removed from scan: {candidate.as_posix()}\", file=sys.stderr)\n\n# DECLARE our own importable names.\n#\n# The dependency-hallucination rule (SKY-D222) resolves every import root\n# against PyPI and calls anything missing a hallucination. It only counts a\n# name as local when it sits at the repository root, so this workspace's\n# namespace packages (packages/*/src/qmf) and the top-level tool modules that\n# the pytest pythonpath exposes are invisible to it. They are first-party and\n# deliberately never published, so we name them - which teaches the rule our\n# vocabulary and leaves it fully armed for everything else.\n# */src covers top-level apps (qmb/, qml/, qmn/); */*/src covers\n# packages/*/src and extensions/*/src. Deeper trees (e.g. qmx-agents)\n# stay on the floor set below until their layout is stable.\nnamespaces = {\n    child.name\n    for src in list(root.glob(\"*/src\")) + list(root.glob(\"*/*/src\"))\n    for child in src.iterdir()\n    if child.is_dir() and not child.name.startswith((\".\", \"_\"))\n}\ntool_modules = {\n    module.stem\n    for module in root.glob(\"tools/*.py\")\n    if not module.stem.startswith(\"_\")\n}\n# A floor for namespaces that later epics introduce, so the first commit that\n# adds one cannot re-trip this before its src/ tree exists.\nfloor = {\"qmf\", \"qmb\", \"qml\", \"qmn\", \"qma\"}\nallow = sorted(namespaces | tool_modules | floor)\nprint(f\"first-party names: {allow}\", file=sys.stderr)\nprint(\"SKYLOS_PRIVATE_DEPS_ALLOW=\" + \",\".join(allow))\nPY\n"
+            },
+            {
+              "name": "Scan",
+              "run": "set +e\n# -a is the full local audit: dead code + security/dangerous flow +\n# secrets + quality + dependency CVEs + the evidence-backed AI-defect\n# checks. Scope and exclusions come from [tool.skylos] in pyproject.toml,\n# so this command is the same one a developer runs locally.\npython -m skylos.cli . -a --no-upload --json > skylos-report.json\nstatus=$?\nset -e\n# 0 = clean, 1 = findings (the Gate step below is what decides). Any\n# other code means the run itself broke, and a fail-closed gate must\n# never read a broken run as a clean one.\nif [ \"$status\" -ne 0 ] && [ \"$status\" -ne 1 ]; then\n  echo \"::error::Skylos scan exited $status; refusing to treat that as a clean result\"\n  exit \"$status\"\nfi\n"
+            },
+            {
+              "name": "Annotate the commit and PR",
+              "if": "always()",
+              "run": "python -m skylos.cli cicd annotate --input skylos-report.json --max 50 || true"
+            },
+            {
+              "name": "Gate",
+              "run": "python -m skylos.cli cicd gate --input skylos-report.json --summary"
+            },
+            {
+              "uses": "actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4",
+              "if": "always()",
+              "with": {
+                "name": "skylos-report",
+                "path": "skylos-report.json",
+                "if-no-files-found": "error",
+                "retention-days": 30
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

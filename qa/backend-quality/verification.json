@@ -1,0 +1,50 @@
+{
+  "scoped_tests": {
+    "passed": 180,
+    "skipped": 1,
+    "skip_reason": "Windows symlink privilege unavailable"
+  },
+  "scoped_pyright": {
+    "errors": 0,
+    "version": "1.1.411"
+  },
+  "canonical_root_lint": {
+    "passed": true,
+    "ruff_version": "0.16.3"
+  },
+  "canonical_root_format": {
+    "inherited_files_requiring_format": 20
+  },
+  "root_pyright": {
+    "errors": 4,
+    "source": "../pyright-final.json"
+  },
+  "strict_docs": {
+    "inherited_errors": 25
+  },
+  "tools_suite_clean": {
+    "passed": 619,
+    "failed": 3,
+    "skipped": 2,
+    "six_canonical_tools_coverage_percent": 98.36
+  },
+  "root_exploratory": {
+    "passed": 5524,
+    "failed": 66,
+    "skipped": 39,
+    "live_deselected": 7,
+    "acceptance_valid": false,
+    "limitations": [
+      "some child processes use task-8 editable sources",
+      "coverage data overlapped tools execution"
+    ]
+  },
+  "hosted_ci_observed": false,
+  "full_mutmut_executed": false,
+  "full_nested_suite_executed": false,
+  "coverage_acceptance_passed": false,
+  "review": {
+    "spec_blockers": 0,
+    "standards_blockers": 0
+  }
+}
