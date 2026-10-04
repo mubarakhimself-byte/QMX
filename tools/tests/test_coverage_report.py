@@ -437,10 +437,20 @@ def test_untracked_source_cannot_pad_tracked_inventory() -> None:
     )
 
 
-def test_unrelated_absolute_checkout_is_not_candidate(tmp_path: Path) -> None:
+@pytest.mark.parametrize("prefix", ["/unrelated/", "C:/unrelated/", "other-checkout/"])
+def test_unrelated_checkout_is_not_candidate(tmp_path: Path, prefix: str) -> None:
     report = _clean_report()
     sources = set(report["files"])
-    report["files"] = {"/unrelated/" + path: info for path, info in report["files"].items()}
+    report["files"] = {prefix + path: info for path, info in report["files"].items()}
     assert any(
         "outside the candidate" in item for item in cov.evaluate(report, (), sources, tmp_path)
     )
+
+
+@pytest.mark.parametrize("absolute", [False, True])
+def test_current_candidate_paths_remain_valid(tmp_path: Path, absolute: bool) -> None:
+    report = _clean_report()
+    sources = set(report["files"])
+    prefix = tmp_path.as_posix() + "/" if absolute else "./"
+    report["files"] = {prefix + path: info for path, info in report["files"].items()}
+    assert cov.evaluate(report, (), sources, tmp_path) == []

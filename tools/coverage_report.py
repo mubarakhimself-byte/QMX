@@ -146,11 +146,16 @@ def evaluate(
         if expected_sources and source not in expected_sources:
             violations.append(f"{source}: source is outside the tracked inventory")
             continue
-        if source_root is not None and (Path(path).is_absolute() or re.match(r"^[A-Za-z]:", path)):
+        if source_root is not None:
             try:
-                Path(path).relative_to(source_root)
+                candidate = source_root.resolve()
+                measured = (candidate / Path(_norm(path))).resolve()
+                relative = measured.relative_to(candidate).as_posix()
             except ValueError:
                 violations.append(f"{path}: measured source is outside the candidate")
+                continue
+            if relative != source:
+                violations.append(f"{path}: measured source is outside the candidate inventory")
                 continue
         if source in summaries:
             violations.append(f"{source}: duplicate source path in coverage report")
