@@ -11,21 +11,45 @@
 
   let { part }: { part: "providers" | "mcp" } = $props();
 
+  /** How each provider connects: a key in the credential store, your
+   * Claude plan through the Claude Code CLI on this laptop (no key), or a
+   * model running locally. */
   const PROVIDERS = [
     {
-      name: "Anthropic",
+      name: "Claude through your plan",
+      how: "Claude Code on this laptop · no key, uses your Claude plan",
       models: "Opus 5.5 (daily driver), Sonnet 5.5, Haiku 4.5",
+      state: "Signed in",
+    },
+    {
+      name: "Anthropic API",
+      how: "API key in the credential store · billed per use",
+      models: "Opus 5.5, Sonnet 5.5, Haiku 4.5",
       state: "Key set",
     },
     {
-      name: "OpenAI-compatible",
-      models: "Any endpoint you register",
+      name: "OpenAI",
+      how: "API key",
+      models: "GPT models",
+      state: "Not set",
+    },
+    {
+      name: "Google Gemini",
+      how: "API key",
+      models: "Gemini models",
+      state: "Not set",
+    },
+    {
+      name: "OpenRouter",
+      how: "API key · one key for many models",
+      models: "DeepSeek, Qwen, Grok and others",
       state: "Not set",
     },
     {
       name: "Local models",
-      models: "Ollama on this laptop",
-      state: "Found: qwen, llama",
+      how: "Ollama on this laptop · free, private, slower",
+      models: "qwen, llama",
+      state: "Found 2",
     },
   ];
   let mcp = $state([
@@ -67,18 +91,37 @@
       Which models the copilots can use. Pick each copilot's model under
       Copilots.
     </p>
-    {#each PROVIDERS as p (p.name)}
-      <section class="flex flex-wrap items-center gap-4 rounded-2xl border p-5">
-        <div class="min-w-0 flex-1">
-          <h3 class="text-lg font-semibold">{p.name}</h3>
-          <p class="text-muted-foreground">{p.models}</p>
-        </div>
-        <span class="text-muted-foreground">{p.state}</span>
-        <Button variant="outline" onclick={() => need(`Setting up ${p.name}`)}
-          >Set up</Button
+    <div class="grid gap-4 xl:grid-cols-2">
+      {#each PROVIDERS as p (p.name)}
+        <section
+          class="solid-backing flex flex-col gap-1 rounded-2xl border p-5"
         >
-      </section>
-    {/each}
+          <div class="flex items-center gap-3">
+            <h3 class="text-lg font-semibold">{p.name}</h3>
+            <span
+              class={p.state === "Not set"
+                ? "text-muted-foreground ml-auto"
+                : "text-success ml-auto"}>{p.state}</span
+            >
+          </div>
+          <p>{p.models}</p>
+          <p class="text-muted-foreground text-sm">{p.how}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-3 w-fit"
+            onclick={() => need(`Setting up ${p.name}`)}
+            >{p.state === "Not set" ? "Connect" : "Manage"}</Button
+          >
+        </section>
+      {/each}
+    </div>
+    <Button
+      variant="outline"
+      class="w-fit"
+      onclick={() => need("Adding an OpenAI-compatible endpoint")}
+      ><Plus />Add any OpenAI-compatible endpoint</Button
+    >
   </div>
 {:else}
   <div class="flex flex-col gap-4">
@@ -87,7 +130,9 @@
       them on, and you choose which copilots may use each.
     </p>
     {#each mcp as m, i (m.name)}
-      <section class="flex flex-wrap items-center gap-4 rounded-2xl border p-5">
+      <section
+        class="solid-backing flex flex-wrap items-center gap-4 rounded-2xl border p-5"
+      >
         <div class="min-w-0 flex-1">
           <h3 class="text-lg font-semibold">
             {m.name}{#if m.paid}<span

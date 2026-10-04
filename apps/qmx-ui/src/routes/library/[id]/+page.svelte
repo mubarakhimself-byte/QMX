@@ -342,7 +342,7 @@
               <div class="flex items-center gap-2">
                 <span class="num font-medium">{op.id}</span><Badge
                   variant="outline"
-                  class="text-[10px]">{op.effect}</Badge
+                  class="text-xs">{op.effect}</Badge
                 >
               </div>
               <p class="text-muted-foreground text-sm">{op.summary}</p>

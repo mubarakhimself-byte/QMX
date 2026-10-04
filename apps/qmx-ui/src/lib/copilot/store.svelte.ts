@@ -61,7 +61,11 @@ class CopilotStore {
     }
   }
 
-  create(origin: Origin, title = "New session"): string {
+  create(origin: Origin, title = "New errand"): string {
+    const empty = this.sessions.find(
+      (s) => s.origin === origin && !this.threads[s.id]?.length,
+    );
+    if (empty) return empty.id;
     const id = `n-${Date.now().toString(36)}`;
     this.sessions = [
       { id, title, origin, status: "done", age: "Now" },
@@ -98,7 +102,7 @@ class CopilotStore {
       text,
       attached: attached.length ? attached : undefined,
     });
-    if (s.title === "New session")
+    if (s.title === "New errand" || s.title === "New session")
       s.title = text.length > 48 ? `${text.slice(0, 46)}…` : text;
     s.age = "Now";
     s.status = "running";

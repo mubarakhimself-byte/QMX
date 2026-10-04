@@ -36,7 +36,7 @@
     </div>
     <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
       {#each NODES as n (n.id)}
-        <article class="rounded-2xl border p-5">
+        <article class="solid-backing rounded-2xl border p-5">
           <div class="flex items-center gap-2">
             <span class={cn("size-2.5 rounded-full", TONE[n.status])}></span>
             <Server class="text-muted-foreground size-4" />
@@ -79,7 +79,7 @@
     </div>
     <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
       {#each ENVIRONMENTS as e (e.id)}
-        <article class="rounded-2xl border p-5">
+        <article class="solid-backing rounded-2xl border p-5">
           <div class="flex items-center gap-2">
             <span class={cn("size-2.5 rounded-full", TONE[e.status])}></span>
             <h4 class="font-semibold">{e.name}</h4>
@@ -105,7 +105,9 @@
     </div>
     <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
       {#each STORAGE as s (s.id)}
-        <article class="flex items-start gap-3 rounded-2xl border p-5">
+        <article
+          class="solid-backing flex items-start gap-3 rounded-2xl border p-5"
+        >
           <HardDrive class="text-muted-foreground mt-0.5 size-5" />
           <div>
             <h4 class="font-semibold">{s.name}</h4>

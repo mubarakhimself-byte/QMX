@@ -100,12 +100,12 @@
 
   <header class="bg-panel flex h-11 shrink-0 items-center gap-3 border-b px-3">
     <span class="text-sm font-semibold">{name}</span>
-    {#if badge}<Badge variant="outline" class="h-4 px-1.5 text-[10px]"
+    {#if badge}<Badge variant="outline" class="h-4 px-1.5 text-xs"
         >{badge}</Badge
       >{/if}
     {#if tone}
       <Badge
-        class="h-5 px-2 text-[11px] font-semibold"
+        class="h-5 px-2 text-xs font-semibold"
         style="background: var(--tone-{tone}); color: #0b0b0b"
         >{tone === "live" ? "LIVE" : "PAPER"}</Badge
       >

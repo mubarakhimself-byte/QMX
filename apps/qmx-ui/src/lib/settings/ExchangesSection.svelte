@@ -38,7 +38,7 @@
   </p>
   {#each VENUES as v (v.id)}
     {@const accounts = ACCOUNTS.filter((a) => a.venue === v.id)}
-    <section class="rounded-2xl border p-5">
+    <section class="solid-backing rounded-2xl border p-5">
       <div class="flex items-center gap-3">
         <h3 class="text-lg font-semibold">{v.name}</h3>
         <span class="text-muted-foreground">{v.market}</span>

@@ -11,7 +11,7 @@
 </script>
 
 <div class="h-full overflow-auto p-2">
-  <p class="text-muted-foreground px-1 pb-1 text-[13px] font-semibold">
+  <p class="text-muted-foreground px-1 pb-1 text-sm font-semibold">
     Copilot sessions
   </p>
   <ul class="mb-3 flex flex-col gap-1">
@@ -29,7 +29,7 @@
             )}
           ></span>
           <span class="min-w-0 flex-1 truncate text-sm">{s.title}</span>
-          <span class="text-muted-foreground shrink-0 text-[13px]"
+          <span class="text-muted-foreground shrink-0 text-sm"
             >{s.status === "running" ? "Running" : "Waiting"} · {s.age}</span
           >
         </a>
@@ -37,7 +37,7 @@
     {/each}
     <!-- eslint-enable svelte/no-navigation-without-resolve -->
   </ul>
-  <p class="text-muted-foreground px-1 pb-1 text-[13px] font-semibold">
+  <p class="text-muted-foreground px-1 pb-1 text-sm font-semibold">
     Jobs on your servers
   </p>
   <ul class="flex flex-col gap-1">
@@ -45,7 +45,7 @@
       <li class="px-2 py-1.5">
         <div class="flex items-center gap-2">
           <span class="min-w-0 flex-1 truncate text-sm">{t.name}</span>
-          <span class="text-muted-foreground shrink-0 text-[13px]"
+          <span class="text-muted-foreground shrink-0 text-sm"
             >{t.where}</span
           >
         </div>
@@ -55,7 +55,7 @@
             ></span>
           </div>
         {:else}
-          <p class="text-muted-foreground text-[13px]">
+          <p class="text-muted-foreground text-sm">
             {t.log[t.log.length - 1]}
           </p>
         {/if}

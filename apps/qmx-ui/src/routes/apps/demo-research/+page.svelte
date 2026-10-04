@@ -111,7 +111,7 @@
                   <td class="w-14 text-right">
                     <span
                       class={cn(
-                        "rounded-sm px-1 text-[10px] uppercase",
+                        "rounded-sm px-1 text-xs uppercase",
                         e.impact === "high" &&
                           "bg-destructive/15 text-destructive",
                         e.impact === "medium" && "bg-warning/15 text-warning",
@@ -133,7 +133,7 @@
     <ul class="flex flex-col text-sm">
       {#each DEMO_NEWS as n (n.title)}
         <li class="flex gap-2 border-b py-1.5 last:border-0">
-          <span class="bg-muted h-fit rounded-sm px-1 text-[10px] font-medium"
+          <span class="bg-muted h-fit rounded-sm px-1 text-xs font-medium"
             >{n.tag}</span
           >
           <span class="min-w-0 flex-1">{n.title}</span>

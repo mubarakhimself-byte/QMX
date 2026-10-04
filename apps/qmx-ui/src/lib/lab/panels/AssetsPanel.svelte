@@ -59,7 +59,7 @@
                 >{items.length}</span
               >
               {#if g.scope === "new"}<span
-                  class="text-muted-foreground ml-1 rounded border px-1 text-[11px]"
+                  class="text-muted-foreground ml-1 rounded border px-1 text-xs"
                   >new scope</span
                 >{/if}
             </button>

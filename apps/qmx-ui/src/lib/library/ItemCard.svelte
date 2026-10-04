@@ -39,7 +39,7 @@
     <span class="text-muted-foreground line-clamp-2 text-xs"
       >{item.summary}</span
     >
-    <span class="text-muted-foreground mt-auto pt-1 text-[11px]">
+    <span class="text-muted-foreground mt-auto pt-1 text-xs">
       {#if item.starts}Starts: {item.starts.what.toLowerCase()}{:else if places.length}Used
         in {places.join(", ")}{:else}Not used yet{/if}
     </span>

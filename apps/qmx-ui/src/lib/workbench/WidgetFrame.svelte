@@ -106,7 +106,7 @@
     <h3 class="panel-label truncate">{title}</h3>
     {#if controls}{@render controls()}{/if}
     {#if state === "stale" || state === "reconnecting" || state === "unknown"}
-      <Badge variant="outline" class="text-warning h-4 px-1.5 text-[10px]"
+      <Badge variant="outline" class="text-warning h-4 px-1.5 text-xs"
         >{STATE_TEXT[state]}</Badge
       >
     {/if}

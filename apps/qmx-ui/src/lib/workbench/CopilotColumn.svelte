@@ -141,7 +141,7 @@
     </DropdownMenu.Root>
     {#if profile}<Badge
         variant="outline"
-        class="h-4 shrink-0 px-1.5 text-[10px]">{profile}</Badge
+        class="h-4 shrink-0 px-1.5 text-xs">{profile}</Badge
       >{/if}
     <div class="ml-auto flex shrink-0 items-center">
       <Button

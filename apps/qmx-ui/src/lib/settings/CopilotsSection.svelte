@@ -73,7 +73,7 @@
 
 <div class="flex flex-col gap-4">
   {#each copilots as c, i (c.id)}
-    <section class="rounded-2xl border">
+    <section class="solid-backing rounded-2xl border">
       <button
         type="button"
         class="flex w-full items-center gap-3 px-5 py-4 text-left"

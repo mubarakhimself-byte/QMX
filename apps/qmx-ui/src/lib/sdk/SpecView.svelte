@@ -58,7 +58,7 @@
     <p class="text-sm">{str(p.text)}</p>
   {:else if el.type === "Metric"}
     <div class="rounded-lg border px-3 py-2">
-      <p class="text-muted-foreground text-[13px]">{str(p.label)}</p>
+      <p class="text-muted-foreground text-sm">{str(p.label)}</p>
       <p class={cn("num text-xl font-semibold", TONE[str(p.tone)] ?? "")}>
         {str(p.value)}
       </p>
@@ -66,7 +66,7 @@
   {:else if el.type === "Table"}
     <div class="overflow-x-auto rounded-lg border">
       <table class="w-full text-sm">
-        <thead class="text-muted-foreground text-left text-[13px]">
+        <thead class="text-muted-foreground text-left text-sm">
           <tr>
             {#each (p.columns as unknown[]) ?? [] as h, i (i)}<th
                 class={cn("px-3 py-2 font-medium", i && "text-right")}
@@ -100,7 +100,7 @@
     }))}
     <div class="h-44"><LineChart {series} height={160} /></div>
   {:else if el.type === "Badge"}
-    <span class="w-fit rounded border px-2 py-0.5 text-[13px]"
+    <span class="w-fit rounded border px-2 py-0.5 text-sm"
       >{str(p.text)}</span
     >
   {:else if el.type === "Callout"}
@@ -137,7 +137,7 @@
     <p class="text-destructive flex items-center gap-2 font-medium">
       <CircleAlert class="size-4" />This panel can't be drawn
     </p>
-    <ul class="text-muted-foreground mt-1 list-disc pl-5 text-[13px]">
+    <ul class="text-muted-foreground mt-1 list-disc pl-5 text-sm">
       {#each errors.slice(0, 6) as e (e)}<li>{e}</li>{/each}
     </ul>
   </div>

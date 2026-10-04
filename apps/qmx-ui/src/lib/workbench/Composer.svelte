@@ -93,9 +93,9 @@
   const iconChip =
     "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted relative flex size-7 shrink-0 items-center justify-center rounded-md";
   const badge =
-    "bg-primary text-primary-foreground num absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] leading-none";
+    "bg-primary text-primary-foreground num absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-xs leading-none";
   const chip =
-    "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap";
+    "text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm whitespace-nowrap";
 </script>
 
 <form
@@ -109,7 +109,7 @@
     <ul class="flex flex-wrap gap-1.5 px-3 pt-3" aria-label="Context">
       {#each refs as ref (ref)}
         <li
-          class="bg-muted flex h-7 items-center gap-1.5 rounded-md pr-1 pl-2 text-[13px]"
+          class="bg-muted flex h-7 items-center gap-1.5 rounded-md pr-1 pl-2 text-sm"
         >
           <LayoutPanelTop class="text-muted-foreground size-3.5" />
           <span class="max-w-64 truncate">{ref}</span>
@@ -136,7 +136,7 @@
             class="hover:bg-muted flex w-full items-baseline gap-3 rounded-md px-2 py-1 text-left"
             onclick={() => (draft = `${c.cmd} `)}
           >
-            <span class="font-mono text-[13px]">{c.cmd}</span>
+            <span class="font-mono text-sm">{c.cmd}</span>
             <span class="text-muted-foreground text-xs">{c.note}</span>
           </button>
         </li>
@@ -161,7 +161,7 @@
       "placeholder:text-muted-foreground field-sizing-content resize-none overflow-y-auto bg-transparent px-3.5 pt-3 outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
       size === "lg"
         ? "max-h-80 min-h-20 text-base"
-        : "max-h-56 min-h-12 text-[15px]",
+        : "max-h-56 min-h-12 text-base",
     )}></textarea>
   <div class="flex items-center gap-0.5 px-2 pb-2">
     {#if context.attach}
@@ -282,9 +282,9 @@
               closeOnSelect={false}
             >
               <span class="flex flex-col">
-                <span class="font-mono text-[13px]"
+                <span class="font-mono text-sm"
                   >{t.id}{#if t.scope === "new"}<span
-                      class="text-muted-foreground ml-1.5 font-sans text-[11px]"
+                      class="text-muted-foreground ml-1.5 font-sans text-xs"
                       >new scope</span
                     >{/if}</span
                 >

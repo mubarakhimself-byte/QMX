@@ -31,7 +31,7 @@
             <span class="text-sm font-medium">{s.label}</span>
             {#if s.scope === "new"}<Badge
                 variant="outline"
-                class="ml-auto text-[11px]">New scope</Badge
+                class="ml-auto text-xs">New scope</Badge
               >{/if}
           </div>
           <p class="text-muted-foreground mt-1 text-xs">{s.owner}</p>

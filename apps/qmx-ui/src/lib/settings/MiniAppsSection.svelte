@@ -38,7 +38,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <section class="flex items-center gap-4 rounded-2xl border p-5">
+  <section class="solid-backing flex items-center gap-4 rounded-2xl border p-5">
     <div class="min-w-0 flex-1">
       <h3 class="text-lg font-semibold">Safe mode</h3>
       <p class="text-muted-foreground">
@@ -59,7 +59,9 @@
   </section>
 
   {#each apps as a, i (a.name)}
-    <section class={cn("rounded-2xl border p-5", safe && "opacity-50")}>
+    <section
+      class={cn("solid-backing rounded-2xl border p-5", safe && "opacity-50")}
+    >
       <div class="flex items-center gap-3">
         <h3 class="text-lg font-semibold">{a.name}</h3>
         <span class="text-muted-foreground">{a.kind} · {a.risk}</span>

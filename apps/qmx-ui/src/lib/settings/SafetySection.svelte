@@ -26,7 +26,7 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <section class="rounded-2xl border p-5">
+  <section class="solid-backing rounded-2xl border p-5">
     <h3 class="text-lg font-semibold">What goes live without you</h3>
     <p class="text-muted-foreground">
       Decided by what a thing can touch, not by how it was built.
@@ -44,7 +44,7 @@
       {/each}
     </ul>
   </section>
-  <section class="flex items-start gap-4 rounded-2xl border p-5">
+  <section class="solid-backing flex items-start gap-4 rounded-2xl border p-5">
     <Lock class="text-primary mt-1 size-5 shrink-0" />
     <div>
       <h3 class="text-lg font-semibold">Real money</h3>
@@ -55,7 +55,7 @@
       </p>
     </div>
   </section>
-  <section class="rounded-2xl border p-5">
+  <section class="solid-backing rounded-2xl border p-5">
     <h3 class="text-lg font-semibold">Kill switch</h3>
     <p class="text-muted-foreground">
       Stop new trades or close and halt by pod, by server or everything, from

@@ -57,7 +57,7 @@
       ></span>
       <span class="min-w-0 flex-1">
         <span class="block text-sm font-medium">{e.what}</span>
-        <span class="text-muted-foreground block text-[13px]"
+        <span class="text-muted-foreground block text-sm"
           >{e.when} · {e.kind} · {e.pods}</span
         >
       </span>

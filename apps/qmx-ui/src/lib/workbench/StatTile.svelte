@@ -13,6 +13,6 @@
     {value ?? "—"}
   </span>
   {#if hint}
-    <span class="text-muted-foreground truncate text-[11px]">{hint}</span>
+    <span class="text-muted-foreground truncate text-xs">{hint}</span>
   {/if}
 </div>

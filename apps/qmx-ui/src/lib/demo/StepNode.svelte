@@ -55,7 +55,7 @@
     {/if}
   </div>
   <div class="px-2.5 pt-2">
-    <p class="text-[13px] font-semibold">{data.label}</p>
+    <p class="text-sm font-semibold">{data.label}</p>
     <p class="text-muted-foreground truncate">{data.detail}</p>
   </div>
   {#if data.preview?.length}

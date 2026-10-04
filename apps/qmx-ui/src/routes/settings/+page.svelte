@@ -5,10 +5,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
-  import {
-    workbench,
-    type Theme,
-  } from "$lib/workbench/workbench.svelte";
+  import { workbench, type Theme } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
   import ExchangesSection from "$lib/settings/ExchangesSection.svelte";
   import ServersSection from "$lib/settings/ServersSection.svelte";
@@ -172,7 +169,7 @@
     { name: "Economic calendar", kind: "Calendar", note: "Free feed" },
     { name: "Market news", kind: "News", note: "Free feeds only" },
   ];
-  const card = "surface flex flex-col gap-3 rounded-xl p-5";
+  const card = "solid-backing surface flex flex-col gap-3 rounded-xl p-5";
 </script>
 
 <svelte:head><title>Settings · QMX</title></svelte:head>

@@ -71,7 +71,7 @@
       class={compact ? "h-20 w-full" : "h-28 w-full"}
     />
     <span
-      class="bg-background/80 text-foreground absolute top-2 left-2 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium backdrop-blur"
+      class="bg-background/80 text-foreground absolute top-2 left-2 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium backdrop-blur"
     >
       <Icon class="size-3" />
       {KIND_LABEL[entity.kind]}{headless ? " · headless" : ""}
@@ -80,7 +80,7 @@
   <div class="flex flex-1 flex-col gap-2 p-3.5">
     <div class="flex items-start gap-2">
       <div class="min-w-0 flex-1">
-        <p class="truncate text-[15px] leading-tight font-semibold">
+        <p class="truncate text-base leading-tight font-semibold">
           {entity.name}
         </p>
         <p class="text-muted-foreground line-clamp-2 text-xs">
@@ -89,7 +89,7 @@
       </div>
       <span
         class={cn(
-          "shrink-0 rounded-full border px-2 py-0.5 text-[11px]",
+          "shrink-0 rounded-full border px-2 py-0.5 text-xs",
           STAGE_TONE[entity.stage],
         )}
       >
@@ -105,7 +105,7 @@
             changed.includes(m.key) && "bg-warning/15 -mx-1 px-1",
           )}
         >
-          <dt class="text-muted-foreground truncate text-[11px]">{m.label}</dt>
+          <dt class="text-muted-foreground truncate text-xs">{m.label}</dt>
           <dd
             class={cn(
               "num text-sm font-semibold",
@@ -119,7 +119,7 @@
       {/each}
     </dl>
     {#if !compact}
-      <p class="text-muted-foreground flex items-center gap-2 text-[11px]">
+      <p class="text-muted-foreground flex items-center gap-2 text-xs">
         <span class="num">{entity.version}</span>
         <span class="num truncate">{entity.fp}</span>
         {#if entity.connections?.length}

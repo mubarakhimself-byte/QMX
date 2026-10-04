@@ -22,13 +22,13 @@
 </script>
 
 <div
-  class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-black/40 font-mono text-[12.5px]"
+  class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-black/40 font-mono text-sm"
 >
   {#if command}
     <div class="flex items-center gap-2 border-b px-3 py-1.5">
       <span class="text-muted-foreground">$</span>
       <span class="truncate">{command}</span>
-      <span class="ml-auto text-[11px] uppercase {TONE[status]}">{status}</span>
+      <span class="ml-auto text-xs uppercase {TONE[status]}">{status}</span>
     </div>
   {/if}
   <pre

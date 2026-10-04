@@ -135,7 +135,7 @@
                 >
               </span>
               <span
-                class="shrink-0 rounded border px-1.5 text-[11px]"
+                class="shrink-0 rounded border px-1.5 text-xs"
                 style="color:{STAGE_TONE[
                   p.stage
                 ]}; border-color:color-mix(in oklab, {STAGE_TONE[

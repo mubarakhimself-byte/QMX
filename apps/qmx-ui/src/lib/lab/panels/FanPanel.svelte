@@ -42,7 +42,7 @@
           ></span>{p.name}
         </p>
         <p class="num text-xl font-semibold">{FAN[p.id].pKill}%</p>
-        <p class="text-muted-foreground text-[11px]">chance of the kill line</p>
+        <p class="text-muted-foreground text-xs">chance of the kill line</p>
       </div>
     {/each}
   </div>

@@ -44,7 +44,7 @@
     <p class="flex items-center gap-2 text-sm font-medium">
       <ShieldCheck class="text-primary size-4" />Needs your yes: {block.action}
     </p>
-    <p class="text-muted-foreground text-[13px]">{block.guard}</p>
+    <p class="text-muted-foreground text-sm">{block.guard}</p>
     <div class="flex flex-wrap gap-1.5">
       <Button size="sm" onclick={() => onanswer("Allowed once")}>Allow</Button>
       <Button

@@ -77,7 +77,7 @@
                   {#each c.checks as k (k.name)}
                     <span
                       class={cn(
-                        "flex-1 truncate rounded px-1 py-0.5 text-center text-[10px]",
+                        "flex-1 truncate rounded px-1 py-0.5 text-center text-xs",
                         k.ok === true
                           ? "bg-success/15 text-success"
                           : k.ok === false

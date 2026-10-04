@@ -236,7 +236,7 @@
         >
           <span
             class={cn(
-              "flex size-5 items-center justify-center rounded-full border text-[11px]",
+              "flex size-5 items-center justify-center rounded-full border text-xs",
               step > i + 1 &&
                 "bg-primary text-primary-foreground border-primary",
               step === i + 1 && "border-primary",

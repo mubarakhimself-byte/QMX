@@ -236,7 +236,7 @@
               class="text-muted-foreground"
               title="Changed from the default">*</span
             >{/if}{#if lab.machine}{@const n = activity(lab.machine, l.id)}<span
-              class="num ml-1.5 rounded px-1 text-[11px] {n
+              class="num ml-1.5 rounded px-1 text-xs {n
                 ? 'bg-info/15 text-info'
                 : 'text-muted-foreground/60'}"
               title={`${n} on this machine`}>{n}</span

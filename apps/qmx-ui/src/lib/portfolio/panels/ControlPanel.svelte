@@ -101,7 +101,7 @@
         <span class="flex items-center gap-1.5"
           >{#if p.danger}<ShieldAlert class="size-3.5" />{/if}{p.label}</span
         >
-        <span class="text-[11px] font-normal opacity-75">{p.note}</span>
+        <span class="text-xs font-normal opacity-75">{p.note}</span>
       </Button>
     {/each}
   </div>

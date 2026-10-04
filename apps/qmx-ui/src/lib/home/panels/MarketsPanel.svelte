@@ -36,7 +36,7 @@
       <span class="num text-right text-sm">{fmtPx(c.px)}</span>
       <span
         class={cn(
-          "num text-right text-[13px]",
+          "num text-right text-sm",
           c.chg >= 0 ? "text-success" : "text-destructive",
         )}>{c.chg >= 0 ? "+" : "−"}{Math.abs(c.chg).toFixed(2)}%</span
       >

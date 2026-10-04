@@ -99,7 +99,7 @@
   <header class="flex h-14 shrink-0 items-center gap-3 border-b px-4">
     <div class="min-w-0">
       <h1 class="truncate text-lg leading-tight font-semibold">{hello}</h1>
-      <p class="text-muted-foreground text-[13px]">{today}</p>
+      <p class="text-muted-foreground text-sm">{today}</p>
     </div>
     <nav class="ml-4 flex items-center gap-0.5" aria-label="Tabs">
       {#each L.layouts as l (l.id)}
@@ -163,7 +163,7 @@
         >
           <Bell class="size-5" />
           {#if waiting.length}<span
-              class="bg-destructive num absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[11px] text-white"
+              class="bg-destructive num absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs text-white"
               >{waiting.length}</span
             >{/if}
         </DropdownMenu.Trigger>

@@ -101,7 +101,7 @@
         >Everything
         <span
           class={cn(
-            "block text-[11px] font-normal",
+            "block text-xs font-normal",
             STATE_TONE[kill.stateOf(scopeKey.all)],
           )}>{KILL_LABEL[kill.stateOf(scopeKey.all)]}</span
         ></button
@@ -125,7 +125,7 @@
               title={n.status}
             ></span></span
           >
-          <span class={cn("block text-[11px]", STATE_TONE[kill.stateOf(k)])}
+          <span class={cn("block text-xs", STATE_TONE[kill.stateOf(k)])}
             >{KILL_LABEL[kill.stateOf(k)]}</span
           >
         </button>
@@ -141,7 +141,7 @@
           )}
           onclick={() => (scope = pk)}
           ><span class="block truncate font-medium">{p.name}</span>
-          <span class={cn("block text-[11px]", STATE_TONE[kill.stateOf(pk)])}
+          <span class={cn("block text-xs", STATE_TONE[kill.stateOf(pk)])}
             >{KILL_LABEL[kill.stateOf(pk)]}</span
           ></button
         >
@@ -173,7 +173,7 @@
                   ></span
                 >
               {/each}
-              <span class={cn("mt-0.5 block text-[11px]", STATE_TONE[st])}
+              <span class={cn("mt-0.5 block text-xs", STATE_TONE[st])}
                 >{KILL_LABEL[st]}</span
               >
             </button>

@@ -20,7 +20,7 @@
   >
     {#each [...items, ...items] as t, i (i)}
       <span
-        class="flex items-center gap-2 text-[13px] whitespace-nowrap"
+        class="flex items-center gap-2 text-sm whitespace-nowrap"
         aria-hidden={i >= items.length}
       >
         <span class="font-medium">{t.sym}</span>

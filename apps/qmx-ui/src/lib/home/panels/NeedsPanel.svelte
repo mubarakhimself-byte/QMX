@@ -29,7 +29,7 @@
             ></span>
             <span class="min-w-0 flex-1">
               <span class="block text-sm font-medium">{n.title}</span>
-              <span class="text-muted-foreground block text-[13px]"
+              <span class="text-muted-foreground block text-sm"
                 >{n.kind} · {n.why}</span
               >
             </span>

@@ -32,7 +32,7 @@
         <s.icon class="text-muted-foreground size-4 shrink-0" />
         <span class="min-w-0 flex-1">
           <span class="block truncate text-sm">{i.name}</span>
-          <span class="text-muted-foreground block truncate text-[13px]"
+          <span class="text-muted-foreground block truncate text-sm"
             >{s.label} · {i.summary}</span
           >
         </span>

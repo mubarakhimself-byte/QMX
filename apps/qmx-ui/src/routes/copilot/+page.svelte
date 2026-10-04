@@ -210,6 +210,7 @@
             <HowDoI
               onstart={(k) => (startKind = k)}
               onask={(t) => (seed = t)}
+              onopen={open}
             />
           {/if}
         </div>

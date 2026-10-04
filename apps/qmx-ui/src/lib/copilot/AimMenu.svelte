@@ -17,7 +17,7 @@
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger
-    class="text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] whitespace-nowrap"
+    class="text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm whitespace-nowrap"
     aria-label={`${mode.label}, ${summary}, answered by ${answerer.label}`}
     title="How much it may do, what it may touch, and who answers"
   >

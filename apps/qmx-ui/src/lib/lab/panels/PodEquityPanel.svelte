@@ -112,7 +112,7 @@
       >
         {#each pods as p (p.id)}
           <span
-            class="num flex items-center justify-center overflow-hidden text-[11px] font-medium text-white"
+            class="num flex items-center justify-center overflow-hidden text-xs font-medium text-white"
             style="width:{share(p.id) * 100}%; background:{p.color}"
             title={`${p.name}: ${usd(share(p.id) * POT)}`}
             >{Math.round(share(p.id) * 100)}%</span

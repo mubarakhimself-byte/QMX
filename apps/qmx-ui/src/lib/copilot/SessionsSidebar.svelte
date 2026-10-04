@@ -16,6 +16,7 @@
   import { Input } from "$lib/components/ui/input";
   import { cn } from "$lib/utils";
   import type { Session } from "./demo";
+  import { copilot } from "./store.svelte";
 
   let {
     sessions,
@@ -48,7 +49,13 @@
   );
   const isWaiting = (s: Session) =>
     s.status === "waiting" || waitingIds.includes(s.id);
+  /** An errand with nothing said yet: shown only while it is open. */
+  const blank = (s: Session) => copilot.blocks(s.id).length === 0;
   const groups = $derived([
+    {
+      label: "Not started",
+      list: top.filter((s) => blank(s) && s.id === active),
+    },
     { label: "Needs you", list: top.filter(isWaiting) },
     {
       label: "Working",
@@ -56,7 +63,9 @@
     },
     {
       label: "Earlier",
-      list: top.filter((s) => s.status === "done" && !isWaiting(s)),
+      list: top.filter(
+        (s) => s.status === "done" && !isWaiting(s) && !blank(s),
+      ),
     },
   ]);
   const activeParent = $derived(
@@ -104,7 +113,7 @@
                 <span class="block truncate">{s.title}</span>
                 <span class="text-muted-foreground block text-sm">{s.age}</span>
               </span>
-              {#if g.label !== "Earlier"}<span
+              {#if g.label === "Needs you" || g.label === "Working"}<span
                   class={cn(
                     "mt-2 size-2 shrink-0 rounded-full",
                     g.label === "Needs you"

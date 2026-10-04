@@ -73,7 +73,7 @@
         <span class="text-muted-foreground num mt-1 w-4 text-xs">{i + 1}</span>
         <div class="w-28 shrink-0">
           <p class="text-sm font-medium">{s.label}</p>
-          <p class="text-muted-foreground text-[11px] leading-tight">
+          <p class="text-muted-foreground text-xs leading-tight">
             {s.note}
           </p>
         </div>
@@ -113,7 +113,7 @@
                       )}><X class="size-3.5" /></button
                   >
                 {:else}
-                  <span class="text-muted-foreground px-1.5 text-[10px]"
+                  <span class="text-muted-foreground px-1.5 text-xs"
                     >required</span
                   >
                 {/if}
@@ -177,7 +177,7 @@
       <span class="num text-muted-foreground w-4 text-xs">8</span>
       <div class="w-28 shrink-0">
         <p class="text-sm font-medium">Venue fit</p>
-        <p class="text-muted-foreground text-[11px]">Always last</p>
+        <p class="text-muted-foreground text-xs">Always last</p>
       </div>
       <span class="text-muted-foreground text-xs"
         >Rounds to the exchange's lot size and minimum order, adds fees, refuses

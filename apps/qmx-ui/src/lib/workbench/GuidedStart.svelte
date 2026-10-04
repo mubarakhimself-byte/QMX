@@ -131,7 +131,7 @@
 </script>
 
 <div
-  class="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6 text-[15px] leading-relaxed"
+  class="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6 text-base leading-relaxed"
 >
   <div class="flex items-start gap-3">
     <Sparkles class="text-primary mt-1 size-4 shrink-0" />
@@ -207,7 +207,7 @@
             <li class="flex items-start gap-3 text-sm">
               <span
                 class={cn(
-                  "num mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px]",
+                  "num mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border text-xs",
                 )}>{i + 1}</span
               >
               <span class="min-w-0">

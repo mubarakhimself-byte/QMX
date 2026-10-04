@@ -365,7 +365,7 @@
               >
             </span>
             {#if i.stage}<span
-                class="text-muted-foreground hidden shrink-0 rounded border px-1.5 text-[11px] @[34rem]:inline"
+                class="text-muted-foreground hidden shrink-0 rounded border px-1.5 text-xs @[34rem]:inline"
                 >{i.stage}</span
               >{/if}
             <span
@@ -852,7 +852,7 @@
                         <div
                           class={cn(
                             "prose-qmx max-w-[78ch]",
-                            reading && "text-[17px]",
+                            reading && "text-base",
                           )}
                         >
                           <!-- Sanitised with DOMPurify in loadArticleText. -->
@@ -932,7 +932,7 @@
                     >
                       <span class="flex items-center gap-2 text-sm font-medium"
                         >{s.name}<span
-                          class="bg-background/50 ml-auto rounded-sm px-1.5 text-[10px]"
+                          class="bg-background/50 ml-auto rounded-sm px-1.5 text-xs"
                           >{s.family}</span
                         ></span
                       >

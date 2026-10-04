@@ -73,7 +73,7 @@
       {/each}
       {#each rows as s (s.id)}
         <span class="self-center text-sm"
-          >{s.name}{#if s.mine}<span class="text-info block text-[11px]"
+          >{s.name}{#if s.mine}<span class="text-info block text-xs"
               >Yours</span
             >{/if}</span
         >
@@ -100,7 +100,7 @@
               </span>
               <span
                 class={cn(
-                  "block truncate text-[11px]",
+                  "block truncate text-xs",
                   c.stoodDown ? "text-destructive" : "text-muted-foreground",
                 )}>{c.stoodDown ? "Stood down: " : ""}{c.fired}</span
               >

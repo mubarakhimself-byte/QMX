@@ -76,7 +76,7 @@
         <div>
           <p class="panel-label">{entry.group}</p>
           <h2 class="text-2xl font-semibold">{entry.type}</h2>
-          <p class="text-muted-foreground mt-1 max-w-3xl text-[15px]">
+          <p class="text-muted-foreground mt-1 max-w-3xl text-base">
             {entry.description}
           </p>
         </div>
@@ -204,10 +204,10 @@
               <tbody>
                 {#each Object.entries(entry.props) as [name, p] (name)}
                   <tr class="border-t">
-                    <td class="px-4 py-2 font-mono text-[13px]"
+                    <td class="px-4 py-2 font-mono text-sm"
                       >{name}{p.required ? "" : "?"}</td
                     >
-                    <td class="text-muted-foreground font-mono text-[13px]"
+                    <td class="text-muted-foreground font-mono text-sm"
                       >{p.options ? p.options.join(" | ") : p.type}</td
                     >
                     <td class="px-4">{p.description}</td>
@@ -221,7 +221,7 @@
         <section aria-label="Spec" class="flex flex-col gap-2">
           <p class="panel-label">Spec the copilot reads</p>
           <pre
-            class="surface overflow-auto rounded-lg p-4 font-mono text-[13px] leading-relaxed">{JSON.stringify(
+            class="surface overflow-auto rounded-lg p-4 font-mono text-sm leading-relaxed">{JSON.stringify(
               { type: entry.type, props: entry.example },
               null,
               2,
