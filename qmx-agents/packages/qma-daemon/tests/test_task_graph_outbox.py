@@ -7,7 +7,9 @@ import json
 import os
 import runpy
 import sqlite3
+from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -583,6 +585,40 @@ def test_outbox_migration_refuses_live_wal_source(tmp_path: Path) -> None:
     connection.close()
 
 
+def _inject_after_backup(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    backup: Path,
+    after_backup: Callable[[], None],
+) -> None:
+    """Inject a source race after the real SQLite online backup has completed."""
+    original_connect = sqlite3.connect
+
+    class RacingConnection(sqlite3.Connection):
+        def backup(
+            self,
+            target: sqlite3.Connection,
+            *,
+            pages: int = -1,
+            progress: Callable[[int, int, int], object] | None = None,
+            name: str = "main",
+            sleep: float = 0.250,
+        ) -> None:
+            super().backup(target, pages=pages, progress=progress, name=name, sleep=sleep)
+            database = target.execute("PRAGMA database_list").fetchone()
+            assert database is not None
+            filename: object = database[2]
+            assert isinstance(filename, str)
+            if Path(filename) == backup:
+                after_backup()
+
+    monkeypatch.setattr(
+        task_graph_outbox_migration.sqlite3,
+        "connect",
+        partial(original_connect, factory=RacingConnection),
+    )
+
+
 def test_outbox_migration_rechecks_wal_snapshot_after_backup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -606,19 +642,16 @@ def test_outbox_migration_rechecks_wal_snapshot_after_backup(
     connection.close()
     assert not Path(f"{database}-wal").exists()
 
-    original_copy = task_graph_outbox_migration._copy_database
     writer_connections: list[sqlite3.Connection] = []
 
-    def copy_then_write(source: Path, destination: Path) -> None:
-        original_copy(source, destination)
-        if source == database:
-            late_writer = sqlite3.connect(database)
-            writer_connections.append(late_writer)
-            late_writer.execute("INSERT INTO retained_extension VALUES ('during-migration')")
-            late_writer.commit()
+    def write_after_backup() -> None:
+        late_writer = sqlite3.connect(database)
+        writer_connections.append(late_writer)
+        late_writer.execute("INSERT INTO retained_extension VALUES ('during-migration')")
+        late_writer.commit()
 
-    monkeypatch.setattr(task_graph_outbox_migration, "_copy_database", copy_then_write)
     backup = tmp_path / "race-backup.sqlite3"
+    _inject_after_backup(monkeypatch, backup=backup, after_backup=write_after_backup)
     destination = tmp_path / "race-destination.sqlite3"
     try:
         result = migrate_task_graph_outbox(source=database, backup=backup, destination=destination)
@@ -665,19 +698,16 @@ def test_outbox_migration_rechecks_schema_objects_written_to_wal(
     connection.close()
     assert not Path(f"{database}-wal").exists()
 
-    original_copy = task_graph_outbox_migration._copy_database
     writer_connections: list[sqlite3.Connection] = []
 
-    def copy_then_create_index(source: Path, destination: Path) -> None:
-        original_copy(source, destination)
-        if source == database:
-            late_writer = sqlite3.connect(database)
-            writer_connections.append(late_writer)
-            late_writer.execute("CREATE INDEX preserved_note_idx ON retained_extension(value)")
-            late_writer.commit()
+    def create_index_after_backup() -> None:
+        late_writer = sqlite3.connect(database)
+        writer_connections.append(late_writer)
+        late_writer.execute("CREATE INDEX preserved_note_idx ON retained_extension(value)")
+        late_writer.commit()
 
-    monkeypatch.setattr(task_graph_outbox_migration, "_copy_database", copy_then_create_index)
     backup = tmp_path / "schema-race-backup.sqlite3"
+    _inject_after_backup(monkeypatch, backup=backup, after_backup=create_index_after_backup)
     destination = tmp_path / "schema-race-destination.sqlite3"
     try:
         result = migrate_task_graph_outbox(source=database, backup=backup, destination=destination)
