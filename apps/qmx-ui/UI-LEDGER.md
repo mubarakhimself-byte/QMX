@@ -200,3 +200,12 @@ Library redesign, then main Copilot, Home, Settings, Mini apps. The backlog was 
 - [x] "Aim this message at" became Mode and reach: Ask, Plan or Do; which areas it may touch; who answers (main, a screen's copilot, a mini app, a running agent). Real money is never in reach.
 - [x] "/" commands in the composer; a new session opens with a greeting and "How do I…" (guided walks for train, bring in, workflow; drafted asks for pods, articles, watching while away).
 - [ ] Next: terminal as a real shell through the daemon, browser driven by the copilot, skills list, the rules for copilot-built UI, components registry.
+
+### 2026-10-04: review, Copilot pass 2, Home
+
+- [x] Independent session review (handoff/research/session-review.md); backlog corrected; outdated text fixed (557da44b).
+- [x] Research: mini-app screens prior art; bb, T3 Code and DeepSeek Harness from source; backend map for mini apps (handoff/research/).
+- [x] Copilot pass 2 (83b87f71), following T3 Code, bb and DeepSeek Harness: it answers (scripted, labelled); builds panels as descriptions (lib/sdk: spec, renderer, validator, tests) that you keep, throw away or pin to the Lab with no restart; one session store with the Lab and Portfolio copilots ("Continue in the main copilot" carries the session); questions and approvals take over the message box; sub-agents open as child threads with Back; right panel with Activity, Artifacts (real previews), Diff, Terminal per job, Browser with an address bar; sessions column folds on its own; small text raised. Lab Logs panel restored (lost in the pods change) with a test.
+- [x] Hand-off for the backend session (eec91b38): handoff/README.md and MINI-APPS-AND-COPILOT-CONTRACT.md.
+- [x] Home rethink: same tile board as the Lab and Portfolio (one widget system); tabs Today, Markets, Research plus your own saved tabs; greeting; editable ticker (by hand or the copilot); a bell and a "Needs you" panel gathering copilot questions, promotions to sign, paper runs ready, raised kill switches and failed runs; Going on; Pods and News reused from Portfolio; Markets watchlist; a screener built as a panel description; Coming up; Recent Library items.
+- [ ] Next: Settings depth, then Mini apps; the start-up screen; day-one with no demo data.
