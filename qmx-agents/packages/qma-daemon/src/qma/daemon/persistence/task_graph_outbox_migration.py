@@ -94,7 +94,9 @@ def _sha256(path: Path) -> str:
 
 
 def _sync_file(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
+    # Windows' CRT _commit (os.fsync) requires a writable descriptor.
+    # Only migration-owned output copies are flushed through this function.
+    descriptor = os.open(path, os.O_RDWR)
     try:
         os.fsync(descriptor)
     finally:
@@ -102,6 +104,11 @@ def _sync_file(path: Path) -> None:
 
 
 def _sync_directory(path: Path) -> None:
+    # Windows has no POSIX directory-fsync operation through os.open. The
+    # SQLite copies and their writable file descriptors are still flushed;
+    # source preservation remains the recovery path, not directory durability.
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)

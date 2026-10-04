@@ -300,6 +300,8 @@ def _template(*, op_id: str, op_version: int) -> GraphTemplate:
         "op_version": op_version,
         "instance_id": _INSTANCE_ID,
     }
+    # Pin the same operation payload in the accepted Task and its invocation.
+    successor_inputs.update(_EGRESS_INPUT if op_id == EGRESS_FIXTURE_OP_ID else _PROJECT_INPUT)
     return GraphTemplate(
         qualified_id="research-corpus:outbox-restart",
         version="1",
@@ -667,6 +669,9 @@ class OutboxRestartFixture:
             if is_refusal(dispatcher):
                 return dispatcher
             dispatcher.value.store.remember(restored.value)
+            # Graph recovery does not itself restore dispatch authority. This
+            # fixture retains the actual compiled Mission across the crash.
+            dispatcher.value.store.put_mission(compiled.value.mission)
             dispatched = dispatcher.value.dispatch_task(
                 task_id=survey_id,
                 holder_agent_id="agent-worker-2",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import runpy
 import sqlite3
 from dataclasses import replace
@@ -464,7 +465,10 @@ def test_running_daemon_writer_blocks_outbox_migration(tmp_path: Path) -> None:
 def test_outbox_migration_escapes_uri_metacharacters_and_preserves_all_tables(
     tmp_path: Path,
 ) -> None:
-    database = tmp_path / "source#part?one.sqlite3"
+    # '?' is illegal in a Windows filename. Keep URI escaping exercised on
+    # tier-1 Windows with '#', '%' and spaces, plus '?' where it is supported.
+    suffix = "?one" if os.name != "nt" else "one"
+    database = tmp_path / f"source#part%20 {suffix}.sqlite3"
     connection = sqlite3.connect(database)
     connection.executescript(
         "CREATE TABLE task_graph_outbox ("
