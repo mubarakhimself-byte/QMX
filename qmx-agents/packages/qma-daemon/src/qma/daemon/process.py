@@ -887,10 +887,14 @@ class DaemonProcess:
                 "a sixth application, COMP-EXP, or HTTP experiment service is not minted "
                 "(FR-W01; DEC-0269)",
             )
-        if isinstance(bind_port, bool) or not isinstance(bind_port, int) or bind_port < 0:
+        if (
+            isinstance(bind_port, bool)
+            or not isinstance(bind_port, int)
+            or not 0 <= bind_port <= 65535
+        ):
             return invalid_input(
                 "bind_port",
-                "bind_port must be a non-negative int (0 selects an ephemeral port)",
+                "bind_port must be an int in 0..65535 (0 selects an ephemeral port)",
                 given=repr(bind_port),
             )
         port = bind_port

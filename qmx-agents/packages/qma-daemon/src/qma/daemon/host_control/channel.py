@@ -283,7 +283,7 @@ def ensure_host_control_token(root: Path) -> Result[str]:
         token = secrets.token_urlsafe(32)
         path.write_text(token + "\n", encoding="utf-8")
         _restrict_owner_only(path)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         return storage_failure(
             f"could not write host_control: {exc}",
             context={"field": "host_control", "root": str(root)},
@@ -340,7 +340,7 @@ def read_host_control_token(root: Path) -> Result[str]:
                 root=str(root),
             )
         token = path.read_text(encoding="utf-8").strip()
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         return storage_failure(
             f"could not read host_control: {exc}",
             context={"field": "host_control", "root": str(root)},
@@ -354,7 +354,13 @@ def read_host_control_token(root: Path) -> Result[str]:
     return Ok(token)
 
 
-def write_host_control_bind(root: Path, *, host: str, port: int) -> Result[None]:
+def _validate_host_control_address(host: object, port: object) -> Result[tuple[str, int]]:
+    if not isinstance(host, str) or not host.strip():
+        return invalid_input("host_control.bind", "bind host is missing")
+    if host not in _LOOPBACK_HOSTS:
+        return policy_rejection("host_control.bind", "host-control requires a loopback host")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        return invalid_input("host_control.bind", "bind port must be an int in 1..65535")
     if port == CT40_BIND_PORT:
         return policy_rejection(
             "host_control",
@@ -362,6 +368,13 @@ def write_host_control_bind(root: Path, *, host: str, port: int) -> Result[None]
             port=port,
             ct40_port=CT40_BIND_PORT,
         )
+    return Ok((host, port))
+
+
+def write_host_control_bind(root: Path, *, host: str, port: int) -> Result[None]:
+    validated = _validate_host_control_address(host, port)
+    if is_refusal(validated):
+        return validated
     path = root / HOST_CONTROL_BIND_NAME
     payload = {"host": host, "port": port}
     try:
@@ -388,7 +401,7 @@ def read_host_control_bind(root: Path) -> Result[tuple[str, int]]:
                 root=str(root),
             )
         raw: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return storage_failure(
             f"could not read host_control.bind: {exc}",
             context={"field": "host_control.bind", "root": str(root)},
@@ -396,19 +409,7 @@ def read_host_control_bind(root: Path) -> Result[tuple[str, int]]:
     if not isinstance(raw, dict):
         return invalid_input("host_control.bind", "bind file must be a JSON object")
     body = cast("dict[str, object]", raw)
-    host = body.get("host")
-    port = body.get("port")
-    if not isinstance(host, str) or not host.strip():
-        return invalid_input("host_control.bind", "bind host is missing")
-    if isinstance(port, bool) or not isinstance(port, int) or port <= 0:
-        return invalid_input("host_control.bind", "bind port is missing")
-    if port == CT40_BIND_PORT:
-        return policy_rejection(
-            "host_control",
-            "host-control must bind outside port 8765 (AM-15)",
-            port=port,
-        )
-    return Ok((host, port))
+    return _validate_host_control_address(body.get("host"), body.get("port"))
 
 
 def host_control_call(
