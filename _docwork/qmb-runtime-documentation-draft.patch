@@ -1,0 +1,53 @@
+--- a/docs/components/qmb.md
++++ b/docs/components/qmb.md
+@@ -340,0 +341,36 @@
++
++
++## Proposed runtime evidence update (2026-10-04; pending documentation review)
++
++The isolated QMB runtime lane starts at combined backend candidate
++`33165e84146b2a6da32c7e536b698c4fa609be3f`. Its review drafts and reproducible
++evidence are in `_docwork/qmb-*-review-draft.md`, the runtime ledger amendment,
++and the task-16 handoff. This paragraph records implementation evidence; it
++does not amend the CT47 authoring, public projection, or financial authority rules.
++
++The Windows research store uses no-follow handles relative to held local NTFS
++directory anchors, atomic no-clobber publication, write-through metadata, file
++flushes, and held-object byte/identity readback. Existing matching blobs are
++flushed again before an idempotent acknowledgement. Pre-publication failure
++deletes only the owned temporary handle; post-publication failure retains the
++final blob and returns a refusal. Junction, mutation, rename, concurrent-writer,
++flush-failure and fresh-process-reopen regressions execute natively on Windows.
++The captured native failure was NtCreateFile SYNCHRONIZE access denial on an
++existing ancestor; attribute-only directory anchors resolve it without changing
++OS security settings. There is no inferred App Control diagnosis or path-following
++fallback. Process restart evidence is not a physical power-cut experiment.
++
++Analysis examples require an explicit trusted operator source that returns CT32
++and CT29ProjectionSource reader locators. Projection independently reopens the
++checked CT10/12, CT13 and terminal evidence; copied journal rows remain refused.
++Shipped examples do not import test fixtures or fabricate durable provenance.
++
++Alternative Study library execution and durable reopen are tested with a declared
++registered measure and actual recorded inputs. Its composed CT47 optimize CLI
++ingress remains unresolved: the CLI takes the legacy Book prerequisite path,
++the delegated envelope fixes backtest.run, and the QMA Study result parser still
++requires fields absent from its declared seven-field Study result schema.
++See `_docwork/qmb-study-ingress-blocker-draft.md` for the real registered-owner,
++registered-ExperimentSpec and actual child-source evidence, plus precise seam
++recommendations. The characterization failure remains enabled; no green ingress
++or legitimate provider authoring claim is made.
+--- a/docs/changelog.md
++++ b/docs/changelog.md
+@@ -445,0 +446,11 @@
++
++
++## Proposed bounded QMB runtime evidence entry (2026-10-04; pending review)
++
++Draft only: local NTFS research publication/flush and containment repair;
++immutable ctypes declarations and narrow scaffold proofs; durable analysis
++example reader locators; Windows diagnostic assertion and filesystem adapter
++scope correction. See the QMB runtime ledger amendment and review drafts.
++The existing Alternative Study CLI failure remains an integrator-owned CT47
++contract/wiring seam with a registered-input reproduction. No QMA/QMN/UI,
++push/merge, provider-spend, exchange or live-money actions are included.
