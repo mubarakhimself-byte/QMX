@@ -1,0 +1,4 @@
+# Separate optional native lane; deliberately no shared pyproject/lock edits.
+openai-codex==0.160.0
+openai-codex-cli-bin==0.160.0
+claude-agent-sdk==0.2.163

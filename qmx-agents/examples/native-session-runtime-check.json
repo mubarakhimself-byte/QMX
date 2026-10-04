@@ -1,0 +1,43 @@
+{
+  "sdk_pins": {
+    "openai-codex": "0.160.0",
+    "openai-codex-cli-bin": "0.160.0",
+    "claude-agent-sdk": "0.2.163",
+    "mcp": "2.3.0"
+  },
+  "codex": [
+    {
+      "executable": "C:\\Users\\Mubarak\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "version": "0.159.3",
+      "sdk_version_floor_passed": true,
+      "read_only_policy_fields": [
+        "networkAccess",
+        "type"
+      ],
+      "restricted_read_roots_available": false,
+      "native_session_admitted": false
+    },
+    {
+      "executable": "C:\\Users\\Mubarak\\Documents\\Codex\\2026-10-04\\task-6\\sdk-venv\\Lib\\site-packages\\codex_cli_bin\\bin\\codex.exe",
+      "version": "0.160.0",
+      "sdk_version_floor_passed": true,
+      "read_only_policy_fields": [
+        "networkAccess",
+        "type"
+      ],
+      "restricted_read_roots_available": false,
+      "native_session_admitted": false
+    }
+  ],
+  "claude": {
+    "version": "2.1.286 (Claude Code)",
+    "sdk_expected_cli_version": "2.1.286",
+    "tool_removal_flags_verified": true,
+    "verbatim_prompts": true,
+    "managed_policy_isolated": false,
+    "native_session_admitted": false
+  },
+  "authentication_performed": false,
+  "model_calls": 0,
+  "subscription_connection_verified": false
+}
