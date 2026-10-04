@@ -26,6 +26,7 @@ from .contracts import (
     ProviderRequest,
     ProviderResult,
 )
+from .native_configuration import NativeProviderConfiguration
 from .providers import ProviderError
 from .research_workflow import ResearchWorkflowProvider, RetainedCorpus, SpecialistDefinition
 from .service import RequestRuntime
@@ -99,7 +100,7 @@ def create_research_browse_binding(
 TargetResolver = Callable[[str], Result[tuple[ContributionRecord, InstanceRecord]]]
 
 
-class _SessionScopedTools:
+class _SessionScopedBinding:
     def __init__(
         self,
         runtime: RequestRuntime,
@@ -126,43 +127,13 @@ class _SessionScopedTools:
         self.now = now
         self.research_workflow = dict(research_workflow or {})
         self.capabilities = replace(provider.capabilities)
+        self._native_activity_lock = threading.Lock()
 
-    def execute(
-        self,
-        request: ProviderRequest,
-        emit: Callable[[ProviderEvent], None],
-        cancellation: threading.Event,
-    ) -> ProviderResult:
+    def _binding(self, request: ProviderRequest) -> ToolBinding:
         loaded = self.runtime.get(request.request_id)
         if is_refusal(loaded):
             raise ProviderError("tool_denied", "Request is not bound to host authority")
         spec = loaded.value.spec
-        selected_profiles = self.research_workflow.get(
-            "profiles", [key for key, names in self.profile_tools.items() if names]
-        )
-        workflow_selected = bool(self.research_workflow) and spec.profile.profile_id in cast(
-            "Sequence[str]", selected_profiles
-        )
-        if not self.profile_tools.get(spec.profile.profile_id) and not (
-            workflow_selected and self.provider.capabilities.execution_kind == "inference"
-        ):
-            active = self.runtime.validate_active_request(request.request_id, now=self.now())
-            if is_refusal(active):
-                raise ProviderError("context_changed", "Active request scope forbids disclosure")
-            return self.provider.execute(request, emit, cancellation)
-        if workflow_selected and "research_browse" not in self.profile_tools.get(
-            spec.profile.profile_id, frozenset()
-        ):
-            active = self.runtime.validate_active_request(request.request_id, now=self.now())
-            if is_refusal(active):
-                raise ProviderError(
-                    "context_changed", "Current scope forbids workflow continuation"
-                )
-            raise ProviderError("scope_interrupt", "Research operation is outside admitted profile")
-        if self.provider.capabilities.execution_kind == "agent_session":
-            raise ProviderError(
-                "unsupported", "Native agent workers cannot run host inference tools"
-            )
         target = self.target_resolver(spec.product_session_id)
         records = self.runtime.product_sessions.granted_records(spec.product_session_id)
         if is_refusal(target) or is_refusal(records):
@@ -200,7 +171,47 @@ class _SessionScopedTools:
                 raise ProviderError("tool_denied", "Current target changed before dispatch")
             return original_execute(arguments)
 
-        binding = replace(binding, execute=current_read)
+        return replace(binding, execute=current_read)
+
+
+class _SessionScopedTools(_SessionScopedBinding):
+    def execute(
+        self,
+        request: ProviderRequest,
+        emit: Callable[[ProviderEvent], None],
+        cancellation: threading.Event,
+    ) -> ProviderResult:
+        loaded = self.runtime.get(request.request_id)
+        if is_refusal(loaded):
+            raise ProviderError("tool_denied", "Request is not bound to host authority")
+        spec = loaded.value.spec
+        selected_profiles = self.research_workflow.get(
+            "profiles", [key for key, names in self.profile_tools.items() if names]
+        )
+        workflow_selected = bool(self.research_workflow) and spec.profile.profile_id in cast(
+            "Sequence[str]", selected_profiles
+        )
+        if not self.profile_tools.get(spec.profile.profile_id) and not (
+            workflow_selected and self.provider.capabilities.execution_kind == "inference"
+        ):
+            active = self.runtime.validate_active_request(request.request_id, now=self.now())
+            if is_refusal(active):
+                raise ProviderError("context_changed", "Active request scope forbids disclosure")
+            return self.provider.execute(request, emit, cancellation)
+        if workflow_selected and "research_browse" not in self.profile_tools.get(
+            spec.profile.profile_id, frozenset()
+        ):
+            active = self.runtime.validate_active_request(request.request_id, now=self.now())
+            if is_refusal(active):
+                raise ProviderError(
+                    "context_changed", "Current scope forbids workflow continuation"
+                )
+            raise ProviderError("scope_interrupt", "Research operation is outside admitted profile")
+        if self.provider.capabilities.execution_kind == "agent_session":
+            raise ProviderError(
+                "unsupported", "Native agent workers cannot run host inference tools"
+            )
+        binding = self._binding(request)
         if workflow_selected:
             workflow = ResearchWorkflowProvider(
                 self.provider,
@@ -238,6 +249,53 @@ class _SessionScopedTools:
         return loop.execute(request, emit, cancellation)
 
 
+class _SessionScopedNative(_SessionScopedBinding):
+    """Current host metadata binding surrounds one native activity, never inference."""
+
+    def execute(
+        self,
+        request: ProviderRequest,
+        emit: Callable[[ProviderEvent], None],
+        cancellation: threading.Event,
+    ) -> ProviderResult:
+        if not self._native_activity_lock.acquire(blocking=False):
+            raise ProviderError("session_busy", "Another native activity owns this provider")
+        try:
+            if not isinstance(self.provider, NativeProviderConfiguration):
+                raise ProviderError("unsupported", "Explicit native operator selection required")
+            active = self.runtime.validate_active_request(request.request_id, now=self.now())
+            if is_refusal(active):
+                raise ProviderError("scope_interrupt", "Current host scope forbids native launch")
+            if self.profile_tools.get(active.value.spec.profile.profile_id) != frozenset(
+                {"research_browse"}
+            ):
+                raise ProviderError("tool_denied", "Native metadata profile is not admitted")
+            binding = self._binding(request)
+            # Optional SDK imports stay outside generic configuration and startup.
+            try:
+                from .native_composition import compose_native_metadata_provider  # noqa: PLC0415
+            except ImportError as exc:
+                raise ProviderError(
+                    "unsupported", "Optional pinned native SDK is unavailable"
+                ) from exc
+            configured = self.provider
+            provider = compose_native_metadata_provider(
+                self.runtime,
+                provider_id=self.capabilities.provider_id,
+                backend=configured.backend,
+                executable=configured.executable,
+                dedicated_home=configured.dedicated_home,
+                empty_workspace=configured.empty_workspace,
+                native_policy_reviewed=configured.native_policy_reviewed,
+                now=self.now,
+                metadata_binding=binding,
+                profile_tools=self.profile_tools,
+            )
+            return provider.execute(request, emit, cancellation)
+        finally:
+            self._native_activity_lock.release()
+
+
 def bind_daemon_tool_providers(
     runtime: RequestRuntime,
     providers: Mapping[str, ProviderAdapter],
@@ -261,9 +319,11 @@ def bind_daemon_tool_providers(
     if not any(profile_tools.values()):
         return Ok(
             {
-                name: _SessionScopedTools(
-                    runtime, provider, profile_tools, knowledge, "", "", (), target_resolver, now
-                )
+                name: (
+                    _SessionScopedNative
+                    if isinstance(provider, NativeProviderConfiguration)
+                    else _SessionScopedTools
+                )(runtime, provider, profile_tools, knowledge, "", "", (), target_resolver, now)
                 for name, provider in providers.items()
             }
         )
@@ -286,7 +346,11 @@ def bind_daemon_tool_providers(
         return invalid_input("research_browse", "empty corpus scope is forbidden")
     return Ok(
         {
-            name: _SessionScopedTools(
+            name: (
+                _SessionScopedNative
+                if isinstance(provider, NativeProviderConfiguration)
+                else _SessionScopedTools
+            )(
                 runtime,
                 provider,
                 profile_tools,

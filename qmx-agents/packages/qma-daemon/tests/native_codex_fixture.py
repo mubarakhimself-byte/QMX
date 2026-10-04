@@ -172,7 +172,7 @@ for line in sys.stdin:
             assert not message["result"]["success"]
         else:
             assert message["result"]["success"]
-            locator = "proof.md" if scenario == "proof" else "visible.md"
+            locator = arguments.get("locator", "proof.md" if scenario == "proof" else "visible.md")
             assert locator in message["result"]["contentItems"][0]["text"]
         terminal()
         continue

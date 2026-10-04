@@ -136,12 +136,38 @@ the SDK's nominal 0.151.0 floor, but only exact 0.160.0 is accepted by this brid
 Both generated read-only policies lack restricted read roots; ordinary tools
 remain gated. Claude 2.1.286 matches the SDK expected CLI and verbatim-prompt floor.
 
-Programmatic composition and the runnable proof are implemented. Shared operator
-JSON parsing and daemon provider-selection wiring are **integrator-owned follow-up**:
-`provider_config.py` and existing inference-only wrappers were not edited. They
-must route `agent_session` explicitly and resolve current host-owned bindings;
-passing native sessions through a chat-model adapter is not supported. Generic
-LangChain API provider options remain independent.
+Programmatic composition and the original standalone proof are implemented. In
+the isolated combined successor, shared operator JSON also accepts the explicit
+`native-session` protocol. The daemon selects a separate native wrapper, resolves
+the current session target and exactly one existing matching metadata grant for
+each activity, then calls `compose_native_metadata_provider`. Native execution
+does not enter the inference wrapper or `ToolLoopProvider.execute`; only existing
+host dispatch/effect receipts are reused. Generic LangChain API options remain
+independent. Native SDK imports stay lazy; absent optional packages fail with a
+sanitized unavailable result and never select another provider.
+
+Every native profile must contain exactly `tools: ["research_browse"]`, with an
+explicit current instance revision and retained corpus scope. Native profiles
+cannot enter the generic research workflow, including its default profile
+selection. Claude additionally requires the operator's explicit
+`native_policy_reviewed: true` attestation; this does not certify managed-policy
+isolation or authentication. Configuration eligibility performs no native launch,
+auth read or filesystem provisioning. Execution retains all backend preflight gates.
+
+The [native operator example](native-session.operator-config.example.json) is a
+nonsecret template requiring real operator-owned paths, instance and corpus pins.
+The [integrated daemon proof](native_daemon_proof.py) supplies its own synthetic
+configuration, app-use session and one narrow grant in a new proof store, then
+uses authenticated CT-40 over loopback and two distinct daemon OS processes. It
+requires a retained native ID, the prior marker omitted from the second prompt,
+and exactly one observed durable host metadata receipt. Default mode performs no
+store writes, native auth or model calls. Never reuse a previous/unknown proof root.
+
+Offline Codex checks exercise that actual shared route with the released SDK's
+transport and a test-only protocol peer. They also prove authenticated cancellation,
+grant revocation/result withholding, forged session/provider/workspace denial and
+no generic inference/API fallback. Runtime verification is disabled only in the
+test fixture. They do not prove live Codex authentication or Claude daemon execution.
 
 [Documentation drafts](NATIVE_SESSION_DOCS_DRAFT.md) propose canonical component,
 stack and contract updates. They are not ratified or applied to canonical docs;
@@ -183,6 +209,12 @@ this lane does not claim completion of every migration acceptance-matrix row.
    existing proof store. Text-only output does not satisfy acceptance.
    Cancellation proof is a separate authorized exercise requiring an explicit
    interrupted terminal. No live proof has been run.
+
+For the **integrated daemon path**, substitute `examples/native_daemon_proof.py`
+for the standalone proof in steps 3-4. It uses the same pinned binary/native home,
+empty workspace and new synthetic root, but restarts the real daemon between the
+two turns and verifies the authenticated shared operator route. The report is
+`daemon-proof-result.json`. No human login or live invocation has been performed.
 
 ## Official references
 

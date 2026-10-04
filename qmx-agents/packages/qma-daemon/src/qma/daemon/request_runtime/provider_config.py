@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from qma.core.barriers.reachability import is_forbidden_model_adapter
 from qmf.core import Ok, Result
@@ -27,6 +27,7 @@ from .contracts import (
 )
 from .daemon_bridge import AgentRequestPolicy
 from .http_provider import ChatCompletionsProvider
+from .native_configuration import NativeProviderConfiguration
 from .providers import CodexAppServerProvider
 
 
@@ -119,6 +120,44 @@ def _provider(alias: str, row: dict[str, Any], manifest: Mapping[str, object]) -
     if is_forbidden_model_adapter(alias):
         raise ValueError("Configured adapter violates host reachability")
     protocol = row.get("protocol")
+    digest = hashlib.sha256(
+        json.dumps({"provider": row, "host_tools": dict(manifest)}, sort_keys=True).encode()
+    ).hexdigest()[:24]
+    if protocol == "native-session":
+        _keys(
+            row,
+            {
+                "protocol",
+                "backend",
+                "executable",
+                "dedicated_home",
+                "empty_workspace",
+                "native_policy_reviewed",
+            },
+        )
+        backend = row.get("backend")
+        if backend not in {"codex", "claude"}:
+            raise ValueError("explicit supported native backend required")
+        reviewed = row.get("native_policy_reviewed", False)
+        if not isinstance(reviewed, bool) or (backend == "claude" and reviewed is not True):
+            raise ValueError("Claude requires reviewed personal unmanaged native policy")
+        if backend == "codex" and "native_policy_reviewed" in row:
+            raise ValueError("native_policy_reviewed applies only to Claude")
+        executable, home, workspace = (
+            Path(_text(row.get(key))) for key in ("executable", "dedicated_home", "empty_workspace")
+        )
+        if not all(path.is_absolute() for path in (executable, home, workspace)):
+            raise ValueError("absolute native paths required")
+        if home == workspace or home in workspace.parents or workspace in home.parents:
+            raise ValueError("distinct dedicated native directories required")
+        return NativeProviderConfiguration(
+            f"configured:{alias}:{digest}",
+            cast("Literal['codex', 'claude']", backend),
+            executable,
+            home,
+            workspace,
+            reviewed,
+        )
     if protocol == "chat-completions":
         _keys(row, {"protocol", "endpoint", "model", "deployment_id", "api_key_env", "stream"})
         key_env = row.get("api_key_env")
@@ -143,9 +182,6 @@ def _provider(alias: str, row: dict[str, Any], manifest: Mapping[str, object]) -
         )
     else:
         raise ValueError("unsupported provider protocol")
-    digest = hashlib.sha256(
-        json.dumps({"provider": row, "host_tools": dict(manifest)}, sort_keys=True).encode()
-    ).hexdigest()[:24]
     return _ConfiguredProvider(provider, f"configured:{alias}:{digest}")
 
 
@@ -195,7 +231,10 @@ def _policy(
     alias = _text(row.get("provider_id"))
     if alias not in providers:
         raise ValueError("profile provider is not configured")
-    if row.get("tools") and providers[alias].capabilities.execution_kind == "agent_session":
+    if isinstance(providers[alias], NativeProviderConfiguration):
+        if row.get("tools") != ["research_browse"]:
+            raise ValueError("native supplied-text profiles require the exact metadata callback")
+    elif row.get("tools") and providers[alias].capabilities.execution_kind == "agent_session":
         raise ValueError("native agent-session profiles cannot use the inference tool graph")
     model = _text(row["model"]) if "model" in row else None
     return AgentRequestPolicy(
@@ -273,8 +312,12 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
         if workflow:
             for name in ("specialist_id", "version", "instructions"):
                 _text(workflow.get(name))
-            if "profiles" in workflow:
-                selected = _sequence(workflow["profiles"])
+            selected = (
+                _sequence(workflow["profiles"])
+                if "profiles" in workflow
+                else [name for name, names in tools.items() if names]
+            )
+            if selected:
                 if not 0 < len(selected) <= 64:
                     raise ValueError("bounded workflow profile selection required")
                 for profile in selected:

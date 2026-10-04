@@ -102,9 +102,13 @@ Availability reports configuration eligibility, not verified login or connection
 No allow-all mode is proposed.
 
 The shared `_SessionScopedTools` inference wrapper is not an agent-session adapter.
-Integrator-owned operator selection must resolve current per-session targets and
-grants, then choose the explicit backend. Shared parser, operator JSON and daemon
-routing changes were intentionally not crossed in this isolated lane.
+The combined successor now parses explicit `native-session` operator selection
+and selects the separate `_SessionScopedNative` wrapper. It resolves current
+per-session targets and grants before calling the reviewed builder; only common
+binding resolution is shared with inference. Claude retains its explicit policy
+attestation and launch gates. The integrated daemon proof is dry by default and
+has separate offline Codex evidence; live auth and Claude daemon execution remain
+unverified. These are documentation proposals, not canonical ratification.
 
 ## Acceptance-matrix row proposals
 
@@ -117,7 +121,7 @@ routing changes were intentionally not crossed in this isolated lane.
 | Ordinary native tool worker | Unsupported; requires separately verified enforceable worker boundary |
 | Claude managed policy | Not isolated by this implementation; conditional reviewed personal unmanaged mode only |
 | API provider options | Existing generic LangChain inference path remains independent; no paid fallback from native sessions |
-| Operator/daemon selection | Programmatic builder implemented; shared parser and current-binding routing remain integrator follow-up |
+| Operator/daemon selection | Explicit shared parser/current-binding routing implemented in combined successor; authenticated Codex daemon restart/cancel tested offline; Claude daemon/live proof unverified |
 | Full agent organization/distributed jobs/UI | Not established by this lane |
 
 Evidence: `test_native_sessions.py`, `test_native_codex_bridge.py`,

@@ -1,0 +1,32 @@
+{
+  "agent_sdk": {
+    "enabled": true,
+    "providers": {
+      "native-codex": {
+        "protocol": "native-session",
+        "backend": "codex",
+        "executable": "C:/operator-reviewed/codex-0.160.0.exe",
+        "dedicated_home": "C:/operator-reviewed/native-codex-home",
+        "empty_workspace": "C:/operator-reviewed/empty-native-workspace"
+      }
+    },
+    "profiles": {
+      "native-reader": {
+        "role": "application",
+        "authority_profile": "app-use",
+        "app_instance_id": "operator-resolved-instance-id",
+        "provider_id": "native-codex",
+        "instructions": "Use only the host-granted retained metadata read.",
+        "timeout_seconds": 60,
+        "tools": ["research_browse"]
+      }
+    },
+    "instance_revisions": {"operator-resolved-instance-id": 1},
+    "research_browse": {
+      "source_id": "strats",
+      "snapshot_ref": "operator-resolved-retained-snapshot-id",
+      "allowed_locators": ["README.md"]
+    },
+    "max_workers": 1
+  }
+}
