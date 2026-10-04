@@ -342,9 +342,7 @@ def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
 
 
 def test_start_failure_points_to_persistent_daemon_diagnostics(tmp_path: Path) -> None:
-    def failed_spawn(
-        _argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
-    ) -> int:
+    def failed_spawn(_argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
         _ = env, root
         return 123456
 
@@ -356,7 +354,7 @@ def test_start_failure_points_to_persistent_daemon_diagnostics(tmp_path: Path) -
     )
     assert is_refusal(refused)
     diagnostic = tmp_path / "logs" / "qma-daemon-startup.log"
-    assert str(diagnostic) in str(refused.context)
+    assert str(diagnostic) in str(refused.context["reason"])
     assert diagnostic.is_file()
 
 
