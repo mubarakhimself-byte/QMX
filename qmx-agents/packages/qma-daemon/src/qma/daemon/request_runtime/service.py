@@ -18,7 +18,9 @@ from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from .memory_projection import HostMemoryBindings
     from .tool_loop import ToolBinding
+
 
 from qma.core.vocabulary.enums import GrantEvaluationMoment
 from qma.daemon.journal.authoritative import AuthoritativeJournal
@@ -45,6 +47,7 @@ def _require_mapping(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ProviderError("outcome_unknown", "Tool result violated its host contract")
     return cast("Mapping[str, object]", value)
+
 
 
 def _nonempty_text(value: object) -> bool:
@@ -133,6 +136,7 @@ class RequestRuntime:
         self.execution_admission = execution_admission
         self.execution_completion = execution_completion
         self.acceptance_binding = acceptance_binding
+        self.memory_bindings: HostMemoryBindings | None = None
         self.submission_admission: Callable[[RequestRecord], Result[RequestRecord]] | None = None
         self.lifecycle_admission: Callable[[str, RequestRecord], Result[None]] | None = None
         self.tool_binding_admission: (
@@ -171,6 +175,13 @@ class RequestRuntime:
         return Ok(saved)
 
     def _admit_lifecycle(self, action: str, row: RequestRecord) -> Result[None]:
+        try:
+            if action != "cancel" and self.memory_bindings is not None:
+                self.memory_bindings.validate(row.spec.memory_binding_sha256)
+            elif action != "cancel" and row.spec.memory_binding_sha256 is not None:
+                return policy_rejection("memory_provider", "Original memory binding is unavailable")
+        except ProviderError:
+            return policy_rejection("memory_provider", "Original memory binding changed")
         if self.lifecycle_admission is not None:
             return self.lifecycle_admission(action, row)
         if row.spec.canonical_join_required:
@@ -413,6 +424,13 @@ class RequestRuntime:
                 if is_refusal(binding):
                     return binding
                 spec = replace(spec, authoring_authority_sha256=binding.value)
+            if self.memory_bindings is not None:
+                memory_binding = self.memory_bindings.bind()
+                if is_refusal(memory_binding):
+                    return memory_binding
+                spec = replace(spec, memory_binding_sha256=memory_binding.value)
+            elif spec.memory_binding_sha256 is not None:
+                return policy_rejection("memory_provider", "No host memory binding installed")
             prior_id = self._keys.get(_key(spec))
             if prior_id is not None:
                 prior = self._records[prior_id]

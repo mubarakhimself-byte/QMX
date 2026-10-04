@@ -59,6 +59,7 @@ class RequestSpec:
     authoring_task_id: str | None = None
     authoring_authority_sha256: str | None = None
     canonical_join_required: bool = False
+    memory_binding_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

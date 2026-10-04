@@ -1296,6 +1296,12 @@ class DaemonProcess:
         runtime = RequestRuntime(
             journal=self.journal, product_sessions=self.product_sessions, providers=providers
         )
+        from .request_runtime.memory_projection import load_memory_bindings  # noqa: PLC0415
+
+        memory_bindings = load_memory_bindings(self.root, self.roster.loader)
+        if is_refusal(memory_bindings):
+            return memory_bindings
+        runtime.memory_bindings = memory_bindings.value
         authoring = ExperimentAuthoring(
             runtime=runtime,
             policies=policies,

@@ -193,7 +193,14 @@ class ActorWorkflowProvider:
                 memory_provider = JournalMemoryProvider(
                     records, scope.namespace, source, validate, now_ns=time.time_ns
                 )
-                memory = DurableMemory(memory_provider, hooks=self.hooks)
+                projection = (
+                    self.runtime.memory_bindings.project(
+                        row.spec, memory_provider, desk="research", request_id=request.request_id
+                    )
+                    if self.runtime.memory_bindings is not None
+                    else memory_provider
+                )
+                memory = DurableMemory(memory_provider, projection=projection, hooks=self.hooks)
                 frozen = records.get("actor_input", activity_id)
                 if frozen is None:
                     frozen = {

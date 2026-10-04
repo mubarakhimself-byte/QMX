@@ -14,13 +14,13 @@ import json
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from weakref import WeakKeyDictionary
 
 from langchain_core.embeddings import Embeddings
 from langgraph.store.base import IndexConfig
 from langgraph.store.memory import InMemoryStore
-from qma.core.ports.memory import MemoryCandidate, parse_memory_candidate
+from qma.core.ports.memory import MemoryCandidate, MemoryProvider, parse_memory_candidate
 from qma.core.vocabulary.enums import MemoryValidationState as State
 from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.journal.authoritative import AuthoritativeJournal
@@ -30,6 +30,9 @@ from qmf.data.store.refusals import invalid_input, policy_rejection
 
 from .graph_storage import JournalRecords
 from .providers import ProviderError
+
+if TYPE_CHECKING:
+    from .memory_projection import MemoryProjection
 
 MemoryType = Literal["summary", "semantic", "episodic", "procedural"]
 MEMORY_TYPES = frozenset({"summary", "semantic", "episodic", "procedural"})
@@ -460,12 +463,20 @@ class DurableMemory:
 
     def __init__(
         self,
-        provider: JournalMemoryProvider,
+        provider: MemoryProvider,
         *,
+        projection: MemoryProjection | None = None,
         desk: str = "research",
         hooks: HookRegistry | None = None,
     ) -> None:
+        from .memory_projection import MemoryProjection  # noqa: PLC0415
+
+        if projection is None:
+            if not isinstance(provider, MemoryProjection):
+                raise ValueError("Memory context requires an explicit typed projection")
+            projection = provider
         self.provider, self.desk = provider, desk
+        self.projection = projection
         self.gate = MemoryAdmissionGate(hooks=hooks)
         result = self.gate.bind(desk, provider)
         if is_refusal(result):
@@ -492,8 +503,8 @@ class DurableMemory:
         """Render a bounded subset. Omission never edits canonical records."""
         _positive(max_bytes, "max_bytes", 1048576)
         _positive(max_tokens, "max_tokens", 1048576)
-        results = self.provider.search(
-            memory_type=memory_type, query=query, limit=self.provider.limits.max_records
+        results = self.projection.search(
+            memory_type=memory_type, query=query, limit=self.projection.limits.max_records
         )
         if is_refusal(results):
             raise ProviderError("memory_denied", "Memory search refused")
@@ -514,9 +525,9 @@ class DurableMemory:
             if len(attempt.encode("utf-8")) <= max_bytes and tokens <= max_tokens:
                 chosen.append(entry)
                 rendered = attempt
-        self.provider.validate()
+        self.projection.validate()
         # Tokenization can take time or invoke trusted host code. Refuse stale
         # disclosure if a selected canonical head expired or changed meanwhile.
         selected_ids = {str(entry["id"]) for entry in chosen}
-        self.provider.validate_selection(tuple(c for c in results.value if c.id in selected_ids))
+        self.projection.validate_selection(tuple(c for c in results.value if c.id in selected_ids))
         return rendered

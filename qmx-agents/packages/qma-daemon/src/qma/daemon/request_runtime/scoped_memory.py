@@ -19,6 +19,7 @@ from qmf.core import is_refusal
 
 from .durable_memory import DurableMemory, JournalMemoryProvider, MemoryLimits, MemorySource
 from .graph_storage import JournalRecords
+from .memory_projection import MemoryProjection
 from .providers import ProviderError
 
 
@@ -50,6 +51,7 @@ class ScopedResearchMemory:
         validate: Callable[[], None],
         *,
         hooks: HookRegistry | None = None,
+        projection: Callable[[JournalMemoryProvider], MemoryProjection] | None = None,
         max_bytes: int = 8192,
         now_ns: Callable[[], int] = time.time_ns,
     ) -> None:
@@ -65,11 +67,12 @@ class ScopedResearchMemory:
             now_ns=now_ns,
             limits=MemoryLimits(max_record_bytes=min(65536, max_bytes + 8192)),
         )
-        self.memory = DurableMemory(self.provider, hooks=hooks)
+        self.projection = projection(self.provider) if projection else self.provider
+        self.memory = DurableMemory(self.provider, projection=self.projection, hooks=hooks)
         self.gate = self.memory.gate
 
     def recall(self) -> dict[str, object] | None:
-        recalled = self.provider.search(memory_type="summary")
+        recalled = self.projection.search(memory_type="summary")
         if is_refusal(recalled):
             raise ProviderError("memory_denied", "Research memory recall refused")
         for candidate in recalled.value:
@@ -78,8 +81,10 @@ class ScopedResearchMemory:
             # in the invocation's byte budget or canonical record.
             body["summary"] = body.pop("text")
             if len(json.dumps(body, ensure_ascii=False).encode("utf-8")) <= self.max_bytes:
-                self.provider.validate_selection((candidate,))
+                self.projection.validate_selection((candidate,))
                 return body
+        if self.projection is not self.provider:
+            return None
         # Read-only compatibility for previous exact-scope summaries. Once typed
         # state exists, never fall back and resurrect invalidated memory.
         with self.provider.lock:

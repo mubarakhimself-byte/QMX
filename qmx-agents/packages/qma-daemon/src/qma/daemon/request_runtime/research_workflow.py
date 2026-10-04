@@ -35,7 +35,9 @@ from .contracts import (
     ProviderRequest,
     ProviderResult,
 )
+from .durable_memory import JournalMemoryProvider
 from .graph_storage import JournalCheckpointer, JournalRecords
+from .memory_projection import MemoryProjection
 from .providers import ProviderCancelled, ProviderError
 from .scoped_memory import ResearchMemoryScope, ScopedResearchMemory
 from .service import RequestRuntime
@@ -268,11 +270,20 @@ class ResearchWorkflowProvider:
                 raise ProviderCancelled()
             gateway.validate_continuation(request, cancellation, deadline)
 
+        def project_memory(canonical: JournalMemoryProvider) -> MemoryProjection:
+            bindings = runtime.memory_bindings
+            if bindings is None:
+                return canonical
+            return bindings.project(
+                row.value.spec, canonical, desk="research", request_id=request.request_id
+            )
+
         memory = ScopedResearchMemory(
             records,
             memory_scope,
             validate,
             hooks=self.hooks,
+            projection=project_memory,
             max_bytes=2 * self.limits.max_response_bytes + 8192,
         )
 
