@@ -36,7 +36,9 @@
       <span class="bg-muted/60 self-start rounded px-2 py-0.5 text-xs"
         >{p.method.label}</span
       >
-      <span class="block h-12"><Sparkline values={p.curve} /></span>
+      <span class="block h-12"
+        ><Sparkline values={p.curve} class="block h-full w-full" /></span
+      >
       <span class="flex items-baseline gap-2">
         <span class="num text-xl font-semibold">{usd(p.equity)}</span>
         <span
