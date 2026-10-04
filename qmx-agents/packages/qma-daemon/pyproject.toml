@@ -13,6 +13,8 @@ dependencies = [
     # IANA zone resolution for wall-clock policies (FR-Q25; AD-6). Same pin as
     # the forex calendar extension so ZoneInfo works on Windows hosts.
     "tzdata==2025.2",
+    "langchain==1.4.3",
+    "langgraph==1.2.12",
 ]
 
 [build-system]

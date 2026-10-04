@@ -14,6 +14,7 @@ from dataclasses import replace
 from typing import cast
 
 from qma.core.operations import public_operation_descriptors
+from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.knowledge.service import KnowledgeService
 from qma.wire.invocation_envelope import ContributionRecord, InstanceRecord
 from qmf.core import Ok, Result, is_refusal
@@ -21,12 +22,12 @@ from qmf.data.store.refusals import invalid_input
 
 from .contracts import (
     ProviderAdapter,
-    ProviderCapabilities,
     ProviderEvent,
     ProviderRequest,
     ProviderResult,
 )
 from .providers import ProviderError
+from .research_workflow import ResearchWorkflowProvider, RetainedCorpus, SpecialistDefinition
 from .service import RequestRuntime
 from .tool_loop import LoopLimits, ToolBinding, ToolLoopProvider
 
@@ -110,7 +111,10 @@ class _SessionScopedTools:
         allowed_locators: tuple[str, ...],
         target_resolver: TargetResolver,
         now: Callable[[], str],
+        research_workflow: Mapping[str, object] | None = None,
+        hooks: HookRegistry | None = None,
     ) -> None:
+        self.hooks = hooks
         self.runtime = runtime
         self.provider = provider
         self.profile_tools = dict(profile_tools)
@@ -120,7 +124,8 @@ class _SessionScopedTools:
         self.allowed_locators = allowed_locators
         self.target_resolver = target_resolver
         self.now = now
-        self.capabilities = ProviderCapabilities(provider.capabilities.provider_id)
+        self.research_workflow = dict(research_workflow or {})
+        self.capabilities = replace(provider.capabilities)
 
     def execute(
         self,
@@ -132,11 +137,32 @@ class _SessionScopedTools:
         if is_refusal(loaded):
             raise ProviderError("tool_denied", "Request is not bound to host authority")
         spec = loaded.value.spec
-        if not self.profile_tools.get(spec.profile.profile_id):
+        selected_profiles = self.research_workflow.get(
+            "profiles", [key for key, names in self.profile_tools.items() if names]
+        )
+        workflow_selected = bool(self.research_workflow) and spec.profile.profile_id in cast(
+            "Sequence[str]", selected_profiles
+        )
+        if not self.profile_tools.get(spec.profile.profile_id) and not (
+            workflow_selected and self.provider.capabilities.execution_kind == "inference"
+        ):
             active = self.runtime.validate_active_request(request.request_id, now=self.now())
             if is_refusal(active):
                 raise ProviderError("context_changed", "Active request scope forbids disclosure")
             return self.provider.execute(request, emit, cancellation)
+        if workflow_selected and "research_browse" not in self.profile_tools.get(
+            spec.profile.profile_id, frozenset()
+        ):
+            active = self.runtime.validate_active_request(request.request_id, now=self.now())
+            if is_refusal(active):
+                raise ProviderError(
+                    "context_changed", "Current scope forbids workflow continuation"
+                )
+            raise ProviderError("scope_interrupt", "Research operation is outside admitted profile")
+        if self.provider.capabilities.execution_kind == "agent_session":
+            raise ProviderError(
+                "unsupported", "Native agent workers cannot run host inference tools"
+            )
         target = self.target_resolver(spec.product_session_id)
         records = self.runtime.product_sessions.granted_records(spec.product_session_id)
         if is_refusal(target) or is_refusal(records):
@@ -175,6 +201,31 @@ class _SessionScopedTools:
             return original_execute(arguments)
 
         binding = replace(binding, execute=current_read)
+        if workflow_selected:
+            workflow = ResearchWorkflowProvider(
+                self.provider,
+                provider_id=self.capabilities.provider_id,
+                specialist=SpecialistDefinition(
+                    cast("str", self.research_workflow["specialist_id"]),
+                    cast("str", self.research_workflow["version"]),
+                    cast("str", self.research_workflow["instructions"]),
+                ),
+                corpus=RetainedCorpus(
+                    self.knowledge,
+                    self.source_id,
+                    self.snapshot_ref,
+                    self.allowed_locators,
+                    retain_supplied=True,
+                ),
+                operation_name="research_browse",
+                operation=binding,
+                operation_arguments={"snapshot_ref": self.snapshot_ref},
+                profile_tools=self.profile_tools,
+                now=self.now,
+                hooks=self.hooks,
+            )
+            workflow.bind_runtime(self.runtime)
+            return workflow.execute(request, emit, cancellation)
         loop = ToolLoopProvider(
             self.provider,
             provider_id=self.capabilities.provider_id,
@@ -196,6 +247,8 @@ def bind_daemon_tool_providers(
     *,
     target_resolver: TargetResolver,
     now: Callable[[], str],
+    research_workflow: Mapping[str, object] | None = None,
+    hooks: HookRegistry | None = None,
 ) -> Result[Mapping[str, ProviderAdapter]]:
     """Install one trusted operation family while retaining configured identities.
 
@@ -205,11 +258,6 @@ def bind_daemon_tool_providers(
     """
     if any(names - {"research_browse"} for names in profile_tools.values()):
         return invalid_input("tools", "only installed research_browse is supported")
-    if any(
-        provider.capabilities.native_tools or provider.capabilities.resume
-        for provider in providers.values()
-    ):
-        return invalid_input("providers", "daemon tools require text-only fresh-turn providers")
     if not any(profile_tools.values()):
         return Ok(
             {
@@ -248,6 +296,8 @@ def bind_daemon_tool_providers(
                 allowed,
                 target_resolver,
                 now,
+                research_workflow,
+                hooks,
             )
             for name, provider in providers.items()
         }

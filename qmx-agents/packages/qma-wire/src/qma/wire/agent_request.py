@@ -16,12 +16,14 @@ from qmf.data.store.refusals import invalid_input, policy_rejection
 
 SUBMIT_AGENT_REQUEST_CAPABILITY: Final[str] = "submit_agent_request"
 GET_AGENT_REQUEST_CAPABILITY: Final[str] = "get_agent_request"
+RESUME_AGENT_REQUEST_CAPABILITY: Final[str] = "resume_agent_request"
 CANCEL_AGENT_REQUEST_CAPABILITY: Final[str] = "cancel_agent_request"
 AGENT_REQUEST_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
         SUBMIT_AGENT_REQUEST_CAPABILITY,
         GET_AGENT_REQUEST_CAPABILITY,
         CANCEL_AGENT_REQUEST_CAPABILITY,
+        RESUME_AGENT_REQUEST_CAPABILITY,
     }
 )
 
@@ -136,3 +138,7 @@ def parse_get_agent_request(value: object) -> Result[AgentRequestReference]:
 
 def parse_cancel_agent_request(value: object) -> Result[AgentRequestReference]:
     return _reference(value)
+
+
+def parse_resume_agent_request(value: object) -> Result[AgentRequestReference]:
+    return parse_get_agent_request(value)

@@ -95,6 +95,7 @@ HUMAN_GATE_COMMANDS: Final[frozenset[str]] = frozenset(
         # Optional SDK ingress is bound to the authenticated local operator.
         "submit_agent_request",
         "cancel_agent_request",
+        "resume_agent_request",
     }
 )
 

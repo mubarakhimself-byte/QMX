@@ -356,7 +356,7 @@ class RequestRuntime:
             code = getattr(exc, "code", None)
             status = (
                 "interrupted"
-                if code == "outcome_unknown"
+                if code in {"outcome_unknown", "scope_interrupt"}
                 else "cancelled"
                 if code == "cancelled"
                 else "failed"

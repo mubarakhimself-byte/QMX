@@ -29,6 +29,9 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 
 ## Architecture
 
+- [Mature agent runtime proposal](decisions/ADR-0028-mature-agent-runtime.md) records
+  library-owned agent/workflow cursors, scoped memory, explicit resume and limits.
+
 - [Bounded SDK request proposal](decisions/ADR-0027-bounded-sdk-request-runtime.md)
   records the isolated branch's request/provider/read-tool scope and release limits.
 

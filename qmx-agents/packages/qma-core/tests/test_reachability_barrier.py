@@ -85,7 +85,6 @@ def test_none_enumerates_empty_set_unenumerated_refused() -> None:
         "api.icmarkets.com",
         "trading-node-vps",
         "qmn-vps",
-        "openrouter.ai",
         "https://demo.ctraderapi.com:5035/path",
     ),
 )
@@ -103,7 +102,7 @@ def test_deny_list_is_code_declared_and_not_waivable() -> None:
     assert "demo.ctraderapi.com" in DENIED_HOST_PATTERNS
     assert classify_denied_host("demo.ctraderapi.com") is DeniedHostClass.VENUE
     assert classify_denied_host("trading-node-vps") is DeniedHostClass.TRADING_NODE
-    assert classify_denied_host("openrouter.ai") is DeniedHostClass.OPENROUTER
+    assert classify_denied_host("openrouter.ai") is None
     assert_deny_list_not_waivable()
     with pytest.raises(ReachabilityBarrierError, match="may not be waived"):
         assert_deny_list_not_waivable(DENIED_HOST_PATTERNS - {"demo.ctraderapi.com"})
@@ -231,16 +230,12 @@ def test_gap_0070_planned_host_is_not_provisioned() -> None:
     assert GAP_0070_DESKTOP_EXCLUSION["provisioned"] == "false"
 
 
-def test_openrouter_is_not_a_qma_path() -> None:
-    assert "openrouter" in FORBIDDEN_MODEL_ADAPTERS
-    assert is_forbidden_model_adapter("openrouter")
+def test_openrouter_inference_is_allowed_under_operator_amendment() -> None:
+    assert "openrouter" not in FORBIDDEN_MODEL_ADAPTERS
+    assert "openrouter" not in FORBIDDEN_IMAGE_TOKENS
+    assert not is_forbidden_model_adapter("openrouter")
+    assert refuse_forbidden_model_adapter("openrouter") is None
+    assert not is_denied_host("openrouter.ai")
+    assert is_ok(validate_network_posture("allowlist", ("openrouter.ai",)))
     assert not is_forbidden_model_adapter(OPENCODEX_ADAPTER)
     assert frozenset({OPENCODEX_ADAPTER}) == LOCAL_PROXY_ADAPTERS
-    refused = refuse_forbidden_model_adapter("openrouter")
-    assert refused is not None
-    assert refused.context["reason"] == "openrouter_forbidden"
-    for path in (AGENTS_ROOT / "packages").rglob("*.py"):
-        if "tests" in path.parts or "__pycache__" in path.parts:
-            continue
-        if "openrouter" in path.read_text(encoding="utf-8").casefold():
-            assert path.name in {"reachability.py", "registry.py", "context.py"}

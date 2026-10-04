@@ -233,7 +233,7 @@ def test_missing_dependency_refused() -> None:
     assert refused.context["field"] == "dependencies"
 
 
-def test_money_path_act_and_openrouter_refused_at_registration() -> None:
+def test_money_path_act_refused_and_openrouter_inference_allowed() -> None:
     loader = PluginLoader()
 
     def money(ctx: PluginContext) -> None:
@@ -261,8 +261,7 @@ def test_money_path_act_and_openrouter_refused_at_registration() -> None:
         _manifest(contributions=[{"point": "model_deployment", "local_id": "route"}]),
         activator=openrouter,
     )
-    assert is_refusal(refused_or)
-    assert "OpenRouter" in str(refused_or.context["reason"])
+    assert is_ok(refused_or)
 
 
 def test_operator_assigned_fields_refused_at_load() -> None:

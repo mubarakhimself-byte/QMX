@@ -63,6 +63,7 @@ class ProviderCapabilities:
     provider_id: str
     resume: bool = False
     native_tools: bool = False
+    execution_kind: Literal["inference", "agent_session"] = "inference"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,7 @@ class ProviderRequest:
     timeout_seconds: float = 120
     instructions: str = ""
     request_id: str = ""
+    graph_thread_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

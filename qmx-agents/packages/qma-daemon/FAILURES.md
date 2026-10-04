@@ -441,7 +441,7 @@ refuses a third logger besides stdlib JSON-lines and QMB LogSink
 
 - **Failure class:** `ProhibitedReachability` / `policy rejection` (CT-04).
 - **Detection:** `ExecutionEnvironmentRegistry.register` runs the AD-28
-  barrier before the binding is stored. A deny-listed host, OpenRouter
+  barrier before the binding is stored. A deny-listed host, forbidden
   destination, forbidden image, or money-path capability is a registration
   (or placement) refusal — never a runtime hook deny (FR-Q48; SCN-0014).
 - **Auto-recovery / retry:** none — Role, Mission, plugin, permission, and
@@ -450,8 +450,8 @@ refuses a third logger besides stdlib JSON-lines and QMB LogSink
   act is minted.
 - **Notification tier:** operator-visible (declaration write / placement).
 - **Product-user affordance:** that environment would reach a venue, broker,
-  exchange, trading node, or OpenRouter. QMA refuses it up front. The
-  trading desk stays read-only.
+  exchange or trading node. QMA refuses it up front; the trading desk stays
+  read-only. OpenRouter alone is permitted by the October 4 attended amendment.
 
 ### FR-29: Timeout, lost supervisor, unreachable environment, or restart is `unknown`
 
@@ -1501,3 +1501,39 @@ refuses a third logger besides stdlib JSON-lines and QMB LogSink
 - **Visible degraded state:** known scope refusal fails without another model call; permitted metadata excludes disallowed corpus locators and contents.
 - **Notification tier:** sanitized tool denial.
 - **Product-user affordance:** browse the currently authorized pinned corpus scope or request a host configuration change.
+
+### FR-108: Workflow scope interruption
+
+- **Failure class:** policy rejection (`scope_interrupt`).
+- **Detection:** The requested research operation is outside the immutable admitted behavior profile. Checked before corpus retention or inference.
+- **Auto-recovery / retry:** No automatic retry; explicit resume rechecks the same scope and never widens it.
+- **Visible degraded state:** Interrupted request; no new research disclosure or domain operation.
+- **Notification tier:** sanitized operator request/wire response.
+- **Product-user affordance:** Use a newly admitted request after an authorized host scope change.
+
+### FR-109: Changed graph or specialist binding
+
+- **Failure class:** policy rejection (`context_changed` or `definition_changed`).
+- **Detection:** Pinned provider, host instructions, limits, descriptor/contribution/instance/grant/arguments or versioned specialist differs from the retained thread.
+- **Auto-recovery / retry:** No automatic retry under changed binding.
+- **Visible degraded state:** Failed request; saved observations cannot be retargeted.
+- **Notification tier:** sanitized operator request/wire response.
+- **Product-user affordance:** Restore the original configuration or admit a new scoped request.
+
+### FR-110: Unreconciled domain effect
+
+- **Failure class:** unknown outcome (`outcome_unknown`).
+- **Detection:** Pending effect intent has no observed receipt, including a lost callback outcome.
+- **Auto-recovery / retry:** No automatic or explicit-resume reexecution; observed receipts replay once without callback duplication.
+- **Visible degraded state:** Interrupted request requiring external reconciliation; no fabricated success.
+- **Notification tier:** sanitized operator request/wire response.
+- **Product-user affordance:** Inspect the existing operation evidence before starting new work.
+
+### FR-111: Research corpus, budget or memory refusal
+
+- **Failure class:** invalid input, storage failure or policy rejection.
+- **Detection:** Missing retained UTF-8 evidence, exceeded byte/call/time limit, denied memory hook, or refused journal write.
+- **Auto-recovery / retry:** No automatic retry; memory admission failure leaves a separately persisted result record if already produced.
+- **Visible degraded state:** Failed request with sanitized code; denied summaries never replace admitted memory.
+- **Notification tier:** sanitized operator request/wire response.
+- **Product-user affordance:** Supply valid bounded evidence or resolve the host memory policy; completed request status is never fabricated.

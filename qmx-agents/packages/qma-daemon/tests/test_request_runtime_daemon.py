@@ -672,3 +672,49 @@ def test_restart_fails_undispatched_request_after_context_narrows(tmp_path: Path
         assert not provider.requests
     finally:
         restarted.close()
+
+
+def test_authenticated_resume_revalidates_owned_interrupted_request(tmp_path: Path) -> None:
+    from qma.daemon.request_runtime.providers import ProviderError
+
+    class InterruptedProvider(ControlledProvider):
+        def execute(
+            self,
+            request: ProviderRequest,
+            emit: Callable[[ProviderEvent], None],
+            cancellation: threading.Event,
+        ) -> ProviderResult:
+            if not self.requests:
+                self.requests.append(request)
+                raise ProviderError("outcome_unknown", "deterministic transport loss")
+            return super().execute(request, emit, cancellation)
+
+    process = compose(tmp_path)
+    try:
+        mint(process)
+        provider = InterruptedProvider()
+        configure(process, provider)
+        conn = connection(process)
+        accepted = receipt(dispatch(process, conn, "submit_agent_request", submit_params()))
+        request_id = str(accepted["request_id"])
+        wait_status(process, conn, request_id, "interrupted")
+        wrong = dispatch(
+            process,
+            conn,
+            "resume_agent_request",
+            {"product_session_ref": "psess:other", "request_id": request_id},
+        )
+        assert "error" in wrong
+        resumed = receipt(
+            dispatch(
+                process,
+                conn,
+                "resume_agent_request",
+                {"product_session_ref": "psess:agent", "request_id": request_id},
+            )
+        )
+        assert resumed["status"] == "queued"
+        assert wait_status(process, conn, request_id, "completed")["content"] == "answer:hello"
+        assert len(provider.requests) == 2
+    finally:
+        process.close()

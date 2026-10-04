@@ -28,3 +28,12 @@ This register covers the proposed optional authenticated SDK methods; existing w
 - **Visible degraded state:** typed refusal. Authorized originating status remains safe when content disclosure is withheld after narrowing.
 - **Notification tier:** wire response.
 - **Product-user affordance:** use the originating authorized session; pairing does not mint a new multi-user identity model.
+
+### FR-SDK-W04: Explicit resume rejected
+
+- **Failure class:** policy rejection.
+- **Detection:** Resume requires negotiated operator capability, original session/principal, current host policy/grants and an interrupted request; queue must have capacity.
+- **Auto-recovery / retry:** No automatic retry.
+- **Visible degraded state:** Typed refusal; no scope widening or unauthorized inference.
+- **Notification tier:** sanitized operator request/wire response.
+- **Product-user affordance:** Resume the original authorized interrupted request once capacity and scope permit; resumption can repeat an unknown model call.

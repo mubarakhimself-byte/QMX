@@ -1,5 +1,9 @@
 # Bounded agent SDK request runtime
 
+October 4: generic sequencing now uses released LangChain/LangGraph with durable
+checkpoints. See [mature runtime acceptance](MATURE_AGENT_RUNTIME.md) for research,
+scoped memory, explicit daemon resume, native-worker limits and source evidence.
+
 This branch adds a trusted in-process API in `qma.daemon.request_runtime`, a local
 operator CLI, a native Codex text transport and an SDK-owned scoped read-tool loop.
 It reuses `AuthoritativeJournal`, `PersistenceSubstrate` and `ProductSessionService`.
@@ -21,13 +25,13 @@ crashed owners become interrupted, with no automatic replay. Native thread/turn
 IDs are evidence, and every provider turn starts fresh until authorized context
 handoff is implemented. Global/application/page profiles separate behavior and
 thread identity; tool ceilings come from trusted host configuration and never
-replace product-session grants. Profile-specific memory/context retrieval is future work.
+replace product-session grants. Bounded research summaries now use host-scoped durable memory; broader memory/context compilation remains future work.
 
 `ToolLoopProvider` parses strict JSON actions from a text provider, executes only
 trusted installed read handlers via the existing grant gate, then supplies their
 validated result to the next model call. Limits bound calls, bytes and duration.
 Handlers must implement their own bounded execution; arbitrary Python callbacks
-cannot be forcibly cancelled safely. Tool observations are not restart checkpoints.
+cannot be forcibly cancelled safely. Tool observations now persist in LangGraph checkpoints; observed domain receipts prevent duplicate effects on resume.
 
 `CodexAppServerProvider` runs native JSONL stdio with a dedicated explicitly supplied
 Codex home. It verifies disabled native features before a turn, requires native

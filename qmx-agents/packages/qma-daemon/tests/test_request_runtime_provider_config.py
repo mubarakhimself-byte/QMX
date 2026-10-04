@@ -163,3 +163,26 @@ def test_duplicate_or_oversize_operator_configuration_is_refused(tmp_path: Path)
     assert is_refusal(load_agent_request_config(tmp_path))
     path.write_text(" " * 1_048_577, encoding="utf-8")
     assert is_refusal(load_agent_request_config(tmp_path))
+
+
+def test_research_workflow_is_host_selected_and_pins_provider_identity(tmp_path: Path) -> None:
+    sdk = configuration()
+    sdk["research_workflow"] = {
+        "specialist_id": "corpus-analyst",
+        "version": "1",
+        "instructions": "Analyze supplied evidence.",
+        "profiles": ["research-reader"],
+    }
+    write(tmp_path, sdk)
+    first = load_agent_request_config(tmp_path)
+    assert not is_refusal(first) and first.value is not None
+    assert first.value.research_workflow == sdk["research_workflow"]
+    identity = first.value.policies["research-reader"].provider_id
+    sdk["research_workflow"]["instructions"] = "Changed analysis behavior."
+    write(tmp_path, sdk)
+    changed = load_agent_request_config(tmp_path)
+    assert not is_refusal(changed) and changed.value is not None
+    assert changed.value.policies["research-reader"].provider_id != identity
+    sdk["research_workflow"]["profiles"] = ["unknown-profile"]
+    write(tmp_path, sdk)
+    assert is_refusal(load_agent_request_config(tmp_path))

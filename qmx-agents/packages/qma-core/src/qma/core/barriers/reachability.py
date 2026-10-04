@@ -3,7 +3,8 @@
 Environment, image, host, and computer-use profile checks are code, never
 settings. Every violation is a registration or placement refusal — never a
 hook deny at runtime. Role, Mission, plugin, permission policy, and hook
-cannot waive a host denial. OpenRouter is not a QMA path.
+cannot waive a host denial. The October 4 attended amendment removes only
+the historical OpenRouter host/adapter/image prohibition.
 """
 
 from __future__ import annotations
@@ -168,10 +169,6 @@ _DENIED_HOST_ROWS: Final[tuple[tuple[str, DeniedHostClass], ...]] = (
     ("qmn-vps", DeniedHostClass.TRADING_NODE),
     ("qmn", DeniedHostClass.TRADING_NODE),
     ("platform-registry", DeniedHostClass.PLATFORM_REGISTRY),
-    ("openrouter.ai", DeniedHostClass.OPENROUTER),
-    ("*.openrouter.ai", DeniedHostClass.OPENROUTER),
-    ("openrouter.com", DeniedHostClass.OPENROUTER),
-    ("openrouter", DeniedHostClass.OPENROUTER),
 )
 
 DENIED_HOST_PATTERNS: Final[frozenset[str]] = frozenset(pattern for pattern, _ in _DENIED_HOST_ROWS)
@@ -196,12 +193,11 @@ FORBIDDEN_IMAGE_TOKENS: Final[frozenset[str]] = frozenset(
         "ibapi",
         "ib_insync",
         "metatrader5",
-        "openrouter",
         "qmb",
     }
 )
 
-FORBIDDEN_MODEL_ADAPTERS: Final[frozenset[str]] = frozenset({"openrouter"})
+FORBIDDEN_MODEL_ADAPTERS: Final[frozenset[str]] = frozenset()
 
 _VENUE_PROFILE_TOKENS: Final[frozenset[str]] = frozenset(
     {
@@ -213,7 +209,6 @@ _VENUE_PROFILE_TOKENS: Final[frozenset[str]] = frozenset(
         "icmarkets",
         "trading-node",
         "qmn",
-        "openrouter",
     }
 )
 
@@ -339,7 +334,7 @@ def is_forbidden_image_token(token: object) -> str | None:
 
 
 def is_forbidden_model_adapter(adapter: object) -> bool:
-    """True when ``adapter`` is OpenRouter or another banned model path."""
+    """True when ``adapter`` is an explicitly banned model path."""
     if not isinstance(adapter, str) or not adapter.strip():
         return False
     return adapter.strip().casefold() in FORBIDDEN_MODEL_ADAPTERS
@@ -350,12 +345,12 @@ def refuse_forbidden_model_adapter(
     *,
     stage: StageName = "registration",
 ) -> ProhibitedReachability | None:
-    """Refuse an OpenRouter (or otherwise banned) model adapter."""
+    """Refuse an explicitly banned model adapter."""
     if not is_forbidden_model_adapter(adapter):
         return None
     return refuse_reachability(
         surface="model_deployment",
-        reason="openrouter_forbidden",
+        reason="model_adapter_forbidden",
         stage=stage,
         matched=str(adapter).strip().casefold(),
     )

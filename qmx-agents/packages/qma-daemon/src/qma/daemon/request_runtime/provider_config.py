@@ -13,6 +13,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
 
+from qma.core.barriers.reachability import is_forbidden_model_adapter
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import invalid_input
 
@@ -36,6 +37,7 @@ class AgentRequestConfiguration:
     profile_tools: Mapping[str, frozenset[str]]
     research_browse: Mapping[str, object]
     instance_revisions: Mapping[str, int]
+    research_workflow: Mapping[str, object]
     max_workers: int = 2
     max_inflight: int = 16
     shutdown_timeout_seconds: float = 2
@@ -114,6 +116,8 @@ def _duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _provider(alias: str, row: dict[str, Any], manifest: Mapping[str, object]) -> ProviderAdapter:
+    if is_forbidden_model_adapter(alias):
+        raise ValueError("Configured adapter violates host reachability")
     protocol = row.get("protocol")
     if protocol == "chat-completions":
         _keys(row, {"protocol", "endpoint", "model", "deployment_id", "api_key_env", "stream"})
@@ -191,6 +195,8 @@ def _policy(
     alias = _text(row.get("provider_id"))
     if alias not in providers:
         raise ValueError("profile provider is not configured")
+    if row.get("tools") and providers[alias].capabilities.execution_kind == "agent_session":
+        raise ValueError("native agent-session profiles cannot use the inference tool graph")
     model = _text(row["model"]) if "model" in row else None
     return AgentRequestPolicy(
         profile=profile,
@@ -224,6 +230,7 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 "providers",
                 "profiles",
                 "research_browse",
+                "research_workflow",
                 "instance_revisions",
                 "max_workers",
                 "max_inflight",
@@ -239,7 +246,9 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
         if not 0 < len(raw_providers) <= 16 or not 0 < len(raw_profiles) <= 32:
             raise ValueError("bounded nonempty provider and profile maps required")
         manifest = {
+            "runtime_revision": "langchain-agent-1",
             "research_browse": sdk.get("research_browse", {}),
+            "research_workflow": sdk.get("research_workflow", {}),
             "instance_revisions": sdk.get("instance_revisions", {}),
             "profile_tools": {
                 key: _mapping(row).get("tools", []) for key, row in raw_profiles.items()
@@ -259,6 +268,24 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 raise ValueError("only the installed scoped research_browse tool is supported")
             tools[profile_id] = frozenset(_text(value) for value in values)
         browse = _mapping(sdk.get("research_browse", {}))
+        workflow = _mapping(sdk.get("research_workflow", {}))
+        _keys(workflow, {"specialist_id", "version", "instructions", "profiles"})
+        if workflow:
+            for name in ("specialist_id", "version", "instructions"):
+                _text(workflow.get(name))
+            if "profiles" in workflow:
+                selected = _sequence(workflow["profiles"])
+                if not 0 < len(selected) <= 64:
+                    raise ValueError("bounded workflow profile selection required")
+                for profile in selected:
+                    name = _text(profile)
+                    if name not in policies:
+                        raise ValueError("workflow profile is not configured")
+                    provider = aliases[_text(_mapping(raw_profiles[name]).get("provider_id"))]
+                    if provider.capabilities.execution_kind != "inference":
+                        raise ValueError("research workflow requires inference profiles")
+            if not any(tools.values()):
+                raise ValueError("research workflow requires scoped research_browse profiles")
         _keys(browse, {"source_id", "snapshot_ref", "allowed_locators"})
         if any(tools.values()):
             _text(browse.get("source_id"))
@@ -293,6 +320,7 @@ def load_agent_request_config(root: Path | str) -> Result[AgentRequestConfigurat
                 profile_tools=MappingProxyType(tools),
                 research_browse=MappingProxyType(browse),
                 instance_revisions=MappingProxyType(revisions),
+                research_workflow=MappingProxyType(workflow),
                 max_workers=workers,
                 max_inflight=inflight,
                 shutdown_timeout_seconds=_duration(sdk.get("shutdown_timeout_seconds", 2), 10),

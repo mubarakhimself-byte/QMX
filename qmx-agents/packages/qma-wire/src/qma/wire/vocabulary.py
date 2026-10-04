@@ -51,7 +51,7 @@ ADDABLE_QUERY_COUNT: Final[int] = 12
 # save/publish_editor_draft (Story 71; AM-09), cancel_job (Epic 73; AM-09),
 # and ProductSession open/grant (DEC-0421 / DEC-0442).
 # Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 9
+ADDABLE_COMMAND_COUNT: Final[int] = 10
 
 
 class MessageFamily(StrEnum):
@@ -92,6 +92,7 @@ class WireCommand(StrEnum):
     GRANT_PRODUCT_SESSION = "grant_product_session"
     SUBMIT_AGENT_REQUEST = "submit_agent_request"
     CANCEL_AGENT_REQUEST = "cancel_agent_request"
+    RESUME_AGENT_REQUEST = "resume_agent_request"
 
 
 class WireQuery(StrEnum):

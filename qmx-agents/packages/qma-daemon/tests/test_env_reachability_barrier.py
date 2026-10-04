@@ -219,7 +219,7 @@ def test_trading_desk_stays_read_only_including_paper() -> None:
     assert is_ok(allowed)
 
 
-def test_openrouter_deployment_refused_at_registration() -> None:
+def test_openrouter_inference_deployment_allowed_at_registration() -> None:
     deployments = DeploymentRegistry()
     refused = deployments.register(
         DeploymentRecord(
@@ -229,6 +229,4 @@ def test_openrouter_deployment_refused_at_registration() -> None:
             context_tokens=8_000,
         )
     )
-    assert is_refusal(refused)
-    assert ProhibitedReachability.matches(refused)
-    assert refused.context["reason"] == "openrouter_forbidden"
+    assert is_ok(refused)

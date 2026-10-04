@@ -343,6 +343,26 @@ class AgentRequestBridge:
             return cancelled
         return Ok(request_receipt(cancelled.value))
 
+    def resume(
+        self, params: AgentRequestReference, *, principal: PrincipalClass
+    ) -> Result[Mapping[str, object]]:
+        """Explicit retry of an owned interrupted graph, never a scope expansion."""
+        with self._condition:
+            if self._closed or self._backlog or len(self._jobs) >= self.max_inflight:
+                return policy_rejection("agent_requests", "bounded request queue unavailable")
+            owned = self._owned(params, principal)
+            if is_refusal(owned):
+                return owned
+            active = self.runtime.validate_request_context(params.request_id, now=self.now())
+            if is_refusal(active):
+                return active
+            queued = self.runtime.retry_interrupted(params.request_id)
+            if is_refusal(queued):
+                return queued
+            self._jobs.add(params.request_id)
+            self._queue.put_nowait(params.request_id)
+            return Ok(request_receipt(queued.value))
+
     def _work(self) -> None:
         self._ready.wait()
         while True:

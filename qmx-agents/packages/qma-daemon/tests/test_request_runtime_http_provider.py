@@ -343,3 +343,42 @@ def test_worker_start_failure_releases_capacity(
     assert slots.acquire(blocking=False)
     slots.release()
     assert server.calls == 0
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://live.ctraderapi.com/v1/chat/completions",
+        "https://api.icmarkets.com/v1/chat/completions",
+        "https://trading-node-vps/v1/chat/completions",
+        "https://platform-registry/v1/chat/completions",
+    ],
+)
+def test_http_inference_preserves_shared_host_reachability(endpoint: str) -> None:
+    with pytest.raises(ValueError, match="reachability"):
+        ChatCompletionsProvider(endpoint, "test-model", deployment_id="test")
+
+
+def test_openrouter_documented_endpoint_constructs_without_auth_or_network() -> None:
+    provider = ChatCompletionsProvider(
+        "https://openrouter.ai/api/v1/chat/completions",
+        "operator/model",
+        deployment_id="openrouter-test",
+        provider_id="openrouter",
+        api_key_env="NOT_CONFIGURED",
+    )
+    assert provider.endpoint == "https://openrouter.ai/api/v1/chat/completions"
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://openrouter.ai/v1/chat/completions",
+        "http://openrouter.ai/api/v1/chat/completions",
+        "https://openrouter.ai:8443/api/v1/chat/completions",
+        "https://example.com/api/v1/chat/completions",
+    ],
+)
+def test_openrouter_path_exception_cannot_expand_other_endpoints(endpoint: str) -> None:
+    with pytest.raises(ValueError):
+        ChatCompletionsProvider(endpoint, "operator/model", deployment_id="test")

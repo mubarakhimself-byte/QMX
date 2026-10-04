@@ -160,7 +160,7 @@ def test_allowlist_enumerates_permitted_destinations_only() -> None:
     assert other.is_empty()
 
 
-def test_openrouter_host_refused_at_registration() -> None:
+def test_openrouter_inference_host_allowed_at_registration() -> None:
     registry = ExecutionEnvironmentRegistry()
     parsed = ExecutionEnvironmentDeclaration.try_parse(
         kind="docker",
@@ -170,9 +170,7 @@ def test_openrouter_host_refused_at_registration() -> None:
         image="qma-worker:isolated",
     )
     refused = registry.register_declaration(parsed)
-    assert is_refusal(refused)
-    assert ProhibitedReachability.matches(refused)
-    assert refused.context["matched"] == "openrouter"
+    assert is_ok(refused)
 
 
 def test_reachability_is_registration_refusal_not_hook() -> None:

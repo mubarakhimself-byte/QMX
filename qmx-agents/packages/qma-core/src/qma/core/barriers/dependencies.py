@@ -45,6 +45,8 @@ QMA_DAEMON_ALLOWED_DEPS: Final[frozenset[str]] = frozenset(
         "qmf-data",
         "qmf-risk",
         "tzdata",
+        "langchain",
+        "langgraph",
     }
 )
 

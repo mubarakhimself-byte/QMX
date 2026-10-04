@@ -208,9 +208,11 @@ from qma.daemon.tools.registry import ToolRegistry
 from qma.wire.agent_request import (
     AGENT_REQUEST_CAPABILITIES,
     GET_AGENT_REQUEST_CAPABILITY,
+    RESUME_AGENT_REQUEST_CAPABILITY,
     SUBMIT_AGENT_REQUEST_CAPABILITY,
     parse_cancel_agent_request,
     parse_get_agent_request,
+    parse_resume_agent_request,
     parse_submit_agent_request,
     require_agent_request_capability,
 )
@@ -1079,6 +1081,7 @@ class DaemonProcess:
                     policies=sdk.policies,
                     profile_tools=sdk.profile_tools,
                     research_browse=sdk.research_browse,
+                    research_workflow=sdk.research_workflow,
                     instance_revisions=sdk.instance_revisions,
                     max_workers=sdk.max_workers,
                     max_inflight=sdk.max_inflight,
@@ -1192,6 +1195,7 @@ class DaemonProcess:
         policies: Mapping[str, AgentRequestPolicy],
         profile_tools: Mapping[str, frozenset[str]] | None = None,
         research_browse: Mapping[str, object] | None = None,
+        research_workflow: Mapping[str, object] | None = None,
         instance_revisions: Mapping[str, int] | None = None,
         max_workers: int = 2,
         max_inflight: int = 16,
@@ -1215,9 +1219,11 @@ class DaemonProcess:
                 providers,
                 profile_tools or {},
                 research_browse or {},
-                KnowledgeService(registry=self.roster.knowledge),
+                KnowledgeService(registry=self.roster.knowledge, hooks=self._artifacts.hooks),
                 target_resolver=self._agent_tool_target,
                 now=self._agent_request_now,
+                research_workflow=research_workflow,
+                hooks=self._artifacts.hooks,
             )
             if is_refusal(wrapped):
                 return wrapped
@@ -2939,6 +2945,8 @@ class DaemonProcess:
                 reference = (
                     parse_get_agent_request(request.get("params"))
                     if method == GET_AGENT_REQUEST_CAPABILITY
+                    else parse_resume_agent_request(request.get("params"))
+                    if method == RESUME_AGENT_REQUEST_CAPABILITY
                     else parse_cancel_agent_request(request.get("params"))
                 )
                 if is_refusal(reference):
@@ -2946,6 +2954,8 @@ class DaemonProcess:
                 result = (
                     bridge.get(reference.value, principal=connection.principal_class)
                     if method == GET_AGENT_REQUEST_CAPABILITY
+                    else bridge.resume(reference.value, principal=connection.principal_class)
+                    if method == RESUME_AGENT_REQUEST_CAPABILITY
                     else bridge.cancel(reference.value, principal=connection.principal_class)
                 )
         except RuntimeError:

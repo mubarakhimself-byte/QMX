@@ -161,7 +161,9 @@ class CodexAppServerProvider:
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities("codex-native", resume=False, native_tools=False)
+        return ProviderCapabilities(
+            "codex-native", resume=False, native_tools=False, execution_kind="agent_session"
+        )
 
     def execute(
         self,

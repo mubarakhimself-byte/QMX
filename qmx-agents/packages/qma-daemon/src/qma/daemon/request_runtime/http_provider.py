@@ -21,6 +21,8 @@ from contextlib import suppress
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+from qma.core.barriers.reachability import is_denied_host, is_forbidden_model_adapter
+
 from .contracts import ProviderCapabilities, ProviderEvent, ProviderRequest, ProviderResult
 from .providers import ProviderError
 
@@ -81,6 +83,10 @@ class ChatCompletionsProvider:
         stream: bool = False,
     ) -> None:
         parsed = urlsplit(endpoint)
+        if is_denied_host(parsed.hostname) or is_forbidden_model_adapter(provider_id):
+            raise ValueError("Configured inference endpoint or adapter violates host reachability")
+        openrouter = parsed.hostname == "openrouter.ai"
+        expected_path = "/api/v1/chat/completions" if openrouter else "/v1/chat/completions"
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname
@@ -88,9 +94,10 @@ class ChatCompletionsProvider:
             or parsed.password
             or parsed.query
             or parsed.fragment
-            or parsed.path != "/v1/chat/completions"
+            or parsed.path != expected_path
+            or (openrouter and (parsed.scheme != "https" or parsed.port not in {None, 443}))
         ):
-            raise ValueError("Explicit http(s) /v1/chat/completions endpoint required")
+            raise ValueError("Explicit supported Chat Completions endpoint required")
         if parsed.scheme == "http":
             try:
                 loopback = ipaddress.ip_address(parsed.hostname).is_loopback
@@ -152,9 +159,15 @@ class ChatCompletionsProvider:
         if request.instructions:
             messages.append({"role": "system", "content": request.instructions})
         messages.append({"role": "user", "content": request.prompt})
-        body = json.dumps(
-            {"model": self.model, "messages": messages, "stream": self.stream, "n": 1}
-        ).encode("utf-8")
+        payload: dict[str, object] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": self.stream,
+            "n": 1,
+        }
+        if self._url.hostname == "openrouter.ai":
+            payload["provider"] = {"allow_fallbacks": False}
+        body = json.dumps(payload).encode("utf-8")
         if len(body) > _MAX_BYTES:
             raise ProviderError("invalid_input", "Completion request exceeds byte budget")
         connection_type = (

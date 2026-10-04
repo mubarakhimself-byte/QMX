@@ -12,6 +12,15 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-04 - Mature library runtime branch proposal
+
+[ADR-0028](decisions/ADR-0028-mature-agent-runtime.md) records the authorized local
+LangChain/LangGraph replacement, durable checkpoint/effect semantics, bounded
+research delegation, scoped memory and authenticated explicit resume. It also
+records the attended OpenRouter-only ban amendment, while retaining shared
+money/control reachability barriers. Native SDK sessions, live spend/auth and
+endurance remain unsupported; no merge or release adoption is claimed.
+
 ## 2026-10-03 - Bounded SDK request branch proposal
 
 [ADR-0027](decisions/ADR-0027-bounded-sdk-request-runtime.md) records the reuse
