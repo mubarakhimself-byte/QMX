@@ -169,7 +169,7 @@ jobs:
 
   agents:
     # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
-    if: ${{ always() && github.event_name != 'schedule' }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
     needs: [agent-suites]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -187,7 +187,7 @@ jobs:
 
   check:
     # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
-    if: ${{ always() && github.event_name != 'schedule' }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
     needs: [backend, agent-suites, vulture]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
