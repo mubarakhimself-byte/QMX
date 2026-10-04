@@ -9,15 +9,31 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
-SCRIPT = Path(__file__).resolve().parents[1] / "readiness_gate.py"
+WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/battery.yml"
 MANDATORY = ("backend", "agent-suites", "vulture")
 
 
 def run_gate(raw: str, required: tuple[str, ...] = MANDATORY) -> int:
+    job = "agents" if required == ("agent-suites",) else "check"
+    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    definition = document["jobs"][job]
+    assert definition["if"] == "${{ always() && github.event_name != 'schedule' }}"
+    assert definition["needs"] == list(required)
+    assert len(definition["steps"]) == 1
+    step = definition["steps"][0]
+    assert step["if"] == "${{ always() }}"
+    assert step["env"]["NEEDS_JSON"] == "${{ toJSON(needs) }}"
+    assert step["env"]["REQUIRED_JOBS"].split() == list(required)
+    # Execute the actual workflow Python body using this host's interpreter.
+    prefix, body = step["run"].split("python3 - <<'PY'\n", 1)
+    assert prefix == ""
+    code, suffix = body.rsplit("\nPY", 1)
+    assert not suffix.strip()
     return subprocess.run(
-        [sys.executable, "-B", str(SCRIPT), *required],
-        env=dict(os.environ, NEEDS_JSON=raw),
+        [sys.executable, "-B", "-c", code],
+        env=dict(os.environ, NEEDS_JSON=raw, REQUIRED_JOBS=" ".join(required)),
         capture_output=True,
         text=True,
         check=False,
@@ -45,6 +61,8 @@ def test_missing_native_suite_or_scan_is_never_green(job: str) -> None:
     assert run_gate(json.dumps(payload)) == 1
 
 
-@pytest.mark.parametrize("raw", ["", "not-json", "[]", "null", '{"backend": true}'])
+@pytest.mark.parametrize(
+    "raw", ["", "not-json", "[]", "null", '{"backend": true}', '{"extra": {"result": "success"}}']
+)
 def test_unreadable_or_malformed_results_are_never_green(raw: str) -> None:
     assert run_gate(raw) == 1
