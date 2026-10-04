@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+import pytest
 from qma.core.operations import OperationDescriptor, public_operation_descriptors
 from qma.core.refusals import GrantInactive, GrantMismatch, GrantWidenRefused, ManifestIsNotGrant
 from qma.daemon import (
@@ -27,6 +28,7 @@ from qma.daemon.sessions import (
     TOOL_REGISTRY_REWRITTEN,
     accepted_invocation_binding,
 )
+from qma.wire import derive_child_logical_invocation_id
 from qma.wire.invocation_envelope import (
     BoundInvocation,
     ContributionRecord,
@@ -208,6 +210,141 @@ def test_granted_ops_store_grant_ids_resolved_from_ledger() -> None:
     assert is_refusal(missing)
     assert isinstance(missing, GrantMismatch)
     assert missing.context["code"] == "GRANT_MISMATCH"
+
+
+@pytest.mark.parametrize("transport", tuple(PublicCallTransport))
+def test_session_dispatch_refuses_parameter_ceiling_before_execution(
+    transport: PublicCallTransport,
+) -> None:
+    service = ProductSessionService()
+    assert is_ok(service.mint(**_mint_kwargs()))
+    assert is_ok(
+        service.host_grant(
+            "psess:desk-1", **_grant_kwargs(parameter_ceiling={"allow_keys": ["as_of"]})
+        )
+    )
+    envelope = _envelope()
+    if transport is PublicCallTransport.NESTED:
+        child_id = derive_child_logical_invocation_id(
+            parent_logical_invocation_id="inv:parent",
+            call_depth=1,
+            child_op_id="qmb.analysis.project",
+            child_canonical_input_hash=_hash(),
+        )
+        assert is_ok(child_id)
+        envelope.update(
+            logical_invocation_id=child_id.value,
+            parent_logical_invocation_id="inv:parent",
+            call_depth=1,
+            caller_kind="workflow",
+        )
+    executed: list[BoundInvocation] = []
+    contributions, descriptors, instances = _stores()
+    result = service.dispatch_public_call(
+        "psess:desk-1",
+        transport=transport,
+        envelope=envelope,
+        payload=_INPUT,
+        now=_NOW,
+        contributions=contributions,
+        descriptors=descriptors,
+        instances=instances,
+        execute=executed.append,
+    )
+    assert executed == []
+    assert isinstance(result, GrantMismatch)
+    assert result.context["field"] == "parameter_ceiling.allow_keys"
+    assert result.context["excess_keys"] == ("run_fp1",)
+
+
+def test_narrow_regrant_enforces_parameter_ceiling_after_restart(tmp_path: Path) -> None:
+    substrate, journal = _open(tmp_path)
+    try:
+        service = ProductSessionService(journal=journal, sqlite=substrate.sqlite)
+        assert is_ok(service.mint(**_mint_kwargs()))
+        assert is_ok(service.host_grant("psess:desk-1", **_grant_kwargs()))
+        original_bytes = service.ledger.minted_bytes("grant:1")
+        narrowed = service.regrant(
+            "psess:desk-1",
+            "grant:1",
+            grant_id="grant:narrow",
+            context_revision=1,
+            parameter_ceiling={"allow_keys": ["run_fp1"]},
+        )
+        assert is_ok(narrowed)
+        assert narrowed.value.context_revision == 1
+        assert service.ledger.minted_bytes("grant:1") == original_bytes
+        assert is_ok(
+            service.revoke_grant(
+                "psess:desk-1",
+                grant_id="grant:1",
+                principal="operator",
+                reason="replaced-by-narrow-grant",
+                revoked_at=_NOW,
+            )
+        )
+        contributions, descriptors, instances = _stores()
+        denied_payload = {"run_fp1": "run-1", "as_of": _AS_OF}
+        denied_hash = compute_input_hash(denied_payload, descriptor=_descriptor())
+        assert is_ok(denied_hash)
+        for restarted in (False, True):
+            if restarted:
+                journal.close()
+                substrate.close()
+                substrate, journal = _open(tmp_path)
+                service = ProductSessionService(journal=journal, sqlite=substrate.sqlite)
+            restored = service.resolve_grant("psess:desk-1", "grant:narrow")
+            assert is_ok(restored)
+            assert restored.value.parameter_ceiling.allow_keys == ("run_fp1",)
+            assert service.ledger.minted_bytes("grant:1") == original_bytes
+            executed: list[BoundInvocation] = []
+            refused = service.dispatch_public_call(
+                "psess:desk-1",
+                transport=PublicCallTransport.IN_PROCESS,
+                envelope=_envelope(grant_id="grant:narrow", input_hash=denied_hash.value),
+                payload=denied_payload,
+                now=_NOW,
+                contributions=contributions,
+                descriptors=descriptors,
+                instances=instances,
+                execute=executed.append,
+            )
+            assert executed == []
+            assert isinstance(refused, GrantMismatch)
+            assert refused.context["excess_keys"] == ("as_of",)
+            allowed = service.dispatch_public_call(
+                "psess:desk-1",
+                transport=PublicCallTransport.IN_PROCESS,
+                envelope=_envelope(grant_id="grant:narrow"),
+                payload=_INPUT,
+                now=_NOW,
+                contributions=contributions,
+                descriptors=descriptors,
+                instances=instances,
+                execute=executed.append,
+            )
+            assert is_ok(allowed)
+            assert allowed.value.invocation is not None
+            assert executed == [allowed.value.invocation]
+            old_grant = service.dispatch_public_call(
+                "psess:desk-1",
+                transport=PublicCallTransport.IN_PROCESS,
+                envelope=_envelope(logical_invocation_id="inv:old-new"),
+                payload=_INPUT,
+                now=_NOW,
+                contributions=contributions,
+                descriptors=descriptors,
+                instances=instances,
+                execute=executed.append,
+            )
+            assert isinstance(old_grant, GrantInactive)
+            assert executed == [allowed.value.invocation]
+            events = journal.read_all()
+            assert is_ok(events)
+            assert all(item["event"] != "product_session.grant_accepted" for item in events.value)
+    finally:
+        journal.close()
+        substrate.close()
 
 
 def test_envelope_mismatch_is_grant_mismatch_before_execution() -> None:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 
+import pytest
 from qma.core.operations import public_operation_descriptors
 from qma.core.refusals import (
     AmbiguousResolution,
@@ -246,6 +248,141 @@ def test_host_compares_stores_envelope_is_not_authority() -> None:
     assert bound.value.grant.grant_id == "grant:1"
     assert bound.value.descriptor.op_id == "qmb.analysis.project"
     assert len(executed) == 1
+
+
+def test_parameter_ceiling_refuses_excess_validated_keys_before_execute() -> None:
+    stores = _stores(grant=_grant(parameter_ceiling={"allow_keys": ["as_of"]}))
+    executed: list[BoundInvocation] = []
+
+    refused = public_call_in_process(
+        _envelope_payload(), _INPUT, stores, execute=_capture(executed)
+    )
+    assert executed == []
+    assert isinstance(refused, GrantMismatch)
+    assert refused.context["field"] == "parameter_ceiling.allow_keys"
+    assert refused.context["grant_id"] == "grant:1"
+    assert refused.context["excess_keys"] == ("run_fp1",)
+
+
+@pytest.mark.parametrize("transport", tuple(PublicCallTransport))
+@pytest.mark.parametrize(
+    ("allow_keys", "payload", "excess_keys"),
+    [
+        ((), _INPUT, ("run_fp1",)),
+        ((), {"run_fp1": "run-1", "as_of": "2026-09-20"}, ("as_of", "run_fp1")),
+        (("*",), _INPUT, ("run_fp1",)),
+        (("RUN_FP1",), _INPUT, ("run_fp1",)),
+        (("run_fp1",), {"run_fp1": "run-1", "as_of": "2026-09-20"}, ("as_of",)),
+        (("run_fp1", "as_of"), {"run_fp1": "run-1", "as_of": "2026-09-20"}, ()),
+    ],
+)
+def test_every_public_transport_enforces_literal_parameter_keys(
+    transport: PublicCallTransport,
+    allow_keys: tuple[str, ...],
+    payload: dict[str, object],
+    excess_keys: tuple[str, ...],
+) -> None:
+    stores = _stores(grant=_grant(parameter_ceiling={"allow_keys": allow_keys}))
+    hashed = compute_input_hash(payload, descriptor=_descriptor())
+    assert is_ok(hashed)
+    envelope = _envelope_payload(input_hash=hashed.value)
+    executed: list[BoundInvocation] = []
+    if transport is PublicCallTransport.NESTED:
+        child_id = derive_child_logical_invocation_id(
+            parent_logical_invocation_id="inv:1",
+            call_depth=1,
+            child_op_id="qmb.analysis.project",
+            child_canonical_input_hash=hashed.value,
+        )
+        assert is_ok(child_id)
+        envelope.update(
+            logical_invocation_id=child_id.value,
+            parent_logical_invocation_id="inv:1",
+            call_depth=1,
+            caller_kind="workflow",
+        )
+        result = public_call_nested(envelope, payload, stores, execute=_capture(executed))
+    elif transport is PublicCallTransport.WIRE:
+        wire = WireEnvelope.try_create(
+            v="1.0.0",
+            type="start_mission",
+            id="msg-ceiling",
+            producer_id="client-a",
+            correlation_id="corr-ceiling",
+            scope_path=[{"kind": "desk", "id": "research"}],
+            payload={"invocation_envelope": envelope, "input": payload},
+        )
+        assert is_ok(wire)
+        result = public_call_from_wire(wire.value, stores, execute=_capture(executed))
+    elif transport is PublicCallTransport.CLI:
+        result = public_call_from_cli(envelope, payload, stores, execute=_capture(executed))
+    else:
+        result = public_call_in_process(envelope, payload, stores, execute=_capture(executed))
+    if excess_keys:
+        assert executed == []
+        assert isinstance(result, GrantMismatch)
+        assert result.context["field"] == "parameter_ceiling.allow_keys"
+        assert result.context["excess_keys"] == excess_keys
+        assert result.context["code"] == "GRANT_MISMATCH"
+    else:
+        assert is_ok(result)
+        assert executed == [result.value]
+        assert dict(result.value.validated_payload) == payload
+
+
+@pytest.mark.parametrize("shape", ("input", "args", "flat"))
+def test_wire_payload_forms_cannot_bypass_parameter_ceiling(shape: str) -> None:
+    stores = _stores(grant=_grant(parameter_ceiling={"allow_keys": ["as_of"]}))
+    message: dict[str, object] = {"invocation_envelope": _envelope_payload()}
+    if shape == "flat":
+        message.update(_INPUT)
+    else:
+        message[shape] = _INPUT
+    executed: list[BoundInvocation] = []
+    result = public_call_from_wire(message, stores, execute=_capture(executed))
+    assert executed == []
+    assert isinstance(result, GrantMismatch)
+    assert result.context["excess_keys"] == ("run_fp1",)
+
+
+def test_parameter_ceiling_preserves_schema_filtering_and_omitted_defaults() -> None:
+    descriptor = _descriptor()
+    descriptor = replace(
+        descriptor,
+        configuration=replace(
+            descriptor.configuration, defaults={"as_of": "2026-09-20"}, optional_keys=()
+        ),
+    )
+    stores = replace(
+        _stores(grant=_grant(parameter_ceiling={"allow_keys": ["run_fp1"]})),
+        descriptors={(descriptor.op_id, descriptor.version): descriptor},
+    )
+    executed: list[BoundInvocation] = []
+    allowed = public_call_in_process(
+        _envelope_payload(),
+        {"run_fp1": "run-1", "unknown_key": "filtered"},
+        stores,
+        execute=_capture(executed),
+    )
+    assert is_ok(allowed)
+    assert executed == [allowed.value]
+    assert dict(allowed.value.validated_payload) == _INPUT
+    explicit = {"run_fp1": "run-1", "as_of": "2026-09-20"}
+    hashed = compute_input_hash(explicit, descriptor=descriptor)
+    assert is_ok(hashed)
+    executed.clear()
+    refused = public_call_in_process(
+        _envelope_payload(input_hash=hashed.value), explicit, stores, execute=_capture(executed)
+    )
+    assert executed == []
+    assert isinstance(refused, GrantMismatch)
+    assert refused.context["excess_keys"] == ("as_of",)
+    missing_required = public_call_in_process(
+        _envelope_payload(), {}, stores, execute=_capture(executed)
+    )
+    assert is_refusal(missing_required)
+    assert missing_required.context["field"] == "input"
+    assert executed == []
 
 
 def test_labeling_external_effect_as_read_is_mismatch_before_execute() -> None:

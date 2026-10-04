@@ -1242,6 +1242,13 @@ def bind_invocation_envelope(
     validated = validate_input_payload(descriptor.value, payload)
     if is_refusal(validated):
         return validated
+    excess_keys = sorted(set(validated.value) - set(pinned.value.parameter_ceiling.allow_keys))
+    if excess_keys:
+        return GrantMismatch.of(
+            field="parameter_ceiling.allow_keys",
+            grant_id=pinned.value.grant_id,
+            excess_keys=excess_keys,
+        )
     expected_hash = compute_input_hash(validated.value, descriptor=descriptor.value)
     if is_refusal(expected_hash):
         return expected_hash
