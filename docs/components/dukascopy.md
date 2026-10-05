@@ -5,10 +5,10 @@ type: component-spec
 status: ratified
 component: COMP-DUKASCOPY
 depends_on: []
-decisions: [DEC-0009, DEC-0013, DEC-0038, DEC-0051, DEC-0053, DEC-0107, DEC-0109, DEC-0117, DEC-0118, DEC-0119, DEC-0166]
-sources: [DEC-0009, DEC-0013, DEC-0038, DEC-0051, DEC-0053, DEC-0107, DEC-0109, DEC-0117, DEC-0118, DEC-0119, DEC-0166, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, docs/architecture/dependencies.yaml, docs/contracts/ct-15-external-source-adapter.yaml]
+decisions: [DEC-0009, DEC-0013, DEC-0038, DEC-0051, DEC-0053, DEC-0107, DEC-0109, DEC-0117, DEC-0118, DEC-0119, DEC-0166, DEC-0170]
+sources: [DEC-0009, DEC-0013, DEC-0038, DEC-0051, DEC-0053, DEC-0107, DEC-0109, DEC-0117, DEC-0118, DEC-0119, DEC-0166, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-QMB-2026-08-20/ARCHITECTURE-SPINE.md, docs/architecture/dependencies.yaml, docs/contracts/ct-15-external-source-adapter.yaml, DEC-0170]
 generated: 2026-08-18
-verified: 2026-08-21
+verified: 2026-10-05
 stale_after: 30d
 ---
 
@@ -38,7 +38,7 @@ The adapter-versus-application boundary is ratified: qmf-data defines the source
 
 Raw originals and lineage are kept forever, and time-series is partitioned by source, instrument, and time window. [DEC-0118]
 
-The source-identity, bid/ask-preservation, and disagreement-edge discipline is ratified (DEC-0119); the concrete Dukascopy provider schema — symbol list, depth, and per-symbol bid/ask specifics — is documentation-time detail for the ingest mapping, and the legal retention/licence posture remains an open operator item recorded, not resolved here.
+The source-identity, bid/ask-preservation, and disagreement-edge discipline is ratified (DEC-0119); the concrete Dukascopy provider schema — symbol list, depth, and per-symbol bid/ask specifics — is documentation-time detail for the ingest mapping, and DEC-0170 closes the licensing ops question for the operator's personal backtesting posture only. It preserves per-window provenance and usage-right tags and reopens the question before redistribution, hosted exposure, or third-party access. This records the existing operator ruling, not a new legal determination. [DEC-0170]
 
 ### Acquisition posture (QMB consumer)
 
@@ -52,7 +52,7 @@ The acquisition posture is **download-once**: the historical corpus is pulled a 
 |---|---|---|
 | Instrument identity shape | `registry:instrument_identity_shape` | Identity is (venue, venue's own symbol), the symbol opaque and never parsed; the historical source is a `source`, distinct from any tradable `VenueId`. [DEC-0107] |
 | Raw-history retention | `registry:raw_history_retention_policy` | Raw originals and lineage are kept forever, partitioned by source, instrument, and time window; the policy governs accepted QMF evidence and grants no source licence rights. [DEC-0118] |
-| External source identity and legal settings | — | Source-identity, bid/ask-preservation, and disagreement-edge discipline ratified (DEC-0119); the concrete provider schema is documentation-time detail for the ingest mapping, and the legal-retention posture is an open operator item. |
+| External source identity and legal settings | — | Source-identity, bid/ask-preservation, and disagreement-edge discipline ratified (DEC-0119); the concrete provider schema is documentation-time detail for the ingest mapping, and DEC-0170 closes the licensing ops flag only for personal backtesting, with per-window usage-right tags still required. [DEC-0170] |
 
 ## Failure modes
 
@@ -61,7 +61,7 @@ The acquisition posture is **download-once**: the historical corpus is pulled a 
 | FM-1 | The source is unavailable or a bounded transfer stops. | QMF cannot require external recovery; checkpoint, retry, and operator-visible refusal live in the standalone application that owns scheduling and supervision. | DEC-0051, DEC-0119 |
 | FM-2 | A record is malformed, missing required timestamps, or cannot map to a source-qualified instrument. | The ingest seam must not admit it as valid evidence; it returns an `invalid input` refusal from the ratified seven-category taxonomy. The concrete quarantine schema is documentation-time detail. | DEC-0038, DEC-0053, DEC-0109 |
 | FM-3 | Duplicate, overlapping, or conflicting records are observed. | QMF must not overwrite or silently merge earlier evidence; the idempotent `(source, source-native id, revision)` intake keys each as an artifact, and disagreements stay visible through `corroborates` / `disagrees-with` edges. | DEC-0038, DEC-0053, DEC-0119 |
-| FM-4 | Source licence or long-term retention rights are unconfirmed. | Acquisition must not be operationalized on an invented legal assumption; the legal-retention posture is an open operator item recorded, not resolved here. | DEC-0051, DEC-0119 |
+| FM-4 | A window lacks its usage-right tag, or proposed use exceeds personal backtesting. | Governed-evidence use of an untagged window is refused. Redistribution, hosted exposure, or third-party access reopens the licensing question before that use begins; the personal-use ruling grants none of those uses. | DEC-0170, DEC-0166 |
 | FM-5 | A request attempts to download the complete corpus during documentation or the factory pass. | The request is outside this component pass; only bounded adapter evidence is permitted until installation/runbook execution. | DEC-0051 |
 
 ## Related

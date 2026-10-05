@@ -5,10 +5,10 @@ type: scenario
 status: ratified
 component: COMP-QMF-DATA
 depends_on: [COMP-QMF-CORE, COMP-QMF-REGISTRY, COMP-QMF-DATA-INGEST, COMP-QMF-DATA-STORE]
-decisions: [DEC-0035, DEC-0038, DEC-0042, DEC-0044, DEC-0045, DEC-0051, DEC-0053, DEC-0108, DEC-0114, DEC-0117, DEC-0119]
+decisions: [DEC-0035, DEC-0038, DEC-0042, DEC-0044, DEC-0045, DEC-0051, DEC-0053, DEC-0108, DEC-0114, DEC-0117, DEC-0119, DEC-0129, DEC-0131]
 sources: [docs/components/qmf-data.md, docs/components/qmf-data-ingest.md, docs/components/qmf-data-store.md, docs/contracts/ct-07-lineage-edge.yaml, docs/contracts/ct-10-source-observation.yaml, docs/contracts/ct-11-evidence-persistence.yaml, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md]
 generated: 2026-08-18
-verified: 2026-08-20
+verified: 2026-10-05
 stale_after: 30d
 ---
 
@@ -32,4 +32,4 @@ The original evidence remains preserved and the correction does not overwrite or
 
 ## Worked numbers
 
-The fixture has two logical evidence versions — original and correction — but this is event cardinality, not a configurable QMF threshold. The two carry distinct `fp1` fingerprints and are joined by an append-only typed lineage edge (the ratified edge vocabulary is `supersedes`, `promoted-from`, `occurrence-of`, `corroborates`, `disagrees-with`); intake idempotency is keyed on (source, source-native id, revision) per DEC-0119. Exact CT-10 and CT-11 field lists are detailed per contract at documentation time under DEC-0117.
+The fixture has two logical evidence versions — original and correction — but this is event cardinality, not a configurable QMF threshold. The two carry distinct `fp1` fingerprints and are joined by an append-only typed lineage edge (the addable ratified edge vocabulary and each edge's meaning are defined in [CT-07](../contracts/ct-07-lineage-edge.yaml); this correction uses `supersedes`); intake idempotency is keyed on (source, source-native id, revision) per DEC-0119. Exact CT-10 and CT-11 field lists are detailed per contract at documentation time under DEC-0117.

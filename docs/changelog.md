@@ -12,6 +12,17 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-05 - Bounded inherited quality reconciliation
+
+[ADR-0032](decisions/ADR-0032-bounded-quality-reconciliation.md) records the local
+quality draft: eight source-consistent document corrections plus partial
+agent-entry/money-path wording repairs, and deterministic exclusive Windows
+research staging with preserved native no-clobber/flush/containment behavior.
+Touched: calendar-feed, dukascopy, object-storage, qmf-data-backup, budgets,
+SCN-0002/0004/0007/0014 and AGENTS.md. The strict gate still has 15 expired dates
+and two deliberately provisional artifacts; no ratification or current vendor,
+measurement, installed-release or live-operation acceptance is asserted.
+
 ## 2026-10-04 - Controlled canonical request integration candidate
 
 [ADR-0029](decisions/ADR-0029-controlled-canonical-request-join.md) records the

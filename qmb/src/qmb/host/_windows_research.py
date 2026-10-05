@@ -9,7 +9,6 @@ from __future__ import annotations
 import ctypes as c
 import msvcrt
 import os
-import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -305,8 +304,18 @@ def write_blob(root: Path, name: str, payload: bytes) -> None:
     with _root(root, create=True) as directory:
         if _flush_existing(directory, name, payload):
             return
-        temporary = f".{name}.write-{uuid.uuid4().hex}"
-        handle = _open(temporary, directory, directory=False, create=True, writable=True)
+        # Exclusive, handle-relative creation owns the staging object; randomness
+        # is unnecessary. Bound collision retries like the POSIX host adapter,
+        # preserving every pre-existing leaf and failing closed on exhaustion.
+        for attempt in range(32):
+            temporary = f".{name}.write-{attempt}"
+            try:
+                handle = _open(temporary, directory, directory=False, create=True, writable=True)
+            except FileExistsError:
+                continue
+            break
+        else:
+            raise UnsafePath("no exclusive temporary filename was available for the research blob")
         try:
             fd = msvcrt.open_osfhandle(handle, os.O_BINARY | os.O_RDWR)
         except BaseException:
