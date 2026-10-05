@@ -184,7 +184,35 @@ class ActorWorkflowProvider:
         gateway.profile_tools = {route.profile_id: frozenset(route.tools)}
 
         def run_step(step: WorkflowStep, state: WorkflowState) -> dict[str, Any]:
-            validate()
+            try:
+                validate()
+            except ProviderError as exc:
+                # A validator refusal before this read's dispatch is known local
+                # noncompletion. Crash, timeout and pending effects are not failures.
+                if (
+                    exc.code == "context_changed"
+                    and row.spec.canonical_join_required
+                    and tuple(s.kind for s in flow.steps) == ("read", "read", "collect")
+                    and step == flow.steps[1]
+                    and records.get("effect", request.request_id + ":step:" + step.step_id) is None
+                ):
+                    records.put(
+                        "partition_refusal",
+                        request.request_id,
+                        {
+                            "request_id": request.request_id,
+                            "request_attempt": row.attempt,
+                            "partition_id": step.step_id,
+                            "tool": step.tool,
+                            "arguments_json": step.arguments_json,
+                            "reason": "pre_dispatch_context_refused",
+                            "occurred_at": self.now(),
+                        },
+                    )
+                    raise ProviderError(
+                        "scope_interrupt", "Read partition refused before dispatch"
+                    ) from exc
+                raise
             output: Any
             selected_outputs = state["outputs"]
             if flow.graph_sha256 is not None:

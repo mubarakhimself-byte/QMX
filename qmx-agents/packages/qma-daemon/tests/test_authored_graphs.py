@@ -88,6 +88,7 @@ def graph_host(
     provider: Any,
     first: Any = True,
     joined: bool = True,
+    availability: Any = None,
 ) -> Any:
     process = value(
         DaemonProcess.compose(
@@ -106,7 +107,7 @@ def graph_host(
                 CapabilityRung.API_OR_STRUCTURED_TOOL,
                 schema={"required_keys": ["snapshot_ref"], "optional_keys": ["locator"]},
                 acts=frozenset({"qml.research.browse"}),
-                check_fn=lambda: True,
+                check_fn=availability or (lambda: True),
             )
         )
     )

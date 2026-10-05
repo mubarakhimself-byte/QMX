@@ -20,6 +20,7 @@ from qma.daemon.capabilities.spawn import AgentCapabilityStore
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.execution import deterministic_task_id
+from qma.daemon.taskgraph.join import JoinRetryPlan
 from qma.daemon.taskgraph.records import DispatchLease
 from qma.daemon.tools.registry import ToolRegistry
 from qmf.core import Ok, Result, is_refusal
@@ -28,6 +29,8 @@ from qmf.data.store.refusals import policy_rejection
 from .actor_profiles import digest
 from .actor_workflow import ActorWorkflowProvider
 from .contracts import RequestRecord
+from .graph_storage import JournalRecords
+from .partition_retry import PartitionRetryAdmission, stage_partition_retry
 from .providers import ProviderError
 from .service import RequestRuntime
 from .tool_loop import ToolBinding
@@ -75,6 +78,7 @@ class CanonicalRequestJoin:
         self.tools = tools
         # Persisted receipts are history; each process needs explicit admission.
         self._reconciled: dict[str, int] = {}
+        self._partition_retries: dict[str, PartitionRetryAdmission] = {}
         self.plans = {p.profile_id: p for p in plans}
         for plan in plans:
             registered = self._register(plan)
@@ -750,6 +754,140 @@ class CanonicalRequestJoin:
             self._reconciled[request_id] = target
             return Ok(None)
 
+    def reconcile_partition_retry(
+        self,
+        request_id: str,
+        *,
+        principal: str,
+        owner: ActorId,
+        dispatch_lease: DispatchLease,
+        partition_id: str,
+        definition_revision: int,
+        join_revision: int,
+    ) -> Result[JoinRetryPlan]:
+        """Host admission for one known refused read; paired resume stays separate."""
+        with (
+            self.runtime.completion_guard(),
+            self.jobs.store.atomic(),
+            self.dispatcher.authority_lock,
+        ):
+            loaded = self.runtime.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
+            receipt = self._accepted(row)
+            provider = self.runtime.providers.get(row.spec.provider_id)
+            durable = self.dispatcher.store.durable
+            if (
+                receipt is None
+                or not isinstance(provider, ActorWorkflowProvider)
+                or durable is None
+            ):
+                return policy_rejection(
+                    "partition_retry", "original canonical authored authority required"
+                )
+            graph = durable.graph_for_task(receipt["task_id"])
+            route = next(
+                (r for r in provider.routes if r.profile_id == receipt["profile_id"]), None
+            )
+            if graph is None or route is None:
+                return policy_rejection("partition_retry", "original graph route required")
+            with durable.authority_lock:
+                staged = stage_partition_retry(
+                    row,
+                    provider.catalog.workflow(route.workflow),
+                    graph,
+                    JournalRecords(self.runtime.journal),
+                    partition_id=partition_id,
+                    definition_revision=definition_revision,
+                    join_revision=join_revision,
+                )
+                if is_refusal(staged):
+                    return staged
+                plan, evidence_sha256 = staged.value
+                existing = durable.get_join(plan.join.join_id)
+                if not is_refusal(existing) and existing.value != plan.join:
+                    return policy_rejection(
+                        "partition_retry", "exact original join snapshot required"
+                    )
+                restored = self.reconcile_owner(
+                    request_id, principal=principal, owner=owner, dispatch_lease=dispatch_lease
+                )
+                if is_refusal(restored):
+                    return restored
+                if is_refusal(existing):
+                    saved = durable.persist_join(plan.join)
+                    if is_refusal(saved):
+                        return saved
+                admitted = PartitionRetryAdmission(row.attempt + 1, plan, evidence_sha256)
+                if self._partition_retries.get(request_id) == admitted:
+                    return Ok(plan)
+                saved_receipt = self._save(
+                    "partition_retry_admitted",
+                    {
+                        "request_id": request_id,
+                        "request_attempt": row.attempt + 1,
+                        "accepted_sha256": digest(receipt),
+                        "evidence_sha256": evidence_sha256,
+                        "join_sha256": digest(dict(plan.join.to_payload())),
+                        "task_attempt": receipt["task_attempt"],
+                        "job_attempt": receipt["job_attempt"],
+                        "graph_id": receipt["graph_id"],
+                        "join_id": plan.join.join_id,
+                        "edge_id": plan.join.edge_id,
+                        "partition_id": partition_id,
+                        "contract_version": 1,
+                    },
+                )
+                if is_refusal(saved_receipt):
+                    return saved_receipt
+                self._partition_retries[request_id] = admitted
+                return Ok(plan)
+
+    def _guard_partition_retry(self, action: str, row: RequestRecord) -> Result[None]:
+        records = JournalRecords(self.runtime.journal)
+        refusal = records.get("partition_refusal", row.request_id)
+        admission = self._partition_retries.get(row.request_id)
+        if refusal is None:
+            return (
+                Ok(None)
+                if admission is None
+                else policy_rejection(
+                    "partition_retry", "admitted known refusal evidence remains present"
+                )
+            )
+        target = row.attempt + 1 if action == "retry" else row.attempt
+        if admission is None or admission.request_attempt != target:
+            return policy_rejection(
+                "partition_retry", "explicit current partition admission required"
+            )
+        durable = self.dispatcher.store.durable
+        if durable is None:
+            return policy_rejection("partition_retry", "original durable join required")
+        with durable.authority_lock:
+            current = durable.get_join(admission.plan.join.join_id)
+            if is_refusal(current) or current.value != admission.plan.join:
+                return policy_rejection(
+                    "partition_retry", "admitted join snapshot remains immutable"
+                )
+            # Partition sorting is lexical; choose by the pinned successful identity.
+            first = next(p for p in admission.plan.join.partitions if p.result_identity is not None)
+            observed = records.get("effect", first.result_identity or "")
+            if digest([refusal, observed]) != admission.evidence_sha256:
+                return policy_rejection(
+                    "partition_retry", "admitted refusal and successful effect remain immutable"
+                )
+            if action in {"retry", "execute"}:
+                failed = admission.plan.join.partition(admission.plan.reinvoke_partition_ids[0])
+                if (
+                    failed is None
+                    or records.get("effect", failed.logical_invocation_id or "") is not None
+                ):
+                    return policy_rejection(
+                        "partition_retry", "failed read remains never dispatched before resume"
+                    )
+            return Ok(None)
+
     def guard(self, action: str, row: RequestRecord) -> Result[None]:
         if not row.spec.canonical_join_required:
             return Ok(None)
@@ -792,6 +930,9 @@ class CanonicalRequestJoin:
                 checked = self._observed_read_prefix(row, plan)
                 if is_refusal(checked):
                     return checked
+            partition_guard = self._guard_partition_retry(action, row)
+            if is_refusal(partition_guard):
+                return partition_guard
             current = self._authority(row, plan, recovery=recovery)
             if is_refusal(current):
                 return current
@@ -861,6 +1002,30 @@ class CanonicalRequestJoin:
                     unknown = self.jobs.mark_unknown(receipt["job_id"], trigger="lost_supervisor")
                     if is_refusal(unknown):
                         return unknown
+            admission = self._partition_retries.get(row.request_id)
+            if row.status == "completed" and admission is not None:
+                guarded = self._guard_partition_retry("observe", row)
+                if is_refusal(guarded):
+                    return guarded
+                durable = self.dispatcher.store.durable
+                if durable is None:
+                    return policy_rejection("partition_retry", "original durable join required")
+                partition_id = admission.plan.reinvoke_partition_ids[0]
+                key = row.request_id + ":step:" + partition_id
+                effect = JournalRecords(self.runtime.journal).get("effect", key)
+                if effect is None or effect.get("status") != "observed":
+                    return policy_rejection(
+                        "partition_retry", "observed selected retry result required"
+                    )
+                folded = durable.apply_join_retry_result(
+                    admission.plan.join.join_id,
+                    partition_id=partition_id,
+                    result_identity=key,
+                    definition_revision=admission.plan.definition_revision,
+                    join_revision=admission.plan.join_revision,
+                )
+                if is_refusal(folded):
+                    return folded
             saved = self._save("observed", body)
             if is_refusal(saved):
                 return saved
@@ -937,6 +1102,9 @@ class CanonicalRequestJoin:
             observations = [
                 e for e in self._events("observed") if e["request_id"] == row.request_id
             ]
+            partition_projection = self._partition_projection(row, receipt)
+            if is_refusal(partition_projection):
+                return partition_projection
             certainty = (
                 "settled"
                 if handle is not None and handle.is_terminal
@@ -968,5 +1136,27 @@ class CanonicalRequestJoin:
                     "canonical_state": "unknown" if handle is None else handle.state.value,
                     "request_status": row.status,
                     "certainty": certainty,
+                    **partition_projection.value,
                 }
             )
+
+    def _partition_projection(
+        self, row: RequestRecord, receipt: dict[str, Any]
+    ) -> Result[dict[str, Any]]:
+        admissions = [
+            e for e in self._events("partition_retry_admitted") if e["request_id"] == row.request_id
+        ]
+        if not admissions:
+            return Ok({})
+        durable = self.dispatcher.store.durable
+        if durable is None:
+            return policy_rejection("partition_retry", "exact admitted join disclosure unavailable")
+        admitted = admissions[-1]
+        joined = durable.get_join(admitted["join_id"])
+        if (
+            is_refusal(joined)
+            or joined.value.graph_run_id != receipt["graph_id"]
+            or joined.value.edge_id != admitted["edge_id"]
+        ):
+            return policy_rejection("partition_retry", "exact admitted join disclosure required")
+        return Ok({"partition_join": dict(joined.value.to_payload())})
