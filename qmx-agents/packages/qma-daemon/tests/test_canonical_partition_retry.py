@@ -55,6 +55,8 @@ from test_request_runtime_daemon import receipt, rpc, submit_params, value, ws_c
         "admission_write_loss",
         "receipt_only",
         "foreign_sibling",
+        "completed_mutation",
+        "completed_missing_seal",
     ],
 )
 def test_paired_partition_retry_requires_known_refusal_and_preserves_exact_join(
@@ -250,7 +252,13 @@ def test_paired_partition_retry_requires_known_refusal_and_preserves_exact_join(
                         assert not process.task_dispatcher.store.durable.join_states()
                 elif defect != "owner_only":
                     plan = value(admitted)
-                    if defect in {"none", "receipt_only", "foreign_sibling"}:
+                    if defect in {
+                        "none",
+                        "receipt_only",
+                        "foreign_sibling",
+                        "completed_mutation",
+                        "completed_missing_seal",
+                    }:
                         before = [
                             e
                             for e in value(process.journal.read_events())
@@ -333,7 +341,13 @@ def test_paired_partition_retry_requires_known_refusal_and_preserves_exact_join(
                     "resume_agent_request",
                     {"request_id": request_id, "product_session_ref": "psess:configured-app"},
                 )
-                if defect not in {"none", "receipt_only", "foreign_sibling"}:
+                if defect not in {
+                    "none",
+                    "receipt_only",
+                    "foreign_sibling",
+                    "completed_mutation",
+                    "completed_missing_seal",
+                }:
                     assert "error" in resumed, resumed
                     assert len(reads) == 1 and not provider.requests
                     duplicate = await rpc(reader, writer, "submit_agent_request", params)
@@ -394,6 +408,64 @@ def test_paired_partition_retry_requires_known_refusal_and_preserves_exact_join(
                 assert all(p["status"] == "done" for p in joined["partitions"])
                 assert joined["definition_revision"] == 1 and joined["join_revision"] == 1
                 assert row["canonical_join"]["certainty"] == "unknown"
+                if defect in {"completed_mutation", "completed_missing_seal"}:
+                    durable = process.task_dispatcher.store.durable
+                    original_join = value(durable.get_join(plan.join.join_id))
+                    observation = [
+                        dict(e.payload)
+                        for e in value(process.journal.read_events())
+                        if e.event == "canonical_request.observed"
+                        and e.payload.get("request_id") == request_id
+                    ][-1]
+                    if defect == "completed_mutation":
+                        successful = original_join.partition("metadata")
+                        value(
+                            durable.persist_join(
+                                original_join.with_partitions(
+                                    (
+                                        replace(successful, result_identity="foreign:result"),
+                                        original_join.partition("source"),
+                                    )
+                                )
+                            )
+                        )
+                    else:
+                        # Synthetic loss of the completed disclosure seal. Durable
+                        # history still must not grant execution or settle UNKNOWN.
+                        unsealed = {
+                            k: v for k, v in observation.items() if k != "partition_join_seal"
+                        }
+                        value(
+                            process.journal.append_event(
+                                "canonical_request.observed", payload=unsealed
+                            )
+                        )
+                    assert "error" in await rpc(
+                        reader,
+                        writer,
+                        "get_agent_request",
+                        {"request_id": request_id, "product_session_ref": "psess:configured-app"},
+                    )
+                    if defect == "completed_mutation":
+                        value(durable.persist_join(original_join))
+                    else:
+                        value(
+                            process.journal.append_event(
+                                "canonical_request.observed", payload=observation
+                            )
+                        )
+                    restored = receipt(
+                        await rpc(
+                            reader,
+                            writer,
+                            "get_agent_request",
+                            {
+                                "request_id": request_id,
+                                "product_session_ref": "psess:configured-app",
+                            },
+                        )
+                    )
+                    assert restored["canonical_join"] == row["canonical_join"]
                 assert (
                     str(
                         receipt(await rpc(reader, writer, "submit_agent_request", params))[

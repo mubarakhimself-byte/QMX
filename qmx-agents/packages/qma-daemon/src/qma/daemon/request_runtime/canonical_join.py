@@ -1026,6 +1026,12 @@ class CanonicalRequestJoin:
                 )
                 if is_refusal(folded):
                     return folded
+                # Frozen completed disclosure evidence, never continuation authority.
+                body["partition_join_seal"] = {
+                    "join_id": folded.value.join_id,
+                    "accepted_sha256": digest(receipt),
+                    "join_sha256": digest(dict(folded.value.to_payload())),
+                }
             saved = self._save("observed", body)
             if is_refusal(saved):
                 return saved
@@ -1159,4 +1165,21 @@ class CanonicalRequestJoin:
             or joined.value.edge_id != admitted["edge_id"]
         ):
             return policy_rejection("partition_retry", "exact admitted join disclosure required")
+        if row.status == "completed" or row.result is not None:
+            observations = [
+                e
+                for e in self._events("observed")
+                if e["request_id"] == row.request_id
+                and e["request_attempt"] == row.attempt
+                and e["request_status"] == "completed"
+            ]
+            expected_seal = {
+                "join_id": joined.value.join_id,
+                "accepted_sha256": digest(receipt),
+                "join_sha256": digest(dict(joined.value.to_payload())),
+            }
+            if not observations or observations[-1].get("partition_join_seal") != expected_seal:
+                return policy_rejection(
+                    "partition_retry", "completed join disclosure requires its exact observed seal"
+                )
         return Ok({"partition_join": dict(joined.value.to_payload())})
