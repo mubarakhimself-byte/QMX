@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import qma.wire
-
-SCHEMAS = Path(__file__).resolve().parents[1] / "schemas"
+from qma.wire.schemas import SCHEMA_DIR
 
 
 def test_version_display_only() -> None:
@@ -22,5 +19,5 @@ def test_message_family_schemas_present() -> None:
         "initialize.v1.schema.json",
         "host_request.v1.schema.json",
     }
-    found = {p.name for p in SCHEMAS.glob("*.schema.json")}
+    found = {p.name for p in SCHEMA_DIR.glob("*.schema.json")}
     assert expected <= found
