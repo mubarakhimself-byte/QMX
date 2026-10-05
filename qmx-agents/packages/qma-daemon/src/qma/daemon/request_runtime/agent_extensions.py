@@ -14,12 +14,14 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from itertools import islice
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
-from langchain.agents.middleware import AgentMiddleware
 
 from .contracts import ProviderEvent
+
+if TYPE_CHECKING:
+    from langchain.agents.middleware import AgentMiddleware
 
 MAX_FILE_BYTES = 16_384
 MAX_LIBRARY_BYTES = 65_536

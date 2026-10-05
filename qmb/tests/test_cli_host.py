@@ -6,8 +6,10 @@ import json
 import os
 import socket
 import stat
+import subprocess
+import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -322,7 +324,7 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
     assert "revoke" in pair_help.output
 
 
-def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
+def test_start_spawns_when_lock_free(tmp_path: Path, start_control: _HostControlServer) -> None:
     seen: list[tuple[tuple[str, ...], str]] = []
 
     def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
@@ -331,7 +333,7 @@ def test_start_spawns_when_lock_free(tmp_path: Path) -> None:
         assert env["QMA_DAEMON_ROOT"] == str(tmp_path)
         _write_lock(root, os.getpid())
         _write_token(root)
-        _write_bind(root, "127.0.0.1", 19234)
+        _write_bind(root, "127.0.0.1", start_control.port)
         return os.getpid()
 
     report = _ok_mapping(
@@ -387,9 +389,12 @@ def test_default_spawn_keeps_child_stderr_in_persistent_log(
     assert getattr(stream, "name", None) == str(tmp_path / "logs" / "qma-daemon-startup.log")
 
 
-def test_start_already_running_does_not_spawn_or_remint(tmp_path: Path) -> None:
+def test_start_already_running_does_not_spawn_or_remint(
+    tmp_path: Path, start_control: _HostControlServer
+) -> None:
     _write_lock(tmp_path, os.getpid())
     _write_token(tmp_path, _TOKEN)
+    _write_bind(tmp_path, "127.0.0.1", start_control.port)
     before = (tmp_path / HOST_CONTROL_FILE).read_bytes()
     spawned: list[object] = []
 
@@ -481,13 +486,13 @@ def test_status_does_not_hide_unreachable_socket_for_live_writer(tmp_path: Path)
     assert "host-control call failed" in str(refused.context.get("reason", ""))
 
 
-def test_click_host_start_status_stop(tmp_path: Path) -> None:
+def test_click_host_start_status_stop(tmp_path: Path, start_control: _HostControlServer) -> None:
     def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
         _ = argv
         assert env["QMA_DAEMON_ROOT"] == str(tmp_path)
         _write_lock(root, os.getpid())
         _write_token(root)
-        _write_bind(root, "127.0.0.1", 19235)
+        _write_bind(root, "127.0.0.1", start_control.port)
         return os.getpid()
 
     runner = CliRunner()
@@ -582,17 +587,15 @@ def test_cli_host_module_does_not_reuse_hosted_bot_or_write_sqlite() -> None:
     assert "PT15M" not in text
 
 
-def test_start_ready_without_token_does_not_write_host_control(tmp_path: Path) -> None:
+def test_start_without_token_refuses_and_does_not_write_host_control(tmp_path: Path) -> None:
     def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
         _ = argv, env
         _write_lock(root, os.getpid())
         _write_bind(root, "127.0.0.1", 19236)
         return os.getpid()
 
-    report = _ok_mapping(
-        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
-    )
-    assert report["state"] == "started"
+    report = invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+    assert is_refusal(report)
     assert not (tmp_path / HOST_CONTROL_FILE).exists()
 
 
@@ -1065,7 +1068,9 @@ def _recover_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path)
     return os.getpid()
 
 
-def test_recover_control_c1_positive_then_start_is_legal(tmp_path: Path) -> None:
+def test_recover_control_c1_positive_then_start_is_legal(
+    tmp_path: Path, start_control: _HostControlServer
+) -> None:
     journal = tmp_path / "journal.ndjson"
     journal_written = write_bytes_exclusive_no_follow(
         journal,
@@ -1100,11 +1105,13 @@ def test_recover_control_c1_positive_then_start_is_legal(tmp_path: Path) -> None
     assert journal.read_text(encoding="utf-8") == '{"event":"local_operator.established"}\n'
     assert sqlite.read_bytes() == b"sqlite-fixture"
 
+    start_control._token = "recovered-" + _TOKEN  # pyright: ignore[reportPrivateUsage] - test server token
+
     def start_spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
         assert DAEMON_RECOVER_FLAG not in argv
         assert env["QMA_DAEMON_ROOT"] == str(root)
         _write_lock(root, os.getpid())
-        _write_bind(root, "127.0.0.1", 19250)
+        _write_bind(root, "127.0.0.1", start_control.port)
         return os.getpid()
 
     started = _ok_mapping(
@@ -1255,10 +1262,8 @@ def test_t_h_03_start_without_recover_does_not_remint(tmp_path: Path) -> None:
         _write_bind(root, "127.0.0.1", 19251)
         return os.getpid()
 
-    started = _ok_mapping(
-        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
-    )
-    assert started["state"] == "started"
+    started = invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+    assert is_refusal(started)
     assert not (tmp_path / HOST_CONTROL_FILE).exists()
     status = invoke_host_status(root=tmp_path)
     assert is_refusal(status)
@@ -1297,7 +1302,10 @@ def test_click_host_recover_control(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("explicit", [False, True])
 def test_cli_host_start_resolves_environment_root_before_spawn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, explicit: bool
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    explicit: bool,
+    start_control: _HostControlServer,
 ) -> None:
     environment_root = tmp_path / "environment-root"
     explicit_root = tmp_path / "explicit-root"
@@ -1312,7 +1320,7 @@ def test_cli_host_start_resolves_environment_root_before_spawn(
         seen.append(root)
         _write_lock(root, os.getpid())
         _write_token(root)
-        _write_bind(root, "127.0.0.1", 19250)
+        _write_bind(root, "127.0.0.1", start_control.port)
         return os.getpid()
 
     monkeypatch.setattr(host_module, "_default_spawn", spawn)
@@ -1371,3 +1379,128 @@ def test_stage_cap_cli_sends_integer_and_returns_receipt(tmp_path: Path) -> None
         )
         assert refused.exit_code != 0
     assert len(calls) == 1
+
+
+@pytest.fixture
+def start_control(tmp_path: Path) -> Iterator[_HostControlServer]:
+    server = _HostControlServer(_TOKEN, root=tmp_path)
+    server.start()
+    try:
+        yield server
+    finally:
+        server.close()
+        server.join(timeout=2)
+
+
+def test_start_stale_bind_is_not_readiness(tmp_path: Path) -> None:
+    _write_lock(tmp_path, os.getpid())
+    _write_token(tmp_path)
+    _write_bind(tmp_path, "127.0.0.1", 1)
+    refused = invoke_host_start(root=tmp_path, wait_attempts=1)
+    assert is_refusal(refused)
+    assert "not ready" in str(refused.context["reason"])
+    assert (tmp_path / DAEMON_LOCK_NAME).exists()
+
+
+def test_start_invalid_wait_does_not_spawn(tmp_path: Path) -> None:
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("invalid wait must refuse before spawning")
+
+    assert is_refusal(invoke_host_start(root=tmp_path, spawn=forbidden, wait_attempts=0))
+
+
+@pytest.mark.parametrize("early_exit", [False, True])
+def test_failed_start_reaps_owned_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, early_exit: bool
+) -> None:
+    children: list[subprocess.Popen[bytes]] = []
+    real_spawn = host_module._default_spawn  # pyright: ignore[reportPrivateUsage]
+
+    def spawn(
+        argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
+    ) -> subprocess.Popen[bytes]:
+        code = (
+            "import sys; print('fixture startup refused', file=sys.stderr); sys.exit(2)"
+            if early_exit
+            else "import time; time.sleep(60)"
+        )
+        child = real_spawn((sys.executable, "-c", code), env=env, root=root)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(host_module, "_default_spawn", spawn)
+    refused = invoke_host_start(root=tmp_path, wait_attempts=10 if early_exit else 1)
+    assert is_refusal(refused)
+    assert children[0].poll() is not None
+    assert refused.context["cleanup_error"] is None
+    assert not (tmp_path / DAEMON_LOCK_NAME).exists()
+    if early_exit:
+        assert "fixture startup refused" in (tmp_path / "logs/qma-daemon-startup.log").read_text()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"ok": False, "status": {"lock": "held", "pid": os.getpid()}},
+        {"ok": True, "status": {"lock": "held", "pid": 0}},
+        {"ok": True, "status": {"lock": "free", "pid": os.getpid()}},
+        {"ok": True, "status": "invalid"},
+    ],
+)
+def test_start_refuses_unready_authenticated_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: Mapping[str, object]
+) -> None:
+    from qmf.core import Ok  # noqa: PLC0415
+
+    _write_lock(tmp_path, os.getpid())
+
+    def reply(*args: object, **kwargs: object) -> Ok[Mapping[str, object]]:
+        return Ok(payload)
+
+    monkeypatch.setattr(host_module, "_host_control_call", reply)
+    assert is_refusal(invoke_host_start(root=tmp_path, wait_attempts=1))
+
+
+def test_timed_out_interpreter_cannot_keep_or_later_acquire_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_spawn = host_module._default_spawn  # pyright: ignore[reportPrivateUsage]
+    code = "import os,json,time,pathlib,sys; r=pathlib.Path(sys.argv[1]); (r/'.daemon_writer').write_text(json.dumps({'pid':os.getpid()})); time.sleep(60)"
+
+    def spawn(
+        argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
+    ) -> subprocess.Popen[bytes]:
+        return real_spawn((sys.executable, "-c", code, str(root)), env=env, root=root)
+
+    monkeypatch.setattr(host_module, "_default_spawn", spawn)
+    refused = invoke_host_start(root=tmp_path, wait_attempts=10)
+    assert is_refusal(refused)
+    assert refused.context["cleanup_error"] is None
+    status = _ok_mapping(invoke_host_status(root=tmp_path))
+    assert status["lock"] == "free"
+    assert not (tmp_path / DAEMON_LOCK_NAME).exists()
+
+
+def test_interrupted_start_reaps_owned_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    children: list[subprocess.Popen[bytes]] = []
+    real_spawn = host_module._default_spawn  # pyright: ignore[reportPrivateUsage]
+
+    def spawn(
+        argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
+    ) -> subprocess.Popen[bytes]:
+        child = real_spawn(
+            (sys.executable, "-c", "import time; time.sleep(60)"), env=env, root=root
+        )
+        children.append(child)
+        return child
+
+    def interrupted(*args: object, **kwargs: object) -> bool:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(host_module, "_default_spawn", spawn)
+    monkeypatch.setattr(host_module, "_ready", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        invoke_host_start(root=tmp_path)
+    assert children[0].poll() is not None

@@ -33,7 +33,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 from urllib.parse import urlsplit
 
 from qma.core.operations import OperationDescriptor, public_operation_descriptors
@@ -192,12 +192,8 @@ from qma.daemon.plugins.pack_ui import (
     restore_plugin_install_records_projection,
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
-from qma.daemon.request_runtime.agent_extensions import AgentExtensions
-from qma.daemon.request_runtime.canonical_join import CanonicalJoinPlan, CanonicalRequestJoin
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
-from qma.daemon.request_runtime.deep_agent import DeepAgentSelection
-from qma.daemon.request_runtime.domain_tools import bind_daemon_tool_providers
 from qma.daemon.request_runtime.experiment_authoring import ExperimentAuthoring
 from qma.daemon.request_runtime.service import RequestRuntime
 from qma.daemon.request_runtime.spot_state import (
@@ -303,6 +299,12 @@ from qmf.core import Ok, RefusalCategory, Result, World, WriterId, fingerprint, 
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Retryability, TypedRefusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
+
+if TYPE_CHECKING:
+    from qma.daemon.request_runtime.agent_extensions import AgentExtensions
+    from qma.daemon.request_runtime.canonical_join import CanonicalJoinPlan, CanonicalRequestJoin
+    from qma.daemon.request_runtime.deep_agent import DeepAgentSelection
+
 
 __all__ = [
     "BROWSER_SPAWNS_PYTHON",
@@ -1303,6 +1305,12 @@ class DaemonProcess:
             return policy_rejection(
                 "agent_requests", "request policy installs once before listener startup"
             )
+        # Load the optional SDK only when host policy actually configures requests.
+        from qma.daemon.request_runtime.canonical_join import CanonicalRequestJoin  # noqa: PLC0415
+        from qma.daemon.request_runtime.domain_tools import (  # noqa: PLC0415
+            bind_daemon_tool_providers,
+        )
+
         restored = self.product_sessions.restore_from_journal()
         if is_refusal(restored):
             return restored

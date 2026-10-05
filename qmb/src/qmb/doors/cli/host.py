@@ -678,14 +678,22 @@ def _default_spawn(
     *,
     env: Mapping[str, str],
     root: Path | None = None,
-) -> int:
+) -> subprocess.Popen[bytes]:
     target = root or product_daemon_root()
     diagnostic = _startup_diagnostic_path(target)
     copied = dict(env)
     with diagnostic.open("ab") as errors:
         if os.name == "nt":
+            executable = None
+            if argv[0] == sys.executable and sys.prefix != sys.base_prefix:
+                # CPython's venv redirector spawns another process. Launch its
+                # interpreter with the same venv selection so our handle owns
+                # the daemon, including timeout/exit cleanup before it is ready.
+                executable = cast("str", getattr(sys, "_base_executable", sys.executable))
+                copied["__PYVENV_LAUNCHER__"] = sys.executable
             proc = subprocess.Popen(
                 argv,
+                executable=executable,
                 env=copied,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -701,7 +709,7 @@ def _default_spawn(
                 stderr=errors,
                 start_new_session=True,
             )
-    return int(proc.pid)
+    return proc
 
 
 def _default_recover_spawn(
@@ -787,7 +795,30 @@ def _ready(root: Path) -> bool:
     pid = _live_lock_pid(root)
     if pid is None:
         return False
-    return (root / HOST_CONTROL_BIND_NAME).is_file()
+    reply = _host_control_call(root, "status", timeout_s=0.05)
+    if not isinstance(reply, Ok) or reply.value.get("ok") is not True:
+        return False
+    status = reply.value.get("status")
+    if not isinstance(status, Mapping):
+        return False
+    fields = cast("Mapping[str, object]", status)
+    return fields.get("lock") == "held" and fields.get("pid") == pid
+
+
+def _cleanup_start_child(proc: subprocess.Popen[bytes], root: Path) -> str | None:
+    """Reap only the child we spawned; a failed start must not later become live."""
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"startup child cleanup failed: {exc}"
+    _drop_stale_lock(root)
+    return None
 
 
 def _environ_map(environ: object) -> Result[Mapping[str, str] | None]:
@@ -844,8 +875,18 @@ def invoke_host_start(
             given=str(target),
             product=str(product_daemon_root(environ=env_map)),
         )
+    parsed_attempts = _wait_attempts(wait_attempts)
+    if not isinstance(parsed_attempts, Ok):
+        return parsed_attempts
     live = _live_lock_pid(target)
     if live is not None:
+        if not _ready(target):
+            return unavailable(
+                "daemon",
+                "live daemon writer is not ready on host-control",
+                root=str(target),
+                pid=live,
+            )
         report: dict[str, object] = {
             "verb": "host.start",
             "state": "already-running",
@@ -879,34 +920,49 @@ def invoke_host_start(
     else:
         maybe = getattr(spawned, "pid", None)
         pid = maybe if isinstance(maybe, int) else None
-    parsed_attempts = _wait_attempts(wait_attempts)
-    if not isinstance(parsed_attempts, Ok):
-        return parsed_attempts
+    owned_child = (
+        cast("subprocess.Popen[bytes]", spawned)
+        if spawn is None and isinstance(spawned, subprocess.Popen)
+        else None
+    )
     attempts = parsed_attempts.value
-    for _ in range(max(1, attempts)):
-        if _ready(target):
-            ready_pid = _live_lock_pid(target)
-            started: dict[str, object] = {
-                "verb": "host.start",
-                "state": "started",
-                "pid": ready_pid if ready_pid is not None else pid,
-                "root": str(target),
-                "spawned": True,
-                "argv": list(argv[-2:]),
-                "orchestrates_missions": START_ORCHESTRATES_MISSIONS,
-                "grants": START_GRANTS,
-                "starts_qmn": START_STARTS_QMN,
-                "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
-            }
-            return Ok(cast("Mapping[str, object]", redact_host_surface(started)))
-        if attempts > 1:
-            _pause(sleeper)
+    deadline = time.monotonic() + attempts * 0.05
+    startup_ready = False
+    cleanup_error = None
+    try:
+        for _ in range(attempts):
+            if owned_child is not None and owned_child.poll() is not None:
+                break
+            if _ready(target):
+                ready_pid = _live_lock_pid(target)
+                started: dict[str, object] = {
+                    "verb": "host.start",
+                    "state": "started",
+                    "pid": ready_pid if ready_pid is not None else pid,
+                    "root": str(target),
+                    "spawned": True,
+                    "argv": list(argv[-2:]),
+                    "orchestrates_missions": START_ORCHESTRATES_MISSIONS,
+                    "grants": START_GRANTS,
+                    "starts_qmn": START_STARTS_QMN,
+                    "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
+                }
+                startup_ready = True
+                return Ok(cast("Mapping[str, object]", redact_host_surface(started)))
+            if time.monotonic() >= deadline:
+                break
+            if attempts > 1:
+                _pause(sleeper)
+    finally:
+        if not startup_ready and owned_child is not None:
+            cleanup_error = _cleanup_start_child(owned_child, target)
     return unavailable(
         "daemon",
-        "spawned python -m qma.daemon did not acquire .daemon_writer; "
+        "spawned python -m qma.daemon did not become ready on host-control; "
         f"see startup diagnostics at {_startup_diagnostic_path(target)}",
         root=str(target),
         pid=pid,
+        cleanup_error=cleanup_error,
     )
 
 
