@@ -98,6 +98,7 @@ from qma.daemon.diagnosis import (
     refuse_diagnosis_fourth_store,
     refuse_qmn_alert_failure_class,
 )
+from qma.daemon.discovery.queries import DiscoveryQueryService
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.envs.registry import ExecutionEnvironmentRegistry
 from qma.daemon.envs.router import ComputeRouter
@@ -192,6 +193,7 @@ from qma.daemon.plugins.pack_ui import (
     restore_plugin_install_records_projection,
 )
 from qma.daemon.plugins.packs import DeskPluginRoster
+from qma.daemon.plugins.pins import ContributionPinService
 from qma.daemon.request_runtime.contracts import ProviderAdapter
 from qma.daemon.request_runtime.daemon_bridge import AgentRequestBridge, AgentRequestPolicy
 from qma.daemon.request_runtime.experiment_authoring import ExperimentAuthoring
@@ -231,6 +233,11 @@ from qma.wire.agent_request import (
     require_agent_request_capability,
 )
 from qma.wire.cancel_job import require_cancel_job_capability
+from qma.wire.contribution_pin import parse_contribution_pin
+from qma.wire.discovery_queries import (
+    DISCOVERY_READ_CAPABILITIES,
+    require_discovery_capability,
+)
 from qma.wire.editor_draft import (
     EDITOR_DRAFT_HTTP_PATH,
     require_editor_draft_capability,
@@ -1443,6 +1450,46 @@ class DaemonProcess:
             sessions=self._product_sessions,
             capabilities=caps,
         )
+
+    def _discovery_session_scope(self, session_ref: object) -> Result[str | None]:
+        """Operator discovery is global; an explicitly scoped session narrows it."""
+        if session_ref is None:
+            return Ok(None)
+        if not isinstance(session_ref, str):
+            return invalid_input("product_session_ref", "expected psess: reference")
+        found = self._product_sessions.get(session_ref)
+        if is_refusal(found):
+            return found
+        session = found.value
+        if session.principal != PrincipalClass.OPERATOR.value:
+            return policy_rejection("principal", "discovery requires an operator-owned session")
+        if session.profile == "app-use":
+            instance = session.app_instance_id
+            if instance is None:
+                return policy_rejection("instance_id", "app-use discovery requires its instance")
+            return Ok(instance)
+        return Ok(None)
+
+    def discovery_query(
+        self, name: str, args: object, *, operator_principal: object, capabilities: object
+    ) -> Result[Mapping[str, object]]:
+        """Authenticated CT-40 discovery. No new HTTP query route is mounted."""
+        if operator_principal is not PrincipalClass.OPERATOR:
+            return policy_rejection("principal_class", "discovery requires an operator pairing")
+        gated = require_discovery_capability(name, capabilities)
+        if is_refusal(gated):
+            return gated
+        return DiscoveryQueryService(self._roster.loader, self._discovery_session_scope).query(
+            name, args
+        )
+
+    def _discovery_capabilities(self) -> dict[str, object]:
+        return {
+            **dict.fromkeys(DISCOVERY_READ_CAPABILITIES, True),
+            "get_instance_health": False,
+            "discovery_hit_classes": ["contribution"],
+            "invoke_contribution_pin": True,
+        }
 
     def get_pack_ui_request(
         self,
@@ -2869,6 +2916,7 @@ class DaemonProcess:
                     or GET_PACK_UI_REQUEST_CAPABILITY in raw_caps
                     or raw_caps.get(CANCEL_JOB_CAPABILITY) is True
                     or any(raw_caps.get(name) is True for name in AGENT_REQUEST_CAPABILITIES)
+                    or any(raw_caps.get(name) is True for name in DISCOVERY_READ_CAPABILITIES)
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2876,9 +2924,10 @@ class DaemonProcess:
                 live_producers=self._live_producers,
                 connection_token=connection_token,
                 advertise_pairing=advertise,
-                server_capabilities={}
-                if self._agent_requests is None
-                else self._agent_requests.capabilities,
+                server_capabilities={
+                    **self._discovery_capabilities(),
+                    **({} if self._agent_requests is None else self._agent_requests.capabilities),
+                },
             )
             if is_refusal(completed):
                 return _jsonrpc_refusal(req_id, completed)
@@ -2895,6 +2944,19 @@ class DaemonProcess:
             return self._dispatch_editor_draft_command(connection, request, req_id, publish=False)
         if method == WireCommand.PUBLISH_EDITOR_DRAFT.value:
             return self._dispatch_editor_draft_command(connection, request, req_id, publish=True)
+        if method in DISCOVERY_READ_CAPABILITIES or method == WireQuery.GET_INSTANCE_HEALTH.value:
+            gated_query = connection.require_query_capability(method)
+            if is_refusal(gated_query):
+                return _jsonrpc_refusal(req_id, gated_query)
+            result = self.discovery_query(
+                cast(str, method),
+                request.get("params"),
+                operator_principal=connection.principal_class,
+                capabilities=connection.capabilities,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value)
         if method == WireQuery.GET_PACK_UI_REQUEST.value:
             gated_query = connection.require_query_capability(method)
             if is_refusal(gated_query):
@@ -3253,6 +3315,30 @@ class DaemonProcess:
                     "instance_id", "session instance is not enabled on the live roster"
                 ),
             )
+        if "contribution_pin" in params:
+            pin = parse_contribution_pin(params["contribution_pin"])
+            if is_refusal(pin):
+                return _jsonrpc_refusal(req_id, pin)
+            if (pin.value.qualified_id, pin.value.package_version) != (
+                envelope.contribution.qualified_id,
+                envelope.contribution.package_version,
+            ):
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "contribution_pin", "pin must match the invocation contribution"
+                    ),
+                )
+            current = ContributionPinService(self._roster.loader).revalidate(pin.value)
+            if is_refusal(current):
+                return _jsonrpc_refusal(req_id, current)
+            if current.value.live.plugin_id != loaded.manifest.id:
+                return _jsonrpc_refusal(
+                    req_id,
+                    policy_rejection(
+                        "contribution_pin", "pin must belong to the invocation instance"
+                    ),
+                )
         published = next(
             (
                 row

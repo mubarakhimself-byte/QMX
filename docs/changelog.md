@@ -477,3 +477,10 @@ Draft [ADR-0030](decisions/ADR-0030-bounded-authored-graph-binding.md) records a
 bounded reusable path/compiler binding and prompt graph proposals. Canonical
 restart reconciliation and partitions remain deferred; production corpus adoption
 and publication are parent-owned.
+
+## 2026-10-05: MA-01 bounded discovery adoption candidate
+
+[ADR-0033](decisions/ADR-0033-bounded-discovery-read-adoption.md) records the
+existing owner reuse for CT-40 enabled-pack listing and exact contribution
+search/get. Health and unmounted federation owners remain unavailable; parent
+review remains pending; serial installed acceptance passes. No gap is closed.

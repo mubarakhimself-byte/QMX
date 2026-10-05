@@ -205,3 +205,5 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 - [Authoring screen](lenses/ui/screens/authoring.md) — graph / code / detail family (DEC-0475).
 - [Bootstrap screen](lenses/ui/screens/bootstrap.md) — pairing and first operator (DEC-0485).
 - [WidgetFrame](lenses/ui/screens/widget-frame.md) — mini-app interior expand/return, not a fifth rail destination (DEC-0474).
+
+- [Bounded contribution discovery read adoption (ADR-0033, draft)](decisions/ADR-0033-bounded-discovery-read-adoption.md).

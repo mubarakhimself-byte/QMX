@@ -383,6 +383,25 @@ class FederatedDiscoveryService:
     artifacts: ArtifactLibrarySearchPort
     contributions: PublishedContributionsPort | None = None
 
+    @staticmethod
+    def search_contributions(
+        contributions: PublishedContributionsPort, query: str
+    ) -> Result[tuple[ContributionHit, ...]]:
+        """Literal read of the existing published roster; no optional owner fallback."""
+        hits: list[ContributionHit] = []
+        for row in contributions.published_contributions():
+            mapped = _map_published_row(row)
+            if is_refusal(mapped):
+                return mapped
+            hit = mapped.value
+            if (
+                hit is not None
+                and query.casefold()
+                in (hit.plugin_id + " " + hit.point + " " + hit.qualified_id).casefold()
+            ):
+                hits.append(hit)
+        return Ok(tuple(hits))
+
     def search(
         self,
         query: object,

@@ -32,6 +32,7 @@ from typing import Final, cast
 from qma.core.vocabulary import PrincipalClass
 from qma.wire.agent_request import AGENT_REQUEST_CAPABILITIES
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
+from qma.wire.discovery_queries import DISCOVERY_READ_CAPABILITIES, DISCOVERY_SERVER_OWNED_KEYS
 from qma.wire.editor_draft import (
     editor_draft_capability_unavailable,
 )
@@ -121,6 +122,7 @@ DEFERRED_INITIALIZE_CAPABILITIES: Final[frozenset[str]] = frozenset()
 _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
     {
         *AGENT_REQUEST_CAPABILITIES,
+        *DISCOVERY_SERVER_OWNED_KEYS,
         PACK_UI_REQUEST_CAPABILITY,
         GET_PACK_UI_REQUEST_CAPABILITY,
         CANCEL_JOB_CAPABILITY,
@@ -512,6 +514,18 @@ def negotiate_initialize(
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
+    # Discovery opt-in is a strict boolean; a false/nonboolean request cannot
+    # acquire a mounted read merely by naming its capability.
+    for name in DISCOVERY_SERVER_OWNED_KEYS - {"discovery_hit_classes"}:
+        if params.capabilities and params.capabilities.get(name) is not True:
+            negotiated.pop(name, None)
+
+    # Partial facade adoption must always carry its host-supported hit classes.
+    if "discovery_hit_classes" in caps and any(
+        negotiated.get(name) is True for name in DISCOVERY_READ_CAPABILITIES
+    ):
+        negotiated["discovery_hit_classes"] = caps["discovery_hit_classes"]
+
     producer_id = assign_producer_id or params.client_producer_id
     if producer_id is None or producer_id.strip() == "":
         return _invalid(
@@ -806,6 +820,10 @@ class WireConnection:
             if self._capabilities.get(name) is True:
                 return accepted
             return editor_draft_capability_unavailable(name)
+        if name in DISCOVERY_SERVER_OWNED_KEYS:
+            if self._capabilities.get(name) is True:
+                return accepted
+            return query_unavailable(name)
         if name == GET_PRODUCT_SESSION_CAPABILITY:
             if self._capabilities.get(name) is True:
                 return accepted

@@ -1,0 +1,375 @@
+{
+  "schema": "ma01.contract.examples.v1",
+  "provenance": "Captured from source composition with the five bundled packs in a disposable root. These are examples, not installed acceptance or reusable authority. Revisions are this capture only.",
+  "initialize_params": {
+    "protocolVersion": "1.0.0",
+    "producer_id": "claude-ma01-demo",
+    "capabilities": {
+      "facade_get": true,
+      "facade_search": true,
+      "get_instance_health": true,
+      "get_pack_ui_request": true,
+      "invoke_contribution_pin": true,
+      "list_installed_plugins": true
+    }
+  },
+  "examples": [
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "list_installed_plugins",
+        "params": {}
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "schema": "qma.wire.discovery_read.v1",
+          "plugins": [
+            {
+              "plugin_id": "research-corpus",
+              "package_id": "research-corpus",
+              "package_version": "0.1.0",
+              "instance_id": "pack:research-corpus",
+              "availability_revision": 1,
+              "availability": "enabled"
+            },
+            {
+              "plugin_id": "analysis-backtest",
+              "package_id": "analysis-backtest",
+              "package_version": "0.1.0",
+              "instance_id": "pack:analysis-backtest",
+              "availability_revision": 2,
+              "availability": "enabled"
+            },
+            {
+              "plugin_id": "dev-factory",
+              "package_id": "dev-factory",
+              "package_version": "0.1.0",
+              "instance_id": "pack:dev-factory",
+              "availability_revision": 3,
+              "availability": "enabled"
+            },
+            {
+              "plugin_id": "trading-readonly",
+              "package_id": "trading-readonly",
+              "package_version": "0.1.0",
+              "instance_id": "pack:trading-readonly",
+              "availability_revision": 4,
+              "availability": "enabled"
+            },
+            {
+              "plugin_id": "pm-coordination",
+              "package_id": "pm-coordination",
+              "package_version": "0.1.0",
+              "instance_id": "pack:pm-coordination",
+              "availability_revision": 5,
+              "availability": "enabled"
+            }
+          ],
+          "roster_revision": 5,
+          "authorizes_invoke": false
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "facade_search",
+        "params": {
+          "query": "analysis-backtest:qmb",
+          "hit_class": "contribution"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "schema": "qma.wire.discovery_read.v1",
+          "hits": [
+            {
+              "availability": "enabled",
+              "availability_revision": 2,
+              "hit_class": "contribution",
+              "package_id": "analysis-backtest",
+              "package_version": "0.1.0",
+              "plugin_id": "analysis-backtest",
+              "point": "tool",
+              "qualified_id": "analysis-backtest:qmb"
+            }
+          ],
+          "query": "analysis-backtest:qmb",
+          "hit_class": "contribution",
+          "roster_revision": 5,
+          "authorizes_invoke": false
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "facade_get",
+        "params": {
+          "hit": {
+            "availability": "enabled",
+            "availability_revision": 2,
+            "hit_class": "contribution",
+            "package_id": "analysis-backtest",
+            "package_version": "0.1.0",
+            "plugin_id": "analysis-backtest",
+            "point": "tool",
+            "qualified_id": "analysis-backtest:qmb"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "schema": "qma.wire.discovery_read.v1",
+          "hit": {
+            "availability": "enabled",
+            "availability_revision": 2,
+            "hit_class": "contribution",
+            "package_id": "analysis-backtest",
+            "package_version": "0.1.0",
+            "plugin_id": "analysis-backtest",
+            "point": "tool",
+            "qualified_id": "analysis-backtest:qmb"
+          },
+          "instance_id": "pack:analysis-backtest",
+          "availability_revision": 2,
+          "authorizes_invoke": false
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "facade_search",
+        "params": {
+          "query": "no-such-ma01-contribution"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "schema": "qma.wire.discovery_read.v1",
+          "hits": [],
+          "query": "no-such-ma01-contribution",
+          "hit_class": "contribution",
+          "roster_revision": 5,
+          "authorizes_invoke": false
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "facade_search",
+        "params": {
+          "query": "x",
+          "hit_class": "artifact"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "error": {
+          "code": -32000,
+          "message": "query_unavailable",
+          "data": {
+            "category": "policy rejection",
+            "retryability": "no",
+            "context": {
+              "field": "query",
+              "reason": "query_unavailable",
+              "name": "facade_search:artifact",
+              "query": "facade_search:artifact",
+              "empty_mailbox": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "get_instance_health",
+        "params": {
+          "instance_id": "pack:analysis-backtest"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "error": {
+          "code": -32000,
+          "message": "query_unavailable",
+          "data": {
+            "category": "policy rejection",
+            "retryability": "no",
+            "context": {
+              "field": "query",
+              "reason": "query_unavailable",
+              "name": "get_instance_health",
+              "query": "get_instance_health",
+              "empty_mailbox": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "facade_search",
+        "params": {
+          "query": "qmb",
+          "limit": 10
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "error": {
+          "code": -32000,
+          "message": "unknown discovery argument fields",
+          "data": {
+            "category": "invalid input",
+            "retryability": "no",
+            "context": {
+              "field": "params",
+              "reason": "unknown discovery argument fields"
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "facade_get",
+        "params": {
+          "hit": {
+            "availability": "enabled",
+            "availability_revision": 999,
+            "hit_class": "contribution",
+            "package_id": "analysis-backtest",
+            "package_version": "0.1.0",
+            "plugin_id": "analysis-backtest",
+            "point": "tool",
+            "qualified_id": "analysis-backtest:qmb"
+          }
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "error": {
+          "code": -32000,
+          "message": "unavailable dependency",
+          "data": {
+            "category": "unavailable dependency",
+            "retryability": "no",
+            "context": {
+              "availability": "tombstone",
+              "availability_revision": 999,
+              "cause": "other_version_live",
+              "decision": "DEC-0443",
+              "is_grant": false,
+              "package_version": "0.1.0",
+              "pin_is_grant": false,
+              "qualified_id": "analysis-backtest:qmb",
+              "silent_retarget": false,
+              "store": "plugin_install_records",
+              "other_package_version": "0.1.0",
+              "retarget_refused": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "list_installed_plugins",
+        "params": {
+          "product_session_ref": "psess:ma01"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "result": {
+          "schema": "qma.wire.discovery_read.v1",
+          "plugins": [
+            {
+              "plugin_id": "analysis-backtest",
+              "package_id": "analysis-backtest",
+              "package_version": "0.1.0",
+              "instance_id": "pack:analysis-backtest",
+              "availability_revision": 2,
+              "availability": "enabled"
+            }
+          ],
+          "roster_revision": 5,
+          "authorizes_invoke": false
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "facade_get",
+        "params": {
+          "hit": {
+            "availability": "enabled",
+            "availability_revision": 1,
+            "hit_class": "contribution",
+            "package_id": "research-corpus",
+            "package_version": "0.1.0",
+            "plugin_id": "research-corpus",
+            "point": "tool",
+            "qualified_id": "research-corpus:search"
+          },
+          "product_session_ref": "psess:ma01"
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "error": {
+          "code": -32000,
+          "message": "contribution is outside product session scope",
+          "data": {
+            "category": "policy rejection",
+            "retryability": "no",
+            "context": {
+              "field": "instance_id",
+              "reason": "contribution is outside product session scope"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "invocation_params_addition": {
+    "contribution_pin": {
+      "qualified_id": "analysis-backtest:qmb",
+      "package_version": "0.1.0",
+      "availability_revision": 2
+    }
+  }
+}

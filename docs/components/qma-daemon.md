@@ -556,3 +556,14 @@ binding and Agent permission bridge. The paired read capability journey is still
 blocked; this containment closes a legacy toolset alias bypass and does not claim
 working joined agents. The host-retry fixture now admits an actual compiled
 Mission, Task and root outbox before its single mocked place-run attempt.
+
+## Bounded discovery adoption candidate (2026-10-05)
+
+[ADR-0033](../decisions/ADR-0033-bounded-discovery-read-adoption.md) records
+MA-01 owner reuse for currently enabled pack identities and exact live
+ContributionHit search/get over existing CT-40 admission. Health and unmounted
+Artifact/Knowledge owners stay typed unavailable. The
+[implementation handoff](../../release/MA01-DISCOVERY-CONTRACT.md) specifies
+additive schemas and invocation pin checks; serial installed acceptance passes,
+and independent parent review remains pending. Historical inspect-SHA statements and release limits
+are unchanged.
