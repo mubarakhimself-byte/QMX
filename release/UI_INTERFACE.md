@@ -113,3 +113,17 @@ adapter, with the panel index encoded in view_id. Validation publishes no view.
 Treat empty/stale/unavailable output explicitly, require explicit chart samples,
 and keep current grants/invocation/readiness checks at use. No UI code or connected
 UI acceptance is included in this backend contribution. Parent review precedes MA04.
+
+## MA04 lifecycle handoff to the existing UI owner
+
+Consume [MA04-PUBLICATION-CONTRACT.md](MA04-PUBLICATION-CONTRACT.md) and
+[observed versioned examples](MA04-PUBLICATION-EXAMPLES.json). Keep candidate,
+validation, active publication and installed availability identities separate.
+Use current authoring context/CAS for new work, exact producer/id and parameters
+for uncertain retries, and a prior publication identity plus current compatible
+proof for undo. An app-use session cannot change implementation. Refresh the real
+PackUiRequest with the committed instance/revision; render typed refusal or
+not-observed readiness honestly. Data reads still use the existing current grant,
+operation and pin gates. HTTP capabilities follow the last complete initialize
+for the pairing while sockets retain their own map. No UI edits or connected UI
+acceptance are part of this backend candidate; independent parent review is next.

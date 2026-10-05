@@ -83,6 +83,7 @@ class DaemonPluginContext:
         self._exit_stack = exit_stack if exit_stack is not None else PluginExitStack(plugin_id)
         self._singletons: dict[tuple[str, str], object] = {}
         self._multis: dict[tuple[str, str], object] = {}
+        self._hosted_data_keys: set[tuple[str, str]] = set()
         self._credential_refs: dict[str, CredentialRef] = {}
         self._context_compiler: ContextCompiler | None = None
         self._load_config: Mapping[str, object] = MappingProxyType(dict(load_config or {}))
@@ -148,9 +149,11 @@ class DaemonPluginContext:
 
     def _dispose_multi(self, point: str, qualified: str) -> Disposer:
         key = (point, qualified)
+        admitted = self._multis.get(key)
 
         def dispose() -> None:
-            self._multis.pop(key, None)
+            if self._multis.get(key) is admitted:
+                self._multis.pop(key, None)
 
         return self._push(dispose)
 
@@ -289,6 +292,28 @@ class DaemonPluginContext:
                 f"manifest for {self._plugin_id!r} declares operator-assigned field 'model_family'"
             )
         return self._bind_multi("model_deployment", local_id, deployment)
+
+    def replace_hosted_data_toolset(self, local_id: str, payload: Mapping[str, object]) -> None:
+        """Trusted daemon seam for MA04; never on the plugin SDK protocol."""
+        qualified = qualified_contribution_id(self.plugin_id, local_id)
+        key = ("toolset", qualified)
+        existing = self._multis.get(key)
+        if existing is not None and (
+            not isinstance(existing, Mapping)
+            or cast(Mapping[str, object], existing).get("schema") != "qma.miniapp.publication.v1"
+        ):
+            raise PluginContextError("hosted data toolset collides with an existing registration")
+        if self.exit_stack.closed:
+            raise PluginContextError("trusted host scope is closed")
+        if key not in self._hosted_data_keys:
+            # One cleanup per slot, independent of the number of accepted versions.
+            def dispose_slot() -> None:
+                self._multis.pop(key, None)
+                self._hosted_data_keys.discard(key)
+
+            self._push(dispose_slot)
+            self._hosted_data_keys.add(key)
+        self._multis[key] = dict(payload)
 
     def register_toolset(self, local_id: str, toolset: Mapping[str, object]) -> Disposer:
         return self._bind_multi("toolset", local_id, dict(toolset))

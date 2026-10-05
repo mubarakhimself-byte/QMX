@@ -40,11 +40,11 @@ from qmf.core.refusal import is_ok, is_refusal
 def test_seed_vocabulary_counts_and_owner() -> None:
     assert WIRE_VOCABULARY_OWNER == "qma-wire"
     assert SEED_COMMAND_COUNT == 9
-    assert ADDABLE_COMMAND_COUNT == 12
-    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 21
+    assert ADDABLE_COMMAND_COUNT == 14
+    assert len(WIRE_COMMANDS) == SEED_COMMAND_COUNT + ADDABLE_COMMAND_COUNT == 23
     assert SEED_QUERY_COUNT == 7
-    assert ADDABLE_QUERY_COUNT == 16
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 23
+    assert ADDABLE_QUERY_COUNT == 17
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 24
     assert len(WIRE_EVENTS) == SEED_EVENT_COUNT == 10
     assert SEED_VOCABULARY_COUNT == 26
     assert {member.value for member in WireCommand} == WIRE_COMMANDS
@@ -67,6 +67,8 @@ def test_seed_members_match_ratified_packet() -> None:
         "transfer_complete",
         "save_app_candidate",
         "validate_app_candidate",
+        "publish_app_candidate",
+        "undo_app_publication",
         "save_editor_draft",
         "publish_editor_draft",
         "cancel_job",

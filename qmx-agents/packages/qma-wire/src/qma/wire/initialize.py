@@ -32,6 +32,7 @@ from typing import Final, cast
 from qma.core.vocabulary import PrincipalClass
 from qma.wire.agent_request import AGENT_REQUEST_CAPABILITIES
 from qma.wire.app_candidate import CANDIDATE_CAPABILITIES, CANDIDATE_READS
+from qma.wire.app_publication import PUBLICATION_CAPABILITIES, PUBLICATION_READS
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
 from qma.wire.discovery_queries import DISCOVERY_READ_CAPABILITIES, DISCOVERY_SERVER_OWNED_KEYS
 from qma.wire.editor_draft import (
@@ -127,6 +128,7 @@ _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
         *DISCOVERY_SERVER_OWNED_KEYS,
         *CANDIDATE_CAPABILITIES,
         *VALIDATION_CAPABILITIES,
+        *PUBLICATION_CAPABILITIES,
         PACK_UI_REQUEST_CAPABILITY,
         GET_PACK_UI_REQUEST_CAPABILITY,
         CANCEL_JOB_CAPABILITY,
@@ -518,7 +520,7 @@ def negotiate_initialize(
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
-    for name in CANDIDATE_CAPABILITIES | VALIDATION_CAPABILITIES:
+    for name in CANDIDATE_CAPABILITIES | VALIDATION_CAPABILITIES | PUBLICATION_CAPABILITIES:
         if params.capabilities.get(name) is not True or caps.get(name) is not True:
             negotiated.pop(name, None)
 
@@ -829,7 +831,7 @@ class WireConnection:
             if self._capabilities.get(name) is True:
                 return accepted
             return editor_draft_capability_unavailable(name)
-        if name in CANDIDATE_READS | VALIDATION_READS:
+        if name in CANDIDATE_READS | VALIDATION_READS | PUBLICATION_READS:
             if self._capabilities.get(name) is True:
                 return accepted
             return query_unavailable(name)

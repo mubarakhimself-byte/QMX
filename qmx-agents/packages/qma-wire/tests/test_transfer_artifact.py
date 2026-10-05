@@ -50,7 +50,7 @@ def test_transfer_artifact_is_addable_ct40_and_absent_at_inspect_sha() -> None:
     assert TRANSFER_COMPLETE_MINTED is True
     assert TRANSFER_ARTIFACT_AMENDMENT == "AM-09"
     assert SEED_COMMAND_COUNT == 9
-    assert ADDABLE_COMMAND_COUNT == 12
+    assert ADDABLE_COMMAND_COUNT == 14
     assert SEED_QUERY_COUNT == 7
     assert SEED_EVENT_COUNT == 10
     assert TRANSFER_ARTIFACT_EXISTED_AT_INSPECT_SHA is False

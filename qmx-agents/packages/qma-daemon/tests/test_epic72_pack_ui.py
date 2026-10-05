@@ -336,10 +336,12 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
         assert record is not None
         assert record["pack_ui_request"] == _valid_request()
 
+        # This partial-process unit fixture checks the existing installed read owner.
+        # The MA04 public reconciliation wrapper is covered by real composed lifecycle tests.
         process = DaemonProcess.__new__(DaemonProcess)
         object.__setattr__(process, "_roster", SimpleNamespace(loader=loader))
         object.__setattr__(process, "_substrate", substrate)
-        found = process.get_pack_ui_request(
+        found = process._get_pack_ui_request_locked(  # pyright: ignore[reportPrivateUsage]
             {
                 "instance_id": loaded.value.instance_id,
                 "availability_revision": loaded.value.availability_revision,
@@ -350,7 +352,7 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
         assert is_ok(found), found
         assert found.value.request.views[0].view_id == "view:search"
         assert is_refusal(
-            process.get_pack_ui_request(
+            process._get_pack_ui_request_locked(  # pyright: ignore[reportPrivateUsage]
                 {
                     "instance_id": loaded.value.instance_id,
                     "availability_revision": loaded.value.availability_revision + 1,
@@ -359,7 +361,7 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
                 capabilities={"get_pack_ui_request": True},
             )
         )
-        missing_capability = process.get_pack_ui_request(
+        missing_capability = process._get_pack_ui_request_locked(  # pyright: ignore[reportPrivateUsage]
             {
                 "instance_id": loaded.value.instance_id,
                 "availability_revision": loaded.value.availability_revision,
@@ -368,7 +370,7 @@ def test_pack_ui_request_is_durable_and_query_checks_capability_instance_revisio
             capabilities={},
         )
         assert is_refusal(missing_capability)
-        absent_capability = process.get_pack_ui_request(
+        absent_capability = process._get_pack_ui_request_locked(  # pyright: ignore[reportPrivateUsage]
             {
                 "instance_id": loaded.value.instance_id,
                 "availability_revision": loaded.value.availability_revision,

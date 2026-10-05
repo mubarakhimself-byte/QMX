@@ -600,3 +600,14 @@ Trusted validation and app_candidate.validated receipts extend MA02 app_candidat
 amendment; [the release contract](../../release/MA03-COMPOSITION-CONTRACT.md) gives
 exact DTOs and proof limits. Backend implementation awaits independent parent
 review. Historical source-inspection and ratification dates above retain their scope.
+
+## MA04 local publication amendment (draft)
+
+[ADR-0036](../decisions/ADR-0036-miniapp-local-publication.md) reuses the existing
+journal, immutable artifact, authority, roster, installation and trusted host
+owners for one data-only app. Publication adds a child projection under
+app_candidate_state and a dev-factory toolset; no new store class or executable
+plugin. Wire owns the closed additive DTOs and receipt schema. The
+[release contract](../../release/MA04-PUBLICATION-CONTRACT.md) specifies exact
+CAS, current proof replay, retry/undo/recovery and the backend-only boundary.
+Independent parent review remains required; historical ratification dates stand.

@@ -56,8 +56,8 @@ def test_facade_queries_are_additive_ct40_vocabulary() -> None:
     assert WireQuery.FACADE_GET.value == "facade_get"
     assert "facade_search" in WIRE_QUERIES
     assert "facade_get" in WIRE_QUERIES
-    assert ADDABLE_QUERY_COUNT == 16
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 23
+    assert ADDABLE_QUERY_COUNT == 17
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 24
     assert parse_wire_type("facade_search") == "facade_search"
     assert is_ok(validate_family_payload("facade_search", {"query": "swing-high"}))
     assert is_ok(validate_family_payload("facade_get", {"hit_class": "knowledge"}))

@@ -19,7 +19,7 @@ from qma.wire.pack_ui_request import (
     parse_pack_ui_request,
 )
 from qmf.core.refusal import Ok, Result, is_refusal
-from qmf.data.store.refusals import storage_failure
+from qmf.data.store.refusals import invalid_input, storage_failure
 
 PLUGIN_INSTALL_RECORDS_TABLE = "plugin_install_records"
 
@@ -385,9 +385,17 @@ def restore_plugin_install_records_projection(
         rows: dict[tuple[str, int], Mapping[str, object]] = {}
         max_revision = 0
         for event in events.value:
-            if event.event not in {"plugin.enabled", "plugin.pack_ui_projection_failed"}:
+            if event.event not in {
+                "plugin.enabled",
+                "plugin.pack_ui_projection_failed",
+                "app_candidate.published",
+            }:
                 continue
-            payload = event.payload
+            payload = (
+                event.payload
+                if event.event != "app_candidate.published"
+                else cast(Mapping[str, object], event.payload["installation"])
+            )
             instance_id = payload.get("instance_id")
             revision = payload.get("availability_revision")
             if (
@@ -437,8 +445,16 @@ def plugin_availability_revision_high_water(journal: AuthoritativeJournal) -> Re
     revisions = [
         revision
         for event in events.value
-        if event.event in {"plugin.enabled", "plugin.pack_ui_projection_failed"}
-        and isinstance(revision := event.payload.get("availability_revision"), int)
+        if event.event
+        in {"plugin.enabled", "plugin.pack_ui_projection_failed", "app_candidate.published"}
+        and isinstance(
+            revision := (
+                event.payload
+                if event.event != "app_candidate.published"
+                else cast(Mapping[str, object], event.payload["installation"])
+            ).get("availability_revision"),
+            int,
+        )
         and not isinstance(revision, bool)
         and revision >= 0
     ]
@@ -502,3 +518,21 @@ def read_latest_plugin_install_record(
         instance_id=instance_id,
         availability_revision=revision,
     )
+
+
+def latest_host_installation(journal: AuthoritativeJournal) -> Result[Mapping[str, object] | None]:
+    events = journal.read_events()
+    if is_refusal(events):
+        return events
+    latest: Mapping[str, object] | None = None
+    for event in events.value:
+        if event.event != "app_candidate.published":
+            continue
+        identity = event.verify_identity()
+        if is_refusal(identity):
+            return identity
+        row = event.payload.get("installation")
+        if not isinstance(row, Mapping):
+            return invalid_input("publication", "missing installation receipt")
+        latest = cast(Mapping[str, object], row)
+    return Ok(latest)

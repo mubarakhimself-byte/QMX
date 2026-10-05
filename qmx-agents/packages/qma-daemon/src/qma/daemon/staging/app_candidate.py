@@ -146,6 +146,10 @@ class AppCandidateService:
         # This is inert JSON, not an MA03 catalog/operation/renderer verdict.
         return Ok(None)
 
+    def authorize_session(self, ref: object, principal: object) -> Result[ProductSession]:
+        """Shared authenticated session gate for the named MA04 lifecycle extension."""
+        return self._session(ref, principal)
+
     def _session(self, ref: object, principal: object) -> Result[ProductSession]:
         if principal is not PrincipalClass.OPERATOR:
             return policy_rejection(

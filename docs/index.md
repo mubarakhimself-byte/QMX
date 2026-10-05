@@ -212,3 +212,5 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 - [Bounded contribution discovery read adoption (ADR-0033, draft)](decisions/ADR-0033-bounded-discovery-read-adoption.md).
 
 - [MA03 panel composition validation ownership (ADR-0035, draft)](decisions/ADR-0035-miniapp-composition-validation.md).
+
+- [MA04 local data-only publication ownership (ADR-0036, draft)](decisions/ADR-0036-miniapp-local-publication.md).

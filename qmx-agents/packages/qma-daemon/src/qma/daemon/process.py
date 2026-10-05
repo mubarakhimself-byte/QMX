@@ -189,6 +189,7 @@ from qma.daemon.pairing import (
 )
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.persistence.substrate import PersistenceSubstrate
+from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.pack_ui import (
     read_pack_ui_request_record,
     restore_plugin_install_records_projection,
@@ -215,6 +216,7 @@ from qma.daemon.sessions.product_session import (
     accepted_invocation_binding,
 )
 from qma.daemon.staging.app_candidate import AppCandidateService
+from qma.daemon.staging.app_publication import AppPublicationService
 from qma.daemon.staging.app_validation import AppValidationService
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
@@ -237,6 +239,7 @@ from qma.wire.agent_request import (
     require_agent_request_capability,
 )
 from qma.wire.app_candidate import CANDIDATE_CAPABILITIES, CANDIDATE_READS
+from qma.wire.app_publication import PUBLICATION_CAPABILITIES, PUBLICATION_READS
 from qma.wire.cancel_job import require_cancel_job_capability
 from qma.wire.contribution_pin import parse_contribution_pin
 from qma.wire.discovery_queries import (
@@ -480,6 +483,17 @@ def _jsonrpc_error(
     return {"jsonrpc": JSONRPC_VERSION, "id": req_id, "error": error}
 
 
+def _jsonrpc_native(value: object) -> object:
+    """Thaw immutable refusal context containers into wire JSON containers."""
+    if isinstance(value, Mapping):
+        return {
+            key: _jsonrpc_native(item) for key, item in cast(Mapping[str, object], value).items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_jsonrpc_native(item) for item in cast(list[object] | tuple[object, ...], value)]
+    return value
+
+
 def _jsonrpc_refusal(req_id: object, refusal: TypedRefusal) -> dict[str, object]:
     reason = refusal.context.get("reason")
     message = reason if isinstance(reason, str) and reason else refusal.category.value
@@ -490,7 +504,7 @@ def _jsonrpc_refusal(req_id: object, refusal: TypedRefusal) -> dict[str, object]
         data={
             "category": refusal.category.value,
             "retryability": refusal.retryability.value,
-            "context": dict(refusal.context),
+            "context": _jsonrpc_native(refusal.context),
         },
     )
 
@@ -878,6 +892,9 @@ class DaemonProcess:
         self._app_validation = AppValidationService(
             self._app_candidates, self._roster.loader, self._operation_descriptors, self.root
         )
+        self._app_publication = AppPublicationService(
+            self._app_validation, AtomicRoster(self.root / "authoring-pack")
+        )
         self._transfers = TransferTicketStore(
             journal=journal,
             sqlite=substrate.sqlite,
@@ -1124,6 +1141,10 @@ class DaemonProcess:
             if is_refusal(restored_validation):
                 process._release(release_process_gate=False)
                 return restored_validation
+            restored_publications = process._app_publication.restore_from_journal()
+            if is_refusal(restored_publications):
+                process._release(release_process_gate=False)
+                return restored_publications
             restored_plugin_records = restore_plugin_install_records_projection(
                 process.sqlite,
                 process.journal,
@@ -1147,6 +1168,10 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return activated
+            restored_publication_runtime = process._app_publication.reconcile_runtime()
+            if is_refusal(restored_publication_runtime):
+                process._release(release_process_gate=False)
+                return restored_publication_runtime
             spot_bindings = load_spot_state_bindings(process.root)
             if is_refusal(spot_bindings):
                 process._release(release_process_gate=False)
@@ -1566,7 +1591,42 @@ class DaemonProcess:
             "invoke_contribution_pin": True,
         }
 
+    @property
+    def app_publication(self) -> AppPublicationService:
+        return self._app_publication
+
+    def app_publication_request(
+        self,
+        name: str,
+        args: object,
+        *,
+        operator_principal: object,
+        capabilities: object,
+        producer_id: object = None,
+        request_id: object = None,
+    ) -> Result[Mapping[str, object]]:
+        return self._app_publication.request(
+            name,
+            args,
+            principal_class=operator_principal,
+            owner_principal=self._operator_principal(),
+            capabilities=capabilities,
+            producer_id=producer_id,
+            request_id=request_id,
+        )
+
     def get_pack_ui_request(
+        self, args: object, *, operator_principal: object, capabilities: object | None = None
+    ) -> Result[PackUiRequestSnapshot]:
+        with self._app_candidates.authority_lock:
+            current = self._app_publication.ensure_current()
+            if is_refusal(current):
+                return current
+            return self._get_pack_ui_request_locked(
+                args, operator_principal=operator_principal, capabilities=capabilities
+            )
+
+    def _get_pack_ui_request_locked(
         self,
         args: object,
         *,
@@ -2994,7 +3054,9 @@ class DaemonProcess:
                     or any(raw_caps.get(name) is True for name in DISCOVERY_READ_CAPABILITIES)
                     or any(
                         raw_caps.get(name) is True
-                        for name in CANDIDATE_CAPABILITIES | VALIDATION_CAPABILITIES
+                        for name in CANDIDATE_CAPABILITIES
+                        | VALIDATION_CAPABILITIES
+                        | PUBLICATION_CAPABILITIES
                     )
                 )
             completed = connection.complete_initialize(
@@ -3007,6 +3069,7 @@ class DaemonProcess:
                     **self._discovery_capabilities(),
                     **dict.fromkeys(CANDIDATE_CAPABILITIES, True),
                     **self._app_validation.capabilities(),
+                    **self._app_publication.capabilities(),
                     **({} if self._agent_requests is None else self._agent_requests.capabilities),
                 },
             )
@@ -3019,6 +3082,24 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method in PUBLICATION_CAPABILITIES:
+            if method in PUBLICATION_READS:
+                gate = connection.require_query_capability(method)
+            else:
+                gate = connection.authorize_command(method)
+            if isinstance(gate, TypedRefusal):
+                return _jsonrpc_refusal(req_id, gate)
+            result = self.app_publication_request(
+                cast(str, method),
+                request.get("params"),
+                operator_principal=connection.principal_class,
+                capabilities=connection.capabilities,
+                producer_id=connection.producer_id,
+                request_id=req_id,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value)
         if method in VALIDATION_CAPABILITIES:
             unicode = validate_unicode(req_id, "request_id")
             if is_refusal(unicode):

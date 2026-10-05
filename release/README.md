@@ -109,3 +109,5 @@ hashes; skipped tests, doubles and intermediate versions cannot fill missing
 acceptance lanes. Keep existing installations/data intact while testing a new
 destination. Perform data migrations only under the governing backup-first,
 dry-run, migrate, verify and restore discipline.
+
+The bounded MA04 backend candidate has its [local publication contract](MA04-PUBLICATION-CONTRACT.md) and [versioned examples](MA04-PUBLICATION-EXAMPLES.json); independent review and whole-release acceptance remain separate.

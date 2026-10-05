@@ -26,7 +26,8 @@ status; historical acceptance records retain their original scope.
 | Artifact/Knowledge discovery | Owner dependencies absent | Typed query_unavailable; staged bytes are not Library discovery |
 | MA02 candidates/version CAS | CT-40 literal-true save/read/history; operator authoring only; immutable fp1/parent CAS, receipt and restart fold on existing writer | Source failures/CAS/authority checks and noneditable installed paired listener/restart; MA02-CANDIDATE-CONTRACT.md; independent review pending |
 | MA03 validation | Backend implemented; three gated CT-40 verbs; explicit local bounds; exact immutable proof and scoped currentness | MA03-COMPOSITION-CONTRACT.md; paired installed API/restart proof; parent independent review pending |
-| MA04 publish-update-undo / MA05 activity | Not shipped | First data-only milestone still requires MA04 then MA05 |
+| MA04 publish-replace-undo | Backend candidate implemented; one dev-factory data-only app through existing journal/roster/installed owners | MA04-PUBLICATION-CONTRACT.md; paired installed lifecycle/recovery proof; independent parent review pending |
+| MA05 activity | Not shipped | Packet-specific durable activity remains separate |
 | MA06 maintenance / MA07 restricted runner / MA08 mutable data / MA09 API | Not shipped | Require their packet-specific ownership and installed acceptance |
 | MA10 executable deployment / MA11 remote / MA12 laptop-off / MA13 custom UI | Not shipped | No deployment, remote, always-on authority or custom renderer proof |
 
@@ -47,7 +48,9 @@ suites, aggregate/per-package coverage and mutation gates, inherited 17 strict
 doc errors, inherited QMB format debt, historical actor deadline failures,
 provider-enabled cold start, other Python overrides, connected UI, native
 harness, Linux, remote, installer recertification, power-loss and whole release.
-No provider/credential/UI/deployment/publication/push/protected merge occurred.
+The preceding baseline made no provider/credential/UI/deployment/publication/push/protected merge. MA04 adds only local publication in isolated test hosts; no external publication, deployment, provider, UI, push or protected merge.
 
 MA02 base for MA03 is independently accepted 1c8e0b6039846d687d7464769c7e68bde711c364.
 MA03 retains all exclusions above and adds no UI/provider/publication authority.
+
+Accepted MA03 base for MA04 is 41082c1805e33c9d7083ccd3ac81b6c31a2f8fe3. MA04 retains the whole-platform exclusions and grants no invoke/readiness authority.

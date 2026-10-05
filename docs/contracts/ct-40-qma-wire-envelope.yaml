@@ -80,3 +80,10 @@ provenance_note: "CT-40 is newly minted by the 2026-08-28/29 QMA architecture si
 # command and get_app_ui_catalog/get_app_candidate_validation queries; own literal-true
 # capabilities on existing paired WebSocket. No new CT/family or HTTP query. Exact DTOs,
 # validation identity dedup and limits: release/MA03-COMPOSITION-CONTRACT.md.
+
+# MA04 named implementation amendment (ADR-0036, draft): publish_app_candidate
+# and undo_app_publication commands plus get_app_publication query, each requiring
+# its own literal-true capability. Existing paired WebSocket only; no CT/family/HTTP
+# route added. Initial expected_active_revision explicitly permits null in this
+# versioned data DTO; publication artifact uses declared finite JSON byte identity.
+# Exact receipt, CAS and journal-lifetime dedup: release/MA04-PUBLICATION-CONTRACT.md.

@@ -65,11 +65,13 @@ from qma.daemon.plugins.pack_ui import (
     IngestedPackUiRequest,
     empty_pack_ui_request,
     ingest_pack_ui_request,
+    latest_host_installation,
     plugin_availability_revision_high_water,
     read_latest_plugin_install_record,
     record_pack_ui_projection_failure,
     write_pack_ui_request_record,
 )
+from qma.wire.pack_ui_request import parse_pack_ui_request
 from qma.wire.principals import authorize_wire_command, parse_principal_class
 from qmf.core import Ok, Result, is_ok
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal, is_refusal
@@ -660,6 +662,8 @@ class PluginLoader:
         self,
         context: DaemonPluginContext,
         manifest: PluginManifest,
+        *,
+        hosted_toolset: str | None = None,
     ) -> tuple[PublishedContribution, ...]:
         """Build published rows without mutating the live roster."""
         snap = context.snapshot()
@@ -687,7 +691,10 @@ class PluginLoader:
             )
             published.append(row)
             seen.add((port, None))
-        for key, _value in cast_mapping(snap["multis"]).items():
+        multis = dict(cast_mapping(snap["multis"]))
+        if hosted_toolset is not None:
+            multis[("toolset", hosted_toolset)] = {}
+        for key, _value in multis.items():
             point, qualified = key
             row = PublishedContribution(
                 plugin_id=context.plugin_id,
@@ -745,6 +752,75 @@ class PluginLoader:
         self._published = published
         self._availability_revision = max(self._availability_revision, next_rev)
         return stamped
+
+    def authorize_hosted_data_publication(self, principal: object) -> Result[None]:
+        """Recheck current trusted host permission and dependency owners at MA04 apply."""
+        host = self.get("dev-factory")
+        if host is None:
+            return self._refuse("instance_id", "trusted authoring host unavailable")
+        operator = self.require_operator("plugin.enable", principal)
+        if is_refusal(operator):
+            return operator
+        permissions = self._check_permissions(host.manifest)
+        if is_refusal(permissions):
+            return permissions
+        try:
+            self._check_dependencies(host.manifest)
+        except PluginLoadError as exc:
+            return self._refuse_load_error(exc)
+        return Ok(None)
+
+    def apply_hosted_data_publication(self, payload: Mapping[str, object]) -> Result[None]:
+        """Install a committed MA04 receipt in the existing trusted host scope."""
+
+        host = self.get("dev-factory")
+        if (
+            host is None
+            or host.instance_id != payload.get("instance_id")
+            or host.manifest.version != payload.get("pack_version")
+        ):
+            return self._refuse("instance_id", "trusted authoring host is unavailable")
+        request = parse_pack_ui_request(payload.get("pack_ui_request"))
+        if is_refusal(request):
+            return request
+        revision = payload.get("availability_revision")
+        local_id = payload.get("local_id")
+        if (
+            isinstance(revision, bool)
+            or not isinstance(revision, int)
+            or revision < 1
+            or not isinstance(local_id, str)
+        ):
+            return self._refuse("publication", "malformed committed publication")
+        qualified = host.manifest.id + ":" + local_id
+        key = ("toolset", qualified)
+        claimed = self._multi_owners.get(key)
+        if claimed is not None and claimed != host.manifest.id:
+            return self._refuse("publication", "hosted contribution owner collision")
+        try:
+            staged = self._stage_published(host.context, host.manifest, hosted_toolset=qualified)
+            stamped = tuple(replace(row, availability_revision=revision) for row in staged)
+            host.context.replace_hosted_data_toolset(local_id, payload)
+        except (ValueError, TypeError, RuntimeError, PluginLoadError) as exc:
+            return self._refuse("publication", str(exc))
+        if claimed is None:
+            self._multi_owners[key] = host.manifest.id
+
+            def drop_slot_claim() -> None:
+                current = self._loaded.get(host.manifest.id)
+                if current is not None and current.exit_stack is not host.exit_stack:
+                    return
+                self._multi_owners.pop(key, None)
+
+            host.exit_stack.push(drop_slot_claim)
+        self._published = [
+            row for row in self._published if row.plugin_id != host.manifest.id
+        ] + list(stamped)
+        host.published = stamped
+        host.availability_revision = revision
+        host.pack_ui_request = IngestedPackUiRequest(request.value)
+        self.restore_availability_revision(revision)
+        return Ok(None)
 
     def snapshot_published_roster(
         self,
@@ -852,6 +928,18 @@ class PluginLoader:
                     self.pack_ui_sqlite,
                     instance_id=instance_id,
                 )
+                if latest is not None and manifest.id == "dev-factory" and self.journal is not None:
+                    committed = latest_host_installation(self.journal)
+                    if (
+                        is_ok(committed)
+                        and committed.value is not None
+                        and latest.get("pack_ui_request") == committed.value.get("pack_ui_request")
+                        and latest.get("availability_revision")
+                        == committed.value.get("availability_revision")
+                    ):
+                        parsed_request = parse_pack_ui_request(latest.get("pack_ui_request"))
+                        if is_ok(parsed_request):
+                            ingested = IngestedPackUiRequest(parsed_request.value)
                 if (
                     latest is not None
                     and latest.get("pack_id") == manifest.id
