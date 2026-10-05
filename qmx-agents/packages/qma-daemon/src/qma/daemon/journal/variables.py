@@ -24,7 +24,11 @@ from qma.core.vocabulary import (
     VocabularyError,
     parse_closed,
 )
-from qma.daemon.journal.authoritative import AuthoritativeJournal, JournalAppendReceipt
+from qma.daemon.journal.authoritative import (
+    AuthoritativeJournal,
+    JournalAppendReceipt,
+    JournalEventRecord,
+)
 from qma.wire.principals import authorize_wire_command
 from qmf.core import Duration, Instant, Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection
@@ -316,37 +320,42 @@ def fold_pairing_ttl_from_journal(journal: AuthoritativeJournal) -> str | None:
 def fold_artifact_stage_max_bytes_from_journal(
     journal: AuthoritativeJournal,
 ) -> Result[int | None]:
-    """Restore only the stage cap from its latest authoritative variable.set receipt."""
-    rows = journal.read_all()
-    if is_refusal(rows):
-        return rows
-    chosen_key: tuple[int, int] | None = None
-    chosen: object = None
-    for row in rows.value:
-        if row.get("event") != VARIABLE_SET_EVENT:
+    """Latest cap by journal_seq; recorded_at is not a mutation ordering key."""
+    events = journal.read_events()
+    if is_refusal(events):
+        return events
+    chosen: JournalEventRecord | None = None
+    seen_sequences: set[int] = set()
+    for event in events.value:
+        if event.event != VARIABLE_SET_EVENT:
             continue
-        payload = row.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        body = cast("dict[str, object]", payload)
-        if body.get("name") != ARTIFACT_STAGE_MAX_BYTES_KEY:
-            continue
-        recorded_at = row.get("recorded_at")
-        journal_seq = row.get("journal_seq")
+        body = event.payload
         if (
-            isinstance(recorded_at, bool)
-            or not isinstance(recorded_at, int)
-            or isinstance(journal_seq, bool)
-            or not isinstance(journal_seq, int)
+            body.get("name") != ARTIFACT_STAGE_MAX_BYTES_KEY
+            and body.get("registry_key") != ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY
         ):
-            return invalid_input("stage_max_bytes", "invalid stage cap journal ordering")
-        key = (recorded_at, journal_seq)
-        if chosen_key is None or key >= chosen_key:
-            chosen_key = key
-            chosen = body.get("value")
-    if chosen_key is None:
+            continue
+        if event.journal_seq < 1 or event.journal_seq in seen_sequences:
+            return invalid_input("stage_max_bytes", "invalid stage cap journal sequence")
+        seen_sequences.add(event.journal_seq)
+        if chosen is None or event.journal_seq > chosen.journal_seq:
+            chosen = event
+    if chosen is None:
         return Ok(None)
-    parsed = resolve_artifact_stage_max_bytes(chosen)
+    body = chosen.payload
+    if (
+        chosen.scope_path
+        or body.get("name") != ARTIFACT_STAGE_MAX_BYTES_KEY
+        or body.get("registry_key") != ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY
+        or body.get("home") != REGISTRY_HOME
+        or body.get("scope") != VariableScope.GLOBAL.value
+    ):
+        return invalid_input(
+            "stage_max_bytes",
+            "stage cap receipt must name the global registry variable",
+            journal_seq=chosen.journal_seq,
+        )
+    parsed = resolve_artifact_stage_max_bytes(body.get("value"))
     if is_refusal(parsed):
         return parsed
     return Ok[int | None](parsed.value)

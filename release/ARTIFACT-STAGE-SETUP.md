@@ -15,10 +15,12 @@ The command uses the existing loopback host-control channel and current local
 token. It returns the selected `max_bytes`, registry key, writer and
 `journal_seq`. It records `variable.set` through the sole daemon writer.
 Changes require another explicit command. Stop/start on the same root restores
-the latest journaled cap without another configuration receipt. Local setup
-files cannot override it. No cap field is added to `operator-config.json`.
-Invalid journaled cap values cause startup refusal; they do not select a default
-or silently reuse an older value. Zero permits only complete empty uploads.
+the cap in the highest authoritative `journal_seq` without another
+configuration receipt. Clock rollback or equal timestamps cannot revert it.
+Local setup files cannot override it. No cap field is added to `operator-config.json`.
+The selected receipt must name this global registry variable with an empty
+scope path. Invalid latest values or receipt metadata cause startup refusal;
+they do not select a default or silently reuse an older value. Zero permits only complete empty uploads.
 
 Boolean, negative, fractional and string values refuse at the host-control/API
 boundary. CLI arguments are parsed as integer text. Unknown targets and extra

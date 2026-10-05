@@ -10,6 +10,7 @@ import struct
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 from qma.core.vocabulary.enums import ArtifactCompleteness
@@ -20,6 +21,7 @@ from qma.daemon.artifacts import (
     handle_stage_artifact_put,
 )
 from qma.daemon.host_control import host_control_call
+from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.journal.variables import (
     ARTIFACT_STAGE_MAX_BYTES_KEY,
     ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
@@ -31,9 +33,11 @@ from qma.daemon.process import DaemonProcess
 from qma.wire.auth import format_pairing_authorization
 from qma.wire.initialize import PAIRING_CAPABILITY, WIRE_PROTOCOL_VERSION
 from qma.wire.stage_artifact import STAGE_ARTIFACT_CAPABILITY, STAGE_ARTIFACT_HTTP_PATH
-from qmf.core import Result, is_ok, is_refusal
+from qmf.core import Instant, Ok, Result, is_ok, is_refusal
 from qmf.core.fingerprint import fingerprint_bytes
 from qmf.core.refusal import RefusalCategory
+from qmf.data.store.journal import JournalStore
+from qmf.data.store.refusals import storage_failure
 
 _ORIGIN = "http://127.0.0.1:5173"
 _FIXTURE_TTL = "PT15M"
@@ -992,3 +996,209 @@ def test_zero_and_operator_only_registry_boundary(tmp_path: Path) -> None:
         _assert_cap(reopened, 0)
     finally:
         reopened.close()
+
+
+def _fixture_wall_now(nanoseconds: int) -> Ok[Instant]:
+    instant = Instant.try_create(nanoseconds)
+    assert is_ok(instant)
+    return Ok(instant.value)
+
+
+@pytest.mark.parametrize(
+    "times",
+    [
+        (200_000_000_000, 100_000_000_000, 50_000_000_000),
+        (200_000_000_000, 200_000_000_000, 200_000_000_000),
+    ],
+)
+def test_cap_restart_uses_journal_sequence_across_clock_steps(
+    tmp_path: Path, times: tuple[int, int, int]
+) -> None:
+    process = _compose(tmp_path, boot="cap-clock-order")
+    try:
+        for value, wall in zip((16, 8), times[:2], strict=True):
+            with patch.object(InjectedUtcClock, "wall_now", return_value=_fixture_wall_now(wall)):
+                assert is_ok(process.configure_artifact_stage_max_bytes(value))
+        _assert_cap(process, 8)
+        before = _cap_receipts(process)
+    finally:
+        process.close()
+    reopened = _compose(tmp_path, boot="cap-clock-reopen")
+    try:
+        _assert_cap(reopened, 8)
+        assert _cap_receipts(reopened) == before
+        with patch.object(InjectedUtcClock, "wall_now", return_value=_fixture_wall_now(times[2])):
+            assert is_ok(reopened.configure_artifact_stage_max_bytes(0))
+        before_zero = _cap_receipts(reopened)
+        rows = reopened.journal.read_events()
+        assert is_ok(rows)
+        caps = [
+            e
+            for e in rows.value
+            if e.event == "variable.set" and e.payload.get("name") == ARTIFACT_STAGE_MAX_BYTES_KEY
+        ]
+        assert [e.recorded_at for e in caps] == list(times)
+        assert [e.journal_seq for e in caps] == sorted(e.journal_seq for e in caps)
+    finally:
+        reopened.close()
+    zero = _compose(tmp_path, boot="cap-clock-zero")
+    try:
+        _assert_cap(zero, 0)
+        assert _cap_receipts(zero) == before_zero
+    finally:
+        zero.close()
+
+
+@pytest.mark.parametrize("value", [True, -1, "16"])
+@pytest.mark.parametrize("latest_wall", [100_000_000_000, 200_000_000_000])
+def test_invalid_highest_sequence_cap_refuses_repeat_restart(
+    tmp_path: Path, value: object, latest_wall: int
+) -> None:
+    process = _compose(tmp_path, boot="cap-clock-invalid")
+    try:
+        with patch.object(
+            InjectedUtcClock, "wall_now", return_value=_fixture_wall_now(200_000_000_000)
+        ):
+            assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        with patch.object(
+            InjectedUtcClock, "wall_now", return_value=_fixture_wall_now(latest_wall)
+        ):
+            assert is_ok(
+                process.variables.variable_set(
+                    ARTIFACT_STAGE_MAX_BYTES_KEY,
+                    value,
+                    principal_class="operator",
+                    journal=process.journal,
+                )
+            )
+        assert is_refusal(process.variables.artifact_stage_max_bytes())
+    finally:
+        process.close()
+    for _ in range(2):
+        result = DaemonProcess.compose(
+            tmp_path,
+            machine="test-host",
+            boot_epoch_id="invalid-retry",
+            bind_port=0,
+            plugin_load_configs=_seed_configs(tmp_path),
+        )
+        assert is_refusal(result) and result.category is RefusalCategory.INVALID_INPUT
+        assert result.context["registry_key"] == ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY
+
+
+@pytest.mark.parametrize(
+    "field,bad",
+    [("scope", "desk"), ("home", "record"), ("registry_key", "registry:other"), ("name", "other")],
+)
+def test_selected_cap_receipt_metadata_cannot_restore_global_value(
+    tmp_path: Path, field: str, bad: str
+) -> None:
+    process = _compose(tmp_path, boot="cap-metadata")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        payload: dict[str, object] = {
+            "name": ARTIFACT_STAGE_MAX_BYTES_KEY,
+            "registry_key": ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
+            "value": 8,
+            "home": "registry",
+            "scope": "global",
+        }
+        payload[field] = bad
+        assert is_ok(process.journal.append_event("variable.set", payload=payload))
+        assert is_refusal(process.variables.restore_artifact_stage_max_bytes(process.journal))
+        _assert_cap(process, 16)
+    finally:
+        process.close()
+
+
+def test_scoped_cap_receipt_cannot_restore_global_value(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="cap-wrong-scope")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        assert is_ok(
+            process.variables.variable_set(
+                ARTIFACT_STAGE_MAX_BYTES_KEY,
+                8,
+                principal_class="operator",
+                journal=process.journal,
+                scope_path=[{"kind": "desk", "id": "test-desk"}],
+            )
+        )
+        assert is_refusal(process.variables.restore_artifact_stage_max_bytes(process.journal))
+    finally:
+        process.close()
+    result = DaemonProcess.compose(
+        tmp_path,
+        machine="test-host",
+        boot_epoch_id="scope-reopen",
+        bind_port=0,
+        plugin_load_configs=_seed_configs(tmp_path),
+    )
+    assert is_refusal(result)
+
+
+@pytest.mark.parametrize(
+    "field,bad",
+    [("payload", []), ("scope_path", "invalid"), ("journal_seq", True), ("journal_seq", 0)],
+)
+def test_malformed_cap_event_read_refuses_without_registry_mutation(
+    tmp_path: Path, field: str, bad: object
+) -> None:
+    process = _compose(tmp_path, boot="cap-corrupt-shape")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        rows = process.journal.read_all()
+        assert is_ok(rows)
+        altered = [dict(row) for row in rows.value]
+        altered[-1][field] = bad
+        with patch.object(JournalStore, "read_stream", return_value=Ok(altered)):
+            assert is_refusal(process.variables.restore_artifact_stage_max_bytes(process.journal))
+        _assert_cap(process, 16)
+    finally:
+        process.close()
+
+
+def test_cap_restore_propagates_journal_storage_refusal(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="cap-read-failure")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        refusal = storage_failure("injected unreadable journal")
+        with patch.object(JournalStore, "read_stream", return_value=refusal):
+            assert process.variables.restore_artifact_stage_max_bytes(process.journal) == refusal
+        _assert_cap(process, 16)
+    finally:
+        process.close()
+
+
+def test_stage_cap_storage_append_refusal_preserves_value_receipts_and_sequence(
+    tmp_path: Path,
+) -> None:
+    process = _compose(tmp_path, boot="cap-append-failure")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        before = _cap_receipts(process)
+        next_sequence = process.journal.next_journal_seq
+        refusal = storage_failure("injected append storage failure")
+        with patch.object(JournalStore, "append", return_value=refusal):
+            assert process.configure_artifact_stage_max_bytes(8) == refusal
+        _assert_cap(process, 16)
+        assert _cap_receipts(process) == before
+        assert process.journal.next_journal_seq == next_sequence
+    finally:
+        process.close()
+
+
+def test_duplicate_cap_journal_sequence_refuses_ambiguous_replay(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="cap-duplicate-sequence")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        assert is_ok(process.configure_artifact_stage_max_bytes(8))
+        rows = process.journal.read_all()
+        assert is_ok(rows)
+        altered = [dict(row) for row in rows.value]
+        altered[-1]["journal_seq"] = altered[-2]["journal_seq"]
+        with patch.object(JournalStore, "read_stream", return_value=Ok(altered)):
+            assert is_refusal(process.variables.restore_artifact_stage_max_bytes(process.journal))
+        _assert_cap(process, 8)
+    finally:
+        process.close()
