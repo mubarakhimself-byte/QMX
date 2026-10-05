@@ -112,3 +112,47 @@ def test_discovery_negotiation_does_not_enable_false_or_nonboolean_requests(
     assert is_ok(negotiated)
     assert negotiated.value.capabilities.get("facade_search") is not True
     assert negotiated.value.capabilities.get("invoke_contribution_pin") is not True
+
+
+@pytest.mark.parametrize("declaration", [None, {}], ids=["omitted", "empty"])
+@pytest.mark.parametrize("advertise_pairing", [False, True])
+def test_no_discovery_default_admission_or_metadata(
+    declaration: object,
+    advertise_pairing: bool,
+) -> None:
+    params = InitializeParams.try_create(
+        protocol_version="1.0.0",
+        client_producer_id="client-default-ma01",
+        capabilities=declaration,
+    )
+    assert is_ok(params)
+    result = negotiate_initialize(
+        params.value,
+        advertise_pairing=advertise_pairing,
+        server_capabilities={
+            "list_installed_plugins": True,
+            "facade_search": True,
+            "facade_get": True,
+            "invoke_contribution_pin": True,
+            "get_instance_health": False,
+            "discovery_hit_classes": ["contribution"],
+            "legacy_query": True,
+        },
+    )
+    assert is_ok(result)
+    assert all(
+        name not in result.value.capabilities
+        for name in (
+            "list_installed_plugins",
+            "facade_search",
+            "facade_get",
+            "invoke_contribution_pin",
+            "get_instance_health",
+            "discovery_hit_classes",
+        )
+    )
+    assert result.value.capabilities["legacy_query"] is True
+    if advertise_pairing:
+        assert result.value.capabilities["list_mailbox"] is True
+        assert result.value.capabilities["get_pack_ui_request"] is True
+        assert "get_editor_draft_head" not in result.value.capabilities

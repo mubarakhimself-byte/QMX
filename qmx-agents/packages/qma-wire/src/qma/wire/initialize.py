@@ -514,12 +514,13 @@ def negotiate_initialize(
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
-    # Discovery opt-in is a strict boolean; a false/nonboolean request cannot
-    # acquire a mounted read merely by naming its capability.
+    # Discovery always requires explicit opt-in, including empty/default maps.
+    # Preserve the accepted base's defaults for unrelated legacy capabilities.
     for name in DISCOVERY_SERVER_OWNED_KEYS - {"discovery_hit_classes"}:
-        if params.capabilities and params.capabilities.get(name) is not True:
+        if params.capabilities.get(name) is not True:
             negotiated.pop(name, None)
 
+    negotiated.pop("discovery_hit_classes", None)
     # Partial facade adoption must always carry its host-supported hit classes.
     if "discovery_hit_classes" in caps and any(
         negotiated.get(name) is True for name in DISCOVERY_READ_CAPABILITIES

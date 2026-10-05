@@ -1,8 +1,10 @@
 # MA-01: installed contribution discovery contract
 
 Backend implementation candidate from `af43324676357e5932a9c1c9b10c78465bba460f`.
-Claude owns UI wiring. Focused source and serial installed acceptance pass;
-independent parent review remains required before integration.
+Claude owns UI wiring. The original packet's installed evidence is retained.
+MA01-R1 corrects omitted/empty capability negotiation. Source checks and
+serial installed replay of this correction pass. Independent parent review
+remains required before integration.
 
 ## Transport and negotiation
 
@@ -15,6 +17,18 @@ Request `list_installed_plugins`, `facade_search`, and `facade_get` capability
 keys with literal `true`. Request `invoke_contribution_pin: true` when using
 pins at invocation. The host supplies `discovery_hit_classes: ["contribution"]`
 whenever a discovery method is negotiated. Client claims cannot widen it.
+Omitting the capability map or sending `{}` enables none of these new reads
+or the invocation-pin feature. Each requires its own literal `true`; false,
+integer/string values, and metadata-only declarations grant no discovery read.
+When no discovery read is negotiated, `discovery_hit_classes` is omitted,
+including when the client requests that metadata or only the pin feature.
+Existing default legacy queries retain the accepted base's behavior.
+
+The existing initialize parser rejects nonobject capability declarations and
+null member values. Its existing `capabilities: null` handling is equivalent
+to an absent map; it also enables no discovery. A refused initialize leaves
+all queries behind the existing initialization gate. No parser grammar or
+legacy query gate is broadened by this repair.
 `get_instance_health` is false/omitted and querying it returns
 `policy rejection` / `query_unavailable`. No real scoped health owner snapshot
 is composed, so enabled publication is never represented as readiness.
@@ -127,12 +141,13 @@ Focused tests cover actual bundled roster metadata, literal empty result,
 unchanged read journal/continuity, no minted grant IDs, dependency disable,
 full identity mismatch, app-use scope, exact restart identities/revisions,
 capability false/echo protection, closed inputs and invocation-time stale pin.
-Final source evidence: **338 wire tests and 57 selected daemon tests pass**;
+Original packet source evidence (`f9fdacac`): **338 wire tests and 57 selected
+daemon tests passed**;
 canonical nested lint/format, strict cross-system types (zero errors), citation,
 registry, inventory and diff checks pass. Strict documentation lint still has
 17 inherited stale/provisional-document errors; no MA-01 document adds one.
 
-Serial installed acceptance uses 14 noneditable offline wheels, an isolated
+Original packet serial installed acceptance used 14 noneditable offline wheels, an isolated
 interpreter outside checkout, the production paired loopback listener and real
 bundled packs. It confirms all three reads, exact contribution resolution,
 Origin/proof refusals, app scope, missing owners, read purity, disabled and stale
@@ -153,6 +168,31 @@ included. All owned test hosts/listeners are stopped. No connected UI or
 provider proof is claimed. Full logs, captured JSON, source/wheel/installed
 hash verification and retained failed harness attempts are in the private
 MA-01 acceptance report supplied to the parent.
+
+MA01-R1 source verification passes **342 wire tests and 32 MA-01 daemon tests**,
+plus nested lint/format, strict types (zero errors/warnings) and citation checks.
+Strict documentation debt remains the accepted base's identical 17 errors.
+Real-dispatch cases cover absent, empty, false, true, partial, nonboolean,
+metadata-only and malformed declarations. They
+check advertised capabilities, all three query outcomes, default mailbox and
+PackUiRequest compatibility, explicit editor-head admission, and unchanged
+journal/roster state. The repair report records its separate focused evidence.
+
+Revised installed proof rebuilds qma-wire in a separate 14-wheel noneditable
+D: environment. An external paired client replays all 13 declaration cases
+through the installed daemon entrypoint, then repeats after stop/restart with
+the same pairing proof and exact identities/revisions. Capability maps match
+captured source dispatch; all three read outcomes/refusals match. An explicit
+legacy-only request additionally confirms no discovery enablement and retains
+HTTP mailbox/PackUiRequest success plus explicit missing-editor-head refusal.
+Absent/empty maps retain default mailbox and PackUiRequest HTTP reads; the
+existing editor-head opt-in gate still refuses them. Journal events stay
+unchanged across each matrix. Both hosts exit cleanly and the serial slot is
+released. The revised 14 wheels / 832 Python+JSON members match source and
+installed bytes, with the exact pinned 95-package runtime inventory. Startup
+changes remain separate; direct-entrypoint evidence does not certify fresh
+QMB-spawn readiness. Original installed evidence is retained separately and
+is not substituted for this corrected negotiation replay.
 
 MA-02 onward remains unsupported. No UI, provider call, credential enrollment,
 deployment or publication is included. Retain inherited aggregate coverage
