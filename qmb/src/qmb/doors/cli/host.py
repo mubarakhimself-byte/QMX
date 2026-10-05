@@ -493,12 +493,24 @@ def _pid_is_live(pid: int) -> bool:
     if pid <= 0:
         return False
     if os.name == "nt":
-        access = 0x1000  # PROCESS_QUERY_LIMITED_INFORMATION
-        handle = ctypes.windll.kernel32.OpenProcess(access, False, pid)
-        if handle:
-            ctypes.windll.kernel32.CloseHandle(handle)
-            return True
-        return False
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        open_process = kernel32.OpenProcess
+        open_process.restype = ctypes.c_void_p
+        open_process.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        # Synchronization tests the process object itself, including exit code 259.
+        handle = open_process(0x1000 | 0x00100000, False, pid)
+        if not handle:
+            # Only a confirmed nonexistent PID is stale; denied/unknown stays held.
+            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER
+        wait = kernel32.WaitForSingleObject
+        wait.restype = ctypes.c_uint32
+        wait.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        close = kernel32.CloseHandle
+        close.argtypes = [ctypes.c_void_p]
+        try:
+            return wait(handle, 0) != 0  # WAIT_OBJECT_0 means the process exited.
+        finally:
+            close(handle)
     try:
         os.kill(pid, 0)
     except (OSError, ProcessLookupError):
@@ -531,11 +543,11 @@ def _live_lock_pid(root: Path) -> int | None:
     return None
 
 
-def _drop_stale_lock(root: Path) -> None:
+def _drop_stale_lock(root: Path, *, expected_pid: int | None = None) -> None:
     pid = _read_lock_pid(root)
-    if pid is None:
+    if pid is None or (expected_pid is not None and pid != expected_pid):
         return
-    if _pid_is_live(pid):
+    if _pid_is_live(pid) or _read_lock_pid(root) != pid:
         return
     path = root / DAEMON_LOCK_NAME
     try:
@@ -612,7 +624,11 @@ def _host_control_call(
     *,
     timeout_s: float = 2.0,
     fields: Mapping[str, object] | None = None,
+    deadline: float | None = None,
 ) -> Result[Mapping[str, object]]:
+    # Startup probes have one absolute deadline, rather than a timeout per byte.
+    if deadline is not None:
+        deadline = min(deadline, time.monotonic() + timeout_s)
     token = _read_token(root)
     if not isinstance(token, Ok):
         return token
@@ -628,14 +644,20 @@ def _host_control_call(
                 continue
             request[name] = item
     try:
-        with socket.create_connection((host, port), timeout=timeout_s) as sock:
-            sock.sendall(_encode_frame(request))
-            header = _recv_exact(sock, 4)
+        encoded_request = _encode_frame(request)
+        connect_timeout = timeout_s if deadline is None else _remaining_time(deadline)
+        with socket.create_connection((host, port), timeout=connect_timeout) as sock:
+            if deadline is not None:
+                sock.settimeout(_remaining_time(deadline))
+            sock.sendall(encoded_request)
+            header = _recv_exact(sock, 4, deadline=deadline)
             size = int.from_bytes(header, "big")
             if size < 1 or size > _MAX_FRAME:
                 return storage("host_control", "host-control response frame refused", size=size)
-            body = _recv_exact(sock, size)
+            body = _recv_exact(sock, size, deadline=deadline)
             parsed: object = json.loads(body.decode("utf-8"))
+            if deadline is not None:
+                _remaining_time(deadline)
     except (OSError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
         return storage("host_control", f"host-control call failed: {exc}", verb=verb)
     if not isinstance(parsed, dict):
@@ -644,13 +666,26 @@ def _host_control_call(
     redacted = redact_host_surface(payload)
     if not isinstance(redacted, dict):
         return invalid("host_control", "redacted host-control response must be an object")
+    if deadline is not None and time.monotonic() >= deadline:
+        return storage("host_control", "host-control readiness deadline expired", verb=verb)
     return Ok(cast("dict[str, object]", redacted))
 
 
-def _recv_exact(sock: socket.socket, size: int) -> bytes:
+def _remaining_time(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("host-control readiness deadline expired")
+    return remaining
+
+
+def _recv_exact(sock: socket.socket, size: int, *, deadline: float | None = None) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
+        if deadline is not None:
+            sock.settimeout(_remaining_time(deadline))
         piece = sock.recv(size - len(chunks))
+        if deadline is not None:
+            _remaining_time(deadline)
         if not piece:
             raise OSError("host-control connection closed")
         chunks.extend(piece)
@@ -776,11 +811,11 @@ def _wait_attempts(value: object) -> Result[int]:
     return Ok(value)
 
 
-def _pause(sleeper: object) -> None:
+def _pause(sleeper: object, seconds: float = 0.05) -> None:
     if callable(sleeper):
-        sleeper(0.05)
+        sleeper(seconds)
         return
-    time.sleep(0.05)
+    time.sleep(seconds)
 
 
 def _id_list(value: object) -> list[object]:
@@ -791,11 +826,13 @@ def _id_list(value: object) -> list[object]:
     return []
 
 
-def _ready(root: Path) -> bool:
+def _ready(root: Path, *, deadline: float | None = None) -> bool:
     pid = _live_lock_pid(root)
     if pid is None:
         return False
-    reply = _host_control_call(root, "status", timeout_s=0.05)
+    if deadline is None:
+        deadline = time.monotonic() + 0.05
+    reply = _host_control_call(root, "status", timeout_s=0.05, deadline=deadline)
     if not isinstance(reply, Ok) or reply.value.get("ok") is not True:
         return False
     status = reply.value.get("status")
@@ -817,7 +854,9 @@ def _cleanup_start_child(proc: subprocess.Popen[bytes], root: Path) -> str | Non
             proc.wait(timeout=5)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"startup child cleanup failed: {exc}"
-    _drop_stale_lock(root)
+    _drop_stale_lock(root, expected_pid=proc.pid)
+    if _read_lock_pid(root) == proc.pid:
+        return "startup child exited but its writer lock could not be released"
     return None
 
 
@@ -931,9 +970,11 @@ def invoke_host_start(
     cleanup_error = None
     try:
         for _ in range(attempts):
+            if time.monotonic() >= deadline:
+                break
             if owned_child is not None and owned_child.poll() is not None:
                 break
-            if _ready(target):
+            if _ready(target, deadline=deadline) and time.monotonic() < deadline:
                 ready_pid = _live_lock_pid(target)
                 started: dict[str, object] = {
                     "verb": "host.start",
@@ -947,12 +988,16 @@ def invoke_host_start(
                     "starts_qmn": START_STARTS_QMN,
                     "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
                 }
+                ready_report = cast("Mapping[str, object]", redact_host_surface(started))
+                if time.monotonic() >= deadline:
+                    break
                 startup_ready = True
-                return Ok(cast("Mapping[str, object]", redact_host_surface(started)))
-            if time.monotonic() >= deadline:
+                return Ok(ready_report)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
             if attempts > 1:
-                _pause(sleeper)
+                _pause(sleeper, min(0.05, remaining))
     finally:
         if not startup_ready and owned_child is not None:
             cleanup_error = _cleanup_start_child(owned_child, target)
