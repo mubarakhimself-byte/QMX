@@ -1,17 +1,24 @@
-"""Characterize the missing operator-bound ATC Study CLI ingress.
+"""Characterize supported Study ingress and refusal of the earlier partial descriptor.
 
-The test's private descriptor shape composes existing typed Study constructors;
-it does not add a public operation, QMA payload field, or financial grammar.
+The checkpoint's backtest request is retained as a refusal control. Complete
+recorded Study inputs use the existing optimize door; no runtime alias is added.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import TypeVar
 
+import pytest
 from click.testing import CliRunner
+from operator_study_fixture_support import (  # pyright: ignore[reportMissingTypeStubs]
+    prepare_study_inputs,
+    write_study_binding,
+)
 from qmb.doors.cli import main
+from qmb.host.qma_cli import QmaBacktestContext
 from qmb.optimize import (
     AlternativeParameterBinding,
     AlternativeStudyObjective,
@@ -22,6 +29,19 @@ from qmf.core import Fingerprint, UnitKind, fingerprint, is_ok
 from qmf.core.refusal import Result
 
 T = TypeVar("T")
+
+
+@pytest.fixture(autouse=True)
+def _forbid_study_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected_execution(*args: object, **kwargs: object) -> object:
+        raise AssertionError("preflight must not execute or verify a Study")
+
+    monkeypatch.setattr(
+        "qmb.host.operator_study_replay.run_operator_alternative_study", unexpected_execution
+    )
+    monkeypatch.setattr(
+        "qmb.host.operator_study_replay.verify_operator_alternative_study", unexpected_execution
+    )
 
 
 def _ok(result: Result[T]) -> T:
@@ -101,12 +121,8 @@ def _qma_payload() -> dict[str, object]:
     }
 
 
-def test_backtest_preflight_selects_operator_bound_alternative_study_descriptor(
-    tmp_path: Path,
-) -> None:
-    """Expected to fail until existing backtest.run resolves this private Study mode."""
-    payload = _qma_payload()
-    runtime_root = tmp_path / "operator-runtime"
+def _write_legacy_study_binding(runtime_root: Path, payload: dict[str, object]) -> None:
+    """Keep the old checkpoint descriptor, including its incomplete runtime binding."""
     descriptor_dir = (
         runtime_root
         / str(payload["experiment_spec_fp1"]).replace(":", "-")
@@ -133,7 +149,10 @@ def test_backtest_preflight_selects_operator_bound_alternative_study_descriptor(
     (descriptor_dir / "operator-alternative-study-binding.json").write_text(
         json.dumps(body, sort_keys=True), encoding="utf-8"
     )
-    environment = {
+
+
+def _environment(payload: dict[str, object], runtime_root: Path) -> dict[str, str]:
+    return {
         "QMA_QMB_DOOR": "cli",
         "QMA_QMB_DOOR_PAYLOAD": json.dumps(payload),
         "QMA_QMB_JOB_ID": str(payload["job_id"]),
@@ -147,10 +166,96 @@ def test_backtest_preflight_selects_operator_bound_alternative_study_descriptor(
         "QMB_REPLAY_RUNTIME_ROOT": str(runtime_root),
     }
 
-    result = CliRunner().invoke(main, ["backtest", "run"], env=environment)
+
+def _payload_for(context: QmaBacktestContext) -> dict[str, object]:
+    payload = _qma_payload()
+    payload.update(
+        job_id=context.job_id,
+        attempt_id=context.attempt_id,
+        experiment_spec_fp1=context.experiment_spec_fp1.value,
+        evidence_ref=context.evidence_ref.value,
+        split_manifest_fp1=context.split_manifest_fp1.value,
+        environment_ref=context.environment_ref,
+        occupancy_key=context.occupancy_key,
+        command=context.command,
+    )
+    return payload
+
+
+def _files(root: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_backtest_preflight_refuses_checkpoint_study_descriptor(tmp_path: Path) -> None:
+    """Study is an optimize invocation, never an implicit backtest alias."""
+    payload = _qma_payload()
+    runtime = tmp_path / "operator-runtime"
+    _write_legacy_study_binding(runtime, payload)
+    before = _files(tmp_path)
+    result = CliRunner().invoke(main, ["backtest", "run"], env=_environment(payload, runtime))
+    assert result.exit_code == 1, result.output
+    refusal = json.loads(result.stderr)
+    assert refusal["category"] == "policy rejection"
+    assert refusal["context"]["field"] == "command"
+    assert (
+        refusal["context"]["reason"]
+        == "optimize selects Study; backtest selects Book or Alternative"
+    )
+    assert _files(tmp_path) == before
+
+
+def test_optimize_preflight_refuses_checkpoint_partial_descriptor(tmp_path: Path) -> None:
+    """Changing the command does not confer complete operator-binding authority."""
+    payload = _qma_payload()
+    payload["command"] = "optimize.run"
+    runtime = tmp_path / "operator-runtime"
+    _write_legacy_study_binding(runtime, payload)
+    before = _files(tmp_path)
+    result = CliRunner().invoke(main, ["optimize", "run"], env=_environment(payload, runtime))
+    assert result.exit_code == 1, result.output
+    refusal = json.loads(result.stderr)
+    assert refusal["context"]["field"] == "operator_binding"
+    assert refusal["context"]["reason"] == "Study descriptor has exactly its versioned fields"
+    assert _files(tmp_path) == before
+
+
+def test_optimize_preflight_selects_complete_operator_study_descriptor(tmp_path: Path) -> None:
+    inputs = prepare_study_inputs(tmp_path / "recorded")
+    runtime = tmp_path / "operator-runtime"
+    path, inputs, plan = write_study_binding(runtime, inputs)
+    payload = _payload_for(inputs.context)
+    body = json.loads(path.read_text())
+    before = _files(tmp_path)
+    result = CliRunner().invoke(main, ["optimize", "run"], env=_environment(payload, runtime))
     assert result.exit_code == 0, result.output
     preflight = json.loads(result.stdout)
     assert preflight["class"] == "qmb-runtime-preflight-v1"
-    assert preflight["composition_class"] == "alternative"
+    assert preflight["composition_class"] == "alternative-study"
     assert preflight["mints_ct32"] is False
     assert preflight["operator_descriptor_fp1"] == body["descriptor_fp1"]
+    assert preflight["study_fp1"] == plan.fingerprint.value
+    assert preflight["generation_count"] == plan.generation_count
+    assert preflight["batch_size"] == plan.batch_size
+    assert not inputs.terminal_store.path.exists()
+    assert _files(tmp_path) == before
+
+
+def test_backtest_preflight_refuses_complete_study_descriptor(tmp_path: Path) -> None:
+    """Even complete recorded Study inputs cannot cross the command boundary."""
+    inputs = prepare_study_inputs(tmp_path / "recorded")
+    runtime = tmp_path / "operator-runtime"
+    _, inputs, _ = write_study_binding(runtime, inputs)
+    payload = _payload_for(inputs.context)
+    payload["command"] = "backtest.run"
+    before = _files(tmp_path)
+    result = CliRunner().invoke(main, ["backtest", "run"], env=_environment(payload, runtime))
+    assert result.exit_code == 1, result.output
+    refusal = json.loads(result.stderr)
+    assert refusal["category"] == "policy rejection"
+    assert refusal["context"]["field"] == "command"
+    assert not inputs.terminal_store.path.exists()
+    assert _files(tmp_path) == before
