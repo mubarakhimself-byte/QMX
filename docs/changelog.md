@@ -12,6 +12,16 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-05 - MA02 candidate persistence proposal
+
+[ADR-0034](decisions/ADR-0034-miniapp-candidate-persistence.md) records reuse of
+core/wire/daemon and the named app_candidate_state fold on the existing writer.
+The implementation adds immutable candidate versions, authoring/scope CAS,
+durable receipts and full-history restart validation. Updated core, wire,
+daemon, index and release contract/capability/next-task handoff. It remains a
+branch proposal for independent parent review; MA03 validation and MA04
+publication are not shipped. No historical DEC or corpus status is superseded.
+
 ## 2026-10-05 - MA01 handoff boundary clarification
 
 Independent installed review of the combined candidate confirms that supplied

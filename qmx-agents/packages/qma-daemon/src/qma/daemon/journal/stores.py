@@ -99,6 +99,8 @@ CLOSED_PROJECTIONS: Final[frozenset[str]] = frozenset(
         "artifact_transfer_ticket",
         # AM-03 named journal projection; not an independent store or SQLite class.
         "editor_draft_head",
+        # MA02 named projection on existing SQLite class (ADR-0034).
+        "app_candidate_state",
     }
 )
 

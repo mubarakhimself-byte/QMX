@@ -18,6 +18,17 @@ stale_after: 90d
 
 The wire is the decoupling boundary: commands mutate and are acked immediately with side effects settling asynchronously, queries read durable state, and a durable event stream carries progress, so closing a client never stops an agent and an overnight agent need not know a client exists (DEC-0304). It is the sole compatibility authority — additive-only within a major, unknown types and fields ignored by older clients, deprecations living a configured number of minors then dropped (`registry:wire.deprecation_minors`) — and it binds NOW as specified chrome: the 2026-09-25 Svelte host (DEC-0509), while `qma-ui-contract` types beyond a stub remain `GAP-0114` (DEC-0333) (DEC-0509). Live CT-40 serving and the Svelte host are absent at `integration@34c148be` (DEC-0507). Ratification fixes the contract only; no implementation, credential, order or promotion authority is conferred by this document — that arrives solely through the factory pipeline (DEC-0329).
 
+### MA02 implementation proposal (2026-10-05)
+
+The additive CT-40 names are save_app_candidate, get_app_candidate and
+get_app_candidate_history, each enabled only by negotiated literal true.
+[ADR-0034](../decisions/ADR-0034-miniapp-candidate-persistence.md) records the
+named amendment; [the exact contract](../../release/MA02-CANDIDATE-CONTRACT.md)
+defines closed params, immutable versions, one-version history pages, scoped
+reads, stale CAS refusals and durable producer/request-id receipt replay.
+No candidate HTTP query, validation, publication or invocation is mounted.
+The inherited per-socket CT-40 and latest-per-pairing HTTP maps remain distinct.
+
 ## Authority boundary
 
 May: carry the wire envelope — `v`, `type`, `id`, `producer_id`, `correlation_id`, `scope_path`, an optional `seq` and `payload` — with JSON canonical per `fp1` and every command, query and event family described by JSON Schema and versioned by a semver `protocolVersion` (DEC-0304); carry JSON-RPC 2.0 over WebSocket for commands and events plus HTTP GET for queries, and the MCP-style `initialize` handshake that negotiates `protocolVersion` and capabilities and assigns each connection its `producer_id` (DEC-0304); seed and hold the closed-and-addable registry of the packet's 26 nouns — 9 commands, 7 queries and 10 `noun.verb` events — as the wire vocabulary (DEC-0304) (DEC-0333); carry `wire.attach(scope, since_seq)` / `wire.detach` as client-only scope subscriptions and the read-only session replay `wire.attach(since_seq=0)` over the durable event stream (DEC-0304); carry the `host_request` bridge family the RLM kernel uses, whose verbs each map to exactly one daemon-owned primitive (DEC-0313); describe the idempotency pair `producer_id` plus `id` and the daemon's dedup cursor window `registry:wire.dedup_window` (DEC-0304); carry the `correlation_missing` evidence carve-out (DEC-0304); enforce, as schema, that every authenticated connection carries exactly one principal class and that the human-gate command families are answerable only by an `operator` principal (DEC-0323); and be the single compatibility authority with additive-only-within-a-major evolution and `registry:wire.deprecation_minors` deprecation windows (DEC-0304).

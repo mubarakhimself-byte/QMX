@@ -29,6 +29,9 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 
 ## Architecture
 
+- [MA02 candidate persistence proposal](decisions/ADR-0034-miniapp-candidate-persistence.md)
+  records data-only candidate/version ownership, CAS, receipts and recovery.
+
 - [Mature agent runtime proposal](decisions/ADR-0028-mature-agent-runtime.md) records
   library-owned agent/workflow cursors, scoped memory, explicit resume and limits.
 

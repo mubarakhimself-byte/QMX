@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmx.local/qma-wire/schemas/app_candidate_content.v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "qma.miniapp.candidate-content.v1"
+    },
+    "kind": {
+      "const": "data-only"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description"
+      ]
+    },
+    "composition_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fp1": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^fp1:sha256:[0-9a-f]{64}$"
+        },
+        "byte_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "media_type": {
+          "const": "application/json"
+        }
+      },
+      "required": [
+        "fp1",
+        "byte_count",
+        "media_type"
+      ]
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fp1": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^fp1:sha256:[0-9a-f]{64}$"
+          },
+          "byte_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "fp1",
+          "byte_count",
+          "media_type"
+        ]
+      }
+    },
+    "asset_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fp1": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^fp1:sha256:[0-9a-f]{64}$"
+          },
+          "byte_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "fp1",
+          "byte_count",
+          "media_type"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "kind",
+    "metadata",
+    "composition_ref",
+    "source_refs",
+    "asset_refs"
+  ]
+}

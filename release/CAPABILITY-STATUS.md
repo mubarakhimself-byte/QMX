@@ -5,8 +5,9 @@ plus reviewed startup `c7f0ef603dc56b2b13719c5d9ecd51c240204649` and reviewed
 MA01 `8465c03f0ec168e177ba57860f19c869748c0db1`. Code composition is
 `7039fbde1bd749f5aaceac1c14df6afe611c22c2`; the delivery SOURCE-REF.json and
 Git bundle identify the final commit including these handoff documents.
-Independent review accepts the b4b0571a runtime as the MA02 base. Review of
-this F1/F2 documentation successor remains pending. This ledger records capability
+Independent review accepts the b4b0571a runtime as the MA02 base. The F1/F2 Markdown-only successor 9843b5bb is independently accepted and
+incorporated here. MA02 implementation on this isolated branch awaits parent
+review. This ledger records capability
 status; historical acceptance records retain their original scope.
 
 | Capability | Mounted behavior | Candidate verification |
@@ -23,8 +24,8 @@ status; historical acceptance records retain their original scope.
 | cancel_job | Existing originating-session command and durable handle fences | Existing source regression; new discovery reads create no cancellable job |
 | get_instance_health | False/omitted; no scoped health owner snapshot | Typed query_unavailable; enablement is not health |
 | Artifact/Knowledge discovery | Owner dependencies absent | Typed query_unavailable; staged bytes are not Library discovery |
-| MA02 candidates/version CAS | Not shipped | Next task pointer: MA02-NEXT-TASK.md |
-| MA03 validation / MA04 publish-update-undo / MA05 activity | Not shipped | First data-only milestone remains MA02 then MA03 then MA04 then MA05 |
+| MA02 candidates/version CAS | CT-40 literal-true save/read/history; operator authoring only; immutable fp1/parent CAS, receipt and restart fold on existing writer | Source failures/CAS/authority checks and noneditable installed paired listener/restart; MA02-CANDIDATE-CONTRACT.md; independent review pending |
+| MA03 validation / MA04 publish-update-undo / MA05 activity | Not shipped | Next pointer MA03-NEXT-TASK.md; first data-only milestone still requires MA03 then MA04 then MA05 |
 | MA06 maintenance / MA07 restricted runner / MA08 mutable data / MA09 API | Not shipped | Require their packet-specific ownership and installed acceptance |
 | MA10 executable deployment / MA11 remote / MA12 laptop-off / MA13 custom UI | Not shipped | No deployment, remote, always-on authority or custom renderer proof |
 
@@ -38,7 +39,8 @@ author. Memory admission is not a checkpoint. AgentLedger evidence is not logs.
 Native harness execution is not inference proxy transport. This composition
 does not add any of those capabilities or renew historical proof.
 
-Use [the exact transport/DTO handoff](MA01-DISCOVERY-CONTRACT.md) and
+Use [the discovery handoff](MA01-DISCOVERY-CONTRACT.md),
+[the candidate contract](MA02-CANDIDATE-CONTRACT.md), and
 [artifact setup](ARTIFACT-STAGE-SETUP.md). Exclusions remain: full repository
 suites, aggregate/per-package coverage and mutation gates, inherited 17 strict
 doc errors, inherited QMB format debt, historical actor deadline failures,

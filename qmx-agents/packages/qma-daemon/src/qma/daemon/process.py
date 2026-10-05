@@ -212,6 +212,7 @@ from qma.daemon.sessions.product_session import (
     ProductSessionService,
     accepted_invocation_binding,
 )
+from qma.daemon.staging.app_candidate import AppCandidateService
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.nested import NestedMissionHost
@@ -232,6 +233,7 @@ from qma.wire.agent_request import (
     parse_submit_agent_request,
     require_agent_request_capability,
 )
+from qma.wire.app_candidate import CANDIDATE_CAPABILITIES, CANDIDATE_READS
 from qma.wire.cancel_job import require_cancel_job_capability
 from qma.wire.contribution_pin import parse_contribution_pin
 from qma.wire.discovery_queries import (
@@ -858,6 +860,17 @@ class DaemonProcess:
             authoring_roster_root=self.root / "authoring-pack",
             authoring_lifecycle=self._roster,
         )
+        self._app_candidates = AppCandidateService(
+            journal=journal,
+            sqlite=self.sqlite,
+            artifacts=self._artifacts,
+            sessions=self._product_sessions,
+            instance_exists=lambda instance: any(
+                item.instance_id == instance
+                for key in self._roster.loader.loaded_ids()
+                if (item := self._roster.loader.get(key)) is not None
+            ),
+        )
         self._transfers = TransferTicketStore(
             journal=journal,
             sqlite=substrate.sqlite,
@@ -1092,6 +1105,14 @@ class DaemonProcess:
                 process._journal.close()
                 process._substrate.close()
                 return restored_drafts
+            restored_candidate_sessions = process.product_sessions.restore_from_journal()
+            if is_refusal(restored_candidate_sessions):
+                process._release(release_process_gate=False)
+                return restored_candidate_sessions
+            restored_candidates = process._app_candidates.restore_from_journal()
+            if is_refusal(restored_candidates):
+                process._release(release_process_gate=False)
+                return restored_candidates
             restored_plugin_records = restore_plugin_install_records_projection(
                 process.sqlite,
                 process.journal,
@@ -1481,6 +1502,32 @@ class DaemonProcess:
             return gated
         return DiscoveryQueryService(self._roster.loader, self._discovery_session_scope).query(
             name, args
+        )
+
+    @property
+    def app_candidates(self) -> AppCandidateService:
+        """Existing-owner service for trusted composition and recovery checks."""
+        return self._app_candidates
+
+    def app_candidate_request(
+        self,
+        name: str,
+        args: object,
+        *,
+        operator_principal: object,
+        capabilities: object,
+        producer_id: object = None,
+        request_id: object = None,
+    ) -> Result[Mapping[str, object]]:
+        """MA02 access through existing pairing and session owners."""
+        return self._app_candidates.request(
+            name,
+            args,
+            principal_class=operator_principal,
+            owner_principal=self._operator_principal(),
+            capabilities=capabilities,
+            producer_id=producer_id,
+            request_id=request_id,
         )
 
     def _discovery_capabilities(self) -> dict[str, object]:
@@ -2917,6 +2964,7 @@ class DaemonProcess:
                     or raw_caps.get(CANCEL_JOB_CAPABILITY) is True
                     or any(raw_caps.get(name) is True for name in AGENT_REQUEST_CAPABILITIES)
                     or any(raw_caps.get(name) is True for name in DISCOVERY_READ_CAPABILITIES)
+                    or any(raw_caps.get(name) is True for name in CANDIDATE_CAPABILITIES)
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2926,6 +2974,7 @@ class DaemonProcess:
                 advertise_pairing=advertise,
                 server_capabilities={
                     **self._discovery_capabilities(),
+                    **dict.fromkeys(CANDIDATE_CAPABILITIES, True),
                     **({} if self._agent_requests is None else self._agent_requests.capabilities),
                 },
             )
@@ -2938,6 +2987,26 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method in CANDIDATE_CAPABILITIES:
+            if method in CANDIDATE_READS:
+                gated = connection.require_query_capability(method)
+                if is_refusal(gated):
+                    return _jsonrpc_refusal(req_id, gated)
+            else:
+                command_gate = connection.authorize_command(method)
+                if is_refusal(command_gate):
+                    return _jsonrpc_refusal(req_id, command_gate)
+            result = self.app_candidate_request(
+                cast(str, method),
+                request.get("params"),
+                operator_principal=connection.principal_class,
+                capabilities=connection.capabilities,
+                producer_id=connection.producer_id,
+                request_id=req_id,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value)
         if method in AGENT_REQUEST_CAPABILITIES:
             return self._dispatch_agent_request(connection, request, req_id, cast("str", method))
         if method == WireCommand.SAVE_EDITOR_DRAFT.value:
@@ -4380,6 +4449,16 @@ class DaemonProcess:
         params: Mapping[str, object] = (
             cast("Mapping[str, object]", raw_params) if isinstance(raw_params, Mapping) else {}
         )
+        if any(key in params for key in ("candidate_id", "candidate_revision")):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "invoke_target",
+                    "MA02 candidate data is not runnable",
+                    refusal="candidate_not_runnable",
+                    minted_job_handle=False,
+                ),
+            )
         if any(key in params for key in ("editor_draft_id", "editor_revision", "unsaved_buffer")):
             return _jsonrpc_refusal(
                 req_id,
@@ -4401,6 +4480,16 @@ class DaemonProcess:
                     "fp1",
                     "saved editor draft revisions are not runnable; publish and enable first",
                     refusal="draft_not_runnable",
+                    minted_job_handle=False,
+                ),
+            )
+        if self._app_candidates.is_candidate_artifact(fp1):
+            return _jsonrpc_refusal(
+                req_id,
+                policy_rejection(
+                    "fp1",
+                    "MA02 candidate data is not runnable",
+                    refusal="candidate_not_runnable",
                     minted_job_handle=False,
                 ),
             )

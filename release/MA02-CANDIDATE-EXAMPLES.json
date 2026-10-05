@@ -1,0 +1,483 @@
+{
+  "fixture_context": {
+    "scope": "Exact installed acceptance messages; these candidate and artifact IDs are local to the preserved disposable acceptance root, not portable authority. Stage your own bytes and use returned IDs for another root.",
+    "authoring_session": "psess:author",
+    "producer_id": "author-producer",
+    "pairing_proof": "Omitted: acquire through the existing local pairing flow.",
+    "artifact_bytes": "Preserved in installed-owner-root-3 under existing ArtifactStore; composition contains inert long JSON/code text and asset bytes are 256-byte binary."
+  },
+  "messages": [
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "initialize-author-producer",
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "1.0.0",
+          "producer_id": "author-producer",
+          "capabilities": {
+            "save_app_candidate": true,
+            "get_app_candidate": true,
+            "get_app_candidate_history": true,
+            "stage_artifact": true
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "create",
+        "method": "save_app_candidate",
+        "params": {
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70184,
+              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "MA02 persistence acceptance",
+              "title": "Installed candidate"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          },
+          "expected_context_revision": 0,
+          "product_session_ref": "psess:author"
+        }
+      },
+      "result": {
+        "authoring_session": "psess:author",
+        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "content_byte_count": 623,
+        "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+        "context_revision": 0,
+        "intent": {
+          "owner_principal": "local_operator",
+          "params": {
+            "content": {
+              "asset_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ],
+              "composition_ref": {
+                "byte_count": 70184,
+                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "media_type": "application/json"
+              },
+              "kind": "data-only",
+              "metadata": {
+                "description": "MA02 persistence acceptance",
+                "title": "Installed candidate"
+              },
+              "schema": "qma.miniapp.candidate-content.v1",
+              "source_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ]
+            },
+            "expected_context_revision": 0,
+            "product_session_ref": "psess:author"
+          }
+        },
+        "operation_key": "fp1:sha256:0779e31ac14059534002300522e01abd555c79b3183b9137e4ef45da9059f74e",
+        "originating_authoring_session": "psess:author",
+        "owner_principal": "local_operator",
+        "principal_class": "operator",
+        "producer_id": "author-producer",
+        "request_fp1": "fp1:sha256:35fc02f9373c4ed36f6b058cec5f414ced755d9dcc1480fa35c43d7cac3bc253",
+        "request_id": "create",
+        "schema": "qma.miniapp.candidate-version.v1",
+        "revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+        "receipt_fp1": "fp1:sha256:d8163186cbc8b3bb9302ee8ac2ecaf48f20222f7fcc7692dc7b85f595b3b7bac",
+        "content": {
+          "asset_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ],
+          "composition_ref": {
+            "byte_count": 70184,
+            "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+            "media_type": "application/json"
+          },
+          "kind": "data-only",
+          "metadata": {
+            "description": "MA02 persistence acceptance",
+            "title": "Installed candidate"
+          },
+          "schema": "qma.miniapp.candidate-content.v1",
+          "source_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ]
+        }
+      },
+      "retry": "Same producer/id/params returns this original result even after edits."
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "left",
+        "method": "save_app_candidate",
+        "params": {
+          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70184,
+              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "",
+              "title": "Left edit"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          },
+          "expected_context_revision": 0,
+          "expected_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+          "product_session_ref": "psess:author"
+        }
+      },
+      "producer_id": "author-producer",
+      "result": {
+        "authoring_session": "psess:author",
+        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "content_byte_count": 586,
+        "content_fp1": "fp1:sha256:2f6fceb78ac9ef10bff47a333607d27675f729b92ea0788727885d41d8206bf5",
+        "context_revision": 0,
+        "intent": {
+          "owner_principal": "local_operator",
+          "params": {
+            "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+            "content": {
+              "asset_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ],
+              "composition_ref": {
+                "byte_count": 70184,
+                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "media_type": "application/json"
+              },
+              "kind": "data-only",
+              "metadata": {
+                "description": "",
+                "title": "Left edit"
+              },
+              "schema": "qma.miniapp.candidate-content.v1",
+              "source_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ]
+            },
+            "expected_context_revision": 0,
+            "expected_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+            "product_session_ref": "psess:author"
+          }
+        },
+        "operation_key": "fp1:sha256:0dde714287e317b2b4f2eb9d041ba8b61074162a5a33771b01904f1d91dfb633",
+        "originating_authoring_session": "psess:author",
+        "owner_principal": "local_operator",
+        "parent_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+        "principal_class": "operator",
+        "producer_id": "author-producer",
+        "request_fp1": "fp1:sha256:e40065b70c8e47b124a819c4a691c60fd0ad214033a48b7eea41af1d74a7e69d",
+        "request_id": "left",
+        "schema": "qma.miniapp.candidate-version.v1",
+        "revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+        "receipt_fp1": "fp1:sha256:d01943e45587195f4c1baa1ea54187b90ee683ad15ce4eb282a645c0e2a379e2",
+        "content": {
+          "asset_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ],
+          "composition_ref": {
+            "byte_count": 70184,
+            "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+            "media_type": "application/json"
+          },
+          "kind": "data-only",
+          "metadata": {
+            "description": "",
+            "title": "Left edit"
+          },
+          "schema": "qma.miniapp.candidate-content.v1",
+          "source_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "recovered-head",
+        "method": "get_app_candidate",
+        "params": {
+          "product_session_ref": "psess:author",
+          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88"
+        }
+      },
+      "result": {
+        "schema": "qma.wire.app_candidate.v1",
+        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "current_revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+        "validated": false,
+        "published": false,
+        "version": {
+          "authoring_session": "psess:author",
+          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+          "content_byte_count": 623,
+          "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+          "context_revision": 0,
+          "intent": {
+            "owner_principal": "local_operator",
+            "params": {
+              "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+              "content": {
+                "asset_refs": [
+                  {
+                    "byte_count": 256,
+                    "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                    "media_type": "application/octet-stream"
+                  }
+                ],
+                "composition_ref": {
+                  "byte_count": 70184,
+                  "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                  "media_type": "application/json"
+                },
+                "kind": "data-only",
+                "metadata": {
+                  "description": "MA02 persistence acceptance",
+                  "title": "Installed candidate"
+                },
+                "schema": "qma.miniapp.candidate-content.v1",
+                "source_refs": [
+                  {
+                    "byte_count": 256,
+                    "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                    "media_type": "application/octet-stream"
+                  }
+                ]
+              },
+              "expected_context_revision": 0,
+              "expected_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+              "product_session_ref": "psess:author"
+            }
+          },
+          "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
+          "originating_authoring_session": "psess:author",
+          "owner_principal": "local_operator",
+          "parent_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+          "principal_class": "operator",
+          "producer_id": "author-producer",
+          "request_fp1": "fp1:sha256:f806e6b5f0d486c85390859524ca3afcc91a4b7aecbe80162a6cbc2a53aa35a0",
+          "request_id": "return-to-content",
+          "schema": "qma.miniapp.candidate-version.v1",
+          "revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+          "receipt_fp1": "fp1:sha256:04d1566bc4b26d3856527da5a3a0d917694e21a36ece36b037ed8fc2abaf849d",
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70184,
+              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "MA02 persistence acceptance",
+              "title": "Installed candidate"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "history",
+        "method": "get_app_candidate_history",
+        "params": {
+          "product_session_ref": "psess:author",
+          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88"
+        }
+      },
+      "result": {
+        "schema": "qma.wire.app_candidate.v1",
+        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "current_revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+        "validated": false,
+        "published": false,
+        "versions": [
+          {
+            "authoring_session": "psess:author",
+            "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+            "content_byte_count": 623,
+            "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+            "context_revision": 0,
+            "intent": {
+              "owner_principal": "local_operator",
+              "params": {
+                "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+                "content": {
+                  "asset_refs": [
+                    {
+                      "byte_count": 256,
+                      "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                      "media_type": "application/octet-stream"
+                    }
+                  ],
+                  "composition_ref": {
+                    "byte_count": 70184,
+                    "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                    "media_type": "application/json"
+                  },
+                  "kind": "data-only",
+                  "metadata": {
+                    "description": "MA02 persistence acceptance",
+                    "title": "Installed candidate"
+                  },
+                  "schema": "qma.miniapp.candidate-content.v1",
+                  "source_refs": [
+                    {
+                      "byte_count": 256,
+                      "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                      "media_type": "application/octet-stream"
+                    }
+                  ]
+                },
+                "expected_context_revision": 0,
+                "expected_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+                "product_session_ref": "psess:author"
+              }
+            },
+            "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
+            "originating_authoring_session": "psess:author",
+            "owner_principal": "local_operator",
+            "parent_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+            "principal_class": "operator",
+            "producer_id": "author-producer",
+            "request_fp1": "fp1:sha256:f806e6b5f0d486c85390859524ca3afcc91a4b7aecbe80162a6cbc2a53aa35a0",
+            "request_id": "return-to-content",
+            "schema": "qma.miniapp.candidate-version.v1",
+            "revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+            "receipt_fp1": "fp1:sha256:04d1566bc4b26d3856527da5a3a0d917694e21a36ece36b037ed8fc2abaf849d",
+            "content": {
+              "asset_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ],
+              "composition_ref": {
+                "byte_count": 70184,
+                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "media_type": "application/json"
+              },
+              "kind": "data-only",
+              "metadata": {
+                "description": "MA02 persistence acceptance",
+                "title": "Installed candidate"
+              },
+              "schema": "qma.miniapp.candidate-content.v1",
+              "source_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ]
+            }
+          }
+        ],
+        "next_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf"
+      }
+    },
+    {
+      "refusal": {
+        "category": "policy rejection",
+        "retryability": "no",
+        "context": {
+          "field": "expected_revision",
+          "reason": "stale candidate head; reload before saving",
+          "refusal": "stale_revision",
+          "expected": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+          "current": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+          "wrote_version": false
+        }
+      },
+      "meaning": "Competing same-base edit; preserve draft and reload current head."
+    }
+  ]
+}

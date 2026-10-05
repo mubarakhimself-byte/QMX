@@ -90,8 +90,8 @@ def test_additive_ct40_query_and_inspect_sha_honesty() -> None:
     assert WireQuery.GET_PROVIDER_HEALTH.value == "get_provider_health"
     assert WireQuery.GET_INSTANCE_HEALTH.value != WireQuery.GET_PROVIDER_HEALTH.value
     assert "get_instance_health" in WIRE_QUERIES
-    assert ADDABLE_QUERY_COUNT == 12
-    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 19
+    assert ADDABLE_QUERY_COUNT == 14
+    assert len(WIRE_QUERIES) == SEED_QUERY_COUNT + ADDABLE_QUERY_COUNT == 21
     assert parse_wire_type("get_instance_health") == "get_instance_health"
     assert is_ok(validate_family_payload("get_instance_health", {"instance_id": "inst:1"}))
     claimed_absent = claim_listing_axes_absent_at_inspect_sha(True)

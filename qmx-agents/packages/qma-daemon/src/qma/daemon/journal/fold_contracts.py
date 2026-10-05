@@ -106,6 +106,7 @@ _CORE_V1_FOLDS: Final[dict[str, FoldContract]] = {
         "artifact_transfer_ticket.*",
     ),
     "editor_draft_head": _contract("editor_draft_head", "editor_draft.*"),
+    "app_candidate_state": _contract("app_candidate_state", "app_candidate.saved"),
 }
 
 # Definition-store registries are each a v1 fold over their noun.verb stream.
@@ -158,6 +159,7 @@ _STORE_TO_FOLD: Final[Mapping[str, str]] = MappingProxyType(
         "pairing_session": "pairing_session",
         "artifact_transfer_ticket": "artifact_transfer_ticket",
         "editor_draft_head": "editor_draft_head",
+        "app_candidate_state": "app_candidate_state",
         **{member: member for member in DEFINITION_STORE_MEMBERS},
     }
 )

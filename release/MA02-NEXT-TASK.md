@@ -1,6 +1,8 @@
 # Next task: MA02 candidate persistence only
 
-Planning pointer; no MA02 implementation is included in this candidate.
+Historical MA02 assignment retained below. MA02 is now implemented on the
+review candidate branch; independent parent acceptance remains required.
+See MA02-CANDIDATE-CONTRACT.md and the successor MA03-NEXT-TASK.md.
 Source: claude-reconciliation/MINIAPP-IMPLEMENTATION-PACKETS.md, MA-02 section.
 Original packet SHA256: `9bafc9762003bf931039b99f52f3887169de8e9a3c0947a32e93db76d9e1e040`.
 The packet was prepared at ea65b50d; start the next task from the reviewed final

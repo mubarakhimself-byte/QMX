@@ -18,6 +18,15 @@ stale_after: 90d
 
 `COMP-QMA-CORE` is an application-layer definitions package beside `qmb` and `qml`, adopted from the QMA architecture spine (AD-1..AD-29, FINAL 2026-08-29) whose validation closed dry on 2026-08-29 (DEC-0329). The design is ratified as rider material under the sitting's "I draft, operator ratifies" mode; ratification fixes the architecture only, and implementation authorization arrives solely through the factory pipeline — no runtime, credential, order, promotion or destructive act is authorized by this document (DEC-0329). Every runtime concern enters through a port `qma-core` defines and the daemon implements: a plugin imports its contribution types from `qma-core` and never from `qma-daemon` (DEC-0300) (DEC-0335).
 
+### MA02 implementation proposal (2026-10-05)
+
+[ADR-0034](../decisions/ADR-0034-miniapp-candidate-persistence.md) records the
+named v1 data-only candidate descriptor on this existing owner. Metadata and
+composition/source/asset fp1 references are closed inert data. Canonical
+content identity is distinct from a parent-bearing immutable version identity.
+This extension neither consumes another definition slot nor evaluates code.
+MA03 catalog/operation validation and MA04 publication remain separate.
+
 ## Authority boundary
 
 May: define the ontology chain Desk → Role → Quant → Agent → Subagent plus Session, Worker, Mission, Task and Task Graph, and the `ActorId` address grammar `quant:<desk_slug>/<quant_slug>` (DEC-0306); define the seven runtime ports — MemoryProvider, ModelDeployment, ExecutionEnvironment, KnowledgeSource, ToolAdapter, ComputeProvider, ContextCompiler — each declaring a cardinality and, for a singleton, an explicit scope key (DEC-0300) (DEC-0335); define the plugin contribution surface — `PluginManifest`, the `PluginContext` protocol carrying the cardinality-typed registration methods, `HookEvent`, `HookResult`, the closed handle-kind vocabulary and the `credential_ref` string type — in a `plugins/` package beside `ports/` (DEC-0300) (DEC-0323); add nouns and refusal variants of `qmf-core`'s typed-refusal base (DEC-0302); define the one tree-digest construction as `fp1` over a canonical manifest of per-file `fp1` values, using the single imported `fp1` (DEC-0302); enumerate, default-deny, the permitted read-and-calculate surfaces of the `qma-daemon → qmf-registry` and `qma-daemon → qmf-risk` edges (DEC-0301) (DEC-0347); declare the six-rung capability ladder and the act-level money-path deny-list constants beside it (DEC-0315); and own every closed-and-addable vocabulary the system uses, each extended only in the AD that owns it — hook events, `HookResult` decisions, handle kinds, Task and Mission states, `JobHandle` states, `MessageKind`, `DeliveryState`, `ModelClass`, routing policies, principal classes, memory validation states, node kinds, ExecutionEnvironment kinds and `network` values, RefinementProposal edit kinds, variable scopes and the three closed verbs admit/apply/promote (DEC-0300) (DEC-0309).

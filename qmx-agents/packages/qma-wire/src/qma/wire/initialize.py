@@ -31,6 +31,7 @@ from typing import Final, cast
 
 from qma.core.vocabulary import PrincipalClass
 from qma.wire.agent_request import AGENT_REQUEST_CAPABILITIES
+from qma.wire.app_candidate import CANDIDATE_CAPABILITIES, CANDIDATE_READS
 from qma.wire.auth import authenticate_before_protocol, authenticate_pairing_record
 from qma.wire.discovery_queries import DISCOVERY_READ_CAPABILITIES, DISCOVERY_SERVER_OWNED_KEYS
 from qma.wire.editor_draft import (
@@ -123,6 +124,7 @@ _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
     {
         *AGENT_REQUEST_CAPABILITIES,
         *DISCOVERY_SERVER_OWNED_KEYS,
+        *CANDIDATE_CAPABILITIES,
         PACK_UI_REQUEST_CAPABILITY,
         GET_PACK_UI_REQUEST_CAPABILITY,
         CANCEL_JOB_CAPABILITY,
@@ -514,6 +516,10 @@ def negotiate_initialize(
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
+    for name in CANDIDATE_CAPABILITIES:
+        if params.capabilities.get(name) is not True or caps.get(name) is not True:
+            negotiated.pop(name, None)
+
     # Discovery always requires explicit opt-in, including empty/default maps.
     # Preserve the accepted base's defaults for unrelated legacy capabilities.
     for name in DISCOVERY_SERVER_OWNED_KEYS - {"discovery_hit_classes"}:
@@ -821,6 +827,10 @@ class WireConnection:
             if self._capabilities.get(name) is True:
                 return accepted
             return editor_draft_capability_unavailable(name)
+        if name in CANDIDATE_READS:
+            if self._capabilities.get(name) is True:
+                return accepted
+            return query_unavailable(name)
         if name in DISCOVERY_SERVER_OWNED_KEYS:
             if self._capabilities.get(name) is True:
                 return accepted
