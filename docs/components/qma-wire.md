@@ -224,5 +224,14 @@ ContributionHit search/get over existing CT-40 admission. Health and unmounted
 Artifact/Knowledge owners stay typed unavailable. The
 [implementation handoff](../../release/MA01-DISCOVERY-CONTRACT.md) specifies
 additive schemas and invocation pin checks; serial installed acceptance passes,
-and independent parent review remains pending. Historical inspect-SHA statements and release limits
-are unchanged.
+and independent review accepts the combined b4b0571a runtime as the MA02 base.
+Review of the F1/F2 documentation successor remains pending. Historical inspect-SHA
+statements and release limits are unchanged.
+
+The current mounted implementation validates every supplied invocation pin even
+when its support advertisement is absent/false. CT40 capability maps stay per
+socket; paired HTTP gates use the last successful initialize for `pairing_record_id`,
+are replaced rather than merged, and are not restored on socket close. The
+implementation handoff records multi-tab renegotiation requirements. These are
+implementation-boundary clarifications, not new session/grant authority or a
+runtime behavior change.

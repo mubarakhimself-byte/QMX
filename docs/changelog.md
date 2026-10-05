@@ -12,6 +12,18 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-05 - MA01 handoff boundary clarification
+
+Independent installed review of the combined candidate confirms that supplied
+invocation pins are always validated; `invoke_contribution_pin` is a support
+advertisement. CT40 negotiation is per socket, while HTTP uses the last successful
+initialize for the pairing identity, including replacement and multi-tab effects.
+Corrected the [exact handoff](../release/MA01-DISCOVERY-CONTRACT.md),
+[capability ledger](../release/CAPABILITY-STATUS.md),
+[UI integration map](../release/UI_INTERFACE.md), and current implementation
+notes in [qma-daemon](components/qma-daemon.md) and [qma-wire](components/qma-wire.md).
+Runtime, schemas, grants and historical architecture decisions are unchanged.
+
 ## 2026-10-05 - Bounded inherited quality reconciliation
 
 [ADR-0032](decisions/ADR-0032-bounded-quality-reconciliation.md) records the local

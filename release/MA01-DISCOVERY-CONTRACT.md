@@ -6,7 +6,9 @@ reviewed startup `c7f0ef603dc56b2b13719c5d9ecd51c240204649` and reviewed
 MA01 `8465c03f0ec168e177ba57860f19c869748c0db1`. Final delivery commit,
 source manifest, wheels and reproducible install command are bound in the
 candidate's supplied SOURCE-REF.json / CLAUDE-HANDOFF.md. Parent review remains
-pending. Claude owns UI wiring; this delivery changes no UI.
+pending for this documentation successor. Independent review accepts the
+`b4b0571a` runtime composition as the MA02 base; this successor clarifies findings
+F1/F2 without changing runtime source. Claude owns UI wiring; this delivery changes no UI.
 
 ## Transport and negotiation
 
@@ -16,14 +18,17 @@ and a unique live producer. These are JSON-RPC query methods, **not new HTTP
 routes**. No operator CLI, grants, commands, stores or search index are added.
 
 Request `list_installed_plugins`, `facade_search`, and `facade_get` capability
-keys with literal `true`. Request `invoke_contribution_pin: true` when using
-pins at invocation. The host supplies `discovery_hit_classes: ["contribution"]`
+keys with literal `true`. Each discovery read requires its own literal `true`;
+omitted/empty/null maps, false/nonboolean values and metadata-only declarations
+enable no discovery read. The host supplies `discovery_hit_classes: ["contribution"]`
 whenever a discovery method is negotiated. Client claims cannot widen it.
-Omitting the capability map or sending `{}` enables none of these new reads
-or the invocation-pin feature. Each requires its own literal `true`; false,
-integer/string values, and metadata-only declarations grant no discovery read.
+`invoke_contribution_pin` is a support advertisement negotiated with literal
+`true`, not an invocation-admission gate. Omitting or declining it removes that
+advertisement; every submitted `params.contribution_pin` is still parsed and
+revalidated by `start_mission`/`launch_task`. Requesting the advertisement does
+not grant an invocation or bypass existing command/session/grant checks.
 When no discovery read is negotiated, `discovery_hit_classes` is omitted,
-including when the client requests that metadata or only the pin feature.
+including when the client requests that metadata or only the pin advertisement.
 Existing default legacy queries retain the accepted base's behavior.
 
 The existing initialize parser rejects nonobject capability declarations and
@@ -37,7 +42,27 @@ is composed, so enabled publication is never represented as readiness.
 
 Existing HTTP queries `/q/list_mailbox`, `/q/get_editor_draft_head`, and
 `/q/get_pack_ui_request` retain their routes, auth, schema and capability gates.
-Known-ID PackUiRequest also remains available over CT-40. Discovery HTTP GETs
+Known-ID PackUiRequest also remains available over CT-40.
+
+CT40 capabilities belong to each initialized socket. HTTP query/upload gates
+instead use a map keyed by the authenticated `pairing_record_id`: each successful
+socket `initialize` replaces that map with its complete negotiated capabilities.
+The last successful initialize under the pairing identity governs subsequent
+HTTP requests, including requests from other tabs sharing that proof. It does
+not alter capabilities already negotiated on another live CT40 socket. Closing
+the last-initialized socket does not restore an earlier HTTP map. To restore an
+HTTP gate, successfully initialize a socket under the same pairing identity with
+the required capability; a partial map replaces rather than merges the old map.
+For example, after socket A opts into search/PackUiRequest and socket B then opts
+into mailbox only, A retains its CT40 reads but HTTP PackUiRequest refuses until
+a later initialize opts into `get_pack_ui_request` again. Browser code must
+coordinate initialization across tabs and include every required HTTP capability
+in the intended last initialization. These maps are not product-session grants
+or authoring authority. HTTP still requires its registered Origin/proof and
+the query's existing owner/session checks. Before any stored initialization,
+the inherited HTTP defaults apply; do not infer a gate from another socket's map.
+
+Discovery HTTP GETs
 are intentionally not mounted; do not bind UI actions to `/q/facade_search`.
 
 ## Requests and responses
@@ -103,7 +128,9 @@ availability_revision)`. Refresh/recheck with `facade_get` before use. When
 submitting the existing `start_mission` or `launch_task` invocation, put that
 existing pin DTO in optional `params.contribution_pin`; keep all existing
 product_session_ref, envelope, payload, grant, input hash and command identity
-fields unchanged. The host revalidates the pin **inside invocation admission**,
+fields unchanged. Whenever that pin field is supplied, the host parses and
+revalidates it **inside invocation admission**, regardless of whether the
+socket advertised `invoke_contribution_pin` (including omitted/false declarations),
 before durable stamping or effects, checks it agrees with envelope contribution
 and enabled instance, and then performs the existing grant checks. A match is
 not sufficient to authorize invocation. Missing pin retains the previous
@@ -111,7 +138,10 @@ invocation contract for existing callers; callers using pinned discovery must
 submit it to obtain the added revision check. No new `invoke_op` method exists.
 
 After restart reconnect with the same pairing identity and reinitialize the
-new socket/producer. Reread list/get rather than reuse an old advertised set.
+new socket/producer. Include the required HTTP capabilities in that initialization:
+it replaces the pairing identity's HTTP map. Other live sockets keep their own
+CT40 maps; their old maps do not restore HTTP gates when a tab closes. Reread
+list/get rather than reuse an old advertised set.
 Unchanged bundled pack IDs and current availability revisions are recovered by
 the existing journal-backed loader; reads add no enable receipts. A changed or
 disabled dependency is unavailable, even if the UI retained its previous hit.
@@ -127,7 +157,7 @@ Never make a UI fallback succeed by substituting these fixture values.
 | Trigger | Actual refusal contract |
 |---|---|
 | Before initialize | policy rejection with field `initialize` |
-| Capability absent/false or unsupported owner | policy rejection, reason `query_unavailable` |
+| Discovery read capability absent/false or unsupported owner | policy rejection, reason `query_unavailable` |
 | Machine principal | policy rejection, field `principal_class` |
 | Wrong Origin/missing or invalid proof | existing socket/HTTP admission refusal; no query dispatch |
 | Unknown/extra/malformed params | invalid input |
@@ -159,7 +189,10 @@ Windows process handles with exit code 259. No loose lock PID authorizes signali
 the local operator-only configuration door. Fresh roots leave the registry cap
 unset and upload refuses without an object. `PUT /artifacts/stage` accepts raw
 bytes with registered Origin and `Authorization: Bearer pairing:<proof>` after
-the cap is configured. Complete at/below-cap bodies return exact fp1. Oversize
+the cap is configured and its current pairing-wide HTTP map admits
+`stage_artifact`. A later initialize omitting that capability removes upload
+admission until renegotiated; it does not erase or change the durable cap.
+Complete at/below-cap bodies return exact fp1. Oversize
 or interrupted bodies write no object. Zero permits a complete empty upload.
 Cap restoration selects greatest authoritative journal_seq before validating
 receipt/value, so backward/equal wall clocks cannot select an older larger cap.

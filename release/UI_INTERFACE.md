@@ -15,6 +15,15 @@ for the supported path and verification limits.
 
 `qma.wire.listener`: localhost daemon default port 8765; POST `/pair/start`, `/pair/confirm`, `/pair/renew`; snapshots under `/q/`; PUT `/artifacts/stage`. WebSocket offers `qmx.ct40.v1` and `qmx.pair.<pairing_proof>`. Origin is checked; pairing proof is bearer authentication, pairing_record_id is journal identity. Origin cannot create a proof. Browser does not spawn Python or receive host_control. Launcher/QMB privileged local host-control door bootstraps the daemon and pairing.
 
+CT40 capabilities stay on the individual socket. Each successful initialize
+replaces the HTTP capability map keyed by `pairing_record_id`; the last such
+initialize under one proof governs HTTP across tabs. Partial maps replace rather
+than merge; closing that socket does not restore an older HTTP map. An older
+socket retains its CT40 capabilities. Coordinate initialization across tabs and
+renegotiate every needed HTTP read/upload gate. This map is not a product-session
+grant or authoring authority. Submitted invocation pins are always validated,
+even when the `invoke_contribution_pin` support advertisement is absent/false.
+
 JSON-RPC initialize negotiates capability families and unique `producer_id`. Preserve IDs across retry of accepted commands. Typed refusal is a real failure, never a recorded successful call. Track producer/id, product_session_ref, instance/revision/config/grant, operation, correlation and job/run/attempt/artifact identity.
 
 `DaemonProcess._dispatch_paired_ct40` handlers include initialize, save_editor_draft, publish_editor_draft, get_editor_draft_head, get_pack_ui_request, transfer_artifact, transfer_complete, cancel_job, send_message, open_product_session, grant_product_session, start_mission, and launch_task. Drafts require authenticated operator and negotiated capabilities. Immutable publication is distinct from enabled instance and grant. Draft CAS conflict must be visible and recoverable. `send_message` produces durable mailbox acknowledgement, not model completion. Closing a tab does not cancel work.

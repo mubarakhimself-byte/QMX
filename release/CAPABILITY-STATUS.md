@@ -5,7 +5,8 @@ plus reviewed startup `c7f0ef603dc56b2b13719c5d9ecd51c240204649` and reviewed
 MA01 `8465c03f0ec168e177ba57860f19c869748c0db1`. Code composition is
 `7039fbde1bd749f5aaceac1c14df6afe611c22c2`; the delivery SOURCE-REF.json and
 Git bundle identify the final commit including these handoff documents.
-Independent parent review is pending. This ledger is the candidate's capability
+Independent review accepts the b4b0571a runtime as the MA02 base. Review of
+this F1/F2 documentation successor remains pending. This ledger records capability
 status; historical acceptance records retain their original scope.
 
 | Capability | Mounted behavior | Candidate verification |
@@ -16,8 +17,8 @@ status; historical acceptance records retain their original scope.
 | facade_search | CT-40; case-insensitive literal contribution search only; explicit literal true | Real five-pack roster and exact analysis-backtest:qmb resolution |
 | facade_get | CT-40; exact live ContributionHit and instance/revision; explicit literal true | Installed exact/stale/disabled/scope cases; no silent retarget |
 | discovery_hit_classes | Host-owned contribution metadata only when at least one read is negotiated | Missing/empty/null/false/nonboolean/metadata/pin/partial/malformed matrix |
-| invoke_contribution_pin | Optional existing pin at start_mission/launch_task admission | Combined source and installed stale-pin refusal before effects; pin remains no grant |
-| get_pack_ui_request | Existing CT-40 and named HTTP query | Installed legacy compatibility; default and explicit legacy negotiation |
+| invoke_contribution_pin | Support advertisement only; any supplied pin is validated at start_mission/launch_task even when advertisement is absent/false | Independent installed true/omitted/false declarations reach the same stale-pin refusal before writes; pin remains no grant |
+| get_pack_ui_request | CT40 capabilities stay per socket; HTTP uses the pairing identity's last successful initialize | Independent shared-proof socket replay: prior CT40 reads survive, HTTP can refuse until the capability is renegotiated; closing a socket does not restore HTTP |
 | list_mailbox / get_editor_draft_head | Existing HTTP queries; editor-head keeps explicit capability and owner gate | Installed mailbox/PackUiRequest success and missing-editor-head refusal; source positive editor tests |
 | cancel_job | Existing originating-session command and durable handle fences | Existing source regression; new discovery reads create no cancellable job |
 | get_instance_health | False/omitted; no scoped health owner snapshot | Typed query_unavailable; enablement is not health |
@@ -26,6 +27,11 @@ status; historical acceptance records retain their original scope.
 | MA03 validation / MA04 publish-update-undo / MA05 activity | Not shipped | First data-only milestone remains MA02 then MA03 then MA04 then MA05 |
 | MA06 maintenance / MA07 restricted runner / MA08 mutable data / MA09 API | Not shipped | Require their packet-specific ownership and installed acceptance |
 | MA10 executable deployment / MA11 remote / MA12 laptop-off / MA13 custom UI | Not shipped | No deployment, remote, always-on authority or custom renderer proof |
+
+Each successful socket initialize replaces the pairing-wide HTTP capability map
+with its complete negotiated map. Include every required HTTP gate in the
+intended last initialization across tabs; partial maps do not merge. Socket
+closure does not roll back that map. This is not a product-session grant.
 
 One global Copilot identity does not collapse session authority. App-use cannot
 author. Memory admission is not a checkpoint. AgentLedger evidence is not logs.
