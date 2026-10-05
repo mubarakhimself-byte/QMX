@@ -523,6 +523,7 @@ class TaskGraphDispatcher:
             graph is None
             or task is None
             or task.owner != lease.owner
+            or graph.mission_id != lease.mission_id
             or task.mission_id != lease.mission_id
             or task.state not in {TaskMissionState.RUNNING, TaskMissionState.UNKNOWN}
             or task.ledger is None

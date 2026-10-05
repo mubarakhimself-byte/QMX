@@ -223,6 +223,7 @@ class CanonicalRequestJoin:
         caps = self.agents.recorded_capabilities(lease.holder_agent_id)
         if (
             graph is None
+            or graph.mission_id != task.mission_id
             or graph.task_by_id(task.id) != task
             or not isinstance(agent, Agent)
             or caps is None
