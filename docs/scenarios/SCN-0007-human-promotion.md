@@ -5,10 +5,10 @@ type: scenario
 status: ratified
 component: COMP-QMF-REGISTRY
 depends_on: [COMP-QMF-CORE, COMP-QMN]
-decisions: [DEC-0003, DEC-0004, DEC-0033, DEC-0038, DEC-0041, DEC-0108, DEC-0116, DEC-0121, DEC-0146, DEC-0155, DEC-0158, DEC-0205, DEC-0213]
-sources: [docs/constitution.md, docs/components/qmf-registry.md, docs/contracts/ct-06-registration.yaml, docs/contracts/ct-07-lineage-edge.yaml, docs/contracts/ct-08-gate-evidence.yaml, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md]
+decisions: [DEC-0003, DEC-0004, DEC-0033, DEC-0038, DEC-0041, DEC-0108, DEC-0116, DEC-0121, DEC-0146, DEC-0155, DEC-0158, DEC-0205, DEC-0213, DEC-0178]
+sources: [docs/constitution.md, docs/components/qmf-registry.md, docs/components/qml.md, _docwork/ledger.yaml, docs/contracts/ct-06-registration.yaml, docs/contracts/ct-07-lineage-edge.yaml, docs/contracts/ct-08-gate-evidence.yaml, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md]
 generated: 2026-08-18
-verified: 2026-08-29
+verified: 2026-10-05
 stale_after: 30d
 ---
 
@@ -18,7 +18,7 @@ This scenario makes the human-only promotion boundary observable, now backed by 
 
 ## Given
 
-A research artifact has a proposed `fp1` fingerprint and lineage, and an agent reports that its checks passed. The `fp1` recipe and its single qmf-core implementation are ratified (DEC-0108). The registry reserves a promotion-occurrence card kind whose V1 signing is the operator's recorded approval attesting the record's `fp1` string (reviewer identity plus instant), with no cryptographic dependency; the card is canonical and the journal's `promotion` event carries only the card's fingerprint plus `correlation_id`. The card additionally carries the **Book-definition (or BMS-definition) fingerprint as an identity field**, so a signature can never attest a superseded template. The **risk slot of the promotion evidence checklist has landed:** it is the three-layer admission packet — Layer 1 registration linters (completeness, a unit on every parameter, exact-rational or scaled-integer numbers, worked-example arithmetic recomputed by invoking the cited producer contracts, control-rank uniqueness, the prediction linter as a pending slot), Layer 2 a technical demo/paper shakedown, and Layer 3 one operator signature on one assembled page — plus the CT-32 performance evidence, with **no trial period, probation window, or paper-performance gate** and no paper role permitted to gate live money. An agent's research or recommendation is not an operator ruling. [DEC-0003] [DEC-0033] [DEC-0108] [DEC-0116] [DEC-0158] [DEC-0146] [DEC-0155]
+A research artifact has a proposed `fp1` fingerprint and lineage, and an agent reports that its checks passed. The `fp1` recipe and its single qmf-core implementation are ratified (DEC-0108). The registry reserves a promotion-occurrence card kind whose V1 signing is the operator's recorded approval attesting the record's `fp1` string (reviewer identity plus instant), with no cryptographic dependency; the card is canonical and the journal's `promotion` event carries only the card's fingerprint plus `correlation_id`. The card additionally carries the **Book-definition (or BMS-definition) fingerprint as an identity field**, so a signature can never attest a superseded template. The **risk slot of the promotion evidence checklist has landed:** it is the three-layer admission packet — Layer 1 registration linters (completeness, a unit on every parameter, exact-rational or scaled-integer numbers, worked-example arithmetic recomputed by invoking the cited producer contracts, control-rank uniqueness, the four-check prediction linter ruled by DEC-0178), Layer 2 a technical demo/paper shakedown, and Layer 3 one operator signature on one assembled page — plus the CT-32 performance evidence, with **no trial period, probation window, or paper-performance gate** and no paper role permitted to gate live money. An agent's research or recommendation is not an operator ruling. [DEC-0003] [DEC-0033] [DEC-0108] [DEC-0116] [DEC-0158] [DEC-0146] [DEC-0155]
 
 `GAP(GAP-0016): Ratify the causality gate and evidence (deferred to the backtesting sitting, DEC-0121) — the promotion evidence checklist's causality slot stays unfilled; consequence knowingly accepted.`
 

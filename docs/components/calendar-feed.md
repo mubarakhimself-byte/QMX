@@ -8,7 +8,7 @@ depends_on: []
 decisions: [DEC-0009, DEC-0038, DEC-0052, DEC-0065, DEC-0074, DEC-0106, DEC-0117, DEC-0119, DEC-0152, DEC-0156, DEC-0157, DEC-0158, DEC-0193, DEC-0198, DEC-0214, DEC-0236, DEC-0259]
 sources: [DEC-0009, DEC-0038, DEC-0052, DEC-0065, DEC-0072, DEC-0074, DEC-0106, DEC-0117, DEC-0119, DEC-0152, DEC-0156, DEC-0157, DEC-0158, EXT-2030, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, _docwork/ledger.yaml, docs/components/trading-node.md, docs/architecture/dependencies.yaml, docs/contracts/ct-15-external-source-adapter.yaml, docs/contracts/ct-31-control-window.yaml]
 generated: 2026-08-18
-verified: 2026-08-29
+verified: 2026-10-05
 stale_after: 30d
 ---
 
@@ -36,7 +36,7 @@ The news-calendar feed is an active external CT-15 provider. `COMP-QMF-DATA-INGE
 
 Provider event identity and corrections remain source evidence written under the news-calendar recorder's own `WriterId` (AD-21 recorder identity): every external fact carries event-time, known-at, source, and revision, and corrections are appended, never overwriting prior evidence. The risk-side control that maps this evidence to affected instruments is the [CT-31](../contracts/ct-31-control-window.yaml) control-window mechanism — instrument scope resolves through dated per-instrument currency-exposure records, never by parsing a symbol; a window blocks new entries only on the instruments in scope, live and paper alike; and feed revisions that drive a window resolve widen-never-shrink at read time (a later revision may widen a not-yet-passed bound, never narrow a window that has had effect). News control is separate from SQS. [DEC-0117] [DEC-0158] [DEC-0152] [DEC-0074]
 
-The news-calendar recorder discipline is ratified (DEC-0119): provider-native identity and revisions through the idempotent `(source, source-native id, revision)` intake, with scheduling owned by the standalone application. The provider selection and the legal archiving/retention posture remain the open operator items DEC-0119 records, carried forward and not resolved here. [DEC-0119]
+The news-calendar recorder discipline is ratified (DEC-0119): provider-native identity and revisions through the idempotent `(source, source-native id, revision)` intake, with scheduling owned by the standalone application. The V1 provider selection is ruled by DEC-0198 and DEC-0214: Forex Factory's free weekly file, with no paid fallback. The legal archiving/retention posture remains an open operator item recorded as personal use; the provider ruling does not resolve it. [DEC-0119] [DEC-0198] [DEC-0214]
 
 The risk-side mechanism GAP-0042 once reserved is now ratified as [CT-31](../contracts/ct-31-control-window.yaml), and lives outside this feed: event severity is stored as the **provider's impact labels verbatim** (QMX mints no severity scale of its own in V1, and severity-to-window is a declared node mapping); currency-to-instrument mapping runs through **dated per-instrument currency-exposure records**, never by parsing a symbol; blackout windows are **entries-only control windows**, live and paper alike; open-position behavior is a Book's `window_forced_flat` declaration entering same-tick arbitration at rank 2, declaring none being the V1 posture; and window widths and buffers are configurable UI-editable variables with no spine value. This feed defines none of it. [DEC-0152] [DEC-0156] [DEC-0157]
 
@@ -62,7 +62,7 @@ A failed refresh blocks entries fail-closed with no live skip button, and stalen
 
 | Variable | Registry key | Notes |
 |---|---|---|
-| Provider and event identity | — | Recorder discipline ratified: provider-native identity and revisions via idempotent `(source, source-native id, revision)` intake; provider selection and legal archiving posture remain open operator items. [DEC-0119] |
+| Provider and event identity | — | Recorder discipline ratified: provider-native identity and revisions via idempotent `(source, source-native id, revision)` intake. V1 provider selection is ruled; legal archiving posture remains open, recorded as personal use. [DEC-0119] [DEC-0198] [DEC-0214] |
 | News blackout before event | `registry:news_blackout_before` | A CT-31 window width — a configurable UI-editable variable with no spine value (recorded evidence: the plus-or-minus-15-minute news buffer is on record as withdrawn). It configures the CT-31 window, never the external feed. [DEC-0157] [DEC-0152] |
 | News blackout after event | `registry:news_blackout_after` | A CT-31 window width — a configurable UI-editable variable with no spine value. It configures the CT-31 window, never the external feed. [DEC-0157] [DEC-0152] |
 

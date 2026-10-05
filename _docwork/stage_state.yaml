@@ -52,7 +52,7 @@ change_mode:
   gates:
     validate_ledger: pass
     validate_registry: pass
-    validate_inventory: pass (warnings: 9 cross-cutting DECs feature-unassigned; registry-vs-data ordering heuristic)
+    validate_inventory: "pass (warnings: 9 cross-cutting DECs feature-unassigned; registry-vs-data ordering heuristic)"
     check_citations: pass
     lint_docs: clean
     lint_docs_strict: expected-blocked (60 provisional docs awaiting operator ratification; open gaps GAP-0031..0046)
@@ -393,3 +393,13 @@ change_mode:
     lint_docs_strict: "expected-blocked (ADR-0023 and SCN-0017 status: provisional per mill stamp; plus eight pre-existing 30d-stale files this fold did not reopen)"
   review: "Prefold 12-lens workflow GO (_docwork/review-prefold-ui-backend.md). Independent consistency 8-lens FAIL-with-amendments (_docwork/review-consistency-ui-backend.md): 6 critical, 18 major, 12 minor. Desk-fixes applied same session (CT-40 Rust-UI leftover, AM-03 sqlite named add, GAP-0081 catalog restamp, AM-01/AM-11 broker-ref, CT-46/48 inspect honesty, overview DEC-0507, ADR-0020/0022 follow-ups, pairing nouns, recover-control writer, origin-revoke argv, COMMAND_GROUPS, pairing.session_ttl write-path, initialize/AM-12/AM-04, FEAT holds, locator waves, rail/library/screens, SCN banners)."
   remaining: "Do not start epics or the software factory from this sitting. Independent planned epics 60-65 continue. FEAT-0064..0071 wait for a later coordinated epics-and-stories pass, then one coding session as the operator directed."
+
+- date: '2026-10-05'
+  change: Bounded inherited strict-documentation reconciliation and Windows research staging
+  sources: [_docwork/strict-docs-reconciliation-2026-10-05.md]
+  adr: ADR-0032 (draft local implementation record; no new ratified decision)
+  status: bounded-repairs-complete
+  gates:
+    lint_docs_strict: expected-blocked (15 expired verification dates, 2 deliberately provisional artifacts)
+    independent_review: first pass found obsolete risk wiring wording; corrected against DEC-0286; final review recorded in delivery
+  notes: Existing authority/status/staleness budgets and registry/inventory unchanged; own D source, no QMA runtime edit or publication.

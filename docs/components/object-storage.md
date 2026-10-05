@@ -8,7 +8,7 @@ depends_on: []
 decisions: [DEC-0013, DEC-0045, DEC-0103, DEC-0106, DEC-0109, DEC-0117, DEC-0118, DEC-0119, DEC-0188, DEC-0197, DEC-0198, DEC-0217, DEC-0252, DEC-0259]
 sources: [_bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md, _docwork/ledger.yaml, _docwork/gaps.yaml, docs/architecture/dependencies.yaml, docs/registry/variables.yaml, docs/components/trading-node.md, docs/contracts/ct-14-backup-restore.yaml]
 generated: 2026-08-18
-verified: 2026-08-29
+verified: 2026-10-05
 stale_after: 30d
 ---
 
@@ -60,7 +60,8 @@ Three restore drills read this bucket, each measuring against the copies it hold
 |---|---|---|
 | Backup cadence | `registry:backup_cadence` | Nightly (ratified); application/ops-owned schedule; no cadence is decided here (DEC-0118). |
 | Recovery-point objective | `registry:backup_recovery_point_objective` | Design ratified; the numeric RPO is named at the node/ops sitting (DEC-0118). |
-| Recovery-time objective | `registry:backup_recovery_time_objective` | Design ratified; the numeric RTO is named at the node/ops sitting (DEC-0118). |
+| Integrity-restore recovery time | `registry:backup_recovery_time_objective_integrity` | Measured at the monthly full-restore rehearsal, never inferred from an upload (DEC-0198, DEC-0252). |
+| Host-loss recovery time | `registry:backup_recovery_time_objective_full_dr` | Measured at the clean-host rehearsal with the escrowed key, including host and key recovery (DEC-0198, DEC-0252). |
 | Backup retention period | `registry:backup_retention_period` | Design ratified; the numeric retention depth is named at the node/ops sitting (DEC-0118). |
 | Restore-verification cadence | `registry:restore_verification_cadence` | Automated sample-restore plus periodic full-restore rehearsal are ratified; the numeric cadence is named at the node/ops sitting (DEC-0118). |
 | Provider, credentials, and encryption | — | Provider selection, credential representation and custody, and encryption key custody are named at the node/ops sitting; no credential-bearing operation is defined here (DEC-0118). |

@@ -426,3 +426,132 @@ def test_native_reader_denies_mutation_of_held_blob(
     )
     assert attacked
     assert first.path.read_bytes() == saved.canonical_bytes
+
+
+def test_native_save_needs_no_ambient_entropy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import uuid
+
+    def entropy_unavailable() -> None:
+        raise AssertionError("research publication must not draw ambient entropy")
+
+    monkeypatch.setattr(uuid, "uuid4", entropy_unavailable)
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "research"
+    receipt = _ok(
+        persist_research_blob(
+            research_root=root,
+            research_ref=saved.research_ref,
+            canonical_bytes=saved.canonical_bytes,
+        )
+    )
+    assert receipt.path.read_bytes() == saved.canonical_bytes
+    assert (
+        _ok(
+            read_research_blob(
+                research_root=root,
+                research_ref=saved.research_ref,
+            )
+        )
+        == saved.canonical_bytes
+    )
+    assert list(root.iterdir()) == [receipt.path]
+
+
+def test_native_occupied_staging_names_are_preserved(tmp_path: Path) -> None:
+    from qmb.host import _windows_research as native
+
+    root = tmp_path / "research"
+    root.mkdir()
+    # Abandoned leaves belong to another operation and must never be removed.
+    leaf = root / ".immutable.write-0"
+    leaf.write_bytes(b"unrelated retained bytes")
+    second = root / ".immutable.write-1"
+    second.write_bytes(b"another retained leaf")
+    native.write_blob(root, "immutable", b"canonical")
+    assert native.read_blob(root, "immutable") == b"canonical"
+    assert leaf.read_bytes() == b"unrelated retained bytes"
+    assert second.read_bytes() == b"another retained leaf"
+    assert set(root.iterdir()) == {root / "immutable", leaf, second}
+
+
+def test_native_staging_directory_collision_refuses_without_mutation(tmp_path: Path) -> None:
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "research"
+    root.mkdir()
+    leaf = saved.research_ref.value.replace(":", "-")
+    directory = root / f".{leaf}.write-0"
+    directory.mkdir()
+    sentinel = directory / "sentinel"
+    sentinel.write_bytes(b"retained directory child")
+    result = persist_research_blob(
+        research_root=root,
+        research_ref=saved.research_ref,
+        canonical_bytes=saved.canonical_bytes,
+    )
+    assert is_refusal(result)
+    assert sentinel.read_bytes() == b"retained directory child"
+    assert list(root.iterdir()) == [directory]
+
+
+def test_native_exhausted_staging_names_refuse_without_mutation(tmp_path: Path) -> None:
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "research"
+    root.mkdir()
+    leaf = saved.research_ref.value.replace(":", "-")
+    occupied = {root / f".{leaf}.write-{index}": str(index).encode() for index in range(32)}
+    for path, content in occupied.items():
+        path.write_bytes(content)
+    result = persist_research_blob(
+        research_root=root,
+        research_ref=saved.research_ref,
+        canonical_bytes=saved.canonical_bytes,
+    )
+    assert is_refusal(result), result
+    assert set(root.iterdir()) == set(occupied)
+    for path, content in occupied.items():
+        assert path.read_bytes() == content
+    # Releasing one candidate permits a fresh operation; exhaustion is not
+    # cached and the adapter never deletes another publisher's staging object.
+    released = next(iter(occupied))
+    released.unlink()
+    receipt = _ok(
+        persist_research_blob(
+            research_root=root,
+            research_ref=saved.research_ref,
+            canonical_bytes=saved.canonical_bytes,
+        )
+    )
+    assert receipt.path.read_bytes() == saved.canonical_bytes
+    assert set(root.iterdir()) == (set(occupied) - {released}) | {receipt.path}
+
+
+def test_native_failed_staging_write_releases_owned_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved = _ok(save_hypothesis(fixture_hypothesis()))
+    root = tmp_path / "research"
+    actual = os.fsync
+
+    def fail_flush(fd: int) -> None:
+        raise OSError("fixture pre-publication flush failure")
+
+    monkeypatch.setattr(os, "fsync", fail_flush)
+    result = persist_research_blob(
+        research_root=root,
+        research_ref=saved.research_ref,
+        canonical_bytes=saved.canonical_bytes,
+    )
+    assert is_refusal(result)
+    assert list(root.iterdir()) == []
+    monkeypatch.setattr(os, "fsync", actual)
+    receipt = _ok(
+        persist_research_blob(
+            research_root=root,
+            research_ref=saved.research_ref,
+            canonical_bytes=saved.canonical_bytes,
+        )
+    )
+    assert receipt.path.read_bytes() == saved.canonical_bytes
+    assert list(root.iterdir()) == [receipt.path]

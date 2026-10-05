@@ -8,13 +8,13 @@ depends_on: [COMP-QMF-CORE, COMP-QMF-DATA-STORE, COMP-OBJECT-STORAGE]
 decisions: [DEC-0044, DEC-0045, DEC-0117, DEC-0118, DEC-0198, DEC-0217, DEC-0252]
 sources: [docs/components/qmf-data-store.md, docs/components/qmf-data-backup.md, docs/components/object-storage.md, docs/components/trading-node.md, docs/registry/variables.yaml, docs/contracts/ct-14-backup-restore.yaml, docs/contracts/ct-26-store-backup-input.yaml, _bmad-output/planning-artifacts/architecture/architecture-QMX-2026-08-19/ARCHITECTURE-SPINE.md, _bmad-output/planning-artifacts/architecture/architecture-NODE-2026-08-28/ARCHITECTURE-SPINE.md]
 generated: 2026-08-18
-verified: 2026-08-29
+verified: 2026-10-05
 stale_after: 30d
 ---
 
 # SCN-0004: Backup Does Not Claim Recoverability Before Its Boundaries Exist
 
-This scenario exercises the ratified off-machine backup design and its primitives-versus-schedule split. The architecture sitting ratified the backup design — nightly, encrypted, versioned, off-machine to an object-storage bucket, with automated sample-restore tests and a periodic full-restore rehearsal — where QMF provides the backup, restore, and verify primitives (CT-14, CT-26) and applications own schedule, execution, and cutover; migrations run preflight checks, backup first, dry-run, migrate, verify, never mutating the only copy in place. Numeric recovery targets, encryption key custody, and the crypto dependency remain node/ops-sitting items. Execution status: **backup design and migration ratified; numeric RPO/RTO await the node/ops sitting**. [DEC-0118]
+This scenario exercises the ratified off-machine backup design and its primitives-versus-schedule split. The architecture sitting ratified the backup design — nightly, encrypted, versioned, off-machine to an object-storage bucket, with automated sample-restore tests and a periodic full-restore rehearsal — where QMF provides the backup, restore, and verify primitives (CT-14, CT-26) and applications own schedule, execution, and cutover; migrations run preflight checks, backup first, dry-run, migrate, verify, never mutating the only copy in place. The trading-node sitting named the payload-key custody, `PayloadCipher` dependency, recovery-point objective, and three restore drills. Execution status: **ratified design; the two recovery-time objectives require separate recorded rehearsal measurements, and this scenario supplies no operational recovery proof**. [DEC-0118] [DEC-0198] [DEC-0252]
 
 ## Given
 
@@ -30,4 +30,4 @@ Recoverability is claimed only through the ratified verify primitives — automa
 
 ## Worked numbers
 
-The backup cadence is ratified as nightly and copies are encrypted, versioned, and off-machine (DEC-0118). Numeric recovery-point and recovery-time objectives, the restore-verification cadence's exact period, encryption key custody, and the crypto dependency remain node/ops-sitting items under DEC-0118 — so `registry:backup_recovery_point_objective`, `registry:backup_recovery_time_objective`, and `registry:restore_verification_cadence` are not filled from a recommendation; they are measured and set at that sitting.
+The backup cadence is ratified as nightly and copies are encrypted, versioned, and off-machine (DEC-0118). The node-owned rows are `registry:backup_recovery_point_objective`, `registry:backup_recovery_time_objective_integrity`, `registry:backup_recovery_time_objective_full_dr`, and `registry:restore_verification_cadence` (DEC-0198, DEC-0252). The RPO is set by the nightly design; the two RTO values are measured separately at the monthly integrity restore and the clean-host disaster-recovery rehearsal. Workstation escrow and `PayloadCipher` are named design obligations, not evidence that provisioning or a rehearsal occurred. A passing snapshot or unit test fills neither measured RTO row.
