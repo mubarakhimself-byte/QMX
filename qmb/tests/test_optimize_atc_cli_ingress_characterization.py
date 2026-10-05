@@ -32,7 +32,7 @@ T = TypeVar("T")
 
 
 @pytest.fixture(autouse=True)
-def _forbid_study_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+def forbid_study_execution(monkeypatch: pytest.MonkeyPatch) -> None:
     def unexpected_execution(*args: object, **kwargs: object) -> object:
         raise AssertionError("preflight must not execute or verify a Study")
 
