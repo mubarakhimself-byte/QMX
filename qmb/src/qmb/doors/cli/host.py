@@ -480,7 +480,11 @@ def _as_root(root: object, environ: Mapping[str, str] | None) -> Path:
         return root
     if isinstance(root, str) and root.strip() != "":
         return Path(root)
-    return product_daemon_root(environ=environ)
+    env = os.environ if environ is None else environ
+    configured = env.get("QMA_DAEMON_ROOT")
+    if isinstance(configured, str) and configured.strip() != "":
+        return Path(configured)
+    return product_daemon_root(environ=env)
 
 
 def _pid_is_live(pid: int) -> bool:

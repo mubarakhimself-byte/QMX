@@ -1287,3 +1287,34 @@ def test_click_host_recover_control(tmp_path: Path) -> None:
     assert payload["recovered"] is True
     assert payload["bound_8765"] is False
     assert "recovered-" + _TOKEN not in recovered.output
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_cli_host_start_resolves_environment_root_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, explicit: bool
+) -> None:
+    environment_root = tmp_path / "environment-root"
+    explicit_root = tmp_path / "explicit-root"
+    environment_root.mkdir()
+    explicit_root.mkdir()
+    monkeypatch.setenv("QMA_DAEMON_ROOT", str(environment_root))
+    target = explicit_root if explicit else environment_root
+    seen: list[Path] = []
+
+    def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
+        assert env["QMA_DAEMON_ROOT"] == str(target)
+        seen.append(root)
+        _write_lock(root, os.getpid())
+        _write_token(root)
+        _write_bind(root, "127.0.0.1", 19250)
+        return os.getpid()
+
+    monkeypatch.setattr(host_module, "_default_spawn", spawn)
+    result = CliRunner().invoke(
+        main,
+        ["host", "start"],
+        obj={"wait_attempts": 1, "sleeper": _no_sleep, **({"root": target} if explicit else {})},
+    )
+    assert result.exit_code == 0, result.output
+    assert seen == [target]
+    assert json.loads(result.output)["root"] == str(target)
