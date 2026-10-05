@@ -4,7 +4,7 @@ Source exploration began at backend a0e8769772e469bf54bd312cc1e27e7995e16c3b + U
 
 ## Existing browser transport
 
-`qma.wire.listener`: localhost daemon default port 8765; POST `/pair/start`, `/pair/confirm`, `/pair/renew`; snapshots under `/q/`; POST `/artifacts/stage`. WebSocket offers `qmx.ct40.v1` and `qmx.pair.<pairing_proof>`. Origin is checked; pairing proof is bearer authentication, pairing_record_id is journal identity. Origin cannot create a proof. Browser does not spawn Python or receive host_control. Launcher/QMB privileged local host-control door bootstraps the daemon and pairing.
+`qma.wire.listener`: localhost daemon default port 8765; POST `/pair/start`, `/pair/confirm`, `/pair/renew`; snapshots under `/q/`; PUT `/artifacts/stage`. WebSocket offers `qmx.ct40.v1` and `qmx.pair.<pairing_proof>`. Origin is checked; pairing proof is bearer authentication, pairing_record_id is journal identity. Origin cannot create a proof. Browser does not spawn Python or receive host_control. Launcher/QMB privileged local host-control door bootstraps the daemon and pairing.
 
 JSON-RPC initialize negotiates capability families and unique `producer_id`. Preserve IDs across retry of accepted commands. Typed refusal is a real failure, never a recorded successful call. Track producer/id, product_session_ref, instance/revision/config/grant, operation, correlation and job/run/attempt/artifact identity.
 

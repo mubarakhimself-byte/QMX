@@ -1,6 +1,6 @@
 """JSON Schema loaders and validators for wire families (CT-40; FR-Q13).
 
-Schemas ship beside this package under ``schemas/`` and are the declarative
+Schemas ship inside this package under ``schema_data/`` and are the declarative
 source for family shape. Validation is a focused Draft 2020-12 subset covering
 the keywords used by the shipped schemas (stdlib only).
 """
@@ -42,7 +42,7 @@ __all__ = [
 ]
 
 
-SCHEMA_DIR: Final[Path] = Path(__file__).resolve().parents[3] / "schemas"
+SCHEMA_DIR: Final[Path] = Path(__file__).resolve().parent / "schema_data"
 
 SCHEMA_FILES: Final[dict[str, str]] = {
     "envelope": "envelope.v1.schema.json",

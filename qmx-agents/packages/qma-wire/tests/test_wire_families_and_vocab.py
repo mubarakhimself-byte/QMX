@@ -33,6 +33,7 @@ from qma.wire import (
     snapshots_are_authoritative,
     validate_family_payload,
 )
+from qma.wire.schemas import SCHEMA_DIR, SCHEMA_FILES, load_schema
 from qmf.core.refusal import is_ok, is_refusal
 
 
@@ -172,3 +173,10 @@ def test_ui_contract_remains_stub_only() -> None:
     assert not (ui_pkg / "pyproject.toml").exists()
     assert not (ui_pkg / "src").exists()
     assert "qma-ui-contract" not in qma.wire.__all__
+
+
+@pytest.mark.parametrize("name", SCHEMA_FILES)
+def test_wire_schemas_are_package_resources(name: str) -> None:
+    """The installed contract must not depend on checkout ancestry."""
+    assert SCHEMA_DIR.is_relative_to(Path(qma.wire.__file__).resolve().parent)
+    assert load_schema(name)["$schema"] == "https://json-schema.org/draft/2020-12/schema"
