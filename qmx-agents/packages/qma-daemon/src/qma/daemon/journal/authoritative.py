@@ -84,19 +84,7 @@ class JournalEventRecord:
             occurred_at=self.occurred_at,
             recorded_at=self.recorded_at,
         )
-        try:
-            expected = fingerprint(identity)
-        except UnicodeEncodeError:
-            return invalid_input("journal_event", "journal identity contains invalid Unicode")
-        if is_refusal(expected):
-            return expected
-        if expected.value.value != self.fingerprint:
-            return invalid_input(
-                "journal_event",
-                "journal receipt fingerprint does not match identity",
-                journal_seq=self.journal_seq,
-            )
-        return Ok(None)
+        return _verify_event_fingerprint(identity, self.fingerprint)
 
     def to_row(self) -> dict[str, object]:
         """JSON-native row for the single append-only journal stream."""
@@ -183,6 +171,108 @@ def _identity_content(
     }
 
 
+def _verify_event_fingerprint(identity: Mapping[str, object], embedded: str) -> Result[None]:
+    """Verify the supplied identity; never replace evidence with an inferred value."""
+    parsed = Fingerprint.try_create(embedded)
+    if is_refusal(parsed):
+        return invalid_input("journal_event", "journal receipt fingerprint is malformed")
+    try:
+        expected = fingerprint(identity)
+    except UnicodeEncodeError, RecursionError:
+        return invalid_input("journal_event", "journal identity cannot be canonically encoded")
+    if is_refusal(expected):
+        return expected
+    if expected.value.value != embedded:
+        return invalid_input("journal_event", "journal receipt fingerprint does not match identity")
+    return Ok(None)
+
+
+def _record_from_row(row: Mapping[str, object], world: World) -> Result[JournalEventRecord]:
+    """Validate/hash actual stored fields before constructing any normalized record."""
+    fields = {
+        "class",
+        "world",
+        "event",
+        "journal_seq",
+        "occurred_at",
+        "recorded_at",
+        "scope_path",
+        "payload",
+        "fingerprint",
+    }
+    if set(row) != fields or row.get("class") != _EVENT_CLASS:
+        return invalid_input("journal_event", "journal row has invalid class or envelope fields")
+    payload, event = row["payload"], row["event"]
+    sequence, occurred_at, recorded_at = row["journal_seq"], row["occurred_at"], row["recorded_at"]
+    raw_scope, stored_world, embedded = row["scope_path"], row["world"], row["fingerprint"]
+    if (
+        not isinstance(payload, Mapping)
+        or not isinstance(event, str)
+        or not event.strip()
+        or "." not in event
+        or not isinstance(sequence, int)
+        or isinstance(sequence, bool)
+        or sequence < _FIRST_JOURNAL_SEQ
+        or not isinstance(occurred_at, int)
+        or isinstance(occurred_at, bool)
+        or not isinstance(recorded_at, int)
+        or isinstance(recorded_at, bool)
+        or stored_world != world.value
+        or not isinstance(embedded, str)
+        or not isinstance(raw_scope, list)
+    ):
+        return invalid_input("journal_event", "journal row has an invalid event shape")
+    for stamp in (occurred_at, recorded_at):
+        instant = Instant.try_create(stamp)
+        if is_refusal(instant):
+            return instant
+    scope = cast(list[object], raw_scope)
+    for segment in scope:
+        if not isinstance(segment, Mapping) or set(cast(Mapping[object, object], segment)) != {
+            "kind",
+            "id",
+        }:
+            return invalid_input(
+                "journal_event", "journal scope segments must contain exactly kind and id"
+            )
+    # Every stored field except the embedded fingerprint participates. In particular,
+    # class and scope keys are checked before the parser can supply/drop anything.
+    verified = _verify_event_fingerprint(
+        {key: value for key, value in row.items() if key != "fingerprint"}, embedded
+    )
+    if is_refusal(verified):
+        return verified
+    try:
+        segments = parse_scope_path(scope)
+    except ScopePathError:
+        return invalid_input("journal_event", "journal scope path is invalid")
+    return Ok(
+        JournalEventRecord(
+            journal_seq=sequence,
+            event=event,
+            scope_path=segments,
+            payload=_freeze_payload(cast(Mapping[str, object], payload)),
+            world=world.value,
+            fingerprint=embedded,
+            occurred_at=occurred_at,
+            recorded_at=recorded_at,
+        )
+    )
+
+
+def _read_records(journal: JournalStore, world: World) -> Result[tuple[JournalEventRecord, ...]]:
+    rows = journal.read_stream(DAEMON_JOURNAL_STREAM, for_world=world)
+    if is_refusal(rows):
+        return rows
+    records: list[JournalEventRecord] = []
+    for row in rows.value:
+        parsed = _record_from_row(row, world)
+        if is_refusal(parsed):
+            return parsed
+        records.append(parsed.value)
+    return Ok(tuple(records))
+
+
 class AuthoritativeJournal:
     """Sole durable append target for daemon-owned events (FR-Q23–FR-Q25; AD-6).
 
@@ -252,24 +342,15 @@ class AuthoritativeJournal:
     def _resume_state(
         journal: JournalStore, *, world: World
     ) -> Result[tuple[int, dict[tuple[tuple[str, str], ...], int]]]:
-        rows = journal.read_stream(DAEMON_JOURNAL_STREAM, for_world=world)
-        if is_refusal(rows):
-            return rows
+        records = _read_records(journal, world)
+        if is_refusal(records):
+            return records
         max_seq = 0
         scope_seq: dict[tuple[tuple[str, str], ...], int] = {}
-        for row in rows.value:
-            raw_seq = row.get("journal_seq")
-            if isinstance(raw_seq, int) and not isinstance(raw_seq, bool) and raw_seq > max_seq:
-                max_seq = raw_seq
-            raw_scope = row.get("scope_path")
-            if isinstance(raw_scope, list):
-                try:
-                    segments = parse_scope_path(cast("list[object]", raw_scope))
-                except ScopePathError:
-                    segments = None
-                if segments is not None:
-                    key = _scope_key(segments)
-                    scope_seq[key] = scope_seq.get(key, 0) + 1
+        for record in records.value:
+            max_seq = max(max_seq, record.journal_seq)
+            key = _scope_key(record.scope_path)
+            scope_seq[key] = scope_seq.get(key, 0) + 1
         return Ok((max_seq + 1 if max_seq >= _FIRST_JOURNAL_SEQ else _FIRST_JOURNAL_SEQ, scope_seq))
 
     @property
@@ -299,55 +380,7 @@ class AuthoritativeJournal:
 
     def read_events(self) -> Result[tuple[JournalEventRecord, ...]]:
         """Read the authoritative stream in journal order for projection recovery."""
-        rows = self._journal.read_stream(DAEMON_JOURNAL_STREAM, for_world=self._world)
-        if is_refusal(rows):
-            return rows
-        events: list[JournalEventRecord] = []
-        for row in rows.value:
-            try:
-                raw_scope = row.get("scope_path")
-                segments = parse_scope_path(raw_scope)
-            except Exception as exc:
-                return invalid_input(
-                    "journal_event", "journal scope path is invalid", error=str(exc)
-                )
-            payload = row.get("payload")
-            event = row.get("event")
-            sequence = row.get("journal_seq")
-            occurred_at = row.get("occurred_at")
-            recorded_at = row.get("recorded_at")
-            world = row.get("world")
-            fp = row.get("fingerprint")
-            if (
-                not isinstance(payload, Mapping)
-                or not isinstance(event, str)
-                or not isinstance(sequence, int)
-                or isinstance(sequence, bool)
-                or not isinstance(occurred_at, int)
-                or isinstance(occurred_at, bool)
-                or not isinstance(recorded_at, int)
-                or isinstance(recorded_at, bool)
-                or not isinstance(world, str)
-                or not isinstance(fp, str)
-            ):
-                return invalid_input(
-                    "journal_event",
-                    "journal row has an invalid event shape",
-                    journal_seq=repr(sequence),
-                )
-            events.append(
-                JournalEventRecord(
-                    journal_seq=sequence,
-                    event=event,
-                    scope_path=segments,
-                    payload=_freeze_payload(cast(Mapping[str, object], payload)),
-                    world=world,
-                    fingerprint=fp,
-                    occurred_at=occurred_at,
-                    recorded_at=recorded_at,
-                )
-            )
-        return Ok(tuple(events))
+        return _read_records(self._journal, self._world)
 
     def declare_store(
         self,
@@ -573,8 +606,11 @@ class AuthoritativeJournal:
         )
 
     def read_all(self) -> Result[list[dict[str, object]]]:
-        """Read the single journal stream in durable append order."""
-        return self._journal.read_stream(DAEMON_JOURNAL_STREAM, for_world=self._world)
+        """Read verified rows in durable append order; never normalize corrupt input."""
+        records = self.read_events()
+        if is_refusal(records):
+            return records
+        return Ok([record.to_row() for record in records.value])
 
     def scope_projection(self, scope_path: object) -> Result[list[tuple[int, dict[str, object]]]]:
         """Filtered per-scope projection with derived ``seq`` (not ``journal_seq``).

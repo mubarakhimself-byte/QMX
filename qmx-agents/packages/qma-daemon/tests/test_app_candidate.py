@@ -563,7 +563,24 @@ def test_save_requires_retryable_string_operation_id(tmp_path: Path, request_id:
 
 
 @pytest.mark.parametrize(
-    "mutation", ["fingerprint", "recorded_at", "world", "scope_path", "session_receipt"]
+    "mutation",
+    [
+        "fingerprint",
+        "recorded_at",
+        "world",
+        "scope_path",
+        "session_receipt",
+        "class",
+        "missing_class",
+        "extra_envelope",
+        "extra_scope",
+        "event",
+        "journal_seq",
+        "occurred_at",
+        "payload",
+        "boolean_seq",
+        "missing_fingerprint",
+    ],
 )
 def test_corrupted_journal_receipt_refuses_restart_without_replacing_projection(
     tmp_path: Path, mutation: str
@@ -586,8 +603,32 @@ def test_corrupted_journal_receipt_refuses_restart_without_replacing_projection(
         saved["recorded_at"] += 1
     elif mutation == "world":
         saved["world"] = "replay"
-    else:
+    elif mutation == "scope_path":
         saved["scope_path"] = [{"kind": "desk", "id": "changed"}]
+    elif mutation == "class":
+        saved["class"] = "corrupt-event-class"
+    elif mutation == "missing_class":
+        del saved["class"]
+    elif mutation == "extra_envelope":
+        saved["ignored"] = "corrupt envelope field"
+    elif mutation == "extra_scope":
+        saved["scope_path"] = [{"kind": "desk", "id": "research", "ignored": "corrupt"}]
+    elif mutation == "event":
+        saved["event"] = "app_candidate.not_saved"
+    elif mutation == "journal_seq":
+        saved["journal_seq"] += 1
+    elif mutation == "occurred_at":
+        saved["occurred_at"] += 1
+    elif mutation == "payload":
+        saved["payload"]["revision"] = "fp1:sha256:" + "0" * 64
+    elif mutation == "boolean_seq":
+        saved["journal_seq"] = True
+    else:
+        del saved["fingerprint"]
+    if mutation in ("class", "missing_class", "extra_envelope", "extra_scope", "boolean_seq"):
+        rehashed = fingerprint({key: value for key, value in saved.items() if key != "fingerprint"})
+        assert is_ok(rehashed)
+        saved["fingerprint"] = rehashed.value.value
     journal.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     corrupted = journal.read_bytes()
     reopened = DaemonProcess.compose(

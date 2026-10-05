@@ -117,9 +117,13 @@ immutable artifacts. A postcommit projection failure reports storage failure,
 operation_committed:true and retry_same_id:true. Live retry/read rebuilds a dirty
 projection before proceeding. An ambiguous journal refusal also marks the fold
 dirty, so retry of the same producer/id reconciles durable evidence.
-Restart first verifies consumed candidate and product-session journal receipts
-with the existing journal owner identity recipe (class, world, event, sequence,
-timestamps, scope and payload). A corrupt embedded fingerprint refuses; it is
+Journal binding and reading first validate the actual stored row before any
+record construction or sequence recovery: exactly class, world, event, journal_seq,
+occurred_at, recorded_at, scope_path, payload and fingerprint. The class must be
+qma-journal-event; scope segments have exactly kind/id. Missing/extra fields and
+invalid field types refuse. Identity hashes every actual stored field except the
+embedded fingerprint, using the existing canonical recipe. Class constants or
+parsed scope DTOs are never substituted before this check. A corrupt fingerprint refuses; it is
 never replaced with a recomputed value. Restart validates all artifact bytes,
 canonical version/content, original
 request/key fingerprints, chronological authoring-session/context authority,

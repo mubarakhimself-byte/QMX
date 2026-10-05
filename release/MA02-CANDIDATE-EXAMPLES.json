@@ -4,7 +4,7 @@
     "authoring_session": "psess:author",
     "producer_id": "author-producer",
     "pairing_proof": "Omitted: acquire through the existing local pairing flow.",
-    "artifact_bytes": "Preserved in installed-owner-root-repair2 under existing ArtifactStore; composition is long inert JSON/code text and asset bytes are 256-byte binary."
+    "artifact_bytes": "Preserved in installed-owner-root-final1 under existing ArtifactStore; composition is long inert JSON/code text and asset bytes are 256-byte binary."
   },
   "messages": [
     {
@@ -39,8 +39,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -63,9 +63,9 @@
       },
       "result": {
         "authoring_session": "psess:author",
-        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+        "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
         "content_byte_count": 623,
-        "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
+        "content_fp1": "fp1:sha256:99fd1db3890f1394197e9c08fb2e39f243db387d701ff2c12fc582db7131854e",
         "context_revision": 0,
         "intent": {
           "owner_principal": "local_operator",
@@ -79,8 +79,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70190,
-                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                "byte_count": 70189,
+                "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -106,11 +106,11 @@
         "owner_principal": "local_operator",
         "principal_class": "operator",
         "producer_id": "author-producer",
-        "request_fp1": "fp1:sha256:696b4bc620c4d93ff78409655012125baaafad83d4f93f91e86b8e5271f7dff1",
+        "request_fp1": "fp1:sha256:6f3efe6098c6608ed37947f98841ac3a2dea6fc35636be82731ab2cd7c4383fc",
         "request_id": "create",
         "schema": "qma.miniapp.candidate-version.v1",
-        "revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
-        "receipt_fp1": "fp1:sha256:4175583ccefac84a5e8af00446d336de2e48a22077c3af46edab95a9ddaaddec",
+        "revision": "fp1:sha256:7f4889aa7af63b5997d2ff3c7e2d0707580d825dba8b016af63f523eed79153f",
+        "receipt_fp1": "fp1:sha256:b5d404bcde898dbc9c2296584f63465663b6665d87d88de17783c3fb244abb7c",
         "content": {
           "asset_refs": [
             {
@@ -120,8 +120,8 @@
             }
           ],
           "composition_ref": {
-            "byte_count": 70190,
-            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+            "byte_count": 70189,
+            "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
             "media_type": "application/json"
           },
           "kind": "data-only",
@@ -147,7 +147,7 @@
         "id": "left",
         "method": "save_app_candidate",
         "params": {
-          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+          "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
           "content": {
             "asset_refs": [
               {
@@ -157,8 +157,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -176,21 +176,21 @@
             ]
           },
           "expected_context_revision": 0,
-          "expected_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
+          "expected_revision": "fp1:sha256:7f4889aa7af63b5997d2ff3c7e2d0707580d825dba8b016af63f523eed79153f",
           "product_session_ref": "psess:author"
         }
       },
       "producer_id": "author-producer",
       "result": {
         "authoring_session": "psess:author",
-        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+        "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
         "content_byte_count": 586,
-        "content_fp1": "fp1:sha256:2ce69e123c91595637fc4fafbbe994f175108c489ebd7080e4c8556f17987810",
+        "content_fp1": "fp1:sha256:631983f6a707e05921ebe83dbb2a7e31291e63a87e32044918af24a0f603120d",
         "context_revision": 0,
         "intent": {
           "owner_principal": "local_operator",
           "params": {
-            "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+            "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
             "content": {
               "asset_refs": [
                 {
@@ -200,8 +200,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70190,
-                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                "byte_count": 70189,
+                "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -219,21 +219,21 @@
               ]
             },
             "expected_context_revision": 0,
-            "expected_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
+            "expected_revision": "fp1:sha256:7f4889aa7af63b5997d2ff3c7e2d0707580d825dba8b016af63f523eed79153f",
             "product_session_ref": "psess:author"
           }
         },
         "operation_key": "fp1:sha256:0dde714287e317b2b4f2eb9d041ba8b61074162a5a33771b01904f1d91dfb633",
         "originating_authoring_session": "psess:author",
         "owner_principal": "local_operator",
-        "parent_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
+        "parent_revision": "fp1:sha256:7f4889aa7af63b5997d2ff3c7e2d0707580d825dba8b016af63f523eed79153f",
         "principal_class": "operator",
         "producer_id": "author-producer",
-        "request_fp1": "fp1:sha256:9601f44175ceaa511e06770ad1530259ab398cd86cdb6c8c93851cf0cdd599a4",
+        "request_fp1": "fp1:sha256:85a1dd5c6064101b0cee9909096597f19c8c8f257779a417a76d630ec032e964",
         "request_id": "left",
         "schema": "qma.miniapp.candidate-version.v1",
-        "revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
-        "receipt_fp1": "fp1:sha256:910c8eb125e5d71b0648262f27e48888ec531c6ff2729c4eea08893a2c2dff4d",
+        "revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
+        "receipt_fp1": "fp1:sha256:68fcc2a392d2d98ca3d8f4e67e18b805fbca68062ab879c3fcbb27f8661f637c",
         "content": {
           "asset_refs": [
             {
@@ -243,8 +243,8 @@
             }
           ],
           "composition_ref": {
-            "byte_count": 70190,
-            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+            "byte_count": 70189,
+            "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
             "media_type": "application/json"
           },
           "kind": "data-only",
@@ -270,25 +270,25 @@
         "method": "get_app_candidate",
         "params": {
           "product_session_ref": "psess:author",
-          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d"
+          "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc"
         }
       },
       "result": {
         "schema": "qma.wire.app_candidate.v1",
-        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
-        "current_revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
+        "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
+        "current_revision": "fp1:sha256:197756a55bae46d15dbd508e0bb99d64a9103cb9accc87549fd4ede001fcb830",
         "validated": false,
         "published": false,
         "version": {
           "authoring_session": "psess:author",
-          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+          "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
           "content_byte_count": 623,
-          "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
+          "content_fp1": "fp1:sha256:99fd1db3890f1394197e9c08fb2e39f243db387d701ff2c12fc582db7131854e",
           "context_revision": 0,
           "intent": {
             "owner_principal": "local_operator",
             "params": {
-              "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+              "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
               "content": {
                 "asset_refs": [
                   {
@@ -298,8 +298,8 @@
                   }
                 ],
                 "composition_ref": {
-                  "byte_count": 70190,
-                  "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                  "byte_count": 70189,
+                  "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                   "media_type": "application/json"
                 },
                 "kind": "data-only",
@@ -317,21 +317,21 @@
                 ]
               },
               "expected_context_revision": 0,
-              "expected_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+              "expected_revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
               "product_session_ref": "psess:author"
             }
           },
           "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
           "originating_authoring_session": "psess:author",
           "owner_principal": "local_operator",
-          "parent_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+          "parent_revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
           "principal_class": "operator",
           "producer_id": "author-producer",
-          "request_fp1": "fp1:sha256:c0871fbbddbe68f8dba2a308761f8361ad7cc8d90d527d8f0e14363c5b81544f",
+          "request_fp1": "fp1:sha256:4a57b803eb80985221db0715bdb1ef72c28777e9c683e77b8beafbeca19ba8de",
           "request_id": "return-to-content",
           "schema": "qma.miniapp.candidate-version.v1",
-          "revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
-          "receipt_fp1": "fp1:sha256:1983a13f58121459fadb11a6c2697caab1913fa45c222000ca7768fc139bd48a",
+          "revision": "fp1:sha256:197756a55bae46d15dbd508e0bb99d64a9103cb9accc87549fd4ede001fcb830",
+          "receipt_fp1": "fp1:sha256:45a0ead06ae5dab759188457cd19e0aabf7c6b2300b3c24977f9aa7153973eed",
           "content": {
             "asset_refs": [
               {
@@ -341,8 +341,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -369,26 +369,26 @@
         "method": "get_app_candidate_history",
         "params": {
           "product_session_ref": "psess:author",
-          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d"
+          "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc"
         }
       },
       "result": {
         "schema": "qma.wire.app_candidate.v1",
-        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
-        "current_revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
+        "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
+        "current_revision": "fp1:sha256:197756a55bae46d15dbd508e0bb99d64a9103cb9accc87549fd4ede001fcb830",
         "validated": false,
         "published": false,
         "versions": [
           {
             "authoring_session": "psess:author",
-            "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+            "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
             "content_byte_count": 623,
-            "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
+            "content_fp1": "fp1:sha256:99fd1db3890f1394197e9c08fb2e39f243db387d701ff2c12fc582db7131854e",
             "context_revision": 0,
             "intent": {
               "owner_principal": "local_operator",
               "params": {
-                "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+                "candidate_id": "appcand:efd3816130d84cd58a532907fcb2d3dc",
                 "content": {
                   "asset_refs": [
                     {
@@ -398,8 +398,8 @@
                     }
                   ],
                   "composition_ref": {
-                    "byte_count": 70190,
-                    "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                    "byte_count": 70189,
+                    "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                     "media_type": "application/json"
                   },
                   "kind": "data-only",
@@ -417,21 +417,21 @@
                   ]
                 },
                 "expected_context_revision": 0,
-                "expected_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+                "expected_revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
                 "product_session_ref": "psess:author"
               }
             },
             "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
             "originating_authoring_session": "psess:author",
             "owner_principal": "local_operator",
-            "parent_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+            "parent_revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
             "principal_class": "operator",
             "producer_id": "author-producer",
-            "request_fp1": "fp1:sha256:c0871fbbddbe68f8dba2a308761f8361ad7cc8d90d527d8f0e14363c5b81544f",
+            "request_fp1": "fp1:sha256:4a57b803eb80985221db0715bdb1ef72c28777e9c683e77b8beafbeca19ba8de",
             "request_id": "return-to-content",
             "schema": "qma.miniapp.candidate-version.v1",
-            "revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
-            "receipt_fp1": "fp1:sha256:1983a13f58121459fadb11a6c2697caab1913fa45c222000ca7768fc139bd48a",
+            "revision": "fp1:sha256:197756a55bae46d15dbd508e0bb99d64a9103cb9accc87549fd4ede001fcb830",
+            "receipt_fp1": "fp1:sha256:45a0ead06ae5dab759188457cd19e0aabf7c6b2300b3c24977f9aa7153973eed",
             "content": {
               "asset_refs": [
                 {
@@ -441,8 +441,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70190,
-                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                "byte_count": 70189,
+                "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -461,7 +461,7 @@
             }
           }
         ],
-        "next_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576"
+        "next_revision": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8"
       }
     },
     {
@@ -472,8 +472,8 @@
           "field": "expected_revision",
           "reason": "stale candidate head; reload before saving",
           "refusal": "stale_revision",
-          "expected": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
-          "current": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+          "expected": "fp1:sha256:7f4889aa7af63b5997d2ff3c7e2d0707580d825dba8b016af63f523eed79153f",
+          "current": "fp1:sha256:788086e0e621a488dead86b75d705064af3c59aabd40f29969f7f12deb2e09c8",
           "wrote_version": false
         }
       },
@@ -494,8 +494,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -518,9 +518,9 @@
       },
       "result": {
         "authoring_session": "psess:author",
-        "candidate_id": "appcand:c3018bbf2da34037877897ab8efcecd1",
+        "candidate_id": "appcand:59d4cea703ea45d7b06c7df271f21b24",
         "content_byte_count": 599,
-        "content_fp1": "fp1:sha256:7f429d8124668bb5eab9464c3726e4bef9ab1639dc814b684bdc4e1aecd9e2d8",
+        "content_fp1": "fp1:sha256:5f885b0962e7deb9eaa7fd343849c454f884398ba2b33b70b884d71eea0966c6",
         "context_revision": 0,
         "intent": {
           "owner_principal": "local_operator",
@@ -534,8 +534,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70190,
-                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                "byte_count": 70189,
+                "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -561,11 +561,11 @@
         "owner_principal": "local_operator",
         "principal_class": "operator",
         "producer_id": "author-producer",
-        "request_fp1": "fp1:sha256:fb708ba7894df098e535bdcf150015fc28c8b25ea36002b4bd36f85190bc94ae",
+        "request_fp1": "fp1:sha256:642750b42b194a27532744eeb8c1765a290761aa8c900cd65da458c22e22c9bd",
         "request_id": "\u4fdd\u5b58-\u03c0-\ud83d\udcca",
         "schema": "qma.miniapp.candidate-version.v1",
-        "revision": "fp1:sha256:9a4437adbdfe7fa942aea4137c75d5e62b5256ba71b6b3bd24bb701893870e3c",
-        "receipt_fp1": "fp1:sha256:ea9ad864515bde6441985bc004582b1ceb4fce9f3ab40bdcb68a786da879e816",
+        "revision": "fp1:sha256:142771d27ae3e59d547479a6231aab0d46880092a709fd9d3fed45011e21c2b0",
+        "receipt_fp1": "fp1:sha256:f3c145f97a2eecccacee99c1099cfc2db3bb515114ee84692b09346187885907",
         "content": {
           "asset_refs": [
             {
@@ -575,8 +575,8 @@
             }
           ],
           "composition_ref": {
-            "byte_count": 70190,
-            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+            "byte_count": 70189,
+            "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
             "media_type": "application/json"
           },
           "kind": "data-only",
@@ -611,8 +611,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -659,8 +659,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70190,
-              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "byte_count": 70189,
+              "fp1": "fp1:sha256:712758c212e70bb0c8f8fbb8b2d5f43dd557bf2f7d601e1ed355e21f395a0b6d",
               "media_type": "application/json"
             },
             "kind": "data-only",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
@@ -253,6 +254,38 @@ def test_unknown_store_announcement_refused(tmp_path: Path) -> None:
         refused = journal.announce_evidence_append("not_a_store", fp.value)
         assert is_refusal(refused)
         assert refused.category is RefusalCategory.POLICY_REJECTION
+    finally:
+        journal.close()
+        substrate.close()
+
+
+def test_journal_verifies_actual_row_before_scope_normalization(tmp_path: Path) -> None:
+    substrate, journal = _open_journal(tmp_path)
+    try:
+        accepted = journal.append_event(
+            "candidate.saved",
+            scope_path=[{"kind": "desk", "id": "研究-📈"}],
+            payload={"text": "Café", "n": 1},
+        )
+        assert is_ok(accepted)
+        good = journal.read_events()
+        assert is_ok(good)
+        assert is_ok(good.value[0].verify_identity())
+        assert good.value[0].to_row() == accepted.value.record.to_row()
+        path = tmp_path / "qmf-data/live/journal/qma-daemon-events/000000.jsonl"
+        row = json.loads(path.read_text(encoding="utf-8"))
+        row["scope_path"][0]["ignored"] = "not a segment field"
+        # Even a correctly rehashed row cannot extend a closed scope DTO and then
+        # silently discard that extra identity field during record construction.
+        forged = fingerprint({key: value for key, value in row.items() if key != "fingerprint"})
+        assert is_ok(forged)
+        row["fingerprint"] = forged.value.value
+        path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        refused = journal.read_events()
+        assert is_refusal(refused)
+        assert refused.context["field"] == "journal_event"
+        assert is_refusal(journal.read_all())
+        assert is_refusal(journal.scope_projection([]))
     finally:
         journal.close()
         substrate.close()

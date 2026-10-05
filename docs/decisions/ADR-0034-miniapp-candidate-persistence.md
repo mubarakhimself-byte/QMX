@@ -68,3 +68,12 @@ refuses without repairing authoritative bytes. MA02's core input boundary
 rejects malformed Unicode before identity serialization, preserves valid Unicode
 and returns CT-04 invalid input while leaving the paired socket usable. No
 identity recipe, schema version, authority, limit or publication scope changes.
+
+Re-review of 81a1676b found that the persisted class was discarded before
+verification. The residual repair moves verification to journal row admission,
+before record construction and sequence recovery: validate the existing closed
+envelope/discriminator/scope shape, then fingerprint the actual stored identity.
+It never substitutes the expected class or drops a stored scope/envelope field
+before checking. Valid rows keep the same writer recipe; corruption refuses
+without changing evidence or candidate projections. This adds no feature or
+format version.

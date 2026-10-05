@@ -12,6 +12,15 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-05 - MA02 stored-envelope verification repair
+
+Re-review found that reconstructing a constant class could admit a corrupt
+persisted class. [ADR-0034](decisions/ADR-0034-miniapp-candidate-persistence.md)
+records validation and identity hashing of actual stored rows before record
+construction/sequence recovery, including closed scope/envelope fields. Added
+field-wide corruption and valid journal round-trip regressions. Identity recipe,
+Unicode behavior, MA02 scope and the MA03/04 exclusions stay unchanged.
+
 ## 2026-10-05 - MA02 independent-review integrity repair
 
 [ADR-0034](decisions/ADR-0034-miniapp-candidate-persistence.md) records two bounded
