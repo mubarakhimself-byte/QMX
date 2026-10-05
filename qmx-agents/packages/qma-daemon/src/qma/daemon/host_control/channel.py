@@ -29,6 +29,7 @@ from qmf.data.store.refusals import invalid_input, policy_rejection, storage_fai
 __all__ = [
     "CT40_BIND_PORT",
     "HOST_CONTROL_BIND_NAME",
+    "HOST_CONTROL_CONFIGURE_ARTIFACT_STAGE_MAX_BYTES_TARGET",
     "HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET",
     "HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET",
     "HOST_CONTROL_CONFIGURE_TARGET",
@@ -71,12 +72,14 @@ RECOVER_CONTROL_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 HOST_CONTROL_VERBS: Final[frozenset[str]] = frozenset(
     {"status", "stop", "configure", "rotate-control", "pair", "pair-revoke"}
 )
+HOST_CONTROL_CONFIGURE_ARTIFACT_STAGE_MAX_BYTES_TARGET: Final[str] = "artifact-stage-max-bytes"
 HOST_CONTROL_CONFIGURE_TARGET: Final[str] = "pairing-ttl"
 HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET: Final[str] = "source-origin"
 HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET: Final[str] = "dest-placement"
 HOST_CONTROL_CONFIGURE_TARGETS: Final[frozenset[str]] = frozenset(
     {
         HOST_CONTROL_CONFIGURE_TARGET,
+        HOST_CONTROL_CONFIGURE_ARTIFACT_STAGE_MAX_BYTES_TARGET,
         HOST_CONTROL_CONFIGURE_SOURCE_ORIGIN_TARGET,
         HOST_CONTROL_CONFIGURE_DEST_PLACEMENT_TARGET,
     }
@@ -554,6 +557,8 @@ class HostControlChannel:
         *,
         status: Callable[[], Mapping[str, object]],
         on_stop: Callable[[], None],
+        on_configure_artifact_stage_max_bytes: Callable[[object], Result[Mapping[str, object]]]
+        | None = None,
         on_configure_pairing_ttl: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_configure_source_origin: Callable[[object], Result[Mapping[str, object]]] | None = None,
         on_configure_dest_placement: Callable[[object], Result[Mapping[str, object]]] | None = None,
@@ -564,6 +569,7 @@ class HostControlChannel:
         self._root = root
         self._status = status
         self._on_stop = on_stop
+        self._on_configure_artifact_stage_max_bytes = on_configure_artifact_stage_max_bytes
         self._on_configure_pairing_ttl = on_configure_pairing_ttl
         self._on_configure_source_origin = on_configure_source_origin
         self._on_configure_dest_placement = on_configure_dest_placement
@@ -726,6 +732,22 @@ class HostControlChannel:
 
     def _configure(self, request: Mapping[str, object]) -> dict[str, object]:
         target = request.get("target")
+        if target == HOST_CONTROL_CONFIGURE_ARTIFACT_STAGE_MAX_BYTES_TARGET:
+            if set(request) != {"verb", "host_control", "target", "max_bytes"}:
+                return _fail(
+                    RefusalCategory.INVALID_INPUT,
+                    "configure",
+                    "stage cap requires exact max_bytes fields",
+                )
+            cap_callback = self._on_configure_artifact_stage_max_bytes
+            if cap_callback is None:
+                return _fail(
+                    RefusalCategory.UNSUPPORTED_CAPABILITY, "configure", "stage cap is not bound"
+                )
+            written = cap_callback(request.get("max_bytes"))
+            if is_refusal(written):
+                return _refusal_frame(written)
+            return {"ok": True, "configured": redact_host_surface(written.value)}
         if target == HOST_CONTROL_CONFIGURE_TARGET:
             callback = self._on_configure_pairing_ttl
             if callback is None:

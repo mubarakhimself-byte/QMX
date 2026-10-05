@@ -2,6 +2,15 @@
 
 Source exploration began at backend a0e8769772e469bf54bd312cc1e27e7995e16c3b + UI f6ffaddf3f78c6c14d32daa136fadf15e7748c14. The current additive CT-40 handlers and payloads are documented below.
 
+## Local artifact upload preflight (draft)
+
+The local operator configures the per-upload cap with
+`qmb host configure artifact-stage-max-bytes <non-negative integer bytes>`.
+No production default is selected; fresh roots refuse upload until configured.
+The journaled cap survives same-root restart. Browser pairing grants no
+configuration authority. See [artifact staging setup](ARTIFACT-STAGE-SETUP.md)
+for the supported path and verification limits.
+
 ## Existing browser transport
 
 `qma.wire.listener`: localhost daemon default port 8765; POST `/pair/start`, `/pair/confirm`, `/pair/renew`; snapshots under `/q/`; PUT `/artifacts/stage`. WebSocket offers `qmx.ct40.v1` and `qmx.pair.<pairing_proof>`. Origin is checked; pairing proof is bearer authentication, pairing_record_id is journal identity. Origin cannot create a proof. Browser does not spawn Python or receive host_control. Launcher/QMB privileged local host-control door bootstraps the daemon and pairing.

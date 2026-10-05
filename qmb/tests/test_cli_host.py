@@ -18,6 +18,7 @@ from qmb.doors.cli import (
     HOST_CONFIGURE_COMMANDS,
     HOST_PAIR_COMMANDS,
     command_tree,
+    invoke_host_configure_artifact_stage_max_bytes,
     invoke_host_configure_dest_placement,
     invoke_host_configure_pairing_ttl,
     invoke_host_configure_source_origin,
@@ -291,7 +292,12 @@ def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
             "pair",
         )
     )
-    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin", "dest-placement")
+    assert HOST_CONFIGURE_COMMANDS == (
+        "pairing-ttl",
+        "artifact-stage-max-bytes",
+        "source-origin",
+        "dest-placement",
+    )
     assert HOST_PAIR_COMMANDS == ("revoke",)
     assert "pair" in HOST_COMMANDS
     runner = CliRunner()
@@ -1318,3 +1324,50 @@ def test_cli_host_start_resolves_environment_root_before_spawn(
     assert result.exit_code == 0, result.output
     assert seen == [target]
     assert json.loads(result.output)["root"] == str(target)
+
+
+@pytest.mark.parametrize("value", [True, -1, 1.5, "16", None])
+def test_stage_cap_wrapper_refuses_invalid_without_transport(value: object) -> None:
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("invalid cap reached transport")
+
+    assert is_refusal(invoke_host_configure_artifact_stage_max_bytes(value, transport=forbidden))
+
+
+def test_stage_cap_cli_sends_integer_and_returns_receipt(tmp_path: Path) -> None:
+    (tmp_path / "host_control").write_text(_TOKEN + "\n", encoding="utf-8")
+    calls: list[Mapping[str, object]] = []
+
+    def transport(
+        verb: str, token: str, *, root: Path, extra: Mapping[str, object]
+    ) -> Mapping[str, object]:
+        assert verb == "configure" and token == _TOKEN and root == tmp_path
+        calls.append(extra)
+        return {
+            "ok": True,
+            "configured": {
+                "registry_key": "registry:artifact.stage_max_bytes",
+                "max_bytes": 16,
+                "journal_seq": 42,
+                "writer": "host.configure.artifact-stage-max-bytes",
+            },
+        }
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["host", "configure", "artifact-stage-max-bytes", "16"],
+        obj={"root": tmp_path, "transport": transport},
+    )
+    assert result.exit_code == 0, result.output
+    assert calls == [{"target": "artifact-stage-max-bytes", "max_bytes": 16}]
+    assert json.loads(result.stdout)["journal_seq"] == 42
+    assert _TOKEN not in result.output
+    for invalid_value in ["true", "-1", "1.5", "abc"]:
+        refused = runner.invoke(
+            main,
+            ["host", "configure", "artifact-stage-max-bytes", invalid_value],
+            obj={"root": tmp_path, "transport": transport},
+        )
+        assert refused.exit_code != 0
+    assert len(calls) == 1

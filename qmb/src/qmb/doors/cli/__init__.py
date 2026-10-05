@@ -76,6 +76,7 @@ from qmb.doors.cli.tree import (
     invoke_config_compile,
     invoke_config_show,
     invoke_data,
+    invoke_host_configure_artifact_stage_max_bytes,
     invoke_host_configure_dest_placement,
     invoke_host_configure_pairing_ttl,
     invoke_host_configure_source_origin,
@@ -173,6 +174,7 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_configure_artifact_stage_max_bytes",
     "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_configure_source_origin",
@@ -1784,6 +1786,23 @@ def host_configure_pairing_ttl(ctx: click.Context, duration: str) -> None:
     )
 
 
+@host_configure.command("artifact-stage-max-bytes")
+@click.argument("max_bytes", type=click.IntRange(min=0))
+@click.pass_context
+def host_configure_artifact_stage_max_bytes(ctx: click.Context, max_bytes: int) -> None:
+    """Set registry:artifact.stage_max_bytes. Operator supplies the byte count."""
+    payload = _payload(ctx)
+    _transport(
+        ctx,
+        invoke_host_configure_artifact_stage_max_bytes(
+            max_bytes,
+            root=payload.get("root"),
+            environ=payload.get("environ"),
+            transport=payload.get("transport"),
+        ),
+    )
+
+
 @host_configure.command("source-origin")
 @click.argument("origin")
 @click.pass_context
@@ -2013,6 +2032,7 @@ def _format_ok(value: object) -> str:
             "host.status",
             "host.stop",
             "host.configure.pairing-ttl",
+            "host.configure.artifact-stage-max-bytes",
             "host.configure.source-origin",
             "host.configure.dest-placement",
             "host.rotate-control",

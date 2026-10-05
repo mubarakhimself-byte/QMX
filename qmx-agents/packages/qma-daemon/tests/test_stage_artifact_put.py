@@ -7,9 +7,11 @@ import base64
 import json
 import os
 import struct
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+import pytest
 from qma.core.vocabulary.enums import ArtifactCompleteness
 from qma.daemon.artifacts import (
     ARTIFACT_STAGE_PUT_EXISTED_AT_INSPECT_SHA,
@@ -17,6 +19,7 @@ from qma.daemon.artifacts import (
     claim_stage_artifact_put_existed_at_inspect_sha,
     handle_stage_artifact_put,
 )
+from qma.daemon.host_control import host_control_call
 from qma.daemon.journal.variables import (
     ARTIFACT_STAGE_MAX_BYTES_KEY,
     ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
@@ -28,7 +31,7 @@ from qma.daemon.process import DaemonProcess
 from qma.wire.auth import format_pairing_authorization
 from qma.wire.initialize import PAIRING_CAPABILITY, WIRE_PROTOCOL_VERSION
 from qma.wire.stage_artifact import STAGE_ARTIFACT_CAPABILITY, STAGE_ARTIFACT_HTTP_PATH
-from qmf.core import is_ok, is_refusal
+from qmf.core import Result, is_ok, is_refusal
 from qmf.core.fingerprint import fingerprint_bytes
 from qmf.core.refusal import RefusalCategory
 
@@ -801,3 +804,191 @@ def test_initialize_pairing_only_then_put_stage(tmp_path: Path) -> None:
             await process.aclose()
 
     asyncio.run(_run())
+
+
+def _assert_host_refusal(reply: Result[Mapping[str, object]]) -> None:
+    assert is_ok(reply), reply
+    assert reply.value["ok"] is False, reply
+
+
+def _assert_cap(process: DaemonProcess, expected: int) -> None:
+    cap = process.variables.artifact_stage_max_bytes()
+    assert is_ok(cap) and cap.value == expected
+
+
+def _cap_receipts(process: DaemonProcess) -> list[object]:
+    rows = process.journal.read_events()
+    assert is_ok(rows)
+    return [
+        e
+        for e in rows.value
+        if e.event == "variable.set" and e.payload.get("name") == ARTIFACT_STAGE_MAX_BYTES_KEY
+    ]
+
+
+def test_local_cap_config_restart_and_upload_boundary(tmp_path: Path) -> None:
+    async def run() -> None:
+        process = _compose(tmp_path, boot="cap-first")
+        try:
+            bound = await process.bind()
+            assert is_ok(bound)
+            host, port = bound.value.host, bound.value.port
+            _, proof = await _pair_over_listener(process, host, port)
+
+            async def put(body: bytes) -> tuple[int, dict[str, str], bytes]:
+                return _split_http(
+                    await _exchange(
+                        host,
+                        port,
+                        _http_bytes(
+                            "PUT",
+                            "/artifacts/stage",
+                            body=body,
+                            headers={"Origin": _ORIGIN, "Authorization": _bearer(proof)},
+                        ),
+                    )
+                )
+
+            assert (await put(b"fresh"))[0] == 403
+            assert process.artifacts.objects() == ()
+            for value in [True, -1, 1.5, "16", None]:
+                refused = await asyncio.to_thread(
+                    host_control_call,
+                    tmp_path,
+                    "configure",
+                    fields={"target": "artifact-stage-max-bytes", "max_bytes": value},
+                )
+                _assert_host_refusal(refused)
+            for fields in [
+                {"target": "unknown", "max_bytes": 16},
+                {"target": "artifact-stage-max-bytes", "max_bytes": 16, "key": "other"},
+            ]:
+                _assert_host_refusal(
+                    await asyncio.to_thread(host_control_call, tmp_path, "configure", fields=fields)
+                )
+            assert _cap_receipts(process) == []
+            for token in ["wrong", "pairing:" + proof]:
+                _assert_host_refusal(
+                    await asyncio.to_thread(
+                        host_control_call,
+                        tmp_path,
+                        "configure",
+                        fields={"target": "artifact-stage-max-bytes", "max_bytes": 16},
+                        token=token,
+                    )
+                )
+            configured = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={"target": "artifact-stage-max-bytes", "max_bytes": 16},
+            )
+            assert is_ok(configured) and configured.value["ok"] is True
+            for body in [b"below", b"x" * 16]:
+                status, _, raw = await put(body)
+                assert status == 200
+                assert json.loads(raw)["result"]["fp1"] == fingerprint_bytes(body).value
+            assert (await put(b"x" * 17))[0] == 403
+            assert len(process.artifacts.objects()) == 2
+            changed = await asyncio.to_thread(
+                host_control_call,
+                tmp_path,
+                "configure",
+                fields={"target": "artifact-stage-max-bytes", "max_bytes": 8},
+            )
+            assert is_ok(changed) and changed.value["ok"] is True
+            receipts = _cap_receipts(process)
+            assert len(receipts) == 2
+        finally:
+            await process.aclose()
+        # Stale file setup is not a cap writer, and cannot override the journal.
+        (tmp_path / "operator-config.json").write_text(
+            json.dumps({"artifact_stage_max_bytes": 999})
+        )
+        reopened = _compose(tmp_path, boot="cap-reopened")
+        try:
+            _assert_cap(reopened, 8)
+            assert _cap_receipts(reopened) == receipts
+            bound = await reopened.bind()
+            assert is_ok(bound)
+            for body, expected_status in [(b"y" * 8, 200), (b"y" * 9, 403)]:
+                raw = await _exchange(
+                    bound.value.host,
+                    bound.value.port,
+                    _http_bytes(
+                        "PUT",
+                        "/artifacts/stage",
+                        body=body,
+                        headers={"Origin": _ORIGIN, "Authorization": _bearer(proof)},
+                    ),
+                )
+                assert _split_http(raw)[0] == expected_status
+        finally:
+            await reopened.aclose()
+
+    asyncio.run(run())
+
+
+def test_failed_journal_write_does_not_change_cap(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="cap-write-failure")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        process.journal.close()
+        assert is_refusal(process.configure_artifact_stage_max_bytes(32))
+        _assert_cap(process, 16)
+    finally:
+        process.close()
+
+
+@pytest.mark.parametrize("value", [True, -1, "16"])
+def test_invalid_latest_journal_cap_refuses_reopen(tmp_path: Path, value: object) -> None:
+    process = _compose(tmp_path, boot="cap-invalid")
+    try:
+        assert is_ok(process.configure_artifact_stage_max_bytes(16))
+        assert is_ok(
+            process.variables.variable_set(
+                ARTIFACT_STAGE_MAX_BYTES_KEY,
+                value,
+                principal_class="operator",
+                journal=process.journal,
+            )
+        )
+    finally:
+        process.close()
+    from qma.daemon.plugins import research_corpus_plugin_load_config
+
+    result = DaemonProcess.compose(
+        tmp_path,
+        machine="test-host",
+        boot_epoch_id="cap-invalid-reopen",
+        bind_port=0,
+        plugin_load_configs=research_corpus_plugin_load_config(tmp_path / "seed-corpus"),
+    )
+    assert is_refusal(result)
+
+
+def test_zero_and_operator_only_registry_boundary(tmp_path: Path) -> None:
+    process = _compose(tmp_path, boot="cap-zero")
+    try:
+        for principal in ["machine", "agent"]:
+            assert is_refusal(
+                process.variables.variable_set(
+                    ARTIFACT_STAGE_MAX_BYTES_KEY,
+                    16,
+                    principal_class=principal,
+                    journal=process.journal,
+                )
+            )
+        assert is_refusal(
+            process.variables.variable_set(
+                "pairing.session_ttl", "PT15M", principal_class="operator", journal=process.journal
+            )
+        )
+        assert is_ok(process.configure_artifact_stage_max_bytes(0))
+    finally:
+        process.close()
+    reopened = _compose(tmp_path, boot="cap-zero-reopen")
+    try:
+        _assert_cap(reopened, 0)
+    finally:
+        reopened.close()

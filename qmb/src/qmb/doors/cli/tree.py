@@ -117,6 +117,7 @@ from .host import (
     HOST_COMMANDS,
     HOST_CONFIGURE_COMMANDS,
     HOST_PAIR_COMMANDS,
+    invoke_host_configure_artifact_stage_max_bytes,
     invoke_host_configure_dest_placement,
     invoke_host_configure_pairing_ttl,
     invoke_host_configure_source_origin,
@@ -181,6 +182,7 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
+    "invoke_host_configure_artifact_stage_max_bytes",
     "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_configure_source_origin",
@@ -326,6 +328,7 @@ _COMMAND_PREREQS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "host.stop": (),
         "host.configure": (),
         "host.configure.pairing-ttl": ("duration",),
+        "host.configure.artifact-stage-max-bytes": ("max_bytes",),
         "host.configure.source-origin": ("origin",),
         "host.configure.dest-placement": (
             "instance_id",

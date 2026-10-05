@@ -70,6 +70,7 @@ __all__ = [
     "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
+    "invoke_host_configure_artifact_stage_max_bytes",
     "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
     "invoke_host_configure_source_origin",
@@ -96,6 +97,7 @@ HOST_COMMANDS: Final[tuple[str, ...]] = (
 )
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = (
     "pairing-ttl",
+    "artifact-stage-max-bytes",
     "source-origin",
     "dest-placement",
 )
@@ -1199,6 +1201,58 @@ def invoke_host_configure_pairing_ttl(
         "registry_key": fields_out.get("registry_key", PAIRING_SESSION_TTL_REGISTRY_KEY),
         "ttl": fields_out.get("ttl", "set"),
         "writer": fields_out.get("writer", "host.configure.pairing-ttl"),
+    }
+    return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
+
+
+def invoke_host_configure_artifact_stage_max_bytes(
+    max_bytes: object,
+    *,
+    root: object = None,
+    environ: object = None,
+    transport: object = None,
+) -> Result[Mapping[str, object]]:
+    """Set an operator-selected non-negative integer byte cap over host-control."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 0:
+        return invalid("max_bytes", "stage cap requires a non-negative integer byte count")
+    env_map = _environ_map(environ)
+    if not isinstance(env_map, Ok):
+        return env_map
+    target = _as_root(root, env_map.value)
+    token = _read_token(target)
+    if not isinstance(token, Ok):
+        return token
+    fields: dict[str, object] = {
+        "target": "artifact-stage-max-bytes",
+        "max_bytes": max_bytes,
+    }
+    if callable(transport):
+        called = transport("configure", token.value, root=target, extra=fields)
+        if isinstance(called, TypedRefusal):
+            return called
+        if not isinstance(called, Mapping):
+            return invalid("configure", "host-control transport must return a mapping")
+        payload = dict(cast("Mapping[str, object]", called))
+    else:
+        remote = _host_control_call(target, "configure", fields=fields)
+        if not isinstance(remote, Ok):
+            return remote
+        payload = dict(remote.value)
+    refused = _payload_refusal(payload, verb="configure")
+    if not isinstance(refused, Ok):
+        return refused
+    configured = payload.get("configured")
+    fields_out: dict[str, object]
+    if isinstance(configured, Mapping):
+        fields_out = dict(cast("Mapping[str, object]", configured))
+    else:
+        fields_out = {}
+    report: dict[str, object] = {
+        "verb": "host.configure.artifact-stage-max-bytes",
+        "registry_key": fields_out.get("registry_key", "registry:artifact.stage_max_bytes"),
+        "max_bytes": fields_out.get("max_bytes"),
+        "journal_seq": fields_out.get("journal_seq"),
+        "writer": fields_out.get("writer", "host.configure.artifact-stage-max-bytes"),
     }
     return Ok(cast("Mapping[str, object]", redact_host_surface(report)))
 

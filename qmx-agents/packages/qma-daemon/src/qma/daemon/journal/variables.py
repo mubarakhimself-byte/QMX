@@ -55,6 +55,7 @@ __all__ = [
     "cite_store_lifecycle_key",
     "claim_pairing_ttl_ct40_writable_at_inspect_sha",
     "expires_at_from_pairing_ttl",
+    "fold_artifact_stage_max_bytes_from_journal",
     "fold_pairing_ttl_from_journal",
     "has_variable_edit_kind",
     "pairing_session_ttl_is_set",
@@ -310,6 +311,45 @@ def fold_pairing_ttl_from_journal(journal: AuthoritativeJournal) -> str | None:
             chosen_key = key
             chosen = duration.strip()
     return chosen
+
+
+def fold_artifact_stage_max_bytes_from_journal(
+    journal: AuthoritativeJournal,
+) -> Result[int | None]:
+    """Restore only the stage cap from its latest authoritative variable.set receipt."""
+    rows = journal.read_all()
+    if is_refusal(rows):
+        return rows
+    chosen_key: tuple[int, int] | None = None
+    chosen: object = None
+    for row in rows.value:
+        if row.get("event") != VARIABLE_SET_EVENT:
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        body = cast("dict[str, object]", payload)
+        if body.get("name") != ARTIFACT_STAGE_MAX_BYTES_KEY:
+            continue
+        recorded_at = row.get("recorded_at")
+        journal_seq = row.get("journal_seq")
+        if (
+            isinstance(recorded_at, bool)
+            or not isinstance(recorded_at, int)
+            or isinstance(journal_seq, bool)
+            or not isinstance(journal_seq, int)
+        ):
+            return invalid_input("stage_max_bytes", "invalid stage cap journal ordering")
+        key = (recorded_at, journal_seq)
+        if chosen_key is None or key >= chosen_key:
+            chosen_key = key
+            chosen = body.get("value")
+    if chosen_key is None:
+        return Ok(None)
+    parsed = resolve_artifact_stage_max_bytes(chosen)
+    if is_refusal(parsed):
+        return parsed
+    return Ok[int | None](parsed.value)
 
 
 def has_variable_edit_kind() -> bool:
@@ -889,6 +929,15 @@ class GovernedVariableRegistry:
         if is_refusal(got):
             return got
         return resolve_artifact_stage_max_bytes(got.value)
+
+    def restore_artifact_stage_max_bytes(self, journal: AuthoritativeJournal) -> Result[None]:
+        """Replay this cap without writing a receipt or selecting a bootstrap value."""
+        folded = fold_artifact_stage_max_bytes_from_journal(journal)
+        if is_refusal(folded):
+            return folded
+        if folded.value is not None:
+            self._values[ARTIFACT_STAGE_MAX_BYTES_KEY] = folded.value
+        return Ok(None)
 
     def pairing_ttl_is_set(self) -> bool:
         """True when host-control has written ``registry:pairing.session_ttl``."""

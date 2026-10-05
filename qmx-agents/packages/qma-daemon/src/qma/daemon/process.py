@@ -137,11 +137,13 @@ from qma.daemon.http_pair import (
 from qma.daemon.journal.authoritative import AuthoritativeJournal
 from qma.daemon.journal.clock import InjectedUtcClock
 from qma.daemon.journal.variables import (
+    ARTIFACT_STAGE_MAX_BYTES_KEY,
     ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
     PAIRING_SESSION_TTL_META_KEY,
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     GovernedVariableRegistry,
     fold_pairing_ttl_from_journal,
+    resolve_artifact_stage_max_bytes,
 )
 from qma.daemon.knowledge.service import KnowledgeService
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
@@ -1044,6 +1046,12 @@ class DaemonProcess:
                 if existing is None:
                     existing = fold_local_operator_from_journal(process.journal)
                 process._local_operator = existing
+            restored_cap = process._variables.restore_artifact_stage_max_bytes(process._journal)
+            if is_refusal(restored_cap):
+                process._closed = True
+                process._journal.close()
+                process._substrate.close()
+                return restored_cap
             process._restore_pairing_ttl()
             restored_pairing = restore_pairing_projections(process.journal, process.sqlite)
             if is_refusal(restored_pairing):
@@ -1964,6 +1972,30 @@ class DaemonProcess:
             )
         )
 
+    def configure_artifact_stage_max_bytes(self, max_bytes: object) -> Result[Mapping[str, object]]:
+        """Local host-control operator write; no default or browser configuration route."""
+        parsed = resolve_artifact_stage_max_bytes(max_bytes)
+        if is_refusal(parsed):
+            return parsed
+        written = self._variables.variable_set(
+            ARTIFACT_STAGE_MAX_BYTES_KEY,
+            parsed.value,
+            principal_class="operator",
+            journal=self._journal,
+        )
+        if is_refusal(written):
+            return written
+        return Ok(
+            MappingProxyType(
+                {
+                    "registry_key": ARTIFACT_STAGE_MAX_BYTES_REGISTRY_KEY,
+                    "max_bytes": written.value.value,
+                    "writer": "host.configure.artifact-stage-max-bytes",
+                    "journal_seq": written.value.journal.record.journal_seq,
+                }
+            )
+        )
+
     def configure_pairing_ttl(self, duration: object) -> Result[Mapping[str, object]]:
         """Sole writer of ``registry:pairing.session_ttl`` (AM-10; GAP-0109)."""
         written = self._variables.configure_pairing_session_ttl(
@@ -2182,6 +2214,7 @@ class DaemonProcess:
             status=self.host_status_snapshot,
             on_stop=self.request_stop,
             on_configure_pairing_ttl=self.configure_pairing_ttl,
+            on_configure_artifact_stage_max_bytes=self.configure_artifact_stage_max_bytes,
             on_configure_source_origin=self.configure_source_origin,
             on_configure_dest_placement=self.configure_dest_placement,
             on_rotate_control=self.rotate_control,
