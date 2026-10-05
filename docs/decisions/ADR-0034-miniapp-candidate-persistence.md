@@ -59,3 +59,12 @@ migration or mutable app data is introduced. artifact.stage_max_bytes remains
 an operator prerequisite for staged uploads. No new numeric registry default
 or unresolved gap is silently filled. Existing ChangeRequest remains separate;
 MA02 does not claim a mounted durable change-request workflow.
+
+Independent review of 67eb7448 found two P2 acceptance gaps: unchecked embedded
+journal receipt fingerprints and uncaught lone-surrogate UTF-8 encoding errors.
+The bounded repair verifies consumed candidate/session receipts with the existing
+journal owner's identity recipe before replacing candidate rows; corruption
+refuses without repairing authoritative bytes. MA02's core input boundary
+rejects malformed Unicode before identity serialization, preserves valid Unicode
+and returns CT-04 invalid input while leaving the paired socket usable. No
+identity recipe, schema version, authority, limit or publication scope changes.

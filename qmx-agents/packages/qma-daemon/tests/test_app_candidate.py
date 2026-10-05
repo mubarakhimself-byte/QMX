@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from typing import cast
 
@@ -557,5 +558,94 @@ def test_save_requires_retryable_string_operation_id(tmp_path: Path, request_id:
         )
         assert is_refusal(refused)
         assert count(p) == 0
+    finally:
+        p.close()
+
+
+@pytest.mark.parametrize(
+    "mutation", ["fingerprint", "recorded_at", "world", "scope_path", "session_receipt"]
+)
+def test_corrupted_journal_receipt_refuses_restart_without_replacing_projection(
+    tmp_path: Path, mutation: str
+) -> None:
+    p = process(tmp_path)
+    try:
+        mint(p)
+        first = save(p, content(p))
+        before = p.sqlite.execute("SELECT * FROM app_candidate_state ORDER BY journal_seq")
+    finally:
+        p.close()
+    journal = tmp_path / "qmf-data/live/journal/qma-daemon-events/000000.jsonl"
+    rows = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+    saved = next(row for row in rows if row["event"] == SAVED_EVENT)
+    if mutation == "session_receipt":
+        saved = next(row for row in rows if row["event"].startswith("product_session."))
+    if mutation in ("fingerprint", "session_receipt"):
+        saved["fingerprint"] = "fp1:sha256:" + "0" * 64
+    elif mutation == "recorded_at":
+        saved["recorded_at"] += 1
+    elif mutation == "world":
+        saved["world"] = "replay"
+    else:
+        saved["scope_path"] = [{"kind": "desk", "id": "changed"}]
+    journal.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    corrupted = journal.read_bytes()
+    reopened = DaemonProcess.compose(
+        tmp_path,
+        machine="ma02-host",
+        boot_epoch_id="bad-receipt",
+        plugin_load_configs=research_corpus_plugin_load_config(tmp_path / "corpus"),
+    )
+    assert is_refusal(reopened), reopened
+    assert reopened.context["field"] == ("world" if mutation == "world" else "journal_event")
+    with closing(
+        sqlite3.connect(f"file:{(tmp_path / 'daemon/daemon.sqlite').as_posix()}?mode=ro", uri=True)
+    ) as conn:
+        assert (
+            conn.execute("SELECT * FROM app_candidate_state ORDER BY journal_seq").fetchall()
+            == before
+        )
+    assert before[0][4] and first["receipt_fp1"] != "fp1:sha256:" + "0" * 64
+    assert journal.read_bytes() == corrupted
+    assert not (tmp_path / ".daemon_writer").exists()
+
+
+@pytest.mark.parametrize("field", ["title", "description", "media_type", "request_id"])
+@pytest.mark.parametrize("surrogate", ["\ud800", "\udfff"])
+def test_malformed_unicode_refuses_without_save_and_valid_unicode_remains_usable(
+    tmp_path: Path, field: str, surrogate: str
+) -> None:
+    p = process(tmp_path)
+    try:
+        mint(p)
+        data = content(p)
+        args: dict[str, object] = {
+            "product_session_ref": "psess:author",
+            "expected_context_revision": 0,
+            "content": data,
+        }
+        request_id = "malformed"
+        if field == "request_id":
+            request_id = surrogate
+        elif field == "media_type":
+            cast(dict[str, object], data["composition_ref"])["media_type"] = surrogate
+        else:
+            cast(dict[str, object], data["metadata"])[field] = surrogate
+        before = p.journal.read_events()
+        assert is_ok(before)
+        refused = call(p, "save_app_candidate", args, request_id)
+        assert is_refusal(refused)
+        assert refused.category.value == "invalid input"
+        assert p.journal.read_events() == before
+        valid = content(p, "Café e\u0301 📈")
+        accepted = save(p, valid, "保存-π-📊")
+        assert (
+            cast(dict[str, object], cast(dict[str, object], accepted["content"])["metadata"])[
+                "title"
+            ]
+            == "Café é 📈"
+        )
+        assert count(p) == 1
+        assert save(p, valid, "保存-π-📊") == accepted
     finally:
         p.close()

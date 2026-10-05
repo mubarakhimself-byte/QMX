@@ -73,6 +73,31 @@ class JournalEventRecord:
     occurred_at: int
     recorded_at: int
 
+    def verify_identity(self) -> Result[None]:
+        """Refuse a corrupted receipt using the journal writer's identity recipe."""
+        identity = _identity_content(
+            journal_seq=self.journal_seq,
+            event=self.event,
+            scope_path=self.scope_path,
+            payload=self.payload,
+            world=self.world,
+            occurred_at=self.occurred_at,
+            recorded_at=self.recorded_at,
+        )
+        try:
+            expected = fingerprint(identity)
+        except UnicodeEncodeError:
+            return invalid_input("journal_event", "journal identity contains invalid Unicode")
+        if is_refusal(expected):
+            return expected
+        if expected.value.value != self.fingerprint:
+            return invalid_input(
+                "journal_event",
+                "journal receipt fingerprint does not match identity",
+                journal_seq=self.journal_seq,
+            )
+        return Ok(None)
+
     def to_row(self) -> dict[str, object]:
         """JSON-native row for the single append-only journal stream."""
         return {

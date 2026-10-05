@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Final, cast
 
+from qma.core.app_candidate import validate_unicode
 from qma.wire.list_mailbox import query_unavailable
 from qmf.core import Ok, Result
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
@@ -51,6 +52,9 @@ def parse_candidate_args(name: str, args: object) -> Result[dict[str, object]]:
     if not isinstance(args, Mapping):
         return invalid_input("params", "expected an object")
     body = dict(cast(Mapping[str, object], args))
+    unicode = validate_unicode(body, "params")
+    if not isinstance(unicode, Ok):
+        return unicode
     required = {"product_session_ref"}
     allowed = required | {"candidate_id"}
     if name == "save_app_candidate":

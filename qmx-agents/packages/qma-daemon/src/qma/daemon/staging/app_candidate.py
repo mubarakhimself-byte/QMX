@@ -17,6 +17,7 @@ from qma.core.app_candidate import (
     json_object,
     parse_candidate_content,
     token,
+    validate_unicode,
 )
 from qma.core.vocabulary.enums import ArtifactCompleteness, PrincipalClass
 from qma.daemon.artifacts.store import ArtifactStore
@@ -241,6 +242,9 @@ class AppCandidateService:
             return producer
         if not isinstance(request_id, str) or not request_id.strip():
             return invalid_input("id", "candidate save requires a non-empty string request id")
+        unicode = validate_unicode(request_id, "id")
+        if is_refusal(unicode):
+            return unicode
         key_result = fingerprint({"producer_id": producer.value, "id": request_id})
         intent_result = fingerprint({"params": dict(args), "owner_principal": owner})
         if is_refusal(key_result):
@@ -403,6 +407,10 @@ class AppCandidateService:
             recovered: list[tuple[dict[str, object], int]] = []
             historical_sessions: dict[str, ProductSession] = {}
             for event in stream.value:
+                if event.event == SAVED_EVENT or event.event.startswith("product_session."):
+                    identity = event.verify_identity()
+                    if is_refusal(identity):
+                        return identity
                 if event.event.startswith("product_session.") and {
                     "product_session_id",
                     "profile",

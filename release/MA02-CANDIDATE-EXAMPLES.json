@@ -4,7 +4,7 @@
     "authoring_session": "psess:author",
     "producer_id": "author-producer",
     "pairing_proof": "Omitted: acquire through the existing local pairing flow.",
-    "artifact_bytes": "Preserved in installed-owner-root-3 under existing ArtifactStore; composition contains inert long JSON/code text and asset bytes are 256-byte binary."
+    "artifact_bytes": "Preserved in installed-owner-root-repair2 under existing ArtifactStore; composition is long inert JSON/code text and asset bytes are 256-byte binary."
   },
   "messages": [
     {
@@ -39,8 +39,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70184,
-              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -63,9 +63,9 @@
       },
       "result": {
         "authoring_session": "psess:author",
-        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
         "content_byte_count": 623,
-        "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+        "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
         "context_revision": 0,
         "intent": {
           "owner_principal": "local_operator",
@@ -79,8 +79,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70184,
-                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "byte_count": 70190,
+                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -106,11 +106,11 @@
         "owner_principal": "local_operator",
         "principal_class": "operator",
         "producer_id": "author-producer",
-        "request_fp1": "fp1:sha256:35fc02f9373c4ed36f6b058cec5f414ced755d9dcc1480fa35c43d7cac3bc253",
+        "request_fp1": "fp1:sha256:696b4bc620c4d93ff78409655012125baaafad83d4f93f91e86b8e5271f7dff1",
         "request_id": "create",
         "schema": "qma.miniapp.candidate-version.v1",
-        "revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
-        "receipt_fp1": "fp1:sha256:d8163186cbc8b3bb9302ee8ac2ecaf48f20222f7fcc7692dc7b85f595b3b7bac",
+        "revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
+        "receipt_fp1": "fp1:sha256:4175583ccefac84a5e8af00446d336de2e48a22077c3af46edab95a9ddaaddec",
         "content": {
           "asset_refs": [
             {
@@ -120,8 +120,8 @@
             }
           ],
           "composition_ref": {
-            "byte_count": 70184,
-            "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+            "byte_count": 70190,
+            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
             "media_type": "application/json"
           },
           "kind": "data-only",
@@ -147,7 +147,7 @@
         "id": "left",
         "method": "save_app_candidate",
         "params": {
-          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
           "content": {
             "asset_refs": [
               {
@@ -157,8 +157,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70184,
-              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -176,21 +176,21 @@
             ]
           },
           "expected_context_revision": 0,
-          "expected_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+          "expected_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
           "product_session_ref": "psess:author"
         }
       },
       "producer_id": "author-producer",
       "result": {
         "authoring_session": "psess:author",
-        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
         "content_byte_count": 586,
-        "content_fp1": "fp1:sha256:2f6fceb78ac9ef10bff47a333607d27675f729b92ea0788727885d41d8206bf5",
+        "content_fp1": "fp1:sha256:2ce69e123c91595637fc4fafbbe994f175108c489ebd7080e4c8556f17987810",
         "context_revision": 0,
         "intent": {
           "owner_principal": "local_operator",
           "params": {
-            "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+            "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
             "content": {
               "asset_refs": [
                 {
@@ -200,8 +200,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70184,
-                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "byte_count": 70190,
+                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -219,21 +219,21 @@
               ]
             },
             "expected_context_revision": 0,
-            "expected_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+            "expected_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
             "product_session_ref": "psess:author"
           }
         },
         "operation_key": "fp1:sha256:0dde714287e317b2b4f2eb9d041ba8b61074162a5a33771b01904f1d91dfb633",
         "originating_authoring_session": "psess:author",
         "owner_principal": "local_operator",
-        "parent_revision": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
+        "parent_revision": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
         "principal_class": "operator",
         "producer_id": "author-producer",
-        "request_fp1": "fp1:sha256:e40065b70c8e47b124a819c4a691c60fd0ad214033a48b7eea41af1d74a7e69d",
+        "request_fp1": "fp1:sha256:9601f44175ceaa511e06770ad1530259ab398cd86cdb6c8c93851cf0cdd599a4",
         "request_id": "left",
         "schema": "qma.miniapp.candidate-version.v1",
-        "revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
-        "receipt_fp1": "fp1:sha256:d01943e45587195f4c1baa1ea54187b90ee683ad15ce4eb282a645c0e2a379e2",
+        "revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
+        "receipt_fp1": "fp1:sha256:910c8eb125e5d71b0648262f27e48888ec531c6ff2729c4eea08893a2c2dff4d",
         "content": {
           "asset_refs": [
             {
@@ -243,8 +243,8 @@
             }
           ],
           "composition_ref": {
-            "byte_count": 70184,
-            "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+            "byte_count": 70190,
+            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
             "media_type": "application/json"
           },
           "kind": "data-only",
@@ -270,25 +270,25 @@
         "method": "get_app_candidate",
         "params": {
           "product_session_ref": "psess:author",
-          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88"
+          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d"
         }
       },
       "result": {
         "schema": "qma.wire.app_candidate.v1",
-        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
-        "current_revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+        "current_revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
         "validated": false,
         "published": false,
         "version": {
           "authoring_session": "psess:author",
-          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
           "content_byte_count": 623,
-          "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+          "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
           "context_revision": 0,
           "intent": {
             "owner_principal": "local_operator",
             "params": {
-              "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+              "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
               "content": {
                 "asset_refs": [
                   {
@@ -298,8 +298,8 @@
                   }
                 ],
                 "composition_ref": {
-                  "byte_count": 70184,
-                  "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                  "byte_count": 70190,
+                  "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
                   "media_type": "application/json"
                 },
                 "kind": "data-only",
@@ -317,21 +317,21 @@
                 ]
               },
               "expected_context_revision": 0,
-              "expected_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+              "expected_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
               "product_session_ref": "psess:author"
             }
           },
           "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
           "originating_authoring_session": "psess:author",
           "owner_principal": "local_operator",
-          "parent_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+          "parent_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
           "principal_class": "operator",
           "producer_id": "author-producer",
-          "request_fp1": "fp1:sha256:f806e6b5f0d486c85390859524ca3afcc91a4b7aecbe80162a6cbc2a53aa35a0",
+          "request_fp1": "fp1:sha256:c0871fbbddbe68f8dba2a308761f8361ad7cc8d90d527d8f0e14363c5b81544f",
           "request_id": "return-to-content",
           "schema": "qma.miniapp.candidate-version.v1",
-          "revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
-          "receipt_fp1": "fp1:sha256:04d1566bc4b26d3856527da5a3a0d917694e21a36ece36b037ed8fc2abaf849d",
+          "revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
+          "receipt_fp1": "fp1:sha256:1983a13f58121459fadb11a6c2697caab1913fa45c222000ca7768fc139bd48a",
           "content": {
             "asset_refs": [
               {
@@ -341,8 +341,8 @@
               }
             ],
             "composition_ref": {
-              "byte_count": 70184,
-              "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
               "media_type": "application/json"
             },
             "kind": "data-only",
@@ -369,26 +369,26 @@
         "method": "get_app_candidate_history",
         "params": {
           "product_session_ref": "psess:author",
-          "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88"
+          "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d"
         }
       },
       "result": {
         "schema": "qma.wire.app_candidate.v1",
-        "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
-        "current_revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
+        "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
+        "current_revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
         "validated": false,
         "published": false,
         "versions": [
           {
             "authoring_session": "psess:author",
-            "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+            "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
             "content_byte_count": 623,
-            "content_fp1": "fp1:sha256:0012aa198bd9b552ecaee3ff9fb0ac98d6e1c5accd62033372230aa145572242",
+            "content_fp1": "fp1:sha256:7a9c3b5add26e23a00bbb5361f3f2f264cca50f862a866b03cb38cf3e7876c07",
             "context_revision": 0,
             "intent": {
               "owner_principal": "local_operator",
               "params": {
-                "candidate_id": "appcand:23f4abcea4cb401fa7520bf64e1c2b88",
+                "candidate_id": "appcand:e89b85d841da4220b19e9861faf8bc9d",
                 "content": {
                   "asset_refs": [
                     {
@@ -398,8 +398,8 @@
                     }
                   ],
                   "composition_ref": {
-                    "byte_count": 70184,
-                    "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                    "byte_count": 70190,
+                    "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
                     "media_type": "application/json"
                   },
                   "kind": "data-only",
@@ -417,21 +417,21 @@
                   ]
                 },
                 "expected_context_revision": 0,
-                "expected_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+                "expected_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
                 "product_session_ref": "psess:author"
               }
             },
             "operation_key": "fp1:sha256:506562455614b9197a137a8231c8986e4d534d538844cbfe55a1faf020dead16",
             "originating_authoring_session": "psess:author",
             "owner_principal": "local_operator",
-            "parent_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+            "parent_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
             "principal_class": "operator",
             "producer_id": "author-producer",
-            "request_fp1": "fp1:sha256:f806e6b5f0d486c85390859524ca3afcc91a4b7aecbe80162a6cbc2a53aa35a0",
+            "request_fp1": "fp1:sha256:c0871fbbddbe68f8dba2a308761f8361ad7cc8d90d527d8f0e14363c5b81544f",
             "request_id": "return-to-content",
             "schema": "qma.miniapp.candidate-version.v1",
-            "revision": "fp1:sha256:b3642b0c27a477a35d92b61248eacc77127a1f0a3aeabd6db10e7c8adfb01d38",
-            "receipt_fp1": "fp1:sha256:04d1566bc4b26d3856527da5a3a0d917694e21a36ece36b037ed8fc2abaf849d",
+            "revision": "fp1:sha256:f91dfcbf7cb1dc4094559de9e1166f4f29e9b467d7bfd3bcd669dbf8bf61fc2c",
+            "receipt_fp1": "fp1:sha256:1983a13f58121459fadb11a6c2697caab1913fa45c222000ca7768fc139bd48a",
             "content": {
               "asset_refs": [
                 {
@@ -441,8 +441,8 @@
                 }
               ],
               "composition_ref": {
-                "byte_count": 70184,
-                "fp1": "fp1:sha256:d410484bd3e00e717ee9006258aea64eebbdcc61631ac615fa2dd0b29a4a64a6",
+                "byte_count": 70190,
+                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
                 "media_type": "application/json"
               },
               "kind": "data-only",
@@ -461,7 +461,7 @@
             }
           }
         ],
-        "next_revision": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf"
+        "next_revision": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576"
       }
     },
     {
@@ -472,12 +472,225 @@
           "field": "expected_revision",
           "reason": "stale candidate head; reload before saving",
           "refusal": "stale_revision",
-          "expected": "fp1:sha256:e46da5e6d5b9694c7f69a9f3bf4a7d86bd31a3dfdadceca93262949688338ff3",
-          "current": "fp1:sha256:c88d30d10dc2a72cb17656ba9fbe71d9a89066335b68211d06b51691d108b9bf",
+          "expected": "fp1:sha256:63ca6d83fb41999f608726de45c879c51ae87e5809eba71bd32c1c3027a81af1",
+          "current": "fp1:sha256:04102815dd60335a35e9d691e3e591233732801aed6670a18249659ac510f576",
           "wrote_version": false
         }
       },
       "meaning": "Competing same-base edit; preserve draft and reload current head."
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "\u4fdd\u5b58-\u03c0-\ud83d\udcca",
+        "method": "save_app_candidate",
+        "params": {
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "\u65e5\u672c\u8a9e",
+              "title": "Caf\u00e9 e\u0301 \ud83d\udcc8"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          },
+          "expected_context_revision": 0,
+          "product_session_ref": "psess:author"
+        }
+      },
+      "result": {
+        "authoring_session": "psess:author",
+        "candidate_id": "appcand:c3018bbf2da34037877897ab8efcecd1",
+        "content_byte_count": 599,
+        "content_fp1": "fp1:sha256:7f429d8124668bb5eab9464c3726e4bef9ab1639dc814b684bdc4e1aecd9e2d8",
+        "context_revision": 0,
+        "intent": {
+          "owner_principal": "local_operator",
+          "params": {
+            "content": {
+              "asset_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ],
+              "composition_ref": {
+                "byte_count": 70190,
+                "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+                "media_type": "application/json"
+              },
+              "kind": "data-only",
+              "metadata": {
+                "description": "\u65e5\u672c\u8a9e",
+                "title": "Caf\u00e9 \u00e9 \ud83d\udcc8"
+              },
+              "schema": "qma.miniapp.candidate-content.v1",
+              "source_refs": [
+                {
+                  "byte_count": 256,
+                  "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                  "media_type": "application/octet-stream"
+                }
+              ]
+            },
+            "expected_context_revision": 0,
+            "product_session_ref": "psess:author"
+          }
+        },
+        "operation_key": "fp1:sha256:2061631d670376538e7360f08af0de2d5651be07d89d9f6fed89be9898571357",
+        "originating_authoring_session": "psess:author",
+        "owner_principal": "local_operator",
+        "principal_class": "operator",
+        "producer_id": "author-producer",
+        "request_fp1": "fp1:sha256:fb708ba7894df098e535bdcf150015fc28c8b25ea36002b4bd36f85190bc94ae",
+        "request_id": "\u4fdd\u5b58-\u03c0-\ud83d\udcca",
+        "schema": "qma.miniapp.candidate-version.v1",
+        "revision": "fp1:sha256:9a4437adbdfe7fa942aea4137c75d5e62b5256ba71b6b3bd24bb701893870e3c",
+        "receipt_fp1": "fp1:sha256:ea9ad864515bde6441985bc004582b1ceb4fce9f3ab40bdcb68a786da879e816",
+        "content": {
+          "asset_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ],
+          "composition_ref": {
+            "byte_count": 70190,
+            "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+            "media_type": "application/json"
+          },
+          "kind": "data-only",
+          "metadata": {
+            "description": "\u65e5\u672c\u8a9e",
+            "title": "Caf\u00e9 \u00e9 \ud83d\udcc8"
+          },
+          "schema": "qma.miniapp.candidate-content.v1",
+          "source_refs": [
+            {
+              "byte_count": 256,
+              "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+              "media_type": "application/octet-stream"
+            }
+          ]
+        }
+      },
+      "meaning": "Valid Unicode uses existing NFC identity and keeps the original receipt across retry/restart."
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "bad-unicode-0",
+        "method": "save_app_candidate",
+        "params": {
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "MA02 persistence acceptance",
+              "title": "\ud800"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          },
+          "expected_context_revision": 0,
+          "product_session_ref": "psess:author"
+        }
+      },
+      "refusal": {
+        "category": "invalid input",
+        "retryability": "no",
+        "context": {
+          "field": "params",
+          "reason": "text must contain valid Unicode encodable as UTF-8"
+        }
+      },
+      "same_socket_usable": true,
+      "events_appended": 0
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "\ud800",
+        "method": "save_app_candidate",
+        "params": {
+          "content": {
+            "asset_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ],
+            "composition_ref": {
+              "byte_count": 70190,
+              "fp1": "fp1:sha256:72597dd4e0bfe9a3e17be2de1417b104b15c4c5876761aa66c4574799af0b756",
+              "media_type": "application/json"
+            },
+            "kind": "data-only",
+            "metadata": {
+              "description": "MA02 persistence acceptance",
+              "title": "Installed candidate"
+            },
+            "schema": "qma.miniapp.candidate-content.v1",
+            "source_refs": [
+              {
+                "byte_count": 256,
+                "fp1": "fp1:sha256:b4b8868b8dbbe0e497492d5b01faa59813760910557b898c169177175b451636",
+                "media_type": "application/octet-stream"
+              }
+            ]
+          },
+          "expected_context_revision": 0,
+          "product_session_ref": "psess:author"
+        }
+      },
+      "refusal": {
+        "category": "invalid input",
+        "retryability": "no",
+        "context": {
+          "field": "id",
+          "reason": "text must contain valid Unicode encodable as UTF-8"
+        }
+      },
+      "same_socket_usable": true,
+      "events_appended": 0
     }
   ]
 }

@@ -25,6 +25,33 @@ CONTENT_SCHEMA: Final[str] = "qma.miniapp.candidate-content.v1"
 VERSION_SCHEMA: Final[str] = "qma.miniapp.candidate-version.v1"
 
 
+def validate_unicode(value: object, field: str) -> Result[None]:
+    """Reject lone surrogates before UTF-8 identity encoding; preserve valid text."""
+    pending = [value]
+    visited: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError:
+                return invalid_input(field, "text must contain valid Unicode encodable as UTF-8")
+        elif isinstance(item, Mapping):
+            body = cast(Mapping[object, object], item)
+            if id(body) in visited:
+                continue
+            visited.add(id(body))
+            pending.extend(body.keys())
+            pending.extend(body.values())
+        elif isinstance(item, (list, tuple)):
+            sequence = cast(list[object] | tuple[object, ...], item)
+            if id(sequence) in visited:
+                continue
+            visited.add(id(sequence))
+            pending.extend(sequence)
+    return Ok(None)
+
+
 def json_object(content: bytes) -> Result[dict[str, object]]:
     """Decode finite JSON, rejecting duplicate keys and non-object roots."""
 
@@ -53,12 +80,19 @@ def json_object(content: bytes) -> Result[dict[str, object]]:
         return invalid_input("content", f"expected finite, unambiguous JSON: {exc}")
     if not isinstance(value, dict):
         return invalid_input("content", "expected a JSON object")
-    return Ok(cast(dict[str, object], value))
+    body = cast(dict[str, object], value)
+    unicode = validate_unicode(body, "content")
+    if is_refusal(unicode):
+        return unicode
+    return Ok(body)
 
 
 def token(field: str, value: object) -> Result[str]:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         return invalid_input(field, "expected a non-empty string without surrounding whitespace")
+    unicode = validate_unicode(value, field)
+    if is_refusal(unicode):
+        return unicode
     return Ok(value)
 
 
@@ -136,6 +170,9 @@ def parse_candidate_content(value: object) -> Result[CandidateContent]:
             if fp1 in seen:
                 return invalid_input(field, "duplicate artifact reference")
             seen.add(fp1)
+    unicode = validate_unicode(body, "content")
+    if is_refusal(unicode):
+        return unicode
     encoded = canonical_bytes(body)
     if is_refusal(encoded):
         return encoded

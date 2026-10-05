@@ -12,6 +12,15 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-05 - MA02 independent-review integrity repair
+
+[ADR-0034](decisions/ADR-0034-miniapp-candidate-persistence.md) records two bounded
+P2 repairs after review of 67eb7448: verify candidate/session journal receipt
+identity before recovery replaces derived rows, and return typed malformed-
+Unicode refusals before fingerprinting. Updated the exact MA02 contract and
+regressions; valid Unicode, normal/CAS/retry/scope/restart semantics remain.
+MA03 validation and MA04 publication remain absent.
+
 ## 2026-10-05 - MA02 candidate persistence proposal
 
 [ADR-0034](decisions/ADR-0034-miniapp-candidate-persistence.md) records reuse of

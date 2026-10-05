@@ -103,7 +103,10 @@ field:expected_revision, refusal:stale_revision, expected/current and
 wrote_version:false. A stale authoring context returns field:
 expected_context_revision, refusal:stale_revision. Unavailable query capability
 returns the existing typed query_unavailable. Malformed metadata/reference/schema
-returns invalid input. Scope/profile/owner violations return policy rejection.
+returns invalid input. Lone surrogate text in request IDs, metadata or other
+identity strings returns CT-04 invalid input before fingerprinting/writes and
+keeps the paired socket usable. Valid Unicode keeps the existing NFC/UTF-8 recipe.
+Scope/profile/owner violations return policy rejection.
 Unknown candidate IDs are not accepted as client-issued identities.
 
 Acceptance is the fsynced app_candidate.saved journal commit after immutable
@@ -114,7 +117,11 @@ immutable artifacts. A postcommit projection failure reports storage failure,
 operation_committed:true and retry_same_id:true. Live retry/read rebuilds a dirty
 projection before proceeding. An ambiguous journal refusal also marks the fold
 dirty, so retry of the same producer/id reconciles durable evidence.
-Restart validates all artifact bytes, canonical version/content, original
+Restart first verifies consumed candidate and product-session journal receipts
+with the existing journal owner identity recipe (class, world, event, sequence,
+timestamps, scope and payload). A corrupt embedded fingerprint refuses; it is
+never replaced with a recomputed value. Restart validates all artifact bytes,
+canonical version/content, original
 request/key fingerprints, chronological authoring-session/context authority,
 immutable scope/origin/owner and complete parent chains before replacing the
 projection. Missing/corrupt/orphaned evidence refuses startup without accepting

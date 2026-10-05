@@ -75,3 +75,20 @@ def test_unknown_authority_missing_fields_and_bad_cas_refuse(args: object) -> No
 def test_json_object_does_not_evaluate_strings() -> None:
     assert is_ok(json_object(b'{"note":"import os; os.system(...)"}'))
     assert is_refusal(json_object(b'{"note":Infinity}'))
+
+
+@pytest.mark.parametrize("body", [b'{"text":"\\ud800"}', b'{"\\udfff":1}'])
+def test_composition_json_refuses_escaped_lone_surrogates(body: bytes) -> None:
+    result = json_object(body)
+    assert is_refusal(result)
+    assert result.context["field"] == "content"
+
+
+@pytest.mark.parametrize("name", ["get_app_candidate", "get_app_candidate_history"])
+def test_candidate_query_rejects_surrogate_before_sqlite_boundary(name: str) -> None:
+    result = parse_candidate_args(
+        name, {"product_session_ref": "psess:author", "candidate_id": "appcand:\ud800"}
+    )
+    assert is_refusal(result)
+    assert result.category.value == "invalid input"
+    assert result.context["field"] == "params"
