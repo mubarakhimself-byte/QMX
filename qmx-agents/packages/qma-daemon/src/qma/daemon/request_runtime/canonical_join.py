@@ -20,6 +20,7 @@ from qma.daemon.capabilities.spawn import AgentCapabilityStore
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.execution import deterministic_task_id
+from qma.daemon.taskgraph.records import DispatchLease
 from qma.daemon.tools.registry import ToolRegistry
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import policy_rejection
@@ -72,6 +73,8 @@ class CanonicalRequestJoin:
         self.runtime, self.dispatcher, self.agents = runtime, dispatcher, agents
         self.mailboxes, self.jobs = mailboxes, jobs
         self.tools = tools
+        # Persisted receipts are history; each process needs explicit admission.
+        self._reconciled: dict[str, int] = {}
         self.plans = {p.profile_id: p for p in plans}
         for plan in plans:
             registered = self._register(plan)
@@ -174,25 +177,42 @@ class CanonicalRequestJoin:
             self.plans[profile_id] = replace(self.plans[profile_id], task_id=task_id)
             return Ok(None)
 
-    def _authority(self, row: RequestRecord, plan: CanonicalJoinPlan) -> Result[dict[str, Any]]:
+    def _authority(
+        self,
+        row: RequestRecord,
+        plan: CanonicalJoinPlan,
+        *,
+        recovery: bool = False,
+        restoring_lease: DispatchLease | None = None,
+    ) -> Result[dict[str, Any]]:
         quant = self.mailboxes.quant_for(plan.canonical_owner)
         task = self.dispatcher.task_for(plan.task_id)
         lease = self.dispatcher.dispatch_lease_for(plan.task_id)
         ledger = self.dispatcher.ledgers.get(plan.task_id)
         handle = self.jobs.handle_for_task(plan.task_id)
         durable = self.dispatcher.store.durable
+        if recovery and restoring_lease is not None and durable is not None:
+            graph = durable.graph_for_task(plan.task_id)
+            task = None if graph is None else graph.task_by_id(plan.task_id)
+            lease = restoring_lease
+            ledger = None if task is None else task.ledger
         if (
             quant is None
             or quant.retired
             or task is None
             or task.owner != quant.actor_id
-            or task.state is not TaskMissionState.RUNNING
+            or task.state
+            not in (
+                {TaskMissionState.RUNNING, TaskMissionState.UNKNOWN}
+                if recovery
+                else {TaskMissionState.RUNNING}
+            )
             or lease is None
             or lease.owner != task.owner
             or lease.task_id != task.id
             or lease.mission_id != task.mission_id
             or ledger is None
-            or self.dispatcher.ledgers.lease_for(task.id) != lease
+            or (restoring_lease is None and self.dispatcher.ledgers.lease_for(task.id) != lease)
             or durable is None
         ):
             return policy_rejection(
@@ -221,7 +241,12 @@ class CanonicalRequestJoin:
             handle is None
             or handle.owner != task.owner
             or handle.originating_product_session_ref != row.spec.product_session_id
-            or handle.state not in {JobHandleState.QUEUED, JobHandleState.RUNNING}
+            or handle.state
+            not in (
+                {JobHandleState.UNKNOWN}
+                if recovery
+                else {JobHandleState.QUEUED, JobHandleState.RUNNING}
+            )
         ):
             return policy_rejection(
                 "canonical_job",
@@ -260,8 +285,10 @@ class CanonicalRequestJoin:
             or task.id != deterministic_task_id(graph.id, str(anchor["id"]))
             or {n.id for n in graph.nodes} != {s.step_id for s in flow.steps}
             or any(n.config.get("graph_sha256") != flow.graph_sha256 for n in graph.nodes)
-            or [(e.from_node, e.to_node, e.mapping.value) for e in graph.edges]
-            != [(e["from"], e["to"], e["mapping"]) for e in json.loads(flow.edges_json or "[]")]
+            or sorted((e.from_node, e.to_node, e.mapping.value) for e in graph.edges)
+            != sorted(
+                (e["from"], e["to"], e["mapping"]) for e in json.loads(flow.edges_json or "[]")
+            )
             or len(graph.tasks) != 1
             or {n.id: (n.kind.value, dict(n.config)) for n in graph.nodes}
             != {
@@ -292,7 +319,13 @@ class CanonicalRequestJoin:
                 "job_id": handle.job_id,
                 "logical_run_id": handle.logical_run_id,
                 "job_attempt": handle.attempt_id,
-                "task_sha256": digest(dict(task.to_payload())),
+                "task_sha256": digest(
+                    dict(
+                        task.with_state(TaskMissionState.RUNNING).to_payload()
+                        if recovery
+                        else task.to_payload()
+                    )
+                ),
                 "capabilities_sha256": digest(
                     [sorted(agent.effective_tool_ids), sorted(agent.effective_permissions)]
                 ),
@@ -541,6 +574,181 @@ class CanonicalRequestJoin:
         matches = [e for e in self._events("accepted") if e["request_id"] == row.request_id]
         return matches[-1] if matches else None
 
+    def _original_plan(self, receipt: dict[str, Any]) -> CanonicalJoinPlan:
+        return CanonicalJoinPlan(
+            receipt["principal"],
+            receipt["profile_id"],
+            receipt["behavioral_actor_id"],
+            ActorId(receipt["canonical_owner"]),
+            receipt["task_id"],
+            receipt["mapping_revision"],
+        )
+
+    def _observed_read_prefix(self, row: RequestRecord, plan: CanonicalJoinPlan) -> Result[None]:
+        """Only an observed authored read prefix can admit a new successor.
+
+        A prior specialist activity or memory effect needs its own reconciliation
+        contract. This increment never replays a possibly started model call.
+        """
+        provider = self.runtime.providers.get(row.spec.provider_id)
+        if not isinstance(provider, ActorWorkflowProvider):
+            return policy_rejection("reconciliation", "original authored provider required")
+        route = next((r for r in provider.routes if r.profile_id == plan.profile_id), None)
+        if route is None:
+            return policy_rejection("reconciliation", "original authored route required")
+        flow = provider.catalog.workflow(route.workflow)
+        if flow.graph_sha256 is None:
+            return policy_rejection("reconciliation", "recovery is bounded to authored paths")
+        events = self.runtime.journal.read_events()
+        if is_refusal(events):
+            return events
+        effects: dict[str, dict[str, Any]] = {}
+        for event in events.value:
+            if event.event != "agent_graph.record":
+                continue
+            key, kind = str(event.payload.get("key", "")), event.payload.get("kind")
+            if not key.startswith(row.request_id + ":"):
+                continue
+            if kind in {"actor_activity", "memory_projection_effect"}:
+                return policy_rejection(
+                    "reconciliation", "prior child/memory activity is not replayable"
+                )
+            if kind == "effect":
+                effects[key] = json.loads(str(event.payload["body"]))
+        remaining = dict(effects)
+        observed = 0
+        gap = False
+        for step in flow.steps:
+            if step.kind in {"agent", "collect"}:
+                break
+            if step.kind != "read":
+                continue
+            effect = remaining.pop(row.request_id + ":step:" + step.step_id, None)
+            if effect is None:
+                gap = True
+                continue
+            if (
+                gap
+                or effect.get("status") != "observed"
+                or effect.get("tool") != step.tool
+                or effect.get("input_hash")
+                != hashlib.sha256(
+                    json.dumps(json.loads(step.arguments_json), sort_keys=True).encode()
+                ).hexdigest()
+                or not isinstance(effect.get("result"), dict)
+            ):
+                return policy_rejection("reconciliation", "exact observed read prefix required")
+            observed += 1
+        if not observed or remaining or self._uncertain_effects(row.request_id):
+            return policy_rejection(
+                "reconciliation", "unobserved effects require separate resolution"
+            )
+        return Ok(None)
+
+    def reconcile_owner(
+        self,
+        request_id: str,
+        *,
+        principal: str,
+        owner: ActorId,
+        dispatch_lease: DispatchLease,
+    ) -> Result[None]:
+        """Trusted host explicitly admits one original-owner successor continuation.
+
+        The host first spawns the original frozen Agent through AgentCapabilityStore.
+        Supplied owner/lease and every current pin must match acceptance exactly.
+        This does not settle UNKNOWN, grant permissions, queue work or restore an
+        environment lease. Paired resume remains a separate authorized action.
+        """
+        with (
+            self.runtime.completion_guard(),
+            self.jobs.store.atomic(),
+            self.dispatcher.authority_lock,
+        ):
+            loaded = self.runtime.get(request_id)
+            if is_refusal(loaded):
+                return loaded
+            row = loaded.value
+            receipt = self._accepted(row)
+            if (
+                receipt is None
+                or not row.spec.canonical_join_required
+                or row.status != "interrupted"
+                or row.result is not None
+                or principal != receipt["principal"]
+                or owner.value != receipt["canonical_owner"]
+                or dict(dispatch_lease.to_payload()) != receipt["dispatch_lease"]
+            ):
+                return policy_rejection(
+                    "reconciliation", "original interrupted owner/lease required"
+                )
+            plan = self._original_plan(receipt)
+            if self.plans.get(plan.profile_id) != plan or any(
+                e["mapping_key"] == receipt["mapping_key"] for e in self._events("retired")
+            ):
+                return policy_rejection("reconciliation", "original active host mapping required")
+            checked = self._observed_read_prefix(row, plan)
+            if is_refusal(checked):
+                return checked
+            provider = self.runtime.providers.get(row.spec.provider_id)
+            if not isinstance(provider, ActorWorkflowProvider):
+                return policy_rejection("reconciliation", "original authored provider unavailable")
+            context = self.runtime.validate_request_context(request_id, now=provider.now())
+            if is_refusal(context):
+                return context
+            if self.runtime.memory_bindings is not None:
+                try:
+                    self.runtime.memory_bindings.validate(row.spec.memory_binding_sha256)
+                except ProviderError:
+                    return policy_rejection("reconciliation", "original memory binding required")
+            elif row.spec.memory_binding_sha256 is not None:
+                return policy_rejection("reconciliation", "original memory binding unavailable")
+            current = self._authority(row, plan, recovery=True, restoring_lease=dispatch_lease)
+            if is_refusal(current):
+                return current
+            catalog = self._catalog(plan)
+            if is_refusal(catalog):
+                return catalog
+            if (
+                any(
+                    receipt.get(k, {} if k == "tool_bindings" else None) != v
+                    for k, v in current.value.items()
+                )
+                or catalog.value != receipt["catalog_sha256"]
+            ):
+                return policy_rejection("reconciliation", "frozen acceptance pins remain immutable")
+            target = row.attempt + 1
+            if request_id in self._reconciled and self._reconciled[request_id] != target:
+                return policy_rejection("reconciliation", "one successor per explicit admission")
+            restored = self.dispatcher.restore_dispatch_authority(dispatch_lease)
+            if is_refusal(restored):
+                return restored
+            task = self.dispatcher.task_for(dispatch_lease.task_id)
+            if task is not None and task.state is not TaskMissionState.UNKNOWN:
+                # Abrupt loss can precede the volatile dispatcher's UNKNOWN fold.
+                # Apply the existing Job owner evidence; never invent a terminal.
+                mapped = self.jobs.apply_to_task(receipt["job_id"])
+                if is_refusal(mapped):
+                    return mapped
+            if request_id in self._reconciled:
+                return Ok(None)
+            saved = self._save(
+                "owner_reconciled",
+                {
+                    "request_id": request_id,
+                    "request_attempt": target,
+                    "accepted_sha256": digest(receipt),
+                    "canonical_owner": owner.value,
+                    "dispatch_lease": dict(dispatch_lease.to_payload()),
+                    "canonical_state": "unknown",
+                    "contract_version": 1,
+                },
+            )
+            if is_refusal(saved):
+                return saved
+            self._reconciled[request_id] = target
+            return Ok(None)
+
     def guard(self, action: str, row: RequestRecord) -> Result[None]:
         if not row.spec.canonical_join_required:
             return Ok(None)
@@ -559,11 +767,6 @@ class CanonicalRequestJoin:
             # missing live host records must never prevent its token being set.
             if action == "cancel":
                 return Ok(None)
-            if action == "retry":
-                return policy_rejection(
-                    "canonical_join",
-                    "interrupted joined work requires reconciliation and a freshly admitted Task",
-                )
             if any(e["mapping_key"] == receipt["mapping_key"] for e in self._events("retired")):
                 return policy_rejection("canonical_join", "behavioral mapping is retired")
             if action == "read":
@@ -575,15 +778,20 @@ class CanonicalRequestJoin:
                         "canonical_owner", "current disclosure requires active Quant"
                     )
                 )
-            plan = CanonicalJoinPlan(
-                receipt["principal"],
-                receipt["profile_id"],
-                receipt["behavioral_actor_id"],
-                ActorId(receipt["canonical_owner"]),
-                receipt["task_id"],
-                receipt["mapping_revision"],
+            plan = self._original_plan(receipt)
+            target = self._reconciled.get(row.request_id)
+            recovery = target is not None and target == (
+                row.attempt + 1 if action == "retry" else row.attempt
             )
-            current = self._authority(row, plan)
+            if action == "retry" and not recovery:
+                return policy_rejection(
+                    "canonical_join", "explicit current owner reconciliation required"
+                )
+            if action == "retry":
+                checked = self._observed_read_prefix(row, plan)
+                if is_refusal(checked):
+                    return checked
+            current = self._authority(row, plan, recovery=recovery)
             if is_refusal(current):
                 return current
             catalog = self._catalog(plan)
@@ -628,15 +836,10 @@ class CanonicalRequestJoin:
             if row.result is not None:
                 body["result_sha256"] = hashlib.sha256(row.result.content.encode()).hexdigest()
                 body["result_json"] = json.dumps(asdict(row.result), sort_keys=True)
-            original_plan = CanonicalJoinPlan(
-                receipt["principal"],
-                receipt["profile_id"],
-                receipt["behavioral_actor_id"],
-                ActorId(receipt["canonical_owner"]),
-                receipt["task_id"],
-                receipt["mapping_revision"],
+            original_plan = self._original_plan(receipt)
+            current = self._authority(
+                row, original_plan, recovery=self._reconciled.get(row.request_id) == row.attempt
             )
-            current = self._authority(row, original_plan)
             authority_lost = is_refusal(current) or any(
                 receipt.get(k, {} if k == "tool_bindings" else None) != v
                 for k, v in current.value.items()

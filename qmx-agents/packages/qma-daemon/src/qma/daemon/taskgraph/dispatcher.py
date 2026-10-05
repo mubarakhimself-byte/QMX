@@ -508,6 +508,49 @@ class TaskGraphDispatcher:
         located = self._store.find_task(task_id)
         return None if located is None else located[1]
 
+    @serialized
+    def restore_dispatch_authority(self, lease: DispatchLease) -> Result[DispatchLease]:
+        """Explicit host admission of the original lease, without redispatch or reassignment.
+
+        This restores only volatile Task/ledger caches from their durable owner.
+        The caller must separately admit the frozen executing Agent and recovery
+        scope. UNKNOWN remains UNKNOWN; no environment slot or attempt is minted.
+        """
+        durable = self._store.durable
+        graph = None if durable is None else durable.graph_for_task(lease.task_id)
+        task = None if graph is None else graph.task_by_id(lease.task_id)
+        if (
+            graph is None
+            or task is None
+            or task.owner != lease.owner
+            or task.mission_id != lease.mission_id
+            or task.state not in {TaskMissionState.RUNNING, TaskMissionState.UNKNOWN}
+            or task.ledger is None
+        ):
+            return policy_rejection("dispatch_lease", "original durable in-flight Task required")
+        current = self._store.find_task(task.id)
+        retained = self._store.lease_for(task.id)
+        ledger_lease = self._ledgers.lease_for(task.id)
+        ledger = self._ledgers.get(task.id)
+        if (
+            (current is not None and (current != (graph, task) or retained != lease))
+            or (retained is not None and retained != lease)
+            or (ledger_lease is not None and ledger_lease != lease)
+            or (ledger is not None and ledger != task.ledger)
+            or self._store.environment_lease_for(task.id) is not None
+            or self._router.lease_for(task.id) is not None
+        ):
+            return policy_rejection(
+                "dispatch_lease", "conflicting retained authority refuses restore"
+            )
+        self._store.remember(graph)
+        self._ledgers.open_for_task(task)
+        granted = self._ledgers.grant(lease)
+        if is_refusal(granted):
+            return granted
+        self._store.record_lease(lease)
+        return Ok(lease)
+
     def expected_operation_input_hash(self, task_id: object) -> Result[str]:
         """Compute the public payload identity from the currently accepted Task inputs."""
         if not isinstance(task_id, str) or not task_id:
