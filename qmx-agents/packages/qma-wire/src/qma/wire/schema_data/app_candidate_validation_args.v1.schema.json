@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "product_session_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "validation_fp1": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "product_session_ref",
+    "candidate_id",
+    "revision",
+    "validation_fp1"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qma.miniapp.app_candidate_validation_args.v1"
+}

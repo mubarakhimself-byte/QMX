@@ -124,6 +124,14 @@ class AppCandidateService:
             )
         return Ok(held.content)
 
+    def read_reference(self, ref: Mapping[str, object]) -> Result[bytes]:
+        """MA03 reuses exact local-complete immutable-byte verification."""
+        return self._artifact_bytes(ref)
+
+    def version_record(self, candidate_id: str, revision: str) -> Mapping[str, object] | None:
+        """Trusted recovery seam; public transport must use request authorization."""
+        return next((row for row in self._rows(candidate_id) if row["revision"] == revision), None)
+
     def _content(self, content: CandidateContent) -> Result[None]:
         for ref in content.refs():
             checked = self._artifact_bytes(ref)

@@ -246,3 +246,12 @@ are replaced rather than merged, and are not restored on socket close. The
 implementation handoff records multi-tab renegotiation requirements. These are
 implementation-boundary clarifications, not new session/grant authority or a
 runtime behavior change.
+
+## MA03 bounded implementation amendment (draft)
+
+Versioned MA03 composition/catalog/validation/read-state schemas and existing PackUiView adaptation are owned here. CT-40 adds validate_app_candidate plus get_app_ui_catalog/get_app_candidate_validation; no new family/CT/HTTP route.
+
+[ADR-0035](../decisions/ADR-0035-miniapp-composition-validation.md) records the named
+amendment; [the release contract](../../release/MA03-COMPOSITION-CONTRACT.md) gives
+exact DTOs and proof limits. Backend implementation awaits independent parent
+review. Historical source-inspection and ratification dates above retain their scope.

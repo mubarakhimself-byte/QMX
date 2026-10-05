@@ -210,3 +210,5 @@ The corpus contains 156 files: 108 Markdown documents and 48 YAML artifacts. Eve
 - [WidgetFrame](lenses/ui/screens/widget-frame.md) — mini-app interior expand/return, not a fifth rail destination (DEC-0474).
 
 - [Bounded contribution discovery read adoption (ADR-0033, draft)](decisions/ADR-0033-bounded-discovery-read-adoption.md).
+
+- [MA03 panel composition validation ownership (ADR-0035, draft)](decisions/ADR-0035-miniapp-composition-validation.md).

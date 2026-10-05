@@ -106,7 +106,7 @@ _CORE_V1_FOLDS: Final[dict[str, FoldContract]] = {
         "artifact_transfer_ticket.*",
     ),
     "editor_draft_head": _contract("editor_draft_head", "editor_draft.*"),
-    "app_candidate_state": _contract("app_candidate_state", "app_candidate.saved"),
+    "app_candidate_state": _contract("app_candidate_state", "app_candidate.*"),
 }
 
 # Definition-store registries are each a v1 fold over their noun.verb stream.

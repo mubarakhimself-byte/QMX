@@ -42,6 +42,7 @@ from qma.wire.pack_ui_request import (
     GET_PACK_UI_REQUEST_CAPABILITY,
     PACK_UI_REQUEST_CAPABILITY,
 )
+from qma.wire.panel_composition import VALIDATION_CAPABILITIES, VALIDATION_READS
 from qma.wire.principals import (
     AuthorizedWireCommand,
     authorize_wire_command,
@@ -125,6 +126,7 @@ _SERVER_OWNED_CLIENT_ECHO_KEYS: Final[frozenset[str]] = frozenset(
         *AGENT_REQUEST_CAPABILITIES,
         *DISCOVERY_SERVER_OWNED_KEYS,
         *CANDIDATE_CAPABILITIES,
+        *VALIDATION_CAPABILITIES,
         PACK_UI_REQUEST_CAPABILITY,
         GET_PACK_UI_REQUEST_CAPABILITY,
         CANCEL_JOB_CAPABILITY,
@@ -516,7 +518,7 @@ def negotiate_initialize(
         for name in DEFERRED_INITIALIZE_CAPABILITIES:
             negotiated.pop(name, None)
 
-    for name in CANDIDATE_CAPABILITIES:
+    for name in CANDIDATE_CAPABILITIES | VALIDATION_CAPABILITIES:
         if params.capabilities.get(name) is not True or caps.get(name) is not True:
             negotiated.pop(name, None)
 
@@ -827,7 +829,7 @@ class WireConnection:
             if self._capabilities.get(name) is True:
                 return accepted
             return editor_draft_capability_unavailable(name)
-        if name in CANDIDATE_READS:
+        if name in CANDIDATE_READS | VALIDATION_READS:
             if self._capabilities.get(name) is True:
                 return accepted
             return query_unavailable(name)

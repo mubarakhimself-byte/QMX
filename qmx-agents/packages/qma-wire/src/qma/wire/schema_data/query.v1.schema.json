@@ -28,6 +28,8 @@
         "get_editor_draft_head",
         "get_app_candidate",
         "get_app_candidate_history",
+        "get_app_ui_catalog",
+        "get_app_candidate_validation",
         "get_product_session"
       ]
     },

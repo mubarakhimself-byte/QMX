@@ -53,6 +53,22 @@ SCHEMA_FILES: Final[dict[str, str]] = {
     "host_request": "host_request.v1.schema.json",
     "principal_record": "principal_record.v1.schema.json",
     "money_path_field_diff": "money_path_field_diff.v1.schema.json",
+    "miniapp_validation": "miniapp_validation.v1.schema.json",
+    "app_ui_catalog_args": "app_ui_catalog_args.v1.schema.json",
+    "app_candidate_validate_args": "app_candidate_validate_args.v1.schema.json",
+    "app_candidate_validation_args": "app_candidate_validation_args.v1.schema.json",
+    "miniapp_read_state": "miniapp_read_state.v1.schema.json",
+    "miniapp_composition": "miniapp_composition.v1.schema.json",
+    "miniapp_props_Stack": "miniapp_props_Stack.v1.schema.json",
+    "miniapp_props_Grid": "miniapp_props_Grid.v1.schema.json",
+    "miniapp_props_Heading": "miniapp_props_Heading.v1.schema.json",
+    "miniapp_props_Text": "miniapp_props_Text.v1.schema.json",
+    "miniapp_props_Metric": "miniapp_props_Metric.v1.schema.json",
+    "miniapp_props_Table": "miniapp_props_Table.v1.schema.json",
+    "miniapp_props_LineChart": "miniapp_props_LineChart.v1.schema.json",
+    "miniapp_props_Badge": "miniapp_props_Badge.v1.schema.json",
+    "miniapp_props_Callout": "miniapp_props_Callout.v1.schema.json",
+    "miniapp_props_Button": "miniapp_props_Button.v1.schema.json",
     "app_candidate_content": "app_candidate_content.v1.schema.json",
     "app_candidate_save": "app_candidate_save.v1.schema.json",
     "app_candidate_version": "app_candidate_version.v1.schema.json",
@@ -76,6 +92,10 @@ SCHEMA_FILES: Final[dict[str, str]] = {
 
 class SchemaValidationError(ValueError):
     """Raised when an instance fails JSON Schema validation."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.path = message.partition(":")[0]
 
 
 def _invalid(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -233,6 +253,11 @@ def _validate(instance: object, schema: Mapping[str, object], path: str = "$") -
                     raise SchemaValidationError(f"{path}: additional property {key!r} not allowed")
         elif schema.get("additionalProperties") is False and as_map:
             raise SchemaValidationError(f"{path}: additional properties not allowed")
+        additional = _as_object_map(schema.get("additionalProperties"))
+        if additional is not None:
+            for key, value in as_map.items():
+                if properties is None or key not in properties:
+                    _validate(value, additional, f"{path}.{key}")
 
     as_list = _as_object_list(instance)
     if as_list is not None:
@@ -248,7 +273,7 @@ def validate_instance(instance: object, schema_name: str) -> Result[Mapping[str,
     try:
         _validate(instance, schema)
     except SchemaValidationError as exc:
-        return _invalid("schema", str(exc), schema=schema_name)
+        return _invalid("schema", str(exc), schema=schema_name, path=exc.path)
     mapped = _as_object_map(instance)
     if mapped is None:
         return _invalid("schema", "validated instance must be an object", schema=schema_name)

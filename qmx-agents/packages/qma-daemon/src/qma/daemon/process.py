@@ -36,6 +36,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, cast
 from urllib.parse import urlsplit
 
+from qma.core.app_candidate import validate_unicode
 from qma.core.operations import OperationDescriptor, public_operation_descriptors
 from qma.core.plugins.hooks import HookSource
 from qma.core.plugins.packs import DESK_PLUGIN_PACK_IDS
@@ -207,12 +208,14 @@ from qma.daemon.request_runtime.spot_state import (
 from qma.daemon.request_runtime.spot_tools import spot_query_descriptor
 from qma.daemon.retry import HostRetryLoop
 from qma.daemon.sessions.chrome import PackUiMount, ProductSessionChrome
+from qma.daemon.sessions.operation_bindings import declared_operation_point
 from qma.daemon.sessions.product_session import (
     BoundSessionGrant,
     ProductSessionService,
     accepted_invocation_binding,
 )
 from qma.daemon.staging.app_candidate import AppCandidateService
+from qma.daemon.staging.app_validation import AppValidationService
 from qma.daemon.staging.editor_draft import EditorDraftService
 from qma.daemon.taskgraph.dispatcher import TaskGraphDispatcher
 from qma.daemon.taskgraph.nested import NestedMissionHost
@@ -293,6 +296,7 @@ from qma.wire.pack_ui_request import (
     parse_pack_ui_request_args,
     require_pack_ui_request_capability,
 )
+from qma.wire.panel_composition import VALIDATION_CAPABILITIES, VALIDATION_READS
 from qma.wire.schemas import SCHEMA_FILES
 from qma.wire.send_message import parse_send_message_payload
 from qma.wire.stage_artifact import (
@@ -871,6 +875,9 @@ class DaemonProcess:
                 if (item := self._roster.loader.get(key)) is not None
             ),
         )
+        self._app_validation = AppValidationService(
+            self._app_candidates, self._roster.loader, self._operation_descriptors, self.root
+        )
         self._transfers = TransferTicketStore(
             journal=journal,
             sqlite=substrate.sqlite,
@@ -1113,6 +1120,10 @@ class DaemonProcess:
             if is_refusal(restored_candidates):
                 process._release(release_process_gate=False)
                 return restored_candidates
+            restored_validation = process._app_validation.restore_from_journal()
+            if is_refusal(restored_validation):
+                process._release(release_process_gate=False)
+                return restored_validation
             restored_plugin_records = restore_plugin_install_records_projection(
                 process.sqlite,
                 process.journal,
@@ -1528,6 +1539,23 @@ class DaemonProcess:
             capabilities=capabilities,
             producer_id=producer_id,
             request_id=request_id,
+        )
+
+    @property
+    def app_validation(self) -> AppValidationService:
+        """Trusted host validator/recovery seam; transport retains all admission checks."""
+        return self._app_validation
+
+    def app_validation_request(
+        self, name: str, args: object, *, operator_principal: object, capabilities: object
+    ) -> Result[Mapping[str, object]]:
+        """MA03 scoped contract access through the existing pairing/session owners."""
+        return self._app_validation.request(
+            name,
+            args,
+            principal_class=operator_principal,
+            owner_principal=self._operator_principal(),
+            capabilities=capabilities,
         )
 
     def _discovery_capabilities(self) -> dict[str, object]:
@@ -2964,7 +2992,10 @@ class DaemonProcess:
                     or raw_caps.get(CANCEL_JOB_CAPABILITY) is True
                     or any(raw_caps.get(name) is True for name in AGENT_REQUEST_CAPABILITIES)
                     or any(raw_caps.get(name) is True for name in DISCOVERY_READ_CAPABILITIES)
-                    or any(raw_caps.get(name) is True for name in CANDIDATE_CAPABILITIES)
+                    or any(
+                        raw_caps.get(name) is True
+                        for name in CANDIDATE_CAPABILITIES | VALIDATION_CAPABILITIES
+                    )
                 )
             completed = connection.complete_initialize(
                 params.value,
@@ -2975,6 +3006,7 @@ class DaemonProcess:
                 server_capabilities={
                     **self._discovery_capabilities(),
                     **dict.fromkeys(CANDIDATE_CAPABILITIES, True),
+                    **self._app_validation.capabilities(),
                     **({} if self._agent_requests is None else self._agent_requests.capabilities),
                 },
             )
@@ -2987,6 +3019,25 @@ class DaemonProcess:
         accepted = connection.accept_family_message(method)
         if is_refusal(accepted):
             return _jsonrpc_refusal(req_id, accepted)
+        if method in VALIDATION_CAPABILITIES:
+            unicode = validate_unicode(req_id, "request_id")
+            if is_refusal(unicode):
+                return _jsonrpc_refusal(req_id, unicode)
+            if method in VALIDATION_READS:
+                gate = connection.require_query_capability(method)
+            else:
+                gate = connection.authorize_command(method)
+            if isinstance(gate, TypedRefusal):
+                return _jsonrpc_refusal(req_id, gate)
+            result = self.app_validation_request(
+                cast(str, method),
+                request.get("params"),
+                operator_principal=connection.principal_class,
+                capabilities=connection.capabilities,
+            )
+            if is_refusal(result):
+                return _jsonrpc_refusal(req_id, result)
+            return _jsonrpc_result(req_id, result.value)
         if method in CANDIDATE_CAPABILITIES:
             if method in CANDIDATE_READS:
                 gated = connection.require_query_capability(method)
@@ -3838,25 +3889,8 @@ class DaemonProcess:
             return _jsonrpc_refusal(
                 req_id, policy_rejection("operation", "operation has no published descriptor")
             )
-        required_point = {
-            "qma.procedure.start": "graph_template",
-            "qmb.backtest.run": "tool",
-            "qmb.optimize.run": "tool",
-            "qmb.analysis.project": "tool",
-            "qmn.spot.paper.query": "tool",
-        }.get(op_id)
-        expected_contribution = {
-            "qma.procedure.start": published.qualified_id,
-            "qmb.backtest.run": "analysis-backtest:qmb",
-            "qmb.optimize.run": "analysis-backtest:qmb",
-            "qmb.analysis.project": "analysis-backtest:qmb",
-            "qmn.spot.paper.query": SPOT_CONTRIBUTION,
-        }.get(op_id)
-        if (
-            required_point is None
-            or published.point != required_point
-            or published.qualified_id != expected_contribution
-        ):
+        required_point = declared_operation_point(op_id, published.qualified_id or "")
+        if required_point is None or published.point != required_point:
             return _jsonrpc_refusal(
                 req_id,
                 policy_rejection(

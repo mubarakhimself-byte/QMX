@@ -103,3 +103,13 @@ The reviewed core descriptor now names the existing documented `qmb.optimize.run
 Both Book and Alternative optimization require the checked complete Study history, durable result and producer occurrence under the originating job/attempt. The generic sensitivity report describes exact objective distributions, parameter slices and neighbourhood stability as data; it adds no financial default or search-quality verdict. Alternative results keep their declared objective units and absent Book/BMS/Bot/CT32 identities. A completed cached history may be read under a new invocation only with its own checked producer occurrence; old trial labels must remain unchanged. Reserved, started/UNKNOWN, partial, cancelled and complete are distinct recovery facts.
 
 The host owns monotonic retry progression for supported READ/NONE operations. Preserve logical/idempotency identity and the complete validated input; a changed payload is new work and must not inherit accepted-work authority after grant revocation or restart. PLACE_RUN is not blindly resubmitted, and a missing accepted-binding/predecessor proof is a refusal. Current retry review remains open at the shared reopened-session dispatch boundary. No UI code changes or connected-browser acceptance are implied by these requirements.
+
+## MA03 composition handoff to the existing UI owner
+
+Consume [MA03-COMPOSITION-CONTRACT.md](MA03-COMPOSITION-CONTRACT.md) and
+[exact examples](MA03-COMPOSITION-EXAMPLES.json). The flat panel/root/elements
+model and ten SDK components remain; use the existing json-render/PackUiView
+adapter, with the panel index encoded in view_id. Validation publishes no view.
+Treat empty/stale/unavailable output explicitly, require explicit chart samples,
+and keep current grants/invocation/readiness checks at use. No UI code or connected
+UI acceptance is included in this backend contribution. Parent review precedes MA04.

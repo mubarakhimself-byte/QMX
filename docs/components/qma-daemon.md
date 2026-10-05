@@ -591,3 +591,12 @@ are replaced rather than merged, and are not restored on socket close. The
 implementation handoff records multi-tab renegotiation requirements. These are
 implementation-boundary clarifications, not new session/grant authority or a
 runtime behavior change.
+
+## MA03 bounded implementation amendment (draft)
+
+Trusted validation and app_candidate.validated receipts extend MA02 app_candidate_state; child validation rows use its sole SQLite writer and existing ArtifactStore. No new store class, renderer, grant or publication.
+
+[ADR-0035](../decisions/ADR-0035-miniapp-composition-validation.md) records the named
+amendment; [the release contract](../../release/MA03-COMPOSITION-CONTRACT.md) gives
+exact DTOs and proof limits. Backend implementation awaits independent parent
+review. Historical source-inspection and ratification dates above retain their scope.

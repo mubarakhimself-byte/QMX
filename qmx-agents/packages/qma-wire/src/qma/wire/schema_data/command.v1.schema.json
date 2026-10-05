@@ -27,7 +27,8 @@
         "grant_product_session",
         "save_editor_draft",
         "publish_editor_draft",
-        "save_app_candidate"
+        "save_app_candidate",
+        "validate_app_candidate"
       ]
     },
     "principal_class": {

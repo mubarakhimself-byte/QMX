@@ -46,12 +46,14 @@ SEED_VOCABULARY_COUNT: Final[int] = SEED_COMMAND_COUNT + SEED_QUERY_COUNT + SEED
 # and get_editor_draft_head for durable editor-head snapshots (Story 71.2; AM-03),
 # and get_pack_ui_request for recorded pack chrome (Epic 72), get_product_session
 # for exact grant recovery, and get_job for originating-session job reattachment.
-ADDABLE_QUERY_COUNT: Final[int] = 14
+# MA02 adds candidate/history reads; MA03 adds catalog/exact-validation reads.
+ADDABLE_QUERY_COUNT: Final[int] = 16
 # transfer_artifact (Story 70.2; AM-09), transfer_complete (Story 70.3),
 # save/publish_editor_draft (Story 71; AM-09), cancel_job (Epic 73; AM-09),
 # and ProductSession open/grant (DEC-0421 / DEC-0442).
+# MA02 adds save_app_candidate; MA03 adds validate_app_candidate.
 # Seed 9/7/10 stay the seed.
-ADDABLE_COMMAND_COUNT: Final[int] = 11
+ADDABLE_COMMAND_COUNT: Final[int] = 12
 
 
 class MessageFamily(StrEnum):
@@ -85,6 +87,7 @@ class WireCommand(StrEnum):
     RETRY_TASK = "retry_task"
     TRANSFER_ARTIFACT = "transfer_artifact"
     TRANSFER_COMPLETE = "transfer_complete"
+    VALIDATE_APP_CANDIDATE = "validate_app_candidate"
     SAVE_APP_CANDIDATE = "save_app_candidate"
     SAVE_EDITOR_DRAFT = "save_editor_draft"
     PUBLISH_EDITOR_DRAFT = "publish_editor_draft"
@@ -128,6 +131,8 @@ class WireQuery(StrEnum):
     GET_DIAGNOSIS = "get_diagnosis"
     GET_INSTANCE_HEALTH = "get_instance_health"
     LIST_MAILBOX = "list_mailbox"
+    GET_APP_UI_CATALOG = "get_app_ui_catalog"
+    GET_APP_CANDIDATE_VALIDATION = "get_app_candidate_validation"
     GET_APP_CANDIDATE = "get_app_candidate"
     GET_APP_CANDIDATE_HISTORY = "get_app_candidate_history"
     GET_EDITOR_DRAFT_HEAD = "get_editor_draft_head"

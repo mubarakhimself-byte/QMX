@@ -30,3 +30,10 @@ MA06 authoring policy, runner, provider/credential/network setup, deployment,
 public push, protected merge or arbitrary-code execution. End with exact DTO
 handoff, failure scenarios, installed acceptance, clean commit and independent
 parent review. MA03 alone does not complete the create-to-publish milestone.
+
+## Implementation handoff
+
+MA03 is implemented on the isolated validation branch, pending independent parent
+review. Consume [MA03-COMPOSITION-CONTRACT.md](MA03-COMPOSITION-CONTRACT.md) and
+[exact examples](MA03-COMPOSITION-EXAMPLES.json). This planning pointer remains
+historical intent; it supplies no MA04 publication authorization.

@@ -12,6 +12,13 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-06 - MA03 composition validation implementation amendment
+
+[ADR-0035](decisions/ADR-0035-miniapp-composition-validation.md) records the
+existing-owner catalog/schema adapter and MA02 fold extension. Exact contract,
+component props, limits and immutable proof examples are in release/MA03-COMPOSITION-CONTRACT.md.
+Backend independent review remains pending; no corpus ratification or MA04 applies.
+
 ## 2026-10-05 - MA02 stored-envelope verification repair
 
 Re-review found that reconstructing a constant class could admit a corrupt

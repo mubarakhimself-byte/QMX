@@ -25,7 +25,8 @@ status; historical acceptance records retain their original scope.
 | get_instance_health | False/omitted; no scoped health owner snapshot | Typed query_unavailable; enablement is not health |
 | Artifact/Knowledge discovery | Owner dependencies absent | Typed query_unavailable; staged bytes are not Library discovery |
 | MA02 candidates/version CAS | CT-40 literal-true save/read/history; operator authoring only; immutable fp1/parent CAS, receipt and restart fold on existing writer | Source failures/CAS/authority checks and noneditable installed paired listener/restart; MA02-CANDIDATE-CONTRACT.md; independent review pending |
-| MA03 validation / MA04 publish-update-undo / MA05 activity | Not shipped | Next pointer MA03-NEXT-TASK.md; first data-only milestone still requires MA03 then MA04 then MA05 |
+| MA03 validation | Backend implemented; three gated CT-40 verbs; explicit local bounds; exact immutable proof and scoped currentness | MA03-COMPOSITION-CONTRACT.md; paired installed API/restart proof; parent independent review pending |
+| MA04 publish-update-undo / MA05 activity | Not shipped | First data-only milestone still requires MA04 then MA05 |
 | MA06 maintenance / MA07 restricted runner / MA08 mutable data / MA09 API | Not shipped | Require their packet-specific ownership and installed acceptance |
 | MA10 executable deployment / MA11 remote / MA12 laptop-off / MA13 custom UI | Not shipped | No deployment, remote, always-on authority or custom renderer proof |
 
@@ -47,3 +48,6 @@ doc errors, inherited QMB format debt, historical actor deadline failures,
 provider-enabled cold start, other Python overrides, connected UI, native
 harness, Linux, remote, installer recertification, power-loss and whole release.
 No provider/credential/UI/deployment/publication/push/protected merge occurred.
+
+MA02 base for MA03 is independently accepted 1c8e0b6039846d687d7464769c7e68bde711c364.
+MA03 retains all exclusions above and adds no UI/provider/publication authority.
