@@ -59,3 +59,11 @@ See [MA04 contract](../../release/MA04-PUBLICATION-CONTRACT.md) and
 [versioned examples](../../release/MA04-PUBLICATION-EXAMPLES.json). No ready health,
 operation execution, generated code, UI implementation, external publication,
 provider, trading, MA05 activity or MA06 delegation policy is inferred.
+
+
+Independent-review repair: publication history is verified before every live
+read/retry/apply decision, and only validated history rebuilds a divergent child.
+The existing PluginLoader lifecycle and AuthoritativeJournal append locks join
+the compound authority/roster boundary through activation. Mutation owners share
+those locks; final staging rechecks cover synchronous owner hooks. The dirty bit
+does not establish current history, active CAS or committed-operation identity.

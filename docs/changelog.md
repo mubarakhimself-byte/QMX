@@ -12,6 +12,17 @@ decisions: [DEC-0186, DEC-0187, DEC-0188, DEC-0189, DEC-0190, DEC-0191, DEC-0192
 
 # QMF Documentation Changelog
 
+## 2026-10-06 - MA04 independent-review consistency repair
+
+[ADR-0036](decisions/ADR-0036-miniapp-local-publication.md) and the
+[publication contract](../release/MA04-PUBLICATION-CONTRACT.md) retain the bounded
+local data-only milestone. Live reads, retries and mutations verify closed
+publication history before derived projection repair. Existing loader lifecycle
+and journal append locks hold proof, acceptance and activation together; final
+staging checks refuse changed permission/proof/CAS or malformed history.
+The three review P2s receive concurrency, live-loss and corrupt-history regressions.
+Independent re-review remains pending; no corpus ratification, UI or external
+publication is implied.
 ## 2026-10-06 - MA03 composition validation implementation amendment
 
 [ADR-0035](decisions/ADR-0035-miniapp-composition-validation.md) records the

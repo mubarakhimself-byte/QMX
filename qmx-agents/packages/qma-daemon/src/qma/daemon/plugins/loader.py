@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import contextlib
 import re
-from collections.abc import Callable, Mapping, Sequence
+import threading
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from functools import wraps
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, Literal, cast
+from typing import TYPE_CHECKING, Concatenate, Final, Literal, cast
 
 from qma.core.plugins.context import Disposer, PluginContext
 from qma.core.plugins.contributes import (
@@ -296,6 +298,17 @@ class LoadedPlugin:
     pack_ui_request: IngestedPackUiRequest | None = None
 
 
+def _synchronized[**P, R](
+    method: Callable[Concatenate[PluginLoader, P], R],
+) -> Callable[Concatenate[PluginLoader, P], R]:
+    @wraps(method)
+    def invoke(self: PluginLoader, *args: P.args, **kwargs: P.kwargs) -> R:
+        with self.synchronized():
+            return method(self, *args, **kwargs)
+
+    return invoke
+
+
 @dataclass
 class PluginLoader:
     """Daemon-owned loader for first-party desk plugins (AD-21; FR-Q68–Q70)."""
@@ -324,6 +337,20 @@ class PluginLoader:
     _availability_revision: int = field(default=0, init=False)
     _disabled_data_intact: set[str] = field(default_factory=set[str], init=False)
     _rehydrating_persisted_plugins: bool = field(default=False, init=False)
+    _lifecycle_lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False
+    )
+
+    @contextlib.contextmanager
+    def synchronized(self) -> Generator[None]:
+        """Keep proof inspection, dependency changes and hosted activation atomic.
+
+        Compound daemon callers acquire session authority, AtomicRoster, this
+        loader, then journal in that order. Loader mutation owners never acquire
+        session/AtomicRoster locks while holding this lock.
+        """
+        with self._lifecycle_lock:
+            yield
 
     @property
     def file_watcher_enabled(self) -> bool:
@@ -334,25 +361,31 @@ class PluginLoader:
     def load_phases(self) -> tuple[str, ...]:
         return LOAD_PHASES
 
+    @_synchronized
     def loaded_ids(self) -> tuple[str, ...]:
         return tuple(self._loaded)
 
+    @_synchronized
     def get(self, plugin_id: str) -> LoadedPlugin | None:
         return self._loaded.get(plugin_id)
 
+    @_synchronized
     def published_contributions(self) -> tuple[PublishedContribution, ...]:
         return tuple(self._published)
 
+    @_synchronized
     def availability_revision(self) -> int:
         """Roster generation stamped onto ContributionHits at the last swap."""
         return self._availability_revision
 
+    @_synchronized
     def restore_availability_revision(self, revision: int) -> None:
         """Raise the roster generation from its journal-backed projection high-water."""
         if revision < 0:
             raise ValueError("availability revision must be non-negative")
         self._availability_revision = max(self._availability_revision, revision)
 
+    @_synchronized
     def set_rehydrating_persisted_plugins(self, enabled: bool) -> None:
         """Bracket compose-time plugin activation that reuses unchanged journal rows."""
         self._rehydrating_persisted_plugins = enabled
@@ -753,6 +786,7 @@ class PluginLoader:
         self._availability_revision = max(self._availability_revision, next_rev)
         return stamped
 
+    @_synchronized
     def authorize_hosted_data_publication(self, principal: object) -> Result[None]:
         """Recheck current trusted host permission and dependency owners at MA04 apply."""
         host = self.get("dev-factory")
@@ -770,6 +804,7 @@ class PluginLoader:
             return self._refuse_load_error(exc)
         return Ok(None)
 
+    @_synchronized
     def apply_hosted_data_publication(self, payload: Mapping[str, object]) -> Result[None]:
         """Install a committed MA04 receipt in the existing trusted host scope."""
 
@@ -822,12 +857,14 @@ class PluginLoader:
         self.restore_availability_revision(revision)
         return Ok(None)
 
+    @_synchronized
     def snapshot_published_roster(
         self,
     ) -> tuple[tuple[PublishedContribution, ...], int]:
         """Live published rows plus availability_revision, for atomic restore."""
         return tuple(self._published), self._availability_revision
 
+    @_synchronized
     def restore_published_roster(
         self,
         snapshot: tuple[tuple[PublishedContribution, ...], int],
@@ -1109,6 +1146,7 @@ class PluginLoader:
             return self._refuse_load_error(exc)
         return Ok(manifest)
 
+    @_synchronized
     def install(
         self,
         raw: Mapping[str, object],
@@ -1123,6 +1161,7 @@ class PluginLoader:
             return gated
         return self._load_with_migrations(raw, activator=activator, correlation_id=correlation_id)
 
+    @_synchronized
     def enable(
         self,
         raw: Mapping[str, object],
@@ -1148,6 +1187,7 @@ class PluginLoader:
             return loaded
         return loaded
 
+    @_synchronized
     def reload(
         self,
         raw: Mapping[str, object],
@@ -1217,6 +1257,7 @@ class PluginLoader:
         for key in cast_mapping(snap["multis"]):
             self._multi_owners[key] = plugin_id
 
+    @_synchronized
     def dependants_of(self, plugin_id: str) -> tuple[str, ...]:
         """Live loaded plugins that list ``plugin_id`` as a dependency (FR-WF-11)."""
         found: list[str] = []
@@ -1225,6 +1266,7 @@ class PluginLoader:
                 found.append(loaded.manifest.id)
         return tuple(found)
 
+    @_synchronized
     def detach_keep_bytes(
         self, plugin_id: str
     ) -> tuple[LoadedPlugin, tuple[PublishedContribution, ...]] | None:
@@ -1233,6 +1275,7 @@ class PluginLoader:
             return None
         return self._park_loaded(plugin_id)
 
+    @_synchronized
     def unload(self, plugin_id: str) -> int:
         """Close the plugin scope LIFO and remove every published contribution."""
         loaded = self._loaded.pop(plugin_id, None)
@@ -1242,6 +1285,7 @@ class PluginLoader:
         self._drop_published(plugin_id)
         return count
 
+    @_synchronized
     def disable(
         self,
         plugin_id: str,
@@ -1275,6 +1319,7 @@ class PluginLoader:
             plugin_id=plugin_id,
         )
 
+    @_synchronized
     def activate_roster(
         self,
         manifests: Sequence[Mapping[str, object]],
@@ -1386,6 +1431,7 @@ class PluginLoader:
                 )
         return Ok(tuple(loaded_rows))
 
+    @_synchronized
     def startup_activate_roster(
         self,
         manifests: Sequence[Mapping[str, object]],

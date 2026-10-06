@@ -131,3 +131,23 @@ bounded milestone. No arbitrary code/module import, custom UI/assets, API server
 remote provider, external network deployment, live trading, MA05–MA13, connected UI,
 full coverage/mutation, launcher/installer/Linux or physical power-loss certification.
 Independent parent review must inspect the candidate and evidence before integration.
+
+
+### Live authoritative consistency (independent-review repair)
+
+Every publication read, identical retry and new mutation verifies the complete
+closed journal-backed publication chain before consulting derived SQLite rows.
+Missing or divergent child rows are repaired only after that validation; corrupt
+authoritative bytes are preserved and refuse further work. A failed derived
+repair returns storage refusal with `reconciliation_required` and `retry_same_id`.
+The in-memory dirty flag is only a runtime-repair hint, never idempotency authority.
+
+The compound lock order is existing session authority, AtomicRoster, PluginLoader
+lifecycle, then AuthoritativeJournal append. Loader enable/reload/disable/unload/
+detach and hosted apply share the loader lock. It stays held from current proof
+inspection through acceptance and activation; journal append cannot interleave
+with verified-history acceptance. Synchronous staging hooks are followed by a
+final permission/proof/history and installed CAS recheck before append. An owner
+change after publication completes is later work; existing invocation grant/pin
+checks continue to apply. Restoring a committed data presentation mints no grant
+and does not report ready health or perform its READ operation.

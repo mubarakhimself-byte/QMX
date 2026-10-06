@@ -124,12 +124,19 @@ class AppPublicationService:
         return Ok(None)
 
     def ensure_current(self) -> Result[None]:
-        if not self._dirty:
-            return Ok(None)
-        restored = self.restore_from_journal()
-        if is_refusal(restored):
-            return restored
-        return self.reconcile_runtime()
+        # Derived rows and an in-memory dirty bit cannot authorize retry or CAS.
+        # Validate the full closed chain even in a live daemon before any read,
+        # idempotency lookup or new mutation; only then repair derived state.
+        with (
+            self.candidates.authority_lock,
+            self.roster.synchronized(),
+            self.validation.loader.synchronized(),
+            self.candidates.journal.synchronized(),
+        ):
+            restored = self.restore_from_journal()
+            if is_refusal(restored):
+                return restored
+            return self.reconcile_runtime() if self._dirty else Ok(None)
 
     def _proof(
         self, args: Mapping[str, object], owner: str, *, historical: bool
@@ -215,7 +222,12 @@ class AppPublicationService:
         owner = token("owner_principal", owner_principal)
         if is_refusal(owner):
             return owner
-        with self.candidates.authority_lock, self.roster.synchronized():
+        with (
+            self.candidates.authority_lock,
+            self.roster.synchronized(),
+            self.validation.loader.synchronized(),
+            self.candidates.journal.synchronized(),
+        ):
             session = self.candidates.authorize_session(
                 parsed.value["product_session_ref"], principal_class
             )
@@ -429,6 +441,33 @@ class AppPublicationService:
             artifact = self.candidates.artifacts.stage_complete_bytes(encoded)
             if is_refusal(artifact):
                 return artifact
+            authorized = self.validation.loader.authorize_hosted_data_publication(principal_class)
+            if is_refusal(authorized):
+                return authorized
+            final_proof = self._proof(selected, owner.value, historical=target is not None)
+            if is_refusal(final_proof):
+                return final_proof
+            # Stage hooks may emit journal records. Revalidate publication history
+            # under the append lock before accepting another immutable receipt.
+            history = self.restore_from_journal()
+            if is_refusal(history):
+                return history
+            latest = self._rows()
+            latest_active = None if not latest else latest[-1]["active_revision"]
+            final_host = self.validation.loader.get(HOST_PLUGIN_ID)
+            if (
+                latest_active != current
+                or final_host is not host
+                or host.availability_revision != params["expected_availability_revision"]
+                or host.manifest.version != body["pack_version"]
+                or self.validation.loader.availability_revision() + 1
+                != body["availability_revision"]
+            ):
+                return policy_rejection(
+                    "publication",
+                    "publication or installed dependencies changed during staging",
+                    refusal="stale_revision",
+                )
             event = self.candidates.journal.append_event(
                 PUBLISHED_EVENT,
                 payload={
@@ -509,7 +548,15 @@ class AppPublicationService:
 
     def restore_from_journal(self) -> Result[int]:
         """Verify the full accepted chain before rebuilding either named projection."""
-        with self.candidates.authority_lock, self.roster.synchronized():
+        with (
+            self.candidates.authority_lock,
+            self.roster.synchronized(),
+            self.validation.loader.synchronized(),
+            self.candidates.journal.synchronized(),
+        ):
+            validated = self.validation.restore_from_journal()
+            if is_refusal(validated):
+                return validated
             events = self.candidates.journal.read_events()
             if is_refusal(events):
                 return events
@@ -784,8 +831,39 @@ class AppPublicationService:
                     for body, seq in recovered:
                         self._insert(body, seq, conn)
 
-                self.candidates.sqlite.run(rebuild)
+                projected = self.candidates.sqlite.execute(
+                    "SELECT candidate_id,active_revision,operation_key,request_fp1,"
+                    "payload,journal_seq "
+                    "FROM app_candidate_publication ORDER BY journal_seq"
+                )
+                expected = [
+                    (
+                        body["candidate_id"],
+                        body["active_revision"],
+                        body["operation_key"],
+                        body["request_fp1"],
+                        body,
+                        seq,
+                    )
+                    for body, seq in recovered
+                ]
+                try:
+                    actual = [
+                        (*row[:4], json.loads(cast(str, row[4])), row[5]) for row in projected
+                    ]
+                    changed = actual != expected
+                except ValueError, TypeError:
+                    changed = True
+                if changed:
+                    self.candidates.sqlite.run(rebuild)
             except (sqlite3.Error, RuntimeError) as exc:
-                return storage_failure(str(exc), context={"field": "app_candidate_publication"})
-            self._dirty = bool(recovered)
+                return storage_failure(
+                    str(exc),
+                    context={
+                        "field": "app_candidate_publication",
+                        "reconciliation_required": True,
+                        "retry_same_id": True,
+                    },
+                )
+            self._dirty = self._dirty or changed
             return Ok(len(recovered))

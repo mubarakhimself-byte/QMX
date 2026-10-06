@@ -10,7 +10,8 @@ record ``fp1`` (telemetry exempt). Durable rows carry ``occurred_at`` /
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal, cast
@@ -303,7 +304,7 @@ class AuthoritativeJournal:
         self._folds = folds if folds is not None else FoldContractRegistry()
         self._next_seq = next_journal_seq
         self._scope_seq = scope_seq_state if scope_seq_state is not None else {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._closed = False
 
     @classmethod
@@ -377,6 +378,16 @@ class AuthoritativeJournal:
     def stream_name(self) -> str:
         """The single append-only journal stream name."""
         return DAEMON_JOURNAL_STREAM
+
+    @contextmanager
+    def synchronized(self) -> Generator[None]:
+        """Hold verified history stable through a compound acceptance boundary.
+
+        This is the existing sole writer's append lock, reentrant for nested
+        artifact announcements and the final append; it creates no new owner.
+        """
+        with self._lock:
+            yield
 
     def read_events(self) -> Result[tuple[JournalEventRecord, ...]]:
         """Read the authoritative stream in journal order for projection recovery."""

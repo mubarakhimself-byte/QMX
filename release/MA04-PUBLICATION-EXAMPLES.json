@@ -767,7 +767,7 @@
   },
   "first_candidate": {
     "authoring_session": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
     "content_byte_count": 334,
     "content_fp1": "fp1:sha256:a5b8ef6ece0594f824622b637ad7d941cd3bb3070e1f904a2e7a0901901c2c47",
     "context_revision": 0,
@@ -801,8 +801,8 @@
     "request_fp1": "fp1:sha256:459d998b8129359fb2af75caebedea2295fa3967e456facfb9b7b4b97e339a8a",
     "request_id": "first",
     "schema": "qma.miniapp.candidate-version.v1",
-    "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
-    "receipt_fp1": "fp1:sha256:fdfde537534bfbdafb0663d408c651eaaf5e0fbf2c43c97a46e5fa025e3bf458",
+    "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
+    "receipt_fp1": "fp1:sha256:e04dab074b6466c1d21d3ac6cffd54fbbd4b3d49dbb57a98b113eeaa12fb91ce",
     "content": {
       "asset_refs": [],
       "composition_ref": {
@@ -821,8 +821,8 @@
   },
   "first_validation": {
     "result": {
-      "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-      "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
+      "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+      "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
       "content_fp1": "fp1:sha256:a5b8ef6ece0594f824622b637ad7d941cd3bb3070e1f904a2e7a0901901c2c47",
       "composition_ref": {
         "byte_count": 1221,
@@ -857,13 +857,13 @@
       "product_session_ref": "psess:author",
       "context_revision": 0,
       "schema": "qma.miniapp.validation.v1",
-      "validator_input_fp1": "fp1:sha256:b19cafbc6fe9f23a7972009300dc8c68cf56adceca86a91ce3013d33912b9bd2",
+      "validator_input_fp1": "fp1:sha256:90134e714a40c97a380fd999b12af538618273cf0b13ad2559c38495d3ef803c",
       "status": "valid",
       "errors": [],
       "catalog_byte_count": 6774,
       "view_requests": [
         {
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1,
           "op_id": "qmb.analysis.project",
           "renderer": "json-render",
@@ -875,7 +875,7 @@
           "catalog_ref": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce"
         },
         {
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1,
           "op_id": "qmb.analysis.project",
           "renderer": "json-render",
@@ -888,32 +888,32 @@
         }
       ]
     },
-    "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
-    "receipt_fp1": "fp1:sha256:1281e8a0ca52f56d7b36c3d2b12219f13e3e063b2ae76156f4f204a3d3e65082",
+    "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
+    "receipt_fp1": "fp1:sha256:8a49a232345c90119893a2f3fad3674f4891f934cbc8a15c5ff569fc1c4b01da",
     "publication_supported": false,
     "authorizes_invoke": false
   },
   "publish_params": {
     "product_session_ref": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
-    "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
+    "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
     "expected_context_revision": 0,
     "expected_active_revision": null,
     "expected_availability_revision": 3
   },
   "publish_receipt": {
     "schema": "qma.miniapp.publication.v1",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
     "content_fp1": "fp1:sha256:a5b8ef6ece0594f824622b637ad7d941cd3bb3070e1f904a2e7a0901901c2c47",
-    "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
-    "validation_receipt_fp1": "fp1:sha256:1281e8a0ca52f56d7b36c3d2b12219f13e3e063b2ae76156f4f204a3d3e65082",
+    "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
+    "validation_receipt_fp1": "fp1:sha256:8a49a232345c90119893a2f3fad3674f4891f934cbc8a15c5ff569fc1c4b01da",
     "catalog_fp1": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce",
     "instance_id": "pack:dev-factory",
     "pack_id": "dev-factory",
     "pack_version": "0.1.0",
-    "local_id": "miniapp-9d98a61b33484695a6fa214c039be59f",
+    "local_id": "miniapp-80a869148bf244a8912439e345b11dbb",
     "publication_generation": 1,
     "availability_revision": 6,
     "roster_generation": 1,
@@ -939,7 +939,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:745531ab3bf33d7885c86931d233e697cf25fa625f39456363082d291c17dd44",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1
         },
         {
@@ -951,7 +951,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:745531ab3bf33d7885c86931d233e697cf25fa625f39456363082d291c17dd44",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1
         }
       ]
@@ -962,14 +962,14 @@
     "producer_id": "author",
     "request_id": "publish-first",
     "operation_key": "fp1:sha256:83e6cd2bebdd4da7bfb9241064a2a9b4a375d8be0eb1d48b9cefc511c4968d2b",
-    "request_fp1": "fp1:sha256:3585f8fabe4d889f5a745d5f6035e19180c216f95cc1b2fabb5c2f5d54bc3619",
+    "request_fp1": "fp1:sha256:c102599bf5b6093afb841dc617a30cf2846300175a8b83aa6b9a906ed73f210e",
     "intent": {
       "method": "publish_app_candidate",
       "params": {
         "product_session_ref": "psess:author",
-        "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-        "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
-        "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
+        "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+        "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
+        "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
         "expected_context_revision": 0,
         "expected_active_revision": null,
         "expected_availability_revision": 3
@@ -977,8 +977,8 @@
       "owner_principal": "local_operator"
     },
     "action": "publish",
-    "active_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b",
-    "receipt_fp1": "fp1:sha256:333dca0aaa623a3e83b5245bd7961ec7ee3f3e845079af61e6fcd11ab0277ecb"
+    "active_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e",
+    "receipt_fp1": "fp1:sha256:d6f344891ad91c09049e8e0ecb63352c4b69b7f0be850c9ea7bac553ba7883b0"
   },
   "maintenance_composition": {
     "schema": "qma.miniapp.composition.v1",
@@ -1064,14 +1064,14 @@
   },
   "maintenance_candidate": {
     "authoring_session": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
     "content_byte_count": 334,
     "content_fp1": "fp1:sha256:802de15683def4d5f3a208158be30e3c4f02c0bc189d140f91225f698a0cbac3",
     "context_revision": 0,
     "intent": {
       "owner_principal": "local_operator",
       "params": {
-        "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
+        "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
         "content": {
           "asset_refs": [],
           "composition_ref": {
@@ -1088,21 +1088,21 @@
           "source_refs": []
         },
         "expected_context_revision": 0,
-        "expected_revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
+        "expected_revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
         "product_session_ref": "psess:author"
       }
     },
     "operation_key": "fp1:sha256:4265373167ea3a9d0618fd7f358380528b6b59a7b084d0f4695c9a5040e12893",
     "originating_authoring_session": "psess:author",
     "owner_principal": "local_operator",
-    "parent_revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
+    "parent_revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
     "principal_class": "operator",
     "producer_id": "author",
-    "request_fp1": "fp1:sha256:6324eecd33078fb5095fdce3142334caf553407d2391aaecacccdbe0b182faf9",
+    "request_fp1": "fp1:sha256:e19f4072d2960a348a28610e476dc8cfb2699f6fc7f9f0bfb118c271543bb6a8",
     "request_id": "maintenance",
     "schema": "qma.miniapp.candidate-version.v1",
-    "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
-    "receipt_fp1": "fp1:sha256:b860bcb587148b57a3efa025f4e84a226e5c11854e70319c48686a8a126a512b",
+    "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
+    "receipt_fp1": "fp1:sha256:f7b8193863a73ea845ab229c946cf7420dd51a1bb3dd4f1cc859ae46002bbf7e",
     "content": {
       "asset_refs": [],
       "composition_ref": {
@@ -1121,8 +1121,8 @@
   },
   "maintenance_validation": {
     "result": {
-      "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-      "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
+      "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+      "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
       "content_fp1": "fp1:sha256:802de15683def4d5f3a208158be30e3c4f02c0bc189d140f91225f698a0cbac3",
       "composition_ref": {
         "byte_count": 1226,
@@ -1157,13 +1157,13 @@
       "product_session_ref": "psess:author",
       "context_revision": 0,
       "schema": "qma.miniapp.validation.v1",
-      "validator_input_fp1": "fp1:sha256:ba7abbaccc3d4a230bbe1913cdea9ffe83e0402a8ece0d2884947bd07142f562",
+      "validator_input_fp1": "fp1:sha256:ae2446bc7417f21b6a1debd99719a6c3266aa154dc7cde14a87f05fedbac5668",
       "status": "valid",
       "errors": [],
       "catalog_byte_count": 6774,
       "view_requests": [
         {
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1,
           "op_id": "qmb.analysis.project",
           "renderer": "json-render",
@@ -1175,7 +1175,7 @@
           "catalog_ref": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce"
         },
         {
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1,
           "op_id": "qmb.analysis.project",
           "renderer": "json-render",
@@ -1188,32 +1188,32 @@
         }
       ]
     },
-    "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
-    "receipt_fp1": "fp1:sha256:a2c8e9c94fc0b3a52ae92a41732727d2f5cf34a27bb8b0cb08abeb2cffb6d7c0",
+    "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
+    "receipt_fp1": "fp1:sha256:d76c03e8cd1b9e303a17f2b629035e9709398bb30e94272f223b49f1673ff278",
     "publication_supported": false,
     "authorizes_invoke": false
   },
   "replace_params": {
     "product_session_ref": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
-    "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
+    "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
     "expected_context_revision": 0,
-    "expected_active_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b",
+    "expected_active_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e",
     "expected_availability_revision": 6
   },
   "replace_receipt": {
     "schema": "qma.miniapp.publication.v1",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
     "content_fp1": "fp1:sha256:802de15683def4d5f3a208158be30e3c4f02c0bc189d140f91225f698a0cbac3",
-    "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
-    "validation_receipt_fp1": "fp1:sha256:a2c8e9c94fc0b3a52ae92a41732727d2f5cf34a27bb8b0cb08abeb2cffb6d7c0",
+    "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
+    "validation_receipt_fp1": "fp1:sha256:d76c03e8cd1b9e303a17f2b629035e9709398bb30e94272f223b49f1673ff278",
     "catalog_fp1": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce",
     "instance_id": "pack:dev-factory",
     "pack_id": "dev-factory",
     "pack_version": "0.1.0",
-    "local_id": "miniapp-9d98a61b33484695a6fa214c039be59f",
+    "local_id": "miniapp-80a869148bf244a8912439e345b11dbb",
     "publication_generation": 2,
     "availability_revision": 7,
     "roster_generation": 2,
@@ -1239,7 +1239,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:11c731e5e77bf503201a15a38f0579a4641daaf47a64ccf3b4947788c7673372",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1
         },
         {
@@ -1251,7 +1251,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:11c731e5e77bf503201a15a38f0579a4641daaf47a64ccf3b4947788c7673372",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1
         }
       ]
@@ -1262,46 +1262,46 @@
     "producer_id": "author",
     "request_id": "replace",
     "operation_key": "fp1:sha256:8e2c0cb14d7c27d456bc6a5b34d5e5ea719d8c28ad151ec8ba5e0c13692a487d",
-    "request_fp1": "fp1:sha256:fce529ffb258363bc22447a654359ccdcf9fdedc461837b2fd6aecfe2235638e",
+    "request_fp1": "fp1:sha256:240d798a331a6c833152ee82f3c0ccc1bb2b36c657e31082d5ba5cea8fc9ab1b",
     "intent": {
       "method": "publish_app_candidate",
       "params": {
         "product_session_ref": "psess:author",
-        "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-        "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
-        "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
+        "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+        "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
+        "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
         "expected_context_revision": 0,
-        "expected_active_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b",
+        "expected_active_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e",
         "expected_availability_revision": 6
       },
       "owner_principal": "local_operator"
     },
     "action": "replace",
-    "previous_active_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b",
-    "active_revision": "fp1:sha256:cf4d593e0b5597164ea62b468f738f12c58efb632035c764b4432faf0df4dad3",
-    "receipt_fp1": "fp1:sha256:e34bb216b04fabf3f5cacacacad5cb3f12890d2e845b8239d8762185404f9585"
+    "previous_active_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e",
+    "active_revision": "fp1:sha256:f608780aad9de923c6444c92e70256d00b071d39b3e21a7bb156a27596701ad2",
+    "receipt_fp1": "fp1:sha256:9f329b238e0aa692c40de13929d2281086e8976d3749f41e52b3a60185b77569"
   },
   "undo_params": {
     "product_session_ref": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
     "expected_context_revision": 0,
-    "expected_active_revision": "fp1:sha256:cf4d593e0b5597164ea62b468f738f12c58efb632035c764b4432faf0df4dad3",
+    "expected_active_revision": "fp1:sha256:f608780aad9de923c6444c92e70256d00b071d39b3e21a7bb156a27596701ad2",
     "expected_availability_revision": 7,
-    "target_publication_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b"
+    "target_publication_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e"
   },
   "undo_receipt": {
     "schema": "qma.miniapp.publication.v1",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:694f09a7871d11b1e2f07b17bddbb1dfee4d4ad33453444dd46efa99fc1bb116",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:c5246df0c8657e7dcc0d669c166d1f11369f3a4bb5bde61f401a9b990c79328e",
     "content_fp1": "fp1:sha256:a5b8ef6ece0594f824622b637ad7d941cd3bb3070e1f904a2e7a0901901c2c47",
-    "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
-    "validation_receipt_fp1": "fp1:sha256:1281e8a0ca52f56d7b36c3d2b12219f13e3e063b2ae76156f4f204a3d3e65082",
+    "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
+    "validation_receipt_fp1": "fp1:sha256:8a49a232345c90119893a2f3fad3674f4891f934cbc8a15c5ff569fc1c4b01da",
     "catalog_fp1": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce",
     "instance_id": "pack:dev-factory",
     "pack_id": "dev-factory",
     "pack_version": "0.1.0",
-    "local_id": "miniapp-9d98a61b33484695a6fa214c039be59f",
+    "local_id": "miniapp-80a869148bf244a8912439e345b11dbb",
     "publication_generation": 3,
     "availability_revision": 8,
     "roster_generation": 3,
@@ -1327,7 +1327,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:745531ab3bf33d7885c86931d233e697cf25fa625f39456363082d291c17dd44",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1
         },
         {
@@ -1339,7 +1339,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:745531ab3bf33d7885c86931d233e697cf25fa625f39456363082d291c17dd44",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1
         }
       ]
@@ -1350,33 +1350,33 @@
     "producer_id": "author",
     "request_id": "undo-lost-response",
     "operation_key": "fp1:sha256:8bccd553960843a7ca5e96e1c30734439bf91ef9488bac1cc1ebc98b4b471a34",
-    "request_fp1": "fp1:sha256:bedf7dfc033638c54a9fce2bb35d101707f57f71705346b5ac7ff33960aec94f",
+    "request_fp1": "fp1:sha256:49617f463d37277f9966ec93619feb6cab9a3b2e9cced9aaea3103b725a1a7a9",
     "intent": {
       "method": "undo_app_publication",
       "params": {
         "product_session_ref": "psess:author",
-        "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-        "validation_fp1": "fp1:sha256:416108de2b89c90f8a2c3bc99abbf993ab20cceb0a7d357f360a54f2cfbdb0c0",
+        "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+        "validation_fp1": "fp1:sha256:941fd4dacfef2c8d9ebca65a52fbfdd6c89b7a5d40952ca9a054e06942970e8e",
         "expected_context_revision": 0,
-        "expected_active_revision": "fp1:sha256:cf4d593e0b5597164ea62b468f738f12c58efb632035c764b4432faf0df4dad3",
+        "expected_active_revision": "fp1:sha256:f608780aad9de923c6444c92e70256d00b071d39b3e21a7bb156a27596701ad2",
         "expected_availability_revision": 7,
-        "target_publication_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b"
+        "target_publication_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e"
       },
       "owner_principal": "local_operator"
     },
     "action": "undo",
-    "previous_active_revision": "fp1:sha256:cf4d593e0b5597164ea62b468f738f12c58efb632035c764b4432faf0df4dad3",
-    "undo_target_revision": "fp1:sha256:28239f10f09d346dd41887815041f6f381984908ede7dac7f78581b2a2d0050b",
-    "active_revision": "fp1:sha256:3d47183189736b745d0ea334a4e2dbea9cda406cb760291994ed87b29ab403fa",
-    "receipt_fp1": "fp1:sha256:9751755c43e5d36958c9713076f493d18ee54db462c35188f3336142fcfa5184"
+    "previous_active_revision": "fp1:sha256:f608780aad9de923c6444c92e70256d00b071d39b3e21a7bb156a27596701ad2",
+    "undo_target_revision": "fp1:sha256:2ef4c5c254676df3aa6b768a698e982966d800cc63affc0d6edcc6795d8b845e",
+    "active_revision": "fp1:sha256:604043e8a1b4a9f4e35ec8c65c71c047b0673567fb9a7061d771f0b848776f70",
+    "receipt_fp1": "fp1:sha256:a864085a488890e0dba4d6a60509ce2aca41cd52cdcedca0445a0c7615aba500"
   },
   "postcommit_params": {
     "product_session_ref": "psess:author",
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-    "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
-    "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+    "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
+    "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
     "expected_context_revision": 0,
-    "expected_active_revision": "fp1:sha256:3d47183189736b745d0ea334a4e2dbea9cda406cb760291994ed87b29ab403fa",
+    "expected_active_revision": "fp1:sha256:604043e8a1b4a9f4e35ec8c65c71c047b0673567fb9a7061d771f0b848776f70",
     "expected_availability_revision": 8
   },
   "postcommit_receipt": {
@@ -1389,7 +1389,7 @@
       "schema": "qmx.ui.pack_ui_request.v1",
       "views": []
     },
-    "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
+    "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
     "catalog_fp1": "fp1:sha256:77e099eaff9993c69a1e80664821b0dbda3d6537b9f81aa5c9212069c3cd2dce",
     "content_fp1": "fp1:sha256:802de15683def4d5f3a208158be30e3c4f02c0bc189d140f91225f698a0cbac3",
     "context_revision": 0,
@@ -1398,16 +1398,16 @@
       "method": "publish_app_candidate",
       "owner_principal": "local_operator",
       "params": {
-        "candidate_id": "appcand:9d98a61b33484695a6fa214c039be59f",
-        "expected_active_revision": "fp1:sha256:3d47183189736b745d0ea334a4e2dbea9cda406cb760291994ed87b29ab403fa",
+        "candidate_id": "appcand:80a869148bf244a8912439e345b11dbb",
+        "expected_active_revision": "fp1:sha256:604043e8a1b4a9f4e35ec8c65c71c047b0673567fb9a7061d771f0b848776f70",
         "expected_availability_revision": 8,
         "expected_context_revision": 0,
         "product_session_ref": "psess:author",
-        "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
-        "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7"
+        "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
+        "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229"
       }
     },
-    "local_id": "miniapp-9d98a61b33484695a6fa214c039be59f",
+    "local_id": "miniapp-80a869148bf244a8912439e345b11dbb",
     "operation_key": "fp1:sha256:8b3c7c9bb664f1b4af64b753c8f0e5a162ff6cdcb7036101bc3fde0713e5f349",
     "owner_principal": "local_operator",
     "pack_id": "dev-factory",
@@ -1426,7 +1426,7 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:11c731e5e77bf503201a15a38f0579a4641daaf47a64ccf3b4947788c7673372",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:0",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:0",
           "view_version": 1
         },
         {
@@ -1438,24 +1438,24 @@
           "renderer": "json-render",
           "slot": "canvas-widget",
           "ui_resource": "fp1:sha256:11c731e5e77bf503201a15a38f0579a4641daaf47a64ccf3b4947788c7673372",
-          "view_id": "view:appcand:9d98a61b33484695a6fa214c039be59f:panel:1",
+          "view_id": "view:appcand:80a869148bf244a8912439e345b11dbb:panel:1",
           "view_version": 1
         }
       ]
     },
     "pack_version": "0.1.0",
-    "previous_active_revision": "fp1:sha256:3d47183189736b745d0ea334a4e2dbea9cda406cb760291994ed87b29ab403fa",
+    "previous_active_revision": "fp1:sha256:604043e8a1b4a9f4e35ec8c65c71c047b0673567fb9a7061d771f0b848776f70",
     "producer_id": "author",
     "product_session_ref": "psess:author",
     "publication_generation": 4,
-    "request_fp1": "fp1:sha256:b44736b8fb0089a74f11aa881156d458756eeaaf2d6d71532a22abb12522dd15",
+    "request_fp1": "fp1:sha256:7ba5c0a475f80c087efe88705fca30a899351cc7f7acb84ce7fcb6589724f64f",
     "request_id": "postcommit",
-    "revision": "fp1:sha256:01f964308adf942d379aed406f660531245e78ea74c05132b0b1b5919c3bd91d",
+    "revision": "fp1:sha256:83f983cf5435715c49f532bff2ba308a0497e708e2b29130d2a409502c86548d",
     "roster_generation": 4,
     "schema": "qma.miniapp.publication.v1",
-    "validation_fp1": "fp1:sha256:f4d47b1beea48916358b0cd48ee1e9776243d8230b854c258fb68a401c76ccc7",
-    "validation_receipt_fp1": "fp1:sha256:a2c8e9c94fc0b3a52ae92a41732727d2f5cf34a27bb8b0cb08abeb2cffb6d7c0",
-    "active_revision": "fp1:sha256:c20caf8553b575b781f0e5ed8367756e8e6a0def35c7ef767040c7f908bba472",
-    "receipt_fp1": "fp1:sha256:0db3a8901dfdc7940abd4cdf76b3ec8eeae53458e96e70456d69938e8705de22"
+    "validation_fp1": "fp1:sha256:b5325bf3a6af5a7b14652c58025359856e41b487be65c8388cacea5f9be4a229",
+    "validation_receipt_fp1": "fp1:sha256:d76c03e8cd1b9e303a17f2b629035e9709398bb30e94272f223b49f1673ff278",
+    "active_revision": "fp1:sha256:bddbfc63854a6625b380de3085291cff1884d05d9663c28fa11c9941b95225f2",
+    "receipt_fp1": "fp1:sha256:f4c5a7a4f3c6c1ce1940d32656d16a1a942051d05cbb85f28e1f2e22c092c34f"
   }
 }

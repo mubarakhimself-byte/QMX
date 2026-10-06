@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -546,3 +547,292 @@ def test_changed_host_package_version_cannot_create_incompatible_receipt(
     denied = call(p, args, "changed-host-version")
     assert is_refusal(denied) and denied.context["refusal"] == "incompatible_host"
     assert len(publications(p)) == 1
+
+
+@pytest.mark.parametrize("fault", ["delete", "payload", "identity"])
+def test_live_projection_divergence_repairs_identical_receipt(
+    owner: DaemonProcess, fault: str
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    args = params(p, first, proof)
+    a = need(call(p, args))
+    depth = host(p).context.snapshot()["exit_stack_depth"]
+    if fault == "delete":
+        p.sqlite.execute("DELETE FROM app_candidate_publication")
+    elif fault == "payload":
+        p.sqlite.execute("UPDATE app_candidate_publication SET payload='{}'")
+    else:
+        p.sqlite.execute("UPDATE app_candidate_publication SET operation_key='wrong'")
+    assert need(call(p, args)) == a
+    read = need(
+        call(
+            p,
+            {"product_session_ref": "psess:app", "candidate_id": first["candidate_id"]},
+            name="get_app_publication",
+        )
+    )
+    assert read["active"] == a
+    assert view(p, a)["pack_ui_request"] == a["pack_ui_request"]
+    assert len(publications(p)) == 1 and host(p).availability_revision == a["availability_revision"]
+    assert host(p).context.snapshot()["exit_stack_depth"] == depth
+    stale = {**args, "expected_availability_revision": host(p).availability_revision}
+    assert is_refusal(call(p, stale, "new-null-cas")) and len(publications(p)) == 1
+
+
+@pytest.mark.parametrize("fault", ["action", "generation", "intent"])
+def test_live_rehashed_history_refuses_reads_retries_and_new_work(
+    owner: DaemonProcess, fault: str
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    args = params(p, first, proof)
+    a = need(call(p, args))
+    body = {k: v for k, v in a.items() if k not in {"active_revision", "receipt_fp1"}}
+    if fault == "action":
+        body["action"] = "undo"
+    elif fault == "generation":
+        body["publication_generation"] = 8
+    else:
+        body["request_fp1"] = "fp1:sha256:" + "0" * 64
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    artifact = need(p.artifacts.stage_complete_bytes(raw))
+    need(
+        p.journal.append_event(
+            PUBLISHED_EVENT,
+            payload={
+                "schema": "qma.miniapp.publication.v1",
+                "active_revision": artifact.fp1,
+                "byte_count": len(raw),
+                "candidate_id": a["candidate_id"],
+                "installation": publications(p)[-1].payload["installation"],
+            },
+        )
+    )  # pyright: ignore[reportPrivateUsage]
+    events = [e.to_row() for e in need(p.journal.read_events())]
+    projection = p.sqlite.execute("SELECT * FROM app_candidate_publication")
+    installed = p.sqlite.execute("SELECT * FROM plugin_install_records")
+    for result in (
+        call(p, args),
+        call(p, params(p, first, proof, a), "new-after-corruption"),
+        call(
+            p,
+            {"product_session_ref": "psess:author", "candidate_id": first["candidate_id"]},
+            name="get_app_publication",
+        ),
+    ):
+        assert is_refusal(result)
+    assert [e.to_row() for e in need(p.journal.read_events())] == events
+    assert p.sqlite.execute("SELECT * FROM app_candidate_publication") == projection
+    assert p.sqlite.execute("SELECT * FROM plugin_install_records") == installed
+    assert (
+        need(
+            p.app_publication.candidates.read_reference(
+                {"fp1": artifact.fp1, "byte_count": len(raw)}
+            )
+        )
+        == raw
+    )
+    assert host(p).availability_revision == a["availability_revision"]
+
+
+@pytest.mark.parametrize("operation", ["disable", "unload", "detach"])
+def test_dependency_owner_cannot_cross_proof_append_activation(
+    owner: DaemonProcess, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    a = need(call(p, params(p, first, proof)))
+    args = params(p, first, proof, a)
+    staged, resume, attempted, departed = (threading.Event() for _ in range(4))
+    original = p.artifacts.stage_complete_bytes
+    activation_dependencies: list[bool] = []
+    apply = p.roster.loader.apply_hosted_data_publication
+
+    def pause(raw: bytes) -> Any:
+        if json.loads(raw).get("schema") == "qma.miniapp.publication.v1":
+            staged.set()
+            assert resume.wait(15)
+        return original(raw)
+
+    def observe(payload: Any) -> Any:
+        activation_dependencies.append(p.roster.loader.get("analysis-backtest") is not None)
+        return apply(payload)
+
+    def change() -> Any:
+        attempted.set()
+        if operation == "disable":
+            answer = p.roster.loader.disable("analysis-backtest", principal=PrincipalClass.OPERATOR)
+            assert is_ok(answer)
+        elif operation == "unload":
+            answer = p.roster.loader.unload("analysis-backtest")
+        else:
+            answer = p.roster.loader.detach_keep_bytes("analysis-backtest")
+        departed.set()
+        return answer
+
+    monkeypatch.setattr(p.artifacts, "stage_complete_bytes", pause)
+    monkeypatch.setattr(p.roster.loader, "apply_hosted_data_publication", observe)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            publication = pool.submit(call, p, args, "atomic-replacement")
+            assert staged.wait(15)
+            dependency = pool.submit(change)
+            assert attempted.wait(15)
+            blocked = not departed.wait(0.25)
+            resume.set()
+            b = need(publication.result(timeout=20))
+            dependency.result(timeout=20)
+            assert blocked and activation_dependencies and all(activation_dependencies)
+        assert b["publication_generation"] == 2 and len(publications(p)) == 2
+        assert p.roster.loader.get("analysis-backtest") is None
+        assert is_refusal(call(p, params(p, first, proof, b), "after-departure"))
+        assert len(publications(p)) == 2
+    finally:
+        resume.set()
+
+
+def test_permission_revocation_at_staging_refuses_before_acceptance(
+    owner: DaemonProcess, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    original = p.artifacts.stage_complete_bytes
+    from qma.wire.app_candidate import policy_rejection
+
+    def revoked(manifest: Any) -> Any:
+        return policy_rejection("permissions", "revoked at staging")
+
+    def change(raw: bytes) -> Any:
+        answer = original(raw)
+        if json.loads(raw).get("schema") == "qma.miniapp.publication.v1":
+            monkeypatch.setattr(p.roster.loader, "_check_permissions", revoked)
+        return answer
+
+    monkeypatch.setattr(p.artifacts, "stage_complete_bytes", change)
+    assert is_refusal(call(p, params(p, first, proof)))
+    assert publications(p) == []
+
+
+def test_live_projection_repair_failure_preserves_receipt_for_retry(
+    owner: DaemonProcess, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    args = params(p, first, proof)
+    a = need(call(p, args))
+    p.sqlite.execute("DELETE FROM app_candidate_publication")
+
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise sqlite3.OperationalError("interrupted live repair")
+
+    with monkeypatch.context() as m:
+        m.setattr(p.app_publication, "_insert", fail)
+        refusal = call(p, args)
+        assert is_refusal(refusal) and refusal.context["reconciliation_required"] is True
+        assert refusal.context["retry_same_id"] is True
+    assert need(call(p, args)) == a and len(publications(p)) == 1
+
+
+def test_reentrant_corrupt_history_at_staging_refuses_before_append(
+    owner: DaemonProcess, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    a = need(call(p, params(p, first, proof)))
+    malformed = {k: v for k, v in a.items() if k not in {"active_revision", "receipt_fp1"}}
+    malformed["action"] = "undo"
+    bad_raw = json.dumps(
+        malformed, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
+    bad = need(p.artifacts.stage_complete_bytes(bad_raw))
+    original = p.artifacts.stage_complete_bytes
+    injected = False
+
+    def change(raw: bytes) -> Any:
+        nonlocal injected
+        result = original(raw)
+        if not injected and json.loads(raw).get("schema") == "qma.miniapp.publication.v1":
+            injected = True
+            need(
+                p.journal.append_event(
+                    PUBLISHED_EVENT,
+                    payload={
+                        "schema": "qma.miniapp.publication.v1",
+                        "active_revision": bad.fp1,
+                        "byte_count": len(bad_raw),
+                        "candidate_id": a["candidate_id"],
+                        "installation": publications(p)[-1].payload["installation"],
+                    },
+                )
+            )  # pyright: ignore[reportPrivateUsage]
+        return result
+
+    monkeypatch.setattr(p.artifacts, "stage_complete_bytes", change)
+    result = call(p, params(p, first, proof, a), "after-staging-corruption")
+    assert is_refusal(result) and len(publications(p)) == 2
+    assert host(p).availability_revision == a["availability_revision"]
+    assert (
+        need(
+            p.app_publication.candidates.read_reference(
+                {"fp1": bad.fp1, "byte_count": len(bad_raw)}
+            )
+        )
+        == bad_raw
+    )
+
+
+def test_concurrent_history_append_is_ordered_after_publication(
+    owner: DaemonProcess, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = owner
+    _, first, proof = setup(p)
+    a = need(call(p, params(p, first, proof)))
+    args = params(p, first, proof, a)
+    malformed = {k: v for k, v in a.items() if k not in {"active_revision", "receipt_fp1"}}
+    malformed["action"] = "undo"
+    raw = json.dumps(malformed, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    bad = need(p.artifacts.stage_complete_bytes(raw))
+    payload = {
+        "schema": "qma.miniapp.publication.v1",
+        "active_revision": bad.fp1,
+        "byte_count": len(raw),
+        "candidate_id": a["candidate_id"],
+        "installation": publications(p)[-1].payload["installation"],
+    }  # pyright: ignore[reportPrivateUsage]
+    staged, resume, attempted, appended = (threading.Event() for _ in range(4))
+    original = p.artifacts.stage_complete_bytes
+
+    def pause(encoded: bytes) -> Any:
+        if json.loads(encoded).get("schema") == "qma.miniapp.publication.v1":
+            staged.set()
+            assert resume.wait(15)
+        return original(encoded)
+
+    def corrupt() -> Any:
+        attempted.set()
+        answer = need(p.journal.append_event(PUBLISHED_EVENT, payload=payload))
+        appended.set()
+        return answer
+
+    monkeypatch.setattr(p.artifacts, "stage_complete_bytes", pause)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            publication = pool.submit(call, p, args, "journal-atomic")
+            assert staged.wait(15)
+            injected = pool.submit(corrupt)
+            assert attempted.wait(15)
+            blocked = not appended.wait(0.25)
+            resume.set()
+            b = need(publication.result(timeout=20))
+            injected.result(timeout=20)
+            assert blocked
+        assert [e.payload["active_revision"] for e in publications(p)] == [
+            a["active_revision"],
+            b["active_revision"],
+            bad.fp1,
+        ]
+        assert is_refusal(call(p, params(p, first, proof, b), "after-concurrent-corruption"))
+        assert len(publications(p)) == 3
+    finally:
+        resume.set()
