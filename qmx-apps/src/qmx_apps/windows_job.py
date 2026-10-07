@@ -82,6 +82,13 @@ class WindowsJob:
             ),
         }
 
+    def cpu_seconds(self) -> float:
+        info = self.api.QueryInformationJobObject(
+            self.handle, self.api.JobObjectBasicAccountingInformation
+        )
+        # The job retains CPU consumed by children even after they exit.
+        return float(info["TotalUserTime"] + info["TotalKernelTime"]) / 10_000_000
+
     def terminate(self) -> None:
         if not self.closed:
             self.api.TerminateJobObject(self.handle, 1)

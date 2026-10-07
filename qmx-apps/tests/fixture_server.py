@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
 import sys
 from contextlib import closing
 from pathlib import Path
@@ -17,6 +18,16 @@ mcp = FastMCP("Supervisor boundary fixture")
 @mcp.tool()
 def ping() -> dict[str, JsonValue]:
     return {"pong": True}
+
+
+@mcp.tool()
+def child_cpu() -> dict[str, JsonValue]:
+    script = (
+        "import time\nstarted = time.process_time()\n"
+        "while time.process_time() - started < 0.35: pass\n"
+    )
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=10)
+    return {"completed": True}
 
 
 @mcp.tool()

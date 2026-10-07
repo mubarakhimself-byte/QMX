@@ -125,6 +125,21 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
     assert registry[0]["transport"] == "stdio"
     assert "ping" in [document(tool)["name"] for tool in cast(list[object], registry[0]["tools"])]
     assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
+    if sys.platform == "win32":
+        before_cpu = cast(
+            float,
+            document(document(supervisor.status("exchange-status")["metrics"])["budget_used"])[
+                "cpu_seconds"
+            ],
+        )
+        supervisor.call("exchange-status", "child_cpu", {})
+        after_cpu = cast(
+            float,
+            document(document(supervisor.status("exchange-status")["metrics"])["budget_used"])[
+                "cpu_seconds"
+            ],
+        )
+        assert after_cpu >= before_cpu + 0.30, "Exited child CPU must remain in the job budget"
     stopped = supervisor.stop("exchange-status")
     assert stopped["status"] == "stopped"
     dead(pid)

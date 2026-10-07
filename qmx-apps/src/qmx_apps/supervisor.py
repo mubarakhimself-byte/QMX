@@ -436,6 +436,7 @@ class Supervisor:
         finally:
             self._kill(instance)
             instance.client = None
+            self._heartbeat(instance)
             if instance.job:
                 instance.job.close()
             if instance.state != "tripped":
@@ -449,6 +450,8 @@ class Supervisor:
     def _heartbeat(self, instance: Instance) -> None:
         path = instance.volume.root / f"data/heartbeat-{instance.id}.json"
         try:
+            if instance.job and not instance.job.closed:
+                instance.cpu = instance.job.cpu_seconds()
             data = cast(Document, json.loads(path.read_text(encoding="utf-8")))
             instance.heartbeat = float(cast(float, data["at"]))
             instance.job_runs = int(cast(int, data["job_runs"]))
@@ -460,7 +463,11 @@ class Supervisor:
                     raise AppError("process_mismatch", "Heartbeat belongs to another process.", 409)
                 instance.process = process
             processes = [instance.process, *instance.process.children(recursive=True)]
-            instance.cpu = sum(p.cpu_times().user + p.cpu_times().system for p in processes)
+            if instance.job is None:
+                instance.cpu = max(
+                    instance.cpu,
+                    sum(p.cpu_times().user + p.cpu_times().system for p in processes),
+                )
             instance.memory = sum(p.memory_info().rss for p in processes)
         except OSError, ValueError, KeyError, psutil.Error:
             return

@@ -34,7 +34,9 @@ Windows Job Objects enforce aggregate job memory in MiB, a CPU hard cap as
 a percentage, and process-tree termination on close. The native CPU limit
 API supplements pywin32's Job Object bindings. Linux uses `RLIMIT_AS`,
 `RLIMIT_CPU`, process groups and psutil termination; it has no CPU percentage
-cap. Heartbeats meter subprocess CPU seconds, RSS, scheduled runs and errors.
+cap. Windows CPU accounting includes exited children from the kernel job;
+Linux CPU accounting uses process-tree polling. Heartbeats meter CPU seconds,
+RSS, scheduled runs and errors.
 MCP tool calls and scheduled job executions consume the run budget. Error,
 CPU, run and heartbeat breaches stop the process tree and persist a reason.
 Scheduled Python files define `run()`; the optional interval is in seconds.
