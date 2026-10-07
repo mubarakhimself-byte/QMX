@@ -307,7 +307,10 @@ def test_producer_to_consumer_artifact_and_screen_state(supervisor: Supervisor) 
     install(supervisor, EXAMPLES / "exchange-status")
     install(supervisor, EXAMPLES / "weekend-watcher")
     supervisor.start("exchange-status")
-    supervisor.start("weekend-watcher")
+    try:
+        supervisor.start("weekend-watcher")
+    except AppError as error:
+        pytest.fail(f"Watcher startup failed: {error}; logs={supervisor.logs('weekend-watcher')}")
     assert supervisor.status("exchange-status")["status"] == "running", supervisor.logs(
         "exchange-status"
     )
