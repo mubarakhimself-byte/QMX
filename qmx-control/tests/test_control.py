@@ -54,6 +54,11 @@ def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
                     assert response.status_code == 200
                     result = await mcp.call_tool(name, args)
                     assert result.data == response.json()
+                values = {"model_calls": 25}
+                written = rest.put("/api/settings/budgets", headers=HEADERS, json=values)
+                assert (
+                    await mcp.call_tool("settings_put", {"section": "budgets", "values": values})
+                ).data == written.json()
                 tools = {tool.name: tool for tool in await mcp.list_tools()}
                 assert tools["apps_publish"].annotations is not None
                 assert tools["apps_publish"].annotations.model_dump(by_alias=True)[
@@ -123,6 +128,40 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
             assert "not_implemented" in str(result.content)
 
     asyncio.run(unavailable())
+
+
+def test_unavailable_errors_match_across_doors(tmp_path: Path) -> None:
+    service = ControlService(tmp_path)
+
+    async def compare() -> None:
+        with TestClient(create_app(service, TOKEN)) as rest:
+            async with Client(create_mcp(service)) as mcp:
+                for name, method, route, _ in OPERATIONS:
+                    if not name.startswith(("apps_", "workflows_")):
+                        continue
+                    args: dict[str, Any] = {}
+                    path = route
+                    if "{app_id}" in path:
+                        args["app_id"] = "missing-app"
+                        path = path.replace("{app_id}", "missing-app")
+                    if "{workflow_id}" in path:
+                        args["workflow_id"] = "missing-workflow"
+                        path = path.replace("{workflow_id}", "missing-workflow")
+                    params: dict[str, str] = {}
+                    body = None
+                    if name in {"apps_create", "apps_update"}:
+                        args["path"] = "uninstalled"
+                        params["path"] = "uninstalled"
+                    if name in {"workflows_put", "workflows_validate"}:
+                        args["graph"] = {}
+                        body = {}
+                    response = rest.request(method, path, headers=HEADERS, params=params, json=body)
+                    assert response.status_code == 501, (name, response.text)
+                    result = await mcp.call_tool(name, args, raise_on_error=False)
+                    assert result.is_error
+                    assert json.loads(result.content[0].model_dump()["text"]) == response.json()
+
+    asyncio.run(compare())
 
 
 @pytest.mark.parametrize("path", ["/api/sessions", "/openapi.json", "/mcp/", "/api/events/runs"])
