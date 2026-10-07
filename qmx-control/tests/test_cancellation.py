@@ -33,7 +33,9 @@ def test_cancel_reaches_the_running_owner(tmp_path: Path, kind: WorkKind) -> Non
         assert not worker.is_alive()
         rows = service.runs_list() if kind == "runs" else service.jobs_list()
         assert rows == [{"id": "work-1", "status": "cancelled"}]
-        assert service.events(kind)[-1]["data"]["status"] in {"cancel_requested", "cancelled"}
+        event_data = service.events(kind)[-1]["data"]
+        assert isinstance(event_data, dict)
+        assert event_data["status"] in {"cancel_requested", "cancelled"}
     finally:
         cancel.set()
         worker.join(timeout=10)
