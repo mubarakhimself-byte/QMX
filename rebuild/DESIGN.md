@@ -46,7 +46,7 @@ The domain core (QMF, QML, QMB, QMN, MIS) is unchanged.
 | QMA task graph engine, loop registry, MissionCompiler, canonical join | **Replace** with LangGraph | Retired once the workflow compiler (7.4) works |
 | Hook registry (23 verbs) | **Replace** with LangChain middleware | |
 | Model proxy chain, `native_*` sessions, `proxy/` | **Replace** with the model router (5.3) | |
-| Tool registry and MCP adapter layer | **Replace** with per-agent `tools=` and `langchain-mcp-adapters` | |
+| Tool registry and MCP adapter layer | **Replace** with per-agent `tools=` and LangChain's built-in `MCPAdapter` (`langchain[mcp]`) | |
 | Agent bus and mailboxes | **Replace** with sync/async sub-agents | |
 | Memory provider contract and two memory modules | **Replace** with one `MemoryProvider` (5.4) | |
 | Hand-written HTTP/WebSocket server, JSON-RPC wire, pairing | **Replace** with FastAPI (section 8) | |
@@ -87,7 +87,7 @@ memory: { scope: workflow }      # task | workflow | session | global
 subagents:
   - ref: agents/data-analyst.yaml          # sync sub-agent
   - workflow: workflows/backtest-pipeline   # compiled LangGraph graph as sub-agent
-async_subagents: [agents/overnight-sweep.yaml]
+background_tasks: [agents/overnight-sweep.yaml]   # run via QMX background tasks (§5.2)
 interrupt_on: { promote_strategy: true, publish_mini_app: true }
 permissions: { write: ["/artifacts/**"], deny_write: ["/data/**"] }
 budget: { model_calls: 200, tool_calls: 400 }
@@ -96,7 +96,7 @@ budget: { model_calls: 200, tool_calls: 400 }
 - **Deep Agents is the default agent type.** The general-purpose sub-agent stays on for the Copilot and is off inside workflow nodes unless the spec turns it on.
 - **Specific tools, MCPs and data per agent:**
   - Tools: `SubAgent.tools` replaces inherited tools.
-  - MCP: one `MultiServerMCPClient` per spec.
+  - MCP: one `langchain.mcp.MCPAdapter` per spec. The old `langchain-mcp-adapters` package is unmaintained.
   - Data: a `CompositeBackend` route plus `permissions`.
 - Per-run identity (session, workflow, task, app) travels in `context_schema`.
 
@@ -105,7 +105,7 @@ budget: { model_calls: 200, tool_calls: 400 }
 | Need | Mechanism |
 |---|---|
 | Quick isolated job (look-up, short research) | sync `SubAgent` through the `task` tool |
-| Long job (sweep, app build, overnight) | `AsyncSubAgent`: start/check/update/cancel/list. Feeds the UI "Activity / jobs" panel |
+| Long job (sweep, app build, overnight) | QMX background tasks: `start_task`, `check_task`, `cancel_task`, `list_tasks` tools, backed by `qmx-control` runs, which run a compiled sub-agent or workflow in the background. Feeds the UI "Activity / jobs" panel. Deep Agents' `AsyncSubAgent` is not used because it needs an Agent Protocol server (§12b) |
 | Fixed pipeline (ingest → backtest → tearsheet) | `CompiledSubAgent` wrapping a LangGraph workflow |
 | Bulk coverage (every symbol or fold) | `CodeInterpreterMiddleware` fan-out, with the interpreter tool gated |
 | Irreversible decision | escalate to a high-reasoning model, or ask the operator via `interrupt_on` |
@@ -479,6 +479,23 @@ P05 (`reports/survival-map.md`) is approved. These rulings override it where the
 5. **Mini-app port (P14): no compatibility IDs or schemas.** Port the *rules*: immutable versions, compare-and-swap, strict validation, undo as a new transition. Old schema names and the `dev-factory` host go away.
 6. **P04 must stop on fixture-labelled modules that have production callers** (`plugins/lifecycle.py`, `sessions/chrome.py`, `staging/change_request.py`, kit-journey re-exports). Move only the ones with no production importers; list the rest in the PR. They disappear with their callers in P16.
 7. **P06 may start as soon as P01 is merged.** It builds a new package and doesn't need P02–P05.
+
+## 12b. Rulings from the docs reference review (Claude, 2026-10-07)
+
+`REFERENCES.md` §0 lists where the official docs differ from this design. Rulings:
+
+1. **MCP client:** use `langchain.mcp.MCPAdapter` (`langchain[mcp]>=1.4.0`). It is beta, but it is the official path; `langchain-mcp-adapters` is unmaintained.
+2. **MCP servers:** FastMCP 4.x (`fastmcp>=4,<5`).
+3. **Long background work:** QMX background tasks, not Deep Agents `AsyncSubAgent`, which needs an Agent Protocol server.
+   - `start_task`, `check_task`, `cancel_task` and `list_tasks` are four tools backed by `qmx-control` runs (P11/P22). Each runs a compiled sub-agent or workflow in the background, with its own checkpointer.
+   - The AgentSpec field is `background_tasks`.
+4. **Python data work:** `CodeInterpreterMiddleware` is JavaScript (QuickJS). The data analyst uses a **sandbox backend** instead.
+   - A small `SandboxBackendProtocol` adapter over the T1 subprocess runner (P12) on the laptop, Docker (P17) on servers, and the Modal or E2B adapters for remote.
+   - The JavaScript interpreter is only used for code-driven fan-out of sub-agents, and is gated.
+5. **Built-in tools:** `tools=` adds to the Deep Agents built-ins. Specs that must not have shell or file tools exclude them through `HarnessProfile(excluded_tools=...)`. Workflow agent nodes turn off the general-purpose sub-agent.
+6. **Amp:** remote runs on orbs or runners ignore SDK-side MCP config. QMX's MCP servers are configured in the Amp project or runner settings, and P21 documents that setup.
+7. **Tests:** use a fake chat model subclass that supports `bind_tools`. Anything with approvals uses a checkpointer.
+8. **Litestream:** one replica per database (0.5.x). **SSE:** FastAPI's native SSE (≥0.135).
 
 ## 13. Open items (not blocking packets 01–08)
 

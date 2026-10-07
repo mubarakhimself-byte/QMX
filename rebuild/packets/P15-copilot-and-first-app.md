@@ -14,7 +14,7 @@ The Copilot is a Deep Agent that builds, runs and inspects mini apps and workflo
   - MCP: `qmx-control`, `qmx-data`, `qmx-backtest`, `qmx-research`, plus operator-added servers
   - skills: `build-mini-app`, `build-workflow`, `debug-app`. Write them as Agent Skills folders, short and practical.
   - sync sub-agents: `researcher`, `data-analyst` (Python sandbox backend, RLM-style prompt), `app-builder`
-  - async sub-agent: `overnight-builder`
+  - background task (DESIGN §12b): `overnight-builder`
   - interrupts: `publish_app`, `start_live`, global memory writes
   - memory scope: session, plus global (approval)
 - **Session log:** the Copilot run is mapped onto the UI's typed block list (text, plan, agents, tool calls, artifact, question, permission, panel draft) and streamed via SSE from `qmx-control`.

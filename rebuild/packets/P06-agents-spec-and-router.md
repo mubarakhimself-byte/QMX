@@ -10,11 +10,11 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
 
 ## Build
 1. `qmx_agents.spec`:
-   - `AgentSpec` (pydantic) with fields: name, model (tier or `provider:model`), system_prompt (path), tools, mcp_servers, skills, memory, subagents (ref | workflow), async_subagents, interrupt_on, permissions, budget.
+   - `AgentSpec` (pydantic) with fields: name, model (tier or `provider:model`), system_prompt (path), tools, mcp_servers, skills, memory, subagents (ref | workflow), background_tasks, interrupt_on, permissions, budget.
    - `load_spec(path)`.
    - `build_agent(spec, ctx) -> CompiledStateGraph` using `deepagents.create_deep_agent`.
    - Tools are resolved by name from a registry dict, which P09 fills. Tests use a fake registry.
-   - MCP servers come from `langchain-mcp-adapters` `MultiServerMCPClient`, using connection settings from config.
+   - MCP servers come from `langchain.mcp.MCPAdapter` (`langchain[mcp]>=1.4.0`), using connection settings from config. Do not use the unmaintained `langchain-mcp-adapters`.
 2. `qmx_agents.router`:
    - Tiers `fast`, `workhorse`, `coding`, `reasoning_high` map to `provider:model` strings in a UI-editable config file.
    - `resolve(tier)` uses `init_chat_model`.
@@ -50,7 +50,7 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
 3. `scripts/live/smoke_agent.py`: runs a one-question agent against a chosen provider and profile. It also checks that a system prompt sent through CLIProxy reaches Claude intact (ask the model to repeat a marker from its system prompt) and prints the result. For the operator to run; never in tests.
 
 ## Pin versions
-Use the latest stable `deepagents`, `langchain`, `langgraph` and `langchain-mcp-adapters`, and record them in the PR. Check exact parameter names in the Deep Agents docs; do not guess.
+Use the latest stable `deepagents`, `langchain`, `langgraph` and `langchain[mcp]`, and record them in the PR. Check exact parameter names in the Deep Agents docs; do not guess.
 
 ## Tests
 - Spec parsing: valid, invalid, missing prompt file.
