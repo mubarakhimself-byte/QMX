@@ -197,6 +197,7 @@ def test_interrupt_requires_checkpoint(tmp_path: Path, config: RouterConfig) -> 
 
 def test_harness_exclusions_and_no_general_purpose(tmp_path: Path, config: RouterConfig) -> None:
     name = "qmx:restricted-test"
+    config.harness_profiles[name] = {"general_purpose_subagent": {"enabled": False}}
     register_harness_profile(
         name,
         HarnessProfile(

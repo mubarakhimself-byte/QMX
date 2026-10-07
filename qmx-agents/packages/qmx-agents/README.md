@@ -32,7 +32,36 @@ before building agents; use `excluded_tools` to hide built-ins and
 registrations merge process-wide, so change them at service startup, not per run.
 Each named sub-agent is compiled independently with its own tools and approvals.
 
-`budget` is parsed for P08. Background tasks fail explicitly
+`budget` installs the library model/tool call limits per invocation, including
+the general-purpose sub-agent. `BuildContext.budget` overrides a spec's budget
+with validated settings. Model limits end the run; tool limits raise and stop it.
+The general-purpose agent is explicitly defined to retain guards. Set its
+`enabled: false` in `RouterConfig.harness_profiles`, the UI-editable configuration,
+to turn it off.
+
+The host supplies `RunJournal(volume / "runs" / "<run>.jsonl", run_id)` through
+`BuildContext.journal` and closes it after the run. It owns one exclusive writer;
+parallel hooks serialize, existing records are verified on reopen, and write
+failures propagate. Model usage and provider metadata are retained without
+inventing prices. Tool arguments are hashed; results and quarantined evidence
+are content-addressed files beside the journal. An abandoned writer lock needs
+host recovery before reopening; it is never stolen automatically.
+
+`BuildContext.admission` accepts an `AdmissionGate` using the same journal.
+Protected writes fail closed even without one. The authenticated host stages an
+immutable `WriteProposal` with a deterministic verifier, records operator
+approval, then resumes the approved tool call through `interrupt_on`. The backend
+rechecks exact content and the previous hash before writing and records both
+sides. This host API is never an agent tool. `/artifacts/` and global memory are
+protected; unapproved uploads and deletion of protected evidence are refused.
+Recursive cleanup belongs to the host; only unprotected leaf files can be
+deleted by agents. The guarded default backend retains the SDK's filesystem
+state schema, so scratch files persist through graph steps and checkpoints.
+Money tools use `metadata={"money_path": True}`. Names, declared acts and MCP
+provenance also retain the old deny list at build and invocation. The local
+`propose_order(journal)` tool only saves unsigned proposals and has no venue API.
+
+Background tasks fail explicitly
 until the QMX task tools exist in P11. Skills are backend paths; provide a backend
 that contains them. Quotas use the documented management plugin quota endpoint.
 

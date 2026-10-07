@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 from deepagents import (
     CompiledSubAgent,
     FilesystemPermission,
+    SubAgent,
     create_deep_agent,  # pyright: ignore[reportUnknownVariableType] - upstream generic overload
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.backends.protocol import BackendProtocol
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ModelCallLimitMiddleware,
+    ToolCallLimitMiddleware,
+)
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -21,6 +27,13 @@ from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMi
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from qmx_tools import default_tool_registry
 
+from qmx_agents.guards import AdmissionBackend, AdmissionGate, RunJournal, check_tool
+from qmx_agents.guards.middleware import (
+    AdmissionStateMiddleware,
+    JournalApprovals,
+    JournalMiddleware,
+    MoneyPathMiddleware,
+)
 from qmx_agents.memory import (
     Approval,
     MemoryContext,
@@ -122,6 +135,9 @@ class BuildContext:
     workflows: dict[str, Runnable[Any, Any]] = field(default_factory=dict[str, Runnable[Any, Any]])
     backend: BackendProtocol | None = None
     checkpointer: BaseCheckpointSaver[Any] | None = None
+    journal: RunJournal | None = None
+    admission: AdmissionGate | None = None
+    budget: Budget | None = None
     qmx_home: Path | None = None
     memory: MemoryManager | None = None
     memory_role: Literal["primary", "subagent", "scheduled", "headless"] = "primary"
@@ -158,9 +174,11 @@ async def _build(
         async with MCPAdapter({"mcpServers": servers}) as adapter:
             tools.extend(await adapter.list_tools())
     names = [tool.name for tool in tools]
+    for tool in tools:
+        check_tool(tool)
     if len(names) != len(set(names)):
         raise ValueError("Agent tool names must be unique")
-    subagents: list[CompiledSubAgent] = []
+    subagents: list[CompiledSubAgent | SubAgent] = []
     for reference in spec.subagents:
         if reference.ref is not None:
             path = reference.ref.resolve()
@@ -219,7 +237,7 @@ async def _build(
         # The composition root closes the run's memory manager after using its graph.
         ctx.memory = memory
         ctx.memory_resources.append(memory)
-    middleware = ctx.router.middleware(run, spec.name)
+    memory_middleware: list[AgentMiddleware[Any, RunContext]] = []
     backend = ctx.backend
     if memory is not None:
         memory.spill_dir.mkdir(parents=True, exist_ok=True)
@@ -232,17 +250,82 @@ async def _build(
             },
         )
         tools.extend(memory.tools(Scope(spec.memory.scope)))
-        middleware.extend(memory.middleware(Scope(spec.memory.scope)))
-        middleware.append(memory.summarization(model, backend))
+        memory_middleware.extend(memory.middleware(Scope(spec.memory.scope)))
+        memory_middleware.append(memory.summarization(model, backend))
     elif spec.memory.provider not in {None, "sqlite"}:
         raise ValueError("An external memory provider requires qmx_home or an opened MemoryManager")
     if len({tool.name for tool in tools}) != len(tools):
         raise ValueError("Agent tool names must be unique")
+    for tool in tools:
+        check_tool(tool)
+    budget = ctx.budget or spec.budget
+
+    def guards(agent: str) -> list[AgentMiddleware[Any, RunContext]]:
+        middleware: list[AgentMiddleware[Any, RunContext]] = []
+        if ctx.journal:
+            middleware.append(JournalMiddleware(ctx.journal, agent, run))
+        middleware.extend(ctx.router.middleware(run, agent))
+        if agent == spec.name:
+            middleware.extend(memory_middleware)
+        middleware.extend([AdmissionStateMiddleware(), MoneyPathMiddleware()])
+        if budget.model_calls is not None:
+            middleware.append(
+                ModelCallLimitMiddleware(run_limit=budget.model_calls, exit_behavior="end")
+            )
+        if budget.tool_calls is not None:
+            middleware.append(
+                ToolCallLimitMiddleware(run_limit=budget.tool_calls, exit_behavior="error")
+            )
+        if ctx.journal and any(spec.interrupt_on.values()):
+            middleware.append(JournalApprovals(ctx.journal, dict(spec.interrupt_on)))
+        return middleware
+
+    backend = AdmissionBackend(
+        backend or StateBackend(),
+        ctx.admission or AdmissionGate(ctx.journal),
+        guarded_prefixes=(
+            "/artifacts/",
+            "/memories/" if spec.memory.scope == "global" else "/memories/global/",
+        ),
+        write=spec.permissions.write,
+        deny_write=spec.permissions.deny_write,
+    )
+    # The SDK's automatic general-purpose agent omits custom middleware. Give it
+    # an explicit spec so delegation retains the same guards and finite budgets.
+    effective = run.effective_models[spec.name]
+    harness_profile: dict[str, Any] = {}
+    model_name = str(getattr(model, "model_name", getattr(model, "model", "")))
+    for key in (effective.split(":", 1)[0], effective, model_name):
+        harness_profile.update(
+            ctx.router.config.harness_profiles.get(key, {}).get("general_purpose_subagent", {})
+        )
+    if harness_profile.get("enabled") is not False and not any(
+        item["name"] == "general-purpose" for item in subagents
+    ):
+        subagents.append(
+            SubAgent(
+                name="general-purpose",
+                description=harness_profile.get(
+                    "description", "Delegate an isolated research task"
+                ),
+                system_prompt=harness_profile.get(
+                    "system_prompt", "Complete the assigned task and return a concise result."
+                ),
+                model=model,
+                tools=tools,
+                middleware=cast(
+                    "list[AgentMiddleware[Any, Any]]", guards(f"{spec.name}/general-purpose")
+                ),
+                skills=spec.skills,
+                permissions=spec.permissions.rules(),
+                interrupt_on={} if ctx.journal else dict(spec.interrupt_on),
+            )
+        )
     return create_deep_agent(
         model=model,
         tools=tools,
         system_prompt=spec.system_prompt.read_text(encoding="utf-8"),
-        middleware=middleware,
+        middleware=guards(spec.name),
         subagents=subagents,
         skills=spec.skills or None,
         permissions=spec.permissions.rules(),

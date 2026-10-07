@@ -1916,6 +1916,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "qmx-tools" },
+    { name = "wcmatch" },
 ]
 
 [package.dev-dependencies]
@@ -1942,6 +1943,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "qmx-tools", editable = "../qmx-tools" },
+    { name = "wcmatch", specifier = "==11.0.1" },
 ]
 
 [package.metadata.requires-dev]

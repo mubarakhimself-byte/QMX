@@ -16,6 +16,7 @@ dependencies = [
     "httpx==0.28.1",
     "langgraph-checkpoint-sqlite==3.1.1",
     "qmx-tools",
+    "wcmatch==11.0.1",
 ]
 
 [build-system]
