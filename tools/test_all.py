@@ -59,6 +59,9 @@ def main() -> int:
             ["tests"],
         ),
     ]
+    suites.append(
+        ("qmx-control", ROOT / "qmx-control", ["python", "-m", "pytest", "tests", "-q"], ["tests"])
+    )
     qa = ROOT / "qa/tests"
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
