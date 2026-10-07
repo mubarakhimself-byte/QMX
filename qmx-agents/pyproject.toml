@@ -59,7 +59,7 @@ dev = [
 qma-runtime = ["qma-daemon"]
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal"
+addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents"
 markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages", "tests"]
 pythonpath = [
