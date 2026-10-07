@@ -91,9 +91,9 @@ def input_view(spec: WorkflowSpec, node: Node, state: WorkflowState) -> dict[str
             and edge.source.node in state.get("values", {})
         ]
         if values:
-            value = values if port.cardinality == "many" else values[-1]
-            Draft202012Validator(port.json_schema).validate(value)  # pyright: ignore[reportUnknownMemberType] - upstream optional schema
-            ports[name] = value
+            for value in values:
+                Draft202012Validator(port.json_schema).validate(value)  # pyright: ignore[reportUnknownMemberType] - upstream optional schema
+            ports[name] = values if port.cardinality == "many" else values[0]
         elif port.required:
             raise ValueError(f"Required input {node.id}.{name} has no runtime value")
     return {"inputs": state.get("inputs", {}), "ports": ports, "values": state.get("values", {})}

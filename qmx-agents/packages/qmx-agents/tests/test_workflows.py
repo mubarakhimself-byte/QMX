@@ -398,6 +398,32 @@ def test_one_port_refuses_silent_multiple_contributions() -> None:
         )
 
 
+def test_many_port_collects_typed_branch_contributions(bindings: Bindings) -> None:
+    fan = Node(id="fan", kind="parallel")
+    left = python(
+        "left", 3, inputs={"value": Port()}, outputs={"result": Port(schema={"type": "integer"})}
+    )
+    right = python(
+        "right", 4, inputs={"value": Port()}, outputs={"result": Port(schema={"type": "integer"})}
+    )
+    joined = Node(
+        id="joined",
+        kind="join",
+        inputs={"values": Port(cardinality="many", schema={"type": "integer"})},
+    )
+    workflow = spec(
+        [fan, left, right, joined],
+        [
+            edge("fan", "left"),
+            edge("fan", "right"),
+            edge("left", "joined", "values", mapping="broadcast"),
+            edge("right", "joined", "values", mapping="broadcast"),
+        ],
+    )
+    result = invoke(compile(workflow, bindings=bindings))
+    assert result["values"]["joined"]["result"] == {"values": [3, 4]}
+
+
 def test_published_schema_requires_kind_configuration() -> None:
     path = Path(__file__).parent.parent / "src/qmx_agents/workflows/workflow.v1.schema.json"
     schema = json.loads(path.read_text(encoding="utf-8"))

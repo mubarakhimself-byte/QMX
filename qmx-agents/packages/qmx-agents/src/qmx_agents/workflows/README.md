@@ -12,8 +12,9 @@ Each node has named `inputs` and `outputs`. Each port declares `kind`
 node result; the default selects the whole result. Edge endpoints name a node
 and a port. The legacy explicit mapping rules remain: `one`, `zip`, `broadcast`,
 `keyed-join` or `cartesian`; Cartesian requires `cartesian: true`.
-Cardinality describes port contributions: a `many` input receives a list of
-the available incoming contributions. Collection scheduling is explicit in
+The schema validates each contribution. Cardinality describes port contributions:
+a `many` input receives a list of the available incoming contributions.
+Collection scheduling is explicit in
 the authored graph, not inferred from edge mappings.
 
 Argument templates use `{"$input": "/ports/value"}`. The view contains
