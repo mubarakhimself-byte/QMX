@@ -123,6 +123,18 @@ Sub-agents hand results back as **artifact references** (paths in the artifact s
   - It rotates across several accounts and fails over between them. Its own dashboard manages accounts.
   - QMX treats it like any API: `ChatAnthropic(base_url=<proxy>)` for Claude models, `ChatOpenAI(base_url=<proxy>)` for GPT models.
   - QMX Settings stores the proxy URL and key and lists the models the proxy offers.
+  - Details are in `research/cliproxy-video.md`, from the T3 Code video plus the repo source (v8.0.17).
+    - **Endpoints:** `/v1/messages` (Claude), `/v1/chat/completions` and `/v1/responses` (OpenAI), `/v1/models`. The default port is 8317.
+    - **QMX clients:** `ChatAnthropic(base_url="http://<host>:8317")` and `ChatOpenAI(base_url="http://<host>:8317/v1")`, both with a client key.
+    - **Model ids** come from the proxy's catalog, for example `claude-opus-5-5` and `gpt-6.1-sol`. A suffix such as `gpt-6.1-sol(high)` sets reasoning effort.
+  - **Recommended proxy settings** (what the video uses):
+    - spend the account whose quota resets soonest first
+    - session affinity on, so a thread stays on one account and keeps its cache
+    - WebSocket on for Codex
+  - **Dashboard in QMX:** a native Settings panel that calls the proxy's management API through the QMX backend. It shows accounts, quota bars for the 5-hour and 7-day windows, and login buttons. The official console can also open as a pop-up window, as a fallback.
+    - The proxy keeps no usage history, so QMX records tokens and cost per run itself (journal, P08).
+  - **Test before relying on it (P06 smoke):** by default the proxy can rewrite or wrap a non-Claude-Code client's system prompt (`disable-claude-cloak-mode`). Check that the Copilot's prompt reaches the model intact, and set the option accordingly.
+  - The video's creator runs the proxy on a home connection rather than a cloud VPS. Remote runs can reach the laptop's proxy over Tailscale while it's on, or use a proxy on the VPS; that's the operator's choice in Settings.
 - Default daily models, via CLIProxy:
 
   | Use | Model |

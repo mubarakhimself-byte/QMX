@@ -31,7 +31,7 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
 
      | Tier | `daily` profile (default, via cliproxy) | `test` profile (via OpenRouter) |
      |---|---|---|
-     | `reasoning_high` (Copilot) | `claude-opus-5.5` | `anthropic/claude-sonnet-5.5` |
+     | `reasoning_high` (Copilot) | `claude-opus-5-5` | `anthropic/claude-sonnet-5.5` |
      | `workhorse` (sub-agents, workflow and app agents) | `gpt-6.1-sol` | `deepseek/deepseek-v4-pro-0813` |
      | `coding` | `gpt-6.1-sol` | `deepseek/deepseek-v4-pro-0813` |
      | `fast` | `gpt-6-luna` | `openai/gpt-6-luna` |
@@ -43,7 +43,11 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
      - Credentials:
        - OpenRouter: Credential Manager `qmx/openrouter`, username `openrouter`.
        - Proxy key: `qmx/cliproxy`, username `cliproxy`.
-3. `scripts/live/smoke_agent.py`: runs a one-question agent against a chosen provider. For the operator to run; never in tests.
+   - CLIProxy specifics are in `rebuild/research/cliproxy-video.md` §C:
+     - endpoints, port 8317, model ids `claude-opus-5-5` / `gpt-6.1-sol`, reasoning suffixes
+     - `list_models()` from `/v1/models`
+     - a management-API client (accounts, quotas) for the Settings panel
+3. `scripts/live/smoke_agent.py`: runs a one-question agent against a chosen provider and profile. It also checks that a system prompt sent through CLIProxy reaches Claude intact (ask the model to repeat a marker from its system prompt) and prints the result. For the operator to run; never in tests.
 
 ## Pin versions
 Use the latest stable `deepagents`, `langchain`, `langgraph` and `langchain-mcp-adapters`, and record them in the PR. Check exact parameter names in the Deep Agents docs; do not guess.
