@@ -27,7 +27,7 @@ Packets are written for a coding agent (Codex) to run without further operator i
 | 03 | Git and branch inventory (report only) | — | S |
 | 04 | Delete dead code and clutter | 01 | M |
 | 05 | Survival map of the QMA daemon (report only) | 04 | S |
-| 06 | `qmx-agents` package: AgentSpec and model router | 04 | M |
+| 06 | `qmx-agents` package: AgentSpec and model router | 01 (see DESIGN §12) | M |
 | 07 | Memory provider | 06 | M |
 | 08 | Guards: journal, admission, money path, budgets | 06 | M |
 | 09 | Domain tools and MCP servers | 06 | M |
@@ -43,4 +43,4 @@ Packets are written for a coding agent (Codex) to run without further operator i
 | 19 | Research sources: MQL5 scraper app, Firecrawl MCP | 12 | S |
 | 20 | Copilot skills and hooks (skills by Claude with operator; hooks by Codex) | 11, 12 | M |
 
-Packets 01–05 can start today. Packets 01, 03 and 05 are low-risk. 03 and 05 produce reports for Claude and the operator to review before 06 starts.
+Packets 01–05 can start today. P05 is reviewed (DESIGN §12): read those rulings before any later packet.

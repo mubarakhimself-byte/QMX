@@ -330,7 +330,23 @@ The UI's Apps detail pane reads these. Remote nodes stream the same data over `q
   - QMX's own scraper runs as a scheduled job (a headless mini app). Its first target is MQL5 articles; the existing library lives on branch `research/mql5-article-library`.
 - **Charting.** This is a UI-lane decision. Recommendation: TradingView Lightweight Charts (open source, Apache-2.0) for all price charts. TradingView Advanced Charts needs a licence application, so consider it only if Lightweight falls short. The backend serves bars and indicators through `qmx-data`.
 
-## 12. Open items (not blocking packets 01–08)
+## 12. Rulings from the P05 survival-map review (Claude, 2026-10-07)
+
+P05 (`reports/survival-map.md`) is approved. These rulings override it where they differ:
+
+1. **No compatibility bridge for the old JSON-RPC wire.** The UI only has a recording transport and no live traffic, and no external host is known. New callers use `qmx-control` (P11), and old wire modules are deleted in P16. The one real caller to migrate is the QMB host CLI (`qmb host start|status|stop|…` spawns `python -m qma.daemon`). P11 adds a `qmx-control` equivalent and P16 moves QMB onto it.
+2. **Evidence journal: keep the rules, shrink the machinery.**
+   - Port: append-only, monotonic sequence, record fingerprint, serialized writes, failures raised, never silently dropped.
+   - Keep the **Experiment Ledger**, the scientist's notebook per experiment, and the "invalid evidence goes to quarantine verbatim, never discarded" rule.
+   - **Drop** the Task Ledger and Quant Ledger lease machinery and Quant/Task identities. A LangGraph thread/run id plus app id is the identity now.
+   - Fold-contract registries, store-class ownership tables and the governed variable registry are not ported. Settings are plain UI-editable config.
+3. **Money-path barrier: port as is.** `qma-core/barriers/money_path.py` and `parent_surfaces.py` are small and correct. Move them into `qmx_agents.guards`, check every resolved LangChain/MCP tool at build time, and keep a check at invoke time.
+4. **Admission is an `interrupt_on` plus one backend check.** Proposals are staged, deterministic checks run, the operator approves, before/after records are kept. The `AdmissionPipeline` hook dispatch is not ported.
+5. **Mini-app port (P14): no compatibility IDs or schemas.** Port the *rules*: immutable versions, compare-and-swap, strict validation, undo as a new transition. Old schema names and the `dev-factory` host go away.
+6. **P04 must stop on fixture-labelled modules that have production callers** (`plugins/lifecycle.py`, `sessions/chrome.py`, `staging/change_request.py`, kit-journey re-exports). Move only the ones with no production importers; list the rest in the PR. They disappear with their callers in P16.
+7. **P06 may start as soon as P01 is merged.** It builds a new package and doesn't need P02–P05.
+
+## 13. Open items (not blocking packets 01–08)
 
 - Whether `sqlite-vec` loads on Windows. Spike before turning on semantic memory search.
 - MCP Apps rendering in the Svelte UI: build on the official AppBridge, since LangGraph React support is unmerged and the UI is Svelte anyway.
