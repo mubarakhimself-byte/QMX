@@ -199,3 +199,7 @@ obs:
 [unix]
 obs:
     cd "{{visualizer}}" && bun install && (SSSF_DB={{justfile_directory()}}/{{db}} bun run server/index.ts &) && bunx vite
+
+# Run every Python suite in its owning environment and print the results.
+test-all:
+    uv run python tools/test_all.py

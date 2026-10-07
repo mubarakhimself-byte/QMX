@@ -628,7 +628,7 @@ def _host_control_call(
 ) -> Result[Mapping[str, object]]:
     # Startup probes have one absolute deadline, rather than a timeout per byte.
     if deadline is not None:
-        deadline = min(deadline, time.monotonic() + timeout_s)
+        deadline = min(deadline, time.monotonic() + timeout_s)  # ambient-scan: allow - host I/O
     token = _read_token(root)
     if not isinstance(token, Ok):
         return token
@@ -666,13 +666,13 @@ def _host_control_call(
     redacted = redact_host_surface(payload)
     if not isinstance(redacted, dict):
         return invalid("host_control", "redacted host-control response must be an object")
-    if deadline is not None and time.monotonic() >= deadline:
+    if deadline is not None and time.monotonic() >= deadline:  # ambient-scan: allow - host I/O
         return storage("host_control", "host-control readiness deadline expired", verb=verb)
     return Ok(cast("dict[str, object]", redacted))
 
 
 def _remaining_time(deadline: float) -> float:
-    remaining = deadline - time.monotonic()
+    remaining = deadline - time.monotonic()  # ambient-scan: allow - host I/O
     if remaining <= 0:
         raise TimeoutError("host-control readiness deadline expired")
     return remaining
@@ -831,7 +831,7 @@ def _ready(root: Path, *, deadline: float | None = None) -> bool:
     if pid is None:
         return False
     if deadline is None:
-        deadline = time.monotonic() + 0.05
+        deadline = time.monotonic() + 0.05  # ambient-scan: allow - host I/O
     reply = _host_control_call(root, "status", timeout_s=0.05, deadline=deadline)
     if not isinstance(reply, Ok) or reply.value.get("ok") is not True:
         return False
@@ -965,16 +965,19 @@ def invoke_host_start(
         else None
     )
     attempts = parsed_attempts.value
-    deadline = time.monotonic() + attempts * 0.05
+    deadline = time.monotonic() + attempts * 0.05  # ambient-scan: allow - host I/O
     startup_ready = False
     cleanup_error = None
     try:
         for _ in range(attempts):
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= deadline:  # ambient-scan: allow - host I/O
                 break
             if owned_child is not None and owned_child.poll() is not None:
                 break
-            if _ready(target, deadline=deadline) and time.monotonic() < deadline:
+            if (
+                _ready(target, deadline=deadline)
+                and time.monotonic() < deadline  # ambient-scan: allow - host I/O
+            ):
                 ready_pid = _live_lock_pid(target)
                 started: dict[str, object] = {
                     "verb": "host.start",
@@ -989,11 +992,11 @@ def invoke_host_start(
                     "browser_spawns_python": BROWSER_SPAWNS_PYTHON,
                 }
                 ready_report = cast("Mapping[str, object]", redact_host_surface(started))
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= deadline:  # ambient-scan: allow - host I/O
                     break
                 startup_ready = True
                 return Ok(ready_report)
-            remaining = deadline - time.monotonic()
+            remaining = deadline - time.monotonic()  # ambient-scan: allow - host I/O
             if remaining <= 0:
                 break
             if attempts > 1:

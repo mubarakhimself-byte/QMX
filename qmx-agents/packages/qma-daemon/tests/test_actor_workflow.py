@@ -42,6 +42,9 @@ from test_request_runtime_tool_loop import host as host_fixture
 
 host = host_fixture
 
+# Deep Agents builds its graph on the first turn; allow loaded parallel workers.
+ACTOR_COMPLETION_TIMEOUT_SECONDS = 60
+
 
 def test_named_child_wire_roundtrip() -> None:
     reference = AgentRequestReference("req:one", "psess:agent", "req:one:child:analysis")
@@ -178,27 +181,38 @@ def children(process: Any, conn: Any, request_id: str) -> list[dict[str, Any]]:
     )
 
 
+def wait_finished(
+    process: Any, request_id: str, timeout_seconds: float = ACTOR_COMPLETION_TIMEOUT_SECONDS
+) -> None:
+    # Status reads replay the journal and compete with the worker's writes.
+    # Wait on its completion condition, then assert the result through the real door.
+    bridge = process.agent_requests
+    assert bridge is not None
+    with bridge._condition:
+        assert bridge._condition.wait_for(
+            lambda: request_id not in bridge._jobs, timeout=timeout_seconds
+        ), f"request {request_id} did not finish"
+
+
 def wait_status(
-    process: Any, conn: Any, request_id: str, status: str, *, timeout_seconds: float = 10
+    process: Any,
+    conn: Any,
+    request_id: str,
+    status: str,
+    *,
+    timeout_seconds: float = ACTOR_COMPLETION_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
-    deadline = time.monotonic() + timeout_seconds
-    while True:
-        row = receipt(
-            dispatch(
-                process,
-                conn,
-                "get_agent_request",
-                {"request_id": request_id, "product_session_ref": "psess:agent"},
-            )
+    wait_finished(process, request_id, timeout_seconds)
+    row = receipt(
+        dispatch(
+            process,
+            conn,
+            "get_agent_request",
+            {"request_id": request_id, "product_session_ref": "psess:agent"},
         )
-        if row["status"] == status:
-            return row
-        if (
-            row["status"] in {"failed", "cancelled", "completed", "interrupted"}
-            or time.monotonic() >= deadline
-        ):
-            pytest.fail(repr(row))
-        threading.Event().wait(0.01)
+    )
+    assert row["status"] == status, row
+    return row
 
 
 def test_two_specialists_two_jobs_actor_memory_and_thread_isolation(

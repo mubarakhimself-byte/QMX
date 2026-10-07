@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -32,7 +31,7 @@ from qma.daemon.taskgraph.records import TaskGraph, TaskRecord
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION
 from qma.wire.invocation_envelope import PublicCallTransport, compute_input_hash
 from qmf.core import is_refusal
-from test_actor_workflow import app_setup, final, save_catalog
+from test_actor_workflow import app_setup, final, save_catalog, wait_finished
 from test_request_runtime_configured_daemon import app_session
 from test_request_runtime_daemon import receipt, rpc, submit_params, value, ws_connect
 from test_request_runtime_tool_loop import ScriptedText
@@ -445,23 +444,18 @@ def test_joined_paired_read_respects_agent_and_current_grant(
                     assert process.canonical_requests._events("accepted") == []  # pyright: ignore[reportPrivateUsage]
                     return
                 request_id = str(receipt(response)["request_id"])
-                deadline = time.monotonic() + 30
-                while True:
-                    row: dict[str, Any] = receipt(
-                        await rpc(
-                            reader,
-                            writer,
-                            "get_agent_request",
-                            {
-                                "request_id": request_id,
-                                "product_session_ref": "psess:configured-app",
-                            },
-                        )
+                await asyncio.to_thread(wait_finished, process, request_id)
+                row: dict[str, Any] = receipt(
+                    await rpc(
+                        reader,
+                        writer,
+                        "get_agent_request",
+                        {
+                            "request_id": request_id,
+                            "product_session_ref": "psess:configured-app",
+                        },
                     )
-                    if row["status"] in {"completed", "failed", "interrupted"}:
-                        break
-                    assert time.monotonic() < deadline, row
-                    await asyncio.sleep(0.01)
+                )
                 if mode == "restart_interrupted":
                     assert row["status"] == "interrupted", row
                 else:

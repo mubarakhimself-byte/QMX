@@ -144,6 +144,7 @@ dev = [
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
     "poethepoet==0.48.0",
+    "pytest-xdist>=3.8,<4",
 ]
 
 # The QMF store engines, provisioned by default (see `default-groups` above).
@@ -212,16 +213,21 @@ qmn-lib = ["qmn"]
 scan = ["skylos"]
 
 [tool.pytest.ini_options]
+addopts = "-n auto --dist worksteal"
 # SSSF contract: a bare `pytest` (and the gate's `pytest -q adws/tests`) targets
 # the factory suite. `poe test` passes `packages extensions qml qmb qmn` explicitly,
 # which overrides this default and collects the QMF package suites plus apps.
 testpaths = ["adws/tests"]
 markers = [
+    "serial: requires exclusive access to shared resources",
     "live: credentialed live-venue smoke; not part of the credential-free gate",
 ]
 # QMF package sources on the import path, so `qmf.*` resolves from src/ without
 # an install at Tier 1 (additive; adws/tests never import qmf and are unaffected).
 pythonpath = [
+    "qmx-agents/packages/qma-core/src",
+    "qmx-agents/packages/qma-wire/src",
+    "qmx-agents/packages/qma-daemon/src",
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
     "packages/qmf-data/src",
@@ -479,6 +485,7 @@ max_dead_code = 1000000
 # `# skylos: ignore[RULE]`.
 
 [tool.poe.tasks]
+test-all = "python tools/test_all.py"
 # The canonical QMF commands (AR-11), byte-identical on every machine. ruff /
 # ruff-format / pyright / pytest target the shipped workspace (packages/,
 # extensions/, qml/, qmb/, tools/); the SSSF gate independently covers adws.

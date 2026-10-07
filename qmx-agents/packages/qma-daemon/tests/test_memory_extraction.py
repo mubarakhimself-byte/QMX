@@ -15,6 +15,8 @@ from qma.daemon.request_runtime.memory_extraction import LangMemExtractor
 from qma.daemon.request_runtime.providers import ProviderError
 from test_durable_memory import Bound, value
 
+pytest.importorskip("langmem")
+
 pytest_plugins = ["test_durable_memory"]
 
 

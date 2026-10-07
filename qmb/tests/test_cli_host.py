@@ -73,6 +73,8 @@ from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 
 _TOKEN = "fixture-host-control-token"
+# Allow the fixture's listener thread to run on a busy host (five seconds total).
+HOST_START_WAIT_ATTEMPTS = 100
 
 
 def _lock_payload(pid: int) -> str:
@@ -337,7 +339,9 @@ def test_start_spawns_when_lock_free(tmp_path: Path, start_control: _HostControl
         return os.getpid()
 
     report = _ok_mapping(
-        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+        invoke_host_start(
+            root=tmp_path, spawn=spawn, wait_attempts=HOST_START_WAIT_ATTEMPTS, sleeper=_no_sleep
+        )
     )
     assert report["state"] == "started"
     assert report["spawned"] is True
@@ -1450,7 +1454,7 @@ def test_failed_start_reaps_owned_child(
 def test_start_refuses_unready_authenticated_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: Mapping[str, object]
 ) -> None:
-    from qmf.core import Ok  # noqa: PLC0415
+    from qmf.core import Ok
 
     _write_lock(tmp_path, os.getpid())
 
@@ -1465,7 +1469,11 @@ def test_timed_out_interpreter_cannot_keep_or_later_acquire_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     real_spawn = host_module._default_spawn  # pyright: ignore[reportPrivateUsage]
-    code = "import os,json,time,pathlib,sys; r=pathlib.Path(sys.argv[1]); (r/'.daemon_writer').write_text(json.dumps({'pid':os.getpid()})); time.sleep(60)"
+    code = (
+        "import os,json,time,pathlib,sys; r=pathlib.Path(sys.argv[1]); "
+        "(r/'.daemon_writer').write_text(json.dumps({'pid':os.getpid()})); "
+        "time.sleep(60)"
+    )
 
     def spawn(
         argv: tuple[str, ...], *, env: Mapping[str, str], root: Path

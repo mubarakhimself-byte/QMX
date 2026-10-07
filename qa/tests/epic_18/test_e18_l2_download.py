@@ -197,12 +197,21 @@ def test_t18_1a_ct15_visible_uncertain_intent_needs_durable_recovery_barrier(
         key = ok(IntakeKey.try_create("fixture-provider", "stable-intake-key", "r1"))
         original = _authority_observation()
         original_fsync = jsonl_engine.os.fsync
+        original_open = Path.open
+        opened_paths: dict[int, Path] = {}
+
+        def track_open(path, *args, **kwargs):
+            handle = original_open(path, *args, **kwargs)
+            opened_paths[handle.fileno()] = path
+            return handle
+
+        monkeypatch.setattr(Path, "open", track_open)
         failed_intent_sync = False
 
         def fail_intent_fsync(fd: int) -> None:
             nonlocal failed_intent_sync
-            target = Path(os.readlink(f"/proc/self/fd/{fd}"))
-            if target.name == "000002.jsonl" and not failed_intent_sync:
+            target = opened_paths.get(fd)
+            if target is not None and target.name == "000002.jsonl" and not failed_intent_sync:
                 failed_intent_sync = True
                 raise OSError("injected CT-13 fsync failure")
             original_fsync(fd)
@@ -233,7 +242,7 @@ def test_t18_1a_ct15_visible_uncertain_intent_needs_durable_recovery_barrier(
         synced_chunks: list[str] = []
 
         def record_sync(fd: int) -> None:
-            synced_chunks.append(Path(os.readlink(f"/proc/self/fd/{fd}")).name)
+            synced_chunks.append(opened_paths[fd].name)
             original_fsync(fd)
 
         monkeypatch.setattr(jsonl_engine.os, "fsync", record_sync)
