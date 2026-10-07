@@ -1,0 +1,34 @@
+id = "weekend-watcher"
+name = "Weekend watcher"
+version = "1.0.0"
+risk = "runs"
+kind = "headless"
+
+[entrypoints]
+mcp = "server.py"
+agents = ["agents/watcher.yaml"]
+
+[capabilities]
+network = []
+data_reads = []
+
+[budget]
+runs = 50
+cpu_seconds = 120
+memory_mb = 1024
+cpu_percent = 50
+
+[feeds.snapshot]
+type = "object"
+required = ["observations"]
+additionalProperties = false
+
+[feeds.snapshot.properties.observations]
+type = "array"
+items = { type = "object", required = ["exchange", "status", "observed_at"], additionalProperties = false, properties = { exchange = { type = "string" }, status = { type = "string", enum = ["operational", "degraded", "unavailable", "unknown"] }, observed_at = { type = "string" } } }
+
+[provides.summary]
+type = "object"
+required = ["summary", "source_sha256", "mode"]
+additionalProperties = false
+properties = { summary = { type = "string" }, source_sha256 = { type = "string" }, mode = { const = "recorded_fixture" } }
