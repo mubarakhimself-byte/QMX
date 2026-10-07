@@ -73,6 +73,8 @@ from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import RefusalCategory, Result, is_ok, is_refusal
 
 _TOKEN = "fixture-host-control-token"
+# Allow the fixture's listener thread to run on a busy host (five seconds total).
+HOST_START_WAIT_ATTEMPTS = 100
 
 
 def _lock_payload(pid: int) -> str:
@@ -337,7 +339,9 @@ def test_start_spawns_when_lock_free(tmp_path: Path, start_control: _HostControl
         return os.getpid()
 
     report = _ok_mapping(
-        invoke_host_start(root=tmp_path, spawn=spawn, wait_attempts=1, sleeper=_no_sleep)
+        invoke_host_start(
+            root=tmp_path, spawn=spawn, wait_attempts=HOST_START_WAIT_ATTEMPTS, sleeper=_no_sleep
+        )
     )
     assert report["state"] == "started"
     assert report["spawned"] is True

@@ -44,10 +44,15 @@ from qmb.doors.cli.host import (
 from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import is_ok, is_refusal
 
+# Allow the fixture's listener thread to run on a busy host (five seconds total).
+HOST_START_WAIT_ATTEMPTS = 100
+
 
 class ReadinessHandler(StreamRequestHandler):
     def handle(self) -> None:
         header = self.rfile.read(4)
+        if len(header) != 4:
+            return
         request = json.loads(self.rfile.read(int.from_bytes(header, "big")))
         assert request["host_control"] == "example-token"
         assert request["verb"] == "status"
@@ -137,7 +142,9 @@ def main() -> None:
         def sleeper(_seconds: float) -> None:
             return None
 
-        started = invoke_host_start(root=root, spawn=spawn, wait_attempts=1, sleeper=sleeper)
+        started = invoke_host_start(
+            root=root, spawn=spawn, wait_attempts=HOST_START_WAIT_ATTEMPTS, sleeper=sleeper
+        )
         assert is_ok(started), started
         assert started.value["state"] == "started"
         again = invoke_host_start(root=root, spawn=spawn, wait_attempts=1)
