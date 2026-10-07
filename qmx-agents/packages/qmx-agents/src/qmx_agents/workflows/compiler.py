@@ -7,6 +7,7 @@ import importlib
 import inspect
 import json
 from dataclasses import dataclass, field, replace
+from pprint import pformat
 from typing import Annotated, Any, TypedDict, cast
 
 from deepagents import CompiledSubAgent
@@ -341,7 +342,9 @@ def to_python(spec: WorkflowSpec) -> str:
         "from qmx_agents.workflows import Bindings, load_graph",
         "from qmx_agents.workflows.compiler import WorkflowState, node_action, router, finalize",
         "",
-        f"spec = load_graph({spec.model_dump_json(by_alias=True)!r})",
+        "spec = load_graph(\n"
+        + pformat(spec.model_dump(mode="json", by_alias=True), sort_dicts=False, width=88)
+        + "\n)",
         "",
         "def build(bindings=None, checkpointer=None):",
         "    bindings = bindings or Bindings()",
