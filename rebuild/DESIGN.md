@@ -189,6 +189,9 @@ Agents get tools from a short list of kinds. Each AgentSpec picks from these, an
 **GPUs.**
 - The node bootstrap detects an NVIDIA GPU and installs the NVIDIA container toolkit, and the node advertises `gpu: <model>, <count>`.
 - Jobs and sandboxes declare `resources: {gpu: 1}`. The supervisor only places them on a node that has one; otherwise it uses a GPU compute provider (for example a rented GPU box) configured in Settings.
+- **When a GPU is actually needed:** training neural networks, fine-tuning or hosting local LLMs, and large deep-learning sweeps. Not needed for backtests, classical ML (gradient boosting, linear models, scikit-learn) or running small trained models.
+- **Train once, run anywhere (ONNX).** Trained models are exported to ONNX (Open Neural Network Exchange) and run with ONNX Runtime on an ordinary CPU, on the laptop, a VPS or a trading node. A GPU is rented by the hour only for training. No GPU provider is set up until the first such job exists.
+- Models are Library artifacts of type `model`: the ONNX file, its training run, data snapshot, metrics and version. Pretrained models (for example from Hugging Face) are imported the same way.
 - Agents never configure drivers. They ask for a GPU target through `run_job`, and the platform handles the rest.
 
 ### 5.7 Invariants as middleware
