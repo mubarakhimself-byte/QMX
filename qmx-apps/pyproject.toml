@@ -1,0 +1,44 @@
+[project]
+name = "qmx-apps"
+version = "0.1.0"
+description = "Immutable mini-app definitions, volumes and a trusted local supervisor"
+requires-python = ">=3.14,<3.15"
+dependencies = ["fastmcp>=4,<5", "pydantic>=2,<3", "jsonschema==4.26.0", "psutil>=7,<9", "keyring==25.7.0", "pywin32==312; sys_platform == 'win32'"]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0", "types-pywin32==312.0.0.20261006", "types-jsonschema", "qmx-agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n 2 --dist worksteal"
+markers = ["serial: requires exclusive access to shared resources"]
+
+[tool.ruff]
+extend = "../pyproject.toml"
+extend-exclude = []
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
+"src/qmx_apps/bootstrap.py" = ["S404"]
+"src/qmx_apps/supervisor.py" = ["S404"]
+"src/qmx_apps/windows_job.py" = ["PLC0415"]
+
+[tool.pyright]
+include = ["src", "tests", "../examples/apps"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.poe.tasks]
+fmt-check = "ruff format --config pyproject.toml --check src tests ../examples/apps"
+lint = "ruff check --config pyproject.toml src tests ../examples/apps"
+types = "python -m pyright"
