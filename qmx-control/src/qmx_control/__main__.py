@@ -75,7 +75,7 @@ def main() -> int:
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=0.5,
                 )
-                if response.status_code == 200:
+                if response.status_code == 200 and response.json().get("pid") == process.pid:
                     state.write_text(
                         json.dumps({"pid": process.pid, "port": args.port}), encoding="utf-8"
                     )
@@ -100,6 +100,9 @@ def main() -> int:
                 timeout=2,
             )
             response.raise_for_status()
+            if response.json().get("pid") != data["pid"]:
+                print("Recorded host has been replaced by another process.", file=sys.stderr)
+                return 1
         except httpx.HTTPError:
             print("Recorded host is unreachable.", file=sys.stderr)
             return 1

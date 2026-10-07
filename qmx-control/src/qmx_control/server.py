@@ -1,6 +1,7 @@
 """Transport adapters over the same bound service methods."""
 
 import json
+import os
 import secrets
 from collections.abc import AsyncIterator, Callable
 from functools import wraps
@@ -151,8 +152,8 @@ def create_app(
             yield ServerSentEvent(data=event["data"], event=topic, id=str(event["id"]))
 
     @app.get("/api/health", dependencies=[Depends(authenticate)])
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, str | int]:
+        return {"status": "ok", "pid": os.getpid()}
 
     # Keep decorated callables visible to strict type checking.
     _ = control_error, stream_events, health
