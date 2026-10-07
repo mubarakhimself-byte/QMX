@@ -25,18 +25,23 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
      - openai
      - openrouter (OpenAI-compatible base URL)
      - local (OpenAI-compatible)
-     - cliproxy (OpenAI-compatible, disabled by default, with a config comment pointing to DESIGN §5.3 on terms of use)
+     - **cliproxy, the default daily provider** (DESIGN §5.3). It takes a base URL and key; Claude models use `ChatAnthropic(base_url=...)`, GPT models use `ChatOpenAI(base_url=...)`. Add `list_models()`, which reads the proxy's model list for Settings.
    - Keys come from Windows Credential Manager `qmx/<provider>` via `keyring`, with an env-var fallback for CI.
-   - Default tier mapping, all via OpenRouter (chosen by Claude 2026-10-07 from the live OpenRouter catalogue; editable in config):
+   - Two profiles in config, switchable in Settings:
 
-     | Tier | Model | $ per 1M tokens (in / out) |
+     | Tier | `daily` profile (default, via cliproxy) | `test` profile (via OpenRouter) |
      |---|---|---|
-     | `fast` | `openai/gpt-6-luna` | 0.10 / 0.50 |
-     | `workhorse` | `deepseek/deepseek-v4-pro-0813` | 0.66 / 1.98 |
-     | `coding` | `deepseek/deepseek-v4-pro-0813` | 0.66 / 1.98 |
-     | `reasoning_high` | `anthropic/claude-sonnet-5.5` | 2.00 / 10.00 |
+     | `reasoning_high` (Copilot) | `claude-opus-5.5` | `anthropic/claude-sonnet-5.5` |
+     | `workhorse` (sub-agents, workflow and app agents) | `gpt-6.1-sol` | `deepseek/deepseek-v4-pro-0813` |
+     | `coding` | `gpt-6.1-sol` | `deepseek/deepseek-v4-pro-0813` |
+     | `fast` | `gpt-6-luna` | `openai/gpt-6-luna` |
 
-     The fallback for each tier is `openai/gpt-6.1-sol`. Pin exact model ids, never `~…-latest` aliases. The OpenRouter key is read from Credential Manager `qmx/openrouter` (username `openrouter`).
+     - Automated tests use neither profile; they use fake models.
+     - Live smoke scripts use `test` unless told otherwise.
+     - Pin exact model ids, never `~…-latest` aliases.
+     - Credentials:
+       - OpenRouter: Credential Manager `qmx/openrouter`, username `openrouter`.
+       - Proxy key: `qmx/cliproxy`, username `cliproxy`.
 3. `scripts/live/smoke_agent.py`: runs a one-question agent against a chosen provider. For the operator to run; never in tests.
 
 ## Pin versions

@@ -118,11 +118,21 @@ Sub-agents hand results back as **artifact references** (paths in the artifact s
 - Tiers: `fast`, `workhorse`, `coding`, `reasoning_high`.
 - Routing via `@wrap_model_call` (a 20-line custom router). LangChain's experimental router middleware may replace it later.
 - `ModelFallbackMiddleware` and `ModelRetryMiddleware` for resilience.
-- Providers: Anthropic API, OpenAI API, OpenRouter, local (OpenAI-compatible). Keys come from Windows Credential Manager `qmx/*`.
-- **CLIProxyAPI** is an optional provider entry (an OpenAI-compatible base URL).
-  - Anthropic's terms say Claude subscription OAuth is only for Claude Code and Claude apps, and Anthropic may enforce that without notice.
-  - Turning it on is the operator's choice and is off by default.
-  - The Codex subscription path is unclear; there is no primary OpenAI statement.
+- **The primary provider is CLIProxyAPI** (github.com/router-for-me/CLIProxyAPI), the operator's daily path.
+  - It runs locally, or on a server in Docker, and exposes OpenAI-, Claude- and Gemini-compatible endpoints backed by the operator's subscriptions: Claude Code login, Codex/ChatGPT login, and others.
+  - It rotates across several accounts and fails over between them. Its own dashboard manages accounts.
+  - QMX treats it like any API: `ChatAnthropic(base_url=<proxy>)` for Claude models, `ChatOpenAI(base_url=<proxy>)` for GPT models.
+  - QMX Settings stores the proxy URL and key and lists the models the proxy offers.
+- Default daily models, via CLIProxy:
+
+  | Use | Model |
+  |---|---|
+  | Copilot (main agent, planning, decisions) | Claude Opus 5.5 |
+  | Sub-agents, and agents inside workflows and apps | GPT-6.1 Sol |
+  | Quick, high-volume steps | GPT-6 Luna |
+
+- **The test profile is OpenRouter** (API key), only for smoke runs during development. It is never the default. Automated tests use fake models.
+- Other providers (Anthropic API, OpenAI API, local OpenAI-compatible) are optional entries. All keys and proxy credentials come from Windows Credential Manager `qmx/*`.
 
 ### 5.4 Memory
 
@@ -329,6 +339,33 @@ The UI's Apps detail pane reads these. Remote nodes stream the same data over `q
   - Firecrawl MCP is a paid provider the operator approves, including Alexandria data providers.
   - QMX's own scraper runs as a scheduled job (a headless mini app). Its first target is MQL5 articles; the existing library lives on branch `research/mql5-article-library`.
 - **Charting.** This is a UI-lane decision. Recommendation: TradingView Lightweight Charts (open source, Apache-2.0) for all price charts. TradingView Advanced Charts needs a licence application, so consider it only if Lightweight falls short. The backend serves bars and indicators through `qmx-data`.
+
+## 11b. Remote runs (laptop off, work continues)
+
+The goal: from the UI, send a job to a server. It sets itself up, works with the laptop off, and every result, log and trace can be recovered afterwards. Think of it like Git: the server does work and "pushes"; QMX "fetches" when it's back.
+
+**Two kinds of remote target, behind one `ComputeProvider` interface** (`provision`, `start`, `status`, `logs`, `stop`, `teardown`):
+
+| Kind | What runs there | Providers |
+|---|---|---|
+| Machine | QMX's own job: a workflow, app instance or agent run, packaged from the same app/workflow definition | own VPS over SSH or Tailscale (T2 Docker), Modal, E2B, Daytona |
+| Remote agent | Amp's agent, given a task and QMX's MCP servers | Amp orbs (managed) or Amp runners (own machine, free) |
+
+**Amp.** Its SDK (TypeScript and Python) runs `execute(prompt, options)` with `executor: "orb"` or `executor: "runner"`, plus an MCP config.
+- Orbs sleep when idle at no cost, run a repo setup script (`.agents/setup`) on first start, and can use a ChatGPT subscription.
+- Pricing: the free tier is pay-as-you-go for orbs and free on your own runners; $20/month includes 45,000 orb minutes.
+- QMX uses Amp for delegated agent tasks (research, coding, long investigations). Machine providers handle pure QMX compute.
+
+**Results, Git-style:**
+- Every remote run has a run id and writes a **run manifest**: inputs, versions, status, artifact list with hashes. It is uploaded with **content-addressed artifacts** to the bucket: `s3://<bucket>/runs/<run_id>/`.
+- The journal, logs and traces stream to the bucket as they are written. If the server dies, QMX still has everything up to the last flush.
+- Workflow checkpoints (LangGraph) are saved to the bucket, so a failed run resumes from its last step on any machine.
+- Code changes (agent-written apps or strategies) go to a Git branch named after the run, never straight to the working branch.
+- QMX's `fetch` pulls finished runs into the Library and app volumes, verifies hashes and records them in the journal.
+
+**Models on the server.** CLIProxy runs on the server too (Docker), so remote agents use the same subscriptions. Per-run credentials come from the operator's vault, are scoped to that run, and are removed at teardown.
+
+**UI.** "Run on…" picks a target. Jobs show where they run, cost so far, live log tail and status. A failed remote run offers "resume elsewhere".
 
 ## 12. Rulings from the P05 survival-map review (Claude, 2026-10-07)
 
