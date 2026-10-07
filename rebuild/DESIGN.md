@@ -310,7 +310,7 @@ The UI's Apps detail pane reads these. Remote nodes stream the same data over `q
 
 ## 11. Operator additions (2026-10-07, after first draft)
 
-- **Mini apps are VS Code-style extensions.** The UI's Apps section is work in progress and its look will change. The core idea from the original node-editor conversation stands. This design fixes the logic; the UI follows later.
+- **Mini apps are not "just extensions".** The VS Code extension comparison is one useful analogy, not the definition. The definition is §7.1: one container-like shape (definition, instance, own data) with optional parts, such as agents, workflows, screens, jobs and tools. The shape covers apps with agents, apps without agents, headless services and trading nodes. The UI's Apps section is work in progress and its look will change; the UI follows this logic later.
 - **The Copilot gets skills and hooks for building mini apps.** Skills are written with intent by Claude with the operator (P20), not generated in bulk.
   - Skills: build-mini-app, build-workflow, debug-app, publish-checklist, connect-broker.
   - Hooks are LangChain middleware events:
