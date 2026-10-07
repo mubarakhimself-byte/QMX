@@ -27,6 +27,16 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
      - local (OpenAI-compatible)
      - cliproxy (OpenAI-compatible, disabled by default, with a config comment pointing to DESIGN §5.3 on terms of use)
    - Keys come from Windows Credential Manager `qmx/<provider>` via `keyring`, with an env-var fallback for CI.
+   - Default tier mapping, all via OpenRouter (chosen by Claude 2026-10-07 from the live OpenRouter catalogue; editable in config):
+
+     | Tier | Model | $ per 1M tokens (in / out) |
+     |---|---|---|
+     | `fast` | `openai/gpt-6-luna` | 0.10 / 0.50 |
+     | `workhorse` | `deepseek/deepseek-v4-pro-0813` | 0.66 / 1.98 |
+     | `coding` | `deepseek/deepseek-v4-pro-0813` | 0.66 / 1.98 |
+     | `reasoning_high` | `anthropic/claude-sonnet-5.5` | 2.00 / 10.00 |
+
+     The fallback for each tier is `openai/gpt-6.1-sol`. Pin exact model ids, never `~…-latest` aliases. The OpenRouter key is read from Credential Manager `qmx/openrouter` (username `openrouter`).
 3. `scripts/live/smoke_agent.py`: runs a one-question agent against a chosen provider. For the operator to run; never in tests.
 
 ## Pin versions
