@@ -322,8 +322,7 @@ def resolve_native_position_attribution(
         )
         if (
             reproved.value != partition
-            or
-            partition.position_model is not PositionModelKind.NETTING
+            or partition.position_model is not PositionModelKind.NETTING
             or partition.account_key != f"{target.venue_id.value}::{target.account_id}"
             or len(declaration) != 1
             or declaration[0].attribution_instruments is None
@@ -488,11 +487,7 @@ def _checked_source_event(
     if type(source) is not JournalEvent:
         return invalid("source_event", "native evidence reference is an exact JournalEvent")
     stream_value: object = cast(object, stream)
-    if (
-        type(stream_value) is not str
-        or not stream_value.strip()
-        or source.writer not in authorized
-    ):
+    if type(stream_value) is not str or not stream_value.strip() or source.writer not in authorized:
         return policy(
             "source_writer", "native source event is from an explicitly authorized writer"
         )
@@ -509,9 +504,7 @@ def _same_event_bytes(left: JournalEvent, right: JournalEvent) -> bool:
     left_row = canonical_bytes(left.to_row())
     right_row = canonical_bytes(right.to_row())
     return (
-        not is_refusal(left_row)
-        and not is_refusal(right_row)
-        and left_row.value == right_row.value
+        not is_refusal(left_row) and not is_refusal(right_row) and left_row.value == right_row.value
     )
 
 
@@ -519,9 +512,7 @@ def _same_row_bytes(left: object, right: Mapping[str, object]) -> bool:
     left_row = canonical_bytes(left)
     right_row = canonical_bytes(dict(right))
     return (
-        not is_refusal(left_row)
-        and not is_refusal(right_row)
-        and left_row.value == right_row.value
+        not is_refusal(left_row) and not is_refusal(right_row) and left_row.value == right_row.value
     )
 
 
@@ -543,9 +534,7 @@ def _native_opening_ids(
     deal_id = _native_id_token(payload.get("dealId"))
     session_epoch = payload.get("sessionEpoch")
     if (
-        (
-            type(position_id) is int and position_id < 1
-        )
+        (type(position_id) is int and position_id < 1)
         or (type(position_id) is str and not position_id.strip())
         or type(position_id) not in {str, int}
         or type(account_id) is not int

@@ -315,9 +315,7 @@ class BotDefinition:
 
 def _bot_version_values(mapping: Mapping[str, object]) -> tuple[object, ...]:
     return tuple(
-        mapping[key]
-        for key in ("contract_format_version", "format_version")
-        if key in mapping
+        mapping[key] for key in ("contract_format_version", "format_version") if key in mapping
     )
 
 

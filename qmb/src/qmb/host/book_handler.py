@@ -2023,9 +2023,8 @@ class BookExecutionSliceHandler:
                 quantity = _sum_quantities(tuple(fill.quantity for fill in entry.fills))
                 if is_refusal(quantity):
                     return quantity
-                if (
-                    entry.intent.direction is cash.position.direction
-                    and _same_quantity(quantity.value, cash.position.quantity)
+                if entry.intent.direction is cash.position.direction and _same_quantity(
+                    quantity.value, cash.position.quantity
                 ):
                     pending_candidates.append((entry, quantity.value))
             if len(candidates) + len(pending_candidates) != 1:

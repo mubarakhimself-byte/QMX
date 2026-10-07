@@ -384,9 +384,7 @@ class AlternativeTerminalStore:
         if is_refusal(rows):
             return rows
         if any(
-            row.get("intent_fp1") == key
-            for row in rows.value
-            if row.get("class") == _INTENT_CLASS
+            row.get("intent_fp1") == key for row in rows.value if row.get("class") == _INTENT_CLASS
         ):
             return policy("trial_intent", "a trial label is reserved at most once")
         row: dict[str, object] = {
@@ -416,10 +414,7 @@ class AlternativeTerminalStore:
         reread = self._read_raw_rows()
         if is_refusal(reread):
             return reread
-        if not any(
-            item == row
-            for item in reread.value
-        ):
+        if not any(item == row for item in reread.value):
             return policy("trial_intent", "exact study intent bytes are physically read back")
         return Ok(None)
 
@@ -442,9 +437,7 @@ class AlternativeTerminalStore:
         source = _fp(
             source_fp.value if isinstance(source_fp, Fingerprint) else source_fp, "source_fp"
         )
-        split = _fp(
-            split_fp.value if isinstance(split_fp, Fingerprint) else split_fp, "split_fp"
-        )
+        split = _fp(split_fp.value if isinstance(split_fp, Fingerprint) else split_fp, "split_fp")
         if is_refusal(label):
             return label
         if is_refusal(candidate):
@@ -529,9 +522,7 @@ class AlternativeTerminalStore:
         }
         intents: dict[str, Mapping[str, object]] = {}
         started = {
-            cast("str", row["intent_fp1"])
-            for row in rows.value
-            if row.get("class") == _START_CLASS
+            cast("str", row["intent_fp1"]) for row in rows.value if row.get("class") == _START_CLASS
         }
         for row in rows.value:
             if row.get("class") != _INTENT_CLASS:
@@ -680,9 +671,7 @@ class AlternativeTerminalStore:
                 or key in starts_seen
                 or any(
                     row.get(field) != intent.get(field)
-                    for field in (
-                        "intent_fp1", "candidate_fp1", "source_fp1", "split_fp1"
-                    )
+                    for field in ("intent_fp1", "candidate_fp1", "source_fp1", "split_fp1")
                 )
                 or start_label_fp is None
                 or intent_label_fp is None

@@ -385,9 +385,7 @@ def _same_event_bytes(left: JournalEvent, right: JournalEvent) -> bool:
     left_row = canonical_bytes(left.to_row())
     right_row = canonical_bytes(right.to_row())
     return (
-        not is_refusal(left_row)
-        and not is_refusal(right_row)
-        and left_row.value == right_row.value
+        not is_refusal(left_row) and not is_refusal(right_row) and left_row.value == right_row.value
     )
 
 
@@ -395,7 +393,5 @@ def _same_mapping_bytes(left: object, right: Mapping[str, object]) -> bool:
     left_row = canonical_bytes(left)
     right_row = canonical_bytes(dict(right))
     return (
-        not is_refusal(left_row)
-        and not is_refusal(right_row)
-        and left_row.value == right_row.value
+        not is_refusal(left_row) and not is_refusal(right_row) and left_row.value == right_row.value
     )

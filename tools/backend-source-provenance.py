@@ -22,7 +22,7 @@ MODULES = (
 
 
 def sources() -> dict[str, str]:
-    result = {}
+    result: dict[str, str] = {}
     for name in MODULES:
         path = importlib.import_module(name).__file__
         if path is None:

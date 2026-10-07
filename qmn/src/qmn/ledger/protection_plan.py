@@ -266,9 +266,7 @@ def create_protection_admission_plan(
     ):
         return policy("offset", "Book ratchet offset shares the admitted CT-03 price scale")
     trigger_value = _r_multiple(trigger, "breakeven_ratchet_trigger", positive=True)
-    improvement_value = _r_multiple(
-        amend_min_improvement, "amend_min_improvement", positive=False
-    )
+    improvement_value = _r_multiple(amend_min_improvement, "amend_min_improvement", positive=False)
     if is_refusal(trigger_value):
         return trigger_value
     if is_refusal(improvement_value):
@@ -309,11 +307,7 @@ def persist_protection_admission_plan(
         return invalid("writer", "live protection plans use the exact LIVE QMF JournalWriter")
     if type(journal) is not JournalStore or journal.world is not World.LIVE:
         return invalid("journal", "live protection plans reopen the exact LIVE CT-13 store")
-    if (
-        type(stream_name) is not str
-        or stream_name != writer.stream_name
-        or type(at) is not Instant
-    ):
+    if type(stream_name) is not str or stream_name != writer.stream_name or type(at) is not Instant:
         return invalid("stream_name", "plan persistence names its writer stream and instant")
     plan_fp = fingerprint(plan.fp1_identity())
     if is_refusal(plan_fp):
@@ -542,9 +536,7 @@ def _snapshot_identity(
     try:
         decoded = json.loads(encoded.value.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
-        return invalid(
-            "policy_source_identity", "Book policy source canonical bytes parse exactly"
-        )
+        return invalid("policy_source_identity", "Book policy source canonical bytes parse exactly")
     if not isinstance(decoded, dict):
         return invalid(
             "policy_source_identity", "Book policy source has string-keyed identity fields"
@@ -633,9 +625,7 @@ def _hydrate_plan(value: Mapping[str, object]) -> Result[ProtectionAdmissionPlan
         return policy("plan_policy", "persisted Book ratchet policy uses its exact version")
     trigger = _read_rational(policy_body.get("trigger"), "breakeven_ratchet_trigger")
     offset = _read_delta(policy_body.get("offset"), "breakeven_ratchet_offset")
-    improvement = _read_rational(
-        policy_body.get("amend_min_improvement"), "amend_min_improvement"
-    )
+    improvement = _read_rational(policy_body.get("amend_min_improvement"), "amend_min_improvement")
     if is_refusal(trigger):
         return trigger
     if is_refusal(offset):

@@ -302,10 +302,15 @@ class ParameterSpec:
                 "ui": payload.ui,
             }
             if type(payload.type) is ParameterType:
-                if payload.type in {
-                    ParameterType.EXACT_INTEGER,
-                    ParameterType.EXACT_RATIONAL,
-                } and isinstance(payload.bounds, tuple) and len(payload.bounds) == 2:
+                if (
+                    payload.type
+                    in {
+                        ParameterType.EXACT_INTEGER,
+                        ParameterType.EXACT_RATIONAL,
+                    }
+                    and isinstance(payload.bounds, tuple)
+                    and len(payload.bounds) == 2
+                ):
                     normalized["bounds"] = {
                         "min": payload.bounds[0],
                         "max": payload.bounds[1],

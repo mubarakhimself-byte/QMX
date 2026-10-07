@@ -279,9 +279,7 @@ def inspect_unit_text(name: str, text: str) -> UnitInspection:
         if _setting(text, "LogNamespace") != "qmn":
             findings.append("qmn.service must set LogNamespace=qmn for the observability stack")
         if _setting(text, "Environment=QMN_DEPLOYMENT_CONFIG") != DEPLOYMENT_CONFIG_PATH:
-            findings.append(
-                "qmn.service must pin QMN_DEPLOYMENT_CONFIG beneath QMX_ROOT"
-            )
+            findings.append("qmn.service must pin QMN_DEPLOYMENT_CONFIG beneath QMX_ROOT")
 
     # Credential-consuming units: only LoadCredentialEncrypted, never plaintext
     # LoadCredential for secret material; seal flag is provision-time.

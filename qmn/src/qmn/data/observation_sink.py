@@ -238,11 +238,16 @@ class QmfLiveJournalSink:
             )
             or type(session_epoch) is not str
             or not session_epoch.strip()
-            or any(identity.value[k] != getattr(source_observation, attr) for k, attr in (
-                ("event_time", "event_time"), ("known_at", "known_at"),
-                ("source", "source"), ("source_native_id", "source_native_id"),
-                ("revision", "revision"),
-            ))
+            or any(
+                identity.value[k] != getattr(source_observation, attr)
+                for k, attr in (
+                    ("event_time", "event_time"),
+                    ("known_at", "known_at"),
+                    ("source", "source"),
+                    ("source_native_id", "source_native_id"),
+                    ("revision", "revision"),
+                )
+            )
         ):
             return policy("source_join", "raw and CT-10 receipts bind this exact live observation")
         journal_type = _event_type(row.get("event_type"))
@@ -354,8 +359,7 @@ class QmfLiveJournalSink:
                 ),
                 (
                     "row_fp",
-                    not is_refusal(row_fp)
-                    and row_fp.value == receipt.store_receipt.fingerprint,
+                    not is_refusal(row_fp) and row_fp.value == receipt.store_receipt.fingerprint,
                 ),
                 ("store_world", receipt.store_receipt.world is World.LIVE),
                 ("store_role", receipt.store_receipt.room_role is RoomRole.JOURNAL),
@@ -429,9 +433,7 @@ class QmfLiveJournalSink:
         )
         if len(matches) != 1 or matches[0].to_row() != receipt.event.to_row():
             return policy("journal_readback", "CT-13 event reopens through the checked reader")
-        journal_rows = self.journal_store.read_stream(
-            self.writer.stream_name, for_world=World.LIVE
-        )
+        journal_rows = self.journal_store.read_stream(self.writer.stream_name, for_world=World.LIVE)
         if is_refusal(journal_rows):
             return journal_rows
         physical_index = receipt.store_receipt.sequence
@@ -440,8 +442,7 @@ class QmfLiveJournalSink:
             return expected_physical_row
         actual_physical_row = (
             canonical_bytes(journal_rows.value[physical_index])
-            if type(physical_index) is int
-            and 0 <= physical_index < len(journal_rows.value)
+            if type(physical_index) is int and 0 <= physical_index < len(journal_rows.value)
             else None
         )
         if actual_physical_row is None or is_refusal(actual_physical_row):
@@ -487,9 +488,10 @@ def _identity(row: Mapping[str, object]) -> Result[dict[str, object]]:
         "active_session_epoch": source_row.get("session_epoch"),
         "wire_kind": source_row.get("wire_kind"),
     }
-    if any(type(fields[key]) is not str or not cast(str, fields[key]).strip() for key in (
-        "source", "source_native_id", "revision"
-    )):
+    if any(
+        type(fields[key]) is not str or not cast(str, fields[key]).strip()
+        for key in ("source", "source_native_id", "revision")
+    ):
         return invalid(
             "source_identity", "source/native/revision identifiers are non-empty strings"
         )
