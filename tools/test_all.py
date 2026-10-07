@@ -79,7 +79,10 @@ def main() -> int:
         for index, (name, cwd, command, paths) in enumerate(suites):
             print(f"Running {name}", flush=True)
             code, row = run_suite(
-                name, cwd, [*command, "-m", "not serial"], Path(temporary) / f"{index}.xml"
+                name,
+                cwd,
+                [*command, "-n", "2", "-m", "not serial"],
+                Path(temporary) / f"{index}.xml",
             )
             failed |= code != 0
             rows.append(row)
