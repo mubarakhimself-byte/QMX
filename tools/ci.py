@@ -14,11 +14,13 @@ def main() -> int:
     if uv is None:
         raise RuntimeError("uv is required to run CI")
     agents = ROOT / "qmx-agents"
+    core = agents / "packages/qmx-agents"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
         (agents, ["sync", "--frozen", "--all-packages"]),
+        (core, ["sync", "--frozen"]),
     ]
-    for workspace in (ROOT, agents):
+    for workspace in (ROOT, agents, core):
         for task in ("fmt-check", "lint", "types"):
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))
     for task in ("money-path-scan", "secret-scan"):

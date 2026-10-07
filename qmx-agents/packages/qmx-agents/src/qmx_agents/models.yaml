@@ -1,0 +1,22 @@
+profile: daily
+profiles:
+  daily:
+    reasoning_high: cliproxy:claude-opus-5-5
+    workhorse: cliproxy:gpt-6.1-sol
+    coding: cliproxy:gpt-6.1-sol
+    fast: cliproxy:gpt-6-luna
+  test:
+    reasoning_high: openrouter:anthropic/claude-sonnet-5.5
+    workhorse: openrouter:deepseek/deepseek-v4-pro-0813
+    coding: openrouter:deepseek/deepseek-v4-pro-0813
+    fast: openrouter:openai/gpt-6-luna
+providers:
+  cliproxy: {base_url: 'http://127.0.0.1:8317'}
+  openrouter: {base_url: 'https://openrouter.ai/api/v1'}
+  anthropic: {}
+  openai: {}
+  local: {}
+fallbacks: []
+max_retries: 2
+harness_profiles: {}
+mcp_servers: {}

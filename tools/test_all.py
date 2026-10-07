@@ -52,6 +52,12 @@ def main() -> int:
             ["python", "-m", "pytest", "packages", "tests", "-q"],
             ["packages", "tests"],
         ),
+        (
+            "qmx-agents",
+            ROOT / "qmx-agents/packages/qmx-agents",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        ),
     ]
     qa = ROOT / "qa/tests"
     top_level = sorted(qa.glob("test_*.py"))
