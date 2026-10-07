@@ -40,6 +40,9 @@ Memory is wired when `BuildContext.qmx_home` is supplied, or when an opened
 `MemoryManager` is injected through `BuildContext.memory`. Give `BuildContext.run`
 the session/workflow/task identifiers needed by `memory.scope`; a workflow search
 also includes its tasks. Build a fresh graph for a different memory identity.
+Model-only invocation overrides inherit that bound identity. The router's `node`
+field is a model selection, so automatic memory setup uses the local `laptop`
+node; inject an opened manager with an explicit `MemoryContext` for another node.
 SQLite files live under `copilot/memory.db` or `apps/<app_id>/memory.db` in that home.
 Call `await ctx.close_memory()` after using a graph built with `qmx_home`, including
 its compiled sub-agents; injected managers remain caller-owned.

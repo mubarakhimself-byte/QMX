@@ -208,7 +208,6 @@ async def _build(
         await memory.open(
             MemoryContext(
                 profile=profile,
-                node=run.node or "laptop",
                 role=ctx.memory_role,
                 session_id=run.session_id,
                 workflow_id=run.workflow_id,

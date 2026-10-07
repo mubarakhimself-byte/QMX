@@ -531,3 +531,34 @@ def test_explicit_search_output_obeys_same_cap(tmp_path: Path) -> None:
         assert "/memory-recall/" in response
 
     asyncio.run(run())
+
+
+def test_model_overrides_do_not_change_bound_memory_identity(
+    tmp_path: Path, config: RouterConfig
+) -> None:
+    async def run() -> None:
+        ctx = BuildContext(
+            ModelRouter(config, fake_models(fake("answer"))),
+            qmx_home=tmp_path / "home",
+            run=RunContext(app_id="macro", session_id="session", node="tier:workhorse"),
+        )
+        try:
+            graph = cast(
+                "Runnable[Any, Any]",
+                await build_agent(
+                    write_spec(tmp_path, "memory: {scope: session}"),
+                    ctx,
+                ),
+            )
+            assert ctx.memory is not None
+            assert ctx.memory.ctx.node == "laptop"
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage("q")]},
+                context=RunContext(model="tier:workhorse"),
+            )
+            assert result["messages"][-1].text == "answer"
+            assert ctx.memory.ctx.profile == "app:macro"
+        finally:
+            await ctx.close_memory()
+
+    asyncio.run(run())

@@ -559,8 +559,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryState, Any]):
                     raise ValueError(
                         "Build a fresh memory-enabled agent for a different run identity"
                     )
-            profile = f"app:{context.app_id}" if context.app_id else "copilot"
-            if profile != self.manager.ctx.profile:
+            if context.app_id is not None and f"app:{context.app_id}" != self.manager.ctx.profile:
                 raise ValueError("Memory profile differs from the invocation context")
         return {"memory_profile": self.manager.pinned()}
 
