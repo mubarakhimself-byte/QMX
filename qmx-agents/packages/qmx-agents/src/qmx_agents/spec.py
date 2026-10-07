@@ -12,6 +12,7 @@ from deepagents import (
     FilesystemPermission,
     create_deep_agent,  # pyright: ignore[reportUnknownVariableType] - upstream generic overload
 )
+from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.backends.protocol import BackendProtocol
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
@@ -19,12 +20,25 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from qmx_agents.memory import (
+    Approval,
+    MemoryContext,
+    MemoryManager,
+    Scope,
+    StoreMemoryProvider,
+    load_provider,
+    memory_path,
+)
 from qmx_agents.router import ModelRouter, RunContext, model_selector
 
 
 class MemorySpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scope: Literal["task", "workflow", "session", "global"] = "task"
+    provider: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    profile_cap: int = Field(default=2000, gt=0)
+    prefetch_cap: int = Field(default=10000, ge=256)
 
 
 class SubagentSpec(BaseModel):
@@ -107,6 +121,17 @@ class BuildContext:
     workflows: dict[str, Runnable[Any, Any]] = field(default_factory=dict[str, Runnable[Any, Any]])
     backend: BackendProtocol | None = None
     checkpointer: BaseCheckpointSaver[Any] | None = None
+    qmx_home: Path | None = None
+    memory: MemoryManager | None = None
+    memory_role: Literal["primary", "subagent", "scheduled", "headless"] = "primary"
+    memory_approval: Approval | None = None
+    memory_resources: list[MemoryManager] = field(default_factory=list[MemoryManager])
+
+    async def close_memory(self) -> None:
+        for manager in reversed(self.memory_resources):
+            await manager.close()
+        self.memory_resources.clear()
+        self.memory = None
 
 
 async def build_agent(
@@ -142,7 +167,11 @@ async def _build(
                 raise ValueError(f"Cyclic sub-agent reference: {path}")
             child = load_spec(path)
             child_run = replace(ctx.run, subagent=child.model)
-            graph = await _build(child, replace(ctx, run=child_run), (*ancestors, path))
+            graph = await _build(
+                child,
+                replace(ctx, run=child_run, memory_role="subagent", memory=None),
+                (*ancestors, path),
+            )
             subagents.append(
                 CompiledSubAgent(
                     name=child.name, description=f"Delegate to {child.name}", runnable=graph
@@ -163,15 +192,61 @@ async def _build(
         raise ValueError("Sub-agent names must be unique")
     run = replace(ctx.run, agent_node=ctx.run.agent_node or spec.model)
     model = ctx.router.resolve_model(run, spec.name)
+    memory = ctx.memory
+    if memory is None and ctx.qmx_home is not None:
+        profile = f"app:{run.app_id}" if run.app_id else "copilot"
+        memory = MemoryManager(
+            StoreMemoryProvider.from_home(ctx.qmx_home, profile, approval=ctx.memory_approval),
+            load_provider(spec.memory.provider)
+            if spec.memory.provider is not None and spec.memory.provider != "sqlite"
+            else None,
+            spill_dir=memory_path(ctx.qmx_home, profile).parent / "memory-recall",
+            profile_cap=spec.memory.profile_cap,
+            prefetch_cap=spec.memory.prefetch_cap,
+            approval=ctx.memory_approval,
+        )
+        await memory.open(
+            MemoryContext(
+                profile=profile,
+                node=run.node or "laptop",
+                role=ctx.memory_role,
+                session_id=run.session_id,
+                workflow_id=run.workflow_id,
+                task_id=run.task_id,
+            ),
+            spec.memory.config,
+        )
+        # The composition root closes the run's memory manager after using its graph.
+        ctx.memory = memory
+        ctx.memory_resources.append(memory)
+    middleware = ctx.router.middleware(run, spec.name)
+    backend = ctx.backend
+    if memory is not None:
+        memory.spill_dir.mkdir(parents=True, exist_ok=True)
+        backend = CompositeBackend(
+            default=backend or StateBackend(),
+            routes={
+                "/memory-recall/": FilesystemBackend(
+                    root_dir=memory.spill_dir.resolve(), virtual_mode=True
+                )
+            },
+        )
+        tools.extend(memory.tools(Scope(spec.memory.scope)))
+        middleware.extend(memory.middleware(Scope(spec.memory.scope)))
+        middleware.append(memory.summarization(model, backend))
+    elif spec.memory.provider not in {None, "sqlite"}:
+        raise ValueError("An external memory provider requires qmx_home or an opened MemoryManager")
+    if len({tool.name for tool in tools}) != len(tools):
+        raise ValueError("Agent tool names must be unique")
     return create_deep_agent(
         model=model,
         tools=tools,
         system_prompt=spec.system_prompt.read_text(encoding="utf-8"),
-        middleware=ctx.router.middleware(run, spec.name),
+        middleware=middleware,
         subagents=subagents,
         skills=spec.skills or None,
         permissions=spec.permissions.rules(),
-        backend=ctx.backend,
+        backend=backend,
         interrupt_on=dict(spec.interrupt_on) or None,
         context_schema=RunContext,
         checkpointer=ctx.checkpointer,

@@ -32,9 +32,33 @@ before building agents; use `excluded_tools` to hide built-ins and
 registrations merge process-wide, so change them at service startup, not per run.
 Each named sub-agent is compiled independently with its own tools and approvals.
 
-`memory.scope` and `budget` are parsed for P07/P08. Background tasks fail explicitly
+`budget` is parsed for P08. Background tasks fail explicitly
 until the QMX task tools exist in P11. Skills are backend paths; provide a backend
 that contains them. Quotas use the documented management plugin quota endpoint.
+
+Memory is wired when `BuildContext.qmx_home` is supplied, or when an opened
+`MemoryManager` is injected through `BuildContext.memory`. Give `BuildContext.run`
+the session/workflow/task identifiers needed by `memory.scope`; a workflow search
+also includes its tasks. Build a fresh graph for a different memory identity.
+SQLite files live under `copilot/memory.db` or `apps/<app_id>/memory.db` in that home.
+Call `await ctx.close_memory()` after using a graph built with `qmx_home`, including
+its compiled sub-agents; injected managers remain caller-owned.
+
+`memory_put` and `memory_search` use the spec's scope. Global writes and deletes
+require the injected `memory_approval` hook (default: deny). Turn synchronization
+and pre-compression hooks run only for the primary agent. Providers must enqueue
+turn work on their own executor and return immediately, preserving the explicit
+profile context in any background work.
+
+`memory.provider` selects one external provider alongside SQLite. Discovery uses
+`qmx.memory_providers` entry points; the selected entry must return a provider from
+a zero-argument factory. Its non-secret settings go in `memory.config`. No plugin
+is imported before selection. `memory.profile_cap` (2,000 characters by default)
+and `memory.prefetch_cap` (10,000) bound prompt text. Long recall spills into the
+profile's `memory-recall/` directory with a capped head/tail preview and a path.
+Pinned profile text freezes at session start. A small scan withholds common
+instruction markers before prompt injection; recalled text is labelled as data.
+Semantic search and automatic extraction are not enabled.
 
 For the Claude prompt-integrity smoke:
 
