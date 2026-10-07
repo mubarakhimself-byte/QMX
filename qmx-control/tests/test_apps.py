@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from pathlib import Path
 
 import psutil
@@ -13,7 +14,7 @@ from qmx_control.service import ControlService
 
 def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
-    token = "local-app-fixture"
+    token = secrets.token_urlsafe(32)
     headers = {"Authorization": f"Bearer {token}"}
     example = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
 
