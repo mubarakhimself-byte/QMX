@@ -51,8 +51,8 @@ dev = [
     "poethepoet==0.48.0",
     "pytest-xdist>=3.8,<4",
     "qmn",
-    "claude-agent-sdk==0.2.164",
-    "openai-codex==0.160.1",
+    "claude-agent-sdk==0.2.163",
+    "openai-codex==0.160.0",
 ]
 # Pulls qma-daemon (and its qmf-data/registry/risk path edges) into the gate
 # environment so store engines are present at import/test time.
