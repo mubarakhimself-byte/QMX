@@ -128,10 +128,8 @@ def test_ui_widget_contribution_is_refused_as_gap_0081() -> None:
         assert refused.context["gap"] == "GAP-0081"
 
 
-def test_qma_ui_contract_remains_a_stub() -> None:
-    assert (UI_CONTRACT_ROOT / "STUB.md").is_file()
-    assert not (UI_CONTRACT_ROOT / "pyproject.toml").exists()
-    assert not (UI_CONTRACT_ROOT / "src").exists()
+def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
+    assert not UI_CONTRACT_ROOT.exists()
     text = WORKSPACE_TOML.read_text(encoding="utf-8")
     assert 'members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon"]' in text
     assert "qma-ui-contract" in text

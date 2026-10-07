@@ -1,7 +1,0 @@
-{
-  "blocked": true,
-  "exception": "ModuleNotFoundError",
-  "reason": "No module named 'fcntl'",
-  "stage": "CT15 cross-process lock",
-  "provider_calls": "recorded injected bytes only"
-}

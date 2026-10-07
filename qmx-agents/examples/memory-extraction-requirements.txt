@@ -1,5 +1,0 @@
-# Optional extraction only. Install alongside the existing workspace lock.
-# These packages were tested against LangGraph 1.2.12 / LangChain 1.4.3.
-langmem==0.0.30
-trustcall==0.0.39
-dydantic==0.0.8

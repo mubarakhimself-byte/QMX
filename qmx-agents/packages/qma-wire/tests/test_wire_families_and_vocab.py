@@ -167,15 +167,9 @@ def test_family_payloads_validate_against_json_schema() -> None:
     assert is_refusal(validate_family_payload("before_tool", {}))
 
 
-def test_ui_contract_remains_stub_only() -> None:
-    stub = Path(__file__).resolve().parents[3] / "packages" / "qma-ui-contract" / "STUB.md"
-    assert stub.is_file()
-    text = stub.read_text(encoding="utf-8")
-    assert "GAP-0081" in text
-    assert "deferred" in text.lower()
-    ui_pkg = stub.parent
-    assert not (ui_pkg / "pyproject.toml").exists()
-    assert not (ui_pkg / "src").exists()
+def test_ui_contract_placeholder_is_not_shipped() -> None:
+    ui_pkg = Path(__file__).resolve().parents[3] / "packages" / "qma-ui-contract"
+    assert not ui_pkg.exists()
     assert "qma-ui-contract" not in qma.wire.__all__
 
 

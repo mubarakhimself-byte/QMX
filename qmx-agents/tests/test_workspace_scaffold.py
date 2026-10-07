@@ -29,13 +29,9 @@ def test_desk_plugin_topology() -> None:
         assert manifest.contributions
 
 
-def test_qma_ui_contract_is_deferred_stub_only() -> None:
+def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
     stub = ROOT / "packages" / "qma-ui-contract"
-    assert stub.is_dir()
-    assert (stub / "STUB.md").is_file()
-    # Deferred exclusion: not a workspace member and ships no UI package source.
-    assert not (stub / "src").exists()
-    assert not (stub / "pyproject.toml").exists()
+    assert not stub.exists()
 
 
 def test_examples_and_tests_roots_exist() -> None:
