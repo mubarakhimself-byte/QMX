@@ -39,5 +39,8 @@ Packets are written for a coding agent (Codex) to run without further operator i
 | 15 | Copilot agent and first end-to-end app | 07–14 | L |
 | 16 | Retire the old QMA runtime | 15 | L |
 | 17 | Docker tier for nodes (T2) | 12 | M |
+| 18 | Brokers, connections, accounts (cTrader/IC Markets, CCXT) + `qmx-broker` MCP | 08, 09 | M |
+| 19 | Research sources: MQL5 scraper app, Firecrawl MCP | 12 | S |
+| 20 | Copilot skills and hooks (skills by Claude with operator; hooks by Codex) | 11, 12 | M |
 
 Packets 01–05 can start today. Packets 01, 03 and 05 are low-risk. 03 and 05 produce reports for Claude and the operator to review before 06 starts.

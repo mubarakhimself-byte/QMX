@@ -308,7 +308,29 @@ The UI's Apps detail pane reads these. Remote nodes stream the same data over `q
 - The QMA runtime ADs listed at the top: superseded by library equivalents (section 3).
 - DEC-0117 (no database server) is kept: SQLite and DuckDB only.
 
-## 11. Open items (not blocking packets 01–08)
+## 11. Operator additions (2026-10-07, after first draft)
+
+- **Mini apps are VS Code-style extensions.** The UI's Apps section is work in progress and its look will change. The core idea from the original node-editor conversation stands. This design fixes the logic; the UI follows later.
+- **The Copilot gets skills and hooks for building mini apps.** Skills are written with intent by Claude with the operator (P20), not generated in bulk.
+  - Skills: build-mini-app, build-workflow, debug-app, publish-checklist, connect-broker.
+  - Hooks are LangChain middleware events:
+    - before publish: manifest valid, tests green
+    - after tool: journal
+    - money-path block
+    - breaker trip: tell the Copilot and the operator
+    - pre-compaction: memory
+- **Brokers are back to CFDs.**
+  - IC Markets via cTrader Open API. The adapter already exists in `packages/qmf-venue/src/qmf/venue/ctrader.py`.
+  - Crypto via CCXT, already in `qmf-venue` and `qmn/venue/spot_paper.py`.
+  - Model: many brokers, many connections, many accounts per connection.
+  - Hummingbot is a reference for crypto connectors and strategy ideas.
+  - A cTrader MCP server is on by default for the Copilot: read-only market and account tools, plus `propose_order`. The money path still needs the operator's signature.
+- **Research sources.**
+  - Firecrawl MCP is a paid provider the operator approves, including Alexandria data providers.
+  - QMX's own scraper runs as a scheduled job (a headless mini app). Its first target is MQL5 articles; the existing library lives on branch `research/mql5-article-library`.
+- **Charting.** This is a UI-lane decision. Recommendation: TradingView Lightweight Charts (open source, Apache-2.0) for all price charts. TradingView Advanced Charts needs a licence application, so consider it only if Lightweight falls short. The backend serves bars and indicators through `qmx-data`.
+
+## 12. Open items (not blocking packets 01–08)
 
 - Whether `sqlite-vec` loads on Windows. Spike before turning on semantic memory search.
 - MCP Apps rendering in the Svelte UI: build on the official AppBridge, since LangGraph React support is unmerged and the UI is Svelte anyway.
