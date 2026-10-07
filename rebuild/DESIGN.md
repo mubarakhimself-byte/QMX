@@ -172,6 +172,25 @@ A `data-analyst` sub-agent runs on a Python sandbox backend (`execute`), with pa
 
 If that falls short, `rlms` with a Docker REPL can be wrapped as one tool.
 
+### 5.6b Agent tool catalogue (what agents can actually do)
+
+Agents get tools from a short list of kinds. Each AgentSpec picks from these, and nothing else exists:
+
+| Kind | Examples | Notes |
+|---|---|---|
+| Domain | `qmx-data`, `qmx-backtest`, `qmx-research`, `qmx-broker` (read + propose only) | P09, P18 |
+| Platform | `qmx-control` (apps, workflows, runs, library, settings) | the same API as the UI (§8) |
+| Files and artifacts | Deep Agents filesystem tools over the `CompositeBackend` routes | writes go through the admission wrapper |
+| Code execution | a Python sandbox (`execute`) on a **target**: laptop T1, a VPS (T2 Docker), or a GPU target | the RLM-style data analyst lives here |
+| Jobs on a target | `run_job(target, image or app, command, resources)`, then `job_status`, `job_logs`, `job_fetch` | for long or heavy work; the job is recorded automatically by the supervisor |
+| Web | Firecrawl MCP (paid, opt-in), plain fetch, a browser MCP (Playwright) | results saved to the Library |
+| External MCP | anything the operator adds in Settings | per-agent allow-list |
+
+**GPUs.**
+- The node bootstrap detects an NVIDIA GPU and installs the NVIDIA container toolkit, and the node advertises `gpu: <model>, <count>`.
+- Jobs and sandboxes declare `resources: {gpu: 1}`. The supervisor only places them on a node that has one; otherwise it uses a GPU compute provider (for example a rented GPU box) configured in Settings.
+- Agents never configure drivers. They ask for a GPU target through `run_job`, and the platform handles the rest.
+
 ### 5.7 Invariants as middleware
 
 | Invariant | Implementation |
@@ -274,6 +293,37 @@ Agent-written app code starts at T2/T3 and moves to T1 only after operator revie
 - Litestream only on Linux nodes that need second-level recovery.
 - Cache: in-process `cachetools`. The app's own SQLite holds durable cached results. No Redis.
 - Convex was evaluated and rejected: its server code is TypeScript only and it adds a server per node. Its component isolation idea is what the per-app volume copies.
+
+### 7.6b The whole data map (every store, its owner, its cache)
+
+Rule zero: **everything is files.** SQLite, DuckDB over Parquet, JSONL and content-addressed blobs. There is no database server. Each file has exactly one writer process, and everyone else reads it or asks the owner through `qmx-control`.
+
+| Data | Store | Owner (single writer) | Who reads | Cache | Backup |
+|---|---|---|---|---|---|
+| Market data (bars, ticks, features, calendars) | Parquet partitions + DuckDB views (`qmf-data` store, exists today) | the data ingest job | agents and apps via `qmx-data`, backtests | none needed: the store *is* the cache of the upstream feeds | Parquet is immutable, so sync it to the bucket. It can be re-downloaded, so it never goes to GitHub |
+| Backtest and research results | QMB results and ledger (exists) plus artifacts | QMB | Lab, Library, agents | **result memo**: same strategy version + data snapshot + params = reuse the old result, never recompute | bucket |
+| Experiments (the scientist's notebook) | Experiment Ledger, SQLite (kept per §12) | QMA guards (P08) | Lab, Library | none | bucket + GitHub weekly |
+| Library (every saved thing: reports, notes, scraped articles, datasets, app outputs) | `artifacts/<sha256>` blobs + `library.db` (SQLite with full-text search; vectors later) | Library service in `qmx-control` | everyone | the catalog is the index; nothing extra | catalog → bucket + GitHub weekly; blobs → bucket |
+| Lab objects (strategies, pods, versions) | typed, versioned Library artifacts | Library service | Lab, agents, Portfolio | none | as Library |
+| Portfolio and live trading state | QMN's own journal and ledgers on each trading node (exists) | QMN on that node | laptop via `qmx-control` read-only views | short in-process TTL for summaries, refreshed by events | per node: bucket, plus Litestream on Linux |
+| Copilot sessions and agent threads | LangGraph checkpoints `copilot/threads.db` | qmx-agents | UI via SSE | none | bucket |
+| Agent memory | `memory.db` per profile (copilot, each app) | MemoryManager (P07) | its agents | prefetch only | bucket + GitHub weekly |
+| Run journal (evidence) | JSONL per run + `runs.db` index | guards middleware (P08) | UI, Library, audits | none | bucket + GitHub weekly |
+| Workflow definitions | JSON files, versioned as Library artifacts or inside an app | Library or the app | compiler | none | as owner |
+| Workflow run state | LangGraph checkpoints in the owning app's volume, or `workflows/<id>/checkpoints.db` | the run | resume logic | none | bucket |
+| Mini app data | the app's volume: `app.db`, `memory.db`, `data/`, `blobs/` | the app instance | the app; others only via its MCP tools or artifact refs | the app's choice (in-process TTL, durable rows with `fetched_at`) | bucket (+ Litestream for money apps) |
+| Settings | `settings.toml` (UI-editable) | `qmx-control` | everyone | loaded once, reloaded on change | GitHub weekly |
+| Secrets | Windows Credential Manager `qmx/*`; node vault on servers | operator | providers at call time | never cached on disk | never backed up anywhere outside the vault |
+| Logs, metrics, traces | JSONL per process; traces to LangSmith or an OTel file | supervisor | UI, debugging | none | bucket, 30-day retention |
+
+**Where caching is worth it** (and nowhere else):
+1. **Upstream data:** fetched once into the market store; Firecrawl and web results are saved to the Library keyed by URL and date.
+2. **Backtest results**, memoized by content keys.
+3. **Model prompts:** the provider's prompt caching (automatic for Claude through Deep Agents). No response caching of model output.
+4. **Expensive read tools** (news, quotes): an in-process TTL cache inside the tool.
+5. **UI aggregates** (portfolio summary, app health): an in-process TTL cache in `qmx-control`, invalidated by events. The UI gets pushes over SSE, never polls.
+
+No Redis, no shared cache server.
 
 ### 7.7 Observability (host-provided, never per app)
 
@@ -383,9 +433,19 @@ The goal: from the UI, send a job to a server. It sets itself up, works with the
 - It is written once and tested against a fresh Ubuntu VM, so it is not a one-shot hope. After that, adding a server is one command.
 - **Recording is automatic, not agentic.** The supervisor journals every run, log line, metric and artifact on its own. No agent has to remember to record anything.
 
-**Bucket.** Any S3-compatible store works, and it can be changed at any time in Settings because rclone hides the vendor. Recommendation:
-- Contabo Object Storage, since the operator is already a Contabo customer, or Cloudflare R2, which has no download fees.
-- Never keep the only backup on the same server it protects.
+**Own VPS first.** The operator's VPS is the default remote target. Amp, Modal and E2B are optional extras, for GPU bursts or delegated agent tasks.
+
+**Storage bucket, with three copies:**
+1. **Primary bucket on the VPS itself:** a plain directory reached through rclone over SFTP. No object-storage software is needed. Agents on that VPS write results right next to where they run.
+2. **Local copies on the laptop:** `fetch` pulls finished runs and nightly snapshots.
+3. **Off-site weekly: a private GitHub repo,** the backup of the backup, for the small, precious data:
+   - DB snapshots (memory, journal index, Library catalog, Experiment Ledger, app `app.db` files)
+   - settings
+   - definitions and manifests
+
+   GitHub rejects files over 100 MB and large repos get slow, so bulk data (Parquet, large blobs) never goes there. Market data can be re-downloaded. Large result blobs get a second bucket (any S3-compatible store, swappable in Settings) when needed.
+
+Never keep the only backup on the same server it protects; the copies above make sure of that.
 
 **UI.** "Run on…" picks a target. Jobs show where they run, cost so far, live log tail and status. A failed remote run offers "resume elsewhere".
 

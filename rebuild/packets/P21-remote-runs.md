@@ -9,6 +9,7 @@ From `qmx-control` (later the UI), send a workflow, app or agent run to a remote
 - The Modal, E2B and Daytona Python SDK docs
 
 ## Build (package `qmx_remote`)
+0. **The own VPS is the default** (DESIGN §11b). The primary bucket is a directory on the VPS reached by rclone over SFTP; S3-compatible stores are optional. GPU: the node advertises its GPU (from P17 bootstrap), jobs declare `resources: {gpu: N}`, and the placement logic picks a GPU node or a configured GPU provider. Agents get `run_job`, `job_status`, `job_logs` and `job_fetch` tools (DESIGN §5.6b).
 1. **`ComputeProvider` interface:** `provision`, `start`, `status`, `logs`, `stop`, `teardown`, plus a registry chosen in settings. Implement in this order:
    1. `ssh` (own VPS, using the P17 Docker image)
    2. `amp` (remote agent: Amp Python SDK `execute` with `executor="orb"` or `"runner"`, and `mcpConfig` pointing at QMX's MCP servers)

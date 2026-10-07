@@ -43,6 +43,7 @@ Packets are written for a coding agent (Codex) to run without further operator i
 | 18 | Brokers, connections, accounts (cTrader/IC Markets, CCXT) + `qmx-broker` MCP | 08, 09 | M |
 | 19 | Research sources: MQL5 scraper app, Firecrawl MCP | 12 | S |
 | 20 | Copilot skills and hooks (skills by Claude with operator; hooks by Codex) | 11, 12 | M |
-| 21 | Remote runs: SSH/Amp/Modal/E2B, Git-style results in S3, fetch and resume | 10, 12, 13, 17 | L |
+| 21 | Remote runs: own VPS first (SFTP bucket), then Amp/Modal/E2B; Git-style results, fetch and resume; GPU targets | 10, 12, 13, 17 | L |
+| 22 | Library, run index, result memo, caching, weekly GitHub backup | 08, 11 | M |
 
 Packets 01–05 can start today. P05 is reviewed (DESIGN §12): read those rulings before any later packet.
