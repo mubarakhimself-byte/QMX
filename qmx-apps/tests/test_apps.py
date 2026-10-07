@@ -125,6 +125,17 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
     assert registry[0]["transport"] == "stdio"
     assert "ping" in [document(tool)["name"] for tool in cast(list[object], registry[0]["tools"])]
     assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
+    text_result = supervisor.call("exchange-status", "text_status", {})
+    assert text_result["result"] is None
+    assert (
+        document(cast(list[object], text_result["content"])[0])["text"]
+        == "Recorded text-only response"
+    )
+    assert document(text_result["meta"])["fixture"] is True
+    assert (
+        document(document(text_result["meta"])["io.modelcontextprotocol/serverInfo"])["name"]
+        == "Supervisor boundary fixture"
+    )
     if sys.platform == "win32":
         before_cpu = cast(
             float,
@@ -148,6 +159,23 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
     assert restarted["instance_id"] != started["instance_id"]
     supervisor.stop("exchange-status")
     dead(cast(int, restarted["pid"]))
+
+
+def test_startup_has_its_own_deadline(supervisor: Supervisor, fixture_app: Path) -> None:
+    script = fixture_app / "server.py"
+    script.write_text(
+        script.read_text().replace(
+            '    mcp.run(transport="stdio", show_banner=False)',
+            "    import time\n    time.sleep(22)\n"
+            '    mcp.run(transport="stdio", show_banner=False)',
+        )
+    )
+    install(supervisor, fixture_app)
+    started = supervisor.start("exchange-status")
+    assert started["status"] == "running"
+    assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
+    supervisor.stop("exchange-status")
+    dead(cast(int, started["pid"]))
 
 
 def test_definition_is_immutable_and_volume_has_one_owner(

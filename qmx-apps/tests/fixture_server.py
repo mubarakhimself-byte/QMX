@@ -10,6 +10,7 @@ from contextlib import closing
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.tools import ToolResult
 from pydantic import JsonValue
 
 mcp = FastMCP("Supervisor boundary fixture")
@@ -18,6 +19,11 @@ mcp = FastMCP("Supervisor boundary fixture")
 @mcp.tool()
 def ping() -> dict[str, JsonValue]:
     return {"pong": True}
+
+
+@mcp.tool()
+def text_status() -> ToolResult:
+    return ToolResult(content="Recorded text-only response", meta={"fixture": True})
 
 
 @mcp.tool()

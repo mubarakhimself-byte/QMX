@@ -424,7 +424,14 @@ class Supervisor:
             if instance.state not in {"tripped", "stopping"}:
                 instance.state = "tripped"
                 instance.reason = "startup_failed" if not instance.ready.done() else "process_exit"
-            self._log(app_id, "process_error", {"reason": instance.reason})
+            message = str(error)
+            for secret in instance.secrets:
+                message = message.replace(secret, "[redacted]")
+            self._log(
+                app_id,
+                "process_error",
+                {"reason": instance.reason, "error_type": type(error).__name__, "message": message},
+            )
             if not instance.ready.done():
                 instance.ready.set_exception(
                     error
@@ -561,7 +568,14 @@ class Supervisor:
                     inputs[feed] = self.artifacts.accept(instance.definition, feed, inputs[feed])
             result = await instance.client.call_tool(tool, inputs)
             data = cast(JsonValue, result.structured_content)
-            document: Document = {"result": data}
+            document: Document = {
+                "result": data,
+                "content": [
+                    cast(Document, block.model_dump(mode="json", by_alias=True))
+                    for block in result.content
+                ],
+                "meta": cast(JsonValue, result.meta),
+            }
             if isinstance(data, dict) and "output" in data and "data" in data:
                 output = data["output"]
                 if not isinstance(output, str):

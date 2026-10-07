@@ -18,6 +18,8 @@ lease gives one supervisor ownership of each app. Each app writes its own
 WAL `app.db`, optional agent `memory.db`, `data/`, `blobs/` and `logs/` under
 `<qmx_home>/apps/<id>`. Restart retains this volume. Host-restart state is
 reported as disconnected until a new connection is established.
+Tool replies preserve raw structured JSON in `result`, standard MCP content
+blocks in `content`, and runtime metadata in `meta`, including text-only tools.
 
 The bootstrap uses the volume as cwd, home and temp directories. Its explicit
 environment includes the app venv path, required OS variables and only the
