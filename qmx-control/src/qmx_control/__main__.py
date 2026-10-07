@@ -9,9 +9,11 @@ import socket
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import httpx
+import psutil
 import uvicorn
 
 from qmx_control.server import create_app, default_home, local_token
@@ -75,17 +77,28 @@ def main() -> int:
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=0.5,
                 )
-                if response.status_code == 200 and response.json().get("pid") == process.pid:
+                reported_pid = response.json().get("pid") if response.status_code == 200 else None
+                owned = {process.pid}
+                owned.update(
+                    child.pid for child in psutil.Process(process.pid).children(recursive=True)
+                )
+                if reported_pid in owned:
                     state.write_text(
-                        json.dumps({"pid": process.pid, "port": args.port}), encoding="utf-8"
+                        json.dumps(
+                            {
+                                "pid": reported_pid,
+                                "port": args.port,
+                                "created": psutil.Process(reported_pid).create_time(),
+                            }
+                        ),
+                        encoding="utf-8",
                     )
                     print(f"Started qmx-control on port {args.port}.")
                     return 0
-            except httpx.HTTPError:
+            except httpx.HTTPError, psutil.NoSuchProcess:
                 pass
             time.sleep(0.1)
-        process.terminate()
-        process.wait(timeout=10)
+        _terminate_tree(psutil.Process(process.pid))
         print("Host did not become ready; see control.log.", file=sys.stderr)
         return 1
     if not state.exists():
@@ -108,21 +121,28 @@ def main() -> int:
             return 1
         print("qmx-control is running.")
         return 0
-    # psutil verifies the recorded PID before termination, so PID reuse is safe.
-    import psutil  # noqa: PLC0415
-
     try:
         process = psutil.Process(data["pid"])
-        command = process.cmdline()
-        if "qmx_control" not in command or "serve" not in command or str(home) not in command:
+        if process.create_time() != data["created"]:
             raise RuntimeError("Recorded PID belongs to a different process; refusing to stop it.")
-        process.terminate()
-        process.wait(timeout=10)
+        _terminate_tree(process)
     except psutil.NoSuchProcess:
         pass
     state.unlink()
     print("Stopped qmx-control.")
     return 0
+
+
+def _terminate_tree(process: psutil.Process) -> None:
+    children = process.children(recursive=True)
+    for child in reversed(children):
+        with suppress(psutil.NoSuchProcess):
+            child.terminate()
+    process.terminate()
+    _, alive = psutil.wait_procs([*children, process], timeout=10)
+    for remaining in alive:
+        remaining.kill()
+    psutil.wait_procs(alive, timeout=10)
 
 
 if __name__ == "__main__":
