@@ -131,6 +131,11 @@ Sub-agents hand results back as **artifact references** (paths in the artifact s
   | Sub-agents, and agents inside workflows and apps | GPT-6.1 Sol |
   | Quick, high-volume steps | GPT-6 Luna |
 
+- **Models are never hard-coded. Every level can override the one above:**
+  - global profile → node (laptop or a given server) → app → workflow → agent node → sub-agent
+  - Each level may set a tier or an exact `provider:model`, for example Kimi K3 for one workflow.
+  - The effective model for any run is resolved from that chain and recorded in the journal.
+  - Settings shows the chain and lets the operator change any level.
 - **The test profile is OpenRouter** (API key), only for smoke runs during development. It is never the default. Automated tests use fake models.
 - Other providers (Anthropic API, OpenAI API, local OpenAI-compatible) are optional entries. All keys and proxy credentials come from Windows Credential Manager `qmx/*`.
 
@@ -364,6 +369,23 @@ The goal: from the UI, send a job to a server. It sets itself up, works with the
 - QMX's `fetch` pulls finished runs into the Library and app volumes, verifies hashes and records them in the journal.
 
 **Models on the server.** CLIProxy runs on the server too (Docker), so remote agents use the same subscriptions. Per-run credentials come from the operator's vault, are scoped to that run, and are removed at teardown.
+
+**Own servers (for example the operator's Contabo VPS): one bootstrap command.**
+- `qmx node bootstrap <ssh-host>` is an idempotent script; running it twice is safe. It installs:
+  - Docker
+  - Tailscale (private network to the laptop)
+  - the QMX node supervisor as a systemd service
+  - CLIProxy in Docker
+  - rclone with the bucket settings
+  - log and trace shipping
+- It ends with `qmx node verify`, which checks each piece and prints a pass/fail list.
+- Secrets are typed by the operator in a guided prompt and stored on the node, never in the repo.
+- It is written once and tested against a fresh Ubuntu VM, so it is not a one-shot hope. After that, adding a server is one command.
+- **Recording is automatic, not agentic.** The supervisor journals every run, log line, metric and artifact on its own. No agent has to remember to record anything.
+
+**Bucket.** Any S3-compatible store works, and it can be changed at any time in Settings because rclone hides the vendor. Recommendation:
+- Contabo Object Storage, since the operator is already a Contabo customer, or Cloudflare R2, which has no download fees.
+- Never keep the only backup on the same server it protects.
 
 **UI.** "Run on…" picks a target. Jobs show where they run, cost so far, live log tail and status. A failed remote run offers "resume elsewhere".
 

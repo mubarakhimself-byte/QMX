@@ -13,6 +13,15 @@ The same app definition runs as a Docker container on Linux servers, such as tra
   - Network: default deny, plus the declared allow-list, using a Docker network with an egress proxy or iptables. Document which you use.
   - Logs, heartbeat and metrics stream to `qmx-control` on the node.
 - **Optional Litestream sidecar:** for apps that need second-level recovery (order and fill records), using the settings in research §C1.
+- **`qmx node bootstrap <ssh-host>`:** an idempotent setup of a fresh Ubuntu server, see DESIGN §11b. It installs:
+  - Docker
+  - Tailscale
+  - the node supervisor as a systemd service
+  - CLIProxy in Docker
+  - rclone with the bucket settings
+  - log and trace shipping
+
+  Secrets are entered through a guided prompt and never written to the repo. Then `qmx node verify` prints a pass/fail checklist. Test it against a throwaway Ubuntu VM or container in CI.
 - **Remote access:** `qmx-control` on the node, reached over Tailscale with a per-node token.
 
 ## Tests

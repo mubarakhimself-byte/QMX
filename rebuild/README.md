@@ -16,7 +16,8 @@ Packets are written for a coding agent (Codex) to run without further operator i
 5. **Keep it small.** Prefer deleting code to adding it. No new abstraction without two real callers. Use library features before writing your own (see `DESIGN.md` §3).
 6. **Python.** Use `uv`. The workspace pins Python 3.14. Strict typing stays on where it is on now. Format and lint with the repo's ruff config.
 7. **Secrets.** Never commit keys. Read credentials from Windows Credential Manager entries `qmx/*`. Live model calls only in scripts under `scripts/live/` that the operator runs; never in the test suite.
-8. **Commits.** Small commits with clear messages. Author identity: the configured Codex identity, not the operator's name.
+8. **Never guess a library API.** Before coding against any library or service, read its section in `rebuild/REFERENCES.md`. `curl` the listed docs (llms.txt or raw markdown) into a scratch folder outside the repo and follow them. If something isn't covered there, say so in the PR instead of inventing it.
+9. **Commits.** Small commits with clear messages. Author identity: the configured Codex identity, not the operator's name.
 
 ## Order
 

@@ -36,6 +36,7 @@ A new small package `qmx-agents/packages/qmx-agents` (import name `qmx_agents`) 
      | `coding` | `gpt-6.1-sol` | `deepseek/deepseek-v4-pro-0813` |
      | `fast` | `gpt-6-luna` | `openai/gpt-6-luna` |
 
+     - **Model resolution chain** (DESIGN §5.3): global profile → node → app → workflow → agent node → sub-agent. Each level may set a tier or an exact `provider:model`. Implement `resolve_model(ctx)` that walks the chain, and record the result in the run context so the journal (P08) logs it.
      - Automated tests use neither profile; they use fake models.
      - Live smoke scripts use `test` unless told otherwise.
      - Pin exact model ids, never `~…-latest` aliases.
