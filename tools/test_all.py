@@ -49,8 +49,14 @@ def main() -> int:
         (
             "QMA",
             ROOT / "qmx-agents",
-            ["python", "-m", "pytest", "packages", "tests", "-q"],
+            ["python", "-m", "pytest", "packages", "tests", "-q", "--ignore=packages/qmx-agents"],
             ["packages", "tests"],
+        ),
+        (
+            "qmx-agents",
+            ROOT / "qmx-agents/packages/qmx-agents",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
         ),
     ]
     qa = ROOT / "qa/tests"
@@ -79,7 +85,19 @@ def main() -> int:
             code, row = run_suite(
                 f"{name} serial",
                 cwd,
-                ["python", "-m", "pytest", *paths, "-q", "-n", "0", "--no-cov", "-m", "serial"],
+                [
+                    "python",
+                    "-m",
+                    "pytest",
+                    *paths,
+                    "-q",
+                    "-n",
+                    "0",
+                    "--no-cov",
+                    "-m",
+                    "serial",
+                    *(["--ignore=packages/qmx-agents"] if name == "QMA" else []),
+                ],
                 Path(temporary) / f"{index}-serial.xml",
             )
             failed |= code not in (0, 5)
