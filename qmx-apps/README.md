@@ -1,0 +1,57 @@
+# QMX mini-app runtime
+
+An app directory contains `app.toml`, `pyproject.toml`, `uv.lock` and an MCP
+server script. `Definition.load()` validates the manifest, local entrypoint
+paths and self-contained JSON Schemas. All source and lock bytes form the
+definition hash. Installing changed content under an existing id/version is
+refused; publish a new version. Installed images and locked environments live
+under `<qmx_home>/definitions/<hash>` and `environments/<hash>`.
+
+`Supervisor(home).install(path, trust="first_party")` installs the lock with
+`uv sync --locked --no-dev --no-editable --no-install-project`. T1 accepts
+first-party, operator-authored or explicitly reviewed code. The default
+`trust="agent"` refuses installation until review or T2/T3 (P17).
+
+`start`, `stop`, `restart`, `status`, `registry`, `call` and `resource` operate
+on actual subprocesses and their long-lived stdio MCP connections. A volume
+lease gives one supervisor ownership of each app. Each app writes its own
+WAL `app.db`, optional agent `memory.db`, `data/`, `blobs/` and `logs/` under
+`<qmx_home>/apps/<id>`. Restart retains this volume. Host-restart state is
+reported as disconnected until a new connection is established.
+
+The bootstrap uses the volume as cwd, home and temp directories. Its explicit
+environment includes the app venv path, required OS variables and only the
+declared Credential Manager secrets. Secret declarations map environment
+names to `qmx/<name>` services (username `<name>`); secret values are absent
+from argv/configuration and redacted from captured stderr and tool errors.
+Python audit checks refuse ordinary filesystem and SQLite writes outside
+the volume, including resolved link escapes. This is a trusted T1 convention
+with a supervisor check, not an OS security sandbox: native code can bypass
+Python audit hooks. Use P17 isolation for untrusted code. T1 logs declared
+egress and data-read capabilities; P17 enforces egress.
+
+Windows Job Objects enforce aggregate job memory in MiB, a CPU hard cap as
+a percentage, and process-tree termination on close. The native CPU limit
+API supplements pywin32's Job Object bindings. Linux uses `RLIMIT_AS`,
+`RLIMIT_CPU`, process groups and psutil termination; it has no CPU percentage
+cap. Heartbeats meter subprocess CPU seconds, RSS, scheduled runs and errors.
+MCP tool calls and scheduled job executions consume the run budget. Error,
+CPU, run and heartbeat breaches stop the process tree and persist a reason.
+Scheduled Python files define `run()`; the optional interval is in seconds.
+
+An artifact-producing tool returns `{"output": "<provides name>", "data": ...}`.
+The host validates its declared schema, writes canonical JSON to the producer's
+`blobs/<sha256>.json`, registers it and returns an `artifact_ref`. Pass that
+reference under a declared feed argument to a consumer. The host checks its
+registration, content hash, producer schema and consumer schema before making
+an immutable copy available in the consumer's volume. Consumers receive
+`{"ref": ..., "path": "blobs/imports/<sha256>.json"}`; they never access the
+producer's mutable database or a shared in-memory bus.
+
+`examples/apps/exchange-status` records explicit observations and exposes an
+MCP HTML resource from its persisted database. `weekend-watcher` runs a real
+QMX agent graph against a recorded local model fixture and writes a summary
+artifact. Its agent-core dependency is pinned to a reviewed Git commit so
+the lock remains portable after image installation. Neither example requires
+live keys or CLIProxy. App testing, publication and road-to-live evidence
+remain P14 responsibilities.
