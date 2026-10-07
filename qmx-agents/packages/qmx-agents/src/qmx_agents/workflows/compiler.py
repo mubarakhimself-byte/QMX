@@ -122,6 +122,8 @@ def agent_context(
         checkpointer=checkpointer,
         general_purpose_subagent=node.general_purpose_subagent,
         memory=None,
+        memory_role="headless",
+        memory_resources=[],
     )
 
 
