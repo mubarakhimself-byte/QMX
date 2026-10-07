@@ -20,5 +20,7 @@ reads an event page using the same event store.
 Sessions are append-only typed blocks. Library save/search is a minimal durable
 catalog; indexing and content-addressed Library storage belong to P22. Settings
 are `settings.toml`; use `credential_ref` instead of embedding secrets. Runs and
-jobs are recorded by their owners. Cancellation without a runner and app/workflow
+jobs are recorded by their owners, which can register a cancellation handle.
+`cancel_requested` is an acknowledgement; the owner records the terminal state.
+Cancellation without a runner and app/workflow
 operations without their owning packets return `not_implemented` explicitly.

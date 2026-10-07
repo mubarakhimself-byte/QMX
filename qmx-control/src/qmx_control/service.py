@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import tomllib
 import uuid
-from collections.abc import AsyncIterator, Generator
+from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Literal, cast
@@ -90,6 +90,7 @@ class ControlService:
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -247,9 +248,26 @@ class ControlService:
         if offset < 0 or not 1 <= limit <= 1000:
             raise ControlError("invalid_page", "Use offset >= 0 and limit between 1 and 1000.")
 
-    def record_work(self, kind: WorkKind, work_id: str, data: Document) -> Document:
+    def record_work(
+        self,
+        kind: WorkKind,
+        work_id: str,
+        data: Document,
+        cancel: Callable[[], None] | None = None,
+    ) -> Document:
         """Called by the owner of a real run or job to publish its state."""
         with self._lock, self._connect() as db:
+            if cancel is not None:
+                self._cancellers[kind, work_id] = cancel
+            if data.get("status") in {
+                "complete",
+                "completed",
+                "failed",
+                "cancelled",
+                "canceled",
+                "stopped",
+            }:
+                self._cancellers.pop((kind, work_id), None)
             db.execute(
                 "INSERT INTO work VALUES(?,?,?) ON CONFLICT(kind,id) "
                 "DO UPDATE SET data=excluded.data",
@@ -276,13 +294,35 @@ class ControlService:
         return self._work_list("jobs", offset, limit)
 
     def _cancel(self, kind: WorkKind, work_id: str) -> Document:
-        with self._connect() as db:
-            if (
-                db.execute("SELECT 1 FROM work WHERE kind=? AND id=?", (kind, work_id)).fetchone()
-                is None
-            ):
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT data FROM work WHERE kind=? AND id=?", (kind, work_id)
+            ).fetchone()
+            if row is None:
                 raise ControlError("not_found", f"Unknown {kind} id.", 404)
-        return self._unavailable(f"{kind}.cancel", "P12/P22")
+            data = _document(row[0])
+            if data.get("status") in {
+                "complete",
+                "completed",
+                "failed",
+                "cancelled",
+                "canceled",
+                "stopped",
+            }:
+                return {**data, "id": work_id}
+            cancel = self._cancellers.get((kind, work_id))
+        if cancel is None:
+            return self._unavailable(f"{kind}.cancel", "a connected run/job owner (P12/P22)")
+        try:
+            cancel()
+        except Exception as error:
+            raise ControlError(
+                "cancel_failed", "The work owner could not accept cancellation.", 409
+            ) from error
+        result: Document = {"id": work_id, "status": "cancel_requested"}
+        with self._lock, self._connect() as db:
+            self._event(db, kind, work_id, result)
+        return result
 
     def runs_cancel(self, run_id: str) -> Document:
         """Cancel a run through its owner; unavailable until the runner is connected."""
