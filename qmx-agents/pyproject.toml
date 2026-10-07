@@ -2,8 +2,8 @@
 #
 # Nested beside the parent QMX/QMF workspace: own SemVer ladder in lockstep with
 # QMF, package version display-only provenance (AR-Q01, AR-Q11; DEC-0335).
-# Members are the three QMA packages only; qma-ui-contract is a deferred stub
-# outside the member set (GAP-0081; AR-Q08). Desk plugins live under plugins/
+# Members are the three QMA packages only; qma-ui-contract remains deferred
+# (GAP-0081; AR-Q08). Desk plugins live under plugins/
 # and register through the qma-core PluginManifest / PluginContext surface.
 
 [project]

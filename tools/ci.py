@@ -16,7 +16,7 @@ def main() -> int:
     agents = ROOT / "qmx-agents"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
-        (agents, ["sync", "--frozen", "--all-packages", "--extra", "memory-extraction"]),
+        (agents, ["sync", "--frozen", "--all-packages"]),
     ]
     for workspace in (ROOT, agents):
         for task in ("fmt-check", "lint", "types"):

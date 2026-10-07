@@ -124,8 +124,7 @@ jobs:
         run: echo "UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/qmx-agents-venv" >> "$GITHUB_ENV"
       - name: Sync the nested workspace
         id: sync
-        # Extraction is opt-in at runtime, but its tests are mandatory here.
-        run: uv sync --frozen --all-packages --extra memory-extraction
+        run: uv sync --frozen --all-packages
       - name: Nested Tier-1 fmt-check
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run --no-sync poe fmt-check

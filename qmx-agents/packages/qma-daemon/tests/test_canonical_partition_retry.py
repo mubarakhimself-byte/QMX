@@ -19,7 +19,7 @@ from qma.daemon.request_runtime.providers import ProviderError
 from qma.daemon.taskgraph.join import JoinArrival, JoinPartitionStatus, JoinWatermark, WatermarkKind
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION
 from qmf.core import is_refusal
-from test_authored_graphs import configure_graph, graph_host
+from support.authored_graph import configure_graph, graph_host
 from test_request_runtime_daemon import receipt, rpc, submit_params, value, ws_connect
 
 
