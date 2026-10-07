@@ -41,6 +41,7 @@ These are facts found in the official docs that change what the packets say. Fol
   - https://docs.langchain.com/oss/python/langchain/agents.md
   - https://docs.langchain.com/oss/python/langchain/middleware/built-in.md
   - https://docs.langchain.com/oss/python/langchain/middleware/custom.md
+  - https://reference.langchain.com/python/langchain-core/callbacks/base/AsyncCallbackHandler/on_chat_model_start.md (P07 pre-compression callback)
   - https://docs.langchain.com/oss/python/langchain/models.md
   - https://docs.langchain.com/oss/python/langchain/human-in-the-loop.md
   - https://docs.langchain.com/oss/python/langchain/test/unit-testing.md
@@ -90,6 +91,7 @@ These are facts found in the official docs that change what the packets say. Fol
   - https://reference.langchain.com/python/deepagents/middleware/async_subagents/AsyncSubAgent.md
   - https://reference.langchain.com/python/deepagents/backends/composite/CompositeBackend.md
   - https://reference.langchain.com/python/deepagents/backends/store/StoreBackend.md
+  - https://reference.langchain.com/python/deepagents/middleware/summarization/create_summarization_middleware.md (P07 preserves library compaction and history offloading)
   - https://reference.langchain.com/python/deepagents/middleware/filesystem/FilesystemPermission.md
   - Repo README: https://raw.githubusercontent.com/langchain-ai/deepagents/main/README.md
 - Key APIs:
