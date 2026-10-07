@@ -15,6 +15,7 @@ from deepagents import (
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware.subagents import SubAgentMiddleware
 from langchain.agents.middleware import (
     AgentMiddleware,
     ModelCallLimitMiddleware,
@@ -143,12 +144,20 @@ class BuildContext:
     memory_role: Literal["primary", "subagent", "scheduled", "headless"] = "primary"
     memory_approval: Approval | None = None
     memory_resources: list[MemoryManager] = field(default_factory=list[MemoryManager])
+    general_purpose_subagent: bool = True
 
     async def close_memory(self) -> None:
         for manager in reversed(self.memory_resources):
             await manager.close()
         self.memory_resources.clear()
         self.memory = None
+
+
+class _NoDelegation(AgentMiddleware[Any, Any, Any]):
+    @property
+    def name(self) -> str:
+        # Deep Agents replaces its default middleware when a name matches.
+        return "SubAgentMiddleware"
 
 
 async def build_agent(
@@ -299,7 +308,7 @@ async def _build(
         harness_profile.update(
             ctx.router.config.harness_profiles.get(key, {}).get("general_purpose_subagent", {})
         )
-    if harness_profile.get("enabled") is not False and not any(
+    if ctx.general_purpose_subagent and harness_profile.get("enabled") is not False and not any(
         item["name"] == "general-purpose" for item in subagents
     ):
         subagents.append(
@@ -321,11 +330,18 @@ async def _build(
                 interrupt_on={} if ctx.journal else dict(spec.interrupt_on),
             )
         )
+    middleware = guards(spec.name)
+    if not ctx.general_purpose_subagent:
+        middleware.append(
+            SubAgentMiddleware(backend=backend, subagents=subagents)
+            if subagents
+            else _NoDelegation()
+        )
     return create_deep_agent(
         model=model,
         tools=tools,
         system_prompt=spec.system_prompt.read_text(encoding="utf-8"),
-        middleware=guards(spec.name),
+        middleware=middleware,
         subagents=subagents,
         skills=spec.skills or None,
         permissions=spec.permissions.rules(),

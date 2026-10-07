@@ -1,0 +1,43 @@
+{
+  "version": "workflow.v1",
+  "name": "ingest-backtest-report",
+  "entry": "ingest",
+  "nodes": [
+    {
+      "id": "ingest",
+      "kind": "tool",
+      "tool": "qmx-data.read_bars",
+      "args": {"symbol": "EURUSD", "timeframe": "1m"},
+      "outputs": {"result": {"schema": {"type": "object"}}}
+    },
+    {
+      "id": "backtest",
+      "kind": "tool",
+      "tool": "qmx-backtest.run_backtest",
+      "inputs": {"bars": {"schema": {"type": "object"}, "required": true}},
+      "args": {"spec": {"config_ref": "recorded"}},
+      "outputs": {"result": {"schema": {"type": "object"}}}
+    },
+    {
+      "id": "report",
+      "kind": "tool",
+      "tool": "qmx-research.library_save",
+      "inputs": {"run": {"schema": {"type": "object"}, "required": true}},
+      "args": {
+        "artifact": {
+          "name": "recorded-report",
+          "kind": "report",
+          "content": {
+            "bars": {"$input": "/values/ingest/result/result"},
+            "backtest": {"$input": "/ports/run/result"}
+          }
+        }
+      },
+      "outputs": {"result": {"schema": {"type": "object"}}}
+    }
+  ],
+  "edges": [
+    {"source": {"node": "ingest", "port": "result"}, "target": {"node": "backtest", "port": "bars"}, "mapping": "one"},
+    {"source": {"node": "backtest", "port": "result"}, "target": {"node": "report", "port": "run"}, "mapping": "one"}
+  ]
+}
