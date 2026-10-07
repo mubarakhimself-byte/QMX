@@ -112,7 +112,7 @@ def _mcp_method(method: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def create_app(
-    service: ControlService, token: str | None = None, ui_origin: str = "http://localhost:5173"
+    service: ControlService, token: str | None = None, ui_origin: str = "http://127.0.0.1:5173"
 ) -> FastAPI:
     token = token or local_token()
     mcp_app = create_mcp(service).http_app(path="/")

@@ -25,7 +25,7 @@ def main() -> int:
     parser.add_argument("command", choices=["serve", "start", "status", "stop"])
     parser.add_argument("--home", type=Path, default=default_home())
     parser.add_argument("--port", type=int, default=8766)
-    parser.add_argument("--ui-origin", default="http://localhost:5173")
+    parser.add_argument("--ui-origin", default="http://127.0.0.1:5173")
     args = parser.parse_args()
     home: Path = args.home.resolve()
     home.mkdir(parents=True, exist_ok=True)
