@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.tools import BaseTool, tool
 from qmb.results.interpret import compare_runs
@@ -115,6 +115,14 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         artifact = ctx.artifact(run_id)
         if artifact.kind != "backtest":
             raise ValueError("Use the run_id returned by run_backtest; this ref is not a backtest")
+        content: Any = artifact.content
+        if not isinstance(content, dict) or not {
+            "data_points_processed",
+            "filled",
+            "stream_order",
+            "slices",
+        }.issubset(cast("dict[str, Any]", content)):
+            raise ValueError("Invalid backtest content; use the run_id returned by run_backtest")
         return ctx.output(
             {"run_id": run_id, "name": artifact.name, "status": "completed"},
             "status",
@@ -149,6 +157,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Compare stored CT-32 artifacts field by field using QMB, without interpreting HTML."""
         first = ctx.artifact(left).content
         second = ctx.artifact(right).content
+        if not isinstance(first, dict) or not isinstance(second, dict):
+            raise ValueError("Select backtest or CT-32 object artifacts with library_search")
+        first = cast("dict[str, Any]", first)
+        second = cast("dict[str, Any]", second)
         comparison = unwrap(
             compare_runs(
                 first.get("performance_result", first), second.get("performance_result", second)

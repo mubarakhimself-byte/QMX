@@ -140,6 +140,18 @@ def test_artifact_spill_restart_and_ref_confinement(context: DomainContext) -> N
         reopened.artifact(saved["ref"])
 
 
+def test_malformed_library_artifacts_have_actionable_backtest_errors(
+    context: DomainContext,
+) -> None:
+    ref = context.save(Artifact(name="malformed", kind="backtest", content=None))["ref"]
+    functions = domain_functions(context)["backtest"]
+    for name in ("backtest_status", "backtest_results"):
+        with pytest.raises(ValueError, match="run_id returned by run_backtest"):
+            functions[name](run_id=ref)
+    with pytest.raises(ValueError, match="library_search"):
+        functions["compare_runs"](left=ref, right=ref)
+
+
 def test_order_proposal_cannot_carry_execution_authority() -> None:
     proposal = {
         "account": "recorded",
