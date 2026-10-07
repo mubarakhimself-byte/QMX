@@ -15,6 +15,7 @@ dependencies = [
     "PyYAML==6.0.3",
     "httpx==0.28.1",
     "langgraph-checkpoint-sqlite==3.1.1",
+    "qmx-tools",
 ]
 
 [build-system]
@@ -24,6 +25,9 @@ build-backend = "uv_build"
 # Keep the strangler independent of the legacy workspace and its older pins.
 [tool.uv.workspace]
 members = []
+
+[tool.uv.sources]
+qmx-tools = { path = "../qmx-tools", editable = true }
 
 [dependency-groups]
 dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-cov>=7,<8", "pytest-xdist>=3.8,<4", "poethepoet==0.48.0"]

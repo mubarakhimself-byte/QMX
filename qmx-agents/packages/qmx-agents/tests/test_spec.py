@@ -32,6 +32,24 @@ def call(name: str, args: dict[str, Any] | None = None) -> AIMessage:
     return AIMessage(content="", tool_calls=[{"name": name, "args": args or {}, "id": name}])
 
 
+def test_default_domain_registry_is_used_by_build_agent(
+    tmp_path: Path, config: RouterConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("QMX_TOOLS_ROOT", str(tmp_path / "volume"))
+    spec = write_spec(tmp_path, "tools: [qmx-research.library_save]\n")
+    model = fake(
+        call(
+            "qmx_research_library_save",
+            {"artifact": {"name": "report", "kind": "note", "content": "recorded"}},
+        ),
+        "saved",
+    )
+    graph = compiled(spec, BuildContext(router=ModelRouter(config, models=fake_models(model))))
+    result = graph.invoke({"messages": [{"role": "user", "content": "Save this report"}]})
+    assert result["messages"][-1].content == "saved"
+    assert len(list((tmp_path / "volume/artifacts").glob("*.json"))) == 1
+
+
 def test_valid_spec_resolves_paths_and_all_fields(tmp_path: Path) -> None:
     spec = write_spec(
         tmp_path,

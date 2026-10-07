@@ -19,6 +19,7 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from qmx_tools import default_tool_registry
 
 from qmx_agents.memory import (
     Approval,
@@ -117,7 +118,7 @@ def load_spec(path: str | Path) -> AgentSpec:
 class BuildContext:
     router: ModelRouter
     run: RunContext = field(default_factory=RunContext)
-    tools: dict[str, BaseTool] = field(default_factory=dict[str, BaseTool])
+    tools: dict[str, BaseTool] = field(default_factory=default_tool_registry)
     workflows: dict[str, Runnable[Any, Any]] = field(default_factory=dict[str, Runnable[Any, Any]])
     backend: BackendProtocol | None = None
     checkpointer: BaseCheckpointSaver[Any] | None = None

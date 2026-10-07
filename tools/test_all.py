@@ -58,6 +58,12 @@ def main() -> int:
             ["python", "-m", "pytest", "tests", "-q"],
             ["tests"],
         ),
+        (
+            "qmx-tools",
+            ROOT / "qmx-agents/packages/qmx-tools",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        ),
     ]
     suites.append(
         ("qmx-control", ROOT / "qmx-control", ["python", "-m", "pytest", "tests", "-q"], ["tests"])
