@@ -21,9 +21,9 @@ from qma.daemon.request_runtime.spot_tools import spot_query_descriptor
 from qma.wire.initialize import WIRE_PROTOCOL_VERSION
 from qma.wire.invocation_envelope import compute_input_hash
 from qmf.core import is_ok, is_refusal
+from qmn.testing.spot_paper import open_account, tick
 from test_pairing_listener import _pair_over_listener  # pyright: ignore[reportPrivateUsage]
 from test_request_runtime_daemon import rpc, ws_connect
-from test_spot_paper_slice import open_account, tick
 
 
 def seed(root: Path) -> dict[str, Any]:

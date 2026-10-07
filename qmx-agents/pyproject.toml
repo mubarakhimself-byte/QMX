@@ -34,6 +34,14 @@ qmf-registry = { path = "../packages/qmf-registry", editable = true }
 qmf-data = { path = "../packages/qmf-data", editable = true }
 qmf-risk = { path = "../packages/qmf-risk", editable = true }
 
+# Shared spot fixtures import the node and its parent-workspace dependencies in tests.
+qmn = { path = "../qmn", editable = true }
+qmb = { path = "../qmb", editable = true }
+qml = { path = "../qml", editable = true }
+qmf-indicators = { path = "../packages/qmf-indicators", editable = true }
+qmf-structure = { path = "../packages/qmf-structure", editable = true }
+qmf-venue = { path = "../packages/qmf-venue", editable = true }
+
 [dependency-groups]
 dev = [
     "ruff==0.16.5",
@@ -41,12 +49,16 @@ dev = [
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
     "poethepoet==0.48.0",
+    "pytest-xdist>=3.8,<4",
+    "qmn",
 ]
 # Pulls qma-daemon (and its qmf-data/registry/risk path edges) into the gate
 # environment so store engines are present at import/test time.
 qma-runtime = ["qma-daemon"]
 
 [tool.pytest.ini_options]
+addopts = "-n auto --dist worksteal"
+markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages", "tests"]
 pythonpath = [
     "packages/qma-core/src",
@@ -56,6 +68,10 @@ pythonpath = [
     "../packages/qmf-data/src",
     "../packages/qmf-registry/src",
     "../packages/qmf-risk/src",
+    "../qmn/src",
+    "../packages/qmf-venue/src",
+    "../qmb/src",
+    "../qml/src",
 ]
 
 [tool.ruff]
@@ -94,6 +110,10 @@ extraPaths = [
     "../packages/qmf-data/src",
     "../packages/qmf-registry/src",
     "../packages/qmf-risk/src",
+    "../qmn/src",
+    "../packages/qmf-venue/src",
+    "../qmb/src",
+    "../qml/src",
 ]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
@@ -107,7 +127,7 @@ lint = "ruff check packages tests examples plugins"
 # `poe.exe` itself is also blocked under this nested .venv (os error 4551); after
 # `uv sync` run `python scripts/ensure_poe_shim.py` so `uv run poe` uses poe.cmd.
 types = "python -m pyright"
-test = "pytest packages tests --cov=packages/qma-core/src --cov=packages/qma-wire/src --cov=packages/qma-daemon/src --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
+test = "python -m pytest packages tests --cov=packages/qma-core/src --cov=packages/qma-wire/src --cov=packages/qma-daemon/src --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
 cov-report = "python ../tools/nested_coverage_report.py"
 
 [tool.poe.tasks.check]
