@@ -15,6 +15,8 @@ from typing import Literal, cast
 
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from qmx_apps.manifest import Trust
+from qmx_apps.supervisor import Supervisor
 
 type Document = dict[str, JsonValue]
 type SettingsSection = Literal["providers", "mcp_servers", "budgets", "memory_provider"]
@@ -91,6 +93,7 @@ class ControlService:
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
+        self._apps: Supervisor | None = None
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -339,26 +342,24 @@ class ControlService:
         )
 
     def apps_list(self) -> list[Document]:
-        """List installed apps (requires the mini-app supervisor)."""
-        self._unavailable("apps.list")
-        return []
+        """List installed definitions and their actual runtime state."""
+        return self.app_runtime().list()
 
     def apps_get(self, app_id: str) -> Document:
         """Read an app definition and runtime status."""
-        return self._unavailable("apps.get")
+        return self.app_runtime().get(app_id)
 
-    def apps_create(self, path: str) -> Document:
+    def apps_create(self, path: str, trust: Trust = "agent") -> Document:
         """Install an app definition from a local package directory."""
-        return self._unavailable("apps.create")
+        return self.app_runtime().install(Path(path), trust=trust)
 
-    def apps_update(self, app_id: str, path: str) -> Document:
+    def apps_update(self, app_id: str, path: str, trust: Trust = "agent") -> Document:
         """Install a new immutable version of an app."""
-        return self._unavailable("apps.update")
+        return self.app_runtime().install(Path(path), trust=trust, expected_id=app_id)
 
     def apps_versions(self, app_id: str) -> list[Document]:
         """List immutable app definitions."""
-        self._unavailable("apps.versions")
-        return []
+        return self.app_runtime().versions(app_id)
 
     def apps_test(self, app_id: str) -> Document:
         """Run road-to-live validation (requires P14)."""
@@ -370,16 +371,57 @@ class ControlService:
 
     def apps_start(self, app_id: str) -> Document:
         """Start an installed app instance."""
-        return self._unavailable("apps.start")
+        return self.app_runtime().start(app_id)
 
     def apps_stop(self, app_id: str) -> Document:
         """Stop an app's process tree."""
-        return self._unavailable("apps.stop")
+        return self.app_runtime().stop(app_id)
 
     def apps_logs(self, app_id: str, limit: int = 100) -> list[Document]:
         """Read structured app logs."""
-        self._unavailable("apps.logs")
-        return []
+        return self.app_runtime().logs(app_id, limit)
+
+    def apps_restart(self, app_id: str) -> Document:
+        """Restart the selected immutable definition, retaining its volume."""
+        return self.app_runtime().restart(app_id)
+
+    def apps_registry(self) -> list[Document]:
+        """Discover connected MCP servers and their tools and resources."""
+        return self.app_runtime().registry()
+
+    def apps_call(self, app_id: str, tool: str, arguments: Document) -> Document:
+        """Call a connected app; feed arguments must be registered artifact refs."""
+        return self.app_runtime().call(app_id, tool, arguments)
+
+    def apps_resource(self, app_id: str, uri: str) -> list[Document]:
+        """Read an app's MCP resource, including ui:// panels."""
+        return self.app_runtime().resource(app_id, uri)
+
+    def app_runtime(self) -> Supervisor:
+        with self._lock:
+            if self._apps is None:
+                self._apps = Supervisor(self.home, event_sink=self._app_event)
+            return self._apps
+
+    def _app_event(self, app_id: str, data: Document) -> None:
+        with self._lock, self._connect() as db:
+            self._event(db, "apps", app_id, data)
+        instance_id = data.get("instance_id")
+        if isinstance(instance_id, str):
+            status = data.get("status")
+            work = {**data, "status": "failed" if status == "tripped" else status}
+
+            def cancel() -> None:
+                self.apps_stop(app_id)
+
+            self.record_work(
+                "jobs", instance_id, work, cancel=cancel if status == "running" else None
+            )
+
+    def close(self) -> None:
+        if self._apps is not None:
+            self._apps.close()
+            self._apps = None
 
     def apps_evidence(self, app_id: str) -> list[Document]:
         """Read app evidence records (requires P14)."""
