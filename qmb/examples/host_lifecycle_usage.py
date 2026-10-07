@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from contextlib import ExitStack
 from pathlib import Path
+from socketserver import StreamRequestHandler, TCPServer
 from tempfile import TemporaryDirectory
+from threading import Thread
 
 from qmb.doors.cli import (
     COMMAND_GROUPS,
@@ -42,6 +45,18 @@ from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
 from qmf.core.refusal import is_ok, is_refusal
 
 
+class ReadinessHandler(StreamRequestHandler):
+    def handle(self) -> None:
+        header = self.rfile.read(4)
+        request = json.loads(self.rfile.read(int.from_bytes(header, "big")))
+        assert request["host_control"] == "example-token"
+        assert request["verb"] == "status"
+        reply = json.dumps({"ok": True, "status": {"lock": "held", "pid": os.getpid()}}).encode(
+            "utf-8"
+        )
+        self.wfile.write(len(reply).to_bytes(4, "big") + reply)
+
+
 def main() -> None:
     assert "host" not in INSPECT_SHA_COMMAND_GROUPS
     assert COMMAND_GROUPS[-1] == "host"
@@ -58,7 +73,12 @@ def main() -> None:
             "pair",
         )
     )
-    assert HOST_CONFIGURE_COMMANDS == ("pairing-ttl", "source-origin", "dest-placement")
+    assert HOST_CONFIGURE_COMMANDS == (
+        "pairing-ttl",
+        "artifact-stage-max-bytes",
+        "source-origin",
+        "dest-placement",
+    )
     assert HOST_PAIR_COMMANDS == ("revoke",)
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
@@ -73,8 +93,14 @@ def main() -> None:
     assert product.name != INSPECT_CWD_RELATIVE_ROOT
     print("product QMA_DAEMON_ROOT is not qma-daemon-data")
 
-    with TemporaryDirectory() as raw:
+    with TemporaryDirectory() as raw, ExitStack() as stack:
         root = Path(raw)
+        # The start door now requires an authenticated readiness reply, not just files.
+        server = stack.enter_context(TCPServer(("127.0.0.1", 0), ReadinessHandler))
+        listener = Thread(target=server.serve_forever, daemon=True)
+        listener.start()
+        stack.callback(listener.join)
+        stack.callback(server.shutdown)
 
         def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
             assert argv[-2:] == ("-m", "qma.daemon")
@@ -102,7 +128,7 @@ def main() -> None:
             assert is_ok(token), token
             bind = write_bytes_exclusive_no_follow(
                 root / "host_control.bind",
-                json.dumps({"host": "127.0.0.1", "port": 19236}).encode("utf-8"),
+                json.dumps({"host": "127.0.0.1", "port": server.server_address[1]}).encode("utf-8"),
                 contain_within=root,
             )
             assert is_ok(bind), bind

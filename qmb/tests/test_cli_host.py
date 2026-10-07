@@ -1450,7 +1450,7 @@ def test_failed_start_reaps_owned_child(
 def test_start_refuses_unready_authenticated_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: Mapping[str, object]
 ) -> None:
-    from qmf.core import Ok  # noqa: PLC0415
+    from qmf.core import Ok
 
     _write_lock(tmp_path, os.getpid())
 
@@ -1465,7 +1465,11 @@ def test_timed_out_interpreter_cannot_keep_or_later_acquire_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     real_spawn = host_module._default_spawn  # pyright: ignore[reportPrivateUsage]
-    code = "import os,json,time,pathlib,sys; r=pathlib.Path(sys.argv[1]); (r/'.daemon_writer').write_text(json.dumps({'pid':os.getpid()})); time.sleep(60)"
+    code = (
+        "import os,json,time,pathlib,sys; r=pathlib.Path(sys.argv[1]); "
+        "(r/'.daemon_writer').write_text(json.dumps({'pid':os.getpid()})); "
+        "time.sleep(60)"
+    )
 
     def spawn(
         argv: tuple[str, ...], *, env: Mapping[str, str], root: Path
