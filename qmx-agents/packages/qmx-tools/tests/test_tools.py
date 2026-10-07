@@ -75,6 +75,9 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
         assert len(page["result"]) == 2
         expected_kind = {"read_bars": "bars", "read_features": "features", "calendar": "calendar"}
         assert all(row["kind"] == expected_kind[name] for row in page["result"])
+        instant = 1_700_000_000_000_000_000 + 60_000_000_000
+        window = data[name](symbol="EURUSD", timeframe="1m", start=instant, end=instant)
+        assert [row["value"] for row in window["result"]] == [1]
         assert page["next_cursor"] == 2
         last = data[name](symbol="EURUSD", timeframe="1m", cursor=2)
         assert last["result"][0]["value"] == 2
