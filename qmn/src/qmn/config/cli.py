@@ -70,8 +70,10 @@ def _open_absolute_directory(path: Path) -> int:
 
 
 def _open_parent(root: Path, relative: Path, *, create: bool) -> tuple[int, str]:
-    if not relative.parts or relative.is_absolute() or any(
-        part in {"", ".", ".."} for part in relative.parts
+    if (
+        not relative.parts
+        or relative.is_absolute()
+        or any(part in {"", ".", ".."} for part in relative.parts)
     ):
         raise ValueError("config path must be a normalized relative path")
     parent_fd = _open_absolute_directory(root)
@@ -150,10 +152,14 @@ def _write_new(root: Path, relative: Path, payload: bytes) -> None:
             view = view[written:]
         os.fsync(fd)
         published_info = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
-        if not stat.S_ISREG(published_info.st_mode) or (
-            published_info.st_dev,
-            published_info.st_ino,
-        ) != created_identity:
+        if (
+            not stat.S_ISREG(published_info.st_mode)
+            or (
+                published_info.st_dev,
+                published_info.st_ino,
+            )
+            != created_identity
+        ):
             raise OSError(errno.EPERM, "config leaf changed during creation")
         os.fsync(parent_fd)
     except BaseException:

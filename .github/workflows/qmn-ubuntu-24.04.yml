@@ -8,10 +8,10 @@ name: QMN ubuntu-24.04 lane
 # contract (systemd-analyze when available).
 on:
   push:
-    branches: [main, integration]
+    branches: [main, integration, 'rebuild/**']
     tags: ['factory-candidate/**']
   pull_request:
-    branches: [main, integration]
+    branches: [main, integration, 'rebuild/**']
 
 permissions:
   contents: read

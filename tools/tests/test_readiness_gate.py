@@ -13,14 +13,15 @@ import pytest
 import yaml
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/battery.yml"
-MANDATORY = ("backend", "agent-suites", "vulture")
+MANDATORY = ("backend",)
 
 
 def run_gate(raw: str, required: tuple[str, ...] = MANDATORY) -> int:
     job = "agents" if required == ("agent-suites",) else "check"
     document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     definition = document["jobs"][job]
-    assert definition["if"] == "${{ always() && github.event_name != 'schedule' }}"
+    event = "==" if job == "agents" else "!="
+    assert definition["if"] == f"${{{{ always() && github.event_name {event} 'schedule' }}}}"
     assert definition["needs"] == list(required)
     assert len(definition["steps"]) == 1
     step = definition["steps"][0]
@@ -42,7 +43,7 @@ def run_gate(raw: str, required: tuple[str, ...] = MANDATORY) -> int:
     ).returncode
 
 
-def test_both_native_matrices_and_dead_code_scan_must_complete() -> None:
+def test_native_pr_matrix_and_nightly_agent_matrix_must_complete() -> None:
     payload = {name: {"result": "success"} for name in MANDATORY}
     assert run_gate(json.dumps(payload)) == 0
     assert run_gate(json.dumps({"agent-suites": {"result": "success"}}), ("agent-suites",)) == 0

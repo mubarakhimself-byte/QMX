@@ -173,10 +173,10 @@ class QmfHostedDecisionJournal:
         body = cast("Mapping[str, object]", event)
         if body.get("class") == DECISION_TRANSCRIPT_CLASS:
             event_type = JournalEventType.DATA_QUALITY
-        elif (
-            body.get("phase") == "before-dispatch"
-            and body.get("kind") in {"command", AMEND_JOURNAL_KIND}
-        ):
+        elif body.get("phase") == "before-dispatch" and body.get("kind") in {
+            "command",
+            AMEND_JOURNAL_KIND,
+        }:
             event_type = JournalEventType.ORDER
         else:
             return invalid(

@@ -1229,9 +1229,8 @@ def recover_alternative_run_receipt(
                 "state": _plain(evaluation.value.accounting_state),
             }
         )
-        if (
-            is_refusal(state_after_fp)
-            or state_after_fp.value.value != payload.get("accounting_state_after_fp1")
+        if is_refusal(state_after_fp) or state_after_fp.value.value != payload.get(
+            "accounting_state_after_fp1"
         ):
             return policy("trial_recovery", "durable accounting state reproduces its fp1")
         output_fp = fingerprint(
@@ -1300,9 +1299,7 @@ def recover_alternative_run_receipt(
             or event.payload.get("command_owner_epoch") != config.command.command_owner_epoch
             for event in labeled_events
         )
-        or {
-            cast(str, event.payload.get("frontier_input_fp1")) for event in labeled_events
-        }
+        or {cast(str, event.payload.get("frontier_input_fp1")) for event in labeled_events}
         != expected_input_fps
     ):
         return policy("trial_recovery", "trial chain has no missing or extra labeled decisions")

@@ -82,9 +82,7 @@ def decode_native_protection_readback(
             "native_identity", "position readback envelope matches the exact account/session/PID"
         )
     trade_data = row.get("tradeData")
-    if (
-        not isinstance(trade_data, Mapping)
-    ):
+    if not isinstance(trade_data, Mapping):
         return policy("native_identity", "ProtoOAPosition tradeData matches the native symbol")
     typed_trade_data = cast("Mapping[str, object]", trade_data)
     if (

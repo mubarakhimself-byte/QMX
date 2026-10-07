@@ -357,6 +357,9 @@ pythonPlatform = "Windows"
 # type-check (Story 1.7); the rest preserves pyright's default exclusions.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tools/tests/fixtures"]
 extraPaths = [
+    "qmx-agents/packages/qma-core/src",
+    "qmx-agents/packages/qma-wire/src",
+    "qmx-agents/packages/qma-daemon/src",
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
     "packages/qmf-data/src",

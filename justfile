@@ -203,3 +203,7 @@ obs:
 # Run every Python suite in its owning environment and print the results.
 test-all:
     uv run python tools/test_all.py
+
+# The PR workflow calls this same runner; suites never overlap.
+ci:
+    uv run python tools/ci.py

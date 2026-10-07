@@ -93,9 +93,7 @@ def build_ui(destination: Path, candidate: str, source: Path) -> None:
     )
 
 
-def _runtime_closure(
-    destination: Path, wheelhouse: Path, root_lock: str, nested_lock: str
-) -> None:
+def _runtime_closure(destination: Path, wheelhouse: Path, root_lock: str, nested_lock: str) -> None:
     """Package the exact locked Linux CPython 3.14 wheel closure."""
     if not wheelhouse.is_dir() or wheelhouse.is_symlink():
         raise RuntimeError("Runtime wheelhouse must be an existing real directory")
@@ -170,14 +168,10 @@ def _runtime_closure(
     inventory: dict[str, object] = {
         "class": RUNTIME_CLASS,
         "target": runtime_target,
-        "requirements": [
-            {"name": name, **requirements[name]} for name in sorted(requirements)
-        ],
+        "requirements": [{"name": name, **requirements[name]} for name in sorted(requirements)],
         "wheels": [
             entry
-            for _, entry in sorted(
-                selected, key=lambda row: cast(str, row[1]["distribution"])
-            )
+            for _, entry in sorted(selected, key=lambda row: cast(str, row[1]["distribution"]))
         ],
     }
     (destination / RUNTIME_INVENTORY_FILENAME).write_text(

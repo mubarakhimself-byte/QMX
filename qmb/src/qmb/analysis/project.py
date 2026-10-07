@@ -1018,17 +1018,13 @@ def _resolve_source_ct29(
             given=expected_cite,
         )
     if source_identity is None:
-        return invalid(
-            "source_ct32", "durable CT-29 resolution requires the stored CT-32 identity"
-        )
+        return invalid("source_ct32", "durable CT-29 resolution requires the stored CT-32 identity")
     from qmb.host.replay_request import ResolvedReplayRequest  # noqa: PLC0415
     from qmb.orchestrator.ledger import read_merge_view  # noqa: PLC0415
 
     config = source.run_config
     request = source.replay_request
-    if not isinstance(config, ResolvedRunConfig) or not isinstance(
-        request, ResolvedReplayRequest
-    ):
+    if not isinstance(config, ResolvedRunConfig) or not isinstance(request, ResolvedReplayRequest):
         return invalid("source_lineage", "projection requires resolved config and request values")
     config_stamp = fingerprint(config.fp1_identity())
     if is_refusal(config_stamp):
@@ -1068,9 +1064,8 @@ def _resolve_source_ct29(
         return source_witness
     expected_data = config.keys.get("data_fingerprint")
     expected_split = config.keys.get("split_fingerprint")
-    if (
-        (expected_data is not None and expected_data != request.source.fingerprint.value)
-        or (expected_split is not None and expected_split != request.split_fp1.value)
+    if (expected_data is not None and expected_data != request.source.fingerprint.value) or (
+        expected_split is not None and expected_split != request.split_fp1.value
     ):
         return policy("source_lineage", "CT-32 data and split refs match the resolved source")
     expected_label = source_identity.get("result_label")
@@ -1081,9 +1076,7 @@ def _resolve_source_ct29(
     )
     if is_refusal(ledger_view):
         return ledger_view
-    matching_lines = tuple(
-        line for line in ledger_view.value if line.run_id == config.fingerprint
-    )
+    matching_lines = tuple(line for line in ledger_view.value if line.run_id == config.fingerprint)
     if len(matching_lines) != 1:
         return policy(
             "terminal_line",
@@ -1155,9 +1148,7 @@ def _resolve_source_ct29(
         net = record.net_realized_pnl()
         if is_refusal(net):
             return net
-        total_fees = Money.try_create(
-            0, record.realized_pnl.currency, record.realized_pnl.scale
-        )
+        total_fees = Money.try_create(0, record.realized_pnl.currency, record.realized_pnl.scale)
         if is_refusal(total_fees):
             return total_fees
         for component in record.cost_components:
@@ -1226,13 +1217,11 @@ def _read_source_binding_witness(
             "source_witness",
             "one durable CT-13 source-binding witness joins this run to its request",
             matches=len(candidates),
-    )
+        )
     event = candidates[0]
     expected_label = source_identity.get("result_label")
     expected_label_map = (
-        cast(Mapping[str, object], expected_label)
-        if isinstance(expected_label, Mapping)
-        else None
+        cast(Mapping[str, object], expected_label) if isinstance(expected_label, Mapping) else None
     )
     label = source.result_label.fp1_identity()
     label_fp = fingerprint(label)
@@ -1316,11 +1305,7 @@ def _ct32_trade_count(identity: Mapping[str, object]) -> Result[int]:
         if exact.get("unit_kind") != "count":
             break
         numerator, denominator = exact.get("num"), exact.get("den")
-        if (
-            type(numerator) is not int
-            or type(denominator) is not int
-            or denominator <= 0
-        ):
+        if type(numerator) is not int or type(denominator) is not int or denominator <= 0:
             break
         count = Fraction(numerator, denominator)
         if count.denominator != 1 or count < 0:

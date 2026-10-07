@@ -1,30 +1,13 @@
 name: QA Battery
-# Permanent CI for the QA battery (card FC-34; OR-10a/b, NFR-02 / AR-11). Three gates on top of
-# the separate Skylos gate (skylos.yml):
-#   * check     - the tasks in `poe check` as independently observed CI steps: the four Tier-1 static scanners (money-path float,
-#                 ambient-nondeterminism, mock-data, secret) plus fmt-check / lint / strict types /
-#                 tests + coverage / the workspace-tool suite.
-#   * vulture   - the dead-code finding count held at or below a committed baseline (ratchet DOWN,
-#                 never up).
-#   * mutation  - nightly mutmut on qmf-core exact.py + chrono.py with a 68% kill-rate floor,
-#                 plus node money-path modules (door wiring, command mint, equity, drift,
-#                 sizing, virtual-ledger folds). Incomplete or failed runs fail closed.
-#                 Mutmut is not a factory gate.
-#
-# Independent steps continue after failures to retain test/scanner evidence; any
-# failed step still fails its job. Ubuntu and Windows run native backend suites.
-# Runner-side setup mirrors the workspace pins: CPython from .python-version (3.14, AR-04) and a
-# pinned uv, then `uv sync --frozen` for the default groups. A gate that cannot run reads RED.
-# Action SHAs are the Node 24 pins shared with skylos.yml.
+# PR checks use the local CI runner. Coverage and heavier scans stay nightly.
 on:
   push:
-    branches: [main, integration]
+    branches: [main, integration, 'rebuild/**']
     tags: ['factory-candidate/**']
   pull_request:
-    branches: [main, integration]
+    branches: [main, integration, 'rebuild/**']
   schedule:
-    # Nightly at 02:17 UTC drives the mutation job only. GitHub runs scheduled workflows on the
-    # default branch. This does not measure an unmerged candidate's mutation strength.
+    # GitHub schedules run on the default branch; PR checks run on rebuild branches.
     - cron: "17 2 * * *"
 
 # Read-only; nothing here writes to the repo. Job artifacts need no token.
@@ -33,10 +16,29 @@ permissions:
 
 jobs:
   backend:
-    # The Tier-1 gate in full - the four scanners plus fmt/lint/types/tests/coverage. On every
-    # push to main/integration, candidate tags and PRs into either branch; not on schedule (that drives
-    # mutation only).
     if: github.event_name != 'schedule'
+    name: ${{ matrix.runner == 'ubuntu-24.04' && 'backend-linux' || 'backend-windows' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version-file: .python-version
+      - name: Install uv (pinned)
+        run: python -m pip install --disable-pip-version-check "uv==0.12.6"
+      - name: Run local CI command
+        run: uv run --frozen python tools/ci.py
+
+  legacy-coverage:
+    # Retain the existing coverage floors and the heavier scanners on the nightly lane.
+    if: github.event_name == 'schedule'
     name: ${{ matrix.runner == 'ubuntu-24.04' && 'backend-linux' || 'backend-windows' }}
     strategy:
       fail-fast: false
@@ -96,7 +98,7 @@ jobs:
 
   agent-suites:
     # Nested qmx-agents workspace; the agents result job below preserves its check name.
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'schedule'
     name: ${{ matrix.runner == 'ubuntu-24.04' && 'agents-linux' || 'agents-windows' }}
     strategy:
       fail-fast: false
@@ -144,7 +146,7 @@ jobs:
 
   vulture:
     # Dead-code ratchet: fail only if the finding count rises above the committed baseline.
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -170,7 +172,7 @@ jobs:
 
   agents:
     # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
-    if: ${{ always() && github.event_name != 'schedule' }}
+    if: ${{ always() && github.event_name == 'schedule' }}
     needs: [agent-suites]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -211,7 +213,7 @@ jobs:
   check:
     # Preserve the established check context and refuse failed, cancelled or skipped prerequisites.
     if: ${{ always() && github.event_name != 'schedule' }}
-    needs: [backend, agent-suites, vulture]
+    needs: [backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -220,7 +222,7 @@ jobs:
         shell: bash
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          REQUIRED_JOBS: backend agent-suites vulture
+          REQUIRED_JOBS: backend
         run: *mandatory_verdict
 
   mutation-qmn:

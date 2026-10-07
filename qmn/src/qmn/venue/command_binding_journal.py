@@ -193,9 +193,7 @@ def _validated_binding(value: object) -> Result[CommandIdBinding]:
     if is_refusal(parsed):
         return parsed
     return Ok(
-        CommandIdBinding(
-            value.venue_client_id, parsed.value, value.account_id, value.session_epoch
-        )
+        CommandIdBinding(value.venue_client_id, parsed.value, value.account_id, value.session_epoch)
     )
 
 
@@ -211,7 +209,12 @@ def _decode_binding_payload(payload: Mapping[str, object]) -> Result[CommandIdBi
         return invalid("command_id_binding", "row contains exact CT-19 identity fields")
     body = cast("Mapping[str, object]", raw)
     if set(body) != {
-        "class", "command_fp1", "account_id", "venue_client_id", "session_epoch", "format_version"
+        "class",
+        "command_fp1",
+        "account_id",
+        "venue_client_id",
+        "session_epoch",
+        "format_version",
     }:
         return invalid("command_id_binding", "row contains exact CT-19 identity fields")
     if (

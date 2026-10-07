@@ -41,7 +41,10 @@ class LangMemExtractor:
         if type(max_candidates) is not int or not 0 < max_candidates <= 16:
             raise ValueError("extraction candidate count must be bounded")
         # Optional package; importing ordinary memory never initializes a model.
-        from langmem import create_memory_manager  # noqa: PLC0415 - optional dependency
+        # LangMem has no py.typed marker; Pyright still checks its source types.
+        from langmem import (  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415
+            create_memory_manager,
+        )
 
         self.manager = create_memory_manager(
             model,
