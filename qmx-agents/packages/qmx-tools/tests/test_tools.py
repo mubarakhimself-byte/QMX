@@ -27,7 +27,10 @@ def context(tmp_path: Path) -> DomainContext:
     ctx.store = unwrap(EvidenceStore(tmp_path / "market").for_world(World.REPLAY)).append_store
     assert ctx.store is not None
     for kind in ("bars", "features", "calendar"):
-        rows = [{"t": 1_700_000_000_000_000_000 + i, "value": i} for i in range(3)]
+        rows = [
+            {"t": 1_700_000_000_000_000_000 + i * 60_000_000_000, "value": i, "kind": kind}
+            for i in range(3)
+        ]
         receipt = unwrap(ctx.store.append_raw(rows))
         ctx.datasets.append(
             Dataset(
@@ -70,6 +73,8 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     for name in ("read_bars", "read_features", "calendar"):
         page = data[name](symbol="EURUSD", timeframe="1m", limit=2)
         assert len(page["result"]) == 2
+        expected_kind = {"read_bars": "bars", "read_features": "features", "calendar": "calendar"}
+        assert all(row["kind"] == expected_kind[name] for row in page["result"])
         assert page["next_cursor"] == 2
         last = data[name](symbol="EURUSD", timeframe="1m", cursor=2)
         assert last["result"][0]["value"] == 2
