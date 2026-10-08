@@ -82,7 +82,9 @@ def main() -> None:
     elif config.get("tier") != "T2":
         import resource  # noqa: PLC0415
 
-        os.setsid()
+        # FastMCP may already have created the subprocess session.
+        if os.getsid(os.getpid()) != os.getpid():
+            os.setsid()
         memory = int(config["memory_mb"]) * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
         cpu = max(1, int(config["cpu_seconds"]) + 1)

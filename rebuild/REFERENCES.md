@@ -364,6 +364,7 @@ P17 additions (fetched 2026-10-08):
 - Litestream Docker: https://litestream.io/guides/docker/
 - systemd service units: https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
 - Subprocess pipe encoding: https://raw.githubusercontent.com/python/cpython/main/Doc/library/subprocess.rst
+- POSIX session ownership: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/os.rst , https://man7.org/linux/man-pages/man2/setsid.2.html
 - rclone filter ordering: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/filtering.md
 
 ---
