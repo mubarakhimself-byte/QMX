@@ -1,0 +1,12 @@
+{
+  "provenance": "Protocol-shaped offline fixture from the official OpenApiMessages.proto and OpenApiModelMessages.proto; not a live capture.",
+  "ProtoOAApplicationAuthReq": {},
+  "ProtoOAGetAccountListByAccessTokenReq": {"ctidTraderAccount": [{"ctidTraderAccountId": "101", "isLive": false}, {"ctidTraderAccountId": "202", "isLive": true}]},
+  "ProtoOAAccountAuthReq": {"ctidTraderAccountId": "101"},
+  "ProtoOASymbolsListReq": {"ctidTraderAccountId": "101", "symbol": [{"symbolId": "1", "symbolName": "EURUSD"}]},
+  "ProtoOASymbolByIdReq": {"ctidTraderAccountId": "101", "symbol": [{"symbolId": "1", "digits": 5, "pipPosition": 4, "minVolume": "100", "stepVolume": "100"}]},
+  "ProtoOATraderReq": {"ctidTraderAccountId": "101", "trader": {"ctidTraderAccountId": "101", "balance": "123456", "depositAssetId": "1", "moneyDigits": 2, "leverageInCents": 5000}},
+  "ProtoOAReconcileReq": {"ctidTraderAccountId": "101", "position": [{"positionId": "7", "positionStatus": "POSITION_STATUS_OPEN", "tradeData": {"symbolId": "1", "volume": "12500", "tradeSide": "BUY"}}]},
+  "ProtoOASubscribeSpotsReq": {"ctidTraderAccountId": "101", "symbolId": "1", "bid": "110001", "ask": "110003", "timestamp": "1700000000000"},
+  "ProtoOAGetTrendbarsReq": {"ctidTraderAccountId": "101", "period": "M1", "symbolId": "1", "trendbar": [{"low": "110000", "deltaOpen": "10", "deltaClose": "15", "deltaHigh": "20", "volume": "25", "utcTimestampInMinutes": 28333333}]}
+}
