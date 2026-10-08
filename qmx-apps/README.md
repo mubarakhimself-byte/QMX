@@ -88,10 +88,12 @@ integrity and records file hashes; transfer the snapshot using `rclone copy`;
 the exact definition on the destination first. This is the narrow node recovery
 path; scheduled online backups remain P13.
 
-Optional `providers.litestream` settings map app ids to credential-free replica
-S3 or local file URLs. The supervisor starts Litestream 0.5.17 with one `replica`, one-second sync
-and daily snapshots. Apps opting in must use SQLite >=3.51.3 and disable
-`wal_autocheckpoint` on every writer connection, as required by Litestream.
+Optional `providers.litestream` settings map app ids to credential-free S3 or
+local file replica URLs. The supervisor starts Litestream 0.5.17 with one
+`replica`, one-second sync and daily snapshots. Apps opting in must supply a
+SQLite >=3.51.3 writer (or a fixed backport) to avoid SQLite's documented
+WAL-reset race; the pinned base's stdlib SQLite is 3.46.1. Disable
+`wal_autocheckpoint` on every writer connection as recommended by Litestream.
 Replica credentials must be declared app secrets; they are injected only at
 instance start. Restart the node supervisor after changing placement or replica
 settings. Live replica recovery requires the operator's bucket credentials.

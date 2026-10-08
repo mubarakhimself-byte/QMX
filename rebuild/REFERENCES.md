@@ -288,6 +288,7 @@ These are facts found in the official docs that change what the packets say. Fol
 - Machine-readable (verified 2026-10-07): https://raw.githubusercontent.com/benbjohnson/litestream.io/main/content/reference/config.md
 - Key facts: YAML with `dbs:` list; each entry has `path:` and a single `replica:` (`url: s3://bucket/path` or `type: s3|sftp|nats|...`); `${VAR}` expansion for secrets; AWS keys via `access-key-id`/`secret-access-key` or env; global `snapshot:` (`interval`, `retention`) and logging settings; run with `litestream replicate`. See D10.
 - Pin: `v0.5.17`.
+- Writer/checkpoint guidance: https://litestream.io/tips/ ; SQLite WAL-reset fix: https://sqlite.org/wal.html#the_wal_reset_bug (fixed in 3.51.3, with 3.44.6 and 3.50.7 backports).
 - Packets: P17.
 
 ## 13. DuckDB
