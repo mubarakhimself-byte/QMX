@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import tempfile
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -25,12 +23,12 @@ if TYPE_CHECKING:
 
 
 def validate(owner: Supervisor, image: Definition, stage: Stage) -> tuple[Document, Document]:
-    from qmx_apps.supervisor import Instance, Supervisor  # noqa: PLC0415
+    from qmx_apps.supervisor import Instance  # noqa: PLC0415
 
     app_id = image.manifest.id
     with tempfile.TemporaryDirectory(prefix="qmx-proof-") as temporary:
         home = Path(temporary)
-        isolated = Supervisor(home, secret_getter=owner.secret_getter, proof_mode=stage)
+        isolated = type(owner)(home, secret_getter=owner.secret_getter, proof_mode=stage)
         volume = Volume(home, app_id)
         volume.create(agents=bool(image.manifest.entrypoints.agents))
         source = Volume(owner.home, app_id)
@@ -41,23 +39,22 @@ def validate(owner: Supervisor, image: Definition, stage: Stage) -> tuple[Docume
         try:
             if stage == "tests":
                 lease = VolumeLease(home, app_id)
-                instance = Instance(image, volume, lease)
-                job_name = f"Local\\qmx-tests-{uuid.uuid4().hex}"
+                instance = Instance(image, volume, lease, tier=isolated.tier)
+                job_name = f"Local\\qmx-tests-{instance.id}"
                 job = (
-                    WindowsJob(job_name, image.manifest.budget) if sys.platform == "win32" else None
+                    WindowsJob(job_name, image.manifest.budget)
+                    if sys.platform == "win32" and isolated.tier == "T1"
+                    else None
                 )
                 try:
                     environment = isolated.environment(instance)
                     config = isolated.configuration(instance, job_name, environment)
                     config["tests"] = True
+                    transport = isolated.transport(instance, config, environment)
                     result = subprocess.run(
-                        [
-                            str(isolated.python(image.hash)),
-                            str(Path(__file__).parents[1] / "bootstrap.py"),
-                            json.dumps(config),
-                        ],
-                        env=environment,
-                        cwd=volume.root,
+                        [transport.command, *transport.args],
+                        env=transport.env,
+                        cwd=transport.cwd,
                         capture_output=True,
                         timeout=min(300, image.manifest.budget.cpu_seconds + 45),
                         check=False,
@@ -77,6 +74,7 @@ def validate(owner: Supervisor, image: Definition, stage: Stage) -> tuple[Docume
                         "tests_failed", "App tests exceeded the bounded test duration.", 422
                     ) from error
                 finally:
+                    isolated.kill(instance)
                     if job:
                         job.close()
                     lease.close()

@@ -128,8 +128,11 @@ class DockerSupervisor(Supervisor):
         replicas: dict[str, str] | None = None,
         event_sink: EventSink | None = None,
         secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+        proof_mode: str = "",
     ) -> None:
-        super().__init__(home, event_sink=event_sink, secret_getter=secret_getter)
+        super().__init__(
+            home, event_sink=event_sink, secret_getter=secret_getter, proof_mode=proof_mode
+        )
         self.node = node
         self.replicas = replicas or {}
         self._resources: dict[str, list[tuple[str, str]]] = {}
@@ -141,7 +144,7 @@ class DockerSupervisor(Supervisor):
         if definition.manifest.capabilities.network:
             build_proxy()
 
-    def _transport(
+    def transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
     ) -> StdioTransport:
         manifest = instance.definition.manifest
@@ -173,7 +176,7 @@ class DockerSupervisor(Supervisor):
         resources = self._resources.setdefault(instance.id, [])
         # A new network per instance prevents access to other app volumes/services.
         network = "none"
-        if manifest.capabilities.network:
+        if manifest.capabilities.network and self.proof_mode not in {"tests", "sandbox"}:
             network = name + "-net"
             docker(
                 "network",
@@ -320,7 +323,7 @@ class DockerSupervisor(Supervisor):
 
     def _log(self, app_id: str, event: str, data: dict[str, Any]) -> None:
         super()._log(app_id, event, data)
-        self._emit(app_id, {"app_id": app_id, "type": "log", "event": event, **data})
+        self.emit(app_id, {"app_id": app_id, "type": "log", "event": event, **data})
 
     def _heartbeat(self, instance: Instance) -> None:
         if instance.id not in self._resources:
@@ -352,7 +355,7 @@ class DockerSupervisor(Supervisor):
         except ValueError, KeyError, StopIteration:
             return
 
-    def _kill(self, instance: Instance) -> None:
+    def kill(self, instance: Instance) -> None:
         resources = self._resources.get(instance.id, [])
         while resources:
             kind, name = resources[-1]

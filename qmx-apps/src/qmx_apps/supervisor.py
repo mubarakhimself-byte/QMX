@@ -453,7 +453,7 @@ class Supervisor:
                     "fallback": "RLIMIT_AS/RLIMIT_CPU and psutil",
                 }
             config = self.configuration(instance, job_name, environment)
-            transport = self._transport(instance, config, environment)
+            transport = self.transport(instance, config, environment)
             # A request timeout also applies to MCP's fallback initialize request.
             # Bound startup separately; running tool/resource calls retain 20s.
             async with Client(transport, init_timeout=45) as client:
@@ -496,7 +496,7 @@ class Supervisor:
                         self._trip(instance, breach)
                     elif instance.state == "running":
                         self._persist(instance)
-                self._kill(instance)
+                self.kill(instance)
         except Exception as error:
             if instance.state not in {"tripped", "stopping"}:
                 instance.state = "tripped"
@@ -518,7 +518,7 @@ class Supervisor:
                     )
                 )
         finally:
-            self._kill(instance)
+            self.kill(instance)
             instance.client = None
             self._heartbeat(instance)
             if instance.job:
@@ -531,7 +531,7 @@ class Supervisor:
             with self._lock:
                 self._instances.pop(app_id, None)
 
-    def _transport(
+    def transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
     ) -> StdioTransport:
         python = self.python(instance.definition.hash)
@@ -597,9 +597,9 @@ class Supervisor:
         self._persist(instance)
         if instance.stop:
             instance.stop.set()
-        self._kill(instance)
+        self.kill(instance)
 
-    def _kill(self, instance: Instance) -> None:
+    def kill(self, instance: Instance) -> None:
         if instance.job:
             instance.job.terminate()
         elif instance.process:
@@ -616,7 +616,7 @@ class Supervisor:
             instance.state = "stopping"
         if instance.stop:
             instance.stop.set()
-        self._kill(instance)
+        self.kill(instance)
 
     def stop(self, app_id: str) -> Document:
         self._definition(app_id)
