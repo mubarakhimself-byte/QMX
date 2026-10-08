@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from pydantic import ValidationError
+from qmx_tools import DomainContext
 
 from qmx_agents.router import ModelRouter, RouterConfig, RunContext
 from qmx_agents.spec import AgentSpec, BuildContext, build_agent, load_spec
@@ -47,7 +48,14 @@ def test_default_domain_registry_is_used_by_build_agent(
     graph = compiled(spec, BuildContext(router=ModelRouter(config, models=fake_models(model))))
     result = graph.invoke({"messages": [{"role": "user", "content": "Save this report"}]})
     assert result["messages"][-1].content == "saved"
-    assert len(list((tmp_path / "volume/artifacts").glob("*.json"))) == 1
+    artifacts = DomainContext(root=tmp_path / "volume")
+    catalog = artifacts.library.search("")
+    assert len(catalog) == 1
+    assert catalog[0]["title"] == "report" and catalog[0]["kind"] == "note"
+    ref = catalog[0]["ref"]
+    assert isinstance(ref, str)
+    saved = artifacts.artifact(ref)
+    assert (saved.name, saved.kind, saved.content) == ("report", "note", "recorded")
 
 
 def test_valid_spec_resolves_paths_and_all_fields(tmp_path: Path) -> None:

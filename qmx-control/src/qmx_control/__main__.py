@@ -22,13 +22,19 @@ from qmx_control.service import ControlService
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="qmx-control")
-    parser.add_argument("command", choices=["serve", "start", "status", "stop"])
+    parser.add_argument("command", choices=["serve", "start", "status", "stop", "weekly-backup"])
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Rehearse backup against a local bare repo"
+    )
     parser.add_argument("--home", type=Path, default=default_home())
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--ui-origin", default="http://127.0.0.1:5173")
     args = parser.parse_args()
     home: Path = args.home.resolve()
     home.mkdir(parents=True, exist_ok=True)
+    if args.command == "weekly-backup":
+        print(json.dumps(ControlService(home).backup_weekly(dry_run=args.dry_run)))
+        return 0
     token = local_token()
     if args.command == "serve":
         uvicorn.run(

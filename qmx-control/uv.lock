@@ -1549,6 +1549,7 @@ name = "qmx-control"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cachetools" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "httpx" },
@@ -1574,6 +1575,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cachetools", specifier = "==7.2.1" },
     { name = "fastapi", specifier = "==0.142.2" },
     { name = "fastmcp", specifier = ">=4,<5" },
     { name = "httpx", specifier = "==0.28.1" },

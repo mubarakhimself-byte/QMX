@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
@@ -18,6 +17,9 @@ from qmf.core import Result, World, is_refusal
 from qmf.data.store.append_store import AppendStore
 from qml.protocol import HostedBot
 from qmn.doors.api import DoorRuntime
+from qmx_control.library import Library
+from qmx_control.models import ControlError, LibraryInput, MemoKey
+from qmx_control.service import ControlService
 
 ResponseFormat = Literal["concise", "detailed"]
 
@@ -114,42 +116,39 @@ class DomainContext:
     store: AppendStore | None = None
     datasets: list[Dataset] = field(default_factory=list[Dataset])
     backtests: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    backtest_identities: dict[str, MemoKey] = field(default_factory=dict[str, MemoKey])
     bots: dict[str, HostedBot] = field(default_factory=dict[str, HostedBot])
     node: DoorRuntime | None = None
     inline_bytes: int = 16_000
+    library: Library = field(init=False)
+    control: ControlService = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.control = ControlService(self.root)
+        self.library = self.control.library
 
     def save(self, artifact: Artifact) -> dict[str, Any]:
-        body = artifact.model_dump_json().encode()
-        digest = hashlib.sha256(body).hexdigest()
-        directory = self.root / "artifacts"
-        directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"{digest}.json"
-        try:
-            with path.open("xb") as stream:
-                stream.write(body)
-        except FileExistsError:
-            if path.read_bytes() != body:
-                raise ValueError(
-                    "Artifact bytes changed; restore this content-addressed file"
-                ) from None
-        return {"ref": f"artifacts/{digest}.json", "name": artifact.name, "kind": artifact.kind}
+        saved = self.control.library_save(
+            LibraryInput(
+                title=artifact.name, kind=artifact.kind, content=json_value(artifact.model_dump())
+            )
+        )
+        return {"ref": saved["ref"], "name": artifact.name, "kind": artifact.kind}
 
     def artifact(self, ref: str) -> Artifact:
-        path = (self.root / ref).resolve()
-        directory = (self.root / "artifacts").resolve()
-        if path.parent != directory or path.suffix != ".json":
-            raise ValueError("Use an artifacts/<sha256>.json reference returned by library_save")
         try:
-            body = path.read_bytes()
-            if path.stem != hashlib.sha256(body).hexdigest():
-                raise ValueError(
-                    "Artifact hash mismatch; restore the original content-addressed bytes"
-                )
-            return Artifact.model_validate_json(body)
-        except FileNotFoundError as exc:
-            raise ValueError(
-                "Artifact not found; use library_search to select an existing ref"
-            ) from exc
+            saved = self.library.by_ref(ref)
+        except ControlError as error:
+            raise ValueError(str(error)) from error
+        content = saved["content"]
+        if (
+            isinstance(content, dict)
+            and content.get("name") == saved["title"]
+            and content.get("kind") == saved["kind"]
+            and "content" in content
+        ):
+            return Artifact.model_validate(content)
+        return Artifact(name=str(saved["title"]), kind=str(saved["kind"]), content=content)
 
     def output(self, value: Any, name: str, response_format: ResponseFormat) -> dict[str, Any]:
         body = json_value(value)
@@ -205,16 +204,35 @@ class DomainContext:
             raise ValueError(
                 "Unknown config_ref; ask the host to register a recorded QMB run configuration"
             )
-        outcome = unwrap(run(**arguments))
-        content = json_value(outcome)
-        if outcome.performance_result is not None:
-            content["performance_result"] = unwrap(as_ct32_artifact(outcome.performance_result))
-        saved = self.save(Artifact(name=spec.config_ref, kind="backtest", content=content))
+
+        def produce() -> LibraryInput:
+            outcome = unwrap(run(**arguments))
+            content = json_value(outcome)
+            if outcome.performance_result is not None:
+                content["performance_result"] = unwrap(as_ct32_artifact(outcome.performance_result))
+            return LibraryInput(
+                title=spec.config_ref,
+                kind="backtest",
+                content={
+                    "name": spec.config_ref,
+                    "kind": "backtest",
+                    "content": content,
+                },
+            )
+
+        identity = self.backtest_identities.get(spec.config_ref)
+        saved = (
+            self.control.memoized_backtest(identity, produce)
+            if identity
+            else self.control.library_save(produce())
+        )
+        content = cast("dict[str, Any]", saved["content"])["content"]
         return self.output(
             {
                 "run_id": saved["ref"],
                 "status": "completed",
-                "data_points_processed": outcome.data_points_processed,
+                "data_points_processed": content["data_points_processed"],
+                "memo_key": saved.get("memo_key"),
             },
             "backtest",
             response_format,
@@ -236,7 +254,7 @@ class DomainContext:
             if not isinstance(context, cls):
                 raise ValueError("QMX_TOOLS_FACTORY must return a DomainContext")
             return context
-        root = Path(os.environ.get("QMX_TOOLS_ROOT", "qmx-tool-data")).resolve()
+        root = Path(os.environ.get("QMX_TOOLS_ROOT", str(Path.home() / ".qmx"))).resolve()
         ctx = cls(root=root)
         manifest = root / "datasets.json"
         if manifest.exists():

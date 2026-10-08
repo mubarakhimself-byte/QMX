@@ -261,14 +261,14 @@ def test_fake_agent_delegates_to_workflow(
         result = graph.invoke({"messages": messages})
         message = result["messages"][-2].content
     assert "artifacts/" in str(message)
-    refs = list((bindings.artifacts.root / "artifacts").glob("*.json"))
-    assert len(refs) == (2 if within_workflow else 1)
-    artifact = next(
-        json.loads(ref.read_text())
-        for ref in refs
-        if json.loads(ref.read_text())["name"] == "calculate"
-    )
-    assert artifact["content"]["compute"]["result"] == 23
+    catalog = bindings.artifacts.library.search("")
+    assert len(catalog) == (2 if within_workflow else 1)
+    item = next(item for item in catalog if item["title"] == "calculate")
+    ref = item["ref"]
+    assert isinstance(ref, str)
+    artifact = bindings.artifacts.artifact(ref)
+    assert artifact.name == "calculate"
+    assert artifact.content["compute"]["result"] == 23
 
 
 def test_sqlite_gate_restart_resume_and_cancel(bindings: Bindings, tmp_path: Path) -> None:

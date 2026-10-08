@@ -38,11 +38,14 @@ def test_article_publishes_to_real_control_library(tmp_path: Path) -> None:
     saved = service.library_search(article_url(623))
     assert len(saved) == 1
     assert saved[0]["kind"] == "article"
+    assert saved[0]["source"] == article_url(623)
     content = saved[0]["content"]
     assert isinstance(content, dict)
     assert content["markdown"] == markdown
     assert content["source_url"] == article_url(623)
     assert content["title"] == metadata["title"]
+    assert saved[0]["fetched_date"] == str(content["fetched_at"])[:10]
+    assert service.library_search(article_url(623)) == saved
     assert store.status()["pending_publication"] == 0
 
 

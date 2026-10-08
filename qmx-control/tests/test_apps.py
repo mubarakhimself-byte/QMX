@@ -54,6 +54,11 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                     "apps_call", {"app_id": "exchange-status", "tool": "snapshot", "arguments": {}}
                 )
                 assert snapshot.data["artifact_ref"]["producer_app"] == "exchange-status"
+                saved = rest.get(f"/api/library/{snapshot.data['library_id']}", headers=headers)
+                assert saved.status_code == 200
+                assert saved.json()["kind"] == "app-output"
+                assert saved.json()["content"]["artifact_ref"] == snapshot.data["artifact_ref"]
+                assert saved.json()["ref"] == snapshot.data["library_ref"]
                 resource = rest.get(
                     "/api/apps/exchange-status/resources",
                     headers=headers,

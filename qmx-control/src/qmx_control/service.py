@@ -26,22 +26,19 @@ from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
 
-type Document = dict[str, JsonValue]
+from qmx_control.backup import weekly_backup
+from qmx_control.cache import read_cache
+from qmx_control.library import Library
+from qmx_control.models import ControlError as ControlError  # noqa: PLC0414 - public re-export
+from qmx_control.models import Document, MemoKey
+from qmx_control.models import LibraryInput as LibraryInput  # noqa: PLC0414 - public re-export
+from qmx_control.runs import RunIndex
+
 type SettingsSection = Literal[
     "providers", "mcp_servers", "budgets", "memory_provider", "backup", "brokers"
 ]
-type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings"]
+type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 type WorkKind = Literal["runs", "jobs"]
-
-
-class ControlError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400) -> None:
-        super().__init__(message)
-        self.code = code
-        self.status = status
-
-    def document(self) -> Document:
-        return {"error": {"code": self.code, "message": str(self)}}
 
 
 class SessionInput(BaseModel):
@@ -68,13 +65,6 @@ class SessionBlock(BaseModel):
         "panel",
         "handoff",
     ]
-    content: Document
-
-
-class LibraryInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=200)
-    kind: str = Field(min_length=1)
     content: Document
 
 
@@ -116,18 +106,41 @@ class ControlService:
         self.tier = tier
         self.node = node
         self.secret_getter = secret_getter
+        self.library = Library(self.home)
+        self.run_index = RunIndex(self.home)
+        self._aggregate = read_cache(ttl=5)(self._aggregate_read)
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS blocks (session_id TEXT NOT NULL, seq INTEGER NOT NULL,
                     data TEXT NOT NULL, PRIMARY KEY(session_id, seq));
-                CREATE TABLE IF NOT EXISTS library (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS work (kind TEXT NOT NULL, id TEXT NOT NULL,
                     data TEXT NOT NULL, PRIMARY KEY(kind, id));
                 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT,
                     topic TEXT NOT NULL, subject TEXT NOT NULL, data TEXT NOT NULL);
             """)
+            db.execute("BEGIN IMMEDIATE")
+            legacy_catalog = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library'"
+            ).fetchone()
+            # Preserve IDs returned by the first service version when moving its catalog.
+            old_items = (
+                db.execute("SELECT id,data FROM library").fetchall() if legacy_catalog else []
+            )
+            for item_id, raw in old_items:
+                try:
+                    self.library.get(item_id)
+                except ControlError as error:
+                    if error.code != "not_found":
+                        raise
+                    item = _document(raw)
+                    item.pop("id")
+                    self.library.save(LibraryInput.model_validate(item), item_id=item_id)
+            if legacy_catalog:
+                db.execute("DROP TABLE library")
+            for work_id, raw in db.execute("SELECT id,data FROM work WHERE kind='runs'").fetchall():
+                self.run_index.record(work_id, _document(raw))
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -137,10 +150,17 @@ class ControlService:
     def _event(
         self, db: sqlite3.Connection, topic: EventTopic, subject: str, data: Document
     ) -> None:
-        db.execute(
+        self._aggregate.cache_clear()
+        cursor = db.execute(
             "INSERT INTO events(topic,subject,data) VALUES(?,?,?)",
             (topic, subject, json.dumps(data)),
         )
+        if topic in {"runs", "jobs", "apps", "library"}:
+            summary = self._aggregate_counts(db, cursor.lastrowid or 0)
+            db.execute(
+                "INSERT INTO events(topic,subject,data) VALUES('aggregates','',?)",
+                (json.dumps(summary),),
+            )
 
     def events(
         self, topic: EventTopic, after: int = 0, subject: str = "", limit: int = 100
@@ -220,7 +240,15 @@ class ControlService:
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
         if section == "backup":
-            BackupSettings.model_validate(values).destination("validation", "validation")
+            if "repository" in values:
+                repository = values["repository"]
+                if not isinstance(repository, str) or not repository.strip():
+                    raise ControlError(
+                        "invalid_settings", "Backup repository must be nonempty text."
+                    )
+            app_settings = {key: value for key, value in values.items() if key != "repository"}
+            if app_settings:
+                BackupSettings.model_validate(app_settings).destination("validation", "validation")
         elif section == "brokers":
             try:
                 values = BrokerSettings.model_validate(values).model_dump(
@@ -231,6 +259,7 @@ class ControlService:
                     "invalid_brokers",
                     "Use valid brokers, connections and accounts with qmx/* vault references.",
                 ) from error
+
         with self._lock:
             path = self.home / "settings.toml"
             settings: Document = {}
@@ -300,24 +329,98 @@ class ControlService:
         return self.events("sessions", after, session_id, limit)
 
     def library_save(self, item: LibraryInput) -> Document:
-        """Save a typed Library item and its content."""
-        item_id = str(uuid.uuid4())
-        data: Document = {"id": item_id, **item.model_dump(mode="json")}
+        """Save an immutable artifact, optionally a new version or URL/date result."""
         with self._lock, self._connect() as db:
-            db.execute("INSERT INTO library VALUES(?,?)", (item_id, json.dumps(data)))
-            self._event(db, "library", item_id, {"type": "saved", "item_id": item_id})
+            data = self.library.save(item)
+            self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
         return data
 
     def library_search(self, query: str = "", offset: int = 0, limit: int = 100) -> list[Document]:
-        """Search saved Library titles and content with pagination."""
-        self._page(offset, limit)
+        """FTS5 search over title, tags and extracted text, ordered by relevance."""
+        return self.library.search(query, offset, limit)
+
+    def library_get(self, artifact_id: str) -> Document:
+        """Read an artifact with its verified blob content."""
+        return self.library.get(artifact_id)
+
+    def memoized_backtest(self, identity: MemoKey, produce: Callable[[], LibraryInput]) -> Document:
+        """Reuse a deterministic backtest artifact, recording newly computed results."""
+        produced = False
+
+        def compute() -> LibraryInput:
+            nonlocal produced
+            item = produce()
+            produced = True
+            return item
+
+        with self._lock:
+            result = self.library.memoized(identity, compute)
+            if produced:
+                with self._connect() as db:
+                    self._event(
+                        db,
+                        "library",
+                        str(result["id"]),
+                        {"type": "saved", "item_id": result["id"], "memo_key": result["memo_key"]},
+                    )
+        return result
+
+    def library_versions(self, artifact_id: str) -> list[Document]:
+        """Read an artifact's immutable version chain."""
+        return self.library.versions(artifact_id)
+
+    def library_link(self, source_id: str, target_id: str, relation: str = "related") -> Document:
+        """Link two existing artifacts without changing their contents."""
+        with self._lock, self._connect() as db:
+            data = self.library.link(source_id, target_id, relation)
+            self._event(db, "library", source_id, {"type": "linked", **data})
+        return data
+
+    def library_links(self, artifact_id: str) -> list[Document]:
+        """Read incoming and outgoing artifact links."""
+        return self.library.links(artifact_id)
+
+    def backup_weekly(self, dry_run: bool = False) -> Document:
+        """Snapshot small stores to the private backup repo in Settings, at most weekly."""
+        settings = self.settings_get("backup")
+        repository = settings.get("repository")
+        if not isinstance(repository, str) or not repository:
+            raise ControlError("backup_not_configured", "Set backup.repository in Settings.")
+        try:
+            result = weekly_backup(self.home, repository, dry_run=dry_run)
+        except (OSError, sqlite3.Error) as error:
+            raise ControlError(
+                "backup_failed", "Snapshot creation failed; backup was not published.", 409
+            ) from error
+        if result["status"] in {"completed", "dry_run"}:
+            self.record_work("jobs", "weekly-backup", {**result, "status": "completed"})
+        return result
+
+    def _aggregate_read(self, revision: int) -> Document:
         with self._connect() as db:
-            rows = db.execute(
-                "SELECT data FROM library WHERE instr(lower(data),lower(?))>0 "
-                "ORDER BY rowid LIMIT ? OFFSET ?",
-                (query, limit, offset),
-            ).fetchall()
-        return [_document(row[0]) for row in rows]
+            return self._aggregate_counts(db, revision)
+
+    def _aggregate_counts(self, db: sqlite3.Connection, revision: int) -> Document:
+        statuses = [
+            _document(row[0]).get("status")
+            for row in db.execute("SELECT data FROM work WHERE kind='jobs'").fetchall()
+        ]
+        count = self.library.count()
+        with closing(sqlite3.connect(self.home / "runs.db")) as index:
+            runs = index.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        return {
+            "revision": revision,
+            "library_items": count,
+            "runs": runs,
+            "active_jobs": sum(status == "running" for status in statuses),
+        }
+
+    def aggregates_get(self) -> Document:
+        """Read short-lived UI totals; event revisions invalidate the cached view."""
+        self._refresh_runs()
+        with self._lock, self._connect() as db:
+            revision = db.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()[0]
+            return cast(Document, self._aggregate(revision)).copy()
 
     @staticmethod
     def _page(offset: int, limit: int) -> None:
@@ -333,6 +436,8 @@ class ControlService:
     ) -> Document:
         """Called by the owner of a real run or job to publish its state."""
         with self._lock, self._connect() as db:
+            if kind == "runs":
+                data = self.run_index.record(work_id, data)
             if cancel is not None:
                 self._cancellers[kind, work_id] = cancel
             if data.get("status") in {
@@ -363,7 +468,25 @@ class ControlService:
 
     def runs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """List recorded runs; an empty installation has no runs."""
-        return self._work_list("runs", offset, limit)
+        self._page(offset, limit)
+        self._refresh_runs()
+        return self.run_index.list(offset, limit)
+
+    def runs_get(self, run_id: str) -> Document:
+        """Read a journal-indexed run, including resolved models and artifacts."""
+        self._refresh_runs()
+        return self.run_index.get(run_id)
+
+    def _refresh_runs(self) -> None:
+        with self._lock, self._connect() as db:
+            for data in self.run_index.refresh():
+                run_id = str(data["id"])
+                db.execute(
+                    "INSERT INTO work VALUES('runs',?,?) ON CONFLICT(kind,id) "
+                    "DO UPDATE SET data=excluded.data",
+                    (run_id, json.dumps(data)),
+                )
+                self._event(db, "runs", run_id, data)
 
     def jobs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """List recorded background jobs."""
@@ -464,7 +587,22 @@ class ControlService:
 
     def apps_call(self, app_id: str, tool: str, arguments: Document) -> Document:
         """Call a connected app; feed arguments must be registered artifact refs."""
-        return self.app_runtime().call(app_id, tool, arguments)
+        result = self.app_runtime().call(app_id, tool, arguments)
+        reference = result.get("artifact_ref")
+        output = result.get("result")
+        if isinstance(reference, dict) and isinstance(output, dict) and "data" in output:
+            saved = self.library_save(
+                LibraryInput(
+                    title=f"{app_id}: {reference['output']}"[:200],
+                    kind="app-output",
+                    tags=[app_id, str(reference["output"])],
+                    source=f"app://{app_id}/{reference['output']}/{reference['sha256']}",
+                    content={"artifact_ref": reference, "data": output["data"]},
+                )
+            )
+            result["library_id"] = saved["id"]
+            result["library_ref"] = saved["ref"]
+        return result
 
     def apps_resource(self, app_id: str, uri: str) -> list[Document]:
         """Read an app's MCP resource, including ui:// panels."""
@@ -507,7 +645,9 @@ class ControlService:
             return self._apps
 
     def _backup_settings(self) -> BackupSettings | None:
-        values = self.settings_get("backup")
+        values = {
+            key: value for key, value in self.settings_get("backup").items() if key != "repository"
+        }
         return BackupSettings.model_validate(values) if values else None
 
     def _backup_apps(self) -> list[str]:
