@@ -94,7 +94,7 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
         assert host_config["CapDrop"] == ["ALL"]
         assert host_config["Memory"] > 0 and host_config["NanoCpus"] > 0
         check = (
-            "import urllib.request,urllib.error,socket; "
+            "import urllib.request,urllib.error,socket,os,errno; "
             "u='http://blocked.invalid'; "
             "\ntry: urllib.request.urlopen(u,timeout=5)\n"
             "except urllib.error.HTTPError as e: assert e.code==403\n"
@@ -102,7 +102,12 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
             "try: socket.create_connection(('1.1.1.1',443),timeout=1)\n"
             "except OSError: pass\nelse: raise AssertionError('direct egress bypass')\n"
             "try: open('/image/escape','w')\nexcept OSError: pass\n"
-            "else: raise AssertionError('root filesystem writable')\nprint('isolated')"
+            "else: raise AssertionError('root filesystem writable')\n"
+            # exec starts a fresh interpreter without the bootstrap audit hook.
+            "try: fd=os.open('/volume/road/steps.jsonl',os.O_WRONLY)\n"
+            "except OSError as e: assert e.errno==errno.EROFS\n"
+            "else: os.close(fd); raise AssertionError('road authority writable')\n"
+            "print('isolated')"
         )
         assert docker("exec", name, "python", "-c", check) == "isolated"
         owner.call(
