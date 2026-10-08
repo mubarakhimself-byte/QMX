@@ -216,5 +216,7 @@ def test_read_cache_expiry_and_invalidation() -> None:
 
 
 def test_backup_manifest_is_persisted(volume: Volume, settings: BackupSettings) -> None:
+    (volume.root / "writer.lock").write_text("runtime lease")
     manifest = backup(volume, settings)
+    assert "writer.lock" not in cast(dict[str, str], manifest["checksums"])
     assert json.loads((volume.root / "backup.json").read_text()) == manifest

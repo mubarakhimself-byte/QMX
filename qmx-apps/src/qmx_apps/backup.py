@@ -109,7 +109,7 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
         for source in _files(volume.root):
             relative = source.relative_to(volume.root)
             if (
-                source.name.endswith(("-wal", "-shm", "-journal"))
+                source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
                 or source.name == "backup.json.tmp"
                 or relative.parts[:2]
                 == (
