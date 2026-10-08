@@ -103,8 +103,9 @@ def main() -> int:
         if ssh is None or git is None:
             raise RuntimeError("Install Git and SSH before bootstrapping a node.")
         revision = run(["git", "rev-parse", "HEAD"])
+        repository = run(["git", "rev-parse", "--show-toplevel"])
         archive = subprocess.run(
-            [git, "archive", "--format=tar", revision],
+            [git, "-C", repository, "archive", "--format=tar", revision],
             capture_output=True,
             check=True,
         ).stdout
