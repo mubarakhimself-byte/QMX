@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -19,7 +20,7 @@ from qmx_control.models import Document, MemoKey
 from qmx_control.server import create_app, create_mcp
 from qmx_control.service import ControlError, ControlService, LibraryInput
 
-TOKEN = "test-token"
+TOKEN = secrets.token_urlsafe(32)
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
