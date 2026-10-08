@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from qmx_apps.docker import DockerSupervisor
 
-from qmx_control.node import bootstrap_script, read_secret, verify
+from qmx_control.node import bootstrap_script, read_secret, run, verify
 from qmx_control.server import create_app
 from qmx_control.service import ControlService
 
@@ -45,6 +46,14 @@ def test_installer_is_pinned_and_has_no_subscription_material() -> None:
     assert "systemctl enable qmx-node" in script
     with pytest.raises(ValueError):
         bootstrap_script("main; exit")
+
+
+def test_remote_script_pipe_preserves_linux_newlines() -> None:
+    output = run(
+        [sys.executable, "-c", "import sys; print(sys.stdin.buffer.read().hex())"],
+        input_text="set -euo pipefail\necho ready\n",
+    )
+    assert bytes.fromhex(output) == b"set -euo pipefail\necho ready\n"
 
 
 def test_verify_reports_missing_components(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -37,7 +37,7 @@ if ! command -v rclone >/dev/null || [[ "$(rclone version | head -1)" != 'rclone
   unzip -oq "$scratch/rclone.zip" -d "$scratch/rclone"
   install -m 0755 "$scratch/rclone/${archive}/rclone" /usr/local/bin/rclone
 fi
-install -d -m 0700 /etc/qmx/vault /var/lib/qmx /var/lib/qmx/bucket /var/lib/qmx/traces
+install -d -m 0700 /etc/qmx/vault /var/lib/qmx /var/lib/qmx/apps /var/lib/qmx/bucket /var/lib/qmx/traces
 if [[ ! -d /opt/qmx/.git ]]; then
   git clone --branch rebuild/base https://github.com/MubarakHimself/QMX.git /opt/qmx
 fi

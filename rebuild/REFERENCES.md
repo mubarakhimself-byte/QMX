@@ -361,6 +361,7 @@ P17 additions (fetched 2026-10-08):
 - rclone installation/SFTP: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/install.md , https://raw.githubusercontent.com/rclone/rclone/master/docs/content/sftp.md
 - Litestream Docker: https://litestream.io/guides/docker/
 - systemd service units: https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+- Subprocess pipe encoding: https://raw.githubusercontent.com/python/cpython/main/Doc/library/subprocess.rst
 
 ---
 

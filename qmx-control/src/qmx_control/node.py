@@ -21,10 +21,16 @@ from qmx_control.service import ControlService
 
 
 def run(command: list[str], *, input_text: str | None = None) -> str:
-    result = subprocess.run(command, input=input_text, text=True, capture_output=True, check=False)
+    # Windows text-mode pipes turn shell-script LF into CRLF, which bash rejects.
+    result = subprocess.run(
+        command,
+        input=input_text.encode("utf-8") if input_text is not None else None,
+        capture_output=True,
+        check=False,
+    )
     if result.returncode:
         raise RuntimeError(f"{command[0]} failed ({result.returncode}); inspect the node logs.")
-    return result.stdout.strip()
+    return result.stdout.decode("utf-8").strip()
 
 
 def read_secret(vault: Path, service: str, username: str) -> str | None:
