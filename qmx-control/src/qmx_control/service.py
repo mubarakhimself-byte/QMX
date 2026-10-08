@@ -13,10 +13,12 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Literal, cast
 
+import keyring
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qmx_apps.backup import BackupSettings, backup, restore
 from qmx_apps.backup_schedule import BackupSchedule
+from qmx_apps.docker import DockerSupervisor
 from qmx_apps.manifest import Trust
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
@@ -91,7 +93,14 @@ def _no_secrets(value: JsonValue) -> None:
 
 
 class ControlService:
-    def __init__(self, home: Path) -> None:
+    def __init__(
+        self,
+        home: Path,
+        *,
+        tier: Literal["T1", "T2"] = "T1",
+        node: str = "laptop",
+        secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+    ) -> None:
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -99,6 +108,9 @@ class ControlService:
         self._apps: Supervisor | None = None
         self._backup_lock = threading.Lock()
         self._backup_schedule: BackupSchedule | None = None
+        self.tier = tier
+        self.node = node
+        self.secret_getter = secret_getter
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -407,7 +419,31 @@ class ControlService:
     def app_runtime(self) -> Supervisor:
         with self._lock:
             if self._apps is None:
-                self._apps = Supervisor(self.home, event_sink=self._app_event)
+                if self.tier == "T2":
+                    providers = self.settings_get("providers")
+                    replica_settings = providers.get("litestream", {})
+                    replicas = (
+                        {
+                            name: url
+                            for name, url in replica_settings.items()
+                            if isinstance(url, str)
+                        }
+                        if isinstance(replica_settings, dict)
+                        else {}
+                    )
+                    self._apps = DockerSupervisor(
+                        self.home,
+                        node=self.node,
+                        replicas=replicas,
+                        event_sink=self._app_event,
+                        secret_getter=self.secret_getter,
+                    )
+                else:
+                    self._apps = Supervisor(
+                        self.home,
+                        event_sink=self._app_event,
+                        secret_getter=self.secret_getter,
+                    )
                 self._backup_schedule = BackupSchedule(
                     self._backup_settings,
                     self._backup_apps,

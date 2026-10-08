@@ -352,6 +352,16 @@ These are facts found in the official docs that change what the packets say. Fol
 - Firecrawl MCP (P19): https://docs.firecrawl.dev/llms.txt , https://docs.firecrawl.dev/mcp-server.md , https://raw.githubusercontent.com/firecrawl/firecrawl-mcp-server/main/README.md (all verified). API key from `qmx/firecrawl`.
 - **UNVERIFIED (not fetched):** Daytona SDK (P21), Docker / Docker networking docs (P17), Windows Job Objects via `pywin32`/`psutil` (P12), Tailscale (P17), LangSmith/OpenTelemetry tracing (DESIGN §5.8), Hummingbot (P18 note), MinIO/moto (P21 tests). Fetch their official docs before using them and add the URLs here in the PR.
 
+P17 additions (fetched 2026-10-08):
+- Docker containers and CLI: https://docs.docker.com/engine/containers/run/ , https://docs.docker.com/reference/cli/docker/container/run/ , https://docs.docker.com/reference/cli/docker/network/create/ , https://docs.docker.com/reference/cli/docker/container/exec/
+- Bridge isolation and gateway modes: https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/drivers/bridge.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/port-publishing.md
+- Docker builds and Ubuntu install: https://raw.githubusercontent.com/docker/docs/main/content/manuals/build/building/best-practices.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/install/ubuntu.md
+- Squid ACLs: https://www.squid-cache.org/Doc/config/acl/ , https://www.squid-cache.org/Doc/config/http_access/ , https://www.squid-cache.org/Doc/config/http_port/
+- Tailscale: https://tailscale.com/docs/install/linux.md
+- rclone installation/SFTP: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/install.md , https://raw.githubusercontent.com/rclone/rclone/master/docs/content/sftp.md
+- Litestream Docker: https://litestream.io/guides/docker/
+- systemd service units: https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+
 ---
 
 ## 20. Packet → sections to read

@@ -63,6 +63,8 @@ class Instance:
     heartbeat: float = 0
     secrets: list[str] = field(default_factory=list[str])
     limits: Document = field(default_factory=dict[str, JsonValue])
+    node: str = "laptop"
+    tier: str = "T1"
 
     def document(self) -> Document:
         return {
@@ -73,8 +75,8 @@ class Instance:
             "pid": self.process.pid
             if self.process and self.state in {"starting", "running", "stopping"}
             else None,
-            "node": "laptop",
-            "tier": "T1",
+            "node": self.node,
+            "tier": self.tier,
             "breaker": {"open": self.state == "tripped", "reason": self.reason},
             "metrics": {
                 "runs": self.runs + self.job_runs,
@@ -90,6 +92,8 @@ class Instance:
 
 
 class Supervisor:
+    tier = "T1"
+
     def __init__(
         self,
         home: Path,
@@ -119,7 +123,7 @@ class Supervisor:
     def install(
         self, path: Path, *, trust: Trust = "agent", expected_id: str | None = None
     ) -> Document:
-        if trust == "agent":
+        if trust == "agent" and self.tier == "T1":
             raise AppError(
                 "tier_required",
                 "Agent-authored code needs T2/T3 or operator review before T1.",
@@ -156,54 +160,7 @@ class Supervisor:
                     shutil.copyfile(source, target)
             if image_hash(image) != definition.hash:
                 raise AppError("definition_corrupt", "The immutable image hash changed.", 409)
-            uv = shutil.which("uv")
-            if uv is None:
-                raise AppError(
-                    "uv_missing", "uv is required to install the locked environment.", 503
-                )
-            environment = {
-                name: value
-                for name, value in os.environ.items()
-                if name.upper()
-                in {
-                    "PATH",
-                    "SYSTEMROOT",
-                    "WINDIR",
-                    "COMSPEC",
-                    "USERPROFILE",
-                    "HOME",
-                    "LOCALAPPDATA",
-                    "APPDATA",
-                    "TEMP",
-                    "TMP",
-                }
-            }
-            environment["UV_PROJECT_ENVIRONMENT"] = str(
-                self.home / "environments" / definition.hash
-            )
-            result = subprocess.run(
-                [
-                    uv,
-                    "sync",
-                    "--project",
-                    str(image),
-                    "--locked",
-                    "--no-dev",
-                    "--no-editable",
-                    "--no-install-project",
-                ],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-            )
-            if result.returncode:
-                raise AppError(
-                    "install_failed",
-                    "uv could not install the app's lock; check its lock and sources.",
-                    422,
-                )
+            self._install_environment(definition, image)
             if image_hash(image) != definition.hash:
                 raise AppError(
                     "definition_corrupt", "Installation changed the immutable image.", 409
@@ -228,6 +185,52 @@ class Supervisor:
                 {"app_id": manifest.id, "status": "installed", "definition_hash": definition.hash},
             )
         return self.get(manifest.id)
+
+    def _install_environment(self, definition: Definition, image: Path) -> None:
+        uv = shutil.which("uv")
+        if uv is None:
+            raise AppError("uv_missing", "uv is required to install the locked environment.", 503)
+        environment = {
+            name: value
+            for name, value in os.environ.items()
+            if name.upper()
+            in {
+                "PATH",
+                "SYSTEMROOT",
+                "WINDIR",
+                "COMSPEC",
+                "USERPROFILE",
+                "HOME",
+                "LOCALAPPDATA",
+                "APPDATA",
+                "TEMP",
+                "TMP",
+            }
+        }
+        environment["UV_PROJECT_ENVIRONMENT"] = str(self.home / "environments" / definition.hash)
+        result = subprocess.run(
+            [
+                uv,
+                "sync",
+                "--project",
+                str(image),
+                "--locked",
+                "--no-dev",
+                "--no-editable",
+                "--no-install-project",
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        if result.returncode:
+            raise AppError(
+                "install_failed",
+                "uv could not install the app's lock; check its lock and sources.",
+                422,
+            )
 
     def _definition(self, app_id: str) -> Definition:
         with closing(sqlite3.connect(self.catalog)) as db:
@@ -307,7 +310,7 @@ class Supervisor:
             except BaseException:
                 lease.close()
                 raise
-            instance = Instance(definition, volume, lease)
+            instance = Instance(definition, volume, lease, tier=self.tier)
             self._instances[app_id] = instance
             instance.task = self._submit(self._serve(instance))
         try:
@@ -356,7 +359,7 @@ class Supervisor:
         try:
             environment = self._environment(instance)
             job_name = f"Local\\qmx-{instance.id}"
-            if sys.platform == "win32":
+            if sys.platform == "win32" and self.tier == "T1":
                 instance.job = WindowsJob(job_name, manifest.budget)
                 instance.limits = instance.job.limits()
             else:
@@ -379,24 +382,7 @@ class Supervisor:
                 "memory_mb": manifest.budget.memory_mb,
                 "cpu_seconds": manifest.budget.cpu_seconds,
             }
-            env = self.home / "environments" / instance.definition.hash
-            python = env / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-            command = str(python)
-            if sys.platform == "win32" and not command.startswith("\\\\?\\"):
-                # Keep sys.prefix extended too, so native DLL imports may exceed MAX_PATH.
-                command = (
-                    "\\\\?\\UNC\\" + command[2:]
-                    if command.startswith("\\\\")
-                    else "\\\\?\\" + command
-                )
-            transport = StdioTransport(
-                command=command,
-                args=[str(Path(__file__).with_name("bootstrap.py")), json.dumps(config)],
-                cwd=str(instance.volume.root),
-                env=environment,
-                keep_alive=False,
-                log_file=instance.volume.root / f"logs/{instance.id}.stderr.log",
-            )
+            transport = self._transport(instance, config, environment)
             # A request timeout also applies to MCP's fallback initialize request.
             # Bound startup separately; running tool/resource calls retain 20s.
             async with Client(transport, init_timeout=45) as client:
@@ -410,7 +396,7 @@ class Supervisor:
                     for resource in await client.list_resources()
                 ]
                 self._heartbeat(instance)
-                if instance.process is None:
+                if not instance.heartbeat:
                     raise AppError(
                         "heartbeat_missing", "The bootstrap did not publish a heartbeat.", 503
                     )
@@ -435,6 +421,8 @@ class Supervisor:
                     breach = self._breach(instance)
                     if breach:
                         self._trip(instance, breach)
+                    elif instance.state == "running":
+                        self._persist(instance)
                 self._kill(instance)
         except Exception as error:
             if instance.state not in {"tripped", "stopping"}:
@@ -469,6 +457,26 @@ class Supervisor:
             instance.lease.close()
             with self._lock:
                 self._instances.pop(app_id, None)
+
+    def _transport(
+        self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
+    ) -> StdioTransport:
+        env = self.home / "environments" / instance.definition.hash
+        python = env / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        command = str(python)
+        if sys.platform == "win32" and not command.startswith("\\\\?\\"):
+            # Keep sys.prefix extended too, so native DLL imports may exceed MAX_PATH.
+            command = (
+                "\\\\?\\UNC\\" + command[2:] if command.startswith("\\\\") else "\\\\?\\" + command
+            )
+        return StdioTransport(
+            command=command,
+            args=[str(Path(__file__).with_name("bootstrap.py")), json.dumps(config)],
+            cwd=str(instance.volume.root),
+            env=environment,
+            keep_alive=False,
+            log_file=instance.volume.root / f"logs/{instance.id}.stderr.log",
+        )
 
     def _heartbeat(self, instance: Instance) -> None:
         path = instance.volume.root / f"data/heartbeat-{instance.id}.json"
@@ -519,8 +527,7 @@ class Supervisor:
             instance.stop.set()
         self._kill(instance)
 
-    @staticmethod
-    def _kill(instance: Instance) -> None:
+    def _kill(self, instance: Instance) -> None:
         if instance.job:
             instance.job.terminate()
         elif instance.process:
