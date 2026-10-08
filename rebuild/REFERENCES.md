@@ -288,6 +288,7 @@ These are facts found in the official docs that change what the packets say. Fol
 - Machine-readable (verified 2026-10-07): https://raw.githubusercontent.com/benbjohnson/litestream.io/main/content/reference/config.md
 - Key facts: YAML with `dbs:` list; each entry has `path:` and a single `replica:` (`url: s3://bucket/path` or `type: s3|sftp|nats|...`); `${VAR}` expansion for secrets; AWS keys via `access-key-id`/`secret-access-key` or env; global `snapshot:` (`interval`, `retention`) and logging settings; run with `litestream replicate`. See D10.
 - Pin: `v0.5.17`.
+- Writer/checkpoint guidance: https://litestream.io/tips/ ; SQLite WAL-reset fix: https://sqlite.org/wal.html#the_wal_reset_bug (fixed in 3.51.3, with 3.44.6 and 3.50.7 backports).
 - Packets: P17.
 
 ## 13. DuckDB
@@ -351,6 +352,20 @@ These are facts found in the official docs that change what the packets say. Fol
 - cachetools (P13): https://raw.githubusercontent.com/tkem/cachetools/master/README.rst (verified), https://cachetools.readthedocs.io/en/stable/ ; `TTLCache(maxsize, ttl)`. Pin `cachetools==7.2.1`.
 - Firecrawl MCP (P19): https://docs.firecrawl.dev/llms.txt , https://docs.firecrawl.dev/mcp-server.md , https://raw.githubusercontent.com/firecrawl/firecrawl-mcp-server/main/README.md (all verified). API key from `qmx/firecrawl`.
 - **UNVERIFIED (not fetched):** Daytona SDK (P21), Docker / Docker networking docs (P17), Windows Job Objects via `pywin32`/`psutil` (P12), Tailscale (P17), LangSmith/OpenTelemetry tracing (DESIGN §5.8), Hummingbot (P18 note), MinIO/moto (P21 tests). Fetch their official docs before using them and add the URLs here in the PR.
+
+P17 additions (fetched 2026-10-08):
+- Docker containers and CLI: https://docs.docker.com/engine/containers/run/ , https://docs.docker.com/reference/cli/docker/container/run/ , https://docs.docker.com/reference/cli/docker/network/create/ , https://docs.docker.com/reference/cli/docker/container/exec/
+- Bridge isolation and gateway modes: https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/drivers/bridge.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/port-publishing.md
+- Docker builds and Ubuntu install: https://raw.githubusercontent.com/docker/docs/main/content/manuals/build/building/best-practices.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/install/ubuntu.md
+- Docker multi-stage builds: https://raw.githubusercontent.com/docker/docs/main/content/manuals/build/building/multi-stage.md (Git is available only during the frozen dependency build).
+- Squid ACLs: https://www.squid-cache.org/Doc/config/acl/ , https://www.squid-cache.org/Doc/config/http_access/ , https://www.squid-cache.org/Doc/config/http_port/
+- Tailscale: https://tailscale.com/docs/install/linux.md
+- rclone installation/SFTP: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/install.md , https://raw.githubusercontent.com/rclone/rclone/master/docs/content/sftp.md
+- Litestream Docker: https://litestream.io/guides/docker/
+- systemd service units: https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+- Subprocess pipe encoding: https://raw.githubusercontent.com/python/cpython/main/Doc/library/subprocess.rst
+- POSIX session ownership: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/os.rst , https://man7.org/linux/man-pages/man2/setsid.2.html
+- rclone filter ordering: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/filtering.md
 
 ---
 

@@ -65,3 +65,38 @@ artifact. Its agent-core dependency is pinned to a reviewed Git commit so
 the lock remains portable after image installation. Neither example requires
 live keys or CLIProxy. App testing, publication and road-to-live evidence
 remain P14 responsibilities.
+
+`DockerSupervisor(home, node="sgp-1")` runs the same definitions at T2 and accepts
+agent-authored code. Its image uses a digest-pinned Python 3.14/uv 0.12.23 base,
+`uv sync --frozen`, and the definition hash as its tag. A separate build stage
+supplies Git for locked Git dependencies; Git stays out of the running image.
+The container has a
+read-only root, a bind mount at `/volume` of the node's `apps/<id>`, dropped
+capabilities, no privilege escalation, and Docker memory, CPU and PID limits.
+The host retains the volume lease and MCP session and publishes logs, heartbeat,
+cgroup metrics and breaker events through the same control service.
+
+Empty network declarations use `--network none`. Declared exact DNS hostnames
+use an isolated internal bridge and a Squid proxy on an outbound bridge. Squid
+denies private destinations and permits only declared hosts on HTTP/HTTPS ports;
+apps must use `HTTP_PROXY`/`HTTPS_PROXY`. Direct sockets, host gateway access,
+arbitrary DNS forwarding and access to other apps are denied. Docker 28+ and
+cgroup v2 are required. T2 does not yet expose inbound app HTTP: the node's
+authenticated REST/MCP doors relay the retained stdio MCP connection.
+
+Stop the app before moving its volume: `snapshot(id, destination)` checks SQLite
+integrity and records file hashes; transfer the snapshot using `rclone copy`;
+`restore(id, snapshot)` verifies it before copying into a fresh volume. Install
+the exact definition on the destination first. This is the narrow node recovery
+path; scheduled online backups remain P13.
+
+Optional `providers.litestream` settings map app ids to credential-free S3 or
+local file replica URLs. The supervisor starts Litestream 0.5.17 with one
+`replica`, one-second sync and daily snapshots. Apps opting in must supply a
+SQLite >=3.51.3 writer (or a fixed backport) to avoid SQLite's documented
+WAL-reset race; the pinned base's stdlib SQLite is 3.46.1, so the supervisor
+refuses replication with that writer. Disable
+`wal_autocheckpoint` on every writer connection as recommended by Litestream.
+Replica credentials must be declared app secrets; they are injected only at
+instance start. Restart the node supervisor after changing placement or replica
+settings. Live replica recovery requires the operator's bucket credentials.

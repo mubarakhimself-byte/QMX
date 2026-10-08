@@ -17,6 +17,9 @@ class CpuRate(ctypes.Structure):
 
 class WindowsJob:
     def __init__(self, name: str, budget: Budget) -> None:
+        self.api: Any
+        self.handle: Any
+        self.kernel: Any
         if sys.platform != "win32":
             raise RuntimeError("Windows Job Objects are only available on Windows.")
         import win32job
@@ -65,6 +68,8 @@ class WindowsJob:
             raise
 
     def limits(self) -> Document:
+        if sys.platform != "win32":
+            raise RuntimeError("Windows Job Objects are only available on Windows.")
         info = self.api.QueryInformationJobObject(
             self.handle, self.api.JobObjectExtendedLimitInformation
         )

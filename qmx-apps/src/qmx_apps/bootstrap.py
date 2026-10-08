@@ -79,10 +79,12 @@ def main() -> None:
                 raise ctypes.WinError(ctypes.get_last_error())
         finally:
             kernel.CloseHandle(handle)
-    else:
+    elif config.get("tier") != "T2":
         import resource  # noqa: PLC0415
 
-        os.setsid()
+        # FastMCP may already have created the subprocess session.
+        if os.getsid(os.getpid()) != os.getpid():
+            os.setsid()
         memory = int(config["memory_mb"]) * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
         cpu = max(1, int(config["cpu_seconds"]) + 1)
@@ -129,7 +131,7 @@ def main() -> None:
     def pulse() -> None:
         while True:
             with lock:
-                data = {"pid": os.getpid(), "at": time.monotonic(), **counts}
+                data = {"pid": os.getpid(), "at": time.monotonic(), "utc": time.time(), **counts}
             temporary = heartbeat.with_suffix(".tmp")
             try:
                 temporary.write_text(json.dumps(data), encoding="utf-8")

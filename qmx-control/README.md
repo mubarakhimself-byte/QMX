@@ -34,3 +34,20 @@ the default agent-authored definition requires T2/T3 or operator review.
 
 Cancellation without a runner, workflows without P10/P22, and app
 test/publish/evidence without P14 return `not_implemented` explicitly.
+
+Linux nodes use `uv run --project qmx-control qmx node bootstrap user@host`
+from a checkout. It installs the current Git revision, Docker, Tailscale,
+uv/rclone, the systemd supervisor and minute-by-minute log/trace shipping.
+Rerunning preserves the node vault and bucket configuration. The default
+bucket is the VPS's plain `/var/lib/qmx/bucket` directory; edit the owner-only
+`rclone.conf` to use a remote bucket. Keep a second copy off the node.
+
+The guided token prompt stores the per-node control token in
+`/etc/qmx/vault/control-token` (0700 vault, 0600 files). Declared `qmx/<name>`
+app secrets are read from matching owner-only vault files. Enroll the node
+with `sudo tailscale up`, then `sudo systemctl start qmx-node`. The service
+binds only the Tailscale address, runs apps at T2, and applies the same bearer
+gate to REST and MCP. `qmx node verify` prints each component's PASS/FAIL and
+returns nonzero until enrollment, token, supervisor and CLIProxy are ready.
+CLIProxy installation/login is deliberately separate from the key-free
+bootstrap; no subscription material is stored in the source or app images.
