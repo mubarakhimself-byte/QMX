@@ -458,9 +458,11 @@ def test_incremental_results_survive_a_hard_killed_worker(tmp_path: Path) -> Non
             else:
                 pytest.fail("Worker never published its incremental log")
         finally:
-            for child in psutil.Process(process.pid).children(recursive=True):
-                child.kill()
+            children = psutil.Process(process.pid).children(recursive=True)
+            # Cut off the shipper first; a killed job must not get a graceful final flush.
             process.kill()
+            for child in children:
+                child.kill()
             process.wait()
     recovered = store.fetch(run_id, tmp_path / "recovered")
     assert recovered.status == "running"
