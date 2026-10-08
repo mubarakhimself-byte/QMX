@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import sqlite3
 import sys
 import time
 from typing import TYPE_CHECKING, cast
@@ -266,6 +267,13 @@ class Road:
                     )
                 raise
             # Journal acceptance survives a failed catalog write; retry repairs it.
-            project(self.owner.home, app_id, state)
+            try:
+                project(self.owner.home, app_id, state)
+            except (OSError, sqlite3.Error) as error:
+                raise AppError(
+                    "publication_committed",
+                    "Publication committed; read app evidence to reconcile its catalog.",
+                    503,
+                ) from error
         self.owner.emit(app_id, {"type": "published", **record})
         return record

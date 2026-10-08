@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from qmx_agents.guards.journal import RunJournal, encoded, fingerprint
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
@@ -260,3 +261,72 @@ def test_finite_unambiguous_unicode_json(data: bytes) -> None:
 def test_closed_proof_inputs(body: Document) -> None:
     with pytest.raises(ValueError):
         Proof.model_validate(body)
+
+
+@pytest.mark.parametrize("mutation", ["parent", "version", "unknown", "passed"])
+def test_self_consistent_forged_version_refuses_replay(
+    owner: RuntimeFixture, mutation: str
+) -> None:
+    image = save(owner, "1.0.0", None)
+    folder = owner.home / "apps/exchange-status/road"
+    path = folder / "steps.jsonl"
+    envelope = json_document(path.read_bytes())
+    payload = cast(Document, envelope["payload"])
+    body = json_document((folder / str(payload["result_ref"])).read_bytes())
+    body[mutation] = {"parent": "wrong", "version": "2.0.0", "unknown": True, "passed": False}[
+        mutation
+    ]
+    data = encoded(body)
+    from hashlib import sha256
+
+    digest = sha256(data).hexdigest()
+    (folder / "steps.jsonl.results" / digest).write_bytes(data)
+    payload.update({"result_ref": f"steps.jsonl.results/{digest}", "byte_count": len(data)})
+    envelope.pop("fingerprint")
+    envelope["fingerprint"] = fingerprint(envelope)
+    path.write_bytes(encoded(envelope) + b"\n")
+    with pytest.raises(AppError):
+        owner.road.evidence("exchange-status")
+    with closing(sqlite3.connect(owner.catalog)) as db:
+        assert db.execute("SELECT hash FROM selected").fetchone()[0] == image.hash
+
+
+def test_precommit_failure_then_retry_preserves_runtime(
+    owner: RuntimeFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    image = save(owner, "1.0.0", None, risk="shows")
+    shadow(owner, image)
+    original = RunJournal.append
+
+    def fail(self: RunJournal, event: str, payload: object) -> dict[str, object]:
+        raise OSError("write failed")
+
+    monkeypatch.setattr(RunJournal, "append", fail)
+    with pytest.raises(AppError):
+        owner.road.publish("exchange-status", image.hash)
+    assert owner.running is None
+    monkeypatch.setattr(RunJournal, "append", original)
+    assert owner.road.publish("exchange-status", image.hash)["stage"] == "live"
+
+
+def test_postcommit_projection_failure_reports_committed_and_repairs(
+    owner: RuntimeFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_apps import road
+
+    image = save(owner, "1.0.0", None, risk="shows")
+    shadow(owner, image)
+
+    def fail(*args: object) -> None:
+        raise OSError("projection failed")
+
+    monkeypatch.setattr(road, "project", fail)
+    with pytest.raises(AppError) as committed:
+        owner.road.publish("exchange-status", image.hash)
+    assert committed.value.code == "publication_committed"
+    assert owner.running == image.hash
+    monkeypatch.undo()
+    record = owner.road.evidence("exchange-status")[-1]
+    assert record["stage"] == "live" and record["passed"] is True
+    with closing(sqlite3.connect(owner.catalog)) as db:
+        assert db.execute("SELECT revision FROM active").fetchone()[0] == record["revision"]
