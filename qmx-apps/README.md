@@ -20,6 +20,9 @@ WAL `app.db`, optional agent `memory.db`, `data/`, `blobs/` and `logs/` under
 reported as disconnected until a new connection is established.
 Tool replies preserve raw structured JSON in `result`, standard MCP content
 blocks in `content`, and runtime metadata in `meta`, including text-only tools.
+Startup has a separate 45-second deadline. Once connected, tool calls and
+resource reads retain their 20-second deadlines; timed-out resource reads return
+`resource_timeout`, and the established connection remains usable.
 
 The bootstrap uses the volume as cwd, home and temp directories. Its explicit
 environment includes the app venv path, required OS variables and only the

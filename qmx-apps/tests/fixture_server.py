@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
 import subprocess
@@ -19,6 +20,18 @@ mcp = FastMCP("Supervisor boundary fixture")
 @mcp.tool()
 def ping() -> dict[str, JsonValue]:
     return {"pong": True}
+
+
+@mcp.tool()
+async def slow_tool() -> dict[str, JsonValue]:
+    await asyncio.sleep(22)
+    return {"completed": True}
+
+
+@mcp.resource("fixture://slow")
+async def slow_resource() -> str:
+    await asyncio.sleep(22)
+    return "late resource"
 
 
 @mcp.tool()

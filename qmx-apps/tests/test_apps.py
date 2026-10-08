@@ -166,7 +166,7 @@ def test_startup_has_its_own_deadline(supervisor: Supervisor, fixture_app: Path)
     script.write_text(
         script.read_text().replace(
             '    mcp.run(transport="stdio", show_banner=False)',
-            "    import time\n    time.sleep(22)\n"
+            "    import time\n    time.sleep(32)\n"
             '    mcp.run(transport="stdio", show_banner=False)',
         )
     )
@@ -176,6 +176,17 @@ def test_startup_has_its_own_deadline(supervisor: Supervisor, fixture_app: Path)
     assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
     supervisor.stop("exchange-status")
     dead(cast(int, started["pid"]))
+
+
+def test_running_requests_keep_their_deadlines(supervisor: Supervisor, fixture_app: Path) -> None:
+    install(supervisor, fixture_app)
+    supervisor.start("exchange-status")
+    with pytest.raises(AppError, match="timed out"):
+        supervisor.call("exchange-status", "slow_tool", {})
+    with pytest.raises(AppError) as resource_error:
+        supervisor.resource("exchange-status", "fixture://slow")
+    assert resource_error.value.code == "resource_timeout"
+    assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
 
 
 def test_definition_is_immutable_and_volume_has_one_owner(

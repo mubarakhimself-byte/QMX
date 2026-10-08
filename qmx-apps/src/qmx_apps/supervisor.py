@@ -383,7 +383,9 @@ class Supervisor:
                 keep_alive=False,
                 log_file=instance.volume.root / f"logs/{instance.id}.stderr.log",
             )
-            async with Client(transport, timeout=20) as client:
+            # A request timeout also applies to MCP's fallback initialize request.
+            # Bound startup separately; running tool/resource calls retain 20s.
+            async with Client(transport, init_timeout=45) as client:
                 instance.client = client
                 instance.tools = [
                     cast(Document, tool.model_dump(mode="json", by_alias=True))
@@ -566,7 +568,7 @@ class Supervisor:
             for feed in instance.definition.manifest.feeds:
                 if feed in inputs:
                     inputs[feed] = self.artifacts.accept(instance.definition, feed, inputs[feed])
-            result = await instance.client.call_tool(tool, inputs)
+            result = await instance.client.call_tool(tool, inputs, timeout=20)
             data = cast(JsonValue, result.structured_content)
             document: Document = {
                 "result": data,
@@ -621,9 +623,9 @@ class Supervisor:
     async def _resource(self, instance: Instance, uri: str) -> list[Document]:
         if instance.client is None:
             raise AppError("not_running", "Start the app before reading a resource.", 409)
+        contents = await asyncio.wait_for(instance.client.read_resource(uri), timeout=20)
         return [
-            cast(Document, content.model_dump(mode="json", by_alias=True))
-            for content in await instance.client.read_resource(uri)
+            cast(Document, content.model_dump(mode="json", by_alias=True)) for content in contents
         ]
 
     def resource(self, app_id: str, uri: str) -> list[Document]:
@@ -631,7 +633,12 @@ class Supervisor:
             instance = self._instances.get(app_id)
         if instance is None:
             raise AppError("not_running", "Start the app before reading a resource.", 409)
-        return self._submit(self._resource(instance, uri)).result(timeout=30)
+        try:
+            return self._submit(self._resource(instance, uri)).result(timeout=30)
+        except concurrent.futures.TimeoutError as error:
+            raise AppError(
+                "resource_timeout", "The resource did not complete within its timeout.", 504
+            ) from error
 
     def _emit(self, app_id: str, data: Document) -> None:
         if self.event_sink:
