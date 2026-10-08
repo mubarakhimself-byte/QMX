@@ -122,7 +122,7 @@ class BrokerService:
 
     def list_accounts(self, offset: int = 0, limit: int = 100) -> Document:
         """List configured account identities; use all three ids in subsequent calls."""
-        self._page(offset, limit)
+        _page(offset, limit)
         accounts = [
             {
                 "broker_id": broker.id,
@@ -187,15 +187,15 @@ class BrokerService:
         """Read the unsigned Portfolio queue; signing and execution belong to QMN."""
         return read_proposals(self.home, offset, limit)
 
-    @staticmethod
-    def _page(offset: int, limit: int) -> None:
-        if offset < 0 or not 1 <= limit <= 1000:
-            raise ValueError("Use offset >= 0 and limit 1..1000")
+
+def _page(offset: int, limit: int) -> None:
+    if offset < 0 or not 1 <= limit <= 1000:
+        raise ValueError("Use offset >= 0 and limit 1..1000")
 
 
 def read_proposals(home: Path, offset: int = 0, limit: int = 100) -> list[Document]:
     """The control door opens the broker-owned queue strictly read-only."""
-    BrokerService._page(offset, limit)
+    _page(offset, limit)
     path = home.resolve() / "portfolio.db"
     if not path.exists():
         return []

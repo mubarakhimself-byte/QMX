@@ -46,7 +46,14 @@ metadata cannot grant this exception.
 
 Run offline checks with `uv run python -m pytest -n 2`. Fixtures follow the
 official protocol/unified response schemas and explicitly identify themselves
-as offline examples, not live broker captures. Operator demo reads:
+as offline examples, not live broker captures.
+
+Wire tests and cTrader response fixtures use the official [Spotware tag 91
+definitions](https://github.com/spotware/openapi-proto-messages/tree/91), git
+`017413087c1c23c1866bbf07ff24d56574047253`, compiled as a FileDescriptorSet with
+protoc 36.2 (`--include_imports`). Their MIT license is included with the fixture.
+
+Operator demo reads:
 
 ```powershell
 uv run --project qmx-agents/packages/qmx-broker python scripts/live/smoke_broker.py --broker ic --connection demo --account 101 --symbol EURUSD

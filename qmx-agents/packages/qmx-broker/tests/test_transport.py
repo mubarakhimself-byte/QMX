@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from google.protobuf import descriptor_pb2
 from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
 
@@ -12,54 +12,10 @@ from qmx_broker.ctrader_transport import CTraderTransport
 
 
 def protocol() -> CompiledProto:
-    """Minimal wire fixture retaining the official field numbers and payload ids."""
-    descriptor = descriptor_pb2.FileDescriptorSet()
-    file = descriptor.file.add(name="offline.proto", syntax="proto2")
-    fields = descriptor_pb2.FieldDescriptorProto
-    shapes = {
-        "ProtoMessage": [
-            ("payloadType", 1, fields.TYPE_UINT32, None),
-            ("payload", 2, fields.TYPE_BYTES, None),
-            ("clientMsgId", 3, fields.TYPE_STRING, None),
-        ],
-        "ProtoOAApplicationAuthReq": [
-            ("payloadType", 1, fields.TYPE_UINT32, "2100"),
-            ("clientId", 2, fields.TYPE_STRING, None),
-            ("clientSecret", 3, fields.TYPE_STRING, None),
-        ],
-        "ProtoOAApplicationAuthRes": [("payloadType", 1, fields.TYPE_UINT32, "2101")],
-        "ProtoOASubscribeSpotsReq": [
-            ("payloadType", 1, fields.TYPE_UINT32, "2127"),
-            ("ctidTraderAccountId", 2, fields.TYPE_INT64, None),
-            ("symbolId", 3, fields.TYPE_INT64, None),
-        ],
-        "ProtoOASubscribeSpotsRes": [("payloadType", 1, fields.TYPE_UINT32, "2128")],
-        "ProtoOASpotEvent": [
-            ("payloadType", 1, fields.TYPE_UINT32, "2131"),
-            ("ctidTraderAccountId", 2, fields.TYPE_INT64, None),
-            ("symbolId", 3, fields.TYPE_INT64, None),
-            ("bid", 4, fields.TYPE_UINT64, None),
-            ("ask", 5, fields.TYPE_UINT64, None),
-            ("timestamp", 8, fields.TYPE_INT64, None),
-        ],
-        "ProtoOAErrorRes": [
-            ("payloadType", 1, fields.TYPE_UINT32, "2142"),
-            ("errorCode", 3, fields.TYPE_STRING, None),
-            ("description", 4, fields.TYPE_STRING, None),
-        ],
-    }
-    for name, definitions in shapes.items():
-        message = file.message_type.add(name=name)
-        for field_name, number, kind, default in definitions:
-            field = message.field.add(
-                name=field_name, number=number, type=kind, label=fields.LABEL_OPTIONAL
-            )
-            if default is not None:
-                field.default_value = default
-            if name == "ProtoOASubscribeSpotsReq" and field_name == "symbolId":
-                field.label = fields.LABEL_REPEATED
     result = compile_descriptor_set(
-        descriptor.SerializeToString(), package_name="openapi-proto-messages", release_tag=91
+        (Path(__file__).parent / "fixtures/tag91.pb").read_bytes(),
+        package_name="openapi-proto-messages",
+        release_tag=91,
     )
     assert not is_refusal(result)
     return result.value
@@ -125,11 +81,22 @@ def test_spot_before_subscription_acknowledgement_is_retained() -> None:
         proto = protocol()
         reader = asyncio.StreamReader()
         reader.feed_data(
-            frame(proto, "ProtoOASpotEvent", "", bid=110000, ask=110010, timestamp=1700000000000)
-            + frame(proto, "ProtoOASubscribeSpotsRes", "1")
+            frame(
+                proto,
+                "ProtoOASpotEvent",
+                "",
+                ctidTraderAccountId=101,
+                symbolId=1,
+                bid=110000,
+                ask=110010,
+                timestamp=1700000000000,
+            )
+            + frame(proto, "ProtoOASubscribeSpotsRes", "1", ctidTraderAccountId=101)
         )
         transport = CTraderTransport(proto, reader, cast(asyncio.StreamWriter, Writer()))
-        quote = await transport.spot("ProtoOASubscribeSpotsReq", {})
+        quote = await transport.spot(
+            "ProtoOASubscribeSpotsReq", {"ctidTraderAccountId": 101, "symbolId": [1]}
+        )
         assert quote["bid"] == "110000" and quote["timestamp"] == "1700000000000"
 
     asyncio.run(run())
@@ -163,7 +130,7 @@ def test_partial_spots_merge_only_within_the_requested_account_and_symbol() -> N
         proto = protocol()
         reader = asyncio.StreamReader()
         reader.feed_data(
-            frame(proto, "ProtoOASubscribeSpotsRes", "1")
+            frame(proto, "ProtoOASubscribeSpotsRes", "1", ctidTraderAccountId=101)
             + frame(
                 proto,
                 "ProtoOASpotEvent",

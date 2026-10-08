@@ -11,8 +11,10 @@ from typing import Any, cast
 import ccxt  # pyright: ignore[reportMissingTypeStubs] - untyped upstream
 import pytest
 from fastmcp import Client
+from google.protobuf.json_format import MessageToDict, ParseDict
 from pydantic import ValidationError
 from qmf.venue.proto import CompiledProto
+from test_transport import message, protocol
 
 from qmx_broker.adapters import CCXTAdapter, CTraderAdapter, Document, ReadAdapter
 from qmx_broker.credentials import credentials
@@ -91,7 +93,14 @@ class CTraderFixture:
 
     async def request(self, name: str, values: Document) -> Document:
         self.calls.append((name, values))
-        return copy.deepcopy(self.payload[name])
+        response_name = (
+            "ProtoOASpotEvent"
+            if name == "ProtoOASubscribeSpotsReq"
+            else name.removesuffix("Req") + "Res"
+        )
+        response = ParseDict(copy.deepcopy(self.payload[name]), message(protocol(), response_name))
+        assert response.IsInitialized()
+        return MessageToDict(response, preserving_proto_field_name=True)
 
     def adapter(self) -> CTraderAdapter:
         return CTraderAdapter(
