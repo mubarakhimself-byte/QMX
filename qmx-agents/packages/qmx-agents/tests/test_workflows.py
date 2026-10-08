@@ -221,8 +221,9 @@ def test_agent_nodes_disable_default_delegation(
         assert ("task" in model.bound_names[0]) is enabled
 
 
+@pytest.mark.parametrize("within_workflow", [False, True])
 def test_fake_agent_delegates_to_workflow(
-    bindings: Bindings, config: RouterConfig, tmp_path: Path
+    bindings: Bindings, config: RouterConfig, tmp_path: Path, within_workflow: bool
 ) -> None:
     child = spec([python("compute", {"$input": "/inputs/value"})], name="calculate")
     (tmp_path / "prompt.md").write_text("Delegate calculation.", encoding="utf-8")
@@ -249,13 +250,25 @@ def test_fake_agent_delegates_to_workflow(
         ModelRouter(config, fake_models(model)),
         workflows={"calculate": as_subagent(child, bindings=bindings)["runnable"]},
     )
-    graph = compiled(load_spec(path), context)
-    result = graph.invoke({"messages": [{"role": "user", "content": "Calculate"}]})
-    message = result["messages"][-2].content
+    messages = [{"role": "user", "content": "Calculate"}]
+    if within_workflow:
+        bindings.agents = context
+        node = Node(id="agent", kind="agent", agent=str(path), args={"messages": messages})
+        result = invoke(compile(spec([node]), bindings=bindings))
+        message = result["values"]["agent"]["result"]["messages"][-2]["content"]
+    else:
+        graph = compiled(load_spec(path), context)
+        result = graph.invoke({"messages": messages})
+        message = result["messages"][-2].content
     assert "artifacts/" in str(message)
     refs = list((bindings.artifacts.root / "artifacts").glob("*.json"))
-    assert len(refs) == 1
-    assert json.loads(refs[0].read_text())["content"]["compute"]["result"] == 23
+    assert len(refs) == (2 if within_workflow else 1)
+    artifact = next(
+        json.loads(ref.read_text())
+        for ref in refs
+        if json.loads(ref.read_text())["name"] == "calculate"
+    )
+    assert artifact["content"]["compute"]["result"] == 23
 
 
 def test_sqlite_gate_restart_resume_and_cancel(bindings: Bindings, tmp_path: Path) -> None:

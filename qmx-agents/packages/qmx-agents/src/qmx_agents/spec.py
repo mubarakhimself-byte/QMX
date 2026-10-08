@@ -308,8 +308,10 @@ async def _build(
         harness_profile.update(
             ctx.router.config.harness_profiles.get(key, {}).get("general_purpose_subagent", {})
         )
-    if ctx.general_purpose_subagent and harness_profile.get("enabled") is not False and not any(
-        item["name"] == "general-purpose" for item in subagents
+    if (
+        ctx.general_purpose_subagent
+        and harness_profile.get("enabled") is not False
+        and not any(item["name"] == "general-purpose" for item in subagents)
     ):
         subagents.append(
             SubAgent(
