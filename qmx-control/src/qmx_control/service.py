@@ -200,7 +200,10 @@ class ControlService:
                 raise ControlError(
                     "invalid_settings", "Use Firecrawl url, enabled and credential_ref only."
                 )
-            url = urlsplit(str(firecrawl.get("url", "https://mcp.firecrawl.dev/v2/mcp")))
+            try:
+                url = urlsplit(str(firecrawl.get("url", "https://mcp.firecrawl.dev/v2/mcp")))
+            except ValueError as error:
+                raise ControlError("invalid_settings", "Firecrawl URL is malformed.") from error
             if (
                 not isinstance(firecrawl.get("enabled", False), bool)
                 or firecrawl.get("credential_ref", "qmx/firecrawl") != "qmx/firecrawl"

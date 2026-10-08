@@ -51,6 +51,7 @@ def test_firecrawl_settings_are_off_by_default_and_persist_only_a_vault_referenc
             {"auth": "do-not-save"},
             {"url": "https://host/?key=do-not-save"},
             {"url": "http://host"},
+            {"url": "https://["},
             {"enabled": "true"},
             {"credential_ref": "qmx/other"},
         ):
