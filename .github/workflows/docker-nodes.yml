@@ -19,7 +19,7 @@ jobs:
         run: |
           revision=$(git rev-parse HEAD)
           sudo install -d -m 700 /opt/qmx-deploy
-          git archive --format=tar HEAD | sudo tee /opt/qmx-deploy/source.tar > /dev/null
+          git archive --format=tar "$revision" | sudo tee /opt/qmx-deploy/source.tar > /dev/null
           sed "s/@REVISION@/$revision/g" qmx-control/src/qmx_control/node-bootstrap.sh > "$RUNNER_TEMP/bootstrap.sh"
           sudo bash "$RUNNER_TEMP/bootstrap.sh"
           sudo bash "$RUNNER_TEMP/bootstrap.sh"
