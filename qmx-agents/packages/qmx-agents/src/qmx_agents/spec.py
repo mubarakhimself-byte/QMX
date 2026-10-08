@@ -169,7 +169,7 @@ async def build_agent(
     return await _build(spec, ctx, ())
 
 
-def _mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str, Any]]:
+def mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str, Any]]:
     servers = {"firecrawl": dict(FIRECRAWL_SERVER), **ctx.router.config.mcp_servers}
     servers["firecrawl"] = {**FIRECRAWL_SERVER, **servers["firecrawl"]}
     if ctx.qmx_home is not None and (ctx.qmx_home / "settings.toml").exists():
@@ -224,7 +224,7 @@ async def _build(
     if any(spec.interrupt_on.values()) and ctx.checkpointer is None:
         raise ValueError("interrupt_on requires a checkpointer")
     tools = [ctx.tools[name] for name in spec.tools]
-    servers = _mcp_configuration(spec, ctx)
+    servers = mcp_configuration(spec, ctx)
     if servers:
         # The official adapter is optional at import time and emits its documented beta warning.
         from langchain.mcp import MCPAdapter  # noqa: PLC0415

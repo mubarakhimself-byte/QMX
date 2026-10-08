@@ -19,7 +19,7 @@ from langgraph.graph import (  # pyright: ignore[reportMissingTypeStubs]
 from test_spec import call, write_spec
 
 from qmx_agents.router import ModelRouter, RouterConfig, RunContext
-from qmx_agents.spec import BuildContext, _mcp_configuration, build_agent
+from qmx_agents.spec import BuildContext, build_agent, mcp_configuration
 
 
 def test_firecrawl_defaults_and_settings_overlay(
@@ -34,13 +34,13 @@ def test_firecrawl_defaults_and_settings_overlay(
     monkeypatch.setattr("qmx_agents.spec.credential", vault)
     spec = write_spec(tmp_path, "mcp_servers: [firecrawl]", name="researcher")
     ctx = BuildContext(ModelRouter(config), qmx_home=tmp_path)
-    assert _mcp_configuration(spec, ctx) == {}
+    assert mcp_configuration(spec, ctx) == {}
     assert not accesses
     (tmp_path / "settings.toml").write_text(
         "[mcp_servers.firecrawl]\nenabled = true\n", encoding="utf-8"
     )
     spec.mcp_servers = []
-    servers = _mcp_configuration(spec, ctx)
+    servers = mcp_configuration(spec, ctx)
     assert servers == {
         "firecrawl": {"url": "https://mcp.firecrawl.dev/v2/mcp", "auth": "test-vault-token"}
     }
@@ -49,7 +49,7 @@ def test_firecrawl_defaults_and_settings_overlay(
     assert "test-vault-token" not in (tmp_path / "settings.toml").read_text()
     config.mcp_servers["firecrawl"] = {"enabled": True, "url": "https://host/?key=leak"}
     with pytest.raises(ValueError, match="HTTPS URL"):
-        _mcp_configuration(spec, ctx)
+        mcp_configuration(spec, ctx)
 
 
 def test_enabled_firecrawl_reaches_researcher_subagent(
@@ -76,7 +76,10 @@ def test_enabled_firecrawl_reaches_researcher_subagent(
             return [firecrawl_scrape]
 
     monkeypatch.setattr("langchain.mcp.MCPAdapter", Adapter)
-    monkeypatch.setattr("qmx_agents.spec.credential", lambda provider: "vault-token")
+    def vault(provider: str) -> str:
+        return "vault-token"
+
+    monkeypatch.setattr("qmx_agents.spec.credential", vault)
     config.mcp_servers["firecrawl"] = {"enabled": True}
     write_spec(tmp_path, name="researcher")
     parent = write_spec(tmp_path, "subagents: [{ref: researcher.yaml}]")
