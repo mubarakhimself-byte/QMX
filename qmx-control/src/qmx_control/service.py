@@ -23,9 +23,13 @@ from qmx_apps.docker import DockerSupervisor
 from qmx_apps.manifest import Trust
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
+from qmx_broker.models import BrokerSettings
+from qmx_broker.service import read_proposals
 
 type Document = dict[str, JsonValue]
-type SettingsSection = Literal["providers", "mcp_servers", "budgets", "memory_provider", "backup"]
+type SettingsSection = Literal[
+    "providers", "mcp_servers", "budgets", "memory_provider", "backup", "brokers"
+]
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings"]
 type WorkKind = Literal["runs", "jobs"]
 
@@ -217,6 +221,16 @@ class ControlService:
                 )
         if section == "backup":
             BackupSettings.model_validate(values).destination("validation", "validation")
+        elif section == "brokers":
+            try:
+                values = BrokerSettings.model_validate(values).model_dump(
+                    mode="json", exclude_none=True
+                )
+            except ValueError as error:
+                raise ControlError(
+                    "invalid_brokers",
+                    "Use valid brokers, connections and accounts with qmx/* vault references.",
+                ) from error
         with self._lock:
             path = self.home / "settings.toml"
             settings: Document = {}
@@ -236,6 +250,10 @@ class ControlService:
             with self._connect() as db:
                 self._event(db, "settings", section, {"section": section})
         return values
+
+    def portfolio_proposals(self, offset: int = 0, limit: int = 100) -> list[Document]:
+        """Read unsigned broker proposals awaiting the operator's Portfolio signature."""
+        return cast(list[Document], read_proposals(self.home, offset, limit))
 
     def sessions_create(self, session: SessionInput) -> Document:
         """Create a durable Copilot session, optionally a child session."""

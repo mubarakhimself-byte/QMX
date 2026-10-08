@@ -12,6 +12,7 @@ dependencies = [
     "tomli-w>=1.2,<2",
     "psutil>=7,<9",
     "qmx-apps",
+    "qmx-broker",
 ]
 
 [project.scripts]
@@ -27,6 +28,7 @@ members = []
 
 [tool.uv.sources]
 qmx-apps = { path = "../qmx-apps", editable = true }
+qmx-broker = { path = "../qmx-agents/packages/qmx-broker", editable = true }
 
 [dependency-groups]
 dev = [

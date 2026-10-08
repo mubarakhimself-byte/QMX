@@ -28,6 +28,8 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from qmx_broker.server import create_server as create_broker_server
+from qmx_broker.service import BrokerService
 from qmx_tools import default_tool_registry
 
 from qmx_agents.guards import AdmissionBackend, AdmissionGate, RunJournal, check_tool
@@ -37,6 +39,7 @@ from qmx_agents.guards.middleware import (
     JournalMiddleware,
     MoneyPathMiddleware,
 )
+from qmx_agents.guards.money_path import BrokerOrderProposalTool
 from qmx_agents.memory import (
     Approval,
     MemoryContext,
@@ -117,8 +120,10 @@ class AgentSpec(BaseModel):
         return model_selector(value)
 
 
-def load_spec(path: str | Path) -> AgentSpec:
-    source = Path(path).resolve()
+def load_spec(path: str | Path | None = None) -> AgentSpec:
+    source = (
+        Path(path) if path is not None else Path(__file__).with_name("copilot.yaml")
+    ).resolve()
     spec = AgentSpec.model_validate(yaml.safe_load(source.read_text(encoding="utf-8")))
     spec.system_prompt = (source.parent / spec.system_prompt).resolve()
     # Fail during loading, before models or MCP connections are constructed.
@@ -147,6 +152,7 @@ class BuildContext:
     memory_approval: Approval | None = None
     memory_resources: list[MemoryManager] = field(default_factory=list[MemoryManager])
     general_purpose_subagent: bool = True
+    broker: BrokerService | None = None
 
     async def close_memory(self) -> None:
         for manager in reversed(self.memory_resources):
@@ -186,6 +192,8 @@ def mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str,
         names.append("firecrawl")
     selected: dict[str, dict[str, Any]] = {}
     for name in names:
+        if name == "qmx-broker":
+            continue
         server = dict(servers[name])
         if server.pop("enabled", True) is False:
             continue
@@ -225,12 +233,26 @@ async def _build(
         raise ValueError("interrupt_on requires a checkpointer")
     tools = [ctx.tools[name] for name in spec.tools]
     servers = mcp_configuration(spec, ctx)
-    if servers:
+    if servers or "qmx-broker" in spec.mcp_servers:
         # The official adapter is optional at import time and emits its documented beta warning.
         from langchain.mcp import MCPAdapter  # noqa: PLC0415
 
-        async with MCPAdapter({"mcpServers": servers}) as adapter:
-            tools.extend(await adapter.list_tools())
+        if servers:
+            async with MCPAdapter({"mcpServers": servers}) as adapter:
+                tools.extend(await adapter.list_tools())
+        if "qmx-broker" in spec.mcp_servers:
+            if ctx.broker is None and ctx.qmx_home is None:
+                raise ValueError(
+                    "qmx-broker requires the node's qmx_home or an injected BrokerService"
+                )
+            broker = ctx.broker or BrokerService(cast(Path, ctx.qmx_home))
+            ctx.broker = broker
+            async with MCPAdapter(create_broker_server(broker)) as adapter:
+                broker_tools = await adapter.list_tools()
+            tools.extend(tool for tool in broker_tools if tool.name != "propose_order")
+            # Never trust a remote tool by name or annotations. Only the local
+            # concrete writer receives the proposal exception in the barrier.
+            tools.append(BrokerOrderProposalTool(service=broker))
     names = [tool.name for tool in tools]
     for tool in tools:
         check_tool(tool)

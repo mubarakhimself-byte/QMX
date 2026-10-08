@@ -1,0 +1,7 @@
+{
+  "provenance": "Offline unified-API fixture following the CCXT Manual; not an exchange capture.",
+  "market": {"id": "BTCUSDT", "symbol": "BTC/USDT", "base": "BTC", "quote": "USDT", "spot": true, "contract": false, "active": true, "precision": {"amount": 0.001, "price": 0.01}, "limits": {"amount": {"min": 0.001, "max": 100}, "cost": {"min": 1, "max": 1000000}}},
+  "balance": {"timestamp": 1700000000000, "free": {"BTC": 1, "USDT": 100}, "used": {"BTC": 0}, "total": {"BTC": 1, "USDT": 100, "ZERO": 0}, "info": {"private": "must-not-return"}},
+  "ticker": {"symbol": "BTC/USDT", "bid": 100, "ask": 101, "timestamp": 1700000000000, "info": {"private": "must-not-return"}},
+  "bars": [[1700000000000, 100, 105, 99, 101, 12], [1700000060000, 101, 106, 100, 103, 15]]
+}

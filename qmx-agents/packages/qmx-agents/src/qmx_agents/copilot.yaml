@@ -1,0 +1,6 @@
+name: copilot
+model: tier:reasoning_high
+system_prompt: copilot.md
+mcp_servers: [qmx-broker]
+memory: {scope: session}
+budget: {model_calls: 200, tool_calls: 400}
