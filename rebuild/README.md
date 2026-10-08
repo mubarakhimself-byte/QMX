@@ -17,7 +17,9 @@ Packets are written for a coding agent (Codex) to run without further operator i
 6. **Python.** Use `uv`. The workspace pins Python 3.14. Strict typing stays on where it is on now. Format and lint with the repo's ruff config.
 7. **Secrets.** Never commit keys. Read credentials from Windows Credential Manager entries `qmx/*`. Live model calls only in scripts under `scripts/live/` that the operator runs; never in the test suite.
 8. **Never guess a library API.** Before coding against any library or service, read its section in `rebuild/REFERENCES.md`. `curl` the listed docs (llms.txt or raw markdown) into a scratch folder outside the repo and follow them. If something isn't covered there, say so in the PR instead of inventing it.
-9. **Commits.** Small commits with clear messages. Author identity: the configured Codex identity, not the operator's name.
+9. **Backend only. No UI work, no Reticle.** `apps/qmx-ui` on this branch is the old, scrapped UI. Don't touch it, run it or verify against it. The real UI lives on `ui-review/repair` and is wired later by Claude. Prove backend work with tests and REST/MCP calls, not browser tools.
+10. **Package layout.** New packages go under `qmx-agents/packages/<name>`, like `qmx-agents`. `qmx-apps` and `qmx-control` currently sit at the repo root; P16 moves them, so don't add more root-level packages.
+11. **Commits.** Small commits with clear messages. Author identity: the configured Codex identity, not the operator's name.
 
 ## Order
 

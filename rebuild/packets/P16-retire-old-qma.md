@@ -16,7 +16,7 @@ The P05 survival map (verdict "replace" or "delete"), updated with what P06–P1
    - old memory
    - old transport (`process.py` server parts, `pairing.py`, `http_pair.py`)
 3. Remove the strict-xfail tests from P01 together with the code they covered.
-4. Update `pyproject` workspaces and the lock file.
+4. Update `pyproject` workspaces and the lock file. Move `qmx-apps/` and `qmx-control/` under `qmx-agents/packages/` and use one shared lock where possible.
 
 ## Done when
 - `just test-all` is green.
