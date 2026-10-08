@@ -97,7 +97,7 @@ class History:
 @contextmanager
 def history(home: Path, app_id: str) -> Generator[History]:
     volume = Volume(home, app_id)
-    lease = VolumeLease(home, app_id + "-road")
+    lease = VolumeLease(home / "road-locks", app_id)
     path = volume.root / "road/steps.jsonl"
     try:
         # The OS lease proves no writer survived; recover a crashed journal lock.

@@ -132,7 +132,7 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
     with tempfile.TemporaryDirectory(prefix="qmx-backup-") as temporary:
         root = Path(temporary) / "snapshot"
         snapshot(volume, root)
-        road_lease = VolumeLease(volume.root.parent.parent, volume.root.name + "-road")
+        road_lease = VolumeLease(volume.root.parent.parent / "road-locks", volume.root.name)
         try:
             # The authority journal and blobs must be copied at one serialized point.
             if (volume.root / "road").is_dir():
@@ -167,7 +167,7 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
 
 def restore(home: Path, app_id: str, settings: BackupSettings, snapshot_id: str) -> Document:
     volume = Volume(home, app_id)
-    road_lease = VolumeLease(home, app_id + "-road")
+    road_lease = VolumeLease(home / "road-locks", app_id)
     try:
         lease = VolumeLease(home, app_id)
     except BaseException:

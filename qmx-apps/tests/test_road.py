@@ -18,6 +18,7 @@ from qmx_apps.manifest import Definition
 from qmx_apps.road.history import history
 from qmx_apps.road.models import Evidence, Proof, Stage, json_document
 from qmx_apps.supervisor import Supervisor
+from qmx_apps.volume import VolumeLease
 
 EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
 
@@ -121,6 +122,15 @@ def test_immutable_version_rule_survives_projection_loss(owner: RuntimeFixture) 
     with pytest.raises(AppError, match="new version"):
         owner.road.register(Definition.load(target), "first_party", first.hash)
     assert owner.get("exchange-status")["definition_hash"] == first.hash
+
+
+def test_road_writer_lock_cannot_collide_with_another_app_id(owner: RuntimeFixture) -> None:
+    image = save(owner, "1.0.0", None)
+    lease = VolumeLease(owner.home, "exchange-status-road")
+    try:
+        assert owner.road.evidence("exchange-status")[0]["definition_hash"] == image.hash
+    finally:
+        lease.close()
 
 
 @pytest.mark.parametrize("stage", ["sandbox", "shadow", "live"])
