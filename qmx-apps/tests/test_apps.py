@@ -252,7 +252,12 @@ def test_new_version_and_trust_boundary(supervisor: Supervisor, fixture_app: Pat
     install(supervisor, fixture_app)
     path = fixture_app / "app.toml"
     path.write_text(path.read_text().replace('version = "1.0.0"', 'version = "1.1.0"'))
-    supervisor.install(fixture_app, trust="reviewed", expected_id="exchange-status")
+    supervisor.install(
+        fixture_app,
+        trust="reviewed",
+        expected_id="exchange-status",
+        expected_hash=str(supervisor.get("exchange-status")["definition_hash"]),
+    )
     assert [item["version"] for item in supervisor.versions("exchange-status")] == [
         "1.0.0",
         "1.1.0",

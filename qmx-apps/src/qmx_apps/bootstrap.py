@@ -7,9 +7,11 @@ import io
 import json
 import os
 import runpy
+import socket
 import sys
 import threading
 import time
+import unittest
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, cast
@@ -96,8 +98,37 @@ def main() -> None:
         target = Path(os.fsdecode(path)).resolve()
         if not target.is_relative_to(volume):
             raise PermissionError("App writes must stay inside its volume.")
+        if target == volume or target.is_relative_to(volume / "road"):
+            raise PermissionError("Road evidence is owned by the host.")
+
+    plumbing = threading.local()
+    original_socketpair = socket.socketpair
+
+    def local_socketpair(*args: Any, **kwargs: Any) -> tuple[socket.socket, socket.socket]:
+        # Windows asyncio creates its wake-up pipe through a loopback socketpair.
+        # Only this stdlib operation is exempt; app network calls remain denied.
+        plumbing.active = True
+        try:
+            return original_socketpair(*args, **kwargs)
+        finally:
+            plumbing.active = False
+
+    if config.get("recorded") and sys.platform == "win32":
+        socket.socketpair = local_socketpair
 
     def audit(event: str, args: tuple[Any, ...]) -> None:
+        if (
+            config.get("recorded")
+            and not getattr(plumbing, "active", False)
+            and event
+            in {
+                "socket.connect",
+                "socket.getaddrinfo",
+                "socket.sendto",
+                "socket.bind",
+            }
+        ):
+            raise PermissionError("Recorded proofs cannot use the network.")
         if event == "open":
             mode = args[1] or ""
             flags = args[2]
@@ -121,9 +152,25 @@ def main() -> None:
             if any(fd != -1 for fd in args[2:]):
                 raise PermissionError("Directory-relative writes are not supported in T1.")
         elif event == "os.chdir":
-            check(args[0])
+            target = Path(os.fsdecode(args[0])).resolve()
+            if not target.is_relative_to(volume):
+                raise PermissionError("App working directories stay inside the volume.")
 
     sys.addaudithook(audit)
+    sys.path[:0] = [str(image), str(image / "src")]
+    if config.get("tests"):
+        suite = unittest.defaultTestLoader.discover(str(image / "tests"))
+        result = unittest.TextTestRunner(stream=sys.stderr, verbosity=2).run(suite)
+        report = {
+            "tests_run": result.testsRun,
+            "passed": bool(result.testsRun) and result.wasSuccessful() and not result.skipped,
+            "failures": [text for _, text in result.failures],
+            "errors": [text for _, text in result.errors],
+            "skipped": len(result.skipped),
+            "python": sys.version.split()[0],
+        }
+        (volume / "data/test-result.json").write_text(json.dumps(report), encoding="utf-8")
+        raise SystemExit(0 if report["passed"] else 1)
     heartbeat = volume / "data" / f"heartbeat-{config['instance_id']}.json"
     counts = {"job_runs": 0, "job_errors": 0}
     lock = threading.Lock()
@@ -162,7 +209,6 @@ def main() -> None:
     threading.Thread(target=pulse, name="qmx-heartbeat", daemon=True).start()
     if config["interval_seconds"]:
         threading.Thread(target=jobs, name="qmx-jobs", daemon=True).start()
-    sys.path[:0] = [str(image), str(image / "src")]
     runpy.run_path(str(image / config["mcp"]), run_name="__main__")
 
 

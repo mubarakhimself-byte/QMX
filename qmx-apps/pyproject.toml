@@ -12,6 +12,7 @@ dependencies = [
     "pywin32==312; sys_platform == 'win32'",
     "duckdb==1.5.5",
     "cachetools==7.2.1",
+    "qmx-agents",
 ]
 
 [build-system]
@@ -54,6 +55,7 @@ extend-exclude = []
 "src/qmx_apps/bootstrap.py" = ["S404"]
 "src/qmx_apps/supervisor.py" = ["S404"]
 "src/qmx_apps/backup.py" = ["S404"]
+"src/qmx_apps/road/validation.py" = ["S404"]
 "src/qmx_apps/windows_job.py" = ["PLC0415"]
 
 [tool.pyright]

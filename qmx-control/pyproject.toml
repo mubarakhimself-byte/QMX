@@ -30,6 +30,7 @@ members = []
 [tool.uv.sources]
 qmx-apps = { path = "../qmx-apps", editable = true }
 qmx-broker = { path = "../qmx-agents/packages/qmx-broker", editable = true }
+qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
 
 [dependency-groups]
 dev = [

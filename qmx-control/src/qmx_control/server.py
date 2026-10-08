@@ -33,6 +33,7 @@ OPERATIONS = (
     ("apps_versions", "GET", "/api/apps/{app_id}/versions", False),
     ("apps_test", "POST", "/api/apps/{app_id}/test", False),
     ("apps_publish", "POST", "/api/apps/{app_id}/publish", True),
+    ("apps_rollback", "POST", "/api/apps/{app_id}/rollback", True),
     ("apps_start", "POST", "/api/apps/{app_id}/start", True),
     ("apps_stop", "POST", "/api/apps/{app_id}/stop", True),
     ("apps_restart", "POST", "/api/apps/{app_id}/restart", True),
@@ -132,6 +133,7 @@ def create_app(
     service: ControlService, token: str | None = None, ui_origin: str = "http://127.0.0.1:5173"
 ) -> FastAPI:
     token = token or local_token()
+    service.app_runtime().road.signing_key(token)
     mcp_app = create_mcp(service).http_app(path="/")
 
     @asynccontextmanager
@@ -168,6 +170,20 @@ def create_app(
         if not secrets.compare_digest(credentials.credentials, token):
             raise HTTPException(status_code=401, detail="Invalid bearer token")
 
+    @app.post("/api/apps/{app_id}/sign", dependencies=[Depends(authenticate)])
+    def sign(
+        app_id: str,
+        definition_hash: str,
+        expected_active: str | None = None,
+        rollback: bool = False,
+    ) -> dict[str, str]:
+        """Operator-only door: never exported as an agent MCP tool."""
+        return {
+            "signature": service.app_runtime().road.sign(
+                app_id, definition_hash, expected_active, rollback=rollback
+            )
+        }
+
     @app.exception_handler(ControlError)
     @app.exception_handler(AppError)
     async def control_error(request: Request, error: ControlError | AppError) -> JSONResponse:
@@ -202,7 +218,7 @@ def create_app(
         return {"status": "ok", "pid": os.getpid()}
 
     # Keep decorated callables visible to strict type checking.
-    _ = control_error, stream_events, health
+    _ = control_error, stream_events, health, sign
 
     app.mount("/mcp", mcp_app)
     app.add_middleware(BearerGate, token=token)

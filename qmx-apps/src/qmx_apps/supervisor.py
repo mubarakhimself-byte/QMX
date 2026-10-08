@@ -26,10 +26,12 @@ import psutil
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
+from qmx_agents.guards.money_path import check_descriptor
 
 from qmx_apps.artifacts import Artifacts
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
+from qmx_apps.road import Road
 from qmx_apps.store import open_store
 from qmx_apps.volume import Volume, VolumeLease
 from qmx_apps.windows_job import WindowsJob
@@ -100,6 +102,7 @@ class Supervisor:
         *,
         event_sink: EventSink | None = None,
         secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+        proof_mode: str = "",
     ) -> None:
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -107,6 +110,10 @@ class Supervisor:
         self.artifacts = Artifacts(self.home)
         self.event_sink = event_sink
         self.secret_getter = secret_getter
+        self.proof_mode = proof_mode
+        self._proof_images: dict[str, Definition] = {}
+        self.environments = self.home / "environments"
+        self.road = Road(self)
         self._lock = threading.RLock()
         self._instances: dict[str, Instance] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -117,11 +124,17 @@ class Supervisor:
                 "(id TEXT, version TEXT, hash TEXT PRIMARY KEY, trust TEXT, "
                 "UNIQUE(id,version)); CREATE TABLE IF NOT EXISTS selected "
                 "(id TEXT PRIMARY KEY, hash TEXT); CREATE TABLE IF NOT EXISTS runtime "
-                "(id TEXT PRIMARY KEY, data TEXT);"
+                "(id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS active "
+                "(id TEXT PRIMARY KEY, hash TEXT, revision TEXT);"
             )
 
     def install(
-        self, path: Path, *, trust: Trust = "agent", expected_id: str | None = None
+        self,
+        path: Path,
+        *,
+        trust: Trust = "agent",
+        expected_id: str | None = None,
+        expected_hash: str | None = None,
     ) -> Document:
         if trust == "agent" and self.tier == "T1":
             raise AppError(
@@ -135,11 +148,11 @@ class Supervisor:
             raise AppError("id_mismatch", "An update must keep the app id.")
         lease = VolumeLease(self.home, manifest.id)
         try:
-            return self._install(definition, trust)
+            return self._install(definition, trust, expected_hash)
         finally:
             lease.close()
 
-    def _install(self, definition: Definition, trust: Trust) -> Document:
+    def _install(self, definition: Definition, trust: Trust, expected_hash: str | None) -> Document:
         manifest = definition.manifest
         with self._lock:
             if manifest.id in self._instances:
@@ -151,6 +164,12 @@ class Supervisor:
                 ).fetchone()
             if existing and existing[0] != definition.hash:
                 raise AppError("immutable_version", "Changed content requires a new version.", 409)
+            with closing(sqlite3.connect(self.catalog)) as db:
+                head = db.execute("SELECT hash FROM selected WHERE id=?", (manifest.id,)).fetchone()
+            if head and head[0] not in {expected_hash, definition.hash}:
+                raise AppError(
+                    "head_conflict", "Candidate head changed; reload before saving.", 409
+                )
             image = self.home / "definitions" / definition.hash
             image.mkdir(parents=True, exist_ok=True)
             if not existing:
@@ -165,22 +184,13 @@ class Supervisor:
                 raise AppError(
                     "definition_corrupt", "Installation changed the immutable image.", 409
                 )
-            with closing(sqlite3.connect(self.catalog)) as db, db:
-                db.execute(
-                    "INSERT OR IGNORE INTO definitions VALUES(?,?,?,?)",
-                    (manifest.id, manifest.version, definition.hash, trust),
-                )
-                db.execute(
-                    "INSERT INTO selected VALUES(?,?) ON CONFLICT(id) "
-                    "DO UPDATE SET hash=excluded.hash",
-                    (manifest.id, definition.hash),
-                )
+            self.road.register(definition, trust, expected_hash)
             self._log(
                 manifest.id,
                 "installed",
                 {"definition_hash": definition.hash, "version": manifest.version},
             )
-            self._emit(
+            self.emit(
                 manifest.id,
                 {"app_id": manifest.id, "status": "installed", "definition_hash": definition.hash},
             )
@@ -207,7 +217,7 @@ class Supervisor:
                 "TMP",
             }
         }
-        environment["UV_PROJECT_ENVIRONMENT"] = str(self.home / "environments" / definition.hash)
+        environment["UV_PROJECT_ENVIRONMENT"] = str(self.environments / definition.hash)
         result = subprocess.run(
             [
                 uv,
@@ -233,6 +243,12 @@ class Supervisor:
             )
 
     def _definition(self, app_id: str) -> Definition:
+        if self.proof_mode and app_id in self._proof_images:
+            image = self._proof_images[app_id]
+            checked = Definition.load(image.root)
+            if checked.hash != image.hash:
+                raise AppError("definition_corrupt", "The immutable proof image changed.", 409)
+            return checked
         with closing(sqlite3.connect(self.catalog)) as db:
             row = db.execute("SELECT hash FROM selected WHERE id=?", (app_id,)).fetchone()
         if row is None:
@@ -242,18 +258,43 @@ class Supervisor:
             raise AppError("definition_corrupt", "The immutable definition hash changed.", 409)
         return definition
 
+    def select_image(self, definition: Definition) -> None:
+        """Disposable proof catalogs point at the host's immutable image."""
+        with closing(sqlite3.connect(self.catalog)) as db, db:
+            db.execute(
+                "INSERT INTO selected VALUES(?,?)", (definition.manifest.id, definition.hash)
+            )
+        self._proof_images[definition.manifest.id] = definition
+
+    def python(self, definition_hash: str) -> Path:
+        return (
+            self.environments
+            / definition_hash
+            / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        )
+
     def list(self) -> list[Document]:
         with closing(sqlite3.connect(self.catalog)) as db:
             rows = db.execute("SELECT id FROM selected ORDER BY id").fetchall()
         return [self.get(row[0]) for row in rows]
 
     def get(self, app_id: str) -> Document:
+        road: Document | None = None
+        if not self.proof_mode and (Volume(self.home, app_id).root / "road/steps.jsonl").exists():
+            from qmx_apps.road.history import history, project  # noqa: PLC0415
+
+            with history(self.home, app_id) as state:
+                project(self.home, app_id, state)
+                road = {"stage": state.stages.get(state.head or ""), "active": state.active}
         definition = self._definition(app_id)
-        return {
+        result: Document = {
             "definition": cast(Document, definition.manifest.model_dump(mode="json")),
             "definition_hash": definition.hash,
             "runtime": self.status(app_id),
         }
+        if road is not None:
+            result["road"] = road
+        return result
 
     def versions(self, app_id: str) -> list[Document]:
         self._definition(app_id)
@@ -292,12 +333,30 @@ class Supervisor:
     def _submit(self, operation: Coroutine[Any, Any, T]) -> concurrent.futures.Future[T]:
         return asyncio.run_coroutine_threadsafe(operation, self._ensure_loop())
 
-    def start(self, app_id: str) -> Document:
+    def start(self, app_id: str, *, definition_hash: str | None = None) -> Document:
         with self._lock:
             existing = self._instances.get(app_id)
             if existing:
                 return existing.document()
             definition = self._definition(app_id)
+            if definition_hash is None and not self.proof_mode:
+                from qmx_apps.road.history import history, project  # noqa: PLC0415
+
+                with history(self.home, app_id) as state:
+                    project(self.home, app_id, state)
+                with closing(sqlite3.connect(self.catalog)) as db:
+                    active = db.execute("SELECT hash FROM active WHERE id=?", (app_id,)).fetchone()
+                definition_hash = active[0] if active else None
+                if definition.manifest.risk == "money" and not active:
+                    raise AppError(
+                        "signature_required",
+                        "Publish a proposal-only money app with an operator signature first.",
+                        409,
+                    )
+            if definition_hash:
+                from qmx_apps.road.history import definition as checked_definition  # noqa: PLC0415
+
+                definition = checked_definition(self.home, app_id, definition_hash)
             volume = Volume(self.home, app_id)
             lease = VolumeLease(self.home, app_id)
             try:
@@ -324,7 +383,7 @@ class Supervisor:
             ) from error
         return self.status(app_id)
 
-    def _environment(self, instance: Instance) -> dict[str, str]:
+    def environment(self, instance: Instance) -> dict[str, str]:
         environment = {
             name: value
             for name, value in os.environ.items()
@@ -342,9 +401,12 @@ class Supervisor:
                 "FASTMCP_SHOW_BANNER": "false",
             }
         )
-        env = self.home / "environments" / instance.definition.hash
+        environment["QMX_STAGE"] = self.proof_mode or "live"
+        env = self.environments / instance.definition.hash
         environment["PATH"] = str(env / ("Scripts" if sys.platform == "win32" else "bin"))
         for name, service in instance.definition.manifest.capabilities.secrets.items():
+            if self.proof_mode in {"tests", "sandbox"}:
+                continue
             secret = self.secret_getter(service, service.split("/", 1)[1])
             if not secret:
                 raise AppError("missing_secret", f"Missing declared credential {service}.", 503)
@@ -352,12 +414,33 @@ class Supervisor:
             instance.secrets.append(secret)
         return environment
 
+    def configuration(
+        self, instance: Instance, job_name: str, environment: dict[str, str]
+    ) -> Document:
+        manifest = instance.definition.manifest
+        return {
+            "image": str(instance.definition.root),
+            "volume": str(instance.volume.root),
+            "mcp": manifest.entrypoints.mcp,
+            "jobs": [] if self.proof_mode else list(manifest.entrypoints.jobs),
+            "interval_seconds": manifest.schedule.interval_seconds
+            if manifest.schedule and not self.proof_mode
+            else 0,
+            "instance_id": instance.id,
+            "job_name": job_name,
+            "env_names": list(environment),
+            "secret_names": list(manifest.capabilities.secrets),
+            "memory_mb": manifest.budget.memory_mb,
+            "cpu_seconds": manifest.budget.cpu_seconds,
+            "recorded": self.proof_mode in {"tests", "sandbox"},
+        }
+
     async def _serve(self, instance: Instance) -> None:
         manifest = instance.definition.manifest
         app_id = manifest.id
         instance.stop = asyncio.Event()
         try:
-            environment = self._environment(instance)
+            environment = self.environment(instance)
             job_name = f"Local\\qmx-{instance.id}"
             if sys.platform == "win32" and self.tier == "T1":
                 instance.job = WindowsJob(job_name, manifest.budget)
@@ -369,19 +452,7 @@ class Supervisor:
                     "cpu_percent": None,
                     "fallback": "RLIMIT_AS/RLIMIT_CPU and psutil",
                 }
-            config = {
-                "image": str(instance.definition.root),
-                "volume": str(instance.volume.root),
-                "mcp": manifest.entrypoints.mcp,
-                "jobs": manifest.entrypoints.jobs,
-                "interval_seconds": manifest.schedule.interval_seconds if manifest.schedule else 0,
-                "instance_id": instance.id,
-                "job_name": job_name,
-                "env_names": list(environment),
-                "secret_names": list(manifest.capabilities.secrets),
-                "memory_mb": manifest.budget.memory_mb,
-                "cpu_seconds": manifest.budget.cpu_seconds,
-            }
+            config = self.configuration(instance, job_name, environment)
             transport = self._transport(instance, config, environment)
             # A request timeout also applies to MCP's fallback initialize request.
             # Bound startup separately; running tool/resource calls retain 20s.
@@ -391,6 +462,8 @@ class Supervisor:
                     cast(Document, tool.model_dump(mode="json", by_alias=True))
                     for tool in await client.list_tools()
                 ]
+                for tool in instance.tools:
+                    check_descriptor(str(tool["name"]), tool)
                 instance.resources = [
                     cast(Document, resource.model_dump(mode="json", by_alias=True))
                     for resource in await client.list_resources()
@@ -461,8 +534,7 @@ class Supervisor:
     def _transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
     ) -> StdioTransport:
-        env = self.home / "environments" / instance.definition.hash
-        python = env / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        python = self.python(instance.definition.hash)
         command = str(python)
         if sys.platform == "win32" and not command.startswith("\\\\?\\"):
             # Keep sys.prefix extended too, so native DLL imports may exceed MAX_PATH.
@@ -585,6 +657,10 @@ class Supervisor:
             raise AppError("budget_exceeded", "The app's run budget is exhausted.", 409)
         instance.runs += 1
         try:
+            resolved = next((item for item in instance.tools if item["name"] == tool), None)
+            if resolved is None:
+                raise AppError("tool_not_found", "Tool is not in the connected MCP catalog.", 404)
+            check_descriptor(tool, resolved)
             inputs = dict(arguments)
             for feed in instance.definition.manifest.feeds:
                 if feed in inputs:
@@ -661,7 +737,7 @@ class Supervisor:
                 "resource_timeout", "The resource did not complete within its timeout.", 504
             ) from error
 
-    def _emit(self, app_id: str, data: Document) -> None:
+    def emit(self, app_id: str, data: Document) -> None:
         if self.event_sink:
             self.event_sink(app_id, data)
 
@@ -673,7 +749,7 @@ class Supervisor:
                 "INSERT INTO runtime VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
                 (app_id, json.dumps(data)),
             )
-        self._emit(app_id, data)
+        self.emit(app_id, data)
 
     def _log(self, app_id: str, event: str, data: Document) -> None:
         path = Volume(self.home, app_id).check_write("logs/supervisor.jsonl")

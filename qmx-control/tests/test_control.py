@@ -147,8 +147,8 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
             == 400
         )
         response = rest.post("/api/apps/missing/test", headers=HEADERS)
-        assert response.status_code == 501
-        assert response.json()["error"]["code"] == "not_implemented"
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "not_found"
     reopened = ControlService(tmp_path)
     assert reopened.sessions_list()[0] == session
     assert reopened.sessions_stream(session["id"])[-1]["data"] == {
@@ -161,7 +161,7 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
         async with Client(create_mcp(reopened)) as mcp:
             result = await mcp.call_tool("apps_test", {"app_id": "missing"}, raise_on_error=False)
             assert result.is_error
-            assert "not_implemented" in str(result.content)
+            assert "not_found" in str(result.content)
 
     asyncio.run(unavailable())
 
@@ -196,7 +196,10 @@ def test_unavailable_errors_match_across_doors(tmp_path: Path) -> None:
                         args["graph"] = {}
                         body = {}
                     response = rest.request(method, path, headers=HEADERS, params=params, json=body)
-                    assert response.status_code == 501, (name, response.text)
+                    assert response.status_code == (404 if name.startswith("apps_") else 501), (
+                        name,
+                        response.text,
+                    )
                     result = await mcp.call_tool(name, args, raise_on_error=False)
                     assert result.is_error
                     assert json.loads(result.content[0].model_dump()["text"]) == response.json()
