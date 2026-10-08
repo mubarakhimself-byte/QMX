@@ -92,7 +92,8 @@ Optional `providers.litestream` settings map app ids to credential-free S3 or
 local file replica URLs. The supervisor starts Litestream 0.5.17 with one
 `replica`, one-second sync and daily snapshots. Apps opting in must supply a
 SQLite >=3.51.3 writer (or a fixed backport) to avoid SQLite's documented
-WAL-reset race; the pinned base's stdlib SQLite is 3.46.1. Disable
+WAL-reset race; the pinned base's stdlib SQLite is 3.46.1, so the supervisor
+refuses replication with that writer. Disable
 `wal_autocheckpoint` on every writer connection as recommended by Litestream.
 Replica credentials must be declared app secrets; they are injected only at
 instance start. Restart the node supervisor after changing placement or replica

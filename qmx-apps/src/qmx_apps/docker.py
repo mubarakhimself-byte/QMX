@@ -140,6 +140,29 @@ class DockerSupervisor(Supervisor):
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
     ) -> StdioTransport:
         manifest = instance.definition.manifest
+        if manifest.id in self.replicas:
+            # A second checkpointer requires SQLite's WAL-reset fix in the app writer.
+            version = tuple(
+                int(part)
+                for part in docker(
+                    "run",
+                    "--rm",
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--entrypoint",
+                    "/opt/app-env/bin/python",
+                    f"qmx-app:{instance.definition.hash}",
+                    "-c",
+                    "import sqlite3; print(sqlite3.sqlite_version)",
+                ).split(".")
+            )
+            if not (version >= (3, 51, 3) or (3, 50, 7) <= version < (3, 51, 0)):
+                raise AppError(
+                    "sqlite_version",
+                    "Litestream requires a SQLite 3.51.3 or 3.50.7 writer.",
+                    409,
+                )
         instance.node = self.node
         name = f"qmx-{instance.id}"
         resources = self._resources.setdefault(instance.id, [])

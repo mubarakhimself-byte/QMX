@@ -110,5 +110,15 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
         denied = owner.start("exchange-status")
         config = json.loads(docker("inspect", "qmx-" + str(denied["instance_id"])))[0]
         assert config["HostConfig"]["NetworkMode"] == "none"
+        replicated = DockerSupervisor(
+            tmp_path / "replicated", replicas={"exchange-status": "s3://backup/example"}
+        )
+        try:
+            replicated.install(source)
+            with pytest.raises(AppError, match="SQLite"):
+                replicated.start("exchange-status")
+            assert not replicated._resources
+        finally:
+            replicated.close()
     finally:
         owner.close()
