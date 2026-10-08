@@ -46,7 +46,7 @@ class FakeApps(ControlService):
     def apps_test(self, app_id: str) -> Document:
         self.tested.append(app_id)
         if self.unavailable:
-            return super().apps_test(app_id)
+            raise ControlError("test_unavailable", "The app test runner is unavailable.", 503)
         if self.change_during_tests:
             self.hash = "version-two"
         return self.test_result
@@ -219,8 +219,3 @@ def test_breaker_notifies_copilot_and_operator_between_turns(
         assert len([event for event in app_events if event["data"].get("type") == "needs_you"]) == 2
     finally:
         service.close()
-
-
-def test_missing_test_runner_is_not_treated_as_green(tmp_path: Path) -> None:
-    with pytest.raises(ControlError, match="requires P14"):
-        ControlService(tmp_path).apps_test("demo")
