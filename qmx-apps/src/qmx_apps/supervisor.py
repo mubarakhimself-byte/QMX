@@ -375,8 +375,16 @@ class Supervisor:
             }
             env = self.home / "environments" / instance.definition.hash
             python = env / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+            command = str(python)
+            if sys.platform == "win32" and not command.startswith("\\\\?\\"):
+                # Keep sys.prefix extended too, so native DLL imports may exceed MAX_PATH.
+                command = (
+                    "\\\\?\\UNC\\" + command[2:]
+                    if command.startswith("\\\\")
+                    else "\\\\?\\" + command
+                )
             transport = StdioTransport(
-                command=str(python),
+                command=command,
                 args=[str(Path(__file__).with_name("bootstrap.py")), json.dumps(config)],
                 cwd=str(instance.volume.root),
                 env=environment,

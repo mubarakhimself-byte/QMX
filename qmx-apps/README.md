@@ -37,7 +37,10 @@ egress and data-read capabilities; P17 enforces egress.
 
 Windows Job Objects enforce aggregate job memory in MiB, a CPU hard cap as
 a percentage, and process-tree termination on close. The native CPU limit
-API supplements pywin32's Job Object bindings. Linux uses `RLIMIT_AS`,
+API supplements pywin32's Job Object bindings. Windows launches the locked
+interpreter through an extended-length path so native DLL dependencies load
+from deep home directories without changing machine registry settings.
+Linux uses `RLIMIT_AS`,
 `RLIMIT_CPU`, process groups and psutil termination; it has no CPU percentage
 cap. Windows CPU accounting includes exited children from the kernel job;
 Linux CPU accounting uses process-tree polling. Heartbeats meter CPU seconds,

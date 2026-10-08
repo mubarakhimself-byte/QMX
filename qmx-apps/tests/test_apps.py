@@ -161,6 +161,26 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
     dead(cast(int, restarted["pid"]))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows native DLL path handling")
+def test_deep_windows_home_loads_native_dependencies(tmp_path: Path, fixture_app: Path) -> None:
+    owner = Supervisor(tmp_path / ("nested-" * 5) / "home")
+    try:
+        install(owner, fixture_app)
+        definition_hash = cast(str, owner.get("exchange-status")["definition_hash"])
+        native = next(
+            (owner.home / "environments" / definition_hash).glob(
+                "Lib/site-packages/_cffi_backend*.pyd"
+            )
+        )
+        assert len(str(native)) > 260, "Exercise the Windows native DLL path boundary"
+        started = owner.start("exchange-status")
+        assert owner.call("exchange-status", "ping", {})["result"] == {"pong": True}
+        owner.stop("exchange-status")
+        dead(cast(int, started["pid"]))
+    finally:
+        owner.close()
+
+
 def test_startup_has_its_own_deadline(supervisor: Supervisor, fixture_app: Path) -> None:
     script = fixture_app / "server.py"
     script.write_text(
