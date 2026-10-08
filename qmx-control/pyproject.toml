@@ -29,7 +29,16 @@ members = []
 qmx-apps = { path = "../qmx-apps", editable = true }
 
 [dependency-groups]
-dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0"]
+dev = [
+    "ruff==0.16.5",
+    "pyright==1.1.411",
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "pytest-cov>=7,<8",
+    "poethepoet==0.48.0",
+    "beautifulsoup4==4.15.0",
+    "markdownify==1.2.3",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -46,6 +55,7 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests"]
+extraPaths = ["src", "../examples/apps/mql5-articles"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 

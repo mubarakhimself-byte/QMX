@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Literal, cast
+from urllib.parse import urlsplit
 
 import keyring
 import tomli_w
@@ -170,15 +171,50 @@ class ControlService:
         """Read UI-editable provider, MCP, budget or memory settings."""
         with self._lock:
             path = self.home / "settings.toml"
-            if not path.exists():
-                return {}
-            with path.open("rb") as file:
-                settings = tomllib.load(file)
-            return cast(Document, settings.get(section, {}))
+            values: Document = {}
+            if path.exists():
+                with path.open("rb") as file:
+                    values = cast(Document, tomllib.load(file).get(section, {}))
+            if section == "mcp_servers":
+                firecrawl = values.get("firecrawl", {})
+                if not isinstance(firecrawl, dict):
+                    raise ControlError("invalid_settings", "Firecrawl settings must be a table.")
+                values["firecrawl"] = {
+                    "url": "https://mcp.firecrawl.dev/v2/mcp",
+                    "enabled": False,
+                    "credential_ref": "qmx/firecrawl",
+                    **firecrawl,
+                }
+            return values
 
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
         _no_secrets(values)
+        if section == "mcp_servers" and "firecrawl" in values:
+            firecrawl = values["firecrawl"]
+            if not isinstance(firecrawl, dict) or set(firecrawl) - {
+                "url",
+                "enabled",
+                "credential_ref",
+            }:
+                raise ControlError(
+                    "invalid_settings", "Use Firecrawl url, enabled and credential_ref only."
+                )
+            try:
+                url = urlsplit(str(firecrawl.get("url", "https://mcp.firecrawl.dev/v2/mcp")))
+            except ValueError as error:
+                raise ControlError("invalid_settings", "Firecrawl URL is malformed.") from error
+            if (
+                not isinstance(firecrawl.get("enabled", False), bool)
+                or firecrawl.get("credential_ref", "qmx/firecrawl") != "qmx/firecrawl"
+                or url.scheme != "https"
+                or not url.hostname
+                or any((url.username, url.password, url.query, url.fragment))
+            ):
+                raise ControlError(
+                    "invalid_settings",
+                    "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
+                )
         if section == "backup":
             BackupSettings.model_validate(values).destination("validation", "validation")
         with self._lock:

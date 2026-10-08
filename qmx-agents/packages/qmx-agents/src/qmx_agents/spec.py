@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, cast
+from urllib.parse import urlsplit
 
 import yaml
 from deepagents import (
@@ -44,7 +46,7 @@ from qmx_agents.memory import (
     load_provider,
     memory_path,
 )
-from qmx_agents.router import ModelRouter, RunContext, model_selector
+from qmx_agents.router import FIRECRAWL_SERVER, ModelRouter, RunContext, credential, model_selector
 
 
 class MemorySpec(BaseModel):
@@ -167,6 +169,53 @@ async def build_agent(
     return await _build(spec, ctx, ())
 
 
+def mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str, Any]]:
+    servers = {"firecrawl": dict(FIRECRAWL_SERVER), **ctx.router.config.mcp_servers}
+    servers["firecrawl"] = {**FIRECRAWL_SERVER, **servers["firecrawl"]}
+    if ctx.qmx_home is not None and (ctx.qmx_home / "settings.toml").exists():
+        with (ctx.qmx_home / "settings.toml").open("rb") as file:
+            settings = tomllib.load(file).get("mcp_servers", {})
+        for name, values in settings.items():
+            servers[name] = {**servers.get(name, {}), **values}
+    names = list(spec.mcp_servers)
+    if (
+        spec.name == "researcher"
+        and servers["firecrawl"].get("enabled") is True
+        and "firecrawl" not in names
+    ):
+        names.append("firecrawl")
+    selected: dict[str, dict[str, Any]] = {}
+    for name in names:
+        server = dict(servers[name])
+        if server.pop("enabled", True) is False:
+            continue
+        reference = server.pop("credential_ref", None)
+        if name == "firecrawl":
+            # This paid provider always gets its bearer token from the vault.
+            reference = "qmx/firecrawl"
+            server.pop("headers", None)
+            url = urlsplit(str(server.get("url", "")))
+            if (
+                url.scheme != "https"
+                or not url.hostname
+                or url.username
+                or url.password
+                or url.query
+                or url.fragment
+            ):
+                raise ValueError("Firecrawl requires an HTTPS URL without embedded credentials.")
+        if reference is not None:
+            if (
+                not isinstance(reference, str)
+                or not reference.startswith("qmx/")
+                or "/" in reference[4:]
+            ):
+                raise ValueError("MCP credentials must reference qmx/<provider>.")
+            server["auth"] = credential(reference[4:])
+        selected[name] = server
+    return selected
+
+
 async def _build(
     spec: AgentSpec, ctx: BuildContext, ancestors: tuple[Path, ...]
 ) -> CompiledStateGraph[Any, RunContext, Any, Any]:
@@ -175,11 +224,11 @@ async def _build(
     if any(spec.interrupt_on.values()) and ctx.checkpointer is None:
         raise ValueError("interrupt_on requires a checkpointer")
     tools = [ctx.tools[name] for name in spec.tools]
-    if spec.mcp_servers:
+    servers = mcp_configuration(spec, ctx)
+    if servers:
         # The official adapter is optional at import time and emits its documented beta warning.
         from langchain.mcp import MCPAdapter  # noqa: PLC0415
 
-        servers = {name: ctx.router.config.mcp_servers[name] for name in spec.mcp_servers}
         async with MCPAdapter({"mcpServers": servers}) as adapter:
             tools.extend(await adapter.list_tools())
     names = [tool.name for tool in tools]

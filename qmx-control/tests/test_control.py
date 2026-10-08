@@ -29,6 +29,42 @@ TOKEN = secrets.token_urlsafe(32)
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
+def test_firecrawl_settings_are_off_by_default_and_persist_only_a_vault_reference(
+    tmp_path: Path,
+) -> None:
+    service = ControlService(tmp_path)
+    default = service.settings_get("mcp_servers")["firecrawl"]
+    assert isinstance(default, dict)
+    assert default == {
+        "url": "https://mcp.firecrawl.dev/v2/mcp",
+        "enabled": False,
+        "credential_ref": "qmx/firecrawl",
+    }
+    values = {"firecrawl": {**default, "enabled": True}}
+    with TestClient(create_app(service, TOKEN)) as rest:
+        assert (
+            rest.put("/api/settings/mcp_servers", headers=HEADERS, json=values).status_code == 200
+        )
+        assert rest.get("/api/settings/mcp_servers", headers=HEADERS).json() == values
+        for invalid in (
+            {"api_key": "do-not-save"},
+            {"auth": "do-not-save"},
+            {"url": "https://host/?key=do-not-save"},
+            {"url": "http://host"},
+            {"url": "https://["},
+            {"enabled": "true"},
+            {"credential_ref": "qmx/other"},
+        ):
+            assert (
+                rest.put(
+                    "/api/settings/mcp_servers", headers=HEADERS, json={"firecrawl": invalid}
+                ).status_code
+                == 400
+            )
+    assert ControlService(tmp_path).settings_get("mcp_servers") == values
+    assert "do-not-save" not in (tmp_path / "settings.toml").read_text()
+
+
 def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
     service.library_save(LibraryInput(title="Research", kind="note", content={"text": "rates"}))
