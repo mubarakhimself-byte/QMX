@@ -17,6 +17,9 @@ import pytest
 from qmx_apps.errors import AppError, Document
 from qmx_apps.supervisor import Supervisor
 
+# These proofs launch multiple metered processes; isolate their CPU budgets.
+pytestmark = pytest.mark.serial
+
 EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
 OWN_TEST = """import json, os, socket, unittest
 from pathlib import Path
