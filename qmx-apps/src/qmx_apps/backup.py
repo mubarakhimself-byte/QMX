@@ -93,6 +93,32 @@ def _verify(root: Path, *, app_id: str, snapshot_id: str) -> Document:
         ) from error
 
 
+def snapshot(volume: Volume, root: Path) -> None:
+    """Copy online databases consistently for both backups and isolated proofs."""
+    root.mkdir(parents=True, exist_ok=True)
+    for source in _files(volume.root):
+        relative = source.relative_to(volume.root)
+        if (
+            source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
+            or source.name == "backup.json.tmp"
+            or (relative.parent == Path("data") and source.name.startswith("heartbeat-"))
+            or relative.parts[:2] == ("data", "tmp")
+            or relative.parts[0] == "road"
+        ):
+            continue
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix == ".db":
+            with (
+                closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as src,
+                closing(sqlite3.connect(target)) as dst,
+            ):
+                src.backup(dst, pages=256)
+                dst.execute("PRAGMA journal_mode=DELETE")
+        else:
+            shutil.copyfile(source, target)
+
+
 def backup(volume: Volume, settings: BackupSettings) -> Document:
     if not volume.check_write("app.db").is_file():
         raise AppError("volume_missing", "Start the app once to create its data volume.", 409)
@@ -105,31 +131,16 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
         )
     with tempfile.TemporaryDirectory(prefix="qmx-backup-") as temporary:
         root = Path(temporary) / "snapshot"
-        root.mkdir()
-        for source in _files(volume.root):
-            relative = source.relative_to(volume.root)
-            if (
-                source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
-                or source.name == "backup.json.tmp"
-                or (relative.parent == Path("data") and source.name.startswith("heartbeat-"))
-                or relative.parts[:2]
-                == (
-                    "data",
-                    "tmp",
+        snapshot(volume, root)
+        road_lease = VolumeLease(volume.root.parent.parent / "road-locks", volume.root.name)
+        try:
+            # The authority journal and blobs must be copied at one serialized point.
+            if (volume.root / "road").is_dir():
+                shutil.copytree(
+                    volume.root / "road", root / "road", ignore=shutil.ignore_patterns("*.lock")
                 )
-            ):
-                continue
-            target = root / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if source.suffix == ".db":
-                with (
-                    closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as src,
-                    closing(sqlite3.connect(target)) as dst,
-                ):
-                    src.backup(dst, pages=256)
-                    dst.execute("PRAGMA journal_mode=DELETE")
-            else:
-                shutil.copyfile(source, target)
+        finally:
+            road_lease.close()
         manifest: Document = {
             "app_id": volume.root.name,
             "snapshot_id": snapshot_id,
@@ -156,7 +167,12 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
 
 def restore(home: Path, app_id: str, settings: BackupSettings, snapshot_id: str) -> Document:
     volume = Volume(home, app_id)
-    lease = VolumeLease(home, app_id)
+    road_lease = VolumeLease(home / "road-locks", app_id)
+    try:
+        lease = VolumeLease(home, app_id)
+    except BaseException:
+        road_lease.close()
+        raise
     try:
         volume.root.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".restore-", dir=volume.root.parent) as temporary:
@@ -177,3 +193,4 @@ def restore(home: Path, app_id: str, settings: BackupSettings, snapshot_id: str)
             return manifest
     finally:
         lease.close()
+        road_lease.close()

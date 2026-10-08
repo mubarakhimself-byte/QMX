@@ -94,7 +94,7 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
         assert host_config["CapDrop"] == ["ALL"]
         assert host_config["Memory"] > 0 and host_config["NanoCpus"] > 0
         check = (
-            "import urllib.request,urllib.error,socket; "
+            "import urllib.request,urllib.error,socket,os,errno; "
             "u='http://blocked.invalid'; "
             "\ntry: urllib.request.urlopen(u,timeout=5)\n"
             "except urllib.error.HTTPError as e: assert e.code==403\n"
@@ -102,7 +102,12 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
             "try: socket.create_connection(('1.1.1.1',443),timeout=1)\n"
             "except OSError: pass\nelse: raise AssertionError('direct egress bypass')\n"
             "try: open('/image/escape','w')\nexcept OSError: pass\n"
-            "else: raise AssertionError('root filesystem writable')\nprint('isolated')"
+            "else: raise AssertionError('root filesystem writable')\n"
+            # exec starts a fresh interpreter without the bootstrap audit hook.
+            "try: fd=os.open('/volume/road/steps.jsonl',os.O_WRONLY)\n"
+            "except OSError as e: assert e.errno==errno.EROFS\n"
+            "else: os.close(fd); raise AssertionError('road authority writable')\n"
+            "print('isolated')"
         )
         assert docker("exec", name, "python", "-c", check) == "isolated"
         owner.call(
@@ -139,9 +144,11 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
         rejected = DockerSupervisor(tmp_path / "rejected")
         try:
             rejected.install(source)
+            original = rejected.home / "apps/exchange-status/app.db"
+            before = original.read_bytes()
             with pytest.raises(AppError, match="checksum"):
                 rejected.restore("exchange-status", corrupt)
-            assert not (rejected.home / "apps/exchange-status/app.db").exists()
+            assert original.read_bytes() == before
         finally:
             rejected.close()
         manifest.write_text(
@@ -150,7 +157,7 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
             ),
             encoding="utf-8",
         )
-        owner.install(source)
+        owner.install(source, expected_hash=str(owner.get("exchange-status")["definition_hash"]))
         denied = owner.start("exchange-status")
         config = json.loads(docker("inspect", "qmx-" + str(denied["instance_id"])))[0]
         assert config["HostConfig"]["NetworkMode"] == "none"

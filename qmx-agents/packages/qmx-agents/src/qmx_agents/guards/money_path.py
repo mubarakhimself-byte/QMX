@@ -78,6 +78,7 @@ _ROLE_PREFIXES: Final[tuple[str, ...]] = (
 
 
 _ALIAS_PAIRS: Final[tuple[tuple[str, str], ...]] = (
+    ("create_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("place_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("place_an_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("submit_an_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
@@ -240,13 +241,14 @@ def check_tool(tool: BaseTool) -> None:
     if type(tool) in {OrderProposalTool, BrokerOrderProposalTool} and tool.name == "propose_order":
         return
     metadata = tool.metadata or {}
+    check_descriptor(tool.name, metadata)
+
+
+def check_descriptor(name: str, metadata: dict[str, Any]) -> None:
+    """The same resolved barrier applies to LangChain and hosted MCP tools."""
     if metadata.get("money_path"):
-        raise MoneyPathDenyError(f"Money-path tool refused: {tool.name}")
-    tokens: list[str] = [tool.name]
-    # MCP names can be server-prefixed; check every suffix and original metadata.
-    for separator in ("_", ".", ":", "/"):
-        parts = tool.name.split(separator)
-        tokens.extend(separator.join(parts[index:]) for index in range(1, len(parts)))
+        raise MoneyPathDenyError(f"Money-path tool refused: {name}")
+    tokens: list[str] = [name]
     sources: list[dict[str, Any]] = [metadata]
     while sources:
         source = sources.pop()
@@ -257,16 +259,21 @@ def check_tool(tool: BaseTool) -> None:
         if "parent_library" in source and not is_parent_surface_permitted(
             str(source["parent_library"]), str(source.get("parent_surface", ""))
         ):
-            raise MoneyPathDenyError(f"Parent surface refused: {tool.name}")
+            raise MoneyPathDenyError(f"Parent surface refused: {name}")
         if source.get("record_family") is not None:
-            raise MoneyPathDenyError(f"Parent record mutation refused: {tool.name}")
+            raise MoneyPathDenyError(f"Parent record mutation refused: {name}")
         if source.get("money_path"):
-            raise MoneyPathDenyError(f"Money-path tool refused: {tool.name}")
+            raise MoneyPathDenyError(f"Money-path tool refused: {name}")
         for key in ("act", "acts", "name", "tool_name"):
             value = source.get(key)
             if isinstance(value, str):
                 tokens.append(value)
             elif isinstance(value, (list, tuple, set)):
                 tokens.extend(str(item) for item in cast("list[Any]", value))
+    # Resolve server prefixes on both advertised names and original MCP metadata.
+    for token in list(tokens):
+        for separator in ("_", ".", ":", "/"):
+            parts = token.split(separator)
+            tokens.extend(separator.join(parts[index:]) for index in range(1, len(parts)))
     if any(is_money_path_act_denied(token) for token in tokens):
-        raise MoneyPathDenyError(f"Money-path act refused: {tool.name}")
+        raise MoneyPathDenyError(f"Money-path act refused: {name}")

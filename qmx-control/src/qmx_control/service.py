@@ -21,6 +21,7 @@ from qmx_apps.backup import BackupSettings, backup, restore
 from qmx_apps.backup_schedule import BackupSchedule
 from qmx_apps.docker import DockerSupervisor
 from qmx_apps.manifest import Trust
+from qmx_apps.road.models import Stage
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
@@ -549,21 +550,50 @@ class ControlService:
         """Install an app definition from a local package directory."""
         return self.app_runtime().install(Path(path), trust=trust)
 
-    def apps_update(self, app_id: str, path: str, trust: Trust = "agent") -> Document:
+    def apps_update(
+        self, app_id: str, path: str, trust: Trust = "agent", expected_hash: str | None = None
+    ) -> Document:
         """Install a new immutable version of an app."""
-        return self.app_runtime().install(Path(path), trust=trust, expected_id=app_id)
+        return self.app_runtime().install(
+            Path(path), trust=trust, expected_id=app_id, expected_hash=expected_hash
+        )
 
     def apps_versions(self, app_id: str) -> list[Document]:
         """List immutable app definitions."""
         return self.app_runtime().versions(app_id)
 
-    def apps_test(self, app_id: str) -> Document:
-        """Run road-to-live validation (requires P14)."""
-        return self._unavailable("apps.test", "P14")
+    def apps_test(
+        self, app_id: str, expected_hash: str | None = None, stage: Stage | None = None
+    ) -> Document:
+        """Run the next actual test, recorded sandbox or isolated shadow stage."""
+        owner = self.app_runtime()
+        current = str(owner.get(app_id)["definition_hash"])
+        return owner.road.advance(app_id, expected_hash or current, stage)
 
-    def apps_publish(self, app_id: str) -> Document:
-        """Publish after road-to-live evidence (requires P14)."""
-        return self._unavailable("apps.publish", "P14")
+    def apps_publish(
+        self,
+        app_id: str,
+        expected_hash: str | None = None,
+        expected_active: str | None = None,
+        signature: str | None = None,
+    ) -> Document:
+        """Activate current proven code using publication CAS and risk rules."""
+        owner = self.app_runtime()
+        current = str(owner.get(app_id)["definition_hash"])
+        return owner.road.publish(app_id, expected_hash or current, expected_active, signature)
+
+    def apps_rollback(
+        self, app_id: str, expected_active: str, signature: str | None = None
+    ) -> Document:
+        """Reactivate the previous publication as a new evidenced transition."""
+        owner = self.app_runtime()
+        return owner.road.publish(
+            app_id,
+            str(owner.get(app_id)["definition_hash"]),
+            expected_active,
+            signature,
+            rollback=True,
+        )
 
     def apps_start(self, app_id: str) -> Document:
         """Start an installed app instance."""
@@ -716,9 +746,8 @@ class ControlService:
             self._apps = None
 
     def apps_evidence(self, app_id: str) -> list[Document]:
-        """Read app evidence records (requires P14)."""
-        self._unavailable("apps.evidence", "P14")
-        return []
+        """Read verified version and stage evidence from the app volume."""
+        return self.app_runtime().road.evidence(app_id)
 
     def workflows_get(self, workflow_id: str) -> Document:
         """Read a workflow definition."""

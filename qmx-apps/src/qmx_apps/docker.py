@@ -128,8 +128,11 @@ class DockerSupervisor(Supervisor):
         replicas: dict[str, str] | None = None,
         event_sink: EventSink | None = None,
         secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+        proof_mode: str = "",
     ) -> None:
-        super().__init__(home, event_sink=event_sink, secret_getter=secret_getter)
+        super().__init__(
+            home, event_sink=event_sink, secret_getter=secret_getter, proof_mode=proof_mode
+        )
         self.node = node
         self.replicas = replicas or {}
         self._resources: dict[str, list[tuple[str, str]]] = {}
@@ -141,7 +144,7 @@ class DockerSupervisor(Supervisor):
         if definition.manifest.capabilities.network:
             build_proxy()
 
-    def _transport(
+    def transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
     ) -> StdioTransport:
         manifest = instance.definition.manifest
@@ -173,7 +176,7 @@ class DockerSupervisor(Supervisor):
         resources = self._resources.setdefault(instance.id, [])
         # A new network per instance prevents access to other app volumes/services.
         network = "none"
-        if manifest.capabilities.network:
+        if manifest.capabilities.network and self.proof_mode not in {"tests", "sandbox"}:
             network = name + "-net"
             docker(
                 "network",
@@ -224,6 +227,8 @@ class DockerSupervisor(Supervisor):
         config.update(image="/image", volume="/volume", env_names=list(environment), tier="T2")
         uid = str(instance.volume.root.stat().st_uid) if os.name == "posix" else "1000"
         gid = str(instance.volume.root.stat().st_gid) if os.name == "posix" else "1000"
+        road = instance.volume.root / "road"
+        road.mkdir(exist_ok=True)
         options = [
             "create",
             "--name",
@@ -248,6 +253,9 @@ class DockerSupervisor(Supervisor):
             str(manifest.budget.cpu_percent / 100),
             "--mount",
             f"type=bind,src={instance.volume.root},dst=/volume",
+            # Native app code must not rewrite the host's publication authority.
+            "--mount",
+            f"type=bind,src={road},dst=/volume/road,readonly",
         ]
         for key in environment:
             options.extend(["--env", key])
@@ -320,7 +328,7 @@ class DockerSupervisor(Supervisor):
 
     def _log(self, app_id: str, event: str, data: dict[str, Any]) -> None:
         super()._log(app_id, event, data)
-        self._emit(app_id, {"app_id": app_id, "type": "log", "event": event, **data})
+        self.emit(app_id, {"app_id": app_id, "type": "log", "event": event, **data})
 
     def _heartbeat(self, instance: Instance) -> None:
         if instance.id not in self._resources:
@@ -352,7 +360,7 @@ class DockerSupervisor(Supervisor):
         except ValueError, KeyError, StopIteration:
             return
 
-    def _kill(self, instance: Instance) -> None:
+    def kill(self, instance: Instance) -> None:
         resources = self._resources.get(instance.id, [])
         while resources:
             kind, name = resources[-1]
@@ -376,7 +384,12 @@ class DockerSupervisor(Supervisor):
         definition = self._definition(app_id)
         if app_id in self._instances:
             raise AppError("app_running", "Stop the app before moving its volume.", 409)
-        lease = VolumeLease(self.home, app_id)
+        road_lease = VolumeLease(self.home / "road-locks", app_id)
+        try:
+            lease = VolumeLease(self.home, app_id)
+        except BaseException:
+            road_lease.close()
+            raise
         try:
             volume = Volume(self.home, app_id)
             target = destination.resolve() / definition.hash
@@ -414,6 +427,7 @@ class DockerSupervisor(Supervisor):
             return target
         finally:
             lease.close()
+            road_lease.close()
 
     def restore(self, app_id: str, snapshot: Path) -> None:
         definition = self._definition(app_id)
@@ -423,26 +437,44 @@ class DockerSupervisor(Supervisor):
         data = json.loads((root / "snapshot.json").read_text(encoding="utf-8"))
         if data["app_id"] != app_id or data["definition_hash"] != definition.hash:
             raise AppError("backup_mismatch", "Install the snapshot's definition before restoring.")
-        lease = VolumeLease(self.home, app_id)
+        road_lease = VolumeLease(self.home / "road-locks", app_id)
+        try:
+            lease = VolumeLease(self.home, app_id)
+        except BaseException:
+            road_lease.close()
+            raise
         try:
             volume = Volume(self.home, app_id)
-            if (volume.root / "app.db").exists():
-                raise AppError("volume_exists", "Restore onto a fresh node or empty volume.", 409)
-            for name, digest in data["files"].items():
-                source = (root / name).resolve()
-                if not source.is_relative_to(root) or source.is_symlink():
-                    raise AppError("backup_invalid", "Snapshot paths must stay inside the backup.")
-                volume.check_write(name)
-                if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
-                    raise AppError("backup_invalid", "Snapshot checksum mismatch.")
-                if source.suffix == ".db":
-                    with closing(sqlite3.connect(source)) as db:
-                        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                            raise AppError("backup_invalid", "Snapshot database is corrupt.")
-            for name in data["files"]:
-                target = volume.check_write(name)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(root / name, target)
-            volume.create(agents=bool(definition.manifest.entrypoints.agents))
+            volume.root.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix=".restore-", dir=volume.root.parent
+            ) as temporary:
+                staged = Volume(Path(temporary), app_id)
+                staged.create(agents=bool(definition.manifest.entrypoints.agents))
+                for name, digest in data["files"].items():
+                    source = (root / name).resolve()
+                    if not source.is_relative_to(root) or source.is_symlink():
+                        raise AppError(
+                            "backup_invalid", "Snapshot paths must stay inside the backup."
+                        )
+                    target = staged.check_write(name)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, target)
+                    if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                        raise AppError("backup_invalid", "Snapshot checksum mismatch.")
+                    if target.suffix == ".db":
+                        with closing(sqlite3.connect(target)) as db:
+                            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                                raise AppError("backup_invalid", "Snapshot database is corrupt.")
+                old = Path(temporary) / "previous"
+                if volume.root.exists():
+                    os.replace(volume.root, old)
+                try:
+                    os.replace(staged.root, volume.root)
+                except BaseException:
+                    if old.exists():
+                        os.replace(old, volume.root)
+                    raise
         finally:
             lease.close()
+            road_lease.close()

@@ -42,6 +42,7 @@ SYSTEM_ENV = frozenset(
         "PYTHONPATH",
         "PYTHONDONTWRITEBYTECODE",
         "QMX_VOLUME",
+        "QMX_STAGE",
     }
 )
 
