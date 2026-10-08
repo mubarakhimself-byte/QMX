@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from qmx_control.backup import MAX_BYTES, weekly_backup
-from qmx_control.models import ControlError, LibraryInput
+from qmx_control.models import ControlError, Document, LibraryInput
 from qmx_control.service import ControlService
 
 
@@ -37,6 +37,9 @@ def test_backup_restores_wal_and_excludes_bulk_secrets_and_large_files(tmp_path:
     remote = tmp_path / "backup.git"
     git(tmp_path, "init", "--bare", str(remote))
     service.settings_put("backup", {"repository": str(remote)})
+    combined: Document = {"repository": str(remote), "remote": "local", "bucket": "app-backups"}
+    service.settings_put("backup", combined)
+    assert service.settings_get("backup") == combined
     definition = home / "definitions" / "small"
     definition.mkdir(parents=True)
     (definition / "app.toml").write_text('id="small"')
@@ -81,6 +84,8 @@ def test_backup_restores_wal_and_excludes_bulk_secrets_and_large_files(tmp_path:
 
 def test_backup_requires_configuration_and_local_bare_dry_run(tmp_path: Path) -> None:
     service = ControlService(tmp_path / "home")
+    with pytest.raises(ControlError, match="nonempty"):
+        service.settings_put("backup", {"repository": ""})
     with pytest.raises(ControlError, match="Settings"):
         service.backup_weekly()
     service.settings_put("backup", {"repository": str(tmp_path)})

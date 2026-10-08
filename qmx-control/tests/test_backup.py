@@ -33,6 +33,7 @@ def test_backup_settings_and_rest_mcp_restore(
         with TestClient(create_app(service, token)) as rest:
             async with Client(create_mcp(service)) as mcp:
                 values = {
+                    "repository": str(tmp_path / "weekly.git"),
                     "remote": "fixture",
                     "bucket": (tmp_path / "bucket").as_posix(),
                     "enabled": False,

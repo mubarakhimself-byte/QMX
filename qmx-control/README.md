@@ -80,6 +80,8 @@ cached.
 Set `[backup] repository = "owner/private-repo"` in Settings to enable weekly
 snapshots while the host is running. The job verifies GitHub privacy through `gh`,
 uses the local authenticated Git installation, and never embeds keys in commands.
+The same section can retain the app backup `remote`, `bucket`, `node` and schedule
+settings; app rclone backups and the weekly catalog snapshot are independent.
 It snapshots memory, run/Library catalogs, Experiment Ledger databases and app
 databases with SQLite's online backup API and checks restoration integrity.
 Settings and JSON/YAML/TOML definitions are copied. Parquet, blobs, data directories,

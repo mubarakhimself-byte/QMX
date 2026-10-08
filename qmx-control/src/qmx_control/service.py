@@ -240,7 +240,15 @@ class ControlService:
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
         if section == "backup":
-            BackupSettings.model_validate(values).destination("validation", "validation")
+            if "repository" in values:
+                repository = values["repository"]
+                if not isinstance(repository, str) or not repository.strip():
+                    raise ControlError(
+                        "invalid_settings", "Backup repository must be nonempty text."
+                    )
+            app_settings = {key: value for key, value in values.items() if key != "repository"}
+            if app_settings:
+                BackupSettings.model_validate(app_settings).destination("validation", "validation")
         elif section == "brokers":
             try:
                 values = BrokerSettings.model_validate(values).model_dump(
@@ -251,6 +259,7 @@ class ControlService:
                     "invalid_brokers",
                     "Use valid brokers, connections and accounts with qmx/* vault references.",
                 ) from error
+
         with self._lock:
             path = self.home / "settings.toml"
             settings: Document = {}
@@ -636,7 +645,9 @@ class ControlService:
             return self._apps
 
     def _backup_settings(self) -> BackupSettings | None:
-        values = self.settings_get("backup")
+        values = {
+            key: value for key, value in self.settings_get("backup").items() if key != "repository"
+        }
         return BackupSettings.model_validate(values) if values else None
 
     def _backup_apps(self) -> list[str]:
