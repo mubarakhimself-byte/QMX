@@ -1,0 +1,6 @@
+name: weekend-watcher
+model: local:recorded
+system_prompt: prompt.md
+memory: {scope: task}
+permissions: {write: ["/artifacts/**"]}
+budget: {model_calls: 1, tool_calls: 1}

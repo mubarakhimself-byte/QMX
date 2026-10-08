@@ -1079,6 +1079,42 @@ wheels = [
 ]
 
 [[package]]
+name = "qmx-apps"
+version = "0.1.0"
+source = { editable = "../qmx-apps" }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "jsonschema" },
+    { name = "keyring" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=4,<5" },
+    { name = "jsonschema", specifier = "==4.26.0" },
+    { name = "keyring", specifier = "==25.7.0" },
+    { name = "psutil", specifier = ">=7,<9" },
+    { name = "pydantic", specifier = ">=2,<3" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "qmx-agents", editable = "../qmx-agents/packages/qmx-agents" },
+    { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-jsonschema" },
+    { name = "types-pywin32", specifier = "==312.0.0.20261006" },
+]
+
+[[package]]
 name = "qmx-control"
 version = "0.1.0"
 source = { editable = "." }
@@ -1088,6 +1124,7 @@ dependencies = [
     { name = "httpx" },
     { name = "keyring" },
     { name = "psutil" },
+    { name = "qmx-apps" },
     { name = "tomli-w" },
     { name = "uvicorn" },
 ]
@@ -1109,6 +1146,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "keyring", specifier = "==25.7.0" },
     { name = "psutil", specifier = ">=7,<9" },
+    { name = "qmx-apps", editable = "../qmx-apps" },
     { name = "tomli-w", specifier = ">=1.2,<2" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]

@@ -1,0 +1,14 @@
+[project]
+name = "weekend-watcher-app"
+version = "1.0.0"
+requires-python = ">=3.14,<3.15"
+dependencies = ["fastmcp==4.0.11", "qmx-agents"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+qmx-agents = { git = "https://github.com/MubarakHimself/QMX", rev = "697b5a09089302ea8bfeba20b4fdbf467e40ff0d", subdirectory = "qmx-agents/packages/qmx-agents" }

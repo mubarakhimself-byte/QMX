@@ -110,7 +110,7 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
             ).status_code
             == 400
         )
-        response = rest.get("/api/apps", headers=HEADERS)
+        response = rest.post("/api/apps/missing/test", headers=HEADERS)
         assert response.status_code == 501
         assert response.json()["error"]["code"] == "not_implemented"
     reopened = ControlService(tmp_path)
@@ -123,7 +123,7 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
 
     async def unavailable() -> None:
         async with Client(create_mcp(reopened)) as mcp:
-            result = await mcp.call_tool("apps_list", raise_on_error=False)
+            result = await mcp.call_tool("apps_test", {"app_id": "missing"}, raise_on_error=False)
             assert result.is_error
             assert "not_implemented" in str(result.content)
 
@@ -137,7 +137,11 @@ def test_unavailable_errors_match_across_doors(tmp_path: Path) -> None:
         with TestClient(create_app(service, TOKEN)) as rest:
             async with Client(create_mcp(service)) as mcp:
                 for name, method, route, _ in OPERATIONS:
-                    if not name.startswith(("apps_", "workflows_")):
+                    if name not in {
+                        "apps_test",
+                        "apps_publish",
+                        "apps_evidence",
+                    } and not name.startswith("workflows_"):
                         continue
                     args: dict[str, Any] = {}
                     path = route

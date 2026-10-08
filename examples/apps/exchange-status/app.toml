@@ -1,0 +1,28 @@
+id = "exchange-status"
+name = "Exchange status"
+version = "1.0.0"
+risk = "shows"
+kind = "screens"
+
+[entrypoints]
+mcp = "server.py"
+ui = "ui"
+
+[capabilities]
+network = []
+data_reads = []
+
+[budget]
+runs = 100
+cpu_seconds = 120
+memory_mb = 1024
+cpu_percent = 50
+
+[provides.snapshot]
+type = "object"
+required = ["observations"]
+additionalProperties = false
+
+[provides.snapshot.properties.observations]
+type = "array"
+items = { type = "object", required = ["exchange", "status", "observed_at"], additionalProperties = false, properties = { exchange = { type = "string" }, status = { type = "string", enum = ["operational", "degraded", "unavailable", "unknown"] }, observed_at = { type = "string" } } }

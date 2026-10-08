@@ -3,7 +3,8 @@
 import json
 import os
 import secrets
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any
@@ -16,6 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from qmx_apps.errors import AppError
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_control.service import ControlError, ControlService, EventTopic
@@ -23,6 +25,7 @@ from qmx_control.service import ControlError, ControlService, EventTopic
 # These descriptors wire both doors; there is no second implementation to drift.
 OPERATIONS = (
     ("apps_list", "GET", "/api/apps", False),
+    ("apps_registry", "GET", "/api/apps/registry", False),
     ("apps_get", "GET", "/api/apps/{app_id}", False),
     ("apps_create", "POST", "/api/apps", True),
     ("apps_update", "PUT", "/api/apps/{app_id}", True),
@@ -31,6 +34,9 @@ OPERATIONS = (
     ("apps_publish", "POST", "/api/apps/{app_id}/publish", True),
     ("apps_start", "POST", "/api/apps/{app_id}/start", True),
     ("apps_stop", "POST", "/api/apps/{app_id}/stop", True),
+    ("apps_restart", "POST", "/api/apps/{app_id}/restart", True),
+    ("apps_call", "POST", "/api/apps/{app_id}/tools/{tool}", True),
+    ("apps_resource", "GET", "/api/apps/{app_id}/resources", False),
     ("apps_logs", "GET", "/api/apps/{app_id}/logs", False),
     ("apps_evidence", "GET", "/api/apps/{app_id}/evidence", False),
     ("workflows_get", "GET", "/api/workflows/{workflow_id}", False),
@@ -105,7 +111,7 @@ def _mcp_method(method: Callable[..., Any]) -> Callable[..., Any]:
     def call(*args: Any, **kwargs: Any) -> Any:
         try:
             return method(*args, **kwargs)
-        except ControlError as error:
+        except (ControlError, AppError) as error:
             raise ToolError(json.dumps(error.document())) from error
 
     return call
@@ -116,7 +122,16 @@ def create_app(
 ) -> FastAPI:
     token = token or local_token()
     mcp_app = create_mcp(service).http_app(path="/")
-    app = FastAPI(title="QMX control", version="0.1.0", lifespan=mcp_app.lifespan)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        try:
+            async with mcp_app.lifespan(app):
+                yield
+        finally:
+            service.close()
+
+    app = FastAPI(title="QMX control", version="0.1.0", lifespan=lifespan)
     bearer = HTTPBearer()
 
     def authenticate(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]) -> None:
@@ -124,7 +139,8 @@ def create_app(
             raise HTTPException(status_code=401, detail="Invalid bearer token")
 
     @app.exception_handler(ControlError)
-    async def control_error(request: Request, error: ControlError) -> JSONResponse:
+    @app.exception_handler(AppError)
+    async def control_error(request: Request, error: ControlError | AppError) -> JSONResponse:
         return JSONResponse(error.document(), status_code=error.status)
 
     for name, method, path, _ in OPERATIONS:

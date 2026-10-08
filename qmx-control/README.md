@@ -22,5 +22,15 @@ catalog; indexing and content-addressed Library storage belong to P22. Settings
 are `settings.toml`; use `credential_ref` instead of embedding secrets. Runs and
 jobs are recorded by their owners, which can register a cancellation handle.
 `cancel_requested` is an acknowledgement; the owner records the terminal state.
-Cancellation without a runner and app/workflow
-operations without their owning packets return `not_implemented` explicitly.
+App installation, lifecycle, versions, logs, the connected MCP registry,
+tool calls and resources use the P12 supervisor. App instances register their
+actual stop handle as background jobs; shutdown stops owned process trees.
+`GET /api/apps/registry` discovers app tools, `POST /api/apps/{id}/tools/{tool}`
+proxies a JSON argument body, and `GET /api/apps/{id}/resources?uri=...` reads
+MCP resources. The same operations are exposed as MCP tools for clients.
+Install with an explicit reviewed/operator/first-party trust declaration;
+the default agent-authored definition requires T2/T3 or operator review.
+`/api/events/apps` carries durable runtime events.
+
+Cancellation without a runner, workflows without P10/P22, and app
+test/publish/evidence without P14 return `not_implemented` explicitly.
