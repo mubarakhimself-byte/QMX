@@ -12,6 +12,7 @@ from qmf.core import World
 from qmf.data import EvidenceStore
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
+from qmx_control.models import MemoKey
 
 from qmx_tools import DomainContext, default_tool_registry
 from qmx_tools.registry import domain_functions
@@ -116,6 +117,57 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     assert proposal["executed"] is False
     assert proposal["status"] == "awaiting_operator_signature"
     assert context.artifact(proposal["proposal"]["ref"]).content["quantity"] == "0.10"
+
+
+def test_backtest_memo_reuses_the_real_engine_result(
+    context: DomainContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import qmx_tools.service as service_module
+
+    original = service_module.run
+    calls = 0
+
+    def counted(**arguments: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return original(**arguments)
+
+    monkeypatch.setattr(service_module, "run", counted)
+    context.backtest_identities["recorded"] = MemoKey(
+        strategy_version="strategy-v1",
+        data_snapshot="recorded-slices-v1",
+        params={"lookback": 20},
+        engine_version="qmb-v1",
+    )
+    functions = domain_functions(context)["backtest"]
+    first = functions["run_backtest"](spec={"config_ref": "recorded"})
+    assert functions["run_backtest"](spec={"config_ref": "recorded"}) == first
+    assert calls == 1
+    assert len(context.control.library_search()) == 1
+    assert len(context.control.events("library")) == 1
+    assert first["result"]["memo_key"]
+    reopened = DomainContext(root=context.root)
+    reopened.backtests = context.backtests
+    reopened.backtest_identities = context.backtest_identities
+    assert (
+        domain_functions(reopened)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
+        == first
+    )
+    assert calls == 1
+    reopened.backtest_identities["recorded"] = context.backtest_identities["recorded"].model_copy(
+        update={"engine_version": "qmb-v2"}
+    )
+    domain_functions(reopened)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
+    assert calls == 2
+
+
+def test_domain_refs_preserve_type_when_payloads_match(context: DomainContext) -> None:
+    note = context.save(Artifact(name="note", kind="note", content={"value": 1}))
+    report = context.save(Artifact(name="report", kind="report", content={"value": 1}))
+    assert note["ref"] != report["ref"]
+    assert context.artifact(note["ref"]).kind == "note"
+    assert context.artifact(report["ref"]).kind == "report"
+    assert context.artifact(note["ref"]).content == context.artifact(report["ref"]).content
 
 
 def test_langchain_tools_have_typed_schemas_and_filter_arguments(context: DomainContext) -> None:

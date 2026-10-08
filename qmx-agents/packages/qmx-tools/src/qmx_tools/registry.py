@@ -207,15 +207,17 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
         """Find saved artifacts by name/kind and paginate their references."""
-        rows: list[dict[str, Any]] = []
-        for path in sorted((ctx.root / "artifacts").glob("*.json")):
-            ref = f"artifacts/{path.name}"
-            artifact = ctx.artifact(ref)
-            if query.casefold() in f"{artifact.name} {artifact.kind}".casefold():
-                rows.append({"ref": ref, "name": artifact.name, "kind": artifact.kind})
-        return ctx.page(
-            rows, Page(limit=limit, cursor=cursor, response_format=response_format), "library"
-        )
+        request = Page(limit=limit, cursor=cursor, response_format=response_format)
+        found = ctx.library.search(query, offset=request.cursor, limit=request.limit + 1)
+        rows = [
+            {"ref": item["ref"], "name": item["title"], "kind": item["kind"]}
+            for item in found[:limit]
+        ]
+        return {
+            **ctx.output(rows, "library", response_format),
+            "next_cursor": cursor + limit if len(found) > limit else None,
+            "total": ctx.library.count(query),
+        }
 
     def library_save(
         artifact: Artifact, response_format: ResponseFormat = "concise"
