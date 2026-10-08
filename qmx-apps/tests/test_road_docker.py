@@ -38,6 +38,8 @@ def test_own_tests_keep_container_boundary_and_cleanup(
             assert args[args.index("--network") + 1] == "none"
             binding = next(arg for arg in args if arg.startswith("type=bind,src="))
             volume = Path(binding.removeprefix("type=bind,src=").removesuffix(",dst=/volume"))
+            assert (volume / "road").is_dir()
+            assert f"type=bind,src={volume / 'road'},dst=/volume/road,readonly" in args
             config = json.loads(args[-1])
             assert config["tier"] == "T2" and config["tests"] is True
             assert config["recorded"] is True and config["jobs"] == []

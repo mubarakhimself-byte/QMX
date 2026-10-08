@@ -227,6 +227,8 @@ class DockerSupervisor(Supervisor):
         config.update(image="/image", volume="/volume", env_names=list(environment), tier="T2")
         uid = str(instance.volume.root.stat().st_uid) if os.name == "posix" else "1000"
         gid = str(instance.volume.root.stat().st_gid) if os.name == "posix" else "1000"
+        road = instance.volume.root / "road"
+        road.mkdir(exist_ok=True)
         options = [
             "create",
             "--name",
@@ -251,6 +253,9 @@ class DockerSupervisor(Supervisor):
             str(manifest.budget.cpu_percent / 100),
             "--mount",
             f"type=bind,src={instance.volume.root},dst=/volume",
+            # Native app code must not rewrite the host's publication authority.
+            "--mount",
+            f"type=bind,src={road},dst=/volume/road,readonly",
         ]
         for key in environment:
             options.extend(["--env", key])
