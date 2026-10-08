@@ -73,6 +73,17 @@ def test_manifest_hash_and_optional_volume_files(fixture_app: Path, tmp_path: Pa
         volume.check_write(tmp_path / "outside")
 
 
+def test_start_applies_definition_migrations(supervisor: Supervisor, fixture_app: Path) -> None:
+    directory = fixture_app / "migrations"
+    directory.mkdir()
+    (directory / "1-state.sql").write_text("CREATE TABLE migrated (value TEXT);")
+    install(supervisor, fixture_app)
+    supervisor.start("exchange-status")
+    supervisor.stop("exchange-status")
+    with closing(sqlite3.connect(supervisor.home / "apps/exchange-status/app.db")) as db:
+        assert db.execute("SELECT COUNT(*) FROM migrated").fetchone() == (0,)
+
+
 @pytest.mark.parametrize(
     "old,new",
     [

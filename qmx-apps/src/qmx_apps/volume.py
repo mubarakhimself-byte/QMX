@@ -47,6 +47,7 @@ class Volume:
         for name in ("app.db", *(("memory.db",) if agents else ())):
             with closing(sqlite3.connect(self.check_write(name))) as db:
                 db.execute("PRAGMA journal_mode=WAL")
+                db.execute("PRAGMA busy_timeout=5000")
 
 
 class VolumeLease:

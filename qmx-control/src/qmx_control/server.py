@@ -39,6 +39,8 @@ OPERATIONS = (
     ("apps_resource", "GET", "/api/apps/{app_id}/resources", False),
     ("apps_logs", "GET", "/api/apps/{app_id}/logs", False),
     ("apps_evidence", "GET", "/api/apps/{app_id}/evidence", False),
+    ("apps_backup", "POST", "/api/apps/{app_id}/backup", False),
+    ("apps_restore", "POST", "/api/apps/{app_id}/restore", True),
     ("workflows_get", "GET", "/api/workflows/{workflow_id}", False),
     ("workflows_put", "PUT", "/api/workflows/{workflow_id}", True),
     ("workflows_validate", "POST", "/api/workflows/validate", False),

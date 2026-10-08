@@ -3,7 +3,16 @@ name = "qmx-apps"
 version = "0.1.0"
 description = "Immutable mini-app definitions, volumes and a trusted local supervisor"
 requires-python = ">=3.14,<3.15"
-dependencies = ["fastmcp>=4,<5", "pydantic>=2,<3", "jsonschema==4.26.0", "psutil>=7,<9", "keyring==25.7.0", "pywin32==312; sys_platform == 'win32'"]
+dependencies = [
+    "fastmcp>=4,<5",
+    "pydantic>=2,<3",
+    "jsonschema==4.26.0",
+    "psutil>=7,<9",
+    "keyring==25.7.0",
+    "pywin32==312; sys_platform == 'win32'",
+    "duckdb==1.5.5",
+    "cachetools==7.2.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -16,7 +25,18 @@ members = []
 qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
 
 [dependency-groups]
-dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0", "types-pywin32==312.0.0.20261006", "types-jsonschema", "qmx-agents"]
+dev = [
+    "ruff==0.16.5",
+    "pyright==1.1.411",
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "pytest-cov>=7,<8",
+    "poethepoet==0.48.0",
+    "types-pywin32==312.0.0.20261006",
+    "types-jsonschema",
+    "qmx-agents",
+    "types-cachetools>=7.0.0.20260713",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -31,6 +51,7 @@ extend-exclude = []
 "**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
 "src/qmx_apps/bootstrap.py" = ["S404"]
 "src/qmx_apps/supervisor.py" = ["S404"]
+"src/qmx_apps/backup.py" = ["S404"]
 "src/qmx_apps/windows_job.py" = ["PLC0415"]
 
 [tool.pyright]

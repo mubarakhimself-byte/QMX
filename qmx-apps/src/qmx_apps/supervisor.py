@@ -30,6 +30,7 @@ from pydantic import JsonValue
 from qmx_apps.artifacts import Artifacts
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
+from qmx_apps.store import open_store
 from qmx_apps.volume import Volume, VolumeLease
 from qmx_apps.windows_job import WindowsJob
 
@@ -298,6 +299,11 @@ class Supervisor:
             lease = VolumeLease(self.home, app_id)
             try:
                 volume.create(agents=bool(definition.manifest.entrypoints.agents))
+                migrations = definition.root / "migrations"
+                if migrations.is_dir():
+                    # The host finishes migrations before handing the writer to the instance.
+                    with closing(open_store(volume, migrations)):
+                        pass
             except BaseException:
                 lease.close()
                 raise

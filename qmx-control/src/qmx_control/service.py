@@ -15,11 +15,14 @@ from typing import Literal, cast
 
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from qmx_apps.backup import BackupSettings, backup, restore
+from qmx_apps.backup_schedule import BackupSchedule
 from qmx_apps.manifest import Trust
 from qmx_apps.supervisor import Supervisor
+from qmx_apps.volume import Volume
 
 type Document = dict[str, JsonValue]
-type SettingsSection = Literal["providers", "mcp_servers", "budgets", "memory_provider"]
+type SettingsSection = Literal["providers", "mcp_servers", "budgets", "memory_provider", "backup"]
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings"]
 type WorkKind = Literal["runs", "jobs"]
 
@@ -94,6 +97,8 @@ class ControlService:
         self._lock = threading.RLock()
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
         self._apps: Supervisor | None = None
+        self._backup_lock = threading.Lock()
+        self._backup_schedule: BackupSchedule | None = None
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -162,6 +167,8 @@ class ControlService:
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
         _no_secrets(values)
+        if section == "backup":
+            BackupSettings.model_validate(values).destination("validation", "validation")
         with self._lock:
             path = self.home / "settings.toml"
             settings: Document = {}
@@ -401,7 +408,59 @@ class ControlService:
         with self._lock:
             if self._apps is None:
                 self._apps = Supervisor(self.home, event_sink=self._app_event)
+                self._backup_schedule = BackupSchedule(
+                    self._backup_settings,
+                    self._backup_apps,
+                    self.apps_backup,
+                    self._backup_failed,
+                )
             return self._apps
+
+    def _backup_settings(self) -> BackupSettings | None:
+        values = self.settings_get("backup")
+        return BackupSettings.model_validate(values) if values else None
+
+    def _backup_apps(self) -> list[str]:
+        return [
+            str(item["definition"]["id"])
+            for item in self.apps_list()
+            if isinstance(item["definition"], dict)
+            and Volume(self.home, str(item["definition"]["id"])).root.joinpath("app.db").is_file()
+        ]
+
+    def _backup_failed(self, app_id: str, error: Exception) -> None:
+        with self._lock, self._connect() as db:
+            self._event(
+                db, "apps", app_id, {"type": "backup_failed", "error": type(error).__name__}
+            )
+
+    def apps_backup(self, app_id: str) -> Document:
+        """Back up now using the UI-editable remote and verify a downloaded restore."""
+        self.app_runtime().get(app_id)
+        settings = self._backup_settings()
+        if settings is None:
+            raise ControlError(
+                "backup_unconfigured", "Configure the backup remote in Settings.", 409
+            )
+        with self._backup_lock:
+            result = backup(Volume(self.home, app_id), settings)
+        with self._lock, self._connect() as db:
+            self._event(db, "apps", app_id, {"type": "backup", **result})
+        return result
+
+    def apps_restore(self, app_id: str, snapshot_id: str) -> Document:
+        """Verify and replace a stopped app's volume from a backup snapshot."""
+        self.app_runtime().get(app_id)
+        settings = self._backup_settings()
+        if settings is None:
+            raise ControlError(
+                "backup_unconfigured", "Configure the backup remote in Settings.", 409
+            )
+        with self._backup_lock:
+            result = restore(self.home, app_id, settings, snapshot_id)
+        with self._lock, self._connect() as db:
+            self._event(db, "apps", app_id, {"type": "restored", **result})
+        return result
 
     def _app_event(self, app_id: str, data: Document) -> None:
         with self._lock, self._connect() as db:
@@ -419,6 +478,9 @@ class ControlService:
             )
 
     def close(self) -> None:
+        if self._backup_schedule is not None:
+            self._backup_schedule.close()
+            self._backup_schedule = None
         if self._apps is not None:
             self._apps.close()
             self._apps = None
