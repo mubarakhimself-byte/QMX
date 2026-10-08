@@ -11,7 +11,6 @@ import socket
 import sys
 import threading
 import time
-import unittest
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, cast
@@ -159,6 +158,8 @@ def main() -> None:
     sys.addaudithook(audit)
     sys.path[:0] = [str(image), str(image / "src")]
     if config.get("tests"):
+        import unittest  # noqa: PLC0415 - only own-test proofs need discovery
+
         suite = unittest.defaultTestLoader.discover(str(image / "tests"))
         result = unittest.TextTestRunner(stream=sys.stderr, verbosity=2).run(suite)
         report = {
