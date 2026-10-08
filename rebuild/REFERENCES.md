@@ -371,6 +371,15 @@ P17 additions (fetched 2026-10-08):
 
 ## 20. Packet → sections to read
 
+P19 additions (fetched and read 2026-10-08 into scratch storage outside the repo):
+- Python robots policy: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/urllib.robotparser.rst
+- SQLite WAL and transactions: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/sqlite3.rst
+- Beautiful Soup selectors and tree cleanup: https://www.crummy.com/software/BeautifulSoup/bs4/doc/ ; pin `beautifulsoup4==4.15.0`.
+- Markdown conversion: https://raw.githubusercontent.com/matthewwithanm/python-markdownify/develop/README.rst ; pin `markdownify==1.2.3`.
+- HTTPX headers, conditional responses and MockTransport: https://www.python-httpx.org/quickstart/ , https://www.python-httpx.org/api/ , https://www.python-httpx.org/advanced/transports/ ; pin `httpx==0.28.1`.
+- Firecrawl hosted MCP and bearer auth: https://docs.firecrawl.dev/mcp-server.md , https://raw.githubusercontent.com/firecrawl/firecrawl-mcp-server/main/README.md ; hosted endpoint `https://mcp.firecrawl.dev/v2/mcp`.
+- LangChain MCP per-server configuration/auth: https://docs.langchain.com/oss/python/langchain/mcp.md , https://docs.langchain.com/oss/python/langchain/mcp/connections.md , https://docs.langchain.com/oss/python/langchain/mcp/auth.md .
+
 | Packet | Read these sections | Notes |
 |---|---|---|
 | P06 agents spec + router | 0, 1, 2, 3, 4, 7, 17, 18 | D1, D3, D5, D6, D8, D9 |

@@ -36,6 +36,8 @@ dev = [
     "types-jsonschema",
     "qmx-agents",
     "types-cachetools>=7.0.0.20260713",
+    "beautifulsoup4==4.15.0",
+    "markdownify==1.2.3",
 ]
 
 [tool.pytest.ini_options]
@@ -56,6 +58,7 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests", "../examples/apps"]
+extraPaths = ["src", "../examples/apps/mql5-articles"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 

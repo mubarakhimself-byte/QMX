@@ -5,9 +5,11 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from conftest import compiled, fake, fake_models
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool, tool
 from langgraph.graph import (  # pyright: ignore[reportMissingTypeStubs]
     END,
     START,
@@ -17,7 +19,84 @@ from langgraph.graph import (  # pyright: ignore[reportMissingTypeStubs]
 from test_spec import call, write_spec
 
 from qmx_agents.router import ModelRouter, RouterConfig, RunContext
-from qmx_agents.spec import BuildContext, build_agent
+from qmx_agents.spec import BuildContext, _mcp_configuration, build_agent
+
+
+def test_firecrawl_defaults_and_settings_overlay(
+    tmp_path: Path, config: RouterConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    accesses: list[str] = []
+
+    def vault(provider: str) -> str:
+        accesses.append(provider)
+        return "test-vault-token"
+
+    monkeypatch.setattr("qmx_agents.spec.credential", vault)
+    spec = write_spec(tmp_path, "mcp_servers: [firecrawl]", name="researcher")
+    ctx = BuildContext(ModelRouter(config), qmx_home=tmp_path)
+    assert _mcp_configuration(spec, ctx) == {}
+    assert not accesses
+    (tmp_path / "settings.toml").write_text(
+        "[mcp_servers.firecrawl]\nenabled = true\n", encoding="utf-8"
+    )
+    spec.mcp_servers = []
+    servers = _mcp_configuration(spec, ctx)
+    assert servers == {
+        "firecrawl": {"url": "https://mcp.firecrawl.dev/v2/mcp", "auth": "test-vault-token"}
+    }
+    assert accesses == ["firecrawl"]
+    assert spec.mcp_servers == [] and config.mcp_servers == {}
+    assert "test-vault-token" not in (tmp_path / "settings.toml").read_text()
+    config.mcp_servers["firecrawl"] = {"enabled": True, "url": "https://host/?key=leak"}
+    with pytest.raises(ValueError, match="HTTPS URL"):
+        _mcp_configuration(spec, ctx)
+
+
+def test_enabled_firecrawl_reaches_researcher_subagent(
+    tmp_path: Path, config: RouterConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[dict[str, Any]] = []
+
+    @tool
+    def firecrawl_scrape(url: str) -> str:
+        """Read a recorded research page."""
+        return "recorded research"
+
+    class Adapter:
+        def __init__(self, options: dict[str, Any]) -> None:
+            captured.append(options)
+
+        async def __aenter__(self) -> Adapter:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
+
+        async def list_tools(self) -> list[BaseTool]:
+            return [firecrawl_scrape]
+
+    monkeypatch.setattr("langchain.mcp.MCPAdapter", Adapter)
+    monkeypatch.setattr("qmx_agents.spec.credential", lambda provider: "vault-token")
+    config.mcp_servers["firecrawl"] = {"enabled": True}
+    write_spec(tmp_path, name="researcher")
+    parent = write_spec(tmp_path, "subagents: [{ref: researcher.yaml}]")
+    model = fake(
+        call("task", {"description": "Research", "subagent_type": "researcher"}),
+        call("firecrawl_scrape", {"url": "https://recorded.test"}),
+        "research complete",
+        "done",
+    )
+    ctx = BuildContext(ModelRouter(config, fake_models(model)), general_purpose_subagent=False)
+
+    async def run() -> dict[str, Any]:
+        graph = cast("Runnable[Any, dict[str, Any]]", await build_agent(parent, ctx))
+        return await graph.ainvoke({"messages": [{"role": "user", "content": "Research"}]})
+
+    result = asyncio.run(run())
+    assert result["messages"][-1].content == "done"
+    assert any("firecrawl_scrape" in names for names in model.bound_names)
+    assert len(captured) == 1
+    assert captured[0]["mcpServers"]["firecrawl"]["auth"] == "vault-token"
 
 
 def test_mcp_selection_and_call_after_discovery_exits(tmp_path: Path, config: RouterConfig) -> None:

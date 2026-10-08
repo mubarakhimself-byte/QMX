@@ -30,6 +30,11 @@ Tier = Literal["fast", "workhorse", "coding", "reasoning_high"]
 Provider = Literal["anthropic", "openai", "openrouter", "local", "cliproxy"]
 TIERS: frozenset[Tier] = frozenset({"fast", "workhorse", "coding", "reasoning_high"})
 DEFAULT_CONFIG = Path(__file__).with_name("models.yaml")
+FIRECRAWL_SERVER: dict[str, Any] = {
+    "url": "https://mcp.firecrawl.dev/v2/mcp",
+    "enabled": False,
+    "credential_ref": "qmx/firecrawl",
+}
 
 
 def model_selector(value: str) -> str:
