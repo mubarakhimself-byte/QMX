@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -216,18 +219,21 @@ def test_invalid_encoding_and_link_refused(tmp_path: Path) -> None:
     path.write_bytes(b"\xff")
     with pytest.raises(UnicodeError):
         load_agent_extensions(tmp_path, {"roots": {"local": "approved"}})
-    # A Windows junction needs no symlink privilege; all inputs stay in this fixture.
-    import subprocess
-
     target = tmp_path / "plain"
     target.mkdir()
     link = tmp_path / "linked"
-    made = subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link), str(target)],  # noqa: S607 - fixture-only junction
-        capture_output=True,
-        check=True,
-    )
-    assert made.returncode == 0
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        if sys.platform != "win32":
+            raise
+        # Junctions need no symlink privilege on Windows; keep a real link so
+        # copying the directory cannot turn this refusal check into a false pass.
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],  # noqa: S607
+            capture_output=True,
+            check=True,
+        )
     with pytest.raises(ValueError, match="reparse"):
         load_agent_extensions(tmp_path, {"roots": {"local": "linked"}})
 

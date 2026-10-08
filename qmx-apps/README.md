@@ -8,7 +8,9 @@ refused; publish a new version. Installed images and locked environments live
 under `<qmx_home>/definitions/<hash>` and `environments/<hash>`.
 
 `Supervisor(home).install(path, trust="first_party")` installs the lock with
-`uv sync --locked --no-dev --no-editable --no-install-project`. T1 accepts
+`uv sync --locked --no-dev --no-editable --no-install-project --compile-bytecode`.
+Precompiling locked dependencies keeps import compilation out of startup;
+the running app cannot write bytecode into its environment. T1 accepts
 first-party, operator-authored or explicitly reviewed code. The default
 `trust="agent"` refuses installation until review or T2/T3 (P17).
 
@@ -20,7 +22,10 @@ WAL `app.db`, optional agent `memory.db`, `data/`, `blobs/` and `logs/` under
 reported as disconnected until a new connection is established.
 Tool replies preserve raw structured JSON in `result`, standard MCP content
 blocks in `content`, and runtime metadata in `meta`, including text-only tools.
-Startup has a separate 45-second deadline. Once connected, tool calls and
+The manifest's `startup_timeout_seconds` defaults to 90 seconds for cold
+agent imports on a loaded laptop. One deadline covers MCP connection, discovery
+and heartbeat readiness, then expires only if startup has not finished.
+Once ready, tool calls and
 resource reads retain their 20-second deadlines; timed-out resource reads return
 `resource_timeout`, and the established connection remains usable.
 

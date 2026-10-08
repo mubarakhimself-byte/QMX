@@ -215,6 +215,8 @@ class Supervisor:
                 "APPDATA",
                 "TEMP",
                 "TMP",
+                "UV_CACHE_DIR",
+                "UV_PYTHON_INSTALL_DIR",
             }
         }
         environment["UV_PROJECT_ENVIRONMENT"] = str(self.environments / definition.hash)
@@ -228,6 +230,8 @@ class Supervisor:
                 "--no-dev",
                 "--no-editable",
                 "--no-install-project",
+                # The runtime cannot write bytecode into its locked dependencies.
+                "--compile-bytecode",
             ],
             env=environment,
             capture_output=True,
@@ -373,7 +377,7 @@ class Supervisor:
             self._instances[app_id] = instance
             instance.task = self._submit(self._serve(instance))
         try:
-            instance.ready.result(timeout=45)
+            instance.ready.result()
         except Exception as error:
             self.stop(app_id)
             if isinstance(error, AppError):
@@ -454,9 +458,12 @@ class Supervisor:
                 }
             config = self.configuration(instance, job_name, environment)
             transport = self.transport(instance, config, environment)
-            # A request timeout also applies to MCP's fallback initialize request.
-            # Bound startup separately; running tool/resource calls retain 20s.
-            async with Client(transport, init_timeout=45) as client:
+            # One deadline covers imports, negotiation and discovery. Disable the
+            # client's competing timer and release this deadline only on readiness.
+            async with (
+                asyncio.timeout(manifest.startup_timeout_seconds) as startup,
+                Client(transport, init_timeout=0) as client,
+            ):
                 instance.client = client
                 instance.tools = [
                     cast(Document, tool.model_dump(mode="json", by_alias=True))
@@ -485,6 +492,7 @@ class Supervisor:
                     },
                 )
                 self._persist(instance)
+                startup.reschedule(None)
                 instance.ready.set_result(None)
                 while not instance.stop.is_set():
                     await asyncio.sleep(0.25)
