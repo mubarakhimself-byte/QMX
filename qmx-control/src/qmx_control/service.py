@@ -26,6 +26,8 @@ from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
+from qmx_remote.models import RemoteSettings, RunBundle
+from qmx_remote.runs import RemoteRuns
 
 from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
@@ -36,7 +38,7 @@ from qmx_control.models import LibraryInput as LibraryInput  # noqa: PLC0414 - p
 from qmx_control.runs import RunIndex
 
 type SettingsSection = Literal[
-    "providers", "mcp_servers", "budgets", "memory_provider", "backup", "brokers"
+    "providers", "mcp_servers", "budgets", "memory_provider", "backup", "brokers", "remote"
 ]
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 type WorkKind = Literal["runs", "jobs"]
@@ -104,6 +106,7 @@ class ControlService:
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
         self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
+        self._remote: RemoteRuns | None = None
         self._backup_lock = threading.Lock()
         self._backup_schedule: BackupSchedule | None = None
         self.tier = tier
@@ -217,6 +220,13 @@ class ControlService:
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
         _no_secrets(values)
+        if section == "remote":
+            try:
+                RemoteSettings.model_validate(values)
+            except ValueError as error:
+                raise ControlError(
+                    "invalid_settings", "Use valid remote targets and bucket settings."
+                ) from error
         if section == "mcp_servers" and "firecrawl" in values:
             firecrawl = values["firecrawl"]
             if not isinstance(firecrawl, dict) or set(firecrawl) - {
@@ -479,6 +489,102 @@ class ControlService:
         """Read a journal-indexed run, including resolved models and artifacts."""
         self._refresh_runs()
         return self.run_index.get(run_id)
+
+    def remote_runtime(self) -> RemoteRuns:
+        if self._remote is None:
+            self._remote = RemoteRuns(
+                self.home,
+                RemoteSettings.model_validate(self.settings_get("remote")),
+                secret_getter=self.secret_getter,
+            )
+        else:
+            self._remote.settings = RemoteSettings.model_validate(self.settings_get("remote"))
+        return self._remote
+
+    def runs_start_remote(
+        self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
+    ) -> Document:
+        """Send an immutable workflow, app, agent or job bundle to a configured target."""
+        result = self.remote_runtime().start(
+            bundle, target, Path(definition_path) if definition_path else None
+        )
+        return self._record_remote(result)
+
+    def _record_remote(self, result: Document) -> Document:
+        bundle = RunBundle.model_validate(result["bundle"])
+        result.update(kind=bundle.kind, node=result["target"], model=bundle.model_profile)
+        run_id = str(result["run_id"])
+        recorded = self.record_work("runs", run_id, result)
+        if bundle.kind == "job":
+            self.record_work("jobs", run_id, recorded)
+        return recorded
+
+    def runs_status(self, run_id: str) -> Document:
+        """Read actual remote status and publish it to the shared run index."""
+        result = self.remote_runtime().status(run_id)
+        return self._record_remote(result)
+
+    def runs_logs(self, run_id: str) -> Document:
+        """Read the remote worker's incremental, redacted logs."""
+        return self.remote_runtime().logs(run_id)
+
+    def runs_fetch(self, run_id: str) -> Document:
+        """Verify remote output hashes, register artifacts and journal the fetch."""
+        result = self.remote_runtime().fetch(run_id)
+        artifacts = result["artifacts"]
+        if not isinstance(artifacts, list):
+            raise ControlError("invalid_remote_result", "Remote artifact list is invalid.")
+        registered: list[JsonValue] = []
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                raise ControlError("invalid_remote_result", "Remote artifact entry is invalid.")
+            if str(artifact["path"]).startswith("outputs/"):
+                item = self.library_save(
+                    LibraryInput(
+                        title=str(artifact["path"]),
+                        kind="remote-result",
+                        content={
+                            **artifact,
+                            "path": str(Path(str(result["path"])) / str(artifact["path"])),
+                        },
+                        source="remote:" + run_id,
+                        tags=["remote", run_id],
+                    )
+                )
+                registered.append(item["id"])
+        result["library_items"] = registered
+        self.record_work("runs", run_id, {"status": result["status"], "artifacts": registered})
+        if self.runs_get(run_id)["kind"] == "job":
+            self.record_work("jobs", run_id, self.runs_get(run_id))
+        return result
+
+    def runs_resume(self, run_id: str, target: str | None = None) -> Document:
+        """Restart an interrupted remote run from its verified LangGraph checkpoint."""
+        result = self.remote_runtime().resume(run_id, target)
+        return self._record_remote(result)
+
+    def runs_stop(self, run_id: str) -> Document:
+        """Stop remote work and remove its container or sandbox, including credentials."""
+        result = self.remote_runtime().stop(run_id)
+        return self._record_remote(result)
+
+    def run_job(
+        self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
+    ) -> Document:
+        """Place a job on a CPU or GPU target and record it automatically."""
+        return self.runs_start_remote(bundle, target, definition_path)
+
+    def job_status(self, run_id: str) -> Document:
+        """Read a placed job's actual status."""
+        return self.runs_status(run_id)
+
+    def job_logs(self, run_id: str) -> Document:
+        """Read a placed job's durable logs."""
+        return self.runs_logs(run_id)
+
+    def job_fetch(self, run_id: str) -> Document:
+        """Fetch and register a placed job's verified results."""
+        return self.runs_fetch(run_id)
 
     def _refresh_runs(self) -> None:
         with self._lock, self._connect() as db:

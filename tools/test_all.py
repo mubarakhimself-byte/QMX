@@ -80,6 +80,14 @@ def main() -> int:
         )
     )
     qa = ROOT / "qa/tests"
+    suites.append(
+        (
+            "qmx-remote",
+            ROOT / "qmx-agents/packages/qmx-remote",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
         paths = [str(path.relative_to(ROOT)) for path in top_level]

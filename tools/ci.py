@@ -19,6 +19,7 @@ def main() -> int:
     domain = agents / "packages/qmx-tools"
     apps = ROOT / "qmx-apps"
     broker = agents / "packages/qmx-broker"
+    remote = agents / "packages/qmx-remote"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
         (agents, ["sync", "--frozen", "--all-packages"]),
@@ -27,8 +28,9 @@ def main() -> int:
         (domain, ["sync", "--frozen"]),
         (apps, ["sync", "--frozen"]),
         (broker, ["sync", "--frozen"]),
+        (remote, ["sync", "--frozen"]),
     ]
-    for workspace in (ROOT, agents, core, control, domain, apps, broker):
+    for workspace in (ROOT, agents, core, control, domain, apps, broker, remote):
         for task in ("fmt-check", "lint", "types"):
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))
     for task in ("money-path-scan", "secret-scan"):
