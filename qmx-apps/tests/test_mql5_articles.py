@@ -119,9 +119,7 @@ def test_seed_dedupe_conditional_requests_and_rate_limits(tmp_path: Path) -> Non
         second = collect(store, http, pages=1, clock=lambda: now[0], sleep=sleep)
     assert first["fetched"] == 1 and second["fetched"] == 0
     assert [path for path, _ in calls].count("/en/articles/999991") == 1
-    assert all(
-        later[1] - earlier[1] >= 10 for earlier, later in pairwise(calls)
-    )
+    assert all(later[1] - earlier[1] >= 10 for earlier, later in pairwise(calls))
     with store.db() as db:
         row = db.execute("SELECT * FROM articles WHERE id=999991").fetchone()
         assert row is not None and row["status"] == "ready"
