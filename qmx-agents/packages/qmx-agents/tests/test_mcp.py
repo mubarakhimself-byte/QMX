@@ -76,6 +76,7 @@ def test_enabled_firecrawl_reaches_researcher_subagent(
             return [firecrawl_scrape]
 
     monkeypatch.setattr("langchain.mcp.MCPAdapter", Adapter)
+
     def vault(provider: str) -> str:
         return "vault-token"
 
