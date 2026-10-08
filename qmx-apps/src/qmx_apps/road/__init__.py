@@ -179,6 +179,28 @@ class Road:
         *,
         rollback: bool = False,
     ) -> Document:
+        try:
+            return self._publish(
+                app_id, expected_hash, expected_active, signature, rollback=rollback
+            )
+        except AppError as error:
+            if error.code == "volume_busy":
+                raise AppError(
+                    "publication_conflict",
+                    "Another road transition owns this app; reload before publishing.",
+                    409,
+                ) from error
+            raise
+
+    def _publish(
+        self,
+        app_id: str,
+        expected_hash: str,
+        expected_active: str | None,
+        signature: str | None,
+        *,
+        rollback: bool,
+    ) -> Document:
         self.owner.get(app_id)
         started = time.monotonic()
         with history(self.owner.home, app_id) as state:

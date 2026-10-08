@@ -210,7 +210,7 @@ def test_competing_active_revision_cas(owner: RuntimeFixture) -> None:
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(publish, range(2)))
     assert len([result for result in results if len(result) == 64]) == 1
-    assert any(result in {"volume_busy", "publication_conflict"} for result in results)
+    assert results.count("publication_conflict") == 1
     assert (
         len(
             [
