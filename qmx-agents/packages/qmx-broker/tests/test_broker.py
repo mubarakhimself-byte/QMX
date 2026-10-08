@@ -190,6 +190,7 @@ def test_ctrader_auth_and_reads() -> None:
             "volume_unit": "ticks",
         }
         assert recorded.calls[-1][1]["period"] == "M1"
+        assert await adapter.bars("EURUSD", "1m", 1700000000000, 1700000040000, 10) == []
 
     asyncio.run(run())
 

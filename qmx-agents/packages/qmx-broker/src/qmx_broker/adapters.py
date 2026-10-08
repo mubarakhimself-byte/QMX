@@ -170,6 +170,7 @@ class CTraderAdapter:
                 "volume_unit": "ticks",
             }
             for item in result.get("trendbar", [])
+            if since <= int(item["utcTimestampInMinutes"]) * 60000 <= until
         ][:limit]
 
 
