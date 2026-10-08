@@ -315,6 +315,9 @@ def test_ssh_uses_detached_docker_and_secrets_only_on_stdin(
     assert "hidden" not in str(args)
     request = json.loads(kwargs["input"])
     assert "--detach" in request["args"] and "--gpus" in request["args"]
+    assert "HOME=/work" in request["args"]
+    assert "TMPDIR=/work" in request["args"]
+    assert not any("src=/srv/qmx/bucket,dst=" in arg for arg in request["args"])
     assert request["env"] == {"TOKEN": "hidden"}
 
 

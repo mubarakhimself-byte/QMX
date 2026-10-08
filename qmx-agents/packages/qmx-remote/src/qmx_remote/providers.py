@@ -99,6 +99,8 @@ class SSHProvider:
             f"type=bind,src={workspace},dst=/work",
             "--env",
             "TMPDIR=/work",
+            "--env",
+            "HOME=/work",
         ]
         if local_bucket:
             for directory in ("requests", "runs"):

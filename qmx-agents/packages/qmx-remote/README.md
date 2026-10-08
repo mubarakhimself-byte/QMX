@@ -37,6 +37,8 @@ its frozen dependencies. The package Dockerfile is built from the repository
 root. Its Dockerfile-specific ignore file excludes environments, caches and
 runtime data. Builds and real node provisioning are operator tasks. No image
 build is needed for the fake-provider test suite.
+SSH workers keep their home, dependency cache and temporary files in the
+writable per-run `/work` mount while the container root stays read-only.
 
 For optional Modal/E2B control clients, install the corresponding `qmx-control`
 extra (`remote-modal` or `remote-e2b`). A Modal target's `image` is the prebuilt
