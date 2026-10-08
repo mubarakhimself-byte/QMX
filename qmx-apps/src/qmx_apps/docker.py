@@ -384,7 +384,12 @@ class DockerSupervisor(Supervisor):
         definition = self._definition(app_id)
         if app_id in self._instances:
             raise AppError("app_running", "Stop the app before moving its volume.", 409)
-        lease = VolumeLease(self.home, app_id)
+        road_lease = VolumeLease(self.home / "road-locks", app_id)
+        try:
+            lease = VolumeLease(self.home, app_id)
+        except BaseException:
+            road_lease.close()
+            raise
         try:
             volume = Volume(self.home, app_id)
             target = destination.resolve() / definition.hash
@@ -422,6 +427,7 @@ class DockerSupervisor(Supervisor):
             return target
         finally:
             lease.close()
+            road_lease.close()
 
     def restore(self, app_id: str, snapshot: Path) -> None:
         definition = self._definition(app_id)
@@ -431,26 +437,44 @@ class DockerSupervisor(Supervisor):
         data = json.loads((root / "snapshot.json").read_text(encoding="utf-8"))
         if data["app_id"] != app_id or data["definition_hash"] != definition.hash:
             raise AppError("backup_mismatch", "Install the snapshot's definition before restoring.")
-        lease = VolumeLease(self.home, app_id)
+        road_lease = VolumeLease(self.home / "road-locks", app_id)
+        try:
+            lease = VolumeLease(self.home, app_id)
+        except BaseException:
+            road_lease.close()
+            raise
         try:
             volume = Volume(self.home, app_id)
-            if (volume.root / "app.db").exists():
-                raise AppError("volume_exists", "Restore onto a fresh node or empty volume.", 409)
-            for name, digest in data["files"].items():
-                source = (root / name).resolve()
-                if not source.is_relative_to(root) or source.is_symlink():
-                    raise AppError("backup_invalid", "Snapshot paths must stay inside the backup.")
-                volume.check_write(name)
-                if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
-                    raise AppError("backup_invalid", "Snapshot checksum mismatch.")
-                if source.suffix == ".db":
-                    with closing(sqlite3.connect(source)) as db:
-                        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                            raise AppError("backup_invalid", "Snapshot database is corrupt.")
-            for name in data["files"]:
-                target = volume.check_write(name)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(root / name, target)
-            volume.create(agents=bool(definition.manifest.entrypoints.agents))
+            volume.root.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix=".restore-", dir=volume.root.parent
+            ) as temporary:
+                staged = Volume(Path(temporary), app_id)
+                staged.create(agents=bool(definition.manifest.entrypoints.agents))
+                for name, digest in data["files"].items():
+                    source = (root / name).resolve()
+                    if not source.is_relative_to(root) or source.is_symlink():
+                        raise AppError(
+                            "backup_invalid", "Snapshot paths must stay inside the backup."
+                        )
+                    target = staged.check_write(name)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, target)
+                    if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                        raise AppError("backup_invalid", "Snapshot checksum mismatch.")
+                    if target.suffix == ".db":
+                        with closing(sqlite3.connect(target)) as db:
+                            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                                raise AppError("backup_invalid", "Snapshot database is corrupt.")
+                old = Path(temporary) / "previous"
+                if volume.root.exists():
+                    os.replace(volume.root, old)
+                try:
+                    os.replace(staged.root, volume.root)
+                except BaseException:
+                    if old.exists():
+                        os.replace(old, volume.root)
+                    raise
         finally:
             lease.close()
+            road_lease.close()

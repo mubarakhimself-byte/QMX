@@ -144,9 +144,11 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
         rejected = DockerSupervisor(tmp_path / "rejected")
         try:
             rejected.install(source)
+            original = rejected.home / "apps/exchange-status/app.db"
+            before = original.read_bytes()
             with pytest.raises(AppError, match="checksum"):
                 rejected.restore("exchange-status", corrupt)
-            assert not (rejected.home / "apps/exchange-status/app.db").exists()
+            assert original.read_bytes() == before
         finally:
             rejected.close()
         manifest.write_text(
@@ -155,7 +157,7 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
             ),
             encoding="utf-8",
         )
-        owner.install(source)
+        owner.install(source, expected_hash=str(owner.get("exchange-status")["definition_hash"]))
         denied = owner.start("exchange-status")
         config = json.loads(docker("inspect", "qmx-" + str(denied["instance_id"])))[0]
         assert config["HostConfig"]["NetworkMode"] == "none"
