@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import shutil
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def test_backup_settings_and_rest_mcp_restore(
     service.apps_stop("exchange-status")
     volume = service.home / "apps/exchange-status"
     (volume / "blobs/report.txt").write_text("original")
-    token = "local-backup-fixture"
+    token = secrets.token_urlsafe(32)
     headers = {"Authorization": f"Bearer {token}"}
 
     async def journey() -> None:
