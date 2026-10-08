@@ -37,6 +37,10 @@ class History:
                 not evidence.passed
                 or evidence.parent != self.head
                 or definition_hash in self.stages
+                or any(
+                    record["stage"] == "build" and record["version"] == evidence.version
+                    for record in self.records
+                )
             ):
                 raise ValueError("Invalid immutable version chain")
             self.head = definition_hash

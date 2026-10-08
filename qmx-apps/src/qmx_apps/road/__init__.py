@@ -39,6 +39,11 @@ class Road:
                 raise AppError(
                     "head_conflict", "Candidate head changed; reload before saving.", 409
                 )
+            if any(
+                record["stage"] == "build" and record["version"] == image.manifest.version
+                for record in state.records
+            ):
+                raise AppError("immutable_version", "Changed content requires a new version.", 409)
             record = Evidence(
                 definition_hash=image.hash,
                 version=image.manifest.version,

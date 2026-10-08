@@ -107,6 +107,21 @@ def test_competing_same_base_serializes_without_lost_data(owner: RuntimeFixture)
     assert owner.get("exchange-status")["definition_hash"] == second.hash
 
 
+def test_immutable_version_rule_survives_projection_loss(owner: RuntimeFixture) -> None:
+    first = save(owner, "1.0.0", None)
+    source = owner.home / "changed"
+    shutil.copytree(first.root, source)
+    (source / "server.py").write_text("changed content")
+    changed = Definition.load(source)
+    target = owner.home / "definitions" / changed.hash
+    shutil.copytree(source, target)
+    with closing(sqlite3.connect(owner.catalog)) as db, db:
+        db.execute("DELETE FROM definitions")
+    with pytest.raises(AppError, match="new version"):
+        owner.road.register(Definition.load(target), "first_party", first.hash)
+    assert owner.get("exchange-status")["definition_hash"] == first.hash
+
+
 @pytest.mark.parametrize("stage", ["sandbox", "shadow", "live"])
 def test_skipping_stages_refuses_without_evidence(owner: RuntimeFixture, stage: Stage) -> None:
     image = save(owner, "1.0.0", None)
