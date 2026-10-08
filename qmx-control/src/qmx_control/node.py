@@ -98,7 +98,29 @@ def main() -> int:
         host = cast(str, args.ssh_host)
         if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
             parser.error("Use an SSH hostname or user@hostname.")
+        ssh = shutil.which("ssh")
+        git = shutil.which("git")
+        if ssh is None or git is None:
+            raise RuntimeError("Install Git and SSH before bootstrapping a node.")
         revision = run(["git", "rev-parse", "HEAD"])
+        archive = subprocess.run(
+            [git, "archive", "--format=tar", revision],
+            capture_output=True,
+            check=True,
+        ).stdout
+        transfer = subprocess.run(
+            [
+                ssh,
+                host,
+                "sudo sh -c 'umask 077; install -d -m 700 /opt/qmx-deploy; "
+                "cat > /opt/qmx-deploy/source.tar'",
+            ],
+            input=archive,
+            capture_output=True,
+            check=False,
+        )
+        if transfer.returncode:
+            raise RuntimeError("SSH could not transfer the pinned QMX source archive.")
         run(["ssh", host, "sudo bash -s"], input_text=bootstrap_script(revision))
         # No prompt or key is needed when rerunning an already-provisioned node.
         exists = run(
@@ -114,9 +136,6 @@ def main() -> int:
             )
         print("Installed. Enroll with: ssh " + shlex.quote(host) + " sudo tailscale up")
         print("Then: ssh " + shlex.quote(host) + " sudo systemctl start qmx-node")
-        ssh = shutil.which("ssh")
-        if ssh is None:
-            raise RuntimeError("Install an SSH client before bootstrapping a node.")
         checklist = subprocess.run(
             [ssh, host, "sudo /opt/qmx/qmx-control/.venv/bin/qmx node verify"],
             check=False,

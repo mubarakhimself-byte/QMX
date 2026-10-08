@@ -41,7 +41,7 @@ def test_vault_references_and_absent_credentials(tmp_path: Path) -> None:
 def test_installer_is_pinned_and_has_no_subscription_material() -> None:
     script = bootstrap_script("a" * 40)
     assert "@REVISION@" not in script
-    assert "checkout --detach " + "a" * 40 in script
+    assert "tar -xf /opt/qmx-deploy/source.tar -C /opt/qmx-versions/" + "a" * 40 in script
     assert "uv sync --project /opt/qmx/qmx-control --frozen --no-dev" in script
     assert "systemctl enable qmx-node" in script
     with pytest.raises(ValueError):

@@ -38,11 +38,10 @@ if ! command -v rclone >/dev/null || [[ "$(rclone version | head -1)" != 'rclone
   install -m 0755 "$scratch/rclone/${archive}/rclone" /usr/local/bin/rclone
 fi
 install -d -m 0700 /etc/qmx/vault /var/lib/qmx /var/lib/qmx/apps /var/lib/qmx/bucket /var/lib/qmx/traces
-if [[ ! -d /opt/qmx/.git ]]; then
-  git clone --branch rebuild/base https://github.com/MubarakHimself/QMX.git /opt/qmx
-fi
-git -C /opt/qmx fetch origin @REVISION@
-git -C /opt/qmx checkout --detach @REVISION@
+test -s /opt/qmx-deploy/source.tar
+install -d -m 0755 /opt/qmx-versions/@REVISION@
+tar -xf /opt/qmx-deploy/source.tar -C /opt/qmx-versions/@REVISION@
+ln -sfnT /opt/qmx-versions/@REVISION@ /opt/qmx
 uv sync --project /opt/qmx/qmx-control --frozen --no-dev
 if [[ ! -f /var/lib/qmx/rclone.conf ]]; then
   printf '[bucket]\ntype = local\n' > /var/lib/qmx/rclone.conf
