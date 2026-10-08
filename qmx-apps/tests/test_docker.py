@@ -117,7 +117,16 @@ def test_container_lifecycle_egress_and_restore(tmp_path: Path) -> None:
             replicated.install(source)
             with pytest.raises(AppError, match="SQLite"):
                 replicated.start("exchange-status")
-            assert not replicated._resources
+            state = replicated.status("exchange-status")
+            assert state["status"] == "tripped"
+            assert not docker(
+                "ps",
+                "-a",
+                "--filter",
+                "name=qmx-" + str(state["instance_id"]),
+                "--format",
+                "{{.Names}}",
+            )
         finally:
             replicated.close()
     finally:
