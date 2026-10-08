@@ -6,6 +6,7 @@ import argparse
 import asyncio
 
 from fastmcp import Client
+
 from qmx_agents.router import FIRECRAWL_SERVER, credential
 
 
