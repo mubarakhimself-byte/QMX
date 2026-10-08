@@ -420,3 +420,10 @@ https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/os.rst
 (`os.symlink`, directory links and Windows privileges).
 The uv CLI reference in section 18 documents `--compile-bytecode`: trade
 installation time for faster startup without runtime bytecode writes.
+
+P21 additions (fetched and read 2026-10-08 into D: scratch storage):
+- Daytona Python SDK: https://www.daytona.io/docs/en/python-sdk.md (read; the packet's adapter roster ends at E2B).
+- Modal lifecycle and explicit vault-backed clients: https://modal.com/docs/sdk/py/latest/Sandbox , https://modal.com/docs/sdk/py/latest/Client , https://modal.com/docs/sdk/py/latest/App .
+- E2B background jobs and reconnection: https://docs.e2b.dev/commands/background.md , https://docs.e2b.dev/sdk-reference/python-sdk/v2.53.1/sandbox_sync.md . `background=True, timeout=0` survives client disconnects; reconnect using the sandbox ID and PID.
+- Run branch isolation/publication: https://git-scm.com/docs/git-clone , https://git-scm.com/docs/git-switch , https://git-scm.com/docs/git-push .
+- Python process and online-checkpoint snapshots: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/subprocess.rst , https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/sqlite3.rst .
