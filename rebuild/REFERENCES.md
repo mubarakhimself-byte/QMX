@@ -357,6 +357,7 @@ P17 additions (fetched 2026-10-08):
 - Docker containers and CLI: https://docs.docker.com/engine/containers/run/ , https://docs.docker.com/reference/cli/docker/container/run/ , https://docs.docker.com/reference/cli/docker/network/create/ , https://docs.docker.com/reference/cli/docker/container/exec/
 - Bridge isolation and gateway modes: https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/drivers/bridge.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/port-publishing.md
 - Docker builds and Ubuntu install: https://raw.githubusercontent.com/docker/docs/main/content/manuals/build/building/best-practices.md , https://raw.githubusercontent.com/docker/docs/main/content/manuals/engine/install/ubuntu.md
+- Docker multi-stage builds: https://raw.githubusercontent.com/docker/docs/main/content/manuals/build/building/multi-stage.md (Git is available only during the frozen dependency build).
 - Squid ACLs: https://www.squid-cache.org/Doc/config/acl/ , https://www.squid-cache.org/Doc/config/http_access/ , https://www.squid-cache.org/Doc/config/http_port/
 - Tailscale: https://tailscale.com/docs/install/linux.md
 - rclone installation/SFTP: https://raw.githubusercontent.com/rclone/rclone/master/docs/content/install.md , https://raw.githubusercontent.com/rclone/rclone/master/docs/content/sftp.md

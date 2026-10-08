@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 from contextlib import closing
 from pathlib import Path
 
@@ -24,6 +25,49 @@ def test_proxy_rules_fail_closed() -> None:
     for host in ["*", ".example.com", "example.com\nhttp_access allow all", "https://example.com"]:
         with pytest.raises(AppError):
             proxy_config([host])
+
+
+@pytest.mark.serial
+@pytest.mark.skipif(os.environ.get("QMX_TEST_DOCKER") != "1", reason="opt-in Docker integration")
+def test_app_with_locked_git_dependency(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    shutil.copytree(EXAMPLE, source, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
+    project = source / "pyproject.toml"
+    project.write_text(
+        project.read_text(encoding="utf-8").replace(
+            '"fastmcp==4.0.11"', '"fastmcp==4.0.11", "typing-extensions"'
+        )
+        + "\n[tool.uv.sources]\ntyping-extensions = { git = "
+        + '"https://github.com/python/typing_extensions", '
+        + 'rev = "3ae9b7553a5c560dc09b484078d98ece2985eecd" }\n',
+        encoding="utf-8",
+    )
+    uv = shutil.which("uv")
+    assert uv is not None
+    subprocess.run([uv, "lock", "--project", str(source)], check=True, capture_output=True)
+    owner = DockerSupervisor(tmp_path / "node")
+    try:
+        definition = owner.install(source)
+        image = "qmx-app:" + str(definition["definition_hash"])
+        assert (
+            docker(
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--entrypoint",
+                "sh",
+                image,
+                "-c",
+                "test ! -x /usr/bin/git && /opt/app-env/bin/python -c "
+                "'import typing_extensions; print(\"installed\")'",
+            )
+            == "installed"
+        )
+        assert owner.start("exchange-status")["status"] == "running"
+        assert owner.call("exchange-status", "snapshot", {})["artifact_ref"]
+    finally:
+        owner.close()
 
 
 @pytest.mark.serial

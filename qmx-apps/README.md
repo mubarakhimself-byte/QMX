@@ -68,7 +68,9 @@ remain P14 responsibilities.
 
 `DockerSupervisor(home, node="sgp-1")` runs the same definitions at T2 and accepts
 agent-authored code. Its image uses a digest-pinned Python 3.14/uv 0.12.23 base,
-`uv sync --frozen`, and the definition hash as its tag. The container has a
+`uv sync --frozen`, and the definition hash as its tag. A separate build stage
+supplies Git for locked Git dependencies; Git stays out of the running image.
+The container has a
 read-only root, a bind mount at `/volume` of the node's `apps/<id>`, dropped
 capabilities, no privilege escalation, and Docker memory, CPU and PID limits.
 The host retains the volume lease and MCP session and publishes logs, heartbeat,

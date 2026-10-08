@@ -85,10 +85,15 @@ def build_image(definition: Definition) -> str:
             shutil.copyfile(source, target)
         shutil.copyfile(Path(__file__).with_name("bootstrap.py"), context / "bootstrap.py")
         (context / "Dockerfile").write_text(
-            f"FROM {BASE}\n"
-            "COPY image /image\nCOPY bootstrap.py /bootstrap.py\nWORKDIR /image\n"
+            f"FROM {BASE} AS build\n"
+            "RUN apt-get update && apt-get install -y --no-install-recommends git "
+            "&& rm -rf /var/lib/apt/lists/*\n"
+            "COPY image /image\nWORKDIR /image\n"
             "ENV UV_PROJECT_ENVIRONMENT=/opt/app-env UV_PYTHON_DOWNLOADS=never\n"
             "RUN uv sync --frozen --no-dev --no-editable --no-install-project\n"
+            f"FROM {BASE}\n"
+            "COPY --from=build /opt/app-env /opt/app-env\n"
+            "COPY image /image\nCOPY bootstrap.py /bootstrap.py\n"
             "ENV PATH=/opt/app-env/bin:/usr/local/bin:/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1\n"
             'WORKDIR /volume\nENTRYPOINT ["/opt/app-env/bin/python", "/bootstrap.py"]\n',
             encoding="utf-8",
