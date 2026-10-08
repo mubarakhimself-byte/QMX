@@ -9,7 +9,7 @@ import pytest
 from conftest import compiled, fake, fake_models
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool, ToolException, tool
 from langgraph.graph import (  # pyright: ignore[reportMissingTypeStubs]
     END,
     START,
@@ -52,15 +52,25 @@ def test_firecrawl_defaults_and_settings_overlay(
         mcp_configuration(spec, ctx)
 
 
+@pytest.mark.parametrize("persist", [False, True])
+@pytest.mark.parametrize("fails", [False, True])
 def test_enabled_firecrawl_reaches_researcher_subagent(
-    tmp_path: Path, config: RouterConfig, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    config: RouterConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    persist: bool,
+    fails: bool,
 ) -> None:
     captured: list[dict[str, Any]] = []
 
     @tool
     def firecrawl_scrape(url: str) -> str:
         """Read a recorded research page."""
+        if fails:
+            raise ToolException("recorded fetch failure")
         return "recorded research"
+
+    firecrawl_scrape.handle_tool_error = True
 
     class Adapter:
         def __init__(self, options: dict[str, Any]) -> None:
@@ -90,17 +100,36 @@ def test_enabled_firecrawl_reaches_researcher_subagent(
         "research complete",
         "done",
     )
-    ctx = BuildContext(ModelRouter(config, fake_models(model)), general_purpose_subagent=False)
+    ctx = BuildContext(
+        ModelRouter(config, fake_models(model)),
+        general_purpose_subagent=False,
+        qmx_home=tmp_path / "home" if persist else None,
+        run=RunContext(
+            session_id="research-session", workflow_id="research-flow", task_id="scrape"
+        ),
+    )
 
     async def run() -> dict[str, Any]:
-        graph = cast("Runnable[Any, dict[str, Any]]", await build_agent(parent, ctx))
-        return await graph.ainvoke({"messages": [{"role": "user", "content": "Research"}]})
+        try:
+            graph = cast("Runnable[Any, dict[str, Any]]", await build_agent(parent, ctx))
+            return await graph.ainvoke({"messages": [{"role": "user", "content": "Research"}]})
+        finally:
+            await ctx.close_memory()
 
     result = asyncio.run(run())
     assert result["messages"][-1].content == "done"
     assert any("firecrawl_scrape" in names for names in model.bound_names)
     assert len(captured) == 1
     assert captured[0]["mcpServers"]["firecrawl"]["auth"] == "vault-token"
+    if persist:
+        from qmx_control.service import ControlService
+
+        catalog = ControlService(tmp_path / "home").library_search("")
+        assert len(catalog) == (0 if fails else 1)
+        if not fails:
+            assert catalog[0]["source"] == "https://recorded.test"
+            assert catalog[0]["fetched_date"] is not None
+            assert catalog[0]["content"] == "recorded research"
 
 
 def test_mcp_selection_and_call_after_discovery_exits(tmp_path: Path, config: RouterConfig) -> None:

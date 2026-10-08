@@ -94,3 +94,9 @@ For a local rehearsal, set `backup.repository` to a local bare Git repo and run
 `qmx-control weekly-backup --dry-run`. This commits and pushes only to that local
 repo, verifies the snapshots, lists exclusions and does not advance the weekly
 success marker. It never uses GitHub or a live provider.
+
+Research producers supply `source` and `fetched_date` for URL/day persistence.
+The MQL5 outbox publishes both fields. With `qmx_home` set, the enabled Firecrawl
+scrape tool saves successful page content through the shared Library; failed
+reads are not saved. Literal URL searches support the article outbox's recovery
+lookup alongside normal FTS5 expressions.

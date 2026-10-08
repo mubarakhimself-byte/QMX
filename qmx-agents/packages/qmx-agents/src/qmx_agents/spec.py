@@ -30,6 +30,7 @@ from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMi
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from qmx_broker.server import create_server as create_broker_server
 from qmx_broker.service import BrokerService
+from qmx_control.service import ControlService
 from qmx_tools import default_tool_registry
 
 from qmx_agents.guards import AdmissionBackend, AdmissionGate, RunJournal, check_tool
@@ -49,6 +50,7 @@ from qmx_agents.memory import (
     load_provider,
     memory_path,
 )
+from qmx_agents.research import ResearchLibraryMiddleware
 from qmx_agents.router import FIRECRAWL_SERVER, ModelRouter, RunContext, credential, model_selector
 
 
@@ -348,6 +350,8 @@ async def _build(
         if agent == spec.name:
             middleware.extend(memory_middleware)
         middleware.extend([AdmissionStateMiddleware(), MoneyPathMiddleware()])
+        if ctx.qmx_home is not None and "firecrawl" in servers:
+            middleware.append(ResearchLibraryMiddleware(ControlService(ctx.qmx_home)))
         if budget.model_calls is not None:
             middleware.append(
                 ModelCallLimitMiddleware(run_limit=budget.model_calls, exit_behavior="end")

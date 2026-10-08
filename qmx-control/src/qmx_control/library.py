@@ -142,7 +142,7 @@ class Library:
                     artifact_id,
                     item.title,
                     " ".join(item.tags),
-                    text,
+                    f"{item.source}\n{text}",
                 ),
             )
         return {**data, "content": item.content}
@@ -170,6 +170,9 @@ class Library:
             raise ControlError("invalid_page", "Use offset >= 0 and limit between 1 and 1000.")
         with self.connect() as db:
             if query.strip():
+                # Existing article outboxes search by a literal source URL.
+                if query.startswith(("https://", "http://")):
+                    query = '"' + query.replace('"', '""') + '"'
                 try:
                     rows = db.execute(
                         "SELECT id FROM search WHERE search MATCH ? ORDER BY rank LIMIT ? OFFSET ?",

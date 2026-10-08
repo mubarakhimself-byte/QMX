@@ -243,6 +243,10 @@ class Store:
                                     :200
                                 ],
                                 "kind": "article",
+                                "source": row["url"],
+                                "fetched_date": datetime.fromisoformat(metadata["fetched_at"])
+                                .date()
+                                .isoformat(),
                                 "content": {
                                     **metadata,
                                     "markdown": (self.root / row["markdown"]).read_text(
