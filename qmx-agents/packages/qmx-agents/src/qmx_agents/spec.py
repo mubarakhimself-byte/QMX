@@ -244,6 +244,7 @@ async def _build(
                     "qmx-broker requires the node's qmx_home or an injected BrokerService"
                 )
             broker = ctx.broker or BrokerService(cast(Path, ctx.qmx_home))
+            ctx.broker = broker
             async with MCPAdapter(create_broker_server(broker)) as adapter:
                 broker_tools = await adapter.list_tools()
             tools.extend(tool for tool in broker_tools if tool.name != "propose_order")

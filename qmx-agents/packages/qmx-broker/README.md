@@ -24,7 +24,8 @@ be authorized; OAuth sign-up and refresh remain operator/node duties.
 CCXT brokers use `adapter: "ccxt"` and an `exchange` id. Demo mode selects the
 exchange's sandbox before other calls. Multi-account connections require a
 distinct account `credential_ref` for each account, since CCXT has no universal
-subaccount selector. Only active non-contract spot markets are accepted.
+subaccount selector. The service reuses exchange instances so CCXT's rate limiter
+survives repeated reads. Only active non-contract spot markets are accepted.
 `spot.py` validates complete TICK_SIZE metadata; other metadata remains a read
 view, without implying validation or execution authority. Spot positions mean
 asset holdings.
