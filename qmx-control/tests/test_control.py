@@ -329,6 +329,40 @@ def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
                     "sessions_create", {"session": {"title": "HTTP MCP"}}
                 )
                 assert json.loads(json.dumps(result.data))["title"] == "HTTP MCP"
+                saved = await client.call_tool(
+                    "library_save",
+                    {
+                        "item": {
+                            "title": "HTTP strategy",
+                            "kind": "strategy",
+                            "tags": ["macro"],
+                            "content": {"lookback": 20},
+                        }
+                    },
+                )
+                item = json.loads(json.dumps(saved.data))
+                fetched = httpx.get(
+                    f"http://127.0.0.1:{port}/api/library/{item['id']}", headers=HEADERS, timeout=10
+                )
+                assert fetched.status_code == 200
+                assert fetched.json() == item
+                versions = await client.call_tool("library_versions", {"artifact_id": item["id"]})
+                assert json.loads(json.dumps(versions.data)) == [item]
+                searched = httpx.get(
+                    f"http://127.0.0.1:{port}/api/library?query=macro", headers=HEADERS, timeout=10
+                )
+                assert searched.json() == [item]
+                aggregate = httpx.get(
+                    f"http://127.0.0.1:{port}/api/aggregates", headers=HEADERS, timeout=10
+                )
+                assert aggregate.json()["library_items"] == 1
+                pushed = httpx.get(
+                    f"http://127.0.0.1:{port}/api/events/aggregates?max_events=1",
+                    headers=HEADERS,
+                    timeout=10,
+                )
+                assert "event: aggregates" in pushed.text
+                assert '"library_items": 1' in pushed.text
 
         asyncio.run(call())
 

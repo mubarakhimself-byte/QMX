@@ -1,10 +1,11 @@
 """Transport adapters over the same bound service methods."""
 
+import asyncio
 import json
 import os
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any
@@ -46,11 +47,18 @@ OPERATIONS = (
     ("workflows_validate", "POST", "/api/workflows/validate", False),
     ("workflows_run", "POST", "/api/workflows/{workflow_id}/run", True),
     ("runs_list", "GET", "/api/runs", False),
+    ("runs_get", "GET", "/api/runs/{run_id}", False),
     ("runs_cancel", "POST", "/api/runs/{run_id}/cancel", True),
     ("jobs_list", "GET", "/api/jobs", False),
     ("jobs_cancel", "POST", "/api/jobs/{job_id}/cancel", True),
     ("library_search", "GET", "/api/library", False),
     ("library_save", "POST", "/api/library", False),
+    ("library_get", "GET", "/api/library/{artifact_id}", False),
+    ("library_versions", "GET", "/api/library/{artifact_id}/versions", False),
+    ("library_links", "GET", "/api/library/{artifact_id}/links", False),
+    ("library_link", "POST", "/api/library/links", False),
+    ("aggregates_get", "GET", "/api/aggregates", False),
+    ("backup_weekly", "POST", "/api/backup/weekly", True),
     ("settings_get", "GET", "/api/settings/{section}", False),
     ("settings_put", "PUT", "/api/settings/{section}", True),
     ("portfolio_proposals", "GET", "/api/portfolio/proposals", False),
@@ -128,10 +136,29 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        async def maintain() -> None:
+            while True:
+                try:
+                    await asyncio.to_thread(service.runs_list)
+                    if service.settings_get("backup").get("repository"):
+                        await asyncio.to_thread(service.backup_weekly)
+                except ControlError as error:
+                    await asyncio.to_thread(
+                        service.record_work,
+                        "jobs",
+                        "maintenance",
+                        {"status": "failed", "error": error.document()},
+                    )
+                await asyncio.sleep(60)
+
+        maintenance = asyncio.create_task(maintain())
         try:
             async with mcp_app.lifespan(app):
                 yield
         finally:
+            maintenance.cancel()
+            with suppress(asyncio.CancelledError):
+                await maintenance
             service.close()
 
     app = FastAPI(title="QMX control", version="0.1.0", lifespan=lifespan)

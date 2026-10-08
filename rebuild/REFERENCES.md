@@ -310,6 +310,11 @@ These are facts found in the official docs that change what the packets say. Fol
 - Key APIs: `Connection.backup(target, *, pages=-1, progress=None, name="main", sleep=0.250)`; `VACUUM INTO 'file'` (target must not exist or be empty; produces a compact copy); `PRAGMA journal_mode=WAL`, `PRAGMA busy_timeout=5000`.
 - Packets: P13, P17.
 
+P22 also uses SQLite FTS5: https://sqlite.org/fts5.html (official HTML,
+fetched 2026-10-08). `CREATE VIRTUAL TABLE ... USING fts5(...)`, `MATCH ?` and
+`ORDER BY rank` provide catalog search. Snapshots use `Connection.backup` to include
+committed WAL content without pausing the app's writer.
+
 ## 15. CCXT
 
 - Docs: https://docs.ccxt.com/docs/manual
@@ -398,3 +403,9 @@ P19 additions (fetched and read 2026-10-08 into scratch storage outside the repo
 | P19 research sources | 4, 5, 19 (Firecrawl) | |
 | P20 skills + hooks | 1 (custom middleware, HITL), 2 (skills) | |
 | P21 remote runs | 3 (checkpointers), 7, 8, 9, 10, 11, 18 | D7; Daytona UNVERIFIED |
+| P22 Library + runs + caching + backup | 5, 6, 11, 13, 14 (FTS5), 18, 19 (cachetools) | Git docs below; no new analytics engine |
+
+P22 Git backup references (fetched 2026-10-08):
+https://git-scm.com/docs/git-clone , https://git-scm.com/docs/git-push ,
+https://cli.github.com/manual/gh_api , https://docs.github.com/en/rest/repos/repos .
+The GitHub repository response's `private` field is checked before uploading.

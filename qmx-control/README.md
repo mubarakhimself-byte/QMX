@@ -17,8 +17,15 @@ Authorization header with fetch streaming (browser EventSource cannot set it).
 `max_events` optionally closes after a finite number. MCP `sessions_stream`
 reads an event page using the same event store.
 
-Sessions are append-only typed blocks. Library save/search is a minimal durable
-catalog; indexing and content-addressed Library storage belong to P22. Settings
+Sessions are append-only typed blocks. Library content is stored as canonical JSON
+in `artifacts/<sha256>`, with metadata and FTS5 title/tag/text search in `library.db`.
+Save takes `title`, `kind`, `content`, optional `tags`, `source`, `extracted_text`,
+and `previous_id` for the next immutable version. Strategies and pods retain their
+type through the version chain. `library_get`, `library_versions`, `library_link`
+and `library_links` use artifact IDs; domain tools also return blob references.
+FTS5 search accepts its standard expression syntax and returns relevance order.
+Web/Firecrawl callers pass `source` URL and `fetched_date` (YYYY-MM-DD); repeated
+fetches of that URL/date return the saved item. Settings
 are `settings.toml`; use `credential_ref` instead of embedding secrets. Runs and
 jobs are recorded by their owners, which can register a cancellation handle.
 `cancel_requested` is an acknowledgement; the owner records the terminal state.
@@ -51,3 +58,34 @@ gate to REST and MCP. `qmx node verify` prints each component's PASS/FAIL and
 returns nonzero until enrollment, token, supervisor and CLIProxy are ready.
 CLIProxy installation/login is deliberately separate from the key-free
 bootstrap; no subscription material is stored in the source or app images.
+
+`runs.db` indexes P08 JSONL files beneath `<home>/runs/` or `<home>/journals/`.
+The host refreshes this projection and publishes changed runs every minute;
+`runs_list`/`runs_get` also refresh before reading. Complete lines must have valid
+fingerprints, monotonic sequences and a stable run ID. Partial trailing writes
+wait for the next refresh. Rewritten journals fail explicitly. Model resolutions
+are recorded per agent; unrecorded costs, targets and times remain null rather
+than being estimated. Run owners can also publish through `record_work`.
+
+`aggregates_get` / `GET /api/aggregates` caches Library/run/job totals for five
+seconds. Events invalidate the cache, including events written by another service
+instance, and `/api/events/aggregates` pushes the changed totals over SSE.
+`qmx_control.cache.read_cache` is the TTL decorator for synchronous expensive
+read tools, with `cache_clear()` for event invalidation. Model responses are never
+cached.
+
+Set `[backup] repository = "owner/private-repo"` in Settings to enable weekly
+snapshots while the host is running. The job verifies GitHub privacy through `gh`,
+uses the local authenticated Git installation, and never embeds keys in commands.
+It snapshots memory, run/Library catalogs, Experiment Ledger databases and app
+databases with SQLite's online backup API and checks restoration integrity.
+Settings and JSON/YAML/TOML definitions are copied. Parquet, blobs, data directories,
+environment files and vault material are excluded. Files above 95 MiB are refused.
+The CLI `uv run --project qmx-control qmx-control weekly-backup` also runs the due
+job, so an OS scheduler can invoke it when the service is off. The operation is
+also exposed through REST/MCP and records successful runs in Jobs.
+
+For a local rehearsal, set `backup.repository` to a local bare Git repo and run
+`qmx-control weekly-backup --dry-run`. This commits and pushes only to that local
+repo, verifies the snapshots, lists exclusions and does not advance the weekly
+success marker. It never uses GitHub or a live provider.
