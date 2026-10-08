@@ -53,6 +53,7 @@ OPERATIONS = (
     ("library_save", "POST", "/api/library", False),
     ("settings_get", "GET", "/api/settings/{section}", False),
     ("settings_put", "PUT", "/api/settings/{section}", True),
+    ("portfolio_proposals", "GET", "/api/portfolio/proposals", False),
     ("sessions_create", "POST", "/api/sessions", False),
     ("sessions_list", "GET", "/api/sessions", False),
     ("sessions_append", "POST", "/api/sessions/{session_id}/blocks", False),

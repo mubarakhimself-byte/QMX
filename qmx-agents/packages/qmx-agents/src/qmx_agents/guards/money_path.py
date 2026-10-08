@@ -11,6 +11,8 @@ from typing import Any, Final, Literal, cast
 from langchain_core.tools import BaseTool
 from langchain_core.tools.base import ArgsSchema
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from qmx_broker.models import OrderProposal
+from qmx_broker.service import BrokerService
 
 from qmx_agents.guards.journal import RunJournal, encoded
 from qmx_agents.guards.parent_surfaces import is_parent_surface_permitted
@@ -199,8 +201,43 @@ def propose_order(journal: RunJournal) -> OrderProposalTool:
     return OrderProposalTool(journal=journal)
 
 
+class BrokerOrderProposalTool(BaseTool):
+    """Trusted local Portfolio writer, substituted for the broker MCP proposal."""
+
+    name: str = "propose_order"
+    description: str = "Queue an unsigned broker order for Portfolio review; never execute."
+    args_schema: ArgsSchema | None = OrderProposal
+    service: BrokerService = Field(exclude=True)
+    metadata: dict[str, Any] | None = Field(default_factory=lambda: {"money_path": True})
+
+    def _run(
+        self,
+        broker_id: str,
+        connection_id: str,
+        account_id: str,
+        symbol: str,
+        side: str,
+        quantity: str,
+        order_type: str = "market",
+        limit_price: str = "",
+    ) -> str:
+        proposal = OrderProposal.model_validate(
+            {
+                "broker_id": broker_id,
+                "connection_id": connection_id,
+                "account_id": account_id,
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "order_type": order_type,
+                "limit_price": limit_price,
+            }
+        )
+        return encoded(self.service.propose_order(proposal)).decode("utf-8")
+
+
 def check_tool(tool: BaseTool) -> None:
-    if type(tool) is OrderProposalTool and tool.name == "propose_order":
+    if type(tool) in {OrderProposalTool, BrokerOrderProposalTool} and tool.name == "propose_order":
         return
     metadata = tool.metadata or {}
     if metadata.get("money_path"):
