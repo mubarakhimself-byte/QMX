@@ -578,7 +578,22 @@ class ControlService:
 
     def apps_call(self, app_id: str, tool: str, arguments: Document) -> Document:
         """Call a connected app; feed arguments must be registered artifact refs."""
-        return self.app_runtime().call(app_id, tool, arguments)
+        result = self.app_runtime().call(app_id, tool, arguments)
+        reference = result.get("artifact_ref")
+        output = result.get("result")
+        if isinstance(reference, dict) and isinstance(output, dict) and "data" in output:
+            saved = self.library_save(
+                LibraryInput(
+                    title=f"{app_id}: {reference['output']}"[:200],
+                    kind="app-output",
+                    tags=[app_id, str(reference["output"])],
+                    source=f"app://{app_id}/{reference['output']}/{reference['sha256']}",
+                    content={"artifact_ref": reference, "data": output["data"]},
+                )
+            )
+            result["library_id"] = saved["id"]
+            result["library_ref"] = saved["ref"]
+        return result
 
     def apps_resource(self, app_id: str, uri: str) -> list[Document]:
         """Read an app's MCP resource, including ui:// panels."""

@@ -38,6 +38,9 @@ MCP resources. The same operations are exposed as MCP tools for clients.
 Install with an explicit reviewed/operator/first-party trust declaration;
 the default agent-authored definition requires T2/T3 or operator review.
 `/api/events/apps` carries durable runtime events.
+Declared app outputs are also saved as Library `app-output` artifacts, including
+their producer reference and payload. `apps_call` returns `library_id` and
+`library_ref` alongside the existing app reference.
 
 Cancellation without a runner, workflows without P10/P22, and app
 test/publish/evidence without P14 return `not_implemented` explicitly.

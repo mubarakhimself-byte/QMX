@@ -95,6 +95,7 @@ def test_backup_refuses_a_public_repo_before_snapshotting(
 ) -> None:
     home = tmp_path / "home"
     ControlService(home)
+
     def which(name: str) -> str:
         return name
 
