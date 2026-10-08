@@ -111,6 +111,7 @@ def backup(volume: Volume, settings: BackupSettings) -> Document:
             if (
                 source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
                 or source.name == "backup.json.tmp"
+                or (relative.parent == Path("data") and source.name.startswith("heartbeat-"))
                 or relative.parts[:2]
                 == (
                     "data",

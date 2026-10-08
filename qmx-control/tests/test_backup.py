@@ -24,7 +24,6 @@ def test_backup_settings_and_rest_mcp_restore(
     example = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
     service.apps_create(str(example), "first_party")
     service.apps_start("exchange-status")
-    service.apps_stop("exchange-status")
     volume = service.home / "apps/exchange-status"
     (volume / "blobs/report.txt").write_text("original")
     token = secrets.token_urlsafe(32)
@@ -44,6 +43,14 @@ def test_backup_settings_and_rest_mcp_restore(
                 backed = rest.post("/api/apps/exchange-status/backup", headers=headers)
                 assert backed.status_code == 200, backed.text
                 assert backed.json()["restore_test"] == {"passed": True}
+                refused = rest.post(
+                    "/api/apps/exchange-status/restore",
+                    headers=headers,
+                    params={"snapshot_id": backed.json()["snapshot_id"]},
+                )
+                assert refused.status_code == 409
+                assert refused.json()["error"]["code"] == "volume_busy"
+                service.apps_stop("exchange-status")
                 (volume / "blobs/report.txt").write_text("changed")
                 restored = await mcp.call_tool(
                     "apps_restore",
