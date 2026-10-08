@@ -14,7 +14,7 @@ from pathlib import Path
 
 from qmx_control.models import ControlError, Document
 
-MAX_BYTES = 95 * 1024 * 1024
+MAX_BYTES = 95_000_000
 DATABASES = {
     "memory.db",
     "runs.db",
@@ -72,7 +72,7 @@ def weekly_backup(home: Path, repository: str, *, dry_run: bool = False) -> Docu
                 "gh_missing", "Install and authenticate gh for private GitHub backups."
             )
         result = subprocess.run(
-            [gh, "api", f"repos/{repository}", "--jq", ".private"],
+            [gh, "api", "--hostname", "github.com", f"repos/{repository}", "--jq", ".private"],
             capture_output=True,
             text=True,
             check=False,

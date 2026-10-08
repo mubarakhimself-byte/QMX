@@ -80,7 +80,7 @@ uses the local authenticated Git installation, and never embeds keys in commands
 It snapshots memory, run/Library catalogs, Experiment Ledger databases and app
 databases with SQLite's online backup API and checks restoration integrity.
 Settings and JSON/YAML/TOML definitions are copied. Parquet, blobs, data directories,
-environment files and vault material are excluded. Files above 95 MiB are refused.
+environment files and vault material are excluded. Files above 95 MB are refused.
 The CLI `uv run --project qmx-control qmx-control weekly-backup` also runs the due
 job, so an OS scheduler can invoke it when the service is off. The operation is
 also exposed through REST/MCP and records successful runs in Jobs.

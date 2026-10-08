@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -87,6 +88,30 @@ def test_backup_requires_configuration_and_local_bare_dry_run(tmp_path: Path) ->
         service.backup_weekly(dry_run=True)
     with pytest.raises(ControlError, match="owner/private-repo"):
         service.backup_weekly()
+
+
+def test_backup_refuses_a_public_repo_before_snapshotting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    ControlService(home)
+    def which(name: str) -> str:
+        return name
+
+    monkeypatch.setattr("qmx_control.backup.shutil.which", which)
+    calls: list[list[str]] = []
+
+    def call(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="false\n", stderr="")
+
+    monkeypatch.setattr("qmx_control.backup.subprocess.run", call)
+    with pytest.raises(ControlError, match="private"):
+        weekly_backup(home, "owner/public")
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--hostname") + 1] == "github.com"
+    assert not (home / "weekly-backup.json").exists()
+    assert not (home / "weekly-backup.lock").exists()
 
 
 def test_backup_weekly_due_guard_and_failed_snapshot_releases_lock(tmp_path: Path) -> None:
