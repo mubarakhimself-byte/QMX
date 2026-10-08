@@ -280,11 +280,21 @@ def test_job_logs_are_incrementally_shipped_and_credentials_redacted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("RUN_SECRET", "scoped-secret")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("TMPDIR", str(scratch))
+    monkeypatch.setenv("UV_CACHE_DIR", str(cache))
     manifest = Manifest(
         run_id="job1",
         bundle=bundle(
             credentials_scope={"RUN_SECRET": "qmx/test"},
-            command=[sys.executable, "-c", "import os; print(os.environ['RUN_SECRET'])"],
+            command=[
+                sys.executable,
+                "-c",
+                "import os,tempfile; print(os.environ['RUN_SECRET']); "
+                "print(tempfile.gettempdir()); print(os.environ['UV_CACHE_DIR'])",
+            ],
         ),
         target="vps",
     )
@@ -296,6 +306,7 @@ def test_job_logs_are_incrementally_shipped_and_credentials_redacted(
     assert recovered.revision >= 2
     text = (tmp_path / "fetched/logs/worker.log").read_text()
     assert "[redacted]" in text and "scoped-secret" not in text
+    assert str(scratch) in text and str(cache) in text
 
 
 def test_ssh_uses_detached_docker_and_secrets_only_on_stdin(

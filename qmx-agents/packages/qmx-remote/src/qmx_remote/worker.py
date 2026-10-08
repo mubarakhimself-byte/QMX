@@ -213,7 +213,8 @@ def execute_job(worker: Worker) -> Document:
     environment = {
         key: value
         for key, value in os.environ.items()
-        if key in {"PATH", "SYSTEMROOT", "HOME", "LANG"} or key in bundle.credentials_scope
+        if key in {"PATH", "SYSTEMROOT", "HOME", "LANG", "TMPDIR", "TEMP", "TMP", "UV_CACHE_DIR"}
+        or key in bundle.credentials_scope
     }
     environment["QMX_REMOTE_OUTPUT"] = str(worker.root / "outputs")
     (worker.root / "outputs").mkdir(exist_ok=True)
