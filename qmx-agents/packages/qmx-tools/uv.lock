@@ -1619,6 +1619,8 @@ name = "qmx-apps"
 version = "0.1.0"
 source = { editable = "../../../qmx-apps" }
 dependencies = [
+    { name = "cachetools" },
+    { name = "duckdb" },
     { name = "fastmcp" },
     { name = "jsonschema" },
     { name = "keyring" },
@@ -1629,6 +1631,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cachetools", specifier = "==7.2.1" },
+    { name = "duckdb", specifier = "==1.5.5" },
     { name = "fastmcp", specifier = ">=4,<5" },
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "keyring", specifier = "==25.7.0" },
@@ -1646,6 +1650,7 @@ dev = [
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "qmx-agents", editable = "../qmx-agents" },
     { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-cachetools", specifier = ">=7.0.0.20260713" },
     { name = "types-jsonschema" },
     { name = "types-pywin32", specifier = "==312.0.0.20261006" },
 ]
