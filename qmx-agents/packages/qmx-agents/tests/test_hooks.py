@@ -11,6 +11,8 @@ from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import ToolException, tool
+from qmx_apps.manifest import Trust
+from qmx_apps.road.models import Stage
 from qmx_control.models import Document
 from qmx_control.server import create_mcp
 from qmx_control.service import ControlError, ControlService, SessionInput
@@ -33,7 +35,12 @@ class FakeApps(ControlService):
             "entrypoints": {"mcp": "server.py"},
         }
         self.hash = "version-one"
-        self.test_result: Document = {"status": "passed", "definition_hash": self.hash}
+        self.test_result: Document = {
+            "stage": "tests",
+            "passed": True,
+            "definition_hash": self.hash,
+        }
+        self.evidence: list[Document] = []
         self.tested: list[str] = []
         self.published: list[str] = []
         self.installed: list[str] = []
@@ -43,7 +50,14 @@ class FakeApps(ControlService):
     def apps_get(self, app_id: str) -> Document:
         return {"definition": self.definition, "definition_hash": self.hash}
 
-    def apps_test(self, app_id: str) -> Document:
+    def apps_evidence(self, app_id: str) -> list[Document]:
+        return self.evidence
+
+    def apps_test(
+        self, app_id: str, expected_hash: str | None = None, stage: Stage | None = None
+    ) -> Document:
+        assert expected_hash == self.hash
+        assert stage == "tests"
         self.tested.append(app_id)
         if self.unavailable:
             raise ControlError("test_unavailable", "The app test runner is unavailable.", 503)
@@ -51,15 +65,23 @@ class FakeApps(ControlService):
             self.hash = "version-two"
         return self.test_result
 
-    def apps_publish(self, app_id: str) -> Document:
+    def apps_publish(
+        self,
+        app_id: str,
+        expected_hash: str | None = None,
+        expected_active: str | None = None,
+        signature: str | None = None,
+    ) -> Document:
         self.published.append(app_id)
         return {"status": "published"}
 
-    def apps_create(self, path: str, trust: Any = "agent") -> Document:
+    def apps_create(self, path: str, trust: Trust = "agent") -> Document:
         self.installed.append(path)
         return self.apps_get("demo")
 
-    def apps_update(self, app_id: str, path: str, trust: Any = "agent") -> Document:
+    def apps_update(
+        self, app_id: str, path: str, trust: Trust = "agent", expected_hash: str | None = None
+    ) -> Document:
         return self.apps_create(path, trust)
 
 
@@ -70,7 +92,18 @@ def messages(result: dict[str, Any]) -> list[ToolMessage]:
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("name", ["publish_app", "apps_publish", "qmx-control_apps_publish"])
 @pytest.mark.parametrize(
-    "problem", ["none", "manifest", "failed", "stale", "changed", "unavailable", "no-service"]
+    "problem",
+    [
+        "none",
+        "manifest",
+        "failed",
+        "stale",
+        "changed",
+        "unavailable",
+        "no-service",
+        "wrong-stage",
+        "generic-success",
+    ],
 )
 def test_publish_requires_valid_manifest_and_current_green_tests(
     tmp_path: Path, config: RouterConfig, asynchronous: bool, name: str, problem: str
@@ -79,13 +112,17 @@ def test_publish_requires_valid_manifest_and_current_green_tests(
     if problem == "manifest":
         service.definition["risk"] = "invalid"
     elif problem == "failed":
-        service.test_result["status"] = "failed"
+        service.test_result["passed"] = False
     elif problem == "stale":
         service.test_result["definition_hash"] = "old-version"
     elif problem == "changed":
         service.change_during_tests = True
     elif problem == "unavailable":
         service.unavailable = True
+    elif problem == "wrong-stage":
+        service.test_result["stage"] = "shadow"
+    elif problem == "generic-success":
+        service.test_result = {"status": "passed", "definition_hash": service.hash}
 
     @tool(name)
     def publish(app_id: str) -> str:
@@ -116,6 +153,49 @@ def test_publish_requires_valid_manifest_and_current_green_tests(
         assert json.loads(Path(reference).read_text())["status"] == response.status
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("stage", ["tests", "sandbox", "shadow", "live", "failed-tests"])
+def test_publish_reuses_current_tests_without_advancing_the_road(
+    tmp_path: Path, config: RouterConfig, asynchronous: bool, stage: str
+) -> None:
+    service = FakeApps(tmp_path / "home")
+    service.evidence = [
+        {"stage": "tests", "passed": True, "definition_hash": "old-version"},
+        dict(service.test_result),
+    ]
+    failed = stage == "failed-tests"
+    service.evidence.append(
+        {
+            "stage": "tests" if failed else stage,
+            "passed": not failed,
+            "definition_hash": service.hash,
+        }
+    )
+    service.test_result["passed"] = not failed
+    service.unavailable = not failed  # Any extra stage advancement would fail this journey.
+
+    @tool
+    def apps_publish(app_id: str) -> str:
+        """Publish an app whose current tests have already run."""
+        return json.dumps(service.apps_publish(app_id))
+
+    graph = compiled(
+        write_spec(tmp_path, "tools: [apps_publish]"),
+        BuildContext(
+            ModelRouter(
+                config, fake_models(fake(call("apps_publish", {"app_id": "demo"}), "done"))
+            ),
+            tools={"apps_publish": apps_publish},
+            control=service,
+        ),
+    )
+    inputs = {"messages": [("user", "Publish")]}
+    result = asyncio.run(graph.ainvoke(inputs)) if asynchronous else graph.invoke(inputs)
+    assert service.tested == (["demo"] if failed else [])
+    assert service.published == ([] if failed else ["demo"])
+    assert messages(result)[0].status == ("error" if failed else "success")
+
+
 @pytest.mark.parametrize("operation", ["apps_create", "apps_update"])
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("outcome", ["passed", "failed", "unavailable", "install-failed"])
@@ -123,7 +203,7 @@ def test_new_versions_run_tests_automatically(
     tmp_path: Path, config: RouterConfig, operation: str, asynchronous: bool, outcome: str
 ) -> None:
     service = FakeApps(tmp_path / "home")
-    service.test_result["status"] = outcome
+    service.test_result["passed"] = outcome == "passed"
     service.unavailable = outcome == "unavailable"
 
     @tool(operation)

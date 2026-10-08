@@ -41,9 +41,23 @@ class AppHooksMiddleware(AgentMiddleware[Any, RunContext]):
             raise ValueError("The installed definition has no content hash.")
         if expected_hash is not None and definition_hash != expected_hash:
             raise ValueError("The app version changed before its tests ran.")
-        result = self.service.apps_test(app_id)
-        # A generic success flag cannot prove which immutable version was tested.
-        if result.get("status") != "passed" or result.get("definition_hash") != definition_hash:
+        evidence = self.service.apps_evidence(app_id)
+        result = next(
+            (
+                row
+                for row in reversed(evidence)
+                if row.get("definition_hash") == definition_hash and row.get("stage") == "tests"
+            ),
+            cast(Document, {}),
+        )
+        # apps_test advances the road. Never advance sandbox/shadow from a hook.
+        if result.get("passed") is not True:
+            result = self.service.apps_test(app_id, expected_hash=definition_hash, stage="tests")
+        if (
+            result.get("stage") != "tests"
+            or result.get("passed") is not True
+            or result.get("definition_hash") != definition_hash
+        ):
             raise ValueError(f"Tests are not green for this app version: {result}")
         if self.service.apps_get(app_id).get("definition_hash") != definition_hash:
             raise ValueError("The app version changed while its tests ran.")
