@@ -2405,6 +2405,7 @@ dependencies = [
     { name = "qmf-data" },
     { name = "qml" },
     { name = "qmn" },
+    { name = "qmx-control" },
 ]
 
 [package.metadata]
@@ -2416,6 +2417,7 @@ requires-dist = [
     { name = "qmf-data", editable = "../packages/qmf-data" },
     { name = "qml", editable = "../qml" },
     { name = "qmn", editable = "../qmn" },
+    { name = "qmx-control", editable = "." },
 ]
 
 [package.metadata.requires-dev]
