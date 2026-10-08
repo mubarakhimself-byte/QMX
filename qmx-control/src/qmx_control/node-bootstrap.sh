@@ -67,7 +67,7 @@ cat > /etc/systemd/system/qmx-ship.service <<'EOF'
 Description=Ship QMX node logs and traces to the configured bucket
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/rclone copy /var/lib/qmx/apps bucket:/var/lib/qmx/bucket/logs --config /var/lib/qmx/rclone.conf --filter "+ */logs/**" --filter "+ *.jsonl" --filter "- *" --max-age 30d
+ExecStart=/usr/local/bin/rclone copy /var/lib/qmx/apps bucket:/var/lib/qmx/bucket/logs --config /var/lib/qmx/rclone.conf --filter "+ */logs/**" --filter "- *" --max-age 30d
 ExecStart=/usr/local/bin/rclone copy /var/lib/qmx/traces bucket:/var/lib/qmx/bucket/traces --config /var/lib/qmx/rclone.conf --max-age 30d
 UMask=0077
 EOF
