@@ -350,6 +350,7 @@ def test_scheduled_jobs_are_metered_and_stopped(supervisor: Supervisor, fixture_
     assert document(supervisor.status("exchange-status")["breaker"])["reason"] == "run_budget"
 
 
+@pytest.mark.serial
 def test_producer_to_consumer_artifact_and_screen_state(supervisor: Supervisor) -> None:
     install(supervisor, EXAMPLES / "exchange-status")
     install(supervisor, EXAMPLES / "weekend-watcher")
