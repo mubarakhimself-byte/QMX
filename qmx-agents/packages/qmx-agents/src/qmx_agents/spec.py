@@ -120,8 +120,10 @@ class AgentSpec(BaseModel):
         return model_selector(value)
 
 
-def load_spec(path: str | Path = Path(__file__).with_name("copilot.yaml")) -> AgentSpec:
-    source = Path(path).resolve()
+def load_spec(path: str | Path | None = None) -> AgentSpec:
+    source = (
+        Path(path) if path is not None else Path(__file__).with_name("copilot.yaml")
+    ).resolve()
     spec = AgentSpec.model_validate(yaml.safe_load(source.read_text(encoding="utf-8")))
     spec.system_prompt = (source.parent / spec.system_prompt).resolve()
     # Fail during loading, before models or MCP connections are constructed.
