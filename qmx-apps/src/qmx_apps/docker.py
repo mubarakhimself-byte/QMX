@@ -232,8 +232,10 @@ class DockerSupervisor(Supervisor):
         resources.append(("container", name))
         if manifest.id in self.replicas:
             replica = self.replicas[manifest.id]
-            if not replica.startswith(("s3://", "sftp://", "file://")) or "@" in replica:
-                raise AppError("invalid_replica", "Use a replica URL without inline credentials.")
+            if not replica.startswith(("s3://", "file://")) or "@" in replica:
+                raise AppError(
+                    "invalid_replica", "Use an S3 or local file replica without credentials."
+                )
             sidecar = name + "-litestream"
             directory = self.home / "replicas" / instance.id
             directory.mkdir(parents=True, exist_ok=True)

@@ -89,7 +89,7 @@ the exact definition on the destination first. This is the narrow node recovery
 path; scheduled online backups remain P13.
 
 Optional `providers.litestream` settings map app ids to credential-free replica
-URLs. The supervisor starts Litestream 0.5.17 with one `replica`, one-second sync
+S3 or local file URLs. The supervisor starts Litestream 0.5.17 with one `replica`, one-second sync
 and daily snapshots. Apps opting in must use SQLite >=3.51.3 and disable
 `wal_autocheckpoint` on every writer connection, as required by Litestream.
 Replica credentials must be declared app secrets; they are injected only at
