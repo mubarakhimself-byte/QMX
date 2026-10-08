@@ -1904,8 +1904,10 @@ name = "qmx-agents"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "deepagents" },
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "keyring" },
     { name = "langchain", extra = ["mcp"] },
     { name = "langchain-anthropic" },
@@ -1931,8 +1933,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosqlite", specifier = "==0.22.1" },
     { name = "deepagents", specifier = "==0.7.22" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "jsonschema", specifier = "==4.26.0" },
     { name = "keyring", specifier = "==25.7.0" },
     { name = "langchain", extras = ["mcp"], specifier = "==1.4.3" },
     { name = "langchain-anthropic", specifier = "==1.7.5" },
