@@ -26,7 +26,7 @@ Copy **only** `catalog.jsonl`, `md/` and `raw/` from that worktree's
 `data/mql5-library/` into `<qmx_home>/apps/mql5-articles/data/seed/`.
 Do not copy any credential files. The importer validates canonical URLs and
 Markdown checksums, normalizes the old Windows newline conversion, and
-decompresses the saved HTML. Calling `seed_library(limit=500)` repeatedly
+decompresses the saved HTML. Calling `seed_library(limit=50)` repeatedly
 imports all batches without network access. The scheduled job publishes the
 imported articles through the control service's `library_save` MCP tool.
 If the archive is absent, bundled successful IDs still prevent refetching;

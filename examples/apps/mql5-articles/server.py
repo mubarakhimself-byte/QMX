@@ -19,10 +19,10 @@ def status() -> dict[str, int]:
 
 
 @mcp.tool
-def seed_library(limit: int = 500) -> dict[str, int]:
+def seed_library(limit: int = 50) -> dict[str, int]:
     """Import the old archive from this instance's data/seed directory, offline."""
-    if not 1 <= limit <= 1000:
-        raise ValueError("Use a limit between 1 and 1000.")
+    if not 1 <= limit <= 100:
+        raise ValueError("Use a limit between 1 and 100.")
     if not RUN_LOCK.acquire(blocking=False):
         raise RuntimeError("Article work is already running.")
     try:
