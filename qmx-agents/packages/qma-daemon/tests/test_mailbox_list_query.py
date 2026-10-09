@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.ports.mailbox import ENVELOPE_PRODUCT_SESSION_FIELD
-from qma.daemon.bus import MailboxStore, handle_list_mailbox_query
+from qma.daemon.bus.mailbox import MailboxStore
+from qma.daemon.bus.mailbox_query import handle_list_mailbox_query
 from qma.daemon.sessions import ProductSessionService
 from qma.wire.list_mailbox import LIST_MAILBOX_CAPABILITY, LIST_MAILBOX_EXISTED_AT_INSPECT_SHA
 from qmf.core import is_ok, is_refusal

@@ -20,7 +20,7 @@ from qma.core.ontology.wake_policy import (
 )
 from qma.core.refusals import OperatorPrincipalRequired
 from qma.core.vocabulary.enums import DeliveryState, MessageKind, VariableEditability, VariableScope
-from qma.daemon.bus import MailboxStore
+from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.scheduler import (
     evaluate_delivery_wake,
     next_quiet_hours_end,

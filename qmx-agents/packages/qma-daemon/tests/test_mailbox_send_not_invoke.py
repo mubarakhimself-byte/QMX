@@ -11,7 +11,7 @@ from qma.core.ports.mailbox import (
     PRODUCT_CHAT_MESSAGE_KINDS,
 )
 from qma.core.vocabulary.enums import DeliveryState, MessageKind
-from qma.daemon.bus import (
+from qma.daemon.bus.mailbox import (
     MailboxStore,
     inherit_product_session_ref_at_write,
     refuse_mailbox_instance_mint,

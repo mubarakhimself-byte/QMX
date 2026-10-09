@@ -8,7 +8,8 @@ from typing import cast
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.ports.mailbox import ENVELOPE_PRODUCT_SESSION_FIELD
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
-from qma.daemon.bus import MailboxStore, handle_list_mailbox_query
+from qma.daemon.bus.mailbox import MailboxStore
+from qma.daemon.bus.mailbox_query import handle_list_mailbox_query
 from qma.daemon.sessions import ProductSessionService
 from qma.wire.mailbox_send import (
     LIVE_SOCKET_DISPATCH_EXISTED_AT_INSPECT_SHA,
