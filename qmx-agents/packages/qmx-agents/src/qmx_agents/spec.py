@@ -34,6 +34,7 @@ from qmx_control.service import ControlService
 from qmx_tools import default_tool_registry
 
 from qmx_agents.guards import AdmissionBackend, AdmissionGate, RunJournal, check_tool
+from qmx_agents.guards.hooks import AppHooksMiddleware, watch_breakers
 from qmx_agents.guards.middleware import (
     AdmissionStateMiddleware,
     JournalApprovals,
@@ -155,6 +156,8 @@ class BuildContext:
     memory_resources: list[MemoryManager] = field(default_factory=list[MemoryManager])
     general_purpose_subagent: bool = True
     broker: BrokerService | None = None
+    # Reuse the node's owner so supervisor events reach the Copilot between turns.
+    control: ControlService | None = None
 
     async def close_memory(self) -> None:
         for manager in reversed(self.memory_resources):
@@ -341,6 +344,12 @@ async def _build(
     for tool in tools:
         check_tool(tool)
     budget = ctx.budget or spec.budget
+    control = ctx.control
+    if control is None and ctx.qmx_home is not None:
+        control = ControlService(ctx.qmx_home)
+        ctx.control = control
+    if control is not None and ctx.memory_role == "primary" and run.session_id is not None:
+        watch_breakers(control, run.session_id)
 
     def guards(agent: str) -> list[AgentMiddleware[Any, RunContext]]:
         middleware: list[AgentMiddleware[Any, RunContext]] = []
@@ -350,6 +359,7 @@ async def _build(
         if agent == spec.name:
             middleware.extend(memory_middleware)
         middleware.extend([AdmissionStateMiddleware(), MoneyPathMiddleware()])
+        middleware.append(AppHooksMiddleware(control, [tool.name for tool in tools]))
         if ctx.qmx_home is not None and "firecrawl" in servers:
             middleware.append(ResearchLibraryMiddleware(ControlService(ctx.qmx_home)))
         if budget.model_calls is not None:

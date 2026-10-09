@@ -65,6 +65,7 @@ class SessionBlock(BaseModel):
         "permission",
         "panel",
         "handoff",
+        "needs_you",
     ]
     content: Document
 
@@ -101,6 +102,7 @@ class ControlService:
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
+        self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
         self._backup_lock = threading.Lock()
         self._backup_schedule: BackupSchedule | None = None
@@ -736,6 +738,19 @@ class ControlService:
             self.record_work(
                 "jobs", instance_id, work, cancel=cancel if status == "running" else None
             )
+        with self._lock:
+            for hook in list(self._app_hooks.values()):
+                hook(app_id, data)
+
+    def watch_app_events(self, session_id: str, hook: Callable[[str, Document], None]) -> None:
+        """Keep one subscription per session across agent rebuilds."""
+        with self._lock:
+            self._app_hooks.setdefault(session_id, hook)
+
+    def notify_app(self, app_id: str, data: Document) -> None:
+        """Publish an actionable operator notification on the existing app stream."""
+        with self._lock, self._connect() as db:
+            self._event(db, "apps", app_id, data)
 
     def close(self) -> None:
         if self._backup_schedule is not None:
@@ -744,6 +759,7 @@ class ControlService:
         if self._apps is not None:
             self._apps.close()
             self._apps = None
+        self._app_hooks.clear()
 
     def apps_evidence(self, app_id: str) -> list[Document]:
         """Read verified version and stage evidence from the app volume."""
