@@ -113,22 +113,7 @@ from qmb.sweep import (
 )
 from qmb.workbench import refuse_caller_declared_lane_fields
 
-from .host import (
-    HOST_COMMANDS,
-    HOST_CONFIGURE_COMMANDS,
-    HOST_PAIR_COMMANDS,
-    invoke_host_configure_artifact_stage_max_bytes,
-    invoke_host_configure_dest_placement,
-    invoke_host_configure_pairing_ttl,
-    invoke_host_configure_source_origin,
-    invoke_host_pair,
-    invoke_host_pair_revoke,
-    invoke_host_recover_control,
-    invoke_host_rotate_control,
-    invoke_host_start,
-    invoke_host_status,
-    invoke_host_stop,
-)
+from .host import HOST_COMMANDS, HOST_CONFIGURE_COMMANDS, HOST_PAIR_COMMANDS, control_host
 
 __all__ = [
     "ANALYSIS_COMMANDS",
@@ -174,6 +159,7 @@ __all__ = [
     "command_prerequisites",
     "command_tree",
     "complete_registry",
+    "control_host",
     "data_command_occupancy",
     "invoke_analysis_project",
     "invoke_analysis_rerun",
@@ -182,17 +168,6 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
-    "invoke_host_configure_artifact_stage_max_bytes",
-    "invoke_host_configure_dest_placement",
-    "invoke_host_configure_pairing_ttl",
-    "invoke_host_configure_source_origin",
-    "invoke_host_pair",
-    "invoke_host_pair_revoke",
-    "invoke_host_recover_control",
-    "invoke_host_rotate_control",
-    "invoke_host_start",
-    "invoke_host_status",
-    "invoke_host_stop",
     "invoke_ledger_bar",
     "invoke_ledger_merge",
     "invoke_library_candidates",

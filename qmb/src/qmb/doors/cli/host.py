@@ -13,6 +13,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -70,6 +71,7 @@ __all__ = [
     "claim_recover_control_existed_at_inspect_sha",
     "claim_rotate_control_existed_at_inspect_sha",
     "claim_types_absent_at_inspect_sha",
+    "control_host",
     "invoke_host_configure_artifact_stage_max_bytes",
     "invoke_host_configure_dest_placement",
     "invoke_host_configure_pairing_ttl",
@@ -86,15 +88,7 @@ __all__ = [
 ]
 
 
-HOST_COMMANDS: Final[tuple[str, ...]] = (
-    "start",
-    "status",
-    "stop",
-    "configure",
-    "rotate-control",
-    "recover-control",
-    "pair",
-)
+HOST_COMMANDS: Final[tuple[str, ...]] = ("start", "status", "stop")
 HOST_CONFIGURE_COMMANDS: Final[tuple[str, ...]] = (
     "pairing-ttl",
     "artifact-stage-max-bytes",
@@ -1788,3 +1782,48 @@ def invoke_host_recover_control(
         f".daemon_writer; see startup diagnostics at {_startup_diagnostic_path(target)}",
         root=str(target),
     )
+
+
+def control_host(
+    command: str,
+    *,
+    home: Path | None = None,
+    port: int = 8766,
+    python: str | None = None,
+) -> Result[Mapping[str, object]]:
+    """Use the control CLI's token, readiness and process-ownership checks."""
+    if command not in HOST_COMMANDS:
+        return invalid("host", "expected start, status or stop")
+    if not 1 <= port <= 65535:
+        return invalid("port", "port must be between 1 and 65535")
+    argv = [python or sys.executable, "-m", "qmx_control", command, "--port", str(port)]
+    # The development checkout has separate environments until package consolidation.
+    if python is None:
+        repo = Path(__file__).resolve().parents[5]
+        projects = (repo / "qmx-control", repo / "qmx-agents/packages/qmx-control")
+        project = next((path for path in projects if (path / "pyproject.toml").exists()), None)
+        if project is not None:
+            uv = shutil.which("uv")
+            if uv is None:
+                return unavailable("host", "uv is required to run qmx-control in this checkout")
+            argv = [uv, "run", "--project", str(project), "--frozen", *argv]
+            # uv selects the project's Python rather than the QMB interpreter.
+            argv[5] = "python"
+    if home is not None:
+        argv.extend(("--home", str(home.resolve())))
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return unavailable("host", f"qmx-control {command} could not complete: {exc}")
+    if completed.returncode:
+        return unavailable(
+            "host", completed.stderr.strip() or completed.stdout.strip() or "qmx-control failed"
+        )
+    return Ok({"verb": f"host.{command}", "message": completed.stdout.strip()})
