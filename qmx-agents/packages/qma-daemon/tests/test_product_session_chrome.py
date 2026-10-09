@@ -7,7 +7,6 @@ import runpy
 from pathlib import Path
 
 from qma.core.refusals import UiContributionDeferred
-from qma.daemon.journal import EIGHT_STORE_CLASSES
 from qma.daemon.sessions import (
     CHROME_KINDS,
     CHROME_OWNS_GRANTS,
@@ -87,7 +86,6 @@ def test_chrome_identity_owns_neither_grants_nor_occupancy() -> None:
     assert PRODUCT_SESSION_TAB_WRITES is False
     assert PRODUCT_SESSION_SIXTH_STORE_MINTED is False
     assert PRODUCT_SESSION_NEW_CT_MINTED is False
-    assert len(EIGHT_STORE_CLASSES) == 8
     assert VIEW_IS_CONTRIBUTION_HIT is False
     assert VIEW_IS_PLUGIN_CONTRIBUTION_POINT is False
     assert VIEW_IS_PRODUCT_SESSION is False

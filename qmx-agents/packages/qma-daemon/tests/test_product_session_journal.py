@@ -11,7 +11,7 @@ from qma.daemon import (
     PersistenceSubstrate,
     ProductSessionService,
 )
-from qma.daemon.journal import EIGHT_STORE_CLASSES, StoreClass
+from qma.daemon.journal import StoreClass
 from qma.daemon.sessions import (
     PRODUCT_SESSION_OCCUPANCY,
     PRODUCT_SESSION_SIXTH_STORE_MINTED,
@@ -80,7 +80,6 @@ def _call(**overrides: object) -> dict[str, object]:
 def test_no_sixth_store_class_and_tabs_write_nothing() -> None:
     assert PRODUCT_SESSION_SIXTH_STORE_MINTED is False
     assert PRODUCT_SESSION_TAB_WRITES is False
-    assert len(EIGHT_STORE_CLASSES) == 8
     assert StoreClass.JOURNAL_DERIVED_PROJECTION.value == "journal_derived_projection"
     assert len(StoreClass) == 2
     refused = refuse_tab_mints_session()

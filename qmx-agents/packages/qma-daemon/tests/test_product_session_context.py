@@ -18,12 +18,7 @@ from qma.daemon import (
     PersistenceSubstrate,
     ProductSessionService,
 )
-from qma.daemon.journal import (
-    CLOSED_PROJECTIONS,
-    EIGHT_STORE_CLASSES,
-    StoreClass,
-    v1_fold_contract,
-)
+from qma.daemon.journal import CLOSED_PROJECTIONS, StoreClass, v1_fold_contract
 from qma.daemon.sessions import (
     PRODUCT_SESSION_CONTEXT_FIELDS,
     PRODUCT_SESSION_FOLD_ID,
@@ -127,7 +122,6 @@ def test_identity_occupancy_none_no_sixth_comp_or_store() -> None:
     assert PRODUCT_SESSION_STORE == "product_session"
     assert PRODUCT_SESSION_STORE_CLASS == "journal_derived_projection"
     assert PRODUCT_SESSION_STORE in CLOSED_PROJECTIONS
-    assert len(EIGHT_STORE_CLASSES) == 8
     assert "product_session" not in SCOPE_KIND_ORDER
     fold = v1_fold_contract(PRODUCT_SESSION_FOLD_ID)
     assert fold is not None

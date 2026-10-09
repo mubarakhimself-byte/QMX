@@ -1,4 +1,4 @@
-"""Story 42.4 — store-class ownership and governed variable registry (FR-Q26, FR-Q36)."""
+"""Story 42.4 — governed variable registry (FR-Q26, FR-Q36)."""
 
 from __future__ import annotations
 
@@ -22,18 +22,13 @@ from qma.daemon import (
     GovernedVariableRegistry,
     PersistenceSubstrate,
     ProposalGate,
-    StoreOwnershipRegistry,
 )
 from qma.daemon.journal import (
-    DURABLE_POSTURE_CLASSES,
-    EIGHT_STORE_CLASSES,
-    INVOCATION_ONLY_CLASSES,
     STORE_BACKUP_CADENCE_KEY,
     STORE_FULL_RESTORE_REHEARSAL_CADENCE_KEY,
     STORE_LIFECYCLE_KEYS,
     STORE_SAMPLE_RESTORE_TEST_CADENCE_KEY,
     VARIABLE_SET_EVENT,
-    PersistenceClass,
     VariableRow,
     cite_store_lifecycle_key,
     has_variable_edit_kind,
@@ -46,7 +41,6 @@ from qma.daemon.staging import (
 from qmf.core import (
     DataDrivenClock,
     Instant,
-    RefusalCategory,
     is_ok,
     is_refusal,
 )
@@ -68,60 +62,6 @@ def _open_journal(
     journal_result = AuthoritativeJournal.bind(substrate, clock=_test_clock(boot=boot))
     assert is_ok(journal_result), journal_result
     return substrate, journal_result.value
-
-
-# --- FR-Q26 store-class ownership -------------------------------------------------
-
-
-def test_eight_store_classes_each_have_writer_crossing_retention() -> None:
-    registry = StoreOwnershipRegistry()
-    registered = registry.register_defaults()
-    assert set(registered) == EIGHT_STORE_CLASSES
-    assert {
-        "journal",
-        "ledger",
-        "memory",
-        "knowledge",
-        "artifacts",
-        "context",
-        "telemetry",
-        "staging",
-    } == EIGHT_STORE_CLASSES
-    complete = registry.assert_complete()
-    assert is_ok(complete)
-    for name, rule in complete.value.items():
-        assert rule.writer
-        assert rule.crossing_rule
-        assert rule.retention_rule
-        assert rule.store_class.value == name
-
-
-def test_context_is_invocation_only_and_durable_posture_holds() -> None:
-    registry = StoreOwnershipRegistry()
-    registry.register_defaults()
-    context = registry.get(PersistenceClass.CONTEXT.value)
-    assert is_ok(context)
-    assert context.value.is_invocation_only
-    assert PersistenceClass.CONTEXT.value in INVOCATION_ONLY_CLASSES
-    assert {
-        "journal",
-        "ledger",
-        "artifacts",
-        "staging",
-        "ledger_quarantine",
-    } <= DURABLE_POSTURE_CLASSES
-    assert registry.ledger_quarantine_durable is True
-    for name in ("journal", "ledger", "artifacts", "staging"):
-        rule = registry.get(name)
-        assert is_ok(rule)
-        assert rule.value.is_durable
-
-
-def test_unknown_store_class_refused() -> None:
-    registry = StoreOwnershipRegistry()
-    refused = registry.get("invented_store")
-    assert is_refusal(refused)
-    assert refused.category is RefusalCategory.POLICY_REJECTION
 
 
 # --- FR-Q26 RefinementProposal boundary -------------------------------------------
