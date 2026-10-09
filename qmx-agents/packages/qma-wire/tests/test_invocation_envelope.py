@@ -52,13 +52,11 @@ from qma.wire import (
     InstanceRecord,
     InvocationEnvelope,
     PublicCallTransport,
-    SchemaEvolutionProposal,
     WireEnvelope,
     claim_caller_kind_at_inspect_sha,
     claim_invocation_envelope_absent_at_inspect_sha,
     compute_input_hash,
     derive_child_logical_invocation_id,
-    evaluate_schema_evolution,
     parse_invocation_envelope,
     public_call_from_cli,
     public_call_from_wire,
@@ -593,19 +591,10 @@ def test_inspect_sha_honesty_caller_kind_absent_envelope_present() -> None:
 
 
 def test_caller_kind_format_mint_is_additive_ct40() -> None:
-    proposal = SchemaEvolutionProposal.of(
-        base_protocol_version="1.0.0",
-        proposed_protocol_version="1.0.1",
-        base_fields=INVOCATION_ENVELOPE_FIELDS_AT_INSPECT_SHA,
-        proposed_fields=INVOCATION_ENVELOPE_FIELDS,
-        base_types=("invocation_envelope",),
-        proposed_types=("invocation_envelope",),
-    )
-    verdict = evaluate_schema_evolution(proposal)
-    assert is_ok(verdict)
-    assert verdict.value.kind == "additive"
-    assert verdict.value.added_fields == frozenset({"caller_kind"})
-    assert verdict.value.added_types == frozenset()
+    previous_fields = frozenset(INVOCATION_ENVELOPE_FIELDS_AT_INSPECT_SHA)
+    current_fields = frozenset(INVOCATION_ENVELOPE_FIELDS)
+    assert previous_fields <= current_fields
+    assert current_fields - previous_fields == frozenset({"caller_kind"})
     assert {"user", "agent", "workflow"} == CALLER_KINDS
     assert "widget" in FORBIDDEN_CALLER_KINDS
     assert "widget" not in CALLER_KINDS

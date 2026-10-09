@@ -4,9 +4,7 @@ One Python asyncio daemon owns durable writes to the event journal, SQLite store
 and artifact store through qmf-data sinks. Folds may open files read-only and never
 checkpoint; DuckDB holds rebuildable views only.
 
-Store lifecycle (FR-Q37) lives in :mod:`qma.daemon.persistence.lifecycle` and
-:mod:`qma.daemon.persistence.schema`; those modules are imported by callers
-directly so this package init does not cycle with the journal package.
+Store schema version gates live in :mod:`qma.daemon.persistence.schema`.
 """
 
 from __future__ import annotations
