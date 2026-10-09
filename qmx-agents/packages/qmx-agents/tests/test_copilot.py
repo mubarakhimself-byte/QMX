@@ -14,7 +14,7 @@ import pytest
 from conftest import fake
 from deepagents.backends import StateBackend
 from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
@@ -341,8 +341,11 @@ def test_completed_child_is_finished_while_primary_awaits_approval(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    "existing_client", [False, True], ids=["recorded-server", "existing-client"]
+)
 def test_macro_agent_data_and_panel_persist(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_client: bool
 ) -> None:
     spec = importlib.util.spec_from_file_location("macro_bias", APP / "macro_bias.py")
     assert spec and spec.loader
@@ -352,7 +355,18 @@ def test_macro_agent_data_and_panel_persist(
     monkeypatch.setenv("QMX_STAGE", "sandbox")
 
     async def run() -> None:
-        payload = await module.refresh(tmp_path)
+        data_target = None
+        if existing_client:
+            data = FastMCP("Fake qmx-data")
+
+            @data.tool
+            def read_bars(symbol: str, timeframe: str, limit: int) -> Document:
+                """Return a recorded source through a prebuilt client."""
+                return {"as_of": "2026-10-07", "bars": [{"close": "1.10"}], "source": "recorded"}
+
+            _ = read_bars
+            data_target = Client(data)
+        payload = await module.refresh(tmp_path, data_target=data_target)
         assert payload["bias"] == "neutral" and payload["source"] == "recorded"
         assert module.latest(tmp_path) == payload
         async with Client(module.create_server(tmp_path)) as client:

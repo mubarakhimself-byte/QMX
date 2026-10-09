@@ -67,7 +67,10 @@ async def refresh(
             if not config["data_url"]:
                 raise ValueError("Configure data_url before the live daily job.")
             data_target = Client(config["data_url"], auth=os.environ["QMX_DATA_TOKEN"])
-    async with Client(data_target) as client:
+    client = (
+        cast("Client[Any]", data_target) if isinstance(data_target, Client) else Client(data_target)
+    )
+    async with client:
         response = await client.call_tool(
             "read_bars", {"symbol": config["symbol"], "timeframe": config["timeframe"], "limit": 50}
         )
