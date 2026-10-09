@@ -48,5 +48,6 @@ Packets are written for a coding agent (Codex) to run without further operator i
 | 21 | Remote runs: own VPS first (SFTP bucket), then Amp/Modal/E2B; Git-style results, fetch and resume; GPU targets | 10, 12, 13, 17 | L |
 | 22 | Library, run index, result memo, caching, weekly GitHub backup | 08, 11 | M |
 | 23 | Fix the two recurring CI failures (watcher startup, Linux mklink) | 12 | S |
+| 24 | Copilot modes, remaining hooks, session log, headless runs, skill registry, lint gate (see COPILOT.md) | 15, 20 | M |
 
 Packets 01–05 can start today. P05 is reviewed (DESIGN §12): read those rulings before any later packet.
