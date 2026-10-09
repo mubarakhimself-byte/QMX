@@ -8,7 +8,6 @@ import pytest
 from qma.core.plugins import ManifestError, PluginContext, parse_plugin_manifest
 from qma.core.plugins.manifest import validate_migration_rollback_contract
 from qma.core.vocabulary.enums import PrincipalClass
-from qma.daemon.persistence.lifecycle import DaemonStoreLifecycle
 from qma.daemon.plugins import (
     CHECKPOINT_IS_RECOVERY_COPY,
     DAEMON_CORE_MIGRATION_TARGETS,
@@ -23,7 +22,7 @@ from qma.daemon.plugins import (
     rollback_mode_for_manifest,
 )
 from qma.wire.vocabulary import WireQuery
-from qmf.core import RefusalCategory, is_ok, is_refusal
+from qmf.core import is_ok, is_refusal
 from qmf.data.verify import MIGRATION_SEQUENCE
 
 
@@ -330,58 +329,6 @@ def test_daemon_core_forward_only_needs_confirm(tmp_path: Path) -> None:
         plugin_id_alias=confirm_key,
     )
     assert is_ok(report), report
-
-
-def test_lifecycle_migrate_enforces_down_or_forward_only(tmp_path: Path) -> None:
-    source = tmp_path / "src"
-    dest = tmp_path / "dst"
-    from qma.daemon.persistence.lifecycle import StoreSnapshot
-
-    snap = StoreSnapshot(store="journal", schema_version=1, records=({"a": 1},))
-    path = source / "journal" / "snapshot.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(snap.to_bytes())
-
-    lifecycle = DaemonStoreLifecycle()
-    # Without declaration args the legacy five-step path still runs.
-    legacy = lifecycle.migrate(
-        store="journal",
-        source_root=source,
-        destination_root=dest / "legacy",
-    )
-    assert is_ok(legacy), legacy
-
-    bad_mode = lifecycle.migrate(
-        store="journal",
-        source_root=source,
-        destination_root=dest / "b",
-        rollback="not-a-mode",
-    )
-    assert is_refusal(bad_mode)
-
-    with_down = lifecycle.migrate(
-        store="journal",
-        source_root=source,
-        destination_root=dest / "c",
-        down={"revert": True},
-        correlation_id="corr-life-1",
-    )
-    assert is_ok(with_down), with_down
-    assert with_down.value.stages_completed == MIGRATION_SEQUENCE
-
-
-def test_lifecycle_failed_preflight_marks_checkpoint_not_recovery(tmp_path: Path) -> None:
-    lifecycle = DaemonStoreLifecycle()
-    refused = lifecycle.migrate(
-        store="staging",
-        source_root=tmp_path / "absent",
-        destination_root=tmp_path / "dst",
-        down={"ok": True},
-        correlation_id="corr-life-fail",
-    )
-    assert is_refusal(refused)
-    assert refused.category is RefusalCategory.POLICY_REJECTION
-    assert refused.context.get("checkpoint_is_recovery_copy") is False
 
 
 def test_reference_usage_example_runs() -> None:

@@ -150,7 +150,6 @@ from qma.daemon.persistence import (
     PersistenceStartupEvidence,
     PersistenceSubstrate,
 )
-from qma.daemon.persistence.lifecycle import DaemonStoreLifecycle
 from qma.daemon.plugins import (
     ExportScanReport,
     PackLifecycleFixture,
@@ -263,7 +262,6 @@ __all__ = [
     "ContributionListingService",
     "DaemonClock",
     "DaemonProcess",
-    "DaemonStoreLifecycle",
     "Diagnosis",
     "DiagnosisQueryService",
     "ExportScanReport",
