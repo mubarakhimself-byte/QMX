@@ -118,6 +118,7 @@ async def stream_turn(
         inputs = prompt
     seen: set[str] = set()
     children: dict[str, str] = {}
+    waiting: set[str] = set()
 
     def append(target: str, kind: str, content: Document) -> None:
         service.sessions_append(
@@ -144,6 +145,7 @@ async def stream_turn(
             target = children[key]
         for node, update in cast(dict[str, Any], chunk["data"]).items():
             if node == "__interrupt__":
+                waiting.add(target)
                 for item in update:
                     append(target, "permission", {"interrupt_id": item.id, "request": item.value})
                 continue
@@ -203,7 +205,9 @@ async def stream_turn(
                             continue
                     if isinstance(result, dict) and "artifact_id" in result:
                         append(target, "artifact", cast(Document, result))
-    state = await graph.aget_state(config)
-    if not state.next:
-        for child in children.values():
-            append(session_id, "agents", {"session_id": child, "state": "complete"})
+    for child in children.values():
+        append(
+            session_id,
+            "agents",
+            {"session_id": child, "state": "needs_you" if child in waiting else "complete"},
+        )

@@ -295,6 +295,52 @@ def test_named_delegation_and_background_run(tmp_path: Path, config: RouterConfi
     asyncio.run(run())
 
 
+def test_completed_child_is_finished_while_primary_awaits_approval(
+    tmp_path: Path, config: RouterConfig
+) -> None:
+    service = ControlService(tmp_path)
+    session_id = str(service.sessions_create(SessionInput(title="Research and remember"))["id"])
+    model = fake(
+        call("task", {"subagent_type": "researcher", "description": "Research coverage"}),
+        "Coverage missing",
+        call("memory_put_global", {"content": "Coverage is missing"}),
+        "done",
+    )
+
+    async def run() -> None:
+        ctx = BuildContext(
+            models(config, model),
+            run=RunContext(session_id=session_id),
+            control=service,
+            qmx_home=tmp_path,
+            checkpointer=InMemorySaver(),
+            agent_backends={"data-analyst": FakeSandbox()},
+        )
+        try:
+            graph = await build_copilot(ctx)
+            await stream_turn(graph, service, session_id, "Research and remember", context=ctx.run)
+            state = await graph.aget_state({"configurable": {"thread_id": session_id}})
+            assert state.tasks[0].interrupts[0].value["kind"] == "global_memory"
+            blocks = [
+                cast(Document, cast(Document, event["data"])["block"])
+                for event in service.sessions_stream(session_id, limit=1000)
+                if cast(Document, event["data"])["type"] == "block"
+            ]
+            agents = [
+                cast(Document, block["content"]) for block in blocks if block["type"] == "agents"
+            ]
+            child_id = next(agent["session_id"] for agent in agents if "namespace" in agent)
+            assert any(
+                agent.get("session_id") == child_id and agent["state"] == "complete"
+                for agent in agents
+            )
+        finally:
+            await ctx.close_memory()
+            service.close()
+
+    asyncio.run(run())
+
+
 def test_macro_agent_data_and_panel_persist(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
