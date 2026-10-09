@@ -127,7 +127,7 @@ from qma.daemon.kit_journey import (
     refuse_widget_owned_invoke,
 )
 from qma.daemon.knowledge import KnowledgeService, KnowledgeSourceRegistry
-from qma.daemon.memory import MemoryAdmissionGate, MemoryProviderRegistry
+from qma.daemon.memory.admission import MemoryAdmissionGate, MemoryProviderRegistry
 from qma.daemon.observability_boundary import (
     QMB_LOGSINK_MAY_REMAIN,
     THIRD_LOGGER_MINTED,
