@@ -1,6 +1,8 @@
 # QMX Copilot: modes, skills, hooks and artifacts
 
-Status: proposed by Claude on 2026-10-09, from two studies:
+Status: **under revision (2026-10-09).** The operator rejected modes, so §2 is withdrawn and the design is being redone around skills, always-on hooks, prompts and caching, after the harness-practices and per-surface studies. P24 is on hold until then.
+
+Originally proposed by Claude on 2026-10-09, from two studies:
 - `research/bmad-study.md`: BMAD v6.11 (BMM, the CIS suite, TEA, BMad Builder)
 - `research/skills-ecosystem.md`: Wayfinder and the Pocock skills, Anthropic Agent Skills, superpowers, Spec Kit, and the modes in Claude Code, Codex, Cursor, Roo and Amp
 

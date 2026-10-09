@@ -1,3 +1,5 @@
+> **ON HOLD (2026-10-09):** do not start. COPILOT.md is being revised; modes are withdrawn.
+
 # P24: Copilot modes, remaining hooks, session log and skill plumbing
 
 ## Goal
