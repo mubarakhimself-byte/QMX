@@ -5,18 +5,17 @@ from __future__ import annotations
 from qma.core.barriers.reachability import (
     GAP_0070_DESKTOP_EXCLUSION,
     REACHABILITY_DENIAL_NOT_LIFTABLE_BY,
+    refuse_forbidden_model_adapter,
 )
 from qma.core.ports.execution import (
     ComputerUseProfile,
     ExecutionEnvironmentDeclaration,
     WorkerImageManifest,
 )
-from qma.core.ports.model import DeploymentRecord
 from qma.core.ports.tools import ToolKind
 from qma.core.refusals import NoEnvironment, ProhibitedMoneyPathTool, ProhibitedReachability
-from qma.core.vocabulary.enums import ExecutionEnvironmentKind, ModelClass, NetworkPolicy
+from qma.core.vocabulary.enums import ExecutionEnvironmentKind, NetworkPolicy
 from qma.daemon.envs import ExecutionEnvironmentRegistry
-from qma.daemon.proxy import DeploymentRegistry
 from qma.daemon.tools import ToolRegistry
 from qmf.core import is_ok, is_refusal
 
@@ -220,13 +219,4 @@ def test_trading_desk_stays_read_only_including_paper() -> None:
 
 
 def test_openrouter_inference_deployment_allowed_at_registration() -> None:
-    deployments = DeploymentRegistry()
-    refused = deployments.register(
-        DeploymentRecord(
-            deployment_id="openrouter-workhorse",
-            model_class=ModelClass.WORKHORSE_GENERAL,
-            adapter="openrouter",
-            context_tokens=8_000,
-        )
-    )
-    assert is_ok(refused)
+    assert refuse_forbidden_model_adapter("openrouter", stage="registration") is None
