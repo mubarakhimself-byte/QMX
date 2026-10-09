@@ -82,9 +82,9 @@ def test_copilot_discovers_broker_reads_and_queues_a_local_proposal(
         "symbol_info",
         "propose_order",
     } <= set(model.bound_names[0])
-    default = Path(__file__).parents[1] / "src/qmx_agents/copilot.yaml"
-    assert load_spec(default).mcp_servers == ["qmx-broker"]
-    assert load_spec().mcp_servers == ["qmx-broker"]
+    default = Path(__file__).parents[1] / "src/qmx_agents/agents/copilot.yaml"
+    assert "qmx-broker" in load_spec(default).mcp_servers
+    assert "qmx-broker" in load_spec().mcp_servers
 
 
 def test_remote_money_metadata_does_not_get_the_local_writer_exception(tmp_path: Path) -> None:

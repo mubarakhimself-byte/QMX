@@ -54,7 +54,11 @@ class FakeApps(ControlService):
         return self.evidence
 
     def apps_test(
-        self, app_id: str, expected_hash: str | None = None, stage: Stage | None = None
+        self,
+        app_id: str,
+        expected_hash: str | None = None,
+        stage: Stage | None = None,
+        auto_publish: bool = True,
     ) -> Document:
         assert expected_hash == self.hash
         assert stage == "tests"

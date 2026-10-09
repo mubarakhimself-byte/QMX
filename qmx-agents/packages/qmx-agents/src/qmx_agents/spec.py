@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import yaml
 from deepagents import (
@@ -16,10 +17,11 @@ from deepagents import (
     create_deep_agent,  # pyright: ignore[reportUnknownVariableType] - upstream generic overload
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
-from deepagents.backends.protocol import BackendProtocol
+from deepagents.backends.protocol import BackendProtocol, SandboxBackendProtocol
 from deepagents.middleware.subagents import SubAgentMiddleware
 from langchain.agents.middleware import (
     AgentMiddleware,
+    ContextEditingMiddleware,
     ModelCallLimitMiddleware,
     ToolCallLimitMiddleware,
 )
@@ -34,6 +36,7 @@ from qmx_control.service import ControlService
 from qmx_tools import default_tool_registry
 
 from qmx_agents.guards import AdmissionBackend, AdmissionGate, RunJournal, check_tool
+from qmx_agents.guards.admission import AdmissionSandboxBackend
 from qmx_agents.guards.hooks import AppHooksMiddleware, watch_breakers
 from qmx_agents.guards.middleware import (
     AdmissionStateMiddleware,
@@ -125,7 +128,7 @@ class AgentSpec(BaseModel):
 
 def load_spec(path: str | Path | None = None) -> AgentSpec:
     source = (
-        Path(path) if path is not None else Path(__file__).with_name("copilot.yaml")
+        Path(path) if path is not None else Path(__file__).with_name("agents") / "copilot.yaml"
     ).resolve()
     spec = AgentSpec.model_validate(yaml.safe_load(source.read_text(encoding="utf-8")))
     spec.system_prompt = (source.parent / spec.system_prompt).resolve()
@@ -147,6 +150,7 @@ class BuildContext:
     backend: BackendProtocol | None = None
     checkpointer: BaseCheckpointSaver[Any] | None = None
     journal: RunJournal | None = None
+    journal_resources: list[RunJournal] = field(default_factory=list[RunJournal])
     admission: AdmissionGate | None = None
     budget: Budget | None = None
     qmx_home: Path | None = None
@@ -158,12 +162,22 @@ class BuildContext:
     broker: BrokerService | None = None
     # Reuse the node's owner so supervisor events reach the Copilot between turns.
     control: ControlService | None = None
+    agent_backends: dict[str, BackendProtocol] = field(default_factory=dict[str, BackendProtocol])
+    mcp_targets: dict[str, Any] = field(default_factory=dict[str, Any])
+    background_resources: list[Any] = field(default_factory=list[Any])
+    explicit_publish: bool = False
 
     async def close_memory(self) -> None:
+        for tasks in self.background_resources:
+            await tasks.close()
+        self.background_resources.clear()
         for manager in reversed(self.memory_resources):
             await manager.close()
         self.memory_resources.clear()
         self.memory = None
+        for journal in self.journal_resources:
+            journal.close()
+        self.journal_resources.clear()
 
 
 class _NoDelegation(AgentMiddleware[Any, Any, Any]):
@@ -197,7 +211,7 @@ def mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str,
         names.append("firecrawl")
     selected: dict[str, dict[str, Any]] = {}
     for name in names:
-        if name == "qmx-broker":
+        if name == "qmx-broker" or name in ctx.mcp_targets:
             continue
         server = dict(servers[name])
         if server.pop("enabled", True) is False:
@@ -232,19 +246,35 @@ def mcp_configuration(spec: AgentSpec, ctx: BuildContext) -> dict[str, dict[str,
 async def _build(
     spec: AgentSpec, ctx: BuildContext, ancestors: tuple[Path, ...]
 ) -> CompiledStateGraph[Any, RunContext, Any, Any]:
-    if spec.background_tasks:
-        raise NotImplementedError("background_tasks require the qmx-control task tools (P11)")
+    if spec.background_tasks and ctx.control is None:
+        raise NotImplementedError("background_tasks require the owning qmx-control service")
     if any(spec.interrupt_on.values()) and ctx.checkpointer is None:
         raise ValueError("interrupt_on requires a checkpointer")
     tools = [ctx.tools[name] for name in spec.tools]
+    if spec.background_tasks:
+        from qmx_agents.tasks import BackgroundTasks  # noqa: PLC0415
+
+        tasks = BackgroundTasks(spec.background_tasks, ctx)
+        ctx.background_resources.append(tasks)
+        tools.extend(tasks.tools())
     servers = mcp_configuration(spec, ctx)
-    if servers or "qmx-broker" in spec.mcp_servers:
+    if servers or spec.mcp_servers:
         # The official adapter is optional at import time and emits its documented beta warning.
         from langchain.mcp import MCPAdapter  # noqa: PLC0415
 
         if servers:
             async with MCPAdapter({"mcpServers": servers}) as adapter:
                 tools.extend(await adapter.list_tools())
+        for name in spec.mcp_servers:
+            if name in ctx.mcp_targets:
+                async with MCPAdapter(ctx.mcp_targets[name]) as adapter:
+                    discovered = await adapter.list_tools()
+                tools.extend(
+                    tool
+                    if name == "qmx-control"
+                    else tool.model_copy(update={"name": f"{name}_{tool.name}"})
+                    for tool in discovered
+                )
         if "qmx-broker" in spec.mcp_servers:
             if ctx.broker is None and ctx.qmx_home is None:
                 raise ValueError(
@@ -270,10 +300,21 @@ async def _build(
             if path in ancestors:
                 raise ValueError(f"Cyclic sub-agent reference: {path}")
             child = load_spec(path)
-            child_run = replace(ctx.run, subagent=child.model)
+            child_run = replace(
+                ctx.run,
+                subagent=child.model,
+                workflow_id=ctx.run.workflow_id or ctx.run.session_id or uuid4().hex,
+                task_id=ctx.run.task_id or uuid4().hex,
+            )
             graph = await _build(
                 child,
-                replace(ctx, run=child_run, memory_role="subagent", memory=None),
+                replace(
+                    ctx,
+                    run=child_run,
+                    memory_role="subagent",
+                    memory=None,
+                    backend=ctx.agent_backends.get(child.name, ctx.backend),
+                ),
                 (*ancestors, path),
             )
             subagents.append(
@@ -335,6 +376,12 @@ async def _build(
             },
         )
         tools.extend(memory.tools(Scope(spec.memory.scope)))
+        if spec.name == "copilot" and ctx.memory_role == "primary":
+            tools.extend(
+                tool.model_copy(update={"name": tool.name + "_global"})
+                for tool in memory.tools(Scope.GLOBAL)
+                if tool.name in {"memory_put", "memory_search"}
+            )
         memory_middleware.extend(memory.middleware(Scope(spec.memory.scope)))
         memory_middleware.append(memory.summarization(model, backend))
     elif spec.memory.provider not in {None, "sqlite"}:
@@ -356,10 +403,16 @@ async def _build(
         if ctx.journal:
             middleware.append(JournalMiddleware(ctx.journal, agent, run))
         middleware.extend(ctx.router.middleware(run, agent))
+        if spec.name == "copilot":
+            middleware.append(ContextEditingMiddleware())
         if agent == spec.name:
             middleware.extend(memory_middleware)
         middleware.extend([AdmissionStateMiddleware(), MoneyPathMiddleware()])
-        middleware.append(AppHooksMiddleware(control, [tool.name for tool in tools]))
+        middleware.append(
+            AppHooksMiddleware(
+                control, [tool.name for tool in tools], explicit_publish=ctx.explicit_publish
+            )
+        )
         if ctx.qmx_home is not None and "firecrawl" in servers:
             middleware.append(ResearchLibraryMiddleware(ControlService(ctx.qmx_home)))
         if budget.model_calls is not None:
@@ -374,7 +427,9 @@ async def _build(
             middleware.append(JournalApprovals(ctx.journal, dict(spec.interrupt_on)))
         return middleware
 
-    backend = AdmissionBackend(
+    sandbox = ctx.backend if isinstance(ctx.backend, SandboxBackendProtocol) else None
+    wrapper = AdmissionSandboxBackend if sandbox is not None else AdmissionBackend
+    backend = wrapper(
         backend or StateBackend(),
         ctx.admission or AdmissionGate(ctx.journal),
         guarded_prefixes=(
@@ -384,6 +439,8 @@ async def _build(
         write=spec.permissions.write,
         deny_write=spec.permissions.deny_write,
     )
+    if isinstance(backend, AdmissionSandboxBackend) and sandbox is not None:
+        backend.execution = sandbox
     # The SDK's automatic general-purpose agent omits custom middleware. Give it
     # an explicit spec so delegation retains the same guards and finite budgets.
     effective = run.effective_models[spec.name]
@@ -413,7 +470,7 @@ async def _build(
                     "list[AgentMiddleware[Any, Any]]", guards(f"{spec.name}/general-purpose")
                 ),
                 skills=spec.skills,
-                permissions=spec.permissions.rules(),
+                permissions=spec.permissions.rules() if sandbox is None else [],
                 interrupt_on={} if ctx.journal else dict(spec.interrupt_on),
             )
         )
@@ -431,7 +488,9 @@ async def _build(
         middleware=middleware,
         subagents=subagents,
         skills=spec.skills or None,
-        permissions=spec.permissions.rules(),
+        # Deep Agents cannot combine its filesystem permissions with execution.
+        # The admission backend keeps file checks; the target owns execution isolation.
+        permissions=spec.permissions.rules() if sandbox is None else [],
         backend=backend,
         interrupt_on=dict(spec.interrupt_on) or None,
         context_schema=RunContext,

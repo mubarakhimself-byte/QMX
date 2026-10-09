@@ -74,7 +74,14 @@ class Road:
             project(self.owner.home, app_id, state)
             return state.records
 
-    def advance(self, app_id: str, expected_hash: str, stage: Stage | None = None) -> Document:
+    def advance(
+        self,
+        app_id: str,
+        expected_hash: str,
+        stage: Stage | None = None,
+        *,
+        auto_publish: bool = True,
+    ) -> Document:
         self.owner.get(app_id)
         with history(self.owner.home, app_id) as state:
             if state.head != expected_hash:
@@ -134,7 +141,7 @@ class Road:
                 422,
             ) from error
         active = self.active_revision(app_id)
-        if target == "shadow" and image.manifest.risk != "money":
+        if auto_publish and target == "shadow" and image.manifest.risk != "money":
             return self.publish(app_id, expected_hash, active)
         return record
 

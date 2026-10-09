@@ -1,0 +1,16 @@
+name: copilot
+model: tier:reasoning_high
+system_prompt: ../copilot.md
+mcp_servers: [qmx-control, qmx-data, qmx-backtest, qmx-research, qmx-broker]
+skills: [/skills/]
+memory: {scope: session}
+subagents:
+  - ref: researcher.yaml
+  - ref: data-analyst.yaml
+  - ref: app-builder.yaml
+background_tasks: [overnight-builder.yaml]
+interrupt_on: {apps_publish: true, apps_start: true}
+permissions:
+  write: [/artifacts/**, /memories/**]
+  deny_write: [/skills/**, /data/**]
+budget: {model_calls: 200, tool_calls: 400}
