@@ -1,0 +1,14 @@
+[project]
+name = "macro-daily-bias-app"
+version = "1.0.0"
+requires-python = ">=3.14,<3.15"
+dependencies = ["fastmcp==4.0.11", "qmx-agents"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+qmx-agents = { git = "https://github.com/MubarakHimself/QMX", rev = "e27a5136a0babbce52c08907d07a8752bab92f6f", subdirectory = "qmx-agents/packages/qmx-agents" }
