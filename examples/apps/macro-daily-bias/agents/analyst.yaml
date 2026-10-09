@@ -1,0 +1,6 @@
+name: macro-analyst
+model: tier:workhorse
+system_prompt: analyst.md
+memory: {scope: task}
+budget: {model_calls: 10, tool_calls: 20}
+permissions: {write: []}

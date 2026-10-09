@@ -20,12 +20,21 @@ from qmx_agents.router import RunContext
 
 
 class AppHooksMiddleware(AgentMiddleware[Any, RunContext]):
-    def __init__(self, service: ControlService | None, names: list[str]) -> None:
+    def __init__(
+        self, service: ControlService | None, names: list[str], *, explicit_publish: bool = False
+    ) -> None:
         self.service = service
+        self.explicit_publish = explicit_publish
         self.names = {
             name: operation
             for name in names
-            for operation in ("apps_publish", "publish_app", "apps_create", "apps_update")
+            for operation in (
+                "apps_publish",
+                "publish_app",
+                "apps_create",
+                "apps_update",
+                "apps_test",
+            )
             if name == operation or name.endswith("_" + operation)
         }
 
@@ -65,6 +74,9 @@ class AppHooksMiddleware(AgentMiddleware[Any, RunContext]):
 
     def _before(self, request: ToolCallRequest) -> None:
         operation = self.names.get(request.tool_call["name"])
+        if self.explicit_publish and operation == "apps_test":
+            # A Copilot proof step must never activate code before publish approval.
+            request.tool_call["args"]["auto_publish"] = False
         if operation in {"apps_publish", "publish_app"}:
             app_id = request.tool_call["args"].get("app_id")
             if not isinstance(app_id, str) or not app_id:

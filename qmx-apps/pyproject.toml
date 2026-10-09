@@ -60,7 +60,7 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests", "../examples/apps"]
-extraPaths = ["src", "../examples/apps/mql5-articles"]
+extraPaths = ["src", "../examples/apps/mql5-articles", "../examples/apps/macro-daily-bias"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 

@@ -671,12 +671,18 @@ class ControlService:
         return self.app_runtime().versions(app_id)
 
     def apps_test(
-        self, app_id: str, expected_hash: str | None = None, stage: Stage | None = None
+        self,
+        app_id: str,
+        expected_hash: str | None = None,
+        stage: Stage | None = None,
+        auto_publish: bool = True,
     ) -> Document:
         """Run the next actual test, recorded sandbox or isolated shadow stage."""
         owner = self.app_runtime()
         current = str(owner.get(app_id)["definition_hash"])
-        return owner.road.advance(app_id, expected_hash or current, stage)
+        return owner.road.advance(
+            app_id, expected_hash or current, stage, auto_publish=auto_publish
+        )
 
     def apps_publish(
         self,

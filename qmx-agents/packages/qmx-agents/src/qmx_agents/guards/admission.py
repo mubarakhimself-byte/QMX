@@ -13,12 +13,14 @@ from deepagents.backends.protocol import (
     BackendProtocol,
     DeleteResult,
     EditResult,
+    ExecuteResponse,
     FileDownloadResponse,
     FileUploadResponse,
     GlobResult,
     GrepResult,
     LsResult,
     ReadResult,
+    SandboxBackendProtocol,
     WriteResult,
 )
 
@@ -257,3 +259,19 @@ class AdmissionBackend(BackendProtocol):
 
     def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         return self.inner.glob(pattern, path)
+
+
+class AdmissionSandboxBackend(AdmissionBackend, SandboxBackendProtocol):
+    """Keep supervised execution available while file tools retain admission checks."""
+
+    execution: SandboxBackendProtocol
+
+    @property
+    def id(self) -> str:
+        return self.execution.id
+
+    def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        return self.execution.execute(command, timeout=timeout)
+
+    async def aexecute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        return await self.execution.aexecute(command, timeout=timeout)
