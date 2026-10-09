@@ -25,7 +25,6 @@ import qma.daemon.pairing
 import qma.daemon.persistence
 import qma.daemon.plugins
 import qma.daemon.process
-import qma.daemon.proxy
 import qma.daemon.retry
 import qma.daemon.scheduler
 import qma.daemon.sessions
@@ -54,7 +53,6 @@ def test_structural_modules_importable() -> None:
         qma.daemon.staging,
         qma.daemon.memory,
         qma.daemon.knowledge,
-        qma.daemon.proxy,
         qma.daemon.tools,
         qma.daemon.envs,
         qma.daemon.experiments,

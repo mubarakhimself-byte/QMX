@@ -18,7 +18,6 @@ from qma.core.ports.model import (
 )
 from qma.core.refusals import NoEligibleDeployment, NoEligibleReviewer, OperatorPrincipalRequired
 from qma.core.vocabulary.enums import ModelClass, PrincipalClass, RoutingPolicy
-from qma.daemon.proxy import DeploymentRegistry, ModelRouter
 from qmf.core import is_ok, is_refusal
 
 
@@ -54,17 +53,14 @@ def _dep(
 
 
 def test_resolve_chain_is_modelclass_deployment_credential_broker() -> None:
-    registry = DeploymentRegistry()
-    assert is_ok(
-        registry.register(_dep("work-1", ModelClass.WORKHORSE_GENERAL, tools=True, context=32_000))
-    )
-    router = ModelRouter(registry)
-    decision = router.resolve(
+    catalog = (_dep("work-1", ModelClass.WORKHORSE_GENERAL, tools=True, context=32_000),)
+    decision = resolve_model_request(
         ModelClassRequest(
             model_class=ModelClass.WORKHORSE_GENERAL,
             needs=NeedsFlags(tools=True),
             min_context_tokens=16_000,
-        )
+        ),
+        catalog,
     )
     assert is_ok(decision)
     assert decision.value.chain == ("ModelClass", "Deployment", "CredentialBroker")
@@ -124,33 +120,38 @@ def test_empty_pool_names_class_and_unmet_constraint_never_crosses_class() -> No
 
 
 def test_routing_policies_failover_wrr_quota_fill() -> None:
-    registry = DeploymentRegistry()
-    for record in (
+    catalog = (
         _dep("f1", ModelClass.REASONING_HIGH, context=100_000, weight=1, quota=10, fill_units=0),
         _dep("f2", ModelClass.REASONING_HIGH, context=100_000, weight=3, quota=50, fill_units=4),
         _dep("f3", ModelClass.REASONING_HIGH, context=100_000, weight=1, quota=20, fill_units=9),
-    ):
-        assert is_ok(registry.register(record))
-    router = ModelRouter(registry)
+    )
     request = ModelClassRequest(model_class=ModelClass.REASONING_HIGH)
 
-    failover = router.resolve(request, policy=RoutingPolicy.FAILOVER)
+    failover = resolve_model_request(request, catalog, policy=RoutingPolicy.FAILOVER)
     assert is_ok(failover)
     assert failover.value.deployment.deployment_id == "f1"
     assert failover.value.capabilities.model_class is ModelClass.REASONING_HIGH
 
-    quota = router.resolve(request, policy="quota_lowest")
+    quota = resolve_model_request(request, catalog, policy="quota_lowest")
     assert is_ok(quota)
     assert quota.value.deployment.deployment_id == "f2"
 
-    fill = router.resolve(request, policy=RoutingPolicy.FILL_FIRST)
+    fill = resolve_model_request(request, catalog, policy=RoutingPolicy.FILL_FIRST)
     assert is_ok(fill)
     assert fill.value.deployment.deployment_id == "f3"
 
-    first = router.resolve(request, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN)
-    second = router.resolve(request, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN)
-    third = router.resolve(request, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN)
-    fourth = router.resolve(request, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN)
+    first = resolve_model_request(
+        request, catalog, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN, round_robin_cursor=0
+    )
+    second = resolve_model_request(
+        request, catalog, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN, round_robin_cursor=1
+    )
+    third = resolve_model_request(
+        request, catalog, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN, round_robin_cursor=2
+    )
+    fourth = resolve_model_request(
+        request, catalog, policy=RoutingPolicy.WEIGHTED_ROUND_ROBIN, round_robin_cursor=3
+    )
     assert is_ok(first) and is_ok(second) and is_ok(third) and is_ok(fourth)
     # weight 1,3,1 → expanded order f1,f2,f2,f2,f3
     assert first.value.deployment.deployment_id == "f1"
@@ -160,13 +161,6 @@ def test_routing_policies_failover_wrr_quota_fill() -> None:
 
 
 def test_registration_refuses_model_family_and_plugin_manifest_names_field() -> None:
-    registry = DeploymentRegistry(allowed_families=("family-a", "family-b"))
-    refused = registry.register(
-        _dep("bad", ModelClass.WORKHORSE_GENERAL, family="family-a", context=16_000)
-    )
-    assert is_refusal(refused)
-    assert refused.context["field"] == "model_family"
-
     with pytest.raises(ManifestError, match="model_family"):
         parse_plugin_manifest(
             {
@@ -182,49 +176,48 @@ def test_registration_refuses_model_family_and_plugin_manifest_names_field() -> 
 
 
 def test_operator_assigns_model_family_machine_refused_unassigned_review_ineligible() -> None:
-    registry = DeploymentRegistry(allowed_families=("family-a", "family-b"))
-    assert is_ok(registry.register(_dep("d1", ModelClass.WORKHORSE_GENERAL, context=16_000)))
-    assert is_ok(registry.register(_dep("d2", ModelClass.REASONING_HIGH, context=16_000)))
-
-    machine = registry.assign_family(
-        "d1",
+    first = _dep("d1", ModelClass.WORKHORSE_GENERAL, context=16_000)
+    second = _dep("d2", ModelClass.REASONING_HIGH, context=16_000)
+    machine = assign_model_family(
+        first,
         "family-a",
         principal=PrincipalClass.MACHINE,
+        allowed_families=("family-a", "family-b"),
     )
     assert is_refusal(machine)
     assert OperatorPrincipalRequired.matches(machine)
     assert machine.context["command"] == "model_family.assign"
-
-    outside = registry.assign_family(
-        "d1",
+    outside = assign_model_family(
+        first,
         "not-allowed",
         principal=PrincipalClass.OPERATOR,
+        allowed_families=("family-a", "family-b"),
     )
     assert is_refusal(outside)
     assert outside.context["field"] == "model_family"
-
-    assigned = registry.assign_family(
-        "d1",
-        "family-a",
-        principal="operator",
+    assigned = assign_model_family(
+        first, "family-a", principal="operator", allowed_families=("family-a", "family-b")
     )
     assert is_ok(assigned)
     assert assigned.value.model_family == "family-a"
-
-    # Unassigned d2 remains routable.
-    routed = ModelRouter(registry).resolve(ModelClassRequest(model_class=ModelClass.REASONING_HIGH))
+    catalog = (assigned.value, second)
+    routed = resolve_model_request(
+        ModelClassRequest(model_class=ModelClass.REASONING_HIGH), catalog
+    )
     assert is_ok(routed)
     assert routed.value.deployment.deployment_id == "d2"
     assert routed.value.deployment.model_family is None
-
-    # Unassigned family is ReviewPolicy-ineligible.
-    catalog = registry.catalog()
     review = select_reviewer("family-a", catalog)
     assert is_refusal(review)
     assert NoEligibleReviewer.matches(review)
-
-    assert is_ok(registry.assign_family("d2", "family-b", principal=PrincipalClass.OPERATOR))
-    again = ReviewPolicy().select_reviewer("family-a", registry.catalog())
+    assigned_second = assign_model_family(
+        second,
+        "family-b",
+        principal=PrincipalClass.OPERATOR,
+        allowed_families=("family-a", "family-b"),
+    )
+    assert is_ok(assigned_second)
+    again = ReviewPolicy().select_reviewer("family-a", (assigned.value, assigned_second.value))
     assert is_ok(again)
     assert again.value.deployment_id == "d2"
     assert again.value.model_family == "family-b"
