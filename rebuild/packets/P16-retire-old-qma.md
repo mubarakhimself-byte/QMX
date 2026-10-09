@@ -19,7 +19,7 @@ The P05 survival map (verdict "replace" or "delete"), updated with what P06–P1
   - an explicit "keep" list with reasons
 
   Merge the report and **stop**. Claude reviews it before anything is deleted.
-- **P16b, delete.** Only after the plan is approved: delete exactly what the approved plan lists, following the steps below.
+- **P16b, delete.** The plan is approved with the rulings in DESIGN §12c (2026-10-09). Follow §12c item 7 for the slice order: one PR per slice, each with `just ci` green.
 
 ## Steps (P16b)
 1. For each module marked replace or delete, confirm it has zero production callers outside the old daemon. Move any remaining callers (QMB, QMN, UI) onto the new packages first, one PR per caller if large.
