@@ -497,6 +497,37 @@ P05 (`reports/survival-map.md`) is approved. These rulings override it where the
 7. **Tests:** use a fake chat model subclass that supports `bind_tools`. Anything with approvals uses a checkpointer.
 8. **Litestream:** one replica per database (0.5.x). **SSE:** FastAPI's native SSE (≥0.135).
 
+## 12c. Rulings from the P16a deletion-plan review (Claude, 2026-10-09)
+
+The plan (`reports/p16-deletion-plan.md`, 166 candidate modules / 77k LOC) is approved with these rulings. They clear its blockers:
+
+1. **QMB host CLI migrates; the old host protocol goes.**
+   - `qmb host start|status|stop` is rewritten to start, check and stop `qmx-control` (`python -m qmx_control`) instead of `python -m qma.daemon`.
+   - `pair`, `configure`, `rotate-control`, `recover-control` and the placement commands are removed. The local token replaces pairing, and P21 compute providers replace placement.
+   - This is the one authorized change inside `qmb/`, limited to `qmb/src/qmb/doors/cli/` and its tests.
+2. **The Experiment Ledger is ported, not kept on the old machinery.** A new `qmx_agents.guards.experiments` module provides:
+   - an append-only SQLite notebook per experiment
+   - identity by run id and app id, with no leases, actors or Task/Quant ledgers
+   - the "invalid evidence goes to quarantine verbatim" rule
+
+   Old experiment modules and their callers move to it, then the old ones are deleted.
+3. **Kept from `qma-wire`:** only `money_path_diff.py`, `schemas.py` and the `schema_data/` resources. QMB names the schema id `qma.wire.money_path_field_diff.v1`. Everything else in `qma-wire` follows the plan.
+4. **No data migration.** The old daemon stores hold only test and fixture data; the operator never ran the product on real work. Nothing has to be converted or preserved beyond git history.
+5. **`qmx-agents/plugins/`:** delete it if no loader or test references it (prove it as P04 did); otherwise retarget its imports to the new packages.
+6. **Tests:** delete tests that only cover removed old-runtime behaviour together with that code. Retarget tests that guard surviving behaviour. QA epic suites that exercise removed behaviour are retired with a one-line reason each in the PR. Never lower thresholds.
+7. **Order:** one PR per slice, each with `just ci` green:
+   1. QMB host migration
+   2. Experiment Ledger port
+   3. task graph and canonical join
+   4. hooks
+   5. proxy and native sessions
+   6. bus
+   7. old memory
+   8. old transport and `process.py`
+   9. package moves and one lock
+
+   "Keep" modules in the plan that only existed to serve deleted code go in the slice that removes their last caller.
+
 ## 13. Open items (not blocking packets 01–08)
 
 - Whether `sqlite-vec` loads on Windows. Spike before turning on semantic memory search.
