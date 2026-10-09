@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from fastmcp import Client
@@ -57,7 +58,7 @@ def test_remote_rest_and_mcp_use_one_owner_and_register_verified_artifacts(tmp_p
         definition_hash=fingerprint({"definition": definition, "files": {}}),
         command=["python", "-c", "print('ok')"],
     )
-    token = "fake-local-test-token"
+    token = str(uuid4())
     headers = {"Authorization": "Bearer " + token}
     with TestClient(create_app(service, token)) as rest:
         response = rest.post(
