@@ -19,6 +19,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from qmx_apps.errors import AppError
+from qmx_remote.models import RemoteError
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_control.service import ControlError, ControlService, EventTopic
@@ -48,6 +49,16 @@ OPERATIONS = (
     ("workflows_validate", "POST", "/api/workflows/validate", False),
     ("workflows_run", "POST", "/api/workflows/{workflow_id}/run", True),
     ("runs_list", "GET", "/api/runs", False),
+    ("runs_start_remote", "POST", "/api/runs/remote", True),
+    ("runs_status", "GET", "/api/runs/{run_id}/status", False),
+    ("runs_logs", "GET", "/api/runs/{run_id}/logs", False),
+    ("runs_fetch", "POST", "/api/runs/{run_id}/fetch", False),
+    ("runs_resume", "POST", "/api/runs/{run_id}/resume", True),
+    ("runs_stop", "POST", "/api/runs/{run_id}/stop", True),
+    ("run_job", "POST", "/api/jobs/remote", True),
+    ("job_status", "GET", "/api/jobs/{run_id}/status", False),
+    ("job_logs", "GET", "/api/jobs/{run_id}/logs", False),
+    ("job_fetch", "POST", "/api/jobs/{run_id}/fetch", False),
     ("runs_get", "GET", "/api/runs/{run_id}", False),
     ("runs_cancel", "POST", "/api/runs/{run_id}/cancel", True),
     ("jobs_list", "GET", "/api/jobs", False),
@@ -123,7 +134,7 @@ def _mcp_method(method: Callable[..., Any]) -> Callable[..., Any]:
     def call(*args: Any, **kwargs: Any) -> Any:
         try:
             return method(*args, **kwargs)
-        except (ControlError, AppError) as error:
+        except (ControlError, AppError, RemoteError) as error:
             raise ToolError(json.dumps(error.document())) from error
 
     return call
@@ -186,7 +197,10 @@ def create_app(
 
     @app.exception_handler(ControlError)
     @app.exception_handler(AppError)
-    async def control_error(request: Request, error: ControlError | AppError) -> JSONResponse:
+    @app.exception_handler(RemoteError)
+    async def control_error(
+        request: Request, error: ControlError | AppError | RemoteError
+    ) -> JSONResponse:
         return JSONResponse(error.document(), status_code=error.status)
 
     for name, method, path, _ in OPERATIONS:

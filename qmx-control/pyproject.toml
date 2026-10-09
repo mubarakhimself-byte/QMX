@@ -14,11 +14,16 @@ dependencies = [
     "psutil>=7,<9",
     "qmx-apps",
     "qmx-broker",
+    "qmx-remote",
 ]
 
 [project.scripts]
 qmx-control = "qmx_control.__main__:main"
 qmx = "qmx_control.node:main"
+
+[project.optional-dependencies]
+remote-modal = ["qmx-remote[modal]"]
+remote-e2b = ["qmx-remote[e2b]"]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -31,6 +36,7 @@ members = []
 qmx-apps = { path = "../qmx-apps", editable = true }
 qmx-broker = { path = "../qmx-agents/packages/qmx-broker", editable = true }
 qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
+qmx-remote = { path = "../qmx-agents/packages/qmx-remote", editable = true }
 
 [dependency-groups]
 dev = [

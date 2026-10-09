@@ -143,10 +143,15 @@ class RunContext:
 
 class ModelRouter:
     def __init__(
-        self, config: RouterConfig, models: dict[str, BaseChatModel] | None = None
+        self,
+        config: RouterConfig,
+        models: dict[str, BaseChatModel] | None = None,
+        *,
+        credential_getter: Callable[[str], str] = credential,
     ) -> None:
         self.config = config
         self._models = dict(models or {})
+        self._credential_getter = credential_getter
 
     def selection(self, selector: str, profile: str | None = None) -> str:
         if selector in TIERS:
@@ -165,7 +170,7 @@ class ModelRouter:
             provider, model = selection.split(":", 1)
             settings = self.config.providers[cast("Provider", provider)]
             kwargs: dict[str, Any] = {
-                "api_key": credential(provider),
+                "api_key": self._credential_getter(provider),
                 "timeout": settings.timeout,
                 # LangChain middleware owns retries, not the provider SDK too.
                 "max_retries": 0,
