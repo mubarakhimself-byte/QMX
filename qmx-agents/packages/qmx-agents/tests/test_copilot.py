@@ -295,6 +295,42 @@ def test_named_delegation_and_background_run(tmp_path: Path, config: RouterConfi
     asyncio.run(run())
 
 
+def test_paused_background_run_cancels_through_its_control_owner(
+    tmp_path: Path, config: RouterConfig
+) -> None:
+    service = ControlService(tmp_path)
+    session_id = str(service.sessions_create(SessionInput(title="Paused background build"))["id"])
+
+    async def run() -> None:
+        ctx = BuildContext(
+            models(config, fake(call("apps_start", {"app_id": "not-installed"}), "done")),
+            run=RunContext(session_id=session_id),
+            control=service,
+            qmx_home=tmp_path,
+            checkpointer=InMemorySaver(),
+            agent_backends={"data-analyst": FakeSandbox()},
+        )
+        try:
+            await build_copilot(ctx)
+            tasks = cast(BackgroundTasks, ctx.background_resources[0])
+            tools = {tool.name: tool for tool in tasks.tools()}
+            result = await tools["start_task"].ainvoke(
+                {"name": "overnight-builder", "description": "Request live start approval"}
+            )
+            await tasks.running[result["id"]]
+            assert service.runs_get(result["id"])["status"] == "needs_you"
+            await tools["cancel_task"].ainvoke({"run_id": result["id"]})
+            await asyncio.sleep(0)
+            assert (await tools["check_task"].ainvoke({"run_id": result["id"]}))[
+                "status"
+            ] == "cancelled"
+        finally:
+            await ctx.close_memory()
+            service.close()
+
+    asyncio.run(run())
+
+
 def test_completed_child_is_finished_while_primary_awaits_approval(
     tmp_path: Path, config: RouterConfig
 ) -> None:

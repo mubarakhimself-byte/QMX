@@ -49,8 +49,18 @@ class BackgroundTasks:
 
             task.add_done_callback(finished)
 
+            def cancel_in_loop() -> None:
+                if task.done():
+                    if self.service.runs_get(run_id).get("status") == "needs_you":
+                        with RunJournal(
+                            self.service.home / "runs" / run_id / "journal.jsonl", run_id
+                        ) as journal:
+                            self._finish(run_id, "cancelled", journal)
+                else:
+                    task.cancel()
+
             def cancel() -> None:
-                loop.call_soon_threadsafe(task.cancel)
+                loop.call_soon_threadsafe(cancel_in_loop)
 
             return self.service.record_work(
                 "runs",
@@ -82,6 +92,17 @@ class BackgroundTasks:
         if run_id not in self.running:
             raise ValueError("This agent did not start that task.")
 
+    def _finish(
+        self, run_id: str, status: str, journal: RunJournal | None, *, error: str | None = None
+    ) -> None:
+        # Journal replay is authoritative over the service's cached run status.
+        if journal is not None:
+            journal.append("run_end", {"status": status})
+        data: Document = {"status": status}
+        if error is not None:
+            data["error"] = error
+        self.service.record_work("runs", run_id, data)
+
     async def _run(self, run_id: str, name: str, prompt: str, session_id: str) -> None:
         from qmx_agents.copilot import stream_turn  # noqa: PLC0415
         from qmx_agents.spec import build_agent  # noqa: PLC0415
@@ -96,6 +117,7 @@ class BackgroundTasks:
                 workflow_id=self.ctx.run.workflow_id or self.ctx.run.session_id or run_id,
             ),
             memory=None,
+            journal=None,
             memory_role="scheduled",
             memory_resources=[],
             background_resources=[],
@@ -114,14 +136,12 @@ class BackgroundTasks:
                 await stream_turn(graph, self.service, session_id, prompt, context=child.run)
                 state = await graph.aget_state({"configurable": {"thread_id": session_id}})
                 status = "needs_you" if state.next else "completed"
-                self.service.record_work("runs", run_id, {"status": status})
+                self._finish(run_id, status, child.journal)
         except asyncio.CancelledError:
-            self.service.record_work("runs", run_id, {"status": "cancelled"})
+            self._finish(run_id, "cancelled", child.journal)
             raise
         except Exception as error:
-            self.service.record_work(
-                "runs", run_id, {"status": "failed", "error": type(error).__name__}
-            )
+            self._finish(run_id, "failed", child.journal, error=type(error).__name__)
         finally:
             await child.close_memory()
 
