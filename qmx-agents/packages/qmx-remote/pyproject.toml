@@ -22,7 +22,7 @@ qmx-agents = { path = "../qmx-agents", editable = true }
 qmx-apps = { path = "../../../qmx-apps", editable = true }
 
 [dependency-groups]
-dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "poethepoet==0.48.0"]
+dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
