@@ -404,8 +404,19 @@ P19 additions (fetched and read 2026-10-08 into scratch storage outside the repo
 | P20 skills + hooks | 1 (custom middleware, HITL), 2 (skills) | |
 | P21 remote runs | 3 (checkpointers), 7, 8, 9, 10, 11, 18 | D7; Daytona UNVERIFIED |
 | P22 Library + runs + caching + backup | 5, 6, 11, 13, 14 (FTS5), 18, 19 (cachetools) | Git docs below; no new analytics engine |
+| P23 startup + link fixtures | 5 (client/transports), 18 (uv bytecode compilation) | Python references below |
 
 P22 Git backup references (fetched 2026-10-08):
 https://git-scm.com/docs/git-clone , https://git-scm.com/docs/git-push ,
 https://cli.github.com/manual/gh_api , https://docs.github.com/en/rest/repos/repos .
 The GitHub repository response's `private` field is checked before uploading.
+
+P23 startup and cross-platform fixture references (fetched 2026-10-08):
+https://gofastmcp.com/python-sdk/fastmcp-client-client.md (`init_timeout=0`
+disables the client's competing initialization timer),
+https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/asyncio-task.rst
+(`asyncio.timeout`, `Timeout.reschedule(None)`),
+https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/os.rst
+(`os.symlink`, directory links and Windows privileges).
+The uv CLI reference in section 18 documents `--compile-bytecode`: trade
+installation time for faster startup without runtime bytecode writes.

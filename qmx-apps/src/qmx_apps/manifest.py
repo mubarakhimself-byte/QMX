@@ -89,6 +89,7 @@ class AppDefinition(StrictModel):
     )
     risk: Literal["shows", "runs", "money"]
     kind: Literal["screens", "headless", "both"]
+    startup_timeout_seconds: float = Field(default=90, gt=0)
     entrypoints: Entrypoints
     capabilities: Capabilities = Field(default_factory=Capabilities)
     schedule: Schedule | None = None

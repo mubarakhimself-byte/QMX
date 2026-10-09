@@ -93,6 +93,8 @@ def test_start_applies_definition_migrations(supervisor: Supervisor, fixture_app
         ('risk = "shows"', 'risk = "orders"'),
         ('mcp = "server.py"', 'mcp = "../server.py"'),
         ('kind = "screens"', 'kind = "headless"'),
+        ('kind = "screens"', 'kind = "screens"\nstartup_timeout_seconds = 0'),
+        ('kind = "screens"', 'kind = "screens"\nstartup_timeout_seconds = nan'),
     ],
 )
 def test_manifest_rejects_invalid_definitions(fixture_app: Path, old: str, new: str) -> None:
