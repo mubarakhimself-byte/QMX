@@ -274,6 +274,14 @@ def test_resume_requires_checkpoint_and_selects_gpu_node(tmp_path: Path) -> None
     assert runs.resume(run_id, "gpu")["status"] == "running"
     assert runs.status(run_id)["status"] == "running"
     assert ResultsStore(config.bucket).read(run_id).checkpoint == manifest.checkpoint
+    manifest.status = "interrupted"
+    ResultsStore(config.bucket).publish(output, manifest)
+    provider.phase = "interrupted"
+    teardowns = provider.calls.count("teardown")
+    with pytest.raises(RemoteError, match="GPUs"):
+        runs.resume(run_id, "vps")
+    assert provider.calls.count("teardown") == teardowns
+    assert runs.resume(run_id, "gpu")["status"] == "running"
 
 
 def test_job_logs_are_incrementally_shipped_and_credentials_redacted(

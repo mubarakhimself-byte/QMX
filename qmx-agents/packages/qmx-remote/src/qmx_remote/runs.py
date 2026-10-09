@@ -205,10 +205,10 @@ class RemoteRuns:
                 raise RemoteError("No verified checkpoint for this run is available.")
             downloaded = self.home / "remote" / run_id / "downloaded"
             store.fetch(run_id, downloaded)
+            name, node = self.settings.place(target, manifest.bundle.resources)
             old_provider = self.providers(state.target, state.bucket)
             if not state.released:
                 old_provider.teardown(state.handle)
-            name, node = self.settings.place(target, manifest.bundle.resources)
             state.target = node
             state.manifest = manifest
             state.manifest.target = name
