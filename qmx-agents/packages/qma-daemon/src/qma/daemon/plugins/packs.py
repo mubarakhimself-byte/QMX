@@ -40,7 +40,7 @@ from qma.core.ports.qmb import QMB_BACKTEST_TOOL_ID, QMB_OWNED_CONCERNS
 from qma.core.vocabulary.enums import PrincipalClass
 from qma.daemon.capabilities.spawn import SpawnRequest, spawn_agent
 from qma.daemon.knowledge import KnowledgeSourceRegistry
-from qma.daemon.memory import MemoryAdmissionGate
+from qma.daemon.memory.admission import MemoryAdmissionGate
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
 from qma.daemon.plugins.lifecycle import AtomicRoster
 from qma.daemon.plugins.loader import (

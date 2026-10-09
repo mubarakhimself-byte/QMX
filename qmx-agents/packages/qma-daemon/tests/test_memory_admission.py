@@ -17,7 +17,7 @@ from qma.core.vocabulary import GovernedAct, GovernedActTarget, validate_governe
 from qma.core.vocabulary.enums import MemoryValidationState, RefinementEditKind
 from qma.core.vocabulary.registry import VocabularyError
 from qma.daemon.hooks.registry import HookRegistry
-from qma.daemon.memory import MemoryAdmissionGate, MemoryProviderRegistry
+from qma.daemon.memory.admission import MemoryAdmissionGate, MemoryProviderRegistry
 from qma.daemon.plugins import DaemonPluginContext
 from qmf.core import Ok, Result, is_ok, is_refusal
 
