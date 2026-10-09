@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.vocabulary.enums import DeliveryState, MessageKind
-from qma.daemon.bus import MailboxStore
+from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.ledgers import TaskLedgerStore
 from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.daemon import RetentionJob, TelemetryStore
-from qma.daemon.bus import MailboxStore
+from qma.daemon.bus.mailbox import MailboxStore
 from qma.daemon.telemetry import OpenTelemetryExportAdapter
 from qmf.core import is_ok, is_refusal
 

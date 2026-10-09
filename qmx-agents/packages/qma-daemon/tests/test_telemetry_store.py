@@ -16,7 +16,7 @@ from qma.core.ports.telemetry import (
     TELEMETRY_RETENTION_KEYS,
 )
 from qma.daemon import RetentionJob, TelemetryStore
-from qma.daemon.bus import DELIVERY_RETENTION_KEYS, MailboxStore
+from qma.daemon.bus.mailbox import DELIVERY_RETENTION_KEYS, MailboxStore
 from qma.daemon.telemetry import (
     DAEMON_CORE_OTEL_IMPORT_FORBIDDEN,
     DAEMON_JOB_TRIM_STREAMS,

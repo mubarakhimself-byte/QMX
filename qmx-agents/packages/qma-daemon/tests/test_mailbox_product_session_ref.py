@@ -14,7 +14,7 @@ from qma.core.ports.mailbox import (
 )
 from qma.core.vocabulary.enums import DeliveryState
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
-from qma.daemon.bus import MailboxStore, copy_product_session_ref_at_write
+from qma.daemon.bus.mailbox import MailboxStore, copy_product_session_ref_at_write
 from qma.daemon.sessions import ProductSessionService
 from qmf.core import DataDrivenClock, Instant, is_ok, is_refusal
 

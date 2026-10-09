@@ -10,7 +10,7 @@ from qma.core.plugins.hooks import HookEvent, HookResult, build_hook_result
 from qma.core.ports.mailbox import HUMAN_APPROVAL_CHANNEL
 from qma.core.vocabulary.enums import DeliveryState, HookResultDecision, MessageKind
 from qma.daemon import AuthoritativeJournal, PersistenceSubstrate
-from qma.daemon.bus import (
+from qma.daemon.bus.mailbox import (
     DELIVERY_RETENTION_KEYS,
     GAP_0071_LEAD_MAILBOX_CATCH_ALL,
     GAP_0079_EXTERNAL_TRANSPORT,
