@@ -52,7 +52,6 @@ from qma.daemon.journal import (
     FoldContractRegistry,
     FoldMetadata,
     GovernedVariableRegistry,
-    StoreOwnershipRegistry,
     StoreRegistry,
     order_by_announcement_journal_seq,
 )
@@ -311,7 +310,6 @@ __all__ = [
     "ProductSessionService",
     "ProposalGate",
     "RetentionJob",
-    "StoreOwnershipRegistry",
     "StoreRegistry",
     "TaskGraphDispatcher",
     "TaskGraphStateService",
