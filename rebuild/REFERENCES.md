@@ -428,3 +428,4 @@ P21 additions (fetched and read 2026-10-08/09 into D: scratch storage):
 - Run branch isolation/publication: https://git-scm.com/docs/git-clone , https://git-scm.com/docs/git-switch , https://git-scm.com/docs/git-push .
 - Python process and online-checkpoint snapshots: https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/subprocess.rst , https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/sqlite3.rst .
 - Python temporary-directory selection and inherited scratch paths: https://docs.python.org/3.14/library/tempfile.html#tempfile.gettempdir .
+- pytest per-suite temporary bases and nested invocations: https://docs.pytest.org/en/stable/how-to/tmp_path.html (fetched and read 2026-10-09).

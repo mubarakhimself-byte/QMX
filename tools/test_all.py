@@ -17,7 +17,19 @@ def run_suite(name: str, cwd: Path, command: list[str], report: Path) -> tuple[i
     if uv is None:
         raise RuntimeError("uv is required to run the workspace suites")
     started = time.monotonic()  # ambient-scan: allow - test duration measurement
-    result = subprocess.run([uv, "run", *command, "--junitxml", str(report)], cwd=cwd, check=False)
+    result = subprocess.run(
+        [
+            uv,
+            "run",
+            *command,
+            "--basetemp",
+            str(report.with_suffix(".tmp")),
+            "--junitxml",
+            str(report),
+        ],
+        cwd=cwd,
+        check=False,
+    )
     counts = dict.fromkeys(("passed", "failed", "skipped", "xfailed"), 0)
     if report.exists():
         for case in ET.parse(report).iter("testcase"):  # noqa: S314 - pytest wrote this temporary report
