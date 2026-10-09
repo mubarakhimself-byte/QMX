@@ -212,7 +212,7 @@ _OUTBOX_COLUMNS: Final[tuple[str, ...]] = (
 
 
 class TaskGraphOutboxSchemaError(RuntimeError):
-    """Existing Task Graph outbox needs an explicit backed-up migration."""
+    """Existing Task Graph outbox has an unsupported layout."""
 
     def __init__(self, *, found: object, reason: str) -> None:
         self.found = found
@@ -606,8 +606,8 @@ class TaskGraphStateSqliteStore:
                 raise TaskGraphOutboxSchemaError(
                     found="unmarked-existing-layout",
                     reason=(
-                        "existing task_graph_outbox has no layout version; run the explicit "
-                        "backup-and-copy migration before opening this database"
+                        "existing task_graph_outbox has no layout version; "
+                        "old fixture stores are not migrated"
                     ),
                 )
             markers = self._sqlite.execute(
@@ -618,7 +618,7 @@ class TaskGraphStateSqliteStore:
                     found=tuple(markers),
                     reason=(
                         "task_graph_outbox layout version is not the supported version 2; "
-                        "run its explicit backed-up migration"
+                        "old fixture stores are not migrated"
                     ),
                 )
             columns = self._sqlite.execute("PRAGMA table_info(task_graph_outbox)")
@@ -940,10 +940,7 @@ class TaskGraphStateService:
                 exc.reason,
                 supported_version=_OUTBOX_SCHEMA_VERSION,
                 found=exc.found,
-                migration_command=(
-                    "python -m qma.daemon.persistence.task_graph_outbox_migration "
-                    "SOURCE.sqlite BACKUP.sqlite DESTINATION.sqlite"
-                ),
+                migration="Old fixture stores are not migrated.",
             )
         return self.reload()
 

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import runpy
 import sqlite3
-from collections.abc import Callable
 from dataclasses import replace
-from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -20,9 +17,7 @@ from qma.core.plugins import analysis_procedure_graph_payload
 from qma.core.ports.execution import ExecutionEnvironmentDeclaration
 from qma.core.vocabulary.enums import ExecutionEnvironmentKind, JobHandleState, TaskMissionState
 from qma.daemon.envs import ExecutionEnvironmentRegistry
-from qma.daemon.persistence import task_graph_outbox_migration
 from qma.daemon.persistence.sqlite_writer import SingleSqliteWriter
-from qma.daemon.persistence.task_graph_outbox_migration import migrate_task_graph_outbox
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
 from qma.daemon.taskgraph import (
@@ -416,7 +411,7 @@ def test_initial_root_rejects_malformed_operation_or_foreign_mission_before_effe
         process.close()
 
 
-def test_existing_successor_outbox_schema_requires_explicit_migration(tmp_path: Path) -> None:
+def test_existing_successor_outbox_schema_is_refused_without_mutation(tmp_path: Path) -> None:
     database = tmp_path / "legacy-task-graph.sqlite3"
     connection = sqlite3.connect(database)
     connection.executescript(
@@ -440,301 +435,14 @@ def test_existing_successor_outbox_schema_requires_explicit_migration(tmp_path: 
     try:
         before_schema = database.read_bytes()
         store = TaskGraphStateSqliteStore(writer)
-        with pytest.raises(TaskGraphOutboxSchemaError, match="explicit"):
+        with pytest.raises(TaskGraphOutboxSchemaError, match="not migrated"):
             store.ensure_schema()
         assert database.read_bytes() == before_schema
         refusal = TaskGraphStateService().bind_durable(sqlite=writer)
         assert is_refusal(refusal)
-        assert "task_graph_outbox_migration" in str(refusal.context)
+        assert refusal.context["migration"] == "Old fixture stores are not migrated."
     finally:
         writer.close()
-    migration_source_bytes = database.read_bytes()
-
-    migrated = migrate_task_graph_outbox(
-        source=database,
-        backup=tmp_path / "legacy-backup.sqlite3",
-        destination=tmp_path / "migrated-daemon.sqlite3",
-    )
-    assert is_ok(migrated), migrated
-    assert database.read_bytes() == migration_source_bytes
-    assert migrated.value.source_layout_version == 1
-    assert migrated.value.destination_layout_version == 2
-    assert migrated.value.preserved_outbox_rows == 1
-    assert migrated.value.steps == ("preflight", "backup", "dry-run", "migrate", "verify")
-    assert migrated.value.restore_path == str(database.resolve())
-    assert not list(tmp_path.glob(".migrated-daemon.sqlite3.dry-run-*"))
-
-    migrated_writer = SingleSqliteWriter(tmp_path / "migrated-daemon.sqlite3")
-    assert is_ok(migrated_writer.start())
-    try:
-        store = TaskGraphStateSqliteStore(migrated_writer)
-        store.ensure_schema()
-        columns = migrated_writer.execute("PRAGMA table_info(task_graph_outbox)")
-        predecessor = next(row for row in columns if row[1] == "predecessor_node_id")
-        assert predecessor[3] == 0
-        marker = migrated_writer.execute(
-            "SELECT schema_version FROM task_graph_outbox_schema WHERE singleton = 1"
-        )
-        assert marker == [(2,)]
-        preserved = migrated_writer.execute(
-            "SELECT predecessor_node_id, logical_invocation_id, transport_state "
-            "FROM task_graph_outbox WHERE graph_run_id = ?",
-            ("graph:legacy",),
-        )
-        assert preserved == [("parent", "inv:legacy", "dispatched")]
-    finally:
-        migrated_writer.close()
-
-
-def test_running_daemon_writer_blocks_outbox_migration(tmp_path: Path) -> None:
-    database = tmp_path / "daemon" / "daemon.sqlite3"
-    database.parent.mkdir()
-    writer_lock = database.parent.parent / ".daemon_writer"
-    writer_lock.write_text("active", encoding="utf-8")
-    source = database.parent.parent / "source.sqlite3"
-    connection = sqlite3.connect(source)
-    connection.execute(
-        "CREATE TABLE task_graph_outbox (graph_run_id TEXT NOT NULL, "
-        "successor_node_id TEXT NOT NULL, predecessor_revision INTEGER NOT NULL, "
-        "partition_id TEXT NOT NULL, outbox_id TEXT NOT NULL, "
-        "predecessor_node_id TEXT NOT NULL, logical_invocation_id TEXT NOT NULL, "
-        "target TEXT NOT NULL, envelope_hash TEXT NOT NULL, transport_state TEXT NOT NULL, "
-        "acceptance_state TEXT, effect_state TEXT, receiver_acceptance_id TEXT, "
-        "PRIMARY KEY (graph_run_id, successor_node_id, predecessor_revision, partition_id))"
-    )
-    connection.commit()
-    connection.close()
-    refused = migrate_task_graph_outbox(
-        source=source,
-        backup=tmp_path / "backup.sqlite3",
-        destination=tmp_path / "destination.sqlite3",
-    )
-    assert not is_ok(refused)
-    assert not (tmp_path / "backup.sqlite3").exists()
-    assert not (tmp_path / "destination.sqlite3").exists()
-
-
-def test_outbox_migration_escapes_uri_metacharacters_and_preserves_all_tables(
-    tmp_path: Path,
-) -> None:
-    # '?' is illegal in a Windows filename. Keep URI escaping exercised on
-    # tier-1 Windows with '#', '%' and spaces, plus '?' where it is supported.
-    suffix = "?one" if os.name != "nt" else "one"
-    database = tmp_path / f"source#part%20 {suffix}.sqlite3"
-    connection = sqlite3.connect(database)
-    connection.executescript(
-        "CREATE TABLE task_graph_outbox ("
-        "graph_run_id TEXT NOT NULL, successor_node_id TEXT NOT NULL, "
-        "predecessor_revision INTEGER NOT NULL, partition_id TEXT NOT NULL, "
-        "outbox_id TEXT NOT NULL, predecessor_node_id TEXT NOT NULL, "
-        "logical_invocation_id TEXT NOT NULL, target TEXT NOT NULL, "
-        "envelope_hash TEXT NOT NULL, transport_state TEXT NOT NULL, "
-        "acceptance_state TEXT, effect_state TEXT, receiver_acceptance_id TEXT, "
-        "PRIMARY KEY (graph_run_id, successor_node_id, predecessor_revision, partition_id));"
-        "CREATE UNIQUE INDEX task_graph_outbox_logical "
-        "ON task_graph_outbox (logical_invocation_id);"
-        "CREATE TABLE retained_extension (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
-        "INSERT INTO retained_extension VALUES ('one', 'preserved');"
-    )
-    connection.close()
-    backup = tmp_path / "backup.sqlite3"
-    destination = tmp_path / "destination.sqlite3"
-    result = migrate_task_graph_outbox(source=database, backup=backup, destination=destination)
-    assert is_ok(result), result
-    assert not (tmp_path / "source").exists()
-    for path in (backup, destination):
-        migrated = sqlite3.connect(path)
-        try:
-            assert migrated.execute("SELECT key, value FROM retained_extension").fetchall() == [
-                ("one", "preserved")
-            ]
-        finally:
-            migrated.close()
-
-
-def test_outbox_migration_refuses_live_wal_source(tmp_path: Path) -> None:
-    database = tmp_path / "wal-source.sqlite3"
-    connection = sqlite3.connect(database)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute(
-        "CREATE TABLE task_graph_outbox (graph_run_id TEXT NOT NULL, "
-        "successor_node_id TEXT NOT NULL, predecessor_revision INTEGER NOT NULL, "
-        "partition_id TEXT NOT NULL, outbox_id TEXT NOT NULL, "
-        "predecessor_node_id TEXT NOT NULL, logical_invocation_id TEXT NOT NULL, "
-        "target TEXT NOT NULL, envelope_hash TEXT NOT NULL, transport_state TEXT NOT NULL, "
-        "acceptance_state TEXT, effect_state TEXT, receiver_acceptance_id TEXT, "
-        "PRIMARY KEY (graph_run_id, successor_node_id, predecessor_revision, partition_id))"
-    )
-    connection.execute(
-        "CREATE UNIQUE INDEX task_graph_outbox_logical ON task_graph_outbox (logical_invocation_id)"
-    )
-    connection.commit()
-    connection.execute(
-        "INSERT INTO task_graph_outbox VALUES "
-        "('g','n',0,'p','o','parent','i','{}','fp','dispatched',NULL,NULL,NULL)"
-    )
-    connection.commit()
-    assert Path(f"{database}-wal").exists()
-    result = migrate_task_graph_outbox(
-        source=database,
-        backup=tmp_path / "wal-backup.sqlite3",
-        destination=tmp_path / "wal-destination.sqlite3",
-    )
-    assert is_refusal(result)
-    assert not (tmp_path / "wal-backup.sqlite3").exists()
-    connection.close()
-
-
-def _inject_after_backup(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    backup: Path,
-    after_backup: Callable[[], None],
-) -> None:
-    """Inject a source race after the real SQLite online backup has completed."""
-    original_connect = sqlite3.connect
-
-    class RacingConnection(sqlite3.Connection):
-        def backup(
-            self,
-            target: sqlite3.Connection,
-            *,
-            pages: int = -1,
-            progress: Callable[[int, int, int], object] | None = None,
-            name: str = "main",
-            sleep: float = 0.250,
-        ) -> None:
-            super().backup(target, pages=pages, progress=progress, name=name, sleep=sleep)
-            database = target.execute("PRAGMA database_list").fetchone()
-            assert database is not None
-            filename: object = database[2]
-            assert isinstance(filename, str)
-            if Path(filename) == backup:
-                after_backup()
-
-    monkeypatch.setattr(
-        task_graph_outbox_migration.sqlite3,
-        "connect",
-        partial(original_connect, factory=RacingConnection),
-    )
-
-
-def test_outbox_migration_rechecks_wal_snapshot_after_backup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database = tmp_path / "race-source.sqlite3"
-    connection = sqlite3.connect(database)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.executescript(
-        "CREATE TABLE task_graph_outbox ("
-        "graph_run_id TEXT NOT NULL, successor_node_id TEXT NOT NULL, "
-        "predecessor_revision INTEGER NOT NULL, partition_id TEXT NOT NULL, "
-        "outbox_id TEXT NOT NULL, predecessor_node_id TEXT NOT NULL, "
-        "logical_invocation_id TEXT NOT NULL, target TEXT NOT NULL, "
-        "envelope_hash TEXT NOT NULL, transport_state TEXT NOT NULL, "
-        "acceptance_state TEXT, effect_state TEXT, receiver_acceptance_id TEXT, "
-        "PRIMARY KEY (graph_run_id, successor_node_id, predecessor_revision, partition_id));"
-        "CREATE UNIQUE INDEX task_graph_outbox_logical "
-        "ON task_graph_outbox (logical_invocation_id);"
-        "CREATE TABLE retained_extension (value TEXT NOT NULL);"
-        "INSERT INTO retained_extension VALUES ('before');"
-    )
-    connection.close()
-    assert not Path(f"{database}-wal").exists()
-
-    writer_connections: list[sqlite3.Connection] = []
-
-    def write_after_backup() -> None:
-        late_writer = sqlite3.connect(database)
-        writer_connections.append(late_writer)
-        late_writer.execute("INSERT INTO retained_extension VALUES ('during-migration')")
-        late_writer.commit()
-
-    backup = tmp_path / "race-backup.sqlite3"
-    _inject_after_backup(monkeypatch, backup=backup, after_backup=write_after_backup)
-    destination = tmp_path / "race-destination.sqlite3"
-    try:
-        result = migrate_task_graph_outbox(source=database, backup=backup, destination=destination)
-        assert is_refusal(result)
-        assert backup.exists()
-        assert not destination.exists()
-        saved = sqlite3.connect(backup)
-        try:
-            assert saved.execute("SELECT value FROM retained_extension").fetchall() == [("before",)]
-        finally:
-            saved.close()
-        current = sqlite3.connect(database)
-        try:
-            assert current.execute("SELECT value FROM retained_extension").fetchall() == [
-                ("before",),
-                ("during-migration",),
-            ]
-        finally:
-            current.close()
-    finally:
-        for late_writer in writer_connections:
-            late_writer.close()
-
-
-def test_outbox_migration_rechecks_schema_objects_written_to_wal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database = tmp_path / "schema-race-source.sqlite3"
-    connection = sqlite3.connect(database)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.executescript(
-        "CREATE TABLE task_graph_outbox ("
-        "graph_run_id TEXT NOT NULL, successor_node_id TEXT NOT NULL, "
-        "predecessor_revision INTEGER NOT NULL, partition_id TEXT NOT NULL, "
-        "outbox_id TEXT NOT NULL, predecessor_node_id TEXT NOT NULL, "
-        "logical_invocation_id TEXT NOT NULL, target TEXT NOT NULL, "
-        "envelope_hash TEXT NOT NULL, transport_state TEXT NOT NULL, "
-        "acceptance_state TEXT, effect_state TEXT, receiver_acceptance_id TEXT, "
-        "PRIMARY KEY (graph_run_id, successor_node_id, predecessor_revision, partition_id));"
-        "CREATE UNIQUE INDEX task_graph_outbox_logical "
-        "ON task_graph_outbox (logical_invocation_id);"
-        "CREATE TABLE retained_extension (value TEXT NOT NULL);"
-    )
-    connection.close()
-    assert not Path(f"{database}-wal").exists()
-
-    writer_connections: list[sqlite3.Connection] = []
-
-    def create_index_after_backup() -> None:
-        late_writer = sqlite3.connect(database)
-        writer_connections.append(late_writer)
-        late_writer.execute("CREATE INDEX preserved_note_idx ON retained_extension(value)")
-        late_writer.commit()
-
-    backup = tmp_path / "schema-race-backup.sqlite3"
-    _inject_after_backup(monkeypatch, backup=backup, after_backup=create_index_after_backup)
-    destination = tmp_path / "schema-race-destination.sqlite3"
-    try:
-        result = migrate_task_graph_outbox(source=database, backup=backup, destination=destination)
-        assert is_refusal(result)
-        assert backup.exists()
-        assert not destination.exists()
-        saved = sqlite3.connect(backup)
-        try:
-            assert (
-                saved.execute(
-                    "SELECT name FROM sqlite_master WHERE type='index' "
-                    "AND name='preserved_note_idx'"
-                ).fetchall()
-                == []
-            )
-        finally:
-            saved.close()
-        current = sqlite3.connect(database)
-        try:
-            assert current.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name='preserved_note_idx'"
-            ).fetchall() == [("preserved_note_idx",)]
-        finally:
-            current.close()
-    finally:
-        for late_writer in writer_connections:
-            late_writer.close()
 
 
 def test_crash_inside_transaction_rolls_back_terminal_and_outbox(tmp_path: Path) -> None:
