@@ -1277,22 +1277,6 @@ def test_cli_autocomplete_usage_example_runs_clean() -> None:
     assert "qmb CLI registry autocomplete ok" in completed.stdout
 
 
-def test_host_lifecycle_usage_example_runs_clean() -> None:
-    completed = subprocess.run(
-        [sys.executable, str(_QMB_ROOT / "examples" / "host_lifecycle_usage.py")],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PYTHONPATH": pythonpath()},
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert "product QMA_DAEMON_ROOT is not qma-daemon-data" in completed.stdout
-    assert (
-        "qmb host start|status|stop|configure|rotate-control|recover-control|pair ok"
-        in completed.stdout
-    )
-
-
 def test_cli_tree_usage_example_runs_clean() -> None:
     completed = subprocess.run(
         [sys.executable, str(_QMB_ROOT / "examples" / "cli_tree_usage.py")],

@@ -14,6 +14,7 @@ import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TypeVar, cast
 
 import click
@@ -68,6 +69,7 @@ from qmb.doors.cli.tree import (
     command_prerequisites,
     command_tree,
     complete_registry,
+    control_host,
     data_command_occupancy,
     invoke_analysis_project,
     invoke_analysis_rerun,
@@ -76,17 +78,6 @@ from qmb.doors.cli.tree import (
     invoke_config_compile,
     invoke_config_show,
     invoke_data,
-    invoke_host_configure_artifact_stage_max_bytes,
-    invoke_host_configure_dest_placement,
-    invoke_host_configure_pairing_ttl,
-    invoke_host_configure_source_origin,
-    invoke_host_pair,
-    invoke_host_pair_revoke,
-    invoke_host_recover_control,
-    invoke_host_rotate_control,
-    invoke_host_start,
-    invoke_host_status,
-    invoke_host_stop,
     invoke_ledger_bar,
     invoke_ledger_merge,
     invoke_library_candidates,
@@ -166,6 +157,7 @@ __all__ = [
     "command_prerequisites",
     "command_tree",
     "complete_registry",
+    "control_host",
     "data_command_occupancy",
     "invoke_analysis_project",
     "invoke_analysis_rerun",
@@ -174,17 +166,6 @@ __all__ = [
     "invoke_config_compile",
     "invoke_config_show",
     "invoke_data",
-    "invoke_host_configure_artifact_stage_max_bytes",
-    "invoke_host_configure_dest_placement",
-    "invoke_host_configure_pairing_ttl",
-    "invoke_host_configure_source_origin",
-    "invoke_host_pair",
-    "invoke_host_pair_revoke",
-    "invoke_host_recover_control",
-    "invoke_host_rotate_control",
-    "invoke_host_start",
-    "invoke_host_status",
-    "invoke_host_stop",
     "invoke_ledger_bar",
     "invoke_ledger_merge",
     "invoke_library_candidates",
@@ -1709,240 +1690,35 @@ def config_show(ctx: click.Context) -> None:
 
 @main.group("host")
 def host_group() -> None:
-    """Local daemon lifecycle over host-control (not CT-33 HostedBot)."""
+    """Start, check or stop the local qmx-control service."""
 
 
 @host_group.command("start")
+@click.option("--home", type=click.Path(path_type=Path))
+@click.option("--port", type=click.IntRange(1, 65535), default=8766, show_default=True)
+@click.option("--python", help="Python interpreter with qmx-control installed.")
 @click.pass_context
-def host_start(ctx: click.Context) -> None:
-    """Set product QMA_DAEMON_ROOT and spawn python -m qma.daemon if the lock is free."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_start(
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            spawn=payload.get("spawn"),
-            python=payload.get("python"),
-            wait_attempts=payload.get("wait_attempts"),
-            sleeper=payload.get("sleeper"),
-        ),
-    )
+def host_start(ctx: click.Context, home: Path | None, port: int, python: str | None) -> None:
+    """Start qmx-control and wait for its authenticated health check."""
+    _transport(ctx, control_host("start", home=home, port=port, python=python))
 
 
 @host_group.command("status")
+@click.option("--home", type=click.Path(path_type=Path))
+@click.option("--python", help="Python interpreter with qmx-control installed.")
 @click.pass_context
-def host_status(ctx: click.Context) -> None:
-    """Report lock, pid, bind, operator-established, TTL, and record ids."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_status(
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
+def host_status(ctx: click.Context, home: Path | None, python: str | None) -> None:
+    """Check the recorded qmx-control process."""
+    _transport(ctx, control_host("status", home=home, python=python))
 
 
 @host_group.command("stop")
+@click.option("--home", type=click.Path(path_type=Path))
+@click.option("--python", help="Python interpreter with qmx-control installed.")
 @click.pass_context
-def host_stop(ctx: click.Context) -> None:
-    """Stop the local daemon and release .daemon_writer. Does not cancel QMN."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_stop(
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-            wait_attempts=payload.get("wait_attempts"),
-            sleeper=payload.get("sleeper"),
-            owns_root=payload.get("owns_root"),
-            signal_stop=payload.get("signal_stop"),
-        ),
-    )
-
-
-@host_group.group("configure")
-def host_configure() -> None:
-    """Host-control configuration. pairing-ttl is the sole TTL writer."""
-
-
-@host_configure.command("pairing-ttl")
-@click.argument("duration")
-@click.pass_context
-def host_configure_pairing_ttl(ctx: click.Context, duration: str) -> None:
-    """Write registry:pairing.session_ttl. Operator supplies the duration."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_configure_pairing_ttl(
-            duration,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_configure.command("artifact-stage-max-bytes")
-@click.argument("max_bytes", type=click.IntRange(min=0))
-@click.pass_context
-def host_configure_artifact_stage_max_bytes(ctx: click.Context, max_bytes: int) -> None:
-    """Set registry:artifact.stage_max_bytes. Operator supplies the byte count."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_configure_artifact_stage_max_bytes(
-            max_bytes,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_configure.command("source-origin")
-@click.argument("origin")
-@click.pass_context
-def host_configure_source_origin(ctx: click.Context, origin: str) -> None:
-    """Record the TLS origin dest will pull. Loopback/http refuse."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_configure_source_origin(
-            origin,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_configure.command("dest-placement")
-@click.option("--instance-id", "instance_id", required=True)
-@click.option("--environment-id", "environment_id", required=True)
-@click.option("--placement-revision", "placement_revision", required=True)
-@click.option("--credential-ref", "credential_ref", required=True)
-@click.option("--reachable-host", "reachable_hosts", multiple=True)
-@click.option("--same-daemon", "same_daemon", is_flag=True, default=False)
-@click.pass_context
-def host_configure_dest_placement(
-    ctx: click.Context,
-    instance_id: str,
-    environment_id: str,
-    placement_revision: str,
-    credential_ref: str,
-    reachable_hosts: tuple[str, ...],
-    same_daemon: bool,
-) -> None:
-    """Register dest placement. Host-control same-daemon is operator authority."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_configure_dest_placement(
-            instance_id=instance_id,
-            environment_id=environment_id,
-            placement_revision=placement_revision,
-            credential_ref=credential_ref,
-            reachable_hosts=reachable_hosts,
-            same_daemon=same_daemon,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_group.command("rotate-control")
-@click.pass_context
-def host_rotate_control(ctx: click.Context) -> None:
-    """Remint host_control while presenting the current token. Does not recover."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_rotate_control(
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_group.command("recover-control")
-@click.pass_context
-def host_recover_control(ctx: click.Context) -> None:
-    """Remint host_control on a stopped root without the lost token. Does not bind 8765."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_recover_control(
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            spawn=payload.get("spawn"),
-            python=payload.get("python"),
-            wait_attempts=payload.get("wait_attempts"),
-            sleeper=payload.get("sleeper"),
-            owns_root=payload.get("owns_root"),
-        ),
-    )
-
-
-class HostPairGroup(click.Group):
-    """``qmb host pair CODE`` confirms; ``qmb host pair revoke`` is the subcommand."""
-
-    def resolve_command(
-        self, ctx: click.Context, args: list[str]
-    ) -> tuple[str | None, click.Command | None, list[str]]:
-        if args:
-            name = args[0]
-            if name not in self.commands and not name.startswith("-"):
-                confirm = self.get_command(ctx, "confirm")
-                if confirm is not None:
-                    return "confirm", confirm, list(args)
-        return super().resolve_command(ctx, args)
-
-
-@host_group.group("pair", cls=HostPairGroup)
-def host_pair() -> None:
-    """Confirm a pending code, or revoke --origin/--session over host-control."""
-
-
-@host_pair.command("confirm", hidden=True)
-@click.argument("code")
-@click.pass_context
-def host_pair_confirm(ctx: click.Context, code: str) -> None:
-    """Confirm a pending pairing code over host-control. Does not issue a proof."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_pair(
-            code,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
-
-
-@host_pair.command("revoke")
-@click.option("--origin", default=None, help="Static Origin to barrier-revoke.")
-@click.option("--session", default=None, help="pairing_record_id to revoke only.")
-@click.pass_context
-def host_pair_revoke(ctx: click.Context, origin: str | None, session: str | None) -> None:
-    """Origin-revoke is a journal_seq barrier; --session is that record only."""
-    payload = _payload(ctx)
-    _transport(
-        ctx,
-        invoke_host_pair_revoke(
-            origin=origin,
-            session=session,
-            root=payload.get("root"),
-            environ=payload.get("environ"),
-            transport=payload.get("transport"),
-        ),
-    )
+def host_stop(ctx: click.Context, home: Path | None, python: str | None) -> None:
+    """Stop the recorded local qmx-control process tree."""
+    _transport(ctx, control_host("stop", home=home, python=python))
 
 
 def _payload(ctx: click.Context, **parsed: object) -> dict[str, object]:
@@ -2031,14 +1807,6 @@ def _format_ok(value: object) -> str:
             "host.start",
             "host.status",
             "host.stop",
-            "host.configure.pairing-ttl",
-            "host.configure.artifact-stage-max-bytes",
-            "host.configure.source-origin",
-            "host.configure.dest-placement",
-            "host.rotate-control",
-            "host.recover-control",
-            "host.pair",
-            "host.pair.revoke",
         }:
             return json.dumps(_jsonable_payload(mapping), ensure_ascii=False)
         # Story 18.3/18.4: list/catalog/verify payloads are machine-readable JSON.

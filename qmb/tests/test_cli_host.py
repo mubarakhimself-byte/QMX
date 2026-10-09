@@ -13,26 +13,6 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
-from qmb.doors.cli import (
-    COMMAND_GROUPS,
-    HOST_COMMANDS,
-    HOST_CONFIGURE_COMMANDS,
-    HOST_PAIR_COMMANDS,
-    command_tree,
-    invoke_host_configure_artifact_stage_max_bytes,
-    invoke_host_configure_dest_placement,
-    invoke_host_configure_pairing_ttl,
-    invoke_host_configure_source_origin,
-    invoke_host_pair,
-    invoke_host_pair_revoke,
-    invoke_host_recover_control,
-    invoke_host_rotate_control,
-    invoke_host_start,
-    invoke_host_status,
-    invoke_host_stop,
-    main,
-)
 from qmb.doors.cli import host as host_module
 from qmb.doors.cli.host import (
     BROWSER_SPAWNS_PYTHON,
@@ -43,7 +23,6 @@ from qmb.doors.cli.host import (
     HOST_CONTROL_BIND_NAME,
     HOST_CONTROL_FILE,
     INSPECT_CWD_RELATIVE_ROOT,
-    INSPECT_SHA_COMMAND_GROUPS,
     LOCAL_OPERATOR_BOOTSTRAP_IS_THIS_STORY,
     PAIRING_SESSION_TTL_REGISTRY_KEY,
     QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA,
@@ -66,6 +45,15 @@ from qmb.doors.cli.host import (
     claim_recover_control_existed_at_inspect_sha,
     claim_rotate_control_existed_at_inspect_sha,
     claim_types_absent_at_inspect_sha,
+    invoke_host_configure_artifact_stage_max_bytes,
+    invoke_host_configure_pairing_ttl,
+    invoke_host_pair,
+    invoke_host_pair_revoke,
+    invoke_host_recover_control,
+    invoke_host_rotate_control,
+    invoke_host_start,
+    invoke_host_status,
+    invoke_host_stop,
     product_daemon_root,
     redact_host_surface,
 )
@@ -280,52 +268,6 @@ def test_product_root_is_not_cwd_relative_qma_daemon_data() -> None:
     assert INSPECT_CWD_RELATIVE_ROOT not in product.parts
 
 
-def test_command_tree_named_adds_host_start_status_stop_configure() -> None:
-    assert "host" not in INSPECT_SHA_COMMAND_GROUPS
-    assert COMMAND_GROUPS[-1] == "host"
-    assert (
-        command_tree()["host"]
-        == HOST_COMMANDS
-        == (
-            "start",
-            "status",
-            "stop",
-            "configure",
-            "rotate-control",
-            "recover-control",
-            "pair",
-        )
-    )
-    assert HOST_CONFIGURE_COMMANDS == (
-        "pairing-ttl",
-        "artifact-stage-max-bytes",
-        "source-origin",
-        "dest-placement",
-    )
-    assert HOST_PAIR_COMMANDS == ("revoke",)
-    assert "pair" in HOST_COMMANDS
-    runner = CliRunner()
-    helped = runner.invoke(main, ["host", "--help"])
-    assert helped.exit_code == 0, helped.output
-    assert "start" in helped.output
-    assert "status" in helped.output
-    assert "stop" in helped.output
-    assert "configure" in helped.output
-    assert "rotate-control" in helped.output
-    assert "recover-control" in helped.output
-    assert "pair" in helped.output
-    missing = runner.invoke(main, ["host", "pair"])
-    assert missing.exit_code != 0
-    configure_help = runner.invoke(main, ["host", "configure", "--help"])
-    assert configure_help.exit_code == 0, configure_help.output
-    assert "pairing-ttl" in configure_help.output
-    assert "source-origin" in configure_help.output
-    assert "dest-placement" in configure_help.output
-    pair_help = runner.invoke(main, ["host", "pair", "--help"])
-    assert pair_help.exit_code == 0, pair_help.output
-    assert "revoke" in pair_help.output
-
-
 def test_start_spawns_when_lock_free(tmp_path: Path, start_control: _HostControlServer) -> None:
     seen: list[tuple[tuple[str, ...], str]] = []
 
@@ -490,60 +432,6 @@ def test_status_does_not_hide_unreachable_socket_for_live_writer(tmp_path: Path)
     assert "host-control call failed" in str(refused.context.get("reason", ""))
 
 
-def test_click_host_start_status_stop(tmp_path: Path, start_control: _HostControlServer) -> None:
-    def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
-        _ = argv
-        assert env["QMA_DAEMON_ROOT"] == str(tmp_path)
-        _write_lock(root, os.getpid())
-        _write_token(root)
-        _write_bind(root, "127.0.0.1", start_control.port)
-        return os.getpid()
-
-    runner = CliRunner()
-    started = runner.invoke(
-        main,
-        ["host", "start"],
-        obj={"root": tmp_path, "spawn": spawn, "wait_attempts": 1, "sleeper": _no_sleep},
-    )
-    assert started.exit_code == 0, started.output
-    payload = json.loads(started.stdout)
-    assert payload["state"] == "started"
-    assert _TOKEN not in started.output
-
-    def transport(verb: str, token: str, *, root: Path) -> Mapping[str, object]:
-        assert token == _TOKEN
-        if verb == "status":
-            return {
-                "ok": True,
-                "status": {
-                    "lock": "held",
-                    "pid": 1,
-                    "bind": "127.0.0.1:8765",
-                    "operator_established": False,
-                    "ttl": "unset",
-                    "pending_record_ids": [],
-                    "bound_record_ids": [],
-                },
-            }
-        (root / DAEMON_LOCK_NAME).unlink(missing_ok=True)
-        return {"ok": True, "stopped": True}
-
-    status = runner.invoke(
-        main,
-        ["host", "status"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert status.exit_code == 0, status.output
-    assert "held" in status.output
-    stopped = runner.invoke(
-        main,
-        ["host", "stop"],
-        obj={"root": tmp_path, "transport": transport, "wait_attempts": 1},
-    )
-    assert stopped.exit_code == 0, stopped.output
-    assert json.loads(stopped.stdout)["state"] == "stopped"
-
-
 def test_honesty_qmb_host_absent_at_inspect_and_types_present() -> None:
     assert QMB_HOST_EXISTED_AT_INSPECT_SHA is False
     assert QMB_HOST_CONFIGURE_EXISTED_AT_INSPECT_SHA is False
@@ -683,259 +571,6 @@ def test_host_pair_revoke_requires_host_control(tmp_path: Path) -> None:
     assert refused.context["field"] == "host_control"
 
 
-def test_click_host_pair_code_and_revoke(tmp_path: Path) -> None:
-    _write_token(tmp_path)
-    seen: list[tuple[str, Mapping[str, object] | None]] = []
-
-    def transport(
-        verb: str,
-        token: str,
-        *,
-        root: Path,
-        extra: Mapping[str, object] | None = None,
-    ) -> Mapping[str, object]:
-        _ = root
-        assert token == _TOKEN
-        seen.append((verb, extra))
-        if verb == "pair":
-            return {
-                "ok": True,
-                "paired": {"pairing_record_id": "pr_click", "confirmed": True},
-            }
-        assert verb == "pair-revoke"
-        return {
-            "ok": True,
-            "revoked": {
-                "scope": "origin",
-                "origin": extra["origin"] if extra is not None else None,
-                "journal_seq": 9,
-                "barrier": "journal_seq",
-                "noop": False,
-                "revoked_record_ids": ["pr_click"],
-            },
-        }
-
-    runner = CliRunner()
-    paired = runner.invoke(
-        main,
-        ["host", "pair", "pending-code"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert paired.exit_code == 0, paired.output
-    pair_payload = json.loads(paired.stdout)
-    assert pair_payload["verb"] == "host.pair"
-    assert pair_payload["confirmed"] is True
-    revoked = runner.invoke(
-        main,
-        ["host", "pair", "revoke", "--origin", "http://127.0.0.1:5173"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert revoked.exit_code == 0, revoked.output
-    revoke_payload = json.loads(revoked.stdout)
-    assert revoke_payload["verb"] == "host.pair.revoke"
-    assert revoke_payload["journal_seq"] == 9
-    assert revoke_payload["barrier"] == "journal_seq"
-    assert seen[0][0] == "pair"
-    assert seen[1][0] == "pair-revoke"
-
-
-def test_click_host_configure_pairing_ttl(tmp_path: Path) -> None:
-    _write_token(tmp_path)
-
-    def transport(
-        verb: str,
-        token: str,
-        *,
-        root: Path,
-        extra: Mapping[str, object] | None = None,
-    ) -> Mapping[str, object]:
-        _ = root
-        assert token == _TOKEN
-        assert verb == "configure"
-        assert extra is not None
-        assert extra["target"] == "pairing-ttl"
-        assert extra["duration"] == "PT15M"
-        return {
-            "ok": True,
-            "configured": {
-                "registry_key": PAIRING_SESSION_TTL_REGISTRY_KEY,
-                "ttl": "set",
-                "writer": "host.configure.pairing-ttl",
-            },
-        }
-
-    runner = CliRunner()
-    configured = runner.invoke(
-        main,
-        ["host", "configure", "pairing-ttl", "PT15M"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert configured.exit_code == 0, configured.output
-    payload = json.loads(configured.stdout)
-    assert payload["registry_key"] == PAIRING_SESSION_TTL_REGISTRY_KEY
-    assert payload["ttl"] == "set"
-
-
-def test_click_host_configure_source_origin(tmp_path: Path) -> None:
-    _write_token(tmp_path)
-
-    def transport(
-        verb: str,
-        token: str,
-        *,
-        root: Path,
-        extra: Mapping[str, object] | None = None,
-    ) -> Mapping[str, object]:
-        _ = root
-        assert token == _TOKEN
-        assert verb == "configure"
-        assert extra is not None
-        assert extra["target"] == "source-origin"
-        assert extra["origin"] == "https://artifacts.example:8443"
-        return {
-            "ok": True,
-            "configured": {
-                "source_origin": "https://artifacts.example:8443",
-                "writer": "host.configure.source-origin",
-            },
-        }
-
-    runner = CliRunner()
-    configured = runner.invoke(
-        main,
-        ["host", "configure", "source-origin", "https://artifacts.example:8443"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert configured.exit_code == 0, configured.output
-    payload = json.loads(configured.stdout)
-    assert payload["verb"] == "host.configure.source-origin"
-    assert payload["source_origin"] == "https://artifacts.example:8443"
-    missing = invoke_host_configure_source_origin("", root=tmp_path)
-    assert is_refusal(missing)
-    assert missing.context["field"] == "origin"
-
-
-def test_click_host_configure_dest_placement(tmp_path: Path) -> None:
-    _write_token(tmp_path)
-    dest_cred = "cred://compute/worker-a"
-
-    def transport(
-        verb: str,
-        token: str,
-        *,
-        root: Path,
-        extra: Mapping[str, object] | None = None,
-    ) -> Mapping[str, object]:
-        _ = root
-        assert token == _TOKEN
-        assert verb == "configure"
-        assert extra is not None
-        assert extra["target"] == "dest-placement"
-        assert extra["instance_id"] == "inst-local"
-        assert extra["same_daemon"] is True
-        assert extra["credential_ref"] == dest_cred
-        return {
-            "ok": True,
-            "configured": {
-                "instance_id": "inst-local",
-                "environment_id": "env-local",
-                "placement_revision": "rev-0",
-                "same_daemon": True,
-                "writer": "host.configure.dest-placement",
-            },
-        }
-
-    runner = CliRunner()
-    configured = runner.invoke(
-        main,
-        [
-            "host",
-            "configure",
-            "dest-placement",
-            "--instance-id",
-            "inst-local",
-            "--environment-id",
-            "env-local",
-            "--placement-revision",
-            "rev-0",
-            "--credential-ref",
-            dest_cred,
-            "--same-daemon",
-        ],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert configured.exit_code == 0, configured.output
-    payload = json.loads(configured.stdout)
-    assert payload["verb"] == "host.configure.dest-placement"
-    assert payload["same_daemon"] is True
-    missing = invoke_host_configure_dest_placement(
-        instance_id="",
-        environment_id="env-local",
-        placement_revision="rev-0",
-        credential_ref=dest_cred,
-        root=tmp_path,
-    )
-    assert is_refusal(missing)
-    assert missing.context["field"] == "dest-placement"
-
-
-def test_click_remote_dest_placement_preserves_repeated_reachable_hosts(
-    tmp_path: Path,
-) -> None:
-    _write_token(tmp_path)
-    expected_hosts = ["artifact-a.example", "artifact-b.example:8443"]
-    seen: dict[str, object] = {}
-
-    def transport(
-        verb: str,
-        token: str,
-        *,
-        root: Path,
-        extra: Mapping[str, object] | None = None,
-    ) -> Mapping[str, object]:
-        assert verb == "configure"
-        assert token == _TOKEN
-        assert root == tmp_path
-        assert extra is not None
-        seen.update(extra)
-        return {
-            "ok": True,
-            "configured": {
-                "instance_id": "inst-remote",
-                "environment_id": "env-remote",
-                "placement_revision": "rev-1",
-                "same_daemon": False,
-                "writer": "host.configure.dest-placement",
-            },
-        }
-
-    configured = CliRunner().invoke(
-        main,
-        [
-            "host",
-            "configure",
-            "dest-placement",
-            "--instance-id",
-            "inst-remote",
-            "--environment-id",
-            "env-remote",
-            "--placement-revision",
-            "rev-1",
-            "--credential-ref",
-            "cred://compute/worker-a",
-            "--reachable-host",
-            expected_hosts[0],
-            "--reachable-host",
-            expected_hosts[1],
-        ],
-        obj={"root": tmp_path, "transport": transport},
-    )
-
-    assert configured.exit_code == 0, configured.output
-    assert seen["reachable_hosts"] == expected_hosts
-    assert seen["same_daemon"] is False
-
-
 def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None:
     server = _HostControlServer(_TOKEN, root=tmp_path)
     server.start()
@@ -965,37 +600,6 @@ def test_rotate_control_while_held_and_old_token_refuses(tmp_path: Path) -> None
     finally:
         server.close()
         server.join(timeout=2)
-
-
-def test_click_host_rotate_control(tmp_path: Path) -> None:
-    _write_token(tmp_path)
-
-    def transport(verb: str, token: str, *, root: Path) -> Mapping[str, object]:
-        _ = root
-        assert token == _TOKEN
-        assert verb == "rotate-control"
-        return {
-            "ok": True,
-            "rotated": {
-                "rotated": True,
-                "local_operator": "unchanged",
-                "writer": "host.rotate-control",
-                "host_control": "should-redact",
-            },
-        }
-
-    runner = CliRunner()
-    rotated = runner.invoke(
-        main,
-        ["host", "rotate-control"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert rotated.exit_code == 0, rotated.output
-    payload = json.loads(rotated.stdout)
-    assert payload["rotated"] is True
-    assert payload["local_operator"] == "unchanged"
-    assert "should-redact" not in rotated.output
-    assert _TOKEN not in rotated.output
 
 
 @pytest.mark.parametrize("verb", ["status", "stop", "configure", "rotate-control"])
@@ -1284,105 +888,12 @@ def test_t_h_03_start_without_recover_does_not_remint(tmp_path: Path) -> None:
     assert not (tmp_path / HOST_CONTROL_FILE).exists()
 
 
-def test_click_host_recover_control(tmp_path: Path) -> None:
-    runner = CliRunner()
-    recovered = runner.invoke(
-        main,
-        ["host", "recover-control"],
-        obj={
-            "root": tmp_path,
-            "spawn": _recover_spawn,
-            "wait_attempts": 1,
-            "sleeper": _no_sleep,
-            "owns_root": True,
-        },
-    )
-    assert recovered.exit_code == 0, recovered.output
-    payload = json.loads(recovered.stdout)
-    assert payload["recovered"] is True
-    assert payload["bound_8765"] is False
-    assert "recovered-" + _TOKEN not in recovered.output
-
-
-@pytest.mark.parametrize("explicit", [False, True])
-def test_cli_host_start_resolves_environment_root_before_spawn(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    explicit: bool,
-    start_control: _HostControlServer,
-) -> None:
-    environment_root = tmp_path / "environment-root"
-    explicit_root = tmp_path / "explicit-root"
-    environment_root.mkdir()
-    explicit_root.mkdir()
-    monkeypatch.setenv("QMA_DAEMON_ROOT", str(environment_root))
-    target = explicit_root if explicit else environment_root
-    seen: list[Path] = []
-
-    def spawn(argv: tuple[str, ...], *, env: Mapping[str, str], root: Path) -> int:
-        assert env["QMA_DAEMON_ROOT"] == str(target)
-        seen.append(root)
-        _write_lock(root, os.getpid())
-        _write_token(root)
-        _write_bind(root, "127.0.0.1", start_control.port)
-        return os.getpid()
-
-    monkeypatch.setattr(host_module, "_default_spawn", spawn)
-    result = CliRunner().invoke(
-        main,
-        ["host", "start"],
-        obj={"wait_attempts": 1, "sleeper": _no_sleep, **({"root": target} if explicit else {})},
-    )
-    assert result.exit_code == 0, result.output
-    assert seen == [target]
-    assert json.loads(result.output)["root"] == str(target)
-
-
 @pytest.mark.parametrize("value", [True, -1, 1.5, "16", None])
 def test_stage_cap_wrapper_refuses_invalid_without_transport(value: object) -> None:
     def forbidden(*args: object, **kwargs: object) -> None:
         pytest.fail("invalid cap reached transport")
 
     assert is_refusal(invoke_host_configure_artifact_stage_max_bytes(value, transport=forbidden))
-
-
-def test_stage_cap_cli_sends_integer_and_returns_receipt(tmp_path: Path) -> None:
-    (tmp_path / "host_control").write_text(_TOKEN + "\n", encoding="utf-8")
-    calls: list[Mapping[str, object]] = []
-
-    def transport(
-        verb: str, token: str, *, root: Path, extra: Mapping[str, object]
-    ) -> Mapping[str, object]:
-        assert verb == "configure" and token == _TOKEN and root == tmp_path
-        calls.append(extra)
-        return {
-            "ok": True,
-            "configured": {
-                "registry_key": "registry:artifact.stage_max_bytes",
-                "max_bytes": 16,
-                "journal_seq": 42,
-                "writer": "host.configure.artifact-stage-max-bytes",
-            },
-        }
-
-    runner = CliRunner()
-    result = runner.invoke(
-        main,
-        ["host", "configure", "artifact-stage-max-bytes", "16"],
-        obj={"root": tmp_path, "transport": transport},
-    )
-    assert result.exit_code == 0, result.output
-    assert calls == [{"target": "artifact-stage-max-bytes", "max_bytes": 16}]
-    assert json.loads(result.stdout)["journal_seq"] == 42
-    assert _TOKEN not in result.output
-    for invalid_value in ["true", "-1", "1.5", "abc"]:
-        refused = runner.invoke(
-            main,
-            ["host", "configure", "artifact-stage-max-bytes", invalid_value],
-            obj={"root": tmp_path, "transport": transport},
-        )
-        assert refused.exit_code != 0
-    assert len(calls) == 1
 
 
 @pytest.fixture
