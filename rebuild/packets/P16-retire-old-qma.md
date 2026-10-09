@@ -6,7 +6,22 @@ Delete the parts of `qma-daemon`, `qma-core` and `qma-wire` that the new package
 ## Read first
 The P05 survival map (verdict "replace" or "delete"), updated with what P06–P15 actually built.
 
-## Steps
+## Blast radius (hard limits)
+- **In scope:** only `qmx-agents/packages/qma-daemon`, `qma-core`, `qma-wire` (the old QMA runtime), plus moving `qmx-apps/` and `qmx-control/` under `qmx-agents/packages/`.
+- **Out of scope:** `packages/qmf-*`, `qml/`, `qmb/`, `qmn/` (including MIS), `extensions/`, `apps/`, `docs/`. Never delete anything there. You may only change an import line where it points at a deleted QMA module, and only to point it at its new owner.
+
+## Two phases (separate PRs)
+- **P16a, plan only.** Write `rebuild/reports/p16-deletion-plan.md`, with one row per module to delete:
+  - path and LOC
+  - every remaining caller anywhere in the repo, including QMB's `qmb host` CLI, tests, entry points and string/dynamic references
+  - what replaces it (the new package and function)
+  - the risk if it's wrong
+  - an explicit "keep" list with reasons
+
+  Merge the report and **stop**. Claude reviews it before anything is deleted.
+- **P16b, delete.** Only after the plan is approved: delete exactly what the approved plan lists, following the steps below.
+
+## Steps (P16b)
 1. For each module marked replace or delete, confirm it has zero production callers outside the old daemon. Move any remaining callers (QMB, QMN, UI) onto the new packages first, one PR per caller if large.
 2. Delete in slices, one PR per area:
    - task graph and canonical join
