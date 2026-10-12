@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-10-12 by `tracker/qma-v2/BACKLOG.md`. Kept for history.
+
 # Backlog (outside the agent-system map)
 
 These items are deliberately **not** decision tickets on the map. Some are other efforts. Some are follow-ups that start once the map's decisions are made.
