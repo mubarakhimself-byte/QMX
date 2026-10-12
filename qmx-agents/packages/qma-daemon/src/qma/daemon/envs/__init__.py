@@ -29,7 +29,6 @@ from qma.core.ports.execution import (
     WorkerImageManifest,
 )
 from qma.core.vocabulary.enums import EnvironmentLifecycle
-from qma.daemon.envs.boundary import DeploymentBoundary, RemoteDeployment
 from qma.daemon.envs.registry import EnvironmentLease, ExecutionEnvironmentRegistry
 from qma.daemon.envs.router import ComputeRouter, PlacementDecision, QueuedPlacement
 
@@ -42,7 +41,6 @@ __all__ = [
     "ComputeRequirement",
     "ComputeRouter",
     "ComputerUseProfile",
-    "DeploymentBoundary",
     "EnvironmentLease",
     "EnvironmentLifecycle",
     "EnvironmentMount",
@@ -51,7 +49,6 @@ __all__ = [
     "GpuRequirement",
     "PlacementDecision",
     "QueuedPlacement",
-    "RemoteDeployment",
     "WorkerImageManifest",
     "environment_isolation",
     "match_compute_requirement",

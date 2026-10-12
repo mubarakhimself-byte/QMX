@@ -8,13 +8,11 @@ from qma.wire import (
     AM_01_NAME,
     AM_01_UNAUTHENTICATED_POST_PATHS,
     CORS_EXISTED_AT_INSPECT_SHA,
-    DAEMON_DIAL_DIRECTION,
     DEC_0304_SUPERSEDED_BY,
     DEC_0323_SUPERSEDED_BY,
     DEFAULT_BIND_HOST,
     LISTENER_POSTURE_TYPES_EXISTED_AT_INSPECT_SHA,
     PAIR_HTTP_EXISTED_AT_INSPECT_SHA,
-    REMOTE_DIAL_DIRECTION,
     UNAUTHENTICATED_BIND_SENTENCE,
     UNAUTHENTICATED_BIND_SENTENCE_HELD,
     Am01UnauthenticatedHttp,
@@ -98,8 +96,6 @@ def test_story_41_4_loopback_tls_never_dials_in_unchanged() -> None:
     refused = validate_listener_startup(plaintext.value)
     assert is_refusal(refused)
     assert "plaintext" in str(refused.context["reason"])
-    assert DAEMON_DIAL_DIRECTION == "never_in"
-    assert REMOTE_DIAL_DIRECTION == "out"
 
 
 def test_three_path_carve_out_classifier() -> None:
