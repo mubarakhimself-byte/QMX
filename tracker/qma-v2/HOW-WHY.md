@@ -647,3 +647,168 @@ Written 2026-10-12. Inputs: `tracker/qma-v2/USER-JOURNEYS.md` (21 journeys, 25 s
 **G14. Sticky approvals have three hard limits.** An `allow_always` decision (32 B5) never covers an always-ask action (FR-105), a deny-listed action (FR-108) or anything touching money (C-11). Research 32 left this as an open question. The PRD already answers it.
 
 **G15. No credential write route exists.** The only `keyring.set_password` call writes the control token (`ctl/server.py:89`). J20's secure field needs a new REST-only route that writes a `qmx/*` entry and returns only the reference. `settings_put` keeps refusing secret-named fields (F16).
+
+
+## Delta pass 3 (architecture revision 2) and fix verification
+
+Written 2026-10-12. Input: `ARCHITECTURE.md` revision 2 (commit 32806d83; `git diff 00a1d1b5 32806d83`), its §10 log, `ARCHITECTURE-CHECK.md`, `reviews/review-opus.md`, `reviews/review-sonnet.md`. Code read with `git show` on `origin/rebuild/base` @ 9ab4c884 (PR #69). Since delta 2's a82f5897 the only code change is the deletion of `qma-wire`'s copilot-profile DTO (4 files, -260 lines), so every earlier citation still holds. Same method as passes 1 and 2: one agent, no sub-agents, planning only. `l.N` is an `ARCHITECTURE.md` line. Paths use the pass-1 keys (`ctl/`, `apps/`, `agents/`, `tools/`, `remote/`). Why sources: git log, `gh pr view` bodies (#32, #42, #43, #46, #49), `rebuild/DESIGN.md`, `rebuild/packets/P08, P11, P22`. No issue, chat, observability or analytics MCP is connected, and the GitHub MCP failed to connect, so `gh` was used.
+
+### E0. Summary in plain words
+
+1. Revision 2 fixes most of what the three reviews asked for, on paper. Of 60 BLOCKER and MAJOR findings checked, 49 are VERIFIED, 11 are WEAKENED, and none is NOT FIXED.
+2. The biggest hole the reviews missed is in today's code. The control token is also the HMAC key that signs money-app publishes (`ctl/server.py:147`; PR #42 body). Any agent that reads `qmx/control-token` can forge the operator's signature without touching the sign door. `PrincipalGate` alone does not close this.
+3. Example apps already ask for that token as an app secret (`examples/apps/macro-daily-bias/app.toml`, `QMX_DATA_TOKEN = "qmx/control-token"`), and the supervisor hands it over (`apps/supervisor.py:411-417`).
+4. The operator secret is "printed once into the launch window", but `qmx-control start` sends stdout to `control.log` (`ctl/__main__.py:57-73`) and QMB's `control_host` captures it (`qmb/src/qmb/doors/cli/host.py:1821-1828`). Neither launch path has a window.
+5. The protected settings list misses four live sections: `backup`, `brokers`, `mcp_servers` and `providers` (`ctl/service.py:40-42`). An agent could still repoint the weekly backup or edit broker connections.
+6. Settings live in `settings.toml`, not a table (`ctl/service.py:200-294`; DESIGN §7.6b), and `qmx-broker` reads that file directly (`qmx_broker/service.py:121`). Revision 2 puts `settings` in `control.db` (l.598), which breaks both.
+7. Packet 0's "audit `qmx-tools` for `control.db` access" already has its answer. `DomainContext` builds a full `ControlService` inside the FastMCP child and writes events through it (`tools/service.py:126-136`). With the new OS lock that child either fails to start or becomes a second writer.
+8. On Windows the Claude SDK spawns the CLI itself, and its `user=` option is POSIX-only (`claude_agent_sdk` 0.2.163 `subprocess_cli.py:873-881`). Running Claude as `qmx-agent` (Q10) inside a host Job Object needs a custom `Transport` or a `cli_path` shim. Neither is named, and P5 does not probe it.
+9. Many new elements fit the code as it stands. The remote lane already resolves keys at launch and passes them to the provider (`remote/runs.py:104-131`). Modal and E2B already get a TTL from `Resources.timeout` (`remote/models.py:48`). `ClaudeSDKClient` accepts a custom transport, the clean home for `ClaudeReplayAdapter`.
+10. GitHub Actions is already enabled on this public repo and all six workflows are `active`, yet the repo has 0 runs (measured with `gh api` in this pass). Homework item 1 will pass and unblock nothing.
+
+### E1. Touchpoints
+
+Verdict key. **Fits** means the element lands as written. **Seam** means it fits once one named adapter or change is added. **Collides** means the element as written contradicts code or a recorded rule.
+
+| # | New or changed element | Existing code it touches | Verdict | What is needed |
+|---|---|---|---|---|
+| T1 | `PrincipalGate` replaces `BearerGate` (l.584) | `ctl/server.py:93-117` (`BearerGate`), `:178-182` (`authenticate`), `:206-213` (every row gets the same dependency), `:238` (middleware); `ctl/__main__.py:38`, `:83`, `:118` (start and status call `/api/health` with the token); `ctl/node.py:153` (T2 per-node token) | Seam | The swap is local to `server.py`. `/api/health` must stay callable by the launcher, so make it pid-only and token-free. Say what the T2 node token resolves to |
+| T2 | Operator credential, per launch, "printed once into the launch window" (l.580) | `ctl/__main__.py:57-73` (`start` sends stdout and stderr to `control.log`, `CREATE_NO_WINDOW`); `qmb/src/qmb/doors/cli/host.py:1799-1828` (`control_host` captures output) | Collides | No launch path has a window. Printing into `control.log` puts the secret in a file every same-user process reads. Name the hand-off |
+| T3 | Operator secret vs the road signing key | `ctl/server.py:146-147` (`road.signing_key(token)`); `apps/road/__init__.py:29-30`, `:152-175`, `:237-247` (HMAC over app, hash and action) | Collides | Today the signing key is the vault token. Revision 2 never says what it becomes. It must become the operator secret, and `qmx/control-token` must leave the laptop's Credential Manager |
+| T4 | "Optionally DPAPI-wrapped for the UI lane" (l.580) | none | Collides with its own goal | DPAPI's CurrentUser scope decrypts for any process of the same user, so it is no barrier before Q10 (platform fact) |
+| T5 | Agent token "passed only in the session's MCP server config" (l.581) | `ctl/server.py:120-129` (`create_mcp`: "in-process and stdio callers are trusted"); revision 2's Claude `mcp_servers` holds only the in-process `qmx` SDK server (l.318) | Seam | Name the MCP server that carries the agent token. The in-process SDK server and the OpenAI in-process tools never present a token, so it matters only for HTTP callers |
+| T6 | App token minted at app start (l.582) | `apps/supervisor.py:411-418` (every manifest secret is read from the vault by `qmx/*` label); `examples/apps/macro-daily-bias/app.toml`, `examples/apps/mql5-articles/app.toml` (both request `qmx/control-token`) | Seam | The per-app token needs an injection path that is not a vault label, and the supervisor must refuse `qmx/control-token` in any manifest |
+| T7 | Operator-only `settings_put_protected` for `approvals, deny, accounts, seats, budgets, remote` (l.584) | `ctl/service.py:40-42` (sections `providers, mcp_servers, budgets, memory_provider, backup, brokers, remote`), `:220-294` (`settings_put` validates `remote`, `mcp_servers`, `backup`, `brokers`); `ctl/server.py:74-75` | Collides | `backup` (destination repo), `brokers` (accounts and connections), `mcp_servers` and `providers` stay agent-writable. §3.2 keys say `budget.*` and `seat.*`, while the protected list says `budgets` and `seats` |
+| T8 | Settings as a `control.db` table (l.598; migration 001 at l.769) | `ctl/service.py:200-294` (TOML file, atomic replace); `qmx_broker/service.py:121` (reads `brokers` from the TOML); `ctl/backup.py:113` (backs up `settings.toml`) | Collides | Keep `settings.toml` with the host as its one writer, or move all three readers in the same packet |
+| T9 | `sessions_append` refuses `permission`, `needs_you`, `user` from agents (l.581) | `ctl/service.py:324-335` (no caller identity); `ctl/server.py:123-128`, `:206-213` (rows bound straight to service methods) | Seam | The check needs the principal inside the service call. Name the plumbing for both doors (a FastAPI dependency and the FastMCP request context) |
+| T10 | Package `qma2`, dist `qma-v2`; `qma` stays a namespace (l.33, l.667) | `qmx-agents/pyproject.toml` workspace members (`qma-core`, `qma-wire`, `qma-daemon` still listed); `qmb/src/qmb/doors/cli/host.py:104` (`DAEMON_SPAWN_MODULE = "qma.daemon"`); PRs #58 to #70 (P16c in flight) | Fits | No `qma2` exists anywhere. `import-linter` is in no lockfile, so packet 0 adds it to the dev group. Whether import-linter can forbid a PEP 420 namespace root is unverified (guess) |
+| T11 | One writer thread per file, `SAVEPOINT` per `Write`, group commit (l.250-264) | `ctl/service.py:105` (RLock), `:152-154` (`_connect`, 22 call sites), `:118-149` (DDL in the constructor); `ctl/runs.py` (`RunIndex.record`) | Seam | Every `ControlService` method is sync and runs in FastAPI's thread pool. `Store` offers only `async def write`. Add a blocking submit for thread callers |
+| T12 | OS file lock for the process lifetime (l.262, l.610) | `tools/service.py:126-128` (`DomainContext` builds `ControlService(self.root)` in the FastMCP stdio child), `:131-136`, `:225-227` (writes through it); `ctl/__main__.py:35-37` (`weekly-backup` builds a `ControlService`, which runs DDL) | Collides | The audit's answer is known. Packet 0 must change `qmx-tools`: Library writes go to `Library` directly or through the host, and events through the host. `qmx-tools` is not in packet 0's file list |
+| T13 | Backup as a host request; `quick_check` before backup (l.610) | `ctl/backup.py:135-145` (already opens the source `mode=ro` and runs `integrity_check` on the copy); `:18-26` (`DATABASES` omits `control.db`); `:17` (95 MB cap) | Fits, with a gap | The read-only part is already true. `control.db` is not backed up at all today, and revision 2 now puts approvals, accounts, graph versions and checkpoints there |
+| T14 | Checkpoints inside `control.db` (l.511, l.598, l.606) | `agents/workflows/runs.py` (`AsyncSqliteSaver` per workflow, to be deleted); `remote/worker.py:28` (`AsyncSqliteSaver`); `remote/runs.py:196-216` (`resume` needs `manifest.checkpoint` from the bucket) | Seam | A rented box has no laptop `control.db`. Name how the headless worker exports checkpoint rows under the manifest's `checkpoints/` prefix so `RemoteRuns.resume` still works |
+| T15 | `recover()` step 1 kills `claude` processes by `CLAUDE_CONFIG_DIR` (l.531) | `ctl/__main__.py:131-134` (ownership by pid plus `create_time`); `ctl/service.py:106` (in-memory cancellers, F3) | Seam | Reading another process's environment works for same-user processes. Under Q10 the children run as `qmx-agent`, and the host cannot read their environment. Record pid and `create_time` per session and match on those |
+| T16 | Claude child in a kill-on-close Job Object, as `qmx-agent` when Q10 is yes (l.311, l.586) | `claude_agent_sdk` 0.2.163 `_internal/transport/subprocess_cli.py:873-881` (`anyio.open_process(..., user=options.user)`; `user` is POSIX-only); `types.py:2099` (`cli_path`) | Seam, unprobed | The SDK owns the spawn. Use a custom `Transport` or a `cli_path` shim in `host/platform.py`, or put the whole host in a Job Object so every descendant inherits it. Add both to P5 |
+| T17 | Remote self-terminate, exit on approval (l.545-546) | `remote/models.py:44-48` (`Resources.timeout = 3600`); `remote/providers.py:200-222` (Modal sandbox `timeout`), `:282-284` (E2B `timeout`); `remote/worker.py:354-357` (SIGTERM handler) | Fits | The provider TTL already exists and comes from the bundle. `max_lifetime_min` should map onto `Resources.timeout`, not a second field |
+| T18 | Keys through the provider's secret store via `setup_verify` (l.542) | `remote/runs.py:104-131` (resolve `credentials_scope` from the vault at launch, pass to `provider.start`, then `credentials.clear()`); `remote/providers.py:221` (`Secret.from_dict`), `:284` (`envs=`) | Fits; duplicates | Launch-time injection already keeps keys out of the bundle and the bucket. A persistent provider secret written by `setup_verify` is a second copy. Prefer the existing path |
+| T19 | `answer_remote` relaunches from saved state with a decision file (l.541) | `remote/runs.py:196-216` (`resume` reuses the bucket request, needs a verified checkpoint, re-places, calls `_launch`) | Seam | Add the decision file to the staged request before `_launch` |
+| T20 | `price_per_minute` on `RemoteLimits` (l.544) | `remote/models.py:100-111` (`Target` has no price); `:122-124` (`default_target = "vps"`) | Seam | Name where the price lives (a `Target` field in the `remote` section) and which packet sets it |
+| T21 | Router family guard (l.450-453) | `agents/router.py:29-30` (`Provider` Literal), `:40-52` (`model_selector` refuses aliases, Y16) | Fits | The `qma.toml` example `default = "claude:opus"` (l.359) is an alias, which Y16 refuses. The `gpt-*` and `openai/*` patterns also block open-weight `gpt-oss` on key providers (inferred) |
+| T22 | Wednesday console at `/console`, served by `qmx-control` (l.642) | `ctl/server.py:238` (the gate wraps every route); `:215-228` (SSE needs the `Authorization` header); `:239-251` (CORS for the UI origin) | Seam | A browser cannot send a header on navigation or through `EventSource`. Serve the static page outside the gate and read SSE with `fetch` streaming. Never put the token in a query string |
+| T23 | UI handoff `openapi.json` (l.644) vs packet 1b "`openapi.json` lacks the doors" (l.770) | P11 packet: "The OpenAPI document is generated and used by the UI" | Collides | The UI must call the approval door, so the handoff must document that route. Publish a second, operator-only schema or tag the doors |
+| T24 | `scripts/operator_setup.py` (l.748-756) | `ctl/server.py:89` (the only vault write today); `remote/providers.py:184-185` (`qmx/modal-token-id`, `qmx/modal-token-secret`), `:265` (`qmx/e2b`); `native_claude.py` recipe (Y39) | Fits | Use exactly those labels. Homework 1 checks something already true (T29) |
+| T25 | FastMCP proxy for domain tools and non-first-party MCP; effect key as `_meta` (l.178, l.413) | `tools/servers.py:9-22` (plain functions registered with `server.tool`); fastmcp 4.0.11 `create_proxy` and `Client.call_tool(meta=...)` (installed); `ctl/service.py:208-254` (Firecrawl is a remote HTTP MCP) | Seam | The proxy side exists in the library. The domain servers must read `_meta` from the request context to use the key, which changes `servers.py` |
+| T26 | `normalise_tool_name` (l.393) | `agents/guards/money_path.py:128-138` (`_normalize_act_token` strips role prefixes, never `mcp_<server>_`) | Fits | Today `mcp__qmx__place_order` normalises to `mcp_qmx_place_order` and is not denied. Call `normalise_tool_name` before `match_money_path_act` |
+| T27 | `ClaudeReplayAdapter` (l.331-333, l.638) | `claude_agent_sdk/client.py:67-85` and `query.py:15` (a custom `Transport` is accepted) | Seam | A replay `Transport` under the real `ClaudeAdapter` exercises hooks and `can_use_tool` too. Revision 2 says only `engine.claude`, `claude_replay` and `openai` import an SDK (l.68), while `events/normalise_claude.py` reads SDK types (l.638). One rule must change |
+| T28 | Packets, acceptance commands and lanes (§8.1) | `tools/ci.py:12-38` (no arguments; fixed workspace list); `tools/test_all.py` (runs all of `qmx-agents/packages`) | Seam | `tools/ci.py --workspace qma-v2` (l.768) uses a flag that does not exist. Packet 0 adds it, plus the new workspace's `poe` tasks |
+| T29 | "`battery.yml` exists and has never run"; homework 1 "Actions enabled?" (l.706, l.750) | `.github/workflows/battery.yml:3-8`, `:26` (rebuild branches, 60 min); `gh api .../actions/permissions` gives `enabled: true`; `.../actions/workflows` gives 6 workflows, all `active`; `.../actions/runs` gives `total_count: 0` | Collides | The premise is wrong. The repo is public, Actions is on, and nothing has ever run. Packets cannot carry an Actions link. Use a local `just ci` log as the gate until the cause is found |
+
+### E2. Why: recorded reasons, RESPECT or DROP
+
+| # | Recorded reason, with source | Element it meets | Verdict |
+|---|---|---|---|
+| Z1 | "Both HTTP doors and OpenAPI require the Credential Manager bearer token" (PR #32 body; P11 "stored in Credential Manager as `qmx/control-token`") | T1, T2 | DROP for the operator, because every same-user process reads the vault (review-opus 1; G1). RESPECT for the T2 node's per-node token (P17), which no agent shares a user with |
+| Z2 | "The existing local bearer token is the signing key; authenticated REST alone exposes the signing door, and MCP has no signing tool" (PR #42 body) | T3 | DROP the key choice. RESPECT the door rule. The key must move to the operator secret, or the door is decorative |
+| Z3 | "The local token replaces pairing" (DESIGN §12c.1; PR #49 removed `pair` and `rotate-control`) | T1, T5, T6 | DROP in part. Scoped credentials come back without the pairing ceremony |
+| Z4 | Settings get and put serve "both the UI and the Copilot" (P11 Goal and Build) | T7 | DROP for protected sections (FR-104, C-11). RESPECT for the rest |
+| Z5 | "The OpenAPI document is generated and used by the UI" (P11) | T23 | RESPECT. The operator doors need a documented schema |
+| Z6 | Start, authenticated health and stop with "process-ownership checks" (PR #32; `ctl/__main__.py:86-101`, `:131-134`; QMB `control_host` docstring) | T1, T15 | RESPECT. Keep pid plus `create_time` ownership, and reuse it in `recover()` |
+| Z7 | "Each file has exactly one writer process, and everyone else reads it or asks the owner through `qmx-control`" (DESIGN §7.6b); "One writer per file" (P08) | T11, T12 | RESPECT |
+| Z8 | "Domain tools use the shared service" (PR #43 body; commit 9ba5d12c) | T12 | DROP. A `ControlService` in the tool child breaks Z7 and the new lock |
+| Z9 | Settings are `settings.toml`, owned by `qmx-control`, backed up weekly to GitHub (DESIGN §7.6b) | T8 | RESPECT. Revision 2 gives no reason to move them |
+| Z10 | Weekly backup of small stores, 95 MB cap, `integrity_check` on the copy (P22; PR #43 body; `ctl/backup.py:17-26`) | T13, T14 | RESPECT. Decide whether `control.db` joins `DATABASES`. Checkpoints in it then need pruning under the cap |
+| Z11 | Keys resolved at launch, passed to the provider, cleared after (PR #46 body; `remote/runs.py:104-131`); "Run bundles and placement settings contain references, never credentials" (`remote/models.py:1`) | T18 | RESPECT. It already meets FR-046 |
+| Z12 | `Resources.timeout` drives the provider sandbox lifetime (P21; `remote/providers.py:222`, `:284`) | T17 | RESPECT. It is the provider TTL revision 2 asks for |
+| Z13 | Owned VPS as the default target (P21 §0; `RemoteSettings.default_target = "vps"`) | T17, T20 | DROP (C-08, K-01; already Y37) |
+| Z14 | `model_selector` refuses `latest` aliases (Y16) | T21 | RESPECT. Fix the `claude:opus` example |
+| Z15 | Money-path tokens normalised with role prefixes and aliases (PR #35; `money_path.py:70-138`) | T26 | RESPECT. Put `normalise_tool_name` in front |
+| Z16 | `qma.daemon` stays a QMB anchor until the QMB review; no compatibility bridge (DESIGN §12c.1; PRD §2.2) | T10 | RESPECT. `qma2` avoids the shadowing |
+| Z17 | One sequential runner for `just ci` and GitHub (PR #29; Y45) | T28, T29 | RESPECT. Extend `tools/ci.py`; add no workflow |
+| Z18 | CORS limited to the UI origin (P11; `ctl/server.py:239-251`) | T22 | RESPECT. The console is same-origin and needs no new CORS entry |
+| Z19 | Fakes in tests, live calls only in `scripts/live/` (Y22) | T27 | RESPECT. A replay transport keeps CI off the network |
+
+### E3. Fix verification
+
+Rule. VERIFIED means `ARCHITECTURE.md` names the module, type, table, route or packet that delivers the fix. WEAKENED means it is named but a gap, a contradiction or a code fact undercuts it. NOT FIXED means it is absent. `ARCHITECTURE-CHECK.md` grades S1 to S4, so S1 is read as BLOCKER and S2 as MAJOR. S3, S4 and every MINOR are out of scope.
+
+| Finding | Severity | Verdict | Where (l.N) and why |
+|---|---|---|---|
+| CHECK 1 shell bypass of doors and money | BLOCKER | WEAKENED | l.574-588, l.723. Gate, three credentials, deny patterns, Q10 and both FR-102 shell tests are named. Undercut by T2 (secret lands in `control.log`), T3 (the vault token still signs money publishes) and T4 (DPAPI) |
+| CHECK 2 double claim on Claude | BLOCKER | VERIFIED | l.399, l.426 ("the ONLY claim"), l.562. `_pre` only decides (l.322-325) |
+| CHECK 3 effect key across resume | BLOCKER | VERIFIED | l.435-436: engine-native ids and a persisted node attempt |
+| CHECK 4 `defer` single-call premise | BLOCKER | VERIFIED | l.98, l.325, P3c at l.742. The FR-109 citation is gone |
+| CHECK 5 checkpoint atomicity | BLOCKER | VERIFIED | l.511, l.598, l.606 (P4 fallback with the order rule). Remote checkpoints are a separate gap (T14) |
+| CHECK 6 no resume driver | BLOCKER | VERIFIED | l.529-534, packet 1b at l.770 |
+| CHECK 7 anthropic wire on OpenAI only | MAJOR | VERIFIED | l.452-453 |
+| CHECK 8 FR-055 port types | MAJOR | VERIFIED | l.502-503 |
+| CHECK 9 remote credential hand-off | MAJOR | VERIFIED | l.542, l.547, l.662. Duplicates the existing launch-time injection (T18) |
+| CHECK 10 Claude trace sink | MAJOR | VERIFIED | l.572, packet 2 at l.772 |
+| CHECK 11 `usage_summary` and compute cost | MAJOR | WEAKENED | l.466, l.554, l.544. No source is named for `price_per_minute` (T20) |
+| CHECK 12 Claude-adapter fake | MAJOR | VERIFIED | l.331-333, packet 2 at l.772. Conflicts with the SDK-import rule at l.68 (T27) |
+| CHECK 13 one home for accounts | MAJOR | VERIFIED | l.446-449 (`accounts` table); `context_tokens_window` at l.228 |
+| CHECK 14 `apps_call` 20 s | MAJOR | VERIFIED | l.661, packet 5a at l.778 |
+| CHECK 15 `SessionTarget` | MAJOR | VERIFIED | l.202 |
+| CHECK 16 budgets as settings, USD in the ledger path | MAJOR | WEAKENED | l.619. Keys are `budget.*`, but the protected section is `budgets` (l.584), and today's section is `budgets` (`ctl/service.py:41`) |
+| opus 1 REST-only is not a boundary | BLOCKER | WEAKENED | l.580-584, l.640, l.770. The protected list misses `backup`, `brokers`, `mcp_servers`, `providers` (T7); the signing key is unchanged (T3) |
+| opus 2 money barrier vs Credential Manager | BLOCKER | VERIFIED, partial by declaration | l.586, l.828, Q10 at l.723. §10 says it is partial. The Q10 spawn path is unnamed (T16) |
+| opus 3 `defer` common case, no resume path | BLOCKER | VERIFIED | l.98, l.137, l.199 (`orphaned`), l.323 (sibling rule), l.337-338 |
+| opus 17 idle teardown on the laptop | BLOCKER | VERIFIED | l.544-547, l.836 |
+| opus 4 `defer` untested shapes | MAJOR | VERIFIED | l.742 (P3 a, d, e), l.325, l.329 |
+| opus 5 plugin `PermissionRequest` hooks | MAJOR | WEAKENED | l.316, l.370, l.376-377. §10 claims a test in 3a, but 3a's done-when (l.773) has no "allow hook, the write does not run" case |
+| opus 6 effect keys from a host counter | MAJOR | VERIFIED | l.436, l.438, l.274 with packet 1c at l.771, l.413 |
+| opus 7 OpenAI parked state per row | MAJOR | VERIFIED | l.301, l.348-349, l.518 |
+| opus 8 checkpoint across two files | MAJOR | VERIFIED | l.606 |
+| opus 9 "every call through `invoke`" | MAJOR | VERIFIED | l.36, l.393, l.409-413 |
+| opus 10 single-writer holes on Windows | MAJOR | VERIFIED | l.251-264, l.610. The audit is now a known change (T12), and the writer needs a sync bridge (T11) |
+| opus 12 subscription usage and herding | MAJOR | VERIFIED | l.449, l.458-463 |
+| opus 14 plugin parity on OpenAI | MAJOR | VERIFIED | l.368-381 |
+| opus 15 agent nodes vs approvals and crashes | MAJOR | VERIFIED | l.500, l.505, l.511 |
+| opus 18 remote keys, approvals, missed runs | MAJOR | VERIFIED | l.537, l.541-542 |
+| opus 19 Claude cwd, cleanup, orphan CLIs | MAJOR | VERIFIED | l.211, l.311, l.314, l.531. Spawn mechanics are unnamed (T16) |
+| opus 20 prompt-injection trifecta | MAJOR | WEAKENED | l.317, l.488, l.627. Raw fetch tools are gone, but Claude `Bash` and the OpenAI `shell` can still reach any host after taint. `decide_builtin` blocks only the host's own port (l.403-404). Neither the taint rule nor §9 covers shell egress |
+| opus 21 agent apps gain trust and credentials | MAJOR | WEAKENED | l.379, l.582, l.661. Manifests can still request `qmx/control-token` from the vault (T6) |
+| opus 23 `qma` name collision | MAJOR | VERIFIED | l.33, l.157, l.667 |
+| opus 24 Wednesday slice plan | MAJOR | VERIFIED | l.21, l.174, l.493, l.784, l.814 |
+| sonnet 1 nothing he can see | BLOCKER | WEAKENED | l.642, l.644, l.722. The console is named. The handoff's `openapi.json` must lack the approval door (l.770), which the UI needs (T23). Console SSE needs `fetch` streaming (T22) |
+| sonnet 2 slices 2 and 3 not parallel | BLOCKER | VERIFIED | l.227-242 (frozen producer types, `StaticRegistry`), J23 at l.775 |
+| sonnet 3 no clock or cut line | BLOCKER | VERIFIED | l.784, l.786-801 |
+| sonnet 4 his setup has no surface | BLOCKER | VERIFIED | l.622, l.748-756. The homework 1 premise is false (T29) |
+| sonnet 5 probes unowned | MAJOR | VERIFIED | l.174, l.736, packet 0 at l.768 |
+| sonnet 6 demo ingredients | MAJOR | VERIFIED | l.776, l.778, l.779 |
+| sonnet 7 Usage page | MAJOR | VERIFIED | l.466, l.554, l.818 |
+| sonnet 8 WED behaviours in prose only | MAJOR | VERIFIED | l.385, l.549-555 |
+| sonnet 9 rented machines bill after the demo | MAJOR | WEAKENED | l.540, l.544, l.753. The price source is unnamed (T20) |
+| sonnet 10 no reader for the DevOps plane | MAJOR | VERIFIED | l.469, l.555 |
+| sonnet 11 no-API-spend bypasses | MAJOR | VERIFIED | l.450-453, packet 3b at l.774 |
+| sonnet 12 money barrier overstated | MAJOR | VERIFIED | l.586, l.817, l.828 |
+| sonnet 13 packets and commands | MAJOR | WEAKENED | l.766-782. Packet 0's command uses `tools/ci.py --workspace`, which does not exist (T28) |
+| sonnet 14 38 WED FRs uncited | MAJOR | VERIFIED | l.820-822. The CHECK's WED half is deferred on purpose (l.853) |
+| sonnet 15 SC-2 skills inside plumbing | MAJOR | VERIFIED | packet S at l.780 |
+| sonnet 16 `qma` name collision | MAJOR | VERIFIED | l.667, packet 0 at l.768 |
+| sonnet 17 slice 0 misdescribes CI | MAJOR | VERIFIED | l.154, l.706, l.768 |
+| sonnet 18 slice 0 edits the Library | MAJOR | VERIFIED | l.603, Q12 at l.725 |
+| sonnet 19 deletion wave on demo eve | MAJOR | VERIFIED | l.673, packet 7 at l.782 |
+| sonnet 20 Max 5x budget | MAJOR | VERIFIED | l.803-805 |
+| sonnet 21 §0 not plain words | MAJOR | VERIFIED | l.12-29 |
+| sonnet 22 his questions not asked | MAJOR | VERIFIED | l.722-728 |
+| sonnet 23 settings keys not enumerated | MAJOR | WEAKENED | l.612-630. Keys are listed, but their store is a table (l.598) while the code and DESIGN use `settings.toml` (T8), and two key prefixes do not match the protected names (T7) |
+| sonnet 24 model switch with cost | MAJOR | VERIFIED | l.23, l.525, packet 3b at l.774 |
+
+Tally. 60 checked: 49 VERIFIED (one partial by declaration), 11 WEAKENED, 0 NOT FIXED.
+
+### E4. Remaining must-fix items for the architect
+
+Ordered by risk. Each names where it lands.
+
+1. **Move the signing key.** `road.signing_key` takes the operator secret, not the vault token (`ctl/server.py:147`). Delete `qmx/control-token` from the laptop's Credential Manager once the per-launch secret exists, and keep it only for the T2 node (Z1, Z2). Packet 1b, with a test that a signature computed from the old vault token is refused.
+2. **Close the app path to the operator token.** The supervisor refuses `qmx/control-token` and any broker `qmx/*` label in an app manifest. The per-app token arrives through a host-injected variable, not a vault label (T6). Packet 5a, with the example manifests changed in packet 0.
+3. **Name the operator-secret hand-off.** `start` and QMB's `control_host` have no window, and `control.log` is readable by agents (T2). Make `/api/health` token-free and pid-only so the ownership checks survive (Z6). Packet 1b.
+4. **Complete the protected settings list.** Add `backup`, `brokers`, `mcp_servers` and `providers`. Rename keys or sections so `budget`/`budgets` and `seat`/`seats` match (T7). Packet 1b's negative test covers every protected section.
+5. **Keep `settings.toml`.** Drop `settings` from migration 001 and from l.598, or move `qmx-broker`'s reader and the backup list in the same packet (T8, Z9).
+6. **Fix `qmx-tools`, do not audit it.** `DomainContext` must stop constructing `ControlService` (`tools/service.py:126-128`). Add `qmx-tools/src/qmx_tools/service.py` to packet 0's files, with a test that the FastMCP child starts while the host holds the lock (T12, Z8).
+7. **Give `Store` a blocking submit** for the sync `ControlService` methods that run in the thread pool (T11). Packet 1a.
+8. **Name the Claude spawn path for Job Objects and Q10.** A custom `Transport` or a `cli_path` shim in `host/platform.py`, or a host-wide Job Object. Add "spawn as `qmx-agent` inside the job" to P5. Make `recover()` match orphans by recorded pid and `create_time`, not by environment (T15, T16).
+9. **Remote checkpoints and price.** Name how `TurnHost.headless` exports checkpoint rows into the manifest's `checkpoints/` prefix (T14). Put `price_per_minute` on `Target` and map `max_lifetime_min` onto `Resources.timeout` (T17, T20). Prefer the existing launch-time key injection over `setup_verify` secrets (T18).
+10. **Console and handoff mechanics.** Serve `/console` outside the gate, read SSE with `fetch` streaming, and publish an operator-only schema for the doors so the UI lane can call the approval route (T22, T23).
+11. **Shell egress after taint.** Either extend `decide_builtin` and the OpenAI `shell` executor so a tainted session's network calls ask first, or list shell exfiltration as a residual in §9 (opus 20).
+12. **Small consistency fixes.** Add the `PermissionRequest` allow-hook test to packet 3a's done-when (opus 5). Decide whether `events/normalise_claude.py` may import the SDK, or move it under `engine/` (T27). Build `ClaudeReplayAdapter` as a replay `Transport`. Change `default = "claude:opus"` to a pinned id (T21). Add `--workspace` to `tools/ci.py` in packet 0 (T28). Decide whether `control.db` joins the weekly backup (T13).
+13. **CI reality.** Actions is enabled and active with zero runs ever. Replace homework 1 with "find why no run starts" (cause unknown; an account-level Actions setting is a guess), and let packets carry a local `just ci` log until then (T29).
