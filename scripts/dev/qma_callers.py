@@ -132,10 +132,14 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
 
     edges = []
     planned_trims = []
+    missing_imports = set()
     for path, tree in trees.items():
         module = module_name(path)
         initializer = path.endswith("/__init__.py")
         expression_strings = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Expr)}
+        loaded_names = {
+            n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        }
         aliases = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -153,8 +157,12 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     targets |= resolve(alias.name)
+                    if REFERENCE.fullmatch(alias.name) and alias.name not in modules:
+                        missing_imports.add(f"{path}:{node.lineno}: {alias.name}")
             elif isinstance(node, ast.ImportFrom):
                 base = from_module(node, module, initializer)
+                if REFERENCE.fullmatch(base) and base not in modules:
+                    missing_imports.add(f"{path}:{node.lineno}: {base}")
                 for alias in node.names:
                     targets |= resolve(base, alias.name)
             elif isinstance(node, ast.Attribute):
@@ -172,6 +180,10 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 kind = "attribute"
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                 kind = "literal"
+                # This analyzer and its synthetic graph inputs describe QMA;
+                # their strings never load the runtime they are inventorying.
+                if path in {"scripts/dev/qma_callers.py", "tools/tests/test_qma_callers.py"}:
+                    continue
                 # Include dotted strings in executable statements, not docstrings.
                 if id(node) in expression_strings:
                     continue
@@ -209,10 +221,15 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                     and initializer
                     and isinstance(node, ast.ImportFrom)
                     and node in tree.body
+                    and not any(
+                        (alias.asname or alias.name) in loaded_names for alias in node.names
+                    )
                 ):
                     planned_trims.append(edge)
                 else:
                     edges.append(edge)
+    if missing_imports:
+        raise ValueError("Imports of missing QMA modules:\n" + "\n".join(sorted(missing_imports)))
     # The retained loader uses spec_from_file_location with manifest entrypoints,
     # not Python import statements. Keep these edges explicit and reproducible.
     loader = modules.get("qma.daemon.plugins.packs")

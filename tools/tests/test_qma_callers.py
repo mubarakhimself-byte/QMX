@@ -138,3 +138,30 @@ def test_external_categories_and_sizes_are_reported_without_untracked_files(
     assert {
         edge["category"] for edge in result["modules"]["qma.core.alpha"]["external_callers"]
     } == {"new", "protected", "tests", "other"}
+
+
+def test_missing_import_cannot_disappear_from_after_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="Imports of missing QMA modules"):
+        scan(
+            tmp_path,
+            monkeypatch,
+            {CORE + "__init__.py": "", "qmb/src/door.py": "import qma.core.deleted\n"},
+        )
+
+
+def test_facade_plan_keeps_imports_used_by_initializer_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = scan(
+        tmp_path,
+        monkeypatch,
+        {
+            CORE + "__init__.py": "from .alpha import register\nregister()\n",
+            CORE + "alpha.py": "def register(): pass\n",
+            "qmb/src/door.py": "import qma.core\n",
+        },
+        trim=True,
+    )
+    assert result["deletion_sets"] == []

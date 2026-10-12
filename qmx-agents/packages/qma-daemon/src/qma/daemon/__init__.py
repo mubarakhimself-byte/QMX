@@ -15,7 +15,6 @@ from __future__ import annotations
 from qma.daemon.capabilities import (
     AGENT_PATH_ENFORCEMENT_EVENTS,
     AgentCapabilityStore,
-    PermissionPolicyEnforcer,
     spawn_agent,
 )
 from qma.daemon.diagnosis import (
@@ -175,7 +174,6 @@ from qma.daemon.sessions import (
     ProductSessionService,
 )
 from qma.daemon.staging import (
-    AdmissionPipeline,
     ChangeRequest,
     ChangeRequestFixture,
     ProposalGate,
@@ -253,7 +251,6 @@ __all__ = [
     "RECONCILE_POLICY_TYPES_EXISTED_AT_INSPECT_SHA",
     "THIRD_LOGGER_MINTED",
     "AdapterInterceptReport",
-    "AdmissionPipeline",
     "AgentCapabilityStore",
     "AuthoritativeJournal",
     "ChangeRequest",
@@ -300,7 +297,6 @@ __all__ = [
     "OutboxRestartFixture",
     "PackLifecycleFixture",
     "PackTransition",
-    "PermissionPolicyEnforcer",
     "PersistenceStartupEvidence",
     "PersistenceSubstrate",
     "ProductSession",
