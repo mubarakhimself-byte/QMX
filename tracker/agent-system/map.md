@@ -69,6 +69,9 @@ Today and the next sittings are planning only. No code ships until ticket 16.
 
 <!-- one line per closed ticket -->
 
+- [Claude Agent SDK as the base harness: capability audit](tickets/01-agent-sdk-capability-audit.md) — not the base for every agent; ticket 02 is option B or C; measure RAM, DeepSeek route and isolation first
+- [Usage, limits and cost telemetry](tickets/05-usage-limits-telemetry.md) — local session files + documented limit events feed a `usage_call` ledger; private OAuth endpoints are off limits
+
 ## Not yet specified
 
 - **Lab default workflows and the built-in research harness.**

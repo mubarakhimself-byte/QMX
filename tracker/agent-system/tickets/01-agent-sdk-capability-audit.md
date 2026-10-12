@@ -2,7 +2,7 @@
 id: 01
 title: Claude Agent SDK as the base harness: capability audit
 label: wayfinder:research
-status: claimed
+status: resolved
 assignee: claude-research-agent
 blocked-by: []
 who-decides: Claude (research, AFK)
@@ -20,3 +20,28 @@ Could the Claude Agent SDK (Python) be QMX's base harness for every agent, not j
 - **Terms:** subscription sign-in for a personal tool.
 
 Deliver a capability table plus a plain-words verdict. Do not ratify anything.
+
+## Answer
+
+Findings: [research/01-agent-sdk-capability-audit.md](../research/01-agent-sdk-capability-audit.md).
+
+The Claude Agent SDK should not be the base harness for every agent.
+
+**What makes option A (SDK everywhere) a poor fit:**
+- One `claude` process per session costs about 1 GiB RAM each.
+- Anthropic says it does not support Claude Code on non-Claude models; those routes lose caching and tool search.
+- Its dynamic workflows have no human gates, no typed state, and resume only inside the same session. The Lab node editor still needs LangGraph.
+- It would mean rewriting about 4,060 lines of LangChain code.
+
+**Where it is strong:**
+- compaction that is safe for Opus 5.5
+- hooks
+- approvals (`can_use_tool`)
+- sessions, including fork
+
+**For ticket 02:** the real choice is B (LangGraph base, Claude Code as a worker) or C (split by agent type).
+
+**Measure first:**
+- per-session RAM and startup on the operator's PC
+- a DeepSeek run through its Anthropic endpoint
+- isolation from the operator's own Claude Code
