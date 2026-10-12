@@ -40,3 +40,9 @@ The 24 principles do not have to be chosen by hand either. `poteto-mode` reads i
 ## Model settings
 
 Subagent roles are set in `~/.agents/pstack-models.md`: Claude only, Sonnet for explorers, Opus for judgment and code, and two reviewers for `interrogate`.
+
+## Agreed operating terms (2026-10-12)
+
+- **Decisions:** asked through the AskUserQuestion tool, each with a recommended answer and options.
+- **Planning depth:** pstack skills run as dedicated background `poteto-agent` sub-agents, one at a time and sequential, told "planning only, write no code". Their output goes into the ticket's folder. Design for complexity. Each ticket also checks the research corpus for how others solved it (cookbooks, Hermes, Codex, big-company patterns).
+- **Where work runs:** planning stays in the main session. Shipping runs in a separate session (one orchestrator, or one agent per slice) as soon as a slice is decided, while planning continues. The UI wiring track gets its own session later.
