@@ -47,3 +47,4 @@ Superseded files sit in `tracker/agent-system/archive/` and `rebuild/research/20
 | 2026-10-12 ~21:10 | `/how` + `/why` #1 | `HOW-WHY.md` | PRD |
 | 2026-10-12 ~22:30 | `/how` + `/why` delta #2 | `HOW-WHY.md` § Delta pass 2 | `USER-JOURNEYS.md`, research 30, 31, 32 |
 | 2026-10-12 ~22:35 | `/how` + `/why` delta #3 | `HOW-WHY.md` § Delta pass 3 | `ARCHITECTURE.md` revision 2 |
+| 2026-10-13 | `/how` + `/why` delta #4 | `HOW-WHY.md` § Delta pass 4 | `ARCHITECTURE.md` revision 3 |

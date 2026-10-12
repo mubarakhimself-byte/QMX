@@ -812,3 +812,89 @@ Ordered by risk. Each names where it lands.
 11. **Shell egress after taint.** Either extend `decide_builtin` and the OpenAI `shell` executor so a tainted session's network calls ask first, or list shell exfiltration as a residual in §9 (opus 20).
 12. **Small consistency fixes.** Add the `PermissionRequest` allow-hook test to packet 3a's done-when (opus 5). Decide whether `events/normalise_claude.py` may import the SDK, or move it under `engine/` (T27). Build `ClaudeReplayAdapter` as a replay `Transport`. Change `default = "claude:opus"` to a pinned id (T21). Add `--workspace` to `tools/ci.py` in packet 0 (T28). Decide whether `control.db` joins the weekly backup (T13).
 13. **CI reality.** Actions is enabled and active with zero runs ever. Replace homework 1 with "find why no run starts" (cause unknown; an account-level Actions setting is a guess), and let packets carry a local `just ci` log until then (T29).
+
+
+## Delta pass 4 (architecture revision 3)
+
+Written 2026-10-13. Input: `git diff 32806d83 bfd69c84 -- tracker/qma-v2/ARCHITECTURE.md`. Code: `origin/rebuild/base` @ 4eac8f69 (PR #70). Since 9ab4c884 the only code change is the removal of `qma-daemon`'s extensibility rungs (4 files, -222 lines), so every pass 3 citation holds. This pass is short. It covers revision 3's new elements only. Same method as before: one agent, no sub-agents, planning only. `l.N` is an `ARCHITECTURE.md` line at bfd69c84.
+
+Class key. **ARCH** needs another architecture revision (a real design gap). **PACKET** is a build-time detail for the shipping packet. **QUESTION** is the operator's call.
+
+### F0. Summary in plain words
+
+1. Revision 3 answers all 13 of pass 3's must-fix items and all 11 WEAKENED findings in the text. 23 of the 24 now read VERIFIED. One is WEAKENED again.
+2. **One ARCH item remains.** The new `qmx-control token` command hands out a one-time code that unlocks the operator secret, but the design never says how that command asks the running host for it. If it is an ordinary local call, any agent shell running as his user can run the same command and approve its own requests.
+3. Everything else is PACKET work, plus two QUESTIONs: the private GitHub backup now carries chats and approvals, and Q10 now includes a firewall rule.
+
+### F1. Touchpoints for revision 3's new elements
+
+| # | Element (l.N) | Existing code it touches | Verdict | Class and note |
+|---|---|---|---|---|
+| U1 | `SpawnTransport` subclasses `SubprocessCLITransport`, spawns with `CreateProcessWithLogonW` as `qmx-agent`, assigns the host Job Object, records pid and `create_time` (l.319-325) | `claude_agent_sdk` 0.2.163 `_internal/transport/subprocess_cli.py:873-881` (the spawn sits inside `connect()` and builds anyio streams from the child's pipes); `client.py:67-85` (`transport=`) | Seam | PACKET. Overriding `connect()` means copying private SDK code and wrapping a Win32 process handle in anyio streams. The `cli_path` shim fallback is named and P5 decides (l.768). `CreateProcessWithLogonW` needs the `qmx-agent` password. Name its vault label, and add it to the deny patterns and the manifest refusals |
+| U2 | Job Object for the child (l.322) | `ctl/__main__.py:142-151` (today's `_terminate_tree` relies on psutil only) | Fits | PACKET. Whether a process started through the secondary-logon service can join the host's job is a guess; P5 covers it (l.768) |
+| U3 | One-time code in the URL fragment; `start`, QMB `control_host` and `qmx-control token` open `/console#<code>` (l.600) | `ctl/__main__.py:57-75` (`start` spawns `serve` with `stdin=DEVNULL`, stdout to `control.log`); `qmb/src/qmb/doors/cli/host.py:1799-1828` (captured output) | Collides | ARCH. The design never names the channel that moves the code from the host to the launcher, and it never names who may use that channel. For `start`, the launcher can mint the code and pass it on the child's stdin (PACKET). For `token` against a running host, the request must travel over a channel the host can attribute to the operator's Windows user, such as a named pipe ACL'd to his SID with a client-user check. Before Q10 no channel tells his shell from an agent shell, so §9 must list this residual next to the signing key. Add `qmx-control token` to the `decide_builtin` deny patterns either way |
+| U4 | `/api/health` token-free and pid-only (l.604) | `ctl/__main__.py:81-101`, `:116-124` (start and status) | Fits | PACKET. Returns `{status, pid}` today (`ctl/server.py:230-232`); only the dependency is dropped |
+| U5 | `SettingsFile` as the host writer of `settings.toml`; every existing section operator-only, agents write `agent.*` (l.270-275, l.604, l.653) | `ctl/service.py:40-42`, `:200-294` (section put, atomic `.tmp` replace); `qmx_broker/service.py:121`; `ctl/backup.py:113` | Fits | PACKET. Key-level `put` over today's section-level replace. Readers stay untouched. `agent` joins the `SettingsSection` Literal |
+| U6 | `qmx-tools` returns results only; the host proxy writes the journal, events, receipts and Library artifacts (l.426) | `tools/service.py:126-136` (`save`), `:153-158` (large results become `{"artifact": ref}`), `:224-232` (backtest memo returns `run_id: saved["ref"]`); `tools/registry.py:226`, `:239` (`library_save`, research saves) | Seam | PACKET. Tool results embed Library refs today. The Library is content-addressed, so the child can compute the ref from the canonical content and return the content with it. The proxy then writes the same bytes. Memo lookup is a read of `library.db`, which the child may keep. Two more `DomainContext` users (`agents/copilot.py:67`, `agents/workflows/compiler.py:50`) are deleted by packet 7, so they need no change |
+| U7 | `Store.submit`, the blocking twin (l.263) | `ctl/service.py:152-154` (`_connect`, 22 call sites) | Fits | PACKET |
+| U8 | `road.signing_key` on `qmx/road-signing-key`; the old token refused (l.606) | `ctl/server.py:146-147`; `apps/road/__init__.py:29-30`, `:161-166`; `ctl/node.py:153`, `:162` (the T2 node passes its node token to `create_app`, so it signs with that) | Seam | PACKET. `create_app` takes the signing key as its own argument, and `node.py` reads `qmx/road-signing-key` from the node vault. The design keeps the node token "for the T2 node" but is silent on the node's signing key |
+| U9 | `QMX_APP_TOKEN` injected by the supervisor; manifest refusals of `qmx/control-token`, `qmx/road-signing-key`, `qmx/broker*` (l.602) | `apps/supervisor.py:404-419` (environment build); `apps/manifest.py:173-179` (secret-name and `qmx/*` checks, `SYSTEM_ENV`) | Fits | PACKET. Put the refusals in `manifest.py:178`, and add `QMX_APP_TOKEN` to `SYSTEM_ENV` so a manifest cannot override it |
+| U10 | `/console` outside the gate; `fetch` streaming; `openapi-operator.json` (l.665-667) | `ctl/server.py:177` (one FastAPI app, one schema), `:238` (the gate is ASGI middleware over everything) | Seam | PACKET. The gate needs a path allowlist for `/console` and the code exchange. The second schema is a filtered `get_openapi` call. `create_mcp` builds from `OPERATIONS`, not from any schema, so "reads only the first" means the row list |
+| U11 | Shell egress after taint asks first outside `reader.egress_allowlist`; a per-user firewall rule under Q10 (l.416-419, l.747, l.853) | none in code; the Bash deny patterns are new | Fits | QUESTION (part of Q10). Whether `New-NetFirewallRule -LocalUser` filters outbound traffic for a local user is unverified and sits in P5. The residual is listed (l.853) |
+| U12 | `--workspace` on `tools/ci.py` (l.792) | `tools/ci.py:12-38` | Fits | PACKET |
+| U13 | `control.db` in the weekly backup; checkpoints pruned to the last 3 per run (l.620) | `ctl/backup.py:17-26` (`DATABASES`, 95 MB cap), `:126-131` (an oversize file raises and stops the whole backup), `:135-145` | Seam | PACKET: `events` and `blocks` grow without bound, so the cap will trip. Set a retention rule for `events` or a size alarm before the cap. QUESTION: chat blocks and approvals now go to the private GitHub backup repo |
+
+### F2. Recorded reasons met by revision 3
+
+| # | Reason, with source | Verdict |
+|---|---|---|
+| Z1, Z2 | Vault token is the bearer and the signing key (PR #32, PR #42) | DROP, as revision 3 does (l.606). RESPECT the node token for the T2 node only |
+| Z6 | Launcher ownership checks by pid plus `create_time` (PR #32) | RESPECT. Kept through the token-free health route (l.604) and `recover()` |
+| Z7, Z8 | One writer process per file (DESIGN §7.6b, P08) vs "domain tools use the shared service" (PR #43) | RESPECT Z7, DROP Z8 (l.426) |
+| Z9 | Settings in `settings.toml` (DESIGN §7.6b) | RESPECT (l.270-275) |
+| Z10 | Weekly backup of small stores, 95 MB cap (P22, PR #43) | RESPECT. The cap now constrains `control.db` (U13) |
+| Z11, Z12 | Launch-time key injection and `Resources.timeout` as the TTL (PR #46) | RESPECT (l.561-567) |
+| Z14 | No model aliases (Y16) | RESPECT (l.372) |
+| Z17 | One sequential CI runner (PR #29) | RESPECT (U12) |
+| Z18 | CORS limited to the UI origin (P11) | RESPECT. The console is same-origin (l.665) |
+| Z20 (new) | "Each instance's secrets are `qmx/*` Credential Manager services" (`apps/manifest.py:178`) | RESPECT, with a narrowing. `QMX_APP_TOKEN` is the one non-vault variable, set by the host |
+
+### F3. Verification of pass 3's E4 items and WEAKENED findings
+
+| Item | Verdict | Where (l.N) | Class of any remainder |
+|---|---|---|---|
+| E4.1 move the signing key | VERIFIED | l.606, packet 1b l.794 | PACKET (node signing key, U8) |
+| E4.2 app path to the operator token | VERIFIED | l.602, l.685, packet 5a l.802 | PACKET (U9) |
+| E4.3 operator-secret hand-off | WEAKENED | l.600, l.604 | ARCH (U3) |
+| E4.4 protected settings list | VERIFIED | l.604, l.653, keys at l.641-647 | none |
+| E4.5 keep `settings.toml` | VERIFIED | l.270-275, l.620-621, packet 1a l.793 | none |
+| E4.6 `qmx-tools` writes | VERIFIED | l.426, l.676, packet 0 l.792 (lock test) | PACKET (U6) |
+| E4.7 `Store.submit` | VERIFIED | l.263, l.793 | none |
+| E4.8 Claude spawn and Q10 | VERIFIED | l.319-325, l.531, P5 l.768, packet 2 l.796 | PACKET (U1, U2) |
+| E4.9 remote checkpoints, price, keys | VERIFIED | l.561-567, l.647, packet 5b l.803 | none |
+| E4.10 console and handoff | VERIFIED | l.665-667 | PACKET (U10) |
+| E4.11 shell egress after taint | VERIFIED, partial by declaration | l.416-419, l.853 | QUESTION (U11, inside Q10) |
+| E4.12 consistency fixes | VERIFIED | l.389, l.372, l.468, l.661, l.344-346, l.797 (allow-hook test), l.792 | none |
+| E4.13 CI reality | VERIFIED | l.730, l.774 (homework 1), l.788 (local `just ci` log) | none |
+| CHECK 1, opus 1 (doors and money) | VERIFIED except the hand-off | l.600-606 | ARCH (U3) |
+| opus 21 (app credentials) | VERIFIED | l.602 | none |
+| CHECK 11, sonnet 9 (price source) | VERIFIED | l.561, l.647 | none |
+| CHECK 16, sonnet 23 (key names, store) | VERIFIED | l.641-653, l.620 | none |
+| opus 5 (allow-hook test) | VERIFIED | l.797 | none |
+| opus 20 (trifecta) | VERIFIED, partial by declaration | l.416-419, l.853 | QUESTION (inside Q10) |
+| sonnet 1 (console mechanics) | VERIFIED | l.665-667 | PACKET (U10) |
+| sonnet 13 (`--workspace`) | VERIFIED | l.792 | none |
+
+Tally. 24 checked (13 E4 items and 11 WEAKENED findings, with CHECK 1 and opus 1 sharing a row): 23 VERIFIED (two partial by declaration), 1 WEAKENED, 0 NOT FIXED.
+
+### F4. Remaining items
+
+1. **ARCH. Name the operator-code channel (U3).** State how `start`, `control_host` and `qmx-control token` get a one-time code from the host, and how the host refuses an agent that asks. After Q10, use a named pipe ACL'd to the operator's SID plus a client-user check. Before Q10, list it in §9 as a residual equal to the signing key, and deny `qmx-control token` by pattern in `decide_builtin`.
+2. **PACKET 1b.** `start` mints the code and passes it on the child's stdin. The gate gets a path allowlist for `/console` and the code exchange (U10).
+3. **PACKET 1b.** The T2 node reads its own `qmx/road-signing-key` (U8).
+4. **PACKET 2.** Name the vault label for the `qmx-agent` password, then deny it and refuse it in manifests (U1). P5 settles the Job Object question for secondary-logon processes (U2).
+5. **PACKET 0.** `qmx-tools` computes content-addressed refs and the proxy writes the bytes (U6).
+6. **PACKET 5a.** Refusals live in `apps/manifest.py:178`, and `QMX_APP_TOKEN` joins `SYSTEM_ENV` (U9).
+7. **PACKET 1a.** Set an `events` retention rule or a size alarm, so `control.db` never trips the 95 MB backup cap (U13).
+8. **QUESTION.** Weekly backups now send chats and approvals to the private GitHub repo. Is that acceptable, or should `control.db` go to the bucket only (U13)?
+9. **QUESTION (Q10).** Q10 now includes the per-user outbound firewall rule. P5 checks that the rule works (U11).
