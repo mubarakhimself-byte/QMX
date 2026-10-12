@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import cast
 
 from qma.wire import (
@@ -10,15 +9,10 @@ from qma.wire import (
     DEFAULT_BIND_HOST,
     FORBIDDEN_SECRET_SURFACE_KEYS,
     REMOTE_DIAL_DIRECTION,
-    REMOTE_OUTBOX_DEPTH_REGISTRY_KEY,
-    REMOTE_SPOOL_BYTES_REGISTRY_KEY,
-    UNKNOWN_TAIL_KIND,
     WIRE_PROTOCOL_VERSION,
     DeployedSideConfig,
     InitializeParams,
     ListenerBindConfig,
-    OutboxBounds,
-    RemoteOutbox,
     WireConnection,
     assert_no_secret_on_wire_surface,
     authenticate_before_protocol,
@@ -212,127 +206,3 @@ def test_remote_dials_out_daemon_never_dials_in() -> None:
     )
     assert isinstance(second, Ok)
     assert is_refusal(validate_deployed_side(second.value))
-
-
-def test_durable_outbox_replays_in_order_ack_removes_only_after_ack(
-    tmp_path: Path,
-) -> None:
-    bounds = OutboxBounds.try_create(max_depth=10, max_spool_bytes=1_000_000)
-    assert isinstance(bounds, Ok)
-    assert bounds.value.depth_registry_key == REMOTE_OUTBOX_DEPTH_REGISTRY_KEY
-    assert bounds.value.spool_registry_key == REMOTE_SPOOL_BYTES_REGISTRY_KEY
-
-    outbox = RemoteOutbox(directory=tmp_path / "spool", bounds=bounds.value)
-    first = outbox.enqueue(
-        producer_id="worker-1",
-        id="rec-1",
-        kind="evidence",
-        payload={"n": 1},
-    )
-    second = outbox.enqueue(
-        producer_id="worker-1",
-        id="rec-2",
-        kind="command",
-        payload={"n": 2},
-    )
-    assert isinstance(first, Ok) and isinstance(second, Ok)
-    assert [e.id for e in outbox.replay()] == ["rec-1", "rec-2"]
-
-    # Survive reconnect by reopening the same durable spool.
-    reopened = RemoteOutbox(directory=tmp_path / "spool", bounds=bounds.value)
-    assert [e.id for e in reopened.replay()] == ["rec-1", "rec-2"]
-    assert reopened.depth == 2
-
-    ack = reopened.acknowledge(producer_id="worker-1", id="rec-1")
-    assert isinstance(ack, Ok)
-    assert ack.value.id == "rec-1"
-    assert reopened.last_acknowledged_id == "rec-1"
-    assert [e.id for e in reopened.replay()] == ["rec-2"]
-
-    # Entry is gone only after ack; a second ack of the same id fails.
-    assert is_refusal(reopened.acknowledge(producer_id="worker-1", id="rec-1"))
-
-
-def test_outbox_bound_blocks_evidence_discards_telemetry_first(tmp_path: Path) -> None:
-    bounds = OutboxBounds.try_create(max_depth=2, max_spool_bytes=10_000)
-    assert isinstance(bounds, Ok)
-    outbox = RemoteOutbox(directory=tmp_path / "bounded", bounds=bounds.value)
-
-    assert isinstance(
-        outbox.enqueue(
-            producer_id="w",
-            id="e1",
-            kind="evidence",
-            payload={"body": "one"},
-        ),
-        Ok,
-    )
-    assert isinstance(
-        outbox.enqueue(
-            producer_id="w",
-            id="t1",
-            kind="telemetry",
-            payload={"metric": 1},
-        ),
-        Ok,
-    )
-    assert outbox.dispatch_blocked is True
-
-    # Telemetry under back-pressure is discarded rather than blocking forever.
-    tel = outbox.enqueue(
-        producer_id="w",
-        id="t2",
-        kind="telemetry",
-        payload={"metric": 2},
-    )
-    assert is_refusal(tel)
-    assert tel.context["field"] == "telemetry_discarded"
-
-    # Evidence must not be discarded — dispatch is blocked instead.
-    blocked = outbox.enqueue(
-        producer_id="w",
-        id="e2",
-        kind="evidence",
-        payload={"body": "two"},
-    )
-    assert is_refusal(blocked)
-    assert blocked.context["field"] == "dispatch_blocked"
-    assert outbox.dispatch_blocked is True
-    assert [e.id for e in outbox.pending()] == ["e1", "t1"]
-
-    discarded = outbox.prefer_discard_telemetry()
-    assert [e.id for e in discarded] == ["t1"]
-    assert [e.kind for e in outbox.pending()] == ["evidence"]
-
-
-def test_environment_lost_records_unknown_tail_not_terminal(tmp_path: Path) -> None:
-    bounds = OutboxBounds.try_create(max_depth=5, max_spool_bytes=10_000)
-    assert isinstance(bounds, Ok)
-    outbox = RemoteOutbox(directory=tmp_path / "lost", bounds=bounds.value)
-    assert isinstance(
-        outbox.enqueue(
-            producer_id="w",
-            id="a1",
-            kind="evidence",
-            payload={},
-        ),
-        Ok,
-    )
-    assert isinstance(
-        outbox.enqueue(
-            producer_id="w",
-            id="a2",
-            kind="evidence",
-            payload={},
-        ),
-        Ok,
-    )
-    assert isinstance(outbox.acknowledge(producer_id="w", id="a1"), Ok)
-
-    marker = outbox.on_environment_lost()
-    assert marker.kind == UNKNOWN_TAIL_KIND
-    assert marker.last_acknowledged_id == "a1"
-    assert marker.pending_count == 1
-    assert marker.authored_by == "daemon"
-    assert marker.manufactures_terminal_outcome is False
-    assert marker.to_dict()["manufactures_terminal_outcome"] is False

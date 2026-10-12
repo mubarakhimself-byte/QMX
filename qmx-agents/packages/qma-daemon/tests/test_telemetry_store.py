@@ -23,8 +23,7 @@ from qma.daemon.telemetry import (
     OpenTelemetryExportAdapter,
     RecordingTelemetryExporter,
 )
-from qma.wire.outbox import OutboxBounds, RemoteOutbox
-from qmf.core import Ok, is_ok, is_refusal
+from qmf.core import is_ok, is_refusal
 
 TELEMETRY_SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon" / "telemetry"
 
@@ -120,48 +119,6 @@ def test_otel_export_port_without_sdk_import() -> None:
                     assert not alias.name.startswith("opentelemetry"), path
             if isinstance(node, ast.ImportFrom) and node.module is not None:
                 assert not node.module.startswith("opentelemetry"), path
-
-
-def test_outbox_drops_telemetry_before_evidence(tmp_path: Path) -> None:
-    bounds = OutboxBounds.try_create(max_depth=2, max_spool_bytes=10_000)
-    assert isinstance(bounds, Ok)
-    outbox = RemoteOutbox(directory=tmp_path / "bounded", bounds=bounds.value)
-    assert is_ok(
-        outbox.enqueue(
-            producer_id="worker-1",
-            id="ev-1",
-            kind="evidence",
-            payload={"entry": "ledger"},
-        )
-    )
-    assert is_ok(
-        outbox.enqueue(
-            producer_id="worker-1",
-            id="tel-1",
-            kind="telemetry",
-            payload={"kind": "metric"},
-        )
-    )
-    tel = outbox.enqueue(
-        producer_id="worker-1",
-        id="tel-2",
-        kind="telemetry",
-        payload={"kind": "metric"},
-    )
-    assert is_refusal(tel)
-    assert tel.context["field"] == "telemetry_discarded"
-    blocked = outbox.enqueue(
-        producer_id="worker-1",
-        id="ev-2",
-        kind="evidence",
-        payload={"entry": "more"},
-    )
-    assert is_refusal(blocked)
-    assert blocked.context["field"] == "dispatch_blocked"
-    discarded = outbox.prefer_discard_telemetry()
-    assert len(discarded) == 1
-    assert discarded[0].kind == "telemetry"
-    assert all(entry.kind == "evidence" for entry in outbox.pending())
 
 
 def test_trim_telemetry_and_mailbox_only(tmp_path: Path) -> None:

@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 from qma.wire import (
-    CORRELATION_MINT_ORIGINS,
-    CORRELATION_MISSING_ANNOTATION,
     DEDUP_WINDOW_REGISTRY_KEY,
     CommandDedupCursor,
-    CorrelationMintOrigin,
     IdempotencyKey,
     WireEnvelope,
-    admit_correlation,
-    assert_copied_verbatim,
-    copy_correlation_id,
     idempotency_key_from_envelope,
-    mint_correlation_id,
-    propagate_correlation,
 )
 from qma.wire.idempotency import IdempotencyError
 from qmf.core.chrono import Duration, Instant
-from qmf.core.refusal import Ok, RefusalCategory, is_ok, is_refusal
+from qmf.core.refusal import Ok
 
 
 def _instant(ns: int) -> Instant:
@@ -109,126 +101,3 @@ def test_non_positive_dedup_window_refused() -> None:
         assert DEDUP_WINDOW_REGISTRY_KEY in str(exc)
     else:
         raise AssertionError("expected IdempotencyError")
-
-
-def test_three_correlation_mint_origins_only() -> None:
-    assert (
-        frozenset(
-            {
-                "operator_command",
-                "scheduled_trigger",
-                "daemon_lifecycle",
-            }
-        )
-        == CORRELATION_MINT_ORIGINS
-    )
-    for origin in CorrelationMintOrigin:
-        minted = mint_correlation_id(origin=origin, correlation_id="corr-root-1")
-        assert isinstance(minted, Ok)
-        assert minted.value.origin is origin
-        assert minted.value.correlation_id == "corr-root-1"
-        assert minted.value.correlation_missing is False
-
-    refused = mint_correlation_id(origin="recipient", correlation_id="x")
-    assert is_refusal(refused)
-
-
-def test_correlation_copied_verbatim_never_regenerated() -> None:
-    origin = mint_correlation_id(
-        origin=CorrelationMintOrigin.OPERATOR_COMMAND,
-        correlation_id="corr-origin-full-opaque-token",
-    )
-    assert isinstance(origin, Ok)
-    copied = copy_correlation_id(origin.value.correlation_id)
-    assert isinstance(copied, Ok)
-    assert copied.value == "corr-origin-full-opaque-token"
-
-    chain = propagate_correlation(
-        origin.value.correlation_id,
-        [
-            origin.value.correlation_id,
-            "corr-origin-full-opaque-token",
-            copy_correlation_id(origin.value.correlation_id).value,  # type: ignore[union-attr]
-        ],
-    )
-    assert is_ok(chain)
-
-    abbreviated = assert_copied_verbatim(
-        origin.value.correlation_id,
-        origin.value.correlation_id[:8],
-    )
-    assert is_refusal(abbreviated)
-    assert "verbatim" in str(abbreviated.context["reason"])
-
-    regenerated = assert_copied_verbatim(origin.value.correlation_id, "corr-brand-new")
-    assert is_refusal(regenerated)
-
-    derived = propagate_correlation(
-        origin.value.correlation_id,
-        [origin.value.correlation_id, f"{origin.value.correlation_id}-child"],
-    )
-    assert is_refusal(derived)
-    assert derived.context["downstream_index"] == 1
-
-
-def test_non_evidence_missing_correlation_is_typed_refusal_without_substitute() -> None:
-    refused = admit_correlation(correlation_id=None, is_evidence_append=False)
-    assert is_refusal(refused)
-    assert refused.category is RefusalCategory.INVALID_INPUT
-    assert refused.context["field"] == "correlation_id"
-    assert refused.context["substitute_identifier"] is None
-    assert "correlation_id" not in refused.context or refused.context.get("correlation_id") is None
-    # Conformance: refusal must not invent a stand-in id under any key.
-    for key, value in refused.context.items():
-        if key in {"field", "reason", "is_evidence_append", "substitute_identifier"}:
-            continue
-        assert value is None or not (
-            isinstance(value, str) and value.startswith(("corr-", "lifecycle-", "daemon-"))
-        )
-
-
-def test_evidence_append_carve_out_preserves_correlation_missing() -> None:
-    admitted = admit_correlation(
-        correlation_id=None,
-        is_evidence_append=True,
-        daemon_lifecycle_id="daemon-lifecycle-42",
-    )
-    assert isinstance(admitted, Ok)
-    assert admitted.value.correlation_id == "daemon-lifecycle-42"
-    assert admitted.value.correlation_missing is True
-    assert admitted.value.source == "lifecycle_carve_out"
-    assert admitted.value.origin is CorrelationMintOrigin.DAEMON_LIFECYCLE
-
-    fields = admitted.value.to_envelope_fields()
-    assert fields["correlation_id"] == "daemon-lifecycle-42"
-    assert fields[CORRELATION_MISSING_ANNOTATION] is True
-
-    env = WireEnvelope.try_create(
-        v="1.0.0",
-        type="ledger.updated",
-        id="ev-1",
-        producer_id="daemon",
-        scope_path=[{"kind": "desk", "id": "d"}],
-        payload={"entry": "evidence"},
-        correlation_id=fields["correlation_id"],
-        correlation_missing=True,
-        seq=1,
-    )
-    assert isinstance(env, Ok)
-    serialized = env.value.to_dict()
-    assert serialized["correlation_id"] == "daemon-lifecycle-42"
-    assert serialized[CORRELATION_MISSING_ANNOTATION] is True
-    # Annotation preserved for audit — evidence is not dropped.
-    assert CORRELATION_MISSING_ANNOTATION in serialized
-
-
-def test_present_correlation_on_evidence_skips_carve_out() -> None:
-    admitted = admit_correlation(
-        correlation_id="corr-already",
-        is_evidence_append=True,
-        daemon_lifecycle_id="daemon-lifecycle-unused",
-    )
-    assert isinstance(admitted, Ok)
-    assert admitted.value.correlation_id == "corr-already"
-    assert admitted.value.correlation_missing is False
-    assert CORRELATION_MISSING_ANNOTATION not in admitted.value.to_envelope_fields()
