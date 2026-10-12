@@ -259,3 +259,21 @@ The Agents SDK is the QMX fit. It is provider-neutral through OpenAI-compatible 
 - Whether to claim the Max API credits for QMX.
 - Folding `rebuild/base` into `integration` and creating `staging`.
 - Which junk branches and worktrees to delete.
+
+---
+
+## 4. Corrections from the operator (same evening, later)
+
+- **No API spending for Claude or Codex, ever.**
+  - Claude runs only on his Max 5x subscription, through the Agent SDK signed in with his plan (the help-centre line above).
+  - GPT only through his ChatGPT subscription ("Sign in with ChatGPT" for locally hosted apps; feasibility to confirm).
+  - The Max API-credit idea is dropped.
+  - Other providers (GLM, MiniMax, Kimi, DeepSeek and the rest) use their API keys.
+- **No owned server.** He does not want to own or manage compute (no Contabo burden, no RAM ceiling). Server work runs on rented, on-demand compute from several providers, so QMX is never limited by one box.
+  - P21 (`qmx-remote`) already targets several providers.
+  - Amp-style "minutes" pricing is the mental model.
+  - §3 point 6 ("Contabo as QMX's own orb") is withdrawn.
+- **Mini apps are NOT Amp portals.** A mini app is QMX's packaged, versioned unit with ML-level complexity (see `21-miniapps-and-workflows-seeds.md`). The portal or preview idea is at most a viewing aid.
+- **Vocabulary:** Claude has liberty. Graphs and loops give more depth than the original node editor. Workflows can be agentic, non-agentic or mixed. Design for the best.
+- **More than one Fable sub-agent** is allowed for this architecture push.
+- **He asked for direct responses to his questions throughout the day.** The architecture must answer the open questions listed in `00-session-ledger-2026-10-12.md` §2, not defer them.
