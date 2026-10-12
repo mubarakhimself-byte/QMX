@@ -7,10 +7,13 @@ QMA v2 ("Quant agents", version 2) is the rebuilt agent system of QMX. This fold
 | File | What it is | Status |
 |---|---|---|
 | `PRD.md` | Requirements: 148 FRs (81 needed for Wednesday), 39 NFRs, constraints, glossary, port list, questions | Current |
-| `HOW-WHY.md` | What each requirement touches in today's code, and why that code is shaped that way | Coming next |
-| `ARCHITECTURE.md` | The design, built against the PRD | After HOW-WHY |
-| `ARCHITECTURE-CHECK.md` | Every FR and NFR mapped to the architecture; gaps listed | After ARCHITECTURE |
-| `SHIPPING-PLAN.md` | Ordered slices with "done when" checks, for the orchestrator session | After the check |
+| `HOW-WHY.md` | What each requirement touches in today's code, and why that code is shaped that way (4 passes) | Current |
+| `ARCHITECTURE.md` | The design, built against the PRD (revision 3a) | Current |
+| `ARCHITECTURE-CHECK.md` | Every FR and NFR mapped to the architecture; gaps listed (first version; fixes are logged in ARCHITECTURE §10) | Current |
+| `SHIPPING-PLAN.md` | 15 PRs in order, with "done when" checks | Current |
+| `ORCHESTRATOR-PROMPT.md` | Prompt for the fresh shipping orchestrator session | Current |
+| `START-HERE.md` | **Read first on Tuesday:** the questions, the homework, then go | Current |
+| `USER-JOURNEYS.md`, `BACKLOG.md`, `ARCH-BRIEF.md`, `candidates/`, `reviews/` | Journeys, the backlog, the design-runner brief, the two candidates, the reviews | Current |
 | `FILE-INDEX.md` | Verdict on every earlier planning file (current input, reference, superseded) | Current |
 
 ## Planning order (agreed 2026-10-12; don't skip steps)
