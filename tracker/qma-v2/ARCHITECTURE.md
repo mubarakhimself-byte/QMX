@@ -604,7 +604,7 @@ Three credentials, one gate.
 `PrincipalGate` replaces `BearerGate`: a token resolves to `(principal, scope, session_id|app_id)`, routes declare the principal they accept through a FastAPI dependency, FastMCP calls get it from the request context, and every `ControlService` method takes `who: Principal`; `OPERATIONS` rows carry an `allowed` set. `/api/health` becomes token-free and pid-only so the launcher's ownership checks survive (Z6). Settings: every existing section (`providers`, `mcp_servers`, `budgets`, `memory_provider`, `backup`, `brokers`, `remote`) and the new ones (`approvals`, `deny`, `seats`) are operator-only through `settings_put_protected`; agents may write only `agent.*` keys. The §3.2 key names use the section names (`budgets.*`, `seats.*`). A negative test holds the doors and every protected section at 403 for agent and app tokens.
 
 **How `qmx-control token` gets its code (the channel).**
-- The command never reads a file or a log. It asks the running host over a local named pipe, `\.\pipe\qmx-operator`.
+- The command never reads a file or a log. It asks the running host over a local named pipe, `\\.\pipe\qmx-operator`.
 - The host creates the pipe with an ACL granting access to the operator's Windows account only.
 - On every request the host checks the caller with `GetNamedPipeClientProcessId`, plus the token user of that process. Only the operator's interactive user gets a code. Each code is single-use and expires after 60 s.
 - `start` and QMB's `control_host` don't use the pipe. They generate the code themselves and pass it to the child host on stdin, which is `DEVNULL` today, so packet 1b adds this hand-off.
