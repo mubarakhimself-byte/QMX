@@ -18,3 +18,8 @@ Who are QMX's agents?
 - What happens to the August vocabulary (Researcher/Analyst/Developer/PM/Trader) that the UI still shows as targets?
 
 Inputs: `qmx-internal.md` §a.7 and §e items 1-3.
+
+## Added 2026-10-12
+
+- Cross-surface reach: from the Lab use something in Portfolio; from the main chat reach both; the copilot must know which surface it acts on (also ticket 18).
+- An engine and a model are chosen per agent (ticket 02), so each copilot can be moved off Claude when Claude usage runs low.

@@ -20,7 +20,7 @@ A ratified design for the QMX agent system, ready to cut into build packets and 
 - skills and system prompts
 - a shipping plan: packets that can run in parallel, tracked against this map, inside usage limits
 
-Today and the next sittings are planning only. No code ships until ticket 16.
+Planning stays in this session. Each slice ships from a separate session as soon as its decisions are made (agreed 2026-10-12); ticket 16 orders the slices.
 
 ## Notes
 
@@ -33,6 +33,7 @@ Today and the next sittings are planning only. No code ships until ticket 16.
   - Follow the skill's spirit, not its letter (operator, 2026-10-12).
 - **Backlog** (other efforts and follow-ups, kept apart from the map): `tracker/agent-system/backlog.md`.
 - **One ticket per session**, research tickets excepted. Load this map first in every session. It is the tracker that survives compaction and session switches.
+- **Words:** `glossary.md` holds the agreed terms ("Claude Code", never "Agent SDK").
 - **HITL tickets:** use `/grilling` and `/domain-modeling`. Use `/codebase-design` for module and seam questions.
 - **Research inputs (fresh, 2026-10-12, primary sources):** `rebuild/research/2026-10-12-agent-system/`
   - `qmx-internal.md`: the UI screen by screen, the August, September and October designs, what the code really does, and 15 contradictions between the eras
@@ -74,14 +75,14 @@ Today and the next sittings are planning only. No code ships until ticket 16.
 
 ## Not yet specified
 
-- **Lab default workflows and the built-in research harness.**
+- **Lab default workflows and the built-in research harness** (the engine itself is now ticket 17).
   - Enhance what P10, P15 and P19 shipped.
   - Candidates from `qmx-internal.md` §c.4: the cited research pipeline, Hypothesis→Test→Learn→Mutate→Gate, experiment-tree budgets and kill criteria.
   - Waits on the WF1/WF2 rework (out of scope here) and on tickets 02 and 04.
 - **Self-improvement.** "Don't repeat Wednesday's mistake": learned procedures from computer use and other work, curation, approval. Hermes is the lead reference. Graduates after ticket 08.
 - **Skill catalogue.** Which skills ship by default, per copilot, and how the operator adds them. After tickets 04 and 13.
 - **RLM and code-over-data in the chosen harness.** After ticket 02.
-- **Mini-app copilots** and the screen-tier-3 in-app code question (`qmx-internal.md` §e item 14).
+- **Mini-app copilots** (how they build things is now ticket 18) and the screen-tier-3 in-app code question (`qmx-internal.md` §e item 14).
 - **Embedding desktop apps inside QMX** (cTrader beside the chat) beyond what ticket 12 measures.
 - **QA scenario generation per screen** (Lab and Portfolio use cases) for the post-build QA phase.
 
