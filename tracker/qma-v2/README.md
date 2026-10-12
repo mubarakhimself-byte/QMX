@@ -19,6 +19,8 @@ QMA v2 ("Quant agents", version 2) is the rebuilt agent system of QMX. This fold
 2. **`/how` and `/why`:** run against the PRD, before any design.
 3. **`/architect`:** on Fable, designed twice, then synthesised.
 4. **Check:** every requirement traced to the design.
+
+**Re-run rule (operator, 2026-10-12, night):** every new input re-opens the workflow. When new research, journeys or decisions arrive, run a `/how` + `/why` delta pass on the code the new input touches *before* the architecture uses it. This applies again after the architecture whenever a new input lands. The log below tracks each pass.
 5. **Shipping plan:** pstack poteto-mode multi-phase-plan.
 6. **Orchestrator session:** a fresh session coordinates one agent per slice. It ships into `rebuild/base`, because `integration` isn't ready. Docs stay live as each slice lands. `main` moves only by the operator's click.
 
@@ -37,3 +39,10 @@ QMA v2 ("Quant agents", version 2) is the rebuilt agent system of QMX. This fold
 - `rebuild/research/2026-10-12-agent-system/models-routing.md`: vendor terms.
 
 Superseded files sit in `tracker/agent-system/archive/` and `rebuild/research/2026-10-12-agent-system/archive/`. Each is stamped and kept for history.
+
+## Pass log
+
+| When | Pass | Output | Inputs it covered |
+|---|---|---|---|
+| 2026-10-12 ~21:10 | `/how` + `/why` #1 | `HOW-WHY.md` | PRD |
+| pending | `/how` + `/why` delta #2 | `HOW-WHY.md` §delta | `USER-JOURNEYS.md`, research 30, 31, 32 |
