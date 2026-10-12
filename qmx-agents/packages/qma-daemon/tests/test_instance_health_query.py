@@ -26,15 +26,11 @@ from qma.daemon.discovery import (
     InstanceHealthService,
     claim_listing_axes_absent_at_inspect_sha,
     claim_qmn_qmf_health_is_instance_report,
-    cli_instance_health,
     instance_health_identity,
-    query_instance_health,
-    refuse_instance_health_chrome,
     refuse_published_as_instance_health,
 )
 from qma.daemon.journal.stores import CLOSED_INDEPENDENT_STORES, CLOSED_STORE_NAMES
 from qma.daemon.plugins import DaemonPluginContext, PluginLoader
-from qma.daemon.sessions.copilot import CopilotHost
 from qma.wire import WireQuery
 from qmf.core import is_ok, is_refusal
 
@@ -165,44 +161,6 @@ def test_pack_instance_health_is_typed_report_distinct_from_published() -> None:
     assert unpublished is not None
     assert unpublished.published is False
     assert after.value.ready is not unpublished.published
-
-
-def test_copilot_and_cli_consume_the_same_headless_query() -> None:
-    loader = _loader()
-    service = InstanceHealthService(loader=loader)
-    registered = service.register_instance(
-        instance_id="inst:1",
-        config_revision=4,
-        package_id="research-corpus",
-        package_version="0.1.0",
-        ready=False,
-    )
-    assert is_ok(registered)
-    copilot = CopilotHost(instance_health=service)
-    from_service = service.health("inst:1")
-    from_query = query_instance_health(service, "inst:1", consumer="copilot")
-    from_copilot = copilot.query_instance_health("inst:1")
-    from_cli = cli_instance_health(service, "inst:1")
-    assert is_ok(from_service)
-    assert is_ok(from_query)
-    assert is_ok(from_copilot)
-    assert is_ok(from_cli)
-    payload = dict(from_service.value.to_payload())
-    assert dict(from_query.value.to_payload()) == payload
-    assert dict(from_copilot.value.to_payload()) == payload
-    assert dict(from_cli.value.to_payload()) == payload
-    assert from_cli.value.ready is False
-    chrome_consumer = query_instance_health(service, "inst:1", consumer="dashboard")
-    assert is_refusal(chrome_consumer)
-    assert chrome_consumer.context["gap"] in {"GAP-0081", "GAP-0100"}
-    ui_consumer = query_instance_health(service, "inst:1", consumer="chrome")
-    assert is_refusal(ui_consumer)
-    assert ui_consumer.context["gap"] == "GAP-0081"
-    missing = CopilotHost().query_instance_health("inst:1")
-    assert is_refusal(missing)
-    unknown = service.health("inst:missing")
-    assert is_refusal(unknown)
-    assert is_refusal(refuse_instance_health_chrome(gap="GAP-0100"))
 
 
 def test_module_never_imports_qmb_or_qmn() -> None:

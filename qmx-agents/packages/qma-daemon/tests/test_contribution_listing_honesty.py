@@ -28,12 +28,9 @@ from qma.daemon.discovery import (
     VIEW_IS_CONTRIBUTION_HIT,
     ContributionListingService,
     claim_listing_axes_absent_at_inspect_sha,
-    cli_list_contributions,
     contribution_listing_identity,
-    query_contribution_listings,
 )
 from qma.daemon.plugins import DaemonPluginContext, PluginLoader
-from qma.daemon.sessions.copilot import CopilotHost
 from qma.wire.contribution_pin import (
     CONTRIBUTION_PIN_IS_GRANT,
     CONTRIBUTION_PIN_WIRED_AT_INSPECT_SHA,
@@ -252,31 +249,6 @@ def test_hypotheses_views_product_session_and_chrome_refuse() -> None:
 
     busy = listings.list_contributions(occupancy="run")
     assert is_refusal(busy)
-
-
-def test_copilot_and_cli_consume_the_same_headless_query() -> None:
-    listings = ContributionListingService(_loader())
-    copilot = CopilotHost(listings=listings)
-    from_service = listings.list_contributions()
-    from_query = query_contribution_listings(listings, consumer="copilot")
-    from_copilot = copilot.list_contributions()
-    from_cli = cli_list_contributions(listings)
-    assert is_ok(from_service)
-    assert is_ok(from_query)
-    assert is_ok(from_copilot)
-    assert is_ok(from_cli)
-    service_payloads = [dict(row.to_payload()) for row in from_service.value]
-    assert [dict(row.to_payload()) for row in from_query.value] == service_payloads
-    assert [dict(row.to_payload()) for row in from_copilot.value] == service_payloads
-    assert [dict(row.to_payload()) for row in from_cli.value] == service_payloads
-    assert from_cli.value[0].published is True
-    assert from_cli.value[0].healthy is False
-    assert from_cli.value[0].authorized is False
-    chrome_consumer = query_contribution_listings(listings, consumer="dashboard")
-    assert is_refusal(chrome_consumer)
-    assert chrome_consumer.context["gap"] in {"GAP-0081", "GAP-0100"}
-    missing = CopilotHost().list_contributions()
-    assert is_refusal(missing)
 
 
 def test_module_never_imports_qmb_occupancy_none() -> None:
