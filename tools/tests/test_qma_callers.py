@@ -259,3 +259,24 @@ def test_facade_plan_ignores_reexports_only_the_package_tests_use(
             "retiring_callers": ["qmx-agents/packages/qma-core/tests/test_old.py"],
         }
     ]
+
+
+def test_package_initializer_groups_with_the_module_it_reexports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pkg = CORE + "old/"
+    result = scan(
+        tmp_path,
+        monkeypatch,
+        {
+            CORE + "__init__.py": "",
+            pkg + "__init__.py": "from .service import Old\n",
+            pkg + "service.py": "class Old: pass\n",
+            "qmx-agents/packages/qma-core/tests/test_old.py": "from qma.core.old import Old\n",
+            "qmb/src/door.py": "import qma.core\n",
+        },
+        trim=True,
+    )
+    assert [s["modules"] for s in result["deletion_sets"]] == [
+        ["qma.core.old", "qma.core.old.service"]
+    ]

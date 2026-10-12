@@ -8,11 +8,9 @@ from __future__ import annotations
 import qma.daemon
 import qma.daemon.bus
 import qma.daemon.capabilities
-import qma.daemon.context
 import qma.daemon.diagnosis
 import qma.daemon.envs
 import qma.daemon.experiments
-import qma.daemon.handles
 import qma.daemon.hooks
 import qma.daemon.host_control
 import qma.daemon.journal
@@ -56,8 +54,6 @@ def test_structural_modules_importable() -> None:
         qma.daemon.tools,
         qma.daemon.envs,
         qma.daemon.experiments,
-        qma.daemon.handles,
-        qma.daemon.context,
         qma.daemon.diagnosis,
         qma.daemon.observability_boundary,
         qma.daemon.operator_log,
