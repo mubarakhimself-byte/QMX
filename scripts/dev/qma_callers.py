@@ -9,8 +9,9 @@ package initialization, and literal dotted QMA references (conservative dynamic
 loads/monkeypatches/entrypoints). Computed module names and external deployments
 cannot be proven statically. Parse failures are fatal, never silently skipped.
 
---trim-facades plans removal of unused initializer re-exports; its sets are NOT
-safe until those exports are actually trimmed and a normal scan is clean.
+--trim-facades plans removal of initializer re-exports that nothing outside the
+package's own tests/examples imports; its sets are NOT safe until those exports
+are actually trimmed and a normal scan is clean.
 --retire-caller names individual unprotected legacy examples/tests to retire
 with their implementation. Protected callers cannot be excluded. Neither flag
 edits files. QMA's own tests are reported separately and require review before
@@ -123,7 +124,10 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 for alias in node.names:
                     exports[module, alias.asname or alias.name] = (base, alias.name)
 
-    used_exports = set()
+    # Which files import each re-export from its package; the current file is
+    # tracked while scanning so resolve() can record it.
+    used_exports = defaultdict(set)
+    current = [""]
 
     def resolve(base: str, name: str = "", seen: frozenset = frozenset()) -> set[str]:
         if (base, name) in seen:
@@ -137,7 +141,7 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
         if qualified in modules:
             result.add(qualified)
         elif (base, name) in exports:
-            used_exports.add((base, name))
+            used_exports[base, name].add(current[0])
             target, symbol = exports[base, name]
             result |= resolve(target, symbol, seen | {(base, name)})
         return result
@@ -147,6 +151,7 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
     trim_candidates = []
     missing_imports = set()
     for path, tree in trees.items():
+        current[0] = path
         module = module_name(path)
         initializer = path.endswith("/__init__.py")
         expression_strings = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Expr)}
@@ -260,9 +265,13 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                     trim_candidates.append((edge, names))
                 else:
                     edges.append(edge)
-    # A re-export some caller imports from the package is not dead facade.
+    # A re-export some caller imports from the package is not dead facade,
+    # unless that caller is the package's own test or example, which retires
+    # with whatever the re-export points at.
     for edge, names in trim_candidates:
-        (edges if names & used_exports else planned_trims).append(edge)
+        users = set().union(*(used_exports.get(n, set()) for n in names))
+        live = {u for u in users if not owned_extra(u) and u not in retired}
+        (edges if live else planned_trims).append(edge)
     if missing_imports:
         raise ValueError("Imports of missing QMA modules:\n" + "\n".join(sorted(missing_imports)))
     # The retained loader uses spec_from_file_location with manifest entrypoints,
