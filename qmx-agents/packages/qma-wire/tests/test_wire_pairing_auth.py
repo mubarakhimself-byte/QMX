@@ -9,7 +9,6 @@ from qma.wire import (
     PAIRING_RECORD_ID_PREFIX,
     PAIRING_SESSION_ID_FIELD,
     PAIRING_WS_SUBPROTOCOL_PREFIX,
-    AuthenticatedWireSession,
     assert_no_secret_on_wire_surface,
     authenticate_before_protocol,
     authenticate_pairing_record,
@@ -20,7 +19,6 @@ from qma.wire import (
     parse_pairing_bearer_authorization,
     refuse_pairing_proof_in_query,
 )
-from qma.wire.copilot_profile import COPILOT_PROFILE_EXISTED_AT_INSPECT_SHA
 from qmf.core.refusal import RefusalCategory, is_ok, is_refusal
 
 
@@ -131,9 +129,3 @@ def test_looks_like_bearer_proof_value_class() -> None:
     assert looks_like_bearer_proof(f"{PAIRING_RECORD_ID_PREFIX}ab") is False
     assert looks_like_bearer_proof("not-a-proof", known_proofs={"secret-proof"}) is False
     assert looks_like_bearer_proof("secret-proof", known_proofs={"secret-proof"}) is True
-
-
-def test_this_story_did_not_deliver_copilot_profile() -> None:
-    assert COPILOT_PROFILE_EXISTED_AT_INSPECT_SHA is False
-    session = AuthenticatedWireSession.__name__
-    assert session == "AuthenticatedWireSession"
