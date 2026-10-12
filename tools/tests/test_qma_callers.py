@@ -236,3 +236,26 @@ def test_facade_plan_never_trims_a_reexport_a_caller_uses(
     )
     trimmed = {(edge["path"], edge["line"]) for edge in result["planned_facade_trims"]}
     assert trimmed == {(CORE + "__init__.py", 2)}
+
+
+def test_facade_plan_ignores_reexports_only_the_package_tests_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = scan(
+        tmp_path,
+        monkeypatch,
+        {
+            CORE + "__init__.py": "from .old import Old\n",
+            CORE + "old.py": "class Old: pass\n",
+            "qmx-agents/packages/qma-core/tests/test_old.py": "from qma.core import Old\n",
+            "qmb/src/door.py": "import qma.core\n",
+        },
+        trim=True,
+    )
+    assert result["deletion_sets"] == [
+        {
+            "modules": ["qma.core.old"],
+            "lines": 1,
+            "retiring_callers": ["qmx-agents/packages/qma-core/tests/test_old.py"],
+        }
+    ]
