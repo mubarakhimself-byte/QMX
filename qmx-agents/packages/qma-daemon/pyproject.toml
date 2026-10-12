@@ -14,8 +14,8 @@ dependencies = [
     # the forex calendar extension so ZoneInfo works on Windows hosts.
     "tzdata==2025.2",
     "langchain==1.4.3",
-    "langgraph==1.2.12",
-    "deepagents==0.7.21",
+    "langgraph==1.2.14",
+    "deepagents==0.7.22",
     "PyYAML==6.0.3",
 ]
 
@@ -31,7 +31,7 @@ module-name = "qma.daemon"
 [tool.uv.sources]
 qma-core = { workspace = true }
 qma-wire = { workspace = true }
-qmf-core = { path = "../../../packages/qmf-core", editable = true }
-qmf-registry = { path = "../../../packages/qmf-registry", editable = true }
-qmf-data = { path = "../../../packages/qmf-data", editable = true }
-qmf-risk = { path = "../../../packages/qmf-risk", editable = true }
+qmf-core = { workspace = "../../.." }
+qmf-registry = { workspace = "../../.." }
+qmf-data = { workspace = "../../.." }
+qmf-risk = { workspace = "../../.." }

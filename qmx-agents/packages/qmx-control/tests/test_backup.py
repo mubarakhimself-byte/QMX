@@ -21,7 +21,7 @@ def test_backup_settings_and_rest_mcp_restore(
     config.write_text("[fixture]\ntype = local\n")
     monkeypatch.setenv("RCLONE_CONFIG", str(config))
     service = ControlService(tmp_path / "home")
-    example = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+    example = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
     service.apps_create(str(example), "first_party")
     service.apps_start("exchange-status")
     volume = service.home / "apps/exchange-status"

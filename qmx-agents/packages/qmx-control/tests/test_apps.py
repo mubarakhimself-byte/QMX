@@ -16,7 +16,7 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
     service = ControlService(tmp_path)
     token = secrets.token_urlsafe(32)
     headers = {"Authorization": f"Bearer {token}"}
-    example = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+    example = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 
     async def journey() -> None:
         with TestClient(create_app(service, token)) as rest:

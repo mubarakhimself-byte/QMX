@@ -21,6 +21,11 @@ def run_suite(name: str, cwd: Path, command: list[str], report: Path) -> tuple[i
         [
             uv,
             "run",
+            *(
+                ["--all-packages", "--all-groups"]
+                if cwd.is_relative_to(ROOT / "qmx-agents")
+                else []
+            ),
             *command,
             "--basetemp",
             str(report.with_suffix(".tmp")),
@@ -78,10 +83,20 @@ def main() -> int:
         ),
     ]
     suites.append(
-        ("qmx-control", ROOT / "qmx-control", ["python", "-m", "pytest", "tests", "-q"], ["tests"])
+        (
+            "qmx-control",
+            ROOT / "qmx-agents/packages/qmx-control",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
     )
     suites.append(
-        ("qmx-apps", ROOT / "qmx-apps", ["python", "-m", "pytest", "tests", "-q"], ["tests"])
+        (
+            "qmx-apps",
+            ROOT / "qmx-agents/packages/qmx-apps",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
     )
     suites.append(
         (

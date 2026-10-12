@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import qma.core
-from qma.core import content_address, tree_digest
+from qma.core import Money, content_address, fingerprint, is_ok, is_refusal, tree_digest
 from qma.core.barriers import parse_declaration, validate_network_posture
-from qma.core.foundation import Money, fingerprint, is_ok, is_refusal
 from qma.core.ontology import (
     ONTOLOGY_CHAIN,
     ActorId,

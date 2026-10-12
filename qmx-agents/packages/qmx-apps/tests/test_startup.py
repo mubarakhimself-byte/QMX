@@ -15,7 +15,7 @@ from qmx_apps.errors import AppError
 from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import Instance, Supervisor
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 
 
 class GatedClient:

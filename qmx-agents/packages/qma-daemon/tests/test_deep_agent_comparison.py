@@ -69,7 +69,7 @@ def test_same_specialist_skill_then_admitted_read(comparison: Any, tmp_path: Pat
     binding = record(runtime.journal, "agent_binding", result.request_id)
     assert binding["extensions"]["files"][PATH]
     if loop.deep_agent:
-        assert binding["harness"]["sdk_versions"]["deepagents"] == "0.7.21"
+        assert binding["harness"]["sdk_versions"]["deepagents"] == "0.7.22"
         assert record(runtime.journal, "deep_agent_budget", result.request_id) == {
             "models": 3,
             "summaries": 0,

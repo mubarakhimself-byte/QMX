@@ -42,7 +42,7 @@ test -s /opt/qmx-deploy/source.tar
 install -d -m 0755 /opt/qmx-versions/@REVISION@
 tar -xf /opt/qmx-deploy/source.tar -C /opt/qmx-versions/@REVISION@
 ln -sfnT /opt/qmx-versions/@REVISION@ /opt/qmx
-uv sync --project /opt/qmx/qmx-control --frozen --no-dev
+uv sync --project /opt/qmx/qmx-agents --package qmx-control --frozen --no-default-groups
 if [[ ! -f /var/lib/qmx/rclone.conf ]]; then
   printf '[bucket]\ntype = local\n' > /var/lib/qmx/rclone.conf
   chmod 600 /var/lib/qmx/rclone.conf
@@ -53,7 +53,7 @@ Description=QMX Docker node supervisor
 After=docker.service tailscaled.service network-online.target
 Requires=docker.service tailscaled.service
 [Service]
-ExecStart=/opt/qmx/qmx-control/.venv/bin/qmx node serve
+ExecStart=/opt/qmx/qmx-agents/.venv/bin/qmx node serve
 Restart=on-failure
 RestartSec=5
 UMask=0077

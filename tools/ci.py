@@ -15,20 +15,14 @@ def main() -> int:
         raise RuntimeError("uv is required to run CI")
     agents = ROOT / "qmx-agents"
     core = agents / "packages/qmx-agents"
-    control = ROOT / "qmx-control"
+    control = agents / "packages/qmx-control"
     domain = agents / "packages/qmx-tools"
-    apps = ROOT / "qmx-apps"
+    apps = agents / "packages/qmx-apps"
     broker = agents / "packages/qmx-broker"
     remote = agents / "packages/qmx-remote"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
-        (agents, ["sync", "--frozen", "--all-packages"]),
-        (core, ["sync", "--frozen"]),
-        (control, ["sync", "--frozen"]),
-        (domain, ["sync", "--frozen"]),
-        (apps, ["sync", "--frozen"]),
-        (broker, ["sync", "--frozen"]),
-        (remote, ["sync", "--frozen"]),
+        (agents, ["sync", "--frozen", "--all-packages", "--all-groups"]),
     ]
     for workspace in (ROOT, agents, core, control, domain, apps, broker, remote):
         for task in ("fmt-check", "lint", "types"):

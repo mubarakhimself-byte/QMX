@@ -13,7 +13,7 @@ import pytest
 from qmx_apps.docker import DockerSupervisor, docker, proxy_config
 from qmx_apps.errors import AppError, Document
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 
 
 def test_proxy_rules_fail_closed() -> None:

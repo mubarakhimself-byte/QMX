@@ -17,4 +17,4 @@ build-backend = "uv_build"
 module-name = "qma.core"
 
 [tool.uv.sources]
-qmf-core = { path = "../../../packages/qmf-core", editable = true }
+qmf-core = { workspace = "../../.." }

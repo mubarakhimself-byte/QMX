@@ -29,14 +29,11 @@ remote-e2b = ["qmx-remote[e2b]"]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
-[tool.uv.workspace]
-members = []
-
 [tool.uv.sources]
-qmx-apps = { path = "../qmx-apps", editable = true }
-qmx-broker = { path = "../qmx-agents/packages/qmx-broker", editable = true }
-qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
-qmx-remote = { path = "../qmx-agents/packages/qmx-remote", editable = true }
+qmx-apps = { workspace = true }
+qmx-broker = { workspace = true }
+qmx-agents = { workspace = true }
+qmx-remote = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -56,7 +53,7 @@ addopts = "-n 2 --dist worksteal"
 markers = ["serial: requires exclusive access to shared resources"]
 
 [tool.ruff]
-extend = "../pyproject.toml"
+extend = "../../../pyproject.toml"
 extend-exclude = []
 
 [tool.ruff.lint.per-file-ignores]
@@ -65,7 +62,7 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests"]
-extraPaths = ["src", "../examples/apps/mql5-articles"]
+extraPaths = ["src", "../../../examples/apps/mql5-articles"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 

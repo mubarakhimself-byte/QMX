@@ -9,19 +9,13 @@ the QMF workspace (AR-Q11).
 from __future__ import annotations
 
 from qma.core.content import content_address, tree_digest
-from qma.core.foundation import (
-    CorrelationId,
-    Fingerprint,
-    Instant,
-    Money,
-    Ok,
-    Result,
-    TypedRefusal,
-    WriterId,
-    fingerprint,
-    is_ok,
-    is_refusal,
-)
+from qmf.core.chrono import Instant, WriterId
+from qmf.core.exact import Money
+from qmf.core.fingerprint import Fingerprint, fingerprint
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_ok, is_refusal
+
+# Correlation ids remain opaque strings; no parallel identity class.
+type CorrelationId = str
 
 __all__ = [
     "CorrelationId",

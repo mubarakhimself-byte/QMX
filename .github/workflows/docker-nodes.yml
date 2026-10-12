@@ -2,7 +2,7 @@ name: Docker nodes
 on:
   pull_request:
     branches: ['rebuild/base']
-    paths: ['qmx-apps/**', 'qmx-control/**', 'examples/apps/**', '.github/workflows/docker-nodes.yml']
+    paths: ['qmx-agents/packages/qmx-apps/**', 'qmx-agents/packages/qmx-control/**', 'qmx-agents/uv.lock', 'qmx-agents/pyproject.toml', 'examples/apps/**', '.github/workflows/docker-nodes.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
           revision=$(git rev-parse HEAD)
           sudo install -d -m 700 /opt/qmx-deploy
           git archive --format=tar "$revision" | sudo tee /opt/qmx-deploy/source.tar > /dev/null
-          sed "s/@REVISION@/$revision/g" qmx-control/src/qmx_control/node-bootstrap.sh > "$RUNNER_TEMP/bootstrap.sh"
+          sed "s/@REVISION@/$revision/g" qmx-agents/packages/qmx-control/src/qmx_control/node-bootstrap.sh > "$RUNNER_TEMP/bootstrap.sh"
           sudo bash "$RUNNER_TEMP/bootstrap.sh"
           sudo bash "$RUNNER_TEMP/bootstrap.sh"
           sudo systemctl is-active docker tailscaled qmx-ship.timer
@@ -30,7 +30,7 @@ jobs:
           /usr/local/bin/uv --version
       - name: Verify checklist without live enrollment or subscriptions
         run: |
-          sudo /opt/qmx/qmx-control/.venv/bin/qmx node verify > "$RUNNER_TEMP/checklist.txt" && exit 1 || status=$?
+          sudo /opt/qmx/qmx-agents/.venv/bin/qmx node verify > "$RUNNER_TEMP/checklist.txt" && exit 1 || status=$?
           test "$status" = 1
           cat "$RUNNER_TEMP/checklist.txt"
           grep '^PASS docker' "$RUNNER_TEMP/checklist.txt"
@@ -39,4 +39,4 @@ jobs:
       - name: Build, run, isolate, restart and restore the example
         env:
           QMX_TEST_DOCKER: '1'
-        run: /usr/local/bin/uv run --project qmx-apps --frozen pytest qmx-apps/tests/test_docker.py -n 0 -q
+        run: /usr/local/bin/uv run --project qmx-agents --package qmx-apps --frozen pytest qmx-agents/packages/qmx-apps/tests/test_docker.py -n 0 -q

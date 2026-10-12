@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 from qma.core.plugins import DESK_PLUGIN_PACK_IDS, PluginContext
@@ -131,7 +132,19 @@ def test_ui_widget_contribution_is_refused_as_gap_0081() -> None:
 def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
     assert not UI_CONTRACT_ROOT.exists()
     text = WORKSPACE_TOML.read_text(encoding="utf-8")
-    assert 'members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon"]' in text
+    members = tomllib.loads(text)["tool"]["uv"]["workspace"]["members"]
+    assert set(members) == {
+        "packages/qma-core",
+        "packages/qma-wire",
+        "packages/qma-daemon",
+        "packages/qmx-agents",
+        "packages/qmx-tools",
+        "packages/qmx-broker",
+        "packages/qmx-remote",
+        "packages/qmx-apps",
+        "packages/qmx-control",
+    }
+    assert "packages/qma-ui-contract" not in members
     assert "qma-ui-contract" in text
     assert "GAP-0081" in text
 

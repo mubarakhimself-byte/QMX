@@ -14,12 +14,9 @@ e2b = ["e2b==2.53.1"]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
-[tool.uv.workspace]
-members = []
-
 [tool.uv.sources]
-qmx-agents = { path = "../qmx-agents", editable = true }
-qmx-apps = { path = "../../../qmx-apps", editable = true }
+qmx-agents = { workspace = true }
+qmx-apps = { workspace = true }
 
 [dependency-groups]
 dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0"]
