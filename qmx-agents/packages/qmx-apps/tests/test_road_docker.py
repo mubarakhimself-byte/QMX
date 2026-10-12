@@ -16,7 +16,7 @@ from qmx_apps.manifest import Definition
 from qmx_apps.road.validation import validate
 from qmx_apps.volume import Volume
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 
 
 @pytest.mark.parametrize("timeout", [False, True])

@@ -19,7 +19,7 @@ from qmx_control.service import ControlService
 
 def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> None:
     source = tmp_path / "definition"
-    example = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+    example = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
     shutil.copytree(example, source)
     manifest = source / "app.toml"
     manifest.write_text(manifest.read_text().replace('risk = "shows"', 'risk = "money"'))

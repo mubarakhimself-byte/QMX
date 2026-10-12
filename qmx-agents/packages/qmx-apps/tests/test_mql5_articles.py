@@ -16,7 +16,7 @@ from fastmcp import Client, FastMCP
 from qmx_apps.manifest import Definition
 
 FIXTURE = Path(__file__).with_name("fixtures") / "mql5-623.html"
-APP = Path(__file__).resolve().parents[2] / "examples/apps/mql5-articles"
+APP = Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"
 
 
 @pytest.fixture(autouse=True)

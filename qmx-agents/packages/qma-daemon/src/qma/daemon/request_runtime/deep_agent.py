@@ -15,10 +15,10 @@ from .graph_storage import JournalRecords
 from .providers import ProviderError
 
 SDK_VERSIONS = {
-    "deepagents": "0.7.21",
+    "deepagents": "0.7.22",
     "langchain": "1.4.3",
-    "langchain-core": "1.6.6",
-    "langgraph": "1.2.12",
+    "langchain-core": "1.6.7",
+    "langgraph": "1.2.14",
 }
 MODEL_PROFILE = "qmx:bounded-specialist-v1"
 EXCLUDED_TOOLS = frozenset(

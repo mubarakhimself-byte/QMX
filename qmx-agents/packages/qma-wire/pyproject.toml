@@ -19,4 +19,4 @@ module-name = "qma.wire"
 
 [tool.uv.sources]
 qma-core = { workspace = true }
-qmf-core = { path = "../../../packages/qmf-core", editable = true }
+qmf-core = { workspace = "../../.." }

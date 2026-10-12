@@ -1,15 +1,9 @@
-# QMA uv-workspace root (qmx-agents).
-#
-# Nested beside the parent QMX/QMF workspace: own SemVer ladder in lockstep with
-# QMF, package version display-only provenance (AR-Q01, AR-Q11; DEC-0335).
-# Members are the three QMA packages only; qma-ui-contract remains deferred
-# (GAP-0081; AR-Q08). Desk plugins live under plugins/
-# and register through the qma-core PluginManifest / PluginContext surface.
+# Shared agent workspace; qma-ui-contract remains deferred (GAP-0081).
 
 [project]
-name = "qmx-agents"
+name = "qmx-workspace"
 version = "0.1.0"
-description = "QMX agentic system (QMA) — nested uv workspace for qma-core, qma-wire, and qma-daemon"
+description = "Shared QMX agent workspace"
 requires-python = ">=3.14,<3.15"
 dependencies = []
 
@@ -20,27 +14,33 @@ dependencies = []
 default-groups = ["dev", "qma-runtime"]
 
 [tool.uv.workspace]
-members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon"]
+members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
 
 [tool.uv.sources]
+qmx-agents = { workspace = true }
+qmx-tools = { workspace = true }
+qmx-broker = { workspace = true }
+qmx-remote = { workspace = true }
+qmx-apps = { workspace = true }
+qmx-control = { workspace = true }
 qma-core = { workspace = true }
 qma-wire = { workspace = true }
 qma-daemon = { workspace = true }
 # Parent QMF roster packages — path edges into the enclosing QMX workspace.
 # Daemon may declare qmf-registry / qmf-data / qmf-risk (read-and-calculate);
 # qmf-venue stays undeclared and import-banned (DEC-0347).
-qmf-core = { path = "../packages/qmf-core", editable = true }
-qmf-registry = { path = "../packages/qmf-registry", editable = true }
-qmf-data = { path = "../packages/qmf-data", editable = true }
-qmf-risk = { path = "../packages/qmf-risk", editable = true }
+qmf-core = { workspace = ".." }
+qmf-registry = { workspace = ".." }
+qmf-data = { workspace = ".." }
+qmf-risk = { workspace = ".." }
 
 # Shared spot fixtures import the node and its parent-workspace dependencies in tests.
-qmn = { path = "../qmn", editable = true }
-qmb = { path = "../qmb", editable = true }
-qml = { path = "../qml", editable = true }
-qmf-indicators = { path = "../packages/qmf-indicators", editable = true }
-qmf-structure = { path = "../packages/qmf-structure", editable = true }
-qmf-venue = { path = "../packages/qmf-venue", editable = true }
+qmn = { workspace = ".." }
+qmb = { workspace = ".." }
+qml = { workspace = ".." }
+qmf-indicators = { workspace = ".." }
+qmf-structure = { workspace = ".." }
+qmf-venue = { workspace = ".." }
 
 [dependency-groups]
 dev = [
@@ -53,13 +53,18 @@ dev = [
     "qmn",
     "claude-agent-sdk==0.2.163",
     "openai-codex==0.160.0",
+    "types-pywin32==312.0.0.20261006",
+    "types-jsonschema",
+    "types-cachetools>=7.0.0.20260713",
+    "beautifulsoup4==4.15.0",
+    "markdownify==1.2.3",
 ]
 # Pulls qma-daemon (and its qmf-data/registry/risk path edges) into the gate
 # environment so store engines are present at import/test time.
-qma-runtime = ["qma-daemon"]
+qma-runtime = ["qma-daemon", "qmx-control"]
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote"
+addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control"
 markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages", "tests"]
 pythonpath = [
@@ -78,7 +83,7 @@ pythonpath = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote"]
+extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
@@ -103,7 +108,7 @@ ignore = [
 
 [tool.pyright]
 include = ["packages", "tests", "examples", "plugins"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
 extraPaths = [
     "packages/qma-core/src",
     "packages/qma-wire/src",

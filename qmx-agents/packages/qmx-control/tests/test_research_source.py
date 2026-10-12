@@ -17,7 +17,7 @@ from fastmcp import Client
 from qmx_control.server import create_mcp
 from qmx_control.service import ControlService
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "examples/apps/mql5-articles"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"))
 
 
 def test_article_publishes_to_real_control_library(tmp_path: Path) -> None:
@@ -54,7 +54,7 @@ def test_daily_entrypoint_publishes_offline_and_respects_robots(
 ) -> None:
     import collector
 
-    app = Path(__file__).resolve().parents[2] / "examples/apps/mql5-articles"
+    app = Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"
     store = collector.Store(tmp_path / "app")
     store.save(623, b"<article>saved</article>", "# Saved", {"title": "Saved"})
     service = ControlService(tmp_path / "control")

@@ -18,7 +18,7 @@ from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 
-EXAMPLES = Path(__file__).resolve().parents[2] / "examples/apps"
+EXAMPLES = Path(__file__).resolve().parents[4] / "examples/apps"
 
 
 @pytest.fixture

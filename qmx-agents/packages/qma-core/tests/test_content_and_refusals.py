@@ -6,18 +6,18 @@ import ast
 from pathlib import Path
 
 import qma.core
-import qma.core.foundation
 import qma.core.refusals
-from qma.core import content_address, tree_digest
-from qma.core.foundation import (
+from qma.core import (
     CorrelationId,
     Instant,
     Money,
     TypedRefusal,
     WriterId,
+    content_address,
     fingerprint,
     is_ok,
     is_refusal,
+    tree_digest,
 )
 from qma.core.refusals import (
     NAMED_REFUSAL_VARIANTS,
@@ -271,11 +271,11 @@ def test_content_address_is_imported_fp1_over_canonical_json() -> None:
     payload = {"b": 2, "a": 1}
     qma_fp = content_address(payload)
     qmf_fp = qmf_fingerprint(payload)
-    via_foundation = fingerprint(payload)
-    assert is_ok(qma_fp) and is_ok(qmf_fp) and is_ok(via_foundation)
-    assert qma_fp.value.value == qmf_fp.value.value == via_foundation.value.value
+    via_core = fingerprint(payload)
+    assert is_ok(qma_fp) and is_ok(qmf_fp) and is_ok(via_core)
+    assert qma_fp.value.value == qmf_fp.value.value == via_core.value.value
     assert qma_fp.value.value.startswith("fp1:sha256:")
-    assert qma.core.foundation.fingerprint is qmf_fingerprint
+    assert qma.core.fingerprint is qmf_fingerprint
 
 
 def test_tree_digest_is_fp1_over_canonical_manifest() -> None:
@@ -303,7 +303,7 @@ def test_no_parallel_money_time_id_or_refusal_base() -> None:
     assert Instant is QmfInstant
     assert WriterId is QmfWriterId
     assert TypedRefusal is QmfTypedRefusal
-    assert qma.core.foundation.fingerprint is qmf_fingerprint
+    assert qma.core.fingerprint is qmf_fingerprint
     correlation: CorrelationId = "corr-origin-1"
     assert isinstance(correlation, str)
 
@@ -319,8 +319,6 @@ def test_no_parallel_money_time_id_or_refusal_base() -> None:
     }
     minted: list[str] = []
     for path in CORE_SRC.rglob("*.py"):
-        if path.name == "foundation.py":
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and node.name in forbidden:

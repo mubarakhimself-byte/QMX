@@ -19,11 +19,8 @@ dependencies = [
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
-[tool.uv.workspace]
-members = []
-
 [tool.uv.sources]
-qmx-agents = { path = "../qmx-agents/packages/qmx-agents", editable = true }
+qmx-agents = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -47,7 +44,7 @@ addopts = "-n 2 --dist worksteal"
 markers = ["serial: requires exclusive access to shared resources"]
 
 [tool.ruff]
-extend = "../pyproject.toml"
+extend = "../../../pyproject.toml"
 extend-exclude = []
 
 [tool.ruff.lint.per-file-ignores]
@@ -59,12 +56,12 @@ extend-exclude = []
 "src/qmx_apps/windows_job.py" = ["PLC0415"]
 
 [tool.pyright]
-include = ["src", "tests", "../examples/apps"]
-extraPaths = ["src", "../examples/apps/mql5-articles", "../examples/apps/macro-daily-bias"]
+include = ["src", "tests", "../../../examples/apps"]
+extraPaths = ["src", "../../../examples/apps/mql5-articles", "../../../examples/apps/macro-daily-bias"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 
 [tool.poe.tasks]
-fmt-check = "ruff format --config pyproject.toml --check src tests ../examples/apps"
-lint = "ruff check --config pyproject.toml src tests ../examples/apps"
+fmt-check = "ruff format --config pyproject.toml --check src tests ../../../examples/apps"
+lint = "ruff check --config pyproject.toml src tests ../../../examples/apps"
 types = "python -m pyright"

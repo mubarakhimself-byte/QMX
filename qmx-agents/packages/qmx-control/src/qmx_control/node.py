@@ -138,7 +138,7 @@ def main() -> int:
         print("Installed. Enroll with: ssh " + shlex.quote(host) + " sudo tailscale up")
         print("Then: ssh " + shlex.quote(host) + " sudo systemctl start qmx-node")
         checklist = subprocess.run(
-            [ssh, host, "sudo /opt/qmx/qmx-control/.venv/bin/qmx node verify"],
+            [ssh, host, "sudo /opt/qmx/qmx-agents/.venv/bin/qmx node verify"],
             check=False,
         )
         return checklist.returncode

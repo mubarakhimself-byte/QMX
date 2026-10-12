@@ -20,7 +20,7 @@ from qmx_apps.road.models import Evidence, Proof, Stage, json_document
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import VolumeLease
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples/apps/exchange-status"
+EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 
 
 class RuntimeFixture(Supervisor):

@@ -1797,18 +1797,25 @@ def control_host(
     if not 1 <= port <= 65535:
         return invalid("port", "port must be between 1 and 65535")
     argv = [python or sys.executable, "-m", "qmx_control", command, "--port", str(port)]
-    # The development checkout has separate environments until package consolidation.
+    # Use the control package workspace when running from a checkout.
     if python is None:
         repo = Path(__file__).resolve().parents[5]
-        projects = (repo / "qmx-control", repo / "qmx-agents/packages/qmx-control")
-        project = next((path for path in projects if (path / "pyproject.toml").exists()), None)
-        if project is not None:
+        project = repo / "qmx-agents/packages/qmx-control"
+        if (project / "pyproject.toml").exists():
             uv = shutil.which("uv")
             if uv is None:
                 return unavailable("host", "uv is required to run qmx-control in this checkout")
-            argv = [uv, "run", "--project", str(project), "--frozen", *argv]
-            # uv selects the project's Python rather than the QMB interpreter.
-            argv[5] = "python"
+            argv = [
+                uv,
+                "run",
+                "--project",
+                str(project),
+                "--package",
+                "qmx-control",
+                "--frozen",
+                "python",
+                *argv[1:],
+            ]
     if home is not None:
         argv.extend(("--home", str(home.resolve())))
     try:
