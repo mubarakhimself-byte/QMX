@@ -603,6 +603,19 @@ Three credentials, one gate.
 
 `PrincipalGate` replaces `BearerGate`: a token resolves to `(principal, scope, session_id|app_id)`, routes declare the principal they accept through a FastAPI dependency, FastMCP calls get it from the request context, and every `ControlService` method takes `who: Principal`; `OPERATIONS` rows carry an `allowed` set. `/api/health` becomes token-free and pid-only so the launcher's ownership checks survive (Z6). Settings: every existing section (`providers`, `mcp_servers`, `budgets`, `memory_provider`, `backup`, `brokers`, `remote`) and the new ones (`approvals`, `deny`, `seats`) are operator-only through `settings_put_protected`; agents may write only `agent.*` keys. The §3.2 key names use the section names (`budgets.*`, `seats.*`). A negative test holds the doors and every protected section at 403 for agent and app tokens.
 
+**How `qmx-control token` gets its code (the channel).**
+- The command never reads a file or a log. It asks the running host over a local named pipe, `\.\pipe\qmx-operator`.
+- The host creates the pipe with an ACL granting access to the operator's Windows account only.
+- On every request the host checks the caller with `GetNamedPipeClientProcessId`, plus the token user of that process. Only the operator's interactive user gets a code. Each code is single-use and expires after 60 s.
+- `start` and QMB's `control_host` don't use the pipe. They generate the code themselves and pass it to the child host on stdin, which is `DEVNULL` today, so packet 1b adds this hand-off.
+
+**Before Q10.** Agent shells run as the same Windows user, so the pipe ACL can't tell them apart. Three things apply until Q10 lands:
+- `decide_builtin` and the OpenAI `shell` executor deny `qmx-control token` and any pipe path matching `qmx-operator` by pattern.
+- The FR-102 test adds "shell runs `qmx-control token`: refused with a journal row" on both engines.
+- §9 lists the remaining risk next to the signing key: a model that writes its own pipe client.
+
+**After Q10.** The `qmx-agent` user fails the ACL, and the risk is closed.
+
 The money-app signing key is its own secret. `road.signing_key` takes `qmx/road-signing-key`, a dedicated Credential Manager entry the host reads only for the sign door and never hands to any process; `qmx/control-token` is deleted from the laptop's Credential Manager once the per-launch secret exists and survives only as the T2 node's per-node token (Z1, Z2). A test refuses a signature computed from the old vault token. Before Q10 a same-user process can still read the signing entry (the same residual as the broker keys, §9); after Q10 it cannot.
 
 The money barrier, stated at its real strength. No order tool exists in any registry and `check_descriptor` refuses any descriptor that smells of one (Y05, Y41). Broker credentials are never in an agent environment. But every process of his Windows user can read his Credential Manager, so until Q10 is answered, `decide_builtin` and the OpenAI `shell` executor deny credential-store reads and calls to the host's own port by pattern, the FR-102 test includes "shell reads a `qmx/*` secret: refused with a journal row" and "shell calls the approval door with the agent token: 403" on both engines, and §9 lists the residual (a model that writes its own client with stolen credentials). With Q10 yes, agent shells (the Claude child, the OpenAI `shell` and `qmx_python` executors, mini-app subprocesses) run as a separate low-rights local user `qmx-agent` created by the setup wizard: its own Credential Manager (empty), read access to the QMX Claude home (which the wizard moves to that user) and its work directories, no access to the operator's `qmx/*` entries. That is process separation (one user, one Job Object), not a sandbox (C-09). Live broker keys leave this PC when the trading node ships (QMN).
@@ -894,3 +907,14 @@ Status: fixed, partly (why), rejected (why).
 - E3 WEAKENED items: CHECK 1, opus 1, opus 21 (T2, T3, T4, T6, T7 above); CHECK 11 and sonnet 9 (price source, T20); CHECK 16 and sonnet 23 (key names and `settings.toml`, T7, T8); opus 5 (the allow-hook test); opus 20 (egress, partly); sonnet 1 (console mechanics and the operator schema, T22, T23); sonnet 13 (`--workspace`, T28). Also from E1: T5 (the agent token's carrier named), T9 (principal plumbing on both doors), T14, T15, T17, T18, T19, T21 (`gpt-oss` kept out of the gpt family), T26 (`normalise_tool_name` before `match_money_path_act`), T27, T29. T10's import-linter namespace question is checked in packet 0. Rejected: none.
 
 Principles that shaped this revision: boundary discipline (principals and scopes at the gate, policy pure inside), model the domain (`ApprovalStatus` with `orphaned`, one claim point, one parity table), make operations idempotent (`recover()` convergent, native effect keys, a single resumer), separate before serializing shared state (one writer thread, one file for node row and checkpoint, an OS lock), sequence work into verifiable units (ten packets with acceptance commands, lanes, a clock), subtract before you add (the deletion wave moved off demo eve, node kinds cut), laziness protocol (no journal table, `qma.toml` unchanged, a console in 400 lines).
+
+**Revision 3a (coordinator, after delta pass 4):**
+- Delta pass 4's one ARCH item, the channel for `qmx-control token`, is fixed. The channel is a named pipe with an operator-only ACL and a caller-identity check, plus a pre-Q10 deny pattern and test, with the residual risk listed in §9.
+- Delta pass 4's six PACKET items move into `SHIPPING-PLAN.md`:
+  - 1b: stdin code hand-off and the gate allowlist.
+  - 1b: node signing key.
+  - 2: the spawn password vault label.
+  - 0: content-addressed refs.
+  - 5a: manifest refusals and `SYSTEM_ENV`.
+  - 1a: `events` retention.
+- Its two QUESTIONs (the GitHub backup of `control.db`, and the Q10 firewall) move into `START-HERE.md`.
