@@ -45,4 +45,4 @@ Superseded files sit in `tracker/agent-system/archive/` and `rebuild/research/20
 | When | Pass | Output | Inputs it covered |
 |---|---|---|---|
 | 2026-10-12 ~21:10 | `/how` + `/why` #1 | `HOW-WHY.md` | PRD |
-| pending | `/how` + `/why` delta #2 | `HOW-WHY.md` §delta | `USER-JOURNEYS.md`, research 30, 31, 32 |
+| 2026-10-12 ~22:30 | `/how` + `/why` delta #2 | `HOW-WHY.md` § Delta pass 2 | `USER-JOURNEYS.md`, research 30, 31, 32 |

@@ -448,3 +448,202 @@ Confidence. "Direct" means an author wrote the reason. "Inferred" is marked. RES
 - **F18.** Installing `qmx-tools` installs QMB, QMF, QML and QMN (`qmx-tools` pyproject dependencies). Any engine or plugin package that imports `qmx_tools` drags the quant core into its environment and into every rented-machine image. Engines should reach domain tools over their FastMCP servers, not by import.
 - **F19.** The "QMA" suite in `test_all.py` runs all of `qmx-agents/packages`, so it re-runs every `qmx-*` package test plus the old `qma-*` tests (`test_all.py:66-71`). Deleting LangChain code changes that suite's count, and the old tests keep the 110k-line anchor in CI until P16 ends.
 - **F20.** `default_home()` is `~/.qmx` on C: (`server.py:255-256`). NFR-034 keeps bulk data off C:, so run volumes, checkpoints and engine homes need a configurable root.
+
+
+## Delta pass 2 (journeys, research 30-32)
+
+Written 2026-10-12. Inputs: `tracker/qma-v2/USER-JOURNEYS.md` (21 journeys, 25 spin ideas, §4 gaps), research 31 (tools, skills, prompts, comms), research 32 (DevOps planes, UI protocol, usage), research 30 (agents and databases). Code read with `git show` on `origin/rebuild/base` @ a82f5897 (PR #68). `git diff --stat bc32b46a a82f5897 -- qmx-agents/packages/qmx-*` is empty, so every pass-1 citation still holds. Same method and labels as pass 1: one agent, no sub-agents, planning only. Paths use the pass-1 keys (`ctl/`, `apps/`, `agents/`, `tools/`, `remote/`, `daemon/`).
+
+### D0. Summary in plain words
+
+1. All four inputs fit the platform that runs today. None of them needs LangChain, and none of them breaks the 14 block kinds.
+2. The inputs give three different homes for "a run": `work` rows in `control.db` (32), a new `runs` table in a new `agents.db` (30), and today's `runs.db` projection over journals. One must win (X1).
+3. Five vocabularies describe run, job and approval states. Two exist in code (`record_work`, the workflow runner). Research 31, 32 and 30 add three more. One enum must be written down before any table lands (X2).
+4. FR-104 needs a pending approval to survive a restart. Research 32 lets Claude approvals expire when the process dies. J19 shows the card still pending. The PRD and the journey win (X4).
+5. The approval answer route, the credential route and the operator terminal route must be REST-only, like today's sign door. If they joined `OPERATIONS`, an agent could approve its own request through MCP (G1).
+6. Research 30's SQLite finding is real and confirmed here. The bundled SQLite is 3.50.4, and `qmx-control` opens a fresh connection per call from several threads, while SSE readers poll without the lock. One writer connection per file is the fix the code is closest to (G2).
+7. Research 30 splits storage into four files. That breaks its own outbox rule, because approvals and their events would no longer share a transaction. Recommended: one `control.db` with one writer task; split off only checkpoints, and later only on a failed load test (X3).
+8. Research 31 and 30 both mention a Contabo server. C-08 and K-01 dropped any owned server, so remote work reaches the laptop through the bucket and fetch, never live (X7).
+9. Research 31 sets spawn depth 2. FR-088 (WED) and J11 say depth 1. Recommended: keep depth 1 and make the orchestrator an errand session, not a sub-agent (X6).
+10. The journeys add 17 missing requirements. Four have a seam in today's code (phone relay → bucket, idle teardown → `ComputeProvider.teardown`, key-safe chat → `_no_secrets`, stale evidence → road hashes). The other 13 start from zero.
+
+### D1. Input 1: USER-JOURNEYS.md
+
+**What it proposes.** 21 journeys (J01-J21), each with a trigger, steps, machinery, FRs, failure paths and DevOps records. It adds a drawer with five panes, chat block names, 25 spin ideas, 17 uncovered steps and a 10-minute demo script.
+
+| Proposal | /how: code it touches (file:line) | Fit | /why: recorded reason | Verdict |
+|---|---|---|---|---|
+| Chat block names `tools, cards, ask, changes` (§0) | `SessionBlock.type` 14 kinds `ctl/service.py:54-72` names them `tool, question, changed`; no `cards` | Seam: UI labels map onto kinds; `cards` → `panel` or `entity` | Y44: the 14 kinds are the UI contract | RESPECT the code names; journey words are labels only |
+| Drawer panes Activity, Artifacts, Diff, Terminal, Browser | No terminal or browser stream; supervisor JSONL logs `apps/supervisor.py:587-638`; `changed`, `artifact` kinds exist | Needs 32's `/live` channel and `panel` with `content.pane` | 24 §1.6: no UI calls these routes yet, so new fields cost no migration | Fits (via 32 B7) |
+| J01 QMX home on D: | `default_home()` is `~/.qmx` `ctl/server.py:255-256` | Seam: configurable root | F20, NFR-034 | Fits once the root moves |
+| J01/J20 key typed into a QMX secure field → Credential Manager | Only write today is the control token, `keyring.set_password` `ctl/server.py:89`; `settings_put` refuses secret-named keys `ctl/service.py:79-91` | Seam: a new REST-only credential route | Y10, F16; operator rule that creds never pass through chat | Fits as a REST-only door (G1, G15) |
+| J02/J03 one errand spans several engine sessions | `sessions` row `{id,title,origin,parent_id}` `ctl/service.py:47-51` | Seam: errand = parent session, engine sessions are children (30's `threads` row is the same idea) | F5: sessions have no status or target | Fits; call it "errand" (PRD glossary), not "thread" |
+| J03 operator-driven switch, compaction first | Per-request override `agents/router.py:199-200`; tier switch `agents/copilot.py:112` | Collides with today's code, which the PRD drops | Y17, Y18; K-11 | Fits the PRD |
+| J04/J05 app build, fix as new version, revision-bound approval | Road `road/__init__.py:77-146`; `image_hash` `apps/manifest.py:130-139`; signature binds `definition_hash` `ctl/server.py:184-196`; T1 refusal `apps/supervisor.py:139-144` | Needs the F1/F2 fix (host-assigned trust, approval record) | Y28 RESPECT review; Y29 sign door | Fits after F1/F2 |
+| J05 app copilot uses the app, never edits it | `AppHooksMiddleware` binding is Bound `agents/guards/hooks.py:120-150` | Seam: per-plugin tool list without `apps_update` | FR-008 | Fits |
+| J06 edit while running; the run finishes on the old hash | No local definition hash (pass 1 4.6); remote fingerprint `remote/models.py:82-85` | Seam: 30's `graph_versions` | Y34 | Fits |
+| J07/J08 cron on rented compute, PC off | Only timers: maintenance loop `ctl/server.py:152-165`, backup schedule, `AppDefinition.schedule` `apps/manifest.py:80-81` | Collides: 30's `triggers` table sits in the laptop's `control.db`, which is off | Pass 1 4.7: the 60 s loop must not grow into a scheduler | Needs a design (X8) |
+| J09 laptop closed, phone checks, $5 approval | Bucket flush `remote/worker.py:72-100`; verified fetch `ctl/service.py:531-559`; teardown on stop, move, failure `remote/runs.py:126`, `158`, `211`, `230` | Partial: no idle teardown, no relay | Y37 DROP owned VPS; Y38 RESPECT result model | Fits with a relay (X9, G10) |
+| J10 orchestrator delegating across engines | `SubagentSpec` refs `agents/spec.py:70-79`; child sessions `agents/copilot.py:131-145` | Needs 31's `delegate` and the engine contract | Y06: every helper gets the parent's guards | Fits; depth via X6 |
+| J11 depth-1 refusal, watchdog restart | `_NoDelegation` `agents/spec.py:183-187`; no watchdog; RunIndex defaults to `running` (F4) | Partial | Y35 depth 1 | Fits; collides with 31 (X6) |
+| J12 Firecrawl off by default, paid, asks | Firecrawl HTTPS guard `ctl/service.py:230-254`; `mcp_configuration` `agents/spec.py:197-243` | Fits | Pass 1 4.16 | Fits |
+| J13 sign versus approve | Sign door is apps-only `ctl/server.py:184-196`; `propose_order` `agents/guards/money_path.py:181-238`; `portfolio_proposals` `ctl/service.py:296-298` | Seam: a proposal signature record beside the app signature | Y05, Y29 | Fits; keep signature ≠ approval |
+| J14 computer use with a demo lock | Nothing | MISSING | C-11 | Fits (LATER) |
+| J15 lesson → gated skill change | Placeholder skills `agents/skills/*/SKILL.md` | MISSING | P20: skills name real tools | Fits; matches 31 §2.4 |
+| J16 usage "estimated from local session files" | Journal `model_call` `agents/guards/middleware.py:104-121`; RunIndex cost `ctl/runs.py:86-134` | Collides mildly with 32 rec 9 | FR-049 documented sources only | X10 |
+| J17 phone approvals, no owned server | Nothing | MISSING | C-08 | New requirement (X9) |
+| J18 two agents on one strategy → variants | `runs/<id>` branch `remote/code.py:32-47`; Library `previous_id` `ctl/library.py:95-96` | Fits | Y20, Y38 | Fits; 30 §6 gives the policy |
+| J19 crash, resume, approval still pending | Cancellers `ctl/service.py:106`; tasks `agents/tasks.py:29`; admission `agents/guards/admission.py:62-63`, all in memory | Collides with today's code (F3) | FR-014, FR-104, NFR-010 | Fits the PRD; collides with 32 B5 (X4) |
+| J20 provider probe on add | Closed `Provider` Literal `agents/router.py:29-30` | Collides with today's code (F6) | Y15 DROP | Fits the PRD |
+| J21 plugin tool code "disabled until reviewed" | App trust values `apps/manifest.py:18`; F1 caller-declared trust | Seam: plugin trust host-assigned (30's `plugins.trust` column) | Y28; F1 | Fits only if trust is never a tool argument |
+| Demo 9:00: "buy" on both engines → two refusals | Broker has no order tool `qmx-broker/.../service.py:164-185`; `check_descriptor` `agents/guards/money_path.py:247-279` | Fits; needs the wrapper layer | Y05 | Fits |
+
+**Spin ideas grouped by the seam today's code gives them.**
+
+| Seam in code | Ideas |
+|---|---|
+| `ComputeProvider.teardown` `remote/providers.py:24`; `place` `remote/models.py:127-139` | 4 (remote loop needs a home), 5 (idle teardown, machines chip), 9 (pre-flight estimate, compute half) |
+| `_no_secrets` refusal `ctl/service.py:79-91`, settings only today | 12 (key-safe chat: extend the refusal into a value scrubber on user blocks before storage, as 32 A2.8 proposes) |
+| Road hashes and signature `road/__init__.py:77-146`, `ctl/server.py:184-196` | 16 (stale evidence), 25 (cooling-off), 17 (variant tournament via `runs/<id>`) |
+| `not_implemented` `ctl/service.py:643-647` | 3 ("what works today" card) |
+| Journal and RunIndex `agents/guards/journal.py:36-127`, `ctl/runs.py` | 1 (restart digest), 7 (trial counter), 8 (negative-results ledger), 21 (re-run with a fixed assumption), 24 (node replay) |
+| `workflow.v1` kinds `agents/workflows/models.py:11-22` | 6 (watch node: `condition` plus `python` today; a new kind is a format change, so ship a template first), 14 (missed-run policy: no field today), 20 (dry run: needs the SDK fakes, NFR-027) |
+| None | 2, 10, 11, 13, 15, 18, 19, 22, 23 |
+
+### D2. Input 2: research 31 (tools, skills, prompts, comms)
+
+**What it proposes.** (a) A `QmxTool` record (effect, idempotency, timeout, size cap, defer, callers, approval) with two generated adapters (Claude in-process SDK MCP, OpenAI `FunctionTool`), FastMCP kept for outside clients. (b) Tool search with a core set of 8-12 tools and a QMX bridge for non-OpenAI providers. (c) A persistent `qmx_python` kernel. (d) A base kit for the OpenAI engine. (e) One skill store, QMX metadata, a lifecycle and an eval gate. (f) Five prompt layers, XML templates, rendered prompt snapshots in CI. (g) One broker with delegate/job, mailbox and board, an envelope, and runaway guards.
+
+| Proposal | /how (file:line) | Fit | /why | Verdict |
+|---|---|---|---|---|
+| (a) Plain function as the single source, two adapters | 13 plain functions `tools/registry.py:26-271`; one LangChain wrap line `:274-281`; in-process SDK server already used `daemon/native_claude.py:222-280` | Fits: replace one Bound line with two adapters | P09 (PR #34): share recorded domain tools between agents and MCP | RESPECT |
+| (a) Adapters in-process for domain tools too | `DomainContext` imports QMB, QMF, QML, QMN `tools/service.py:14-22` | Collides with F18: the quant core lands in every engine host and rented image | F18 | Split: platform tools (sessions, jobs, delegate, board, approvals, apps_call) in-process; domain tools stay behind FastMCP, reached through one in-process proxy that applies policy |
+| (a) Effect classes `read/write/external/money` | Act vocabulary `agents/guards/money_path.py:21-60`; `destructive` meta `ctl/server.py:127` | Seam | Y05: no order tool in any tool list | RESPECT with change (G11) |
+| (a) Default timeout 60 s | App tool deadline 20 s inside 30 s; a timeout stops the app `apps/supervisor.py:676`, `715-726` | Collides for `apps_call` | Y32 (inferred: protect the host) | G12 |
+| (a) `idempotency_key` filled by the caller | No keys anywhere (pass 1 4.6) | Collides with 30, which mints the key in the host | 30 §3.2 | X5 |
+| (b) Tool search, core set, QMX bridge | Nothing | MISSING | FR-100 | Fits |
+| (c) `qmx_python` persistent kernel | Shell only via a sandbox app `agents/copilot.py:30-51`; Job Object `apps/windows_job.py`; scrubbed env `apps/supervisor.py:390-419` | Seam: run the kernel as a supervised subprocess with the same Job Object and env scrub | `tools/service.py:1` docstring: agents never choose filesystem roots or execution code | RESPECT, scoped: the rule binds domain-tool arguments; the kernel is a separate sandboxed capability whose stub has no money tools |
+| (d) Base kit for the OpenAI engine | Nothing | MISSING | FR-133 | Fits |
+| (e) Store at `qma/plugins/<p>/skills/` in the repo | Old desk packs in `qmx-agents/plugins/` (F13); QMX home `~/.qmx` | Collides on the name, and on runtime skill writes landing in the repo | FR-032; F13 | X14 |
+| (e) Claude plugins via `plugins`/`skills`, `setting_sources=[]` | `setting_sources=[]` `daemon/native_claude.py:261`; lockdown `plugins=[]`, `skills=[]` `:222-280` | Keeps the isolation, drops the lockdown | Y39 RESPECT; Y40 DROP | Fits |
+| (f) Five layers; live state in the newest message | Per-turn tier switch `agents/copilot.py:112`; prompt names a plan tier `agents/copilot.md:4` | Collides with code the PRD drops | Y18 DROP; FR-097 | Fits |
+| (f) `claude_code` preset for copilots | Native recipe uses a custom prompt and no built-ins | Fits FR-133 | FR-096 bans CLAUDE.md, not the preset | Fits while `setting_sources=[]` stays |
+| (f) Rendered prompt snapshots in CI | `just ci` steps `tools/ci.py:23-38` | Seam: one more step | Y45 one gate | Fits |
+| (g) Broker job table with MCP-Tasks states | `start_task` family `agents/tasks.py:31-89`; ownership check `:91-93`; `record_work` `ctl/service.py:443-471` | Seam: reuse the four verbs and the ownership rule | Y21: background tasks are QMX-owned | RESPECT; state names collide (X2) |
+| (g) Mailbox and board tables "in the QMX database" | Nothing; 30 §4 defines no mailbox or board table | Gap between 31 and 30 | none | Add `messages` and `board_items` to `control.db` (X3) |
+| (g) Broker publishes every change as events | `_event` `ctl/service.py:156-169` | Fits | Y43 | Fits |
+| (g) Spawn depth 2 | `_NoDelegation` `agents/spec.py:183-187`; workflow default `agents/workflows/models.py:103` | Collides with FR-088 | Y35 depth 1 | X6 |
+| (g) Sessions talk across laptop and "the Contabo server" | T2 node runs its own `ControlService` `ctl/node.py:158` | Collides with C-08 | Y37 DROP | X7 |
+| (g) Agent messages never count as consent | Admission takes `principal == "operator"` only `agents/guards/admission.py:84-93` | Fits | Y08 | RESPECT |
+
+### D3. Input 3: research 32 (DevOps and UI protocol)
+
+**What it proposes.** (a) Three planes (session log, OTLP traces, content-free health) joined on shared ids. (b) A run record of about 20 fields as an extended `work` row. (c) Storage: blocks, events, runs, approvals and ledger in `control.db`; traces as daily JSONL. (d) Write receipts with read-back, and a `completed_with_warnings` status. (e) A "What it did" card, alerts, retention, redaction, replay. (f) An event envelope of about 30 kinds over the 14 blocks, with the durable channel plus a new unstored `/live` SSE route. (g) An `approvals` table and topic, one answer route, ACP decision kinds. (h) Sub-agents as child sessions. (i) Steer, stop and terminal routes. (j) A per-call usage ledger and limit snapshots.
+
+| Proposal | /how (file:line) | Fit | /why | Verdict |
+|---|---|---|---|---|
+| (a) Session log is the truth for what the model saw | Blocks `ctl/service.py:121-123`; journal JSONL `agents/guards/journal.py:36-127` | Collides with 30, where `items` are the truth | Y07: the journal is the one evidence writer | X11 |
+| (a) OTLP JSONL traces; `set_trace_processors` only | Nothing | MISSING | FR-120; LangSmith is a §2.3 non-goal | Fits |
+| (b) Run record as an extended `work` row | `work(kind,id,data)`, `WorkKind = runs|jobs` `ctl/service.py:44`; RunIndex `ctl/runs.py:22-47` | Seam: JSON rows take new fields | P1 | Fits; collides with 30's `runs` table (X1) |
+| (c) All durable state in `control.db` | Four tables `ctl/service.py:119-128` | Fits | DESIGN rule zero `rebuild/DESIGN.md:314` | Fits; agrees with X3 |
+| (d) Write receipts with read-back | Admission `before_hash`/`after_hash` `agents/guards/admission.py:99-111`; `changed` kind | Seam: reuse the admission hash rule | Y08, Y09 | RESPECT; new status joins X2 |
+| (d) Disable Claude Write/Edit or reconcile from `files_persisted` | No wrapper layer | Open | 24 risk 5; FR-133 keeps baseline tools | Reconcile; do not disable |
+| (f) New `approvals` topic | `EventTopic` closed Literal `ctl/service.py:43` | Fits: additive | Y44 | Fits |
+| (f) `/live` unstored channel, asyncio push | SSE runs a sync SQLite read every 50 ms inside an async generator, without the lock `ctl/service.py:176-198` | Fits, and removes an event-loop stall (G3) | Y43 inferred; FR-130 | RESPECT with change |
+| (f) No new block kind in release 1 | 14 kinds | Fits | Y44 | RESPECT |
+| (g) Answer route `POST /api/approvals/{id}` | Every `OPERATIONS` row is a REST route and an MCP tool `ctl/server.py:120-129`, `206-213`; sign door REST-only `:184-196` | Collides if added to `OPERATIONS` | Y11 two doors; Y29 sign door | G1 |
+| (g) Claude approvals expire when the process dies | Nothing durable today (F3) | Collides with FR-104 | FR-104 WED | X4 |
+| (g) Sticky `allow_always` per tool identity | `interrupt_on` per spec `agents/agents/copilot.yaml:12` | Collides with FR-105/108 if unbounded | FR-105, FR-108, C-11 | G14 |
+| (h) Child sessions with `parent_id` | `SessionInput.parent_id` `ctl/service.py:46-51`; projection `agents/copilot.py:131-145` | Fits | Y44 | Fits |
+| (i) Operator terminal `POST /api/sessions/{id}/terminal` | Nothing | Collides like (g) if exported | Y11 | REST-only, through the sandbox app policy (G1) |
+| (i) Stop → `stopping` → `cancelled` | `_cancel` answers 501 once a canceller is lost `ctl/service.py:621-623` | Needs durable cancel | F3 | Fits after F3 |
+| (j) Ledger per model call with `cost_source` | Journal `model_call` `agents/guards/middleware.py:104-121` | Seam: the neutral journal writer feeds both | Y14 RESPECT own ledger | Fits; merge columns (X12) |
+| Node `control.db` synced on fetch | `ctl/node.py:158`; fetch `ctl/service.py:531-559` | Fits | F17 | Fits; the only cross-host path (X7, G9) |
+
+### D4. Input 4: research 30 (agents and databases)
+
+**What it proposes.** (a) Stay on SQLite with one writer task per file, group commit, a read pool and back-pressure. (b) Fix the WAL-reset exposure on 3.50.4. (c) Four logical files: `control.db` (precious), `agents.db` (journal), `checkpoints.db`, `search.db`, with `memory.db` and `library.db` unchanged. (d) 29 tables (§4.2: 12 in control, 15 in agents, 2 in checkpoints). (e) An effects ledger with host-minted keys and resume rules. (f) Approvals consumed once by CAS. (g) The Library and definitions as git objects in SQLite. (h) Leases, CAS and variants for concurrency. (i) Snapshot-then-rclone; no Litestream on Windows. (j) Numbered migrations, portable SQL behind one `qma_store` module, and a Postgres trigger list.
+
+**Today's schema, for comparison.** `control.db`: `sessions(id,data)`, `blocks(session_id,seq,data)`, `work(kind,id,data)`, `events(seq AUTOINCREMENT,topic,subject,data)` (`ctl/service.py:119-128`). `runs.db`: `runs(id,data)` and `journals(path,digest,…)`, a rebuildable projection (`ctl/runs.py:1`, `22-28`). `library.db`: `items(id,data)` with a fetched-source unique index, `search` FTS5, `links`, `memo` (`ctl/library.py:36-44`). Memory: LangGraph `SqliteStore` at `copilot/memory.db` and `apps/<id>/memory.db` (`agents/memory.py:201`, `206`). Every row except FTS is a JSON blob. Migrations are `CREATE TABLE IF NOT EXISTS` in each constructor plus one hand move inside `BEGIN IMMEDIATE` (`ctl/service.py:129-149`). There is no `user_version` and no numbered file.
+
+| Proposal | /how (file:line) | Fit | /why | Verdict |
+|---|---|---|---|---|
+| (a) One writer per file | New connection per call: `_connect` `ctl/service.py:152-154`, `Library.connect` `ctl/library.py:63-64`, `RunIndex.record` `ctl/runs.py:31`; writers serialise on an `RLock` `ctl/service.py:105` and `Library.lock`; `events()` reads unlocked `:176-181` | Seam: the RLock already serialises writers inside one process | DESIGN rule zero: one writer *process* per file `rebuild/DESIGN.md:314` | RESPECT; tighten to one writer connection |
+| (b) WAL-reset bug on 3.50.4 | Confirmed this pass: Python 3.14.6 bundles SQLite 3.50.4. FastAPI runs the sync service methods on a thread pool (`ctl/server.py:206-213`), maintenance uses `asyncio.to_thread` (`:155-159`), SSE opens its own connections | Exposure is reachable in principle (INFERRED); never observed | none recorded | Fix first (G2) |
+| (c) `agents.db` holds sessions, items, runs, events | Sessions, blocks, events in `control.db` | Collides with 30's own outbox rule (§3.1): an approval in `control.db` and its event in `agents.db` cannot commit together | Y43; G7 | X3 |
+| (c) `memory.db` "exists, leave as is" | The file is a LangGraph `SqliteStore` `agents/memory.py:31`, `214-230` | Collides with C-06 | Y25 DROP store, RESPECT one file per profile | G5 |
+| (c) `runs.db` described as a backtest and research index | It is the agent and workflow run projection over P08 journals `ctl/runs.py:1`, `60` | Misread in 30 | Y07 | G4 |
+| (d) Typed columns, UUIDv7, `version` CAS column | JSON-blob rows everywhere | Seam: CAS and lease claims need real columns | `rebuild/DESIGN.md:515`: no data migration, old stores held only test data (the inferred reason no framework exists) | G6 |
+| (d) `threads` table | `sessions` plus `parent_id` | Seam | PRD glossary says "errand" | Fits under the name errand |
+| (d) `sdk_transcript_entries` (Claude `SessionStore` mirror) | Claude writes its JSONL under `CLAUDE_CONFIG_DIR` `daemon/native_claude.py:121` | Optional | FR-119 asks for export, not a mirror | Defer; the native JSONL is the transcript in release 1 |
+| (e) Effects ledger, key `run:node:seq`, intent before the call | Journal hashes args, writes `tool_start`/`tool_end` `agents/guards/middleware.py:85-202`; no keys | Seam: the journal already records intent and outcome; the table adds the claim | FR-061, NFR-010; J19 steps 2 and 4 | RESPECT; it is J19's backbone |
+| (f) Approvals consumed once by CAS | In-memory `_staged`/`_approved` `agents/guards/admission.py:62-63` | Fits | Y08: exact content plus before-hash | RESPECT; CAS on `status` and the content hash |
+| (f) Orders `irreversible` until cTrader dedupe is verified | No order tool exists | Fits trivially for agents | Y05, C-11 | RESPECT |
+| (g) Git objects in SQLite for Library and definitions | `artifacts/<sha256>` with a hash check `ctl/library.py:51`; `previous_id` versions `:95-96`; `links` table | Half built | 24 A2-A3; DESIGN §7.6b | RESPECT; Library is out of QMA v2 scope, so only `graph_versions`/`graph_refs` land now |
+| (h) Leases, CAS, variants | `runs/<id>` branches `remote/code.py:32-47` | Fits | Y20 | RESPECT |
+| (i) No Litestream on Windows | Litestream replicas read from the `providers` section on T2 `ctl/service.py:759-776` | Fits | `rebuild/DESIGN.md:308`: Litestream only on Linux nodes | RESPECT |
+| (i) Snapshot before rclone | Backup uses the SQLite backup API (30 cites `backup.py:141`) | Fits | FR-116 | RESPECT |
+| (j) Numbered migrations, one `qma_store` module | SQL spread across `service.py`, `library.py`, `runs.py`, `memory.py` | Seam | DESIGN :515 (inferred) | `PRAGMA user_version` plus numbered steps before the first new table |
+| (j) Postgres trigger A, "the planned Contabo server" | none | Collides with C-08 | Y37 DROP | X7 |
+
+### D5. Conflicts and recommended resolutions
+
+**X1. Where a run lives.** 32: an extended `work` row in `control.db`, where a run is a turn, workflow, node, job or app action. 30: a precious `runs` table in a new `agents.db`, `graph_id NOT NULL`, so only graph executions count. Code: `work` plus the rebuildable `runs.db` projection. *Resolution.* One run record of any kind, as 32 defines, stored in `control.db`. `work(kind='runs')` becomes that row. `runs.db` stays a derived index rebuilt from journals. The name `runs` is not reused for a second precious table.
+
+**X2. One status vocabulary.** Code: `record_work` terminals `complete, completed, failed, cancelled, canceled, stopped` (`ctl/service.py:456-463`) and the workflow runner's seven values (pass 1 4.6). 31: `working, input_required, completed, failed, cancelled`. 32: `queued, running, waiting_approval, stopping, completed, completed_with_warnings, failed, cancelled, interrupted`. 30: `queued, running, waiting, succeeded, failed, cancelled`. *Resolution.* 32's nine values are the one enum; they include `interrupted`, which F4 needs. MCP-Tasks names appear only at the broker's tool edge. The `canceled` and `stopped` spellings are deleted in the same wave that migrates their callers.
+
+**X3. How many database files.** 30: four files, with `events` in `agents.db`. 32: all durable state in `control.db`. 30 also requires the outbox (state change and event in one transaction). *Resolution.* Release 1 keeps one `control.db` for everything that emits UI events: sessions, blocks, runs, approvals, effects, ledger, triggers, plugins, graph versions, messages, board items and events. One writer task owns it. Split off only stores that emit no events: `checkpoints.db` now, `search.db` and a transcript mirror only if built. Move hot rows to `agents.db` only when the 40-agent load test (NFR-009, 30 rec 13) fails. Per **principle-separate-before-serializing-shared-state**, remote runs and apps already own their files, so `control.db` is the one shared target left, and a single writer serialises it structurally.
+
+**X4. Approvals across a restart.** FR-104 (WED) and J19 step 5: a pending approval survives and stays answerable. 32 B5: a Claude approval whose process died becomes `expired` and its run `interrupted`. *Resolution.* The row stays `pending`. Answering it after a restart resumes the session by id (Y20). The tool call is re-issued under the same effect key, and the decision is consumed once by CAS (30 §3.2 step 5). The UI says the turn restarts from its last saved point. `expired` is kept for real timeouts and for late phone answers (J17).
+
+**X5. Who mints the idempotency key.** 31: each write tool takes an `idempotency_key` argument. 30: the host mints `run_id:node_id:call_seq` before the call. *Resolution.* The host mints it and records intent. Tools receive it in context, not as a model-filled argument; 31's own source [O5] says not to make the model fill values code already knows. Keep two fields: 31's `effect` (policy reach: read, write, external) and 30's recovery class (idempotent, keyed, unkeyed, irreversible).
+
+**X6. Spawn depth.** 31: depth 2 (copilot → orchestrator → worker). FR-088 (WED), Y35, J11: depth 1, and sub-agents do not spawn by default. J10 needs an orchestrator that delegates. *Resolution.* The orchestrator is an errand session started through `delegate(mode="async")` as a peer job, not a sub-agent. Its workers are depth 1. Nothing below an errand spawns. FR-088's acceptance check still passes.
+
+**X7. The Contabo server.** 31 §4.5 routes session messages "across the laptop and the Contabo server". 30's Postgres trigger A assumes "the planned Contabo server". C-08 and K-01 removed any owned agent server; the trading node belongs to QMN and is not an agent host. *Resolution.* Strike both mentions. Cross-host traffic is the qmx-remote bucket plus verified fetch (Y38) and the relay in X9. Postgres trigger A has no live case in QMA v2.
+
+**X8. Schedules while the PC is off.** J07 and J08 run cron on rented compute with the laptop off. 30 keeps `triggers` with leases in the laptop's `control.db`, so nothing fires while it is off. *Resolution.* `triggers` stay in `control.db` as the source of truth. A trigger placed `remote` is pushed as a bundle to a provider-native scheduler. Its fires come back on fetch and land in `trigger_fires` by `fire_key`. The missed-run policy (spin 14) decides gaps. FR-111's setup verify must check that each rented provider has a scheduler.
+
+**X9. Phone approvals without a server.** J17 and spin 11 versus C-08; 32's approvals table sits on a laptop that may be off. *Resolution.* A bucket mailbox. The remote run writes the request into its bucket prefix and parks. A phone client answers into the same prefix with a device-bound, expiring token. The laptop imports both on fetch into the one `approvals` table. Money signatures stay desk-only (J17 step 4; Y29). This is a new requirement and needs an operator call on the push service, which costs money.
+
+**X10. Usage from local session files.** J16 step 5 labels some numbers "estimated (from local session files)". 32 rec 9 forbids parsing Claude JSONL for QMX runs, and FR-049 allows documented sources only. *Resolution.* QMX runs feed the ledger from SDK `result` and usage objects at call time. "Estimated" means `cost_source=modelPriced`, not file parsing.
+
+**X11. One truth for what the model saw.** 32: blocks (the Cordis rule). 30: `items` in `agents.db`. Code: blocks (UI) plus RunJournal JSONL (evidence, Y07). *Resolution.* Release 1 keeps two stores, each with one job. RunJournal stays the evidence and replay truth, extended with request header and context hashes so 30's "model-visible means logged" test can run on it. Blocks stay the UI projection. No `items` table until a feature needs a query the journal cannot answer, per **principle-laziness-protocol**. OpenAI-engine sessions use the SDK's own SQLite session file under the QMX home.
+
+**X12. Ledger columns.** 30 and 32 agree the usage ledger lives in `control.db`. 30 lacks `engine`, `where`, `agent_path`, `speed`, `dedupe_key`. 32 lacks `pricing_version`, `request_hash`. *Resolution.* Take the union. Make `dedupe_key` unique, because Claude's `result` is cumulative and 32 C2 records deltas.
+
+**X13. Approval decision words.** FR-104: ask, allow once, allow for session, remember. 32: ACP's `allow_once, allow_always, reject_once, reject_always, cancel`. 30: statuses `pending, approved, denied, expired, consumed`. *Resolution.* Decisions use FR-104's words mapped onto ACP (`remember` = `allow_always`, plus `allow_for_session`). Status uses 30's set. Both sit in one row.
+
+**X14. Skill locations.** 31 puts the canonical store in the repo. FR-032 wants a QMX-only home, and J15 writes skills at runtime. *Resolution.* Shipped defaults live in the repo under a new path. Every runtime write (operator, agent, self-improvement) goes to the QMX home in the same layout. The loader reads both, and the home wins by name. The old `qmx-agents/plugins/` is deleted before the loader lands (F13).
+
+### D6. New facts the architecture must not get wrong
+
+**G1. Two doors means agents can call every operation.** Every `OPERATIONS` row becomes a REST route and an MCP tool (`ctl/server.py:120-129`, `206-213`). The only exception is the sign door, documented as "Operator-only door: never exported as an agent MCP tool" (`ctl/server.py:184-196`). The approval answer route, the credential write route (J20) and the operator terminal route (32 B7) must be built the same way, outside `OPERATIONS`. Otherwise an agent can approve its own request, the same flaw as F1.
+
+**G2. SQLite 3.50.4 and connection churn.** Python 3.14.6 here bundles SQLite 3.50.4, which predates the WAL-reset fix (3.51.3; backport 3.50.7) (30 §2.2; version re-checked in this pass). `qmx-control` opens a new connection per call in `_connect`, `Library.connect` and `RunIndex.record`. Writers serialise on the RLock, but `events()` reads without it from every SSE stream every 50 ms, and thread-pool handlers and `to_thread` maintenance open their own connections. Do both fixes: one writer connection per file, and a start-up assertion on `sqlite3.sqlite_version`.
+
+**G3. The SSE loop blocks the event loop.** `stream()` calls the sync SQLite read inside an async generator every 50 ms per open stream (`ctl/service.py:187-198`). With several streams and in-process OpenAI agents on the same loop, every stream stalls them. The `/live` channel must be asyncio push, and the durable tail must read off the loop.
+
+**G4. `runs.db` is derived, not precious.** Its docstring reads "Rebuildable run projections over immutable P08 journal records" (`ctl/runs.py:1`), and it is rebuilt from `journals/**/*.jsonl` (`:60`). Run truth written only into `runs.db` is lost on rebuild.
+
+**G5. The memory file is a LangGraph store.** `copilot/memory.db` and `apps/<id>/memory.db` are `SqliteStore` files that run their own migrations (`agents/memory.py:201`, `206`, `217`). Research 30's "leave as is" would keep LangGraph alive. Keep the paths and replace the store.
+
+**G6. Rows are JSON, but claims need columns.** Every table today is `(key, data JSON)`. CAS on approvals, lease claims on jobs and triggers, and sums over the ledger need typed `status`, `version`, `lease_until` and token columns. The first such table must bring `PRAGMA user_version` and numbered migrations with it. Keep JSON documents for rows that are only displayed.
+
+**G7. The outbox only works inside one file.** `_event` writes the event inside the caller's transaction (`ctl/service.py:156-169`), and `Last-Event-ID` is one integer `seq`. Splitting event-emitting tables across files breaks both (X3).
+
+**G8. `aggregates` crosses files inside a transaction.** `_event` calls `_aggregate_counts`, which opens `runs.db` while the `control.db` transaction is open (`ctl/service.py:420-423`). A single-writer design must move that read out of the write transaction.
+
+**G9. Remote runs cannot call the laptop.** Research 30 §2.3 rule 6 has remote nodes call the qmx-control API. With rented compute and the lid closed (C-08, J09) there is nothing to call. Remote runs write their journal and files into the bucket (`remote/worker.py:72-100`), and the laptop imports them on verified fetch as new rows, never merged (Y20, Y38).
+
+**G10. Teardown exists; idle teardown does not.** `ComputeProvider.teardown` exists and runs on stop, move and failure (`remote/providers.py:24`; `remote/runs.py:126`, `158`, `211`, `230`). There is no idle timer and no live machine count. Spin 5 is a timer plus a list, not a new provider verb.
+
+**G11. `money` is not a tool effect.** Research 31's `effect=money` puts a money-labelled tool in a registry agents can see. Y05 says no order tool appears in any tool list. The registry lint must refuse `effect=money` on every agent-visible tool. `propose_order` is a `write` into the proposal queue.
+
+**G12. App tool calls keep 20 s.** Research 31's 60 s default must not reach `apps_call`, where a timeout stops the app (`apps/supervisor.py:676`, `715-726`; Y32). Host tools may take 60 s. Anything longer becomes a job.
+
+**G13. The journeys' block names are labels.** `tools`, `ask`, `changes` and `cards` do not exist in `SessionBlock` (`ctl/service.py:54-72`). The UI maps them onto `tool`, `question`, `changed` and `panel` or `entity`. Renaming a kind breaks Y44.
+
+**G14. Sticky approvals have three hard limits.** An `allow_always` decision (32 B5) never covers an always-ask action (FR-105), a deny-listed action (FR-108) or anything touching money (C-11). Research 32 left this as an open question. The PRD already answers it.
+
+**G15. No credential write route exists.** The only `keyring.set_password` call writes the control token (`ctl/server.py:89`). J20's secure field needs a new REST-only route that writes a `qmx/*` entry and returns only the reference. `settings_put` keeps refusing secret-named fields (F16).
