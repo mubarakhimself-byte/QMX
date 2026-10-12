@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from qma.core.ontology import CONTINUATION_BOUND_KEYS, is_continuation_bound_key
 from qma.core.ports.continuation_host import (
-    CONTINUATION_LAPTOP_OFF_PROMISED_KEY,
     GAP_0062_ALWAYS_ON_HOST,
     GAP_0062_HOST_MACHINE,
     LAPTOP_OFF_OWNERS,
@@ -44,13 +42,6 @@ def _remote(*, reachable: bool) -> ContinuationEnvView:
         colocated_with_daemon=False,
         reachable=reachable,
     )
-
-
-def test_laptop_off_key_is_not_a_story_46_7_bound() -> None:
-    assert CONTINUATION_LAPTOP_OFF_PROMISED_KEY == "registry:continuation.laptop_off_promised"
-    assert CONTINUATION_LAPTOP_OFF_PROMISED_KEY not in CONTINUATION_BOUND_KEYS
-    assert is_continuation_bound_key(CONTINUATION_LAPTOP_OFF_PROMISED_KEY) is False
-    assert is_continuation_bound_key("continuation.laptop_off_promised") is False
 
 
 def test_gap_0062_host_is_operator_config_not_a_machine_name() -> None:

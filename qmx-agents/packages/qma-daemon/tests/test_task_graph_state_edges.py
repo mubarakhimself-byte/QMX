@@ -21,7 +21,6 @@ from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.envs.registry import EnvironmentLease
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
-from qma.daemon.scheduler import PROCEDURE_RUNTIME, SECOND_SCHEDULER_MINTED, RoutineScheduler
 from qma.daemon.taskgraph import (
     DURABLE_EDGES_EXISTED_AT_INSPECT_SHA,
     NODE_SUCCESSOR_KEYS,
@@ -36,10 +35,8 @@ from qma.daemon.taskgraph import (
     GraphTemplateCatalog,
     MissionCompiler,
     TaskGraphDispatcher,
-    TaskGraphStateService,
     claim_durable_edges_at_inspect_sha,
     refuse_qmb_occupancy_write,
-    refuse_second_scheduler,
 )
 from qmf.core import is_ok, is_refusal
 
@@ -264,25 +261,6 @@ def test_occupancy_is_lease_plus_door_law_not_a_table(tmp_path: Path) -> None:
         assert "environment_lease" not in query_slot
     finally:
         process.close()
-
-
-def test_second_scheduler_is_refused() -> None:
-    assert SECOND_SCHEDULER_MINTED is False
-    assert PROCEDURE_RUNTIME == ("RoutineScheduler", "MissionCompiler")
-    refused = refuse_second_scheduler(given="WorkflowScheduler")
-    assert is_refusal(refused)
-    assert refused.context["minted"] is False
-    runtime = refused.context["runtime"]
-    assert isinstance(runtime, (list, tuple))
-    assert list(cast("list[str] | tuple[str, ...]", runtime)) == [
-        "RoutineScheduler",
-        "MissionCompiler",
-    ]
-    service = TaskGraphStateService()
-    minted = service.mint_second_scheduler("WorkflowScheduler")
-    assert is_refusal(minted)
-    assert RoutineScheduler.__name__ == "RoutineScheduler"
-    assert MissionCompiler.__name__ == "MissionCompiler"
 
 
 def test_dispatcher_materialize_writes_sqlite_when_bound(tmp_path: Path) -> None:

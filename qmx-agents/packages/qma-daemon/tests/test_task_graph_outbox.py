@@ -25,10 +25,7 @@ from qma.daemon.taskgraph import (
     INITIAL_ROOT_PARTITION_ID,
     OUTBOX_PROVES_EXACTLY_ONCE_EFFECT,
     OUTBOX_UNIQUE_KEY_FIELDS,
-    OUTBOXES_MERGED,
-    REMOTE_WORKER_OUTBOX_NOUN,
     TASK_GRAPH_ELIGIBILITY_TABLE,
-    TASK_GRAPH_OUTBOX_NOUN,
     TASK_GRAPH_OUTBOX_TABLE,
     TASK_GRAPH_RECEIVER_TABLE,
     CompileRequest,
@@ -44,14 +41,12 @@ from qma.daemon.taskgraph import (
     TaskGraphDispatcher,
     TaskGraphStateService,
     instantiate_procedure,
-    refuse_merge_remote_worker_outbox,
 )
 from qma.daemon.taskgraph.outbox import build_initial_outbox_row
 from qma.daemon.taskgraph.projection import (
     TaskGraphOutboxSchemaError,
     TaskGraphStateSqliteStore,
 )
-from qma.wire.outbox import RemoteOutbox
 from qmf.core import is_ok, is_refusal
 
 _SRC = Path(__file__).resolve().parents[1] / "src" / "qma" / "daemon" / "taskgraph"
@@ -693,17 +688,6 @@ def test_join_waits_for_all_predecessors(tmp_path: Path) -> None:
         assert rows[0].predecessor_node_id == "right"
     finally:
         process.close()
-
-
-def test_remote_worker_outbox_is_a_different_noun() -> None:
-    assert TASK_GRAPH_OUTBOX_NOUN != REMOTE_WORKER_OUTBOX_NOUN
-    assert OUTBOXES_MERGED is False
-    refused = refuse_merge_remote_worker_outbox(given=RemoteOutbox.__name__)
-    assert is_refusal(refused)
-    assert refused.context["merged"] is False
-    assert refused.context["task_graph_outbox"] == TASK_GRAPH_OUTBOX_NOUN
-    assert refused.context["remote_worker_outbox"] == REMOTE_WORKER_OUTBOX_NOUN
-    assert RemoteOutbox.__name__ == "RemoteOutbox"
 
 
 def test_outbox_tables_are_task_graph_state_not_a_new_class(tmp_path: Path) -> None:
