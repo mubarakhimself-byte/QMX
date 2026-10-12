@@ -1,65 +1,71 @@
 ---
-label: qma-v2:architecture (synthesis of candidates A and B)
+label: qma-v2:architecture (synthesis of candidates A and B, revision 2)
 created: 2026-10-12
+revised: 2026-10-12 (after ARCHITECTURE-CHECK, review-opus, review-sonnet; §10 lists every finding)
 status: design, planning only. Nothing committed. Nothing ratified until the operator reads it.
-inputs: ARCH-BRIEF, PRD (148 FRs, 81 WED, 39 NFRs), HOW-WHY (pass 1 + delta 2), USER-JOURNEYS, candidates A-sdk-native and B-qma-kernel, research 01 19 30 31 32, models-routing, the harness/loop/graph clipping
-method: pstack /architect Phase B synthesis. Both candidates screened against design-red-flags.md, compared on interface depth and WED risk, then merged. Every divergence has a decision and a reason in §1.3.
+inputs: ARCH-BRIEF, PRD (148 FRs, 81 WED, 39 NFRs), HOW-WHY (pass 1 + delta 2), USER-JOURNEYS, candidates A and B, the three reviews, research 01 19 30 31 32, models-routing, the harness/loop/graph clipping
+method: pstack /architect Phase B synthesis, then a revision pass. Every BLOCKER and MAJOR finding is fixed, partly fixed with a reason, or rejected with a reason (§10).
 ---
 
 # QMA v2 architecture
 
 ## 0. In plain words
 
-1. QMA v2 is one Python package, `qma`, that sits between the UI backend (`qmx-control`) and two agent engines (the Claude Agent SDK on his Max plan, the OpenAI Agents SDK for GPT via his ChatGPT plan and for every key provider).
-2. The two engines run the model loop. QMA owns everything that must survive a crash or hold on both engines: the approval queue, the money-path rules, the effects ledger, the usage ledger, the graph runner, the job broker, placement.
-3. State lives in one SQLite file, `control.db`, written by one writer. Evidence (what the model saw and did) lives in one journal file per run. The UI reads blocks and events, which are projections written in the same transaction as the state change.
-4. A plugin is a Claude plugin folder plus one small `qma.toml`. The Claude engine loads the folder natively. QMA's loader turns the same folder into OpenAI SDK objects. Plugins are the organogram's seats: general, Lab, Portfolio, one per mini app.
-5. Every tool call from either engine goes through one function, `ToolInvoker.invoke`. That function holds the deny-list, the always-ask list, the approval claim, the idempotency key, the journal write and the write receipt. The money barrier is structural: no order tool exists in any registry, and no broker credential is in any agent's environment.
-6. Approvals are rows. A pending approval survives a restart. On the Claude engine QMA uses the SDK's `defer` decision to park a turn without a live process. On the OpenAI engine it parks the SDK's `RunState`. The UI sees one queue and one REST-only answer route.
-7. Workflows run on QMA's own runner over the kept `workflow.v1` format. Nodes are code by default. An agent node is a loop with a checker and a stop rule. Every node is checkpointed, so a crash resumes without repeating a finished node's side effect.
-8. Sub-agents are the SDKs' own (Claude `Agent`, OpenAI `as_tool`) for cheap same-engine work. Cross-engine or durable work goes through one `delegate` tool that starts a job on the engine the router picks. Depth is one.
-9. The router is data. Accounts are rows. It picks one account and model per session by capability, then usage left, and never switches a running session.
-10. Off-machine runs use the existing `qmx-remote` bundle, bucket and verified fetch. A rented machine runs the same `qma` host without the UI. For Wednesday remote runs use the OpenAI engine and code nodes; a run that needs Claude says "needs your PC on" before launch.
-11. The UI gets two channels: durable blocks and events from `control.db`, and an unstored `/live` push for token deltas, terminal bytes and progress ticks. The 14 block kinds do not change.
-12. About 3,600 new lines of QMA code, plus moves of neutral code out of the LangChain package. Candidate A was 2,900 and B was 5,000. The extra over A buys durable approvals, the effects ledger and one policy point. The saving against B comes from not building a journal table that duplicates blocks, events and the JSONL journal.
-13. Seven build slices to Wednesday. Slice 1 is a copilot turn end to end through the API on a fake engine. Slice 2 puts the Claude engine behind it live. Slices 2 and 3 run in parallel.
-14. Five things are unverified and get probed on Tuesday morning before any code depends on them (§7): Sign in with ChatGPT inside the OpenAI SDK, `setup-token` on a rented box, how long a live Claude approval may block, the 40-agent SQLite load, and the Claude SDK hang and watchdog behaviour.
-15. Every answer in this document that depends on a probe says so. Where a probe fails, the fallback is written down next to it.
+**On Wednesday you can:**
+1. Talk to the copilot on your Claude plan and watch it answer and use tools. LIVE.
+2. Open a Lab seat and a Portfolio seat and see each has its own tools, one on Claude and one on the OpenAI engine. LIVE.
+3. Ask the copilot to build a small workflow, run it, change it, run it again. LIVE.
+4. Ask for a helper on DeepSeek and see the helper's cost under the copilot's. LIVE.
+5. Run a code-only workflow on a rented machine, close the lid, and fetch the results. LIVE IF THE PROVIDER COOPERATES, otherwise an honest card plus the same run on a fake provider.
+6. Try to make either engine place an order and watch both refuse, with the refusal in the journal. LIVE.
+7. Have the copilot rebuild the Macro daily bias app. STRETCH: the first thing dropped if time runs short.
 
-### Overview
+**Not yet (right after Wednesday):** switching a chat's model yourself with the cost shown first (the cost estimate exists on Wednesday, the switch does not); the full usage page (a usage summary exists); approvals from your phone; cron schedules; the long-lived orchestrator; Claude on rented machines; the mailbox and board; plugin install by chat.
+
+**What you will see on Wednesday:** a plain console page served by QMX itself (chat, "Needs you" with Allow and Deny, a runs list, seats, usage, a restart banner, machines alive). The real UI is a separate lane that starts from the handoff packet slice 1 produces. §6.2 Q9 asks you which you want on the day.
+
+**I need from you by Tuesday 18:00:** run the setup script once (Claude sign-in into QMX's own home, one DeepSeek or GLM key, one rented-provider token, the ChatGPT sign-in); check that GitHub Actions is enabled on the repo; set a spend limit in the rented provider's dashboard; answer Q9 to Q15 in §6.2; tell me the demo instrument (gold CFD or a crypto pair).
+
+**How it works, in one breath:** QMX keeps its state in two small databases and one evidence file per run. Two engines run the model loop; QMX owns approvals, the money rules, the ledger, the workflow runner, the job broker and placement, so they hold on both engines and after a crash. Three different keys open the system: yours, the agents', the apps'. Agents cannot approve their own requests, and cannot read your broker credentials once the low-rights account is in place (§6.2 Q10).
+
+### 0.1 For builders
+
+1. One package, `qma2` (dist `qma-v2`), between `qmx-control` and the two SDKs. `qma` stays a namespace owned by the old daemon until P16c removes it.
+2. The Claude Agent SDK runs on his Max plan with a custom prompt, its own config home and plugins loaded natively. The OpenAI Agents SDK runs in-process for GPT via SIWC and every key provider.
+3. Approvals are rows. On Claude the live `can_use_tool` Future is the primary path while the host is up; `defer` parks single-call turns durably. On OpenAI the latest `RunState` is parked once per session. One claim point, `ToolInvoker.invoke`, by an engine-native effect key.
+4. Every QMX tool call (platform tools, domain tools through the FastMCP proxy, every non-first-party MCP server) goes through `ToolInvoker.invoke`. Claude built-ins get `decide_builtin` plus receipt reconciliation. Nothing else runs a tool.
+5. `control.db` has one writer thread. Checkpoints live in it, so a node row and its checkpoint commit together. Evidence is the JSONL `RunJournal` per run.
+6. Three principals with three credentials: operator (a per-launch secret the UI holds in memory), agent (a per-session scoped token), app (a per-app scoped token). The operator doors refuse anything but the operator credential.
+7. Remote runs self-terminate, exit when they hit an approval, and get their keys through the provider's secret store, never the bundle.
+8. About 4,100 new lines plus tests. Ten packets to Wednesday in three lanes, with a clock and a cut line (§8).
 
 ```
- UI (SvelteKit)        phone (NEXT, bucket mailbox)
-   | REST + SSE (durable) + /live (unstored)
- +-v------------------------------- qmx-control (KEEP) ---------------------------+
- | sessions | blocks | work | events | settings | Library seam | OPERATIONS 2 doors |
- | REST-only doors: approvals answer, credential write, terminal, sign            |
- +-------------------------------+-------------------------------------------------+
-                                 | calls qma; passes its home + settings
- +-------------------------------v---------------- qma (NEW) ----------------------+
- | host/     TurnHost, JobRunner, Placement, worker entry      <- the entry points  |
- | store/    Store (ONE writer task per file), Write, migrations, read pool         |
- | journal/  RunJournal (JSONL per run, evidence), blocks + events projection       |
- | policy/   ToolInvoker, ToolRegistry, ApprovalQueue, EffectsLedger, DenyList      |
- | router/   Router.pick over account rows + usage ledger, sticky per session       |
- | plugins/  PluginLoader: Claude folder + qma.toml -> CompiledAgent per engine     |
- | prompts/  five layers, byte-stable L0-L3, CI snapshots                           |
- | engine/   Engine facade (10 verbs) over EngineAdapter port (5 methods)           |
- |           ClaudeAdapter | OpenAIAdapter | FakeAdapter   (only SDK importers)     |
- | graph/    Runner over workflow.v1.1: checkpoints, gates, fan-out, loops, watch   |
- | comms/    Broker: delegate, jobs with leases, mailbox + board (NEXT)             |
- | events/   Normaliser per engine -> QmaEvent; EventSink; LiveFanout               |
- +------+----------------------------+--------------------------------+------------+
-        |                            |                                |
-  Claude Agent SDK            OpenAI Agents SDK                 qmx-remote (KEEP)
-  child process ~1 GB         in-process Agent + Runner        bundle -> provider -> bucket
-  custom prompt, own home     SQLiteSession, RunState park      -> verified fetch
-  plugins=[folder], hooks     FunctionTools = same invoker      worker = qma host, no UI
+ UI lane (later) | Wednesday console (served by qmx-control)      phone (NEXT, bucket mailbox)
+   | operator token: REST + SSE (durable) + /live (unstored)
+ +-v------------------------------- qmx-control (KEEP) -----------------------------------+
+ | sessions | blocks | work | events | settings | Library seam (untouched) | OPERATIONS    |
+ | PrincipalGate: operator | agent | app tokens   agent_ops.py registers the new rows      |
+ | operator-only doors: approvals answer, credential write, terminal, sign, protected settings |
+ +-------------------------------+--------------------------------------------------------+
+                                 | calls qma2; passes home + settings
+ +-------------------------------v---------------- qma2 (NEW) ----------------------------+
+ | host/     TurnHost, recover(), Placement, worker entry, console ops                     |
+ | store/    Store (ONE writer thread per file, SAVEPOINT per Write), migrations, readers  |
+ | journal/  RunJournal (JSONL per run), BlockProjector, EventSink, LiveFanout             |
+ | policy/   ToolInvoker, ToolRegistry, ApprovalQueue, EffectsLedger, DenyList, Principals |
+ | router/   Router.pick over account rows + ledger, family guard, sticky per session      |
+ | plugins/  PluginLoader: Claude folder + qma.toml -> CompiledAgent per engine + parity   |
+ | engine/   Engine facade (10 verbs) over EngineAdapter (5 methods): Claude|OpenAI|Fake   |
+ | graph/    Runner over workflow.v1.1 (WED kinds), checkpoints, gates, fan-out            |
+ | comms/    Broker: delegate, jobs with leases (mailbox + board NEXT)                     |
+ +------+----------------------------+--------------------------------+-------------------+
+   Claude Agent SDK (child, Job Object)   OpenAI Agents SDK (in-process)   qmx-remote (KEEP)
+   agent shells run as the low-rights user (Q10)                           self-terminating worker
         \                            /
-   qmx-tools FastMCP (domain tools, stdio) | qmx-apps MCP | qmx-broker read + propose_order
+   qmx-tools FastMCP (domain tools) | qmx-apps MCP | qmx-broker read + propose_order
 ```
 
-Dependency direction. `qma` imports no `qmx_*` package. `qmx_control`, `qmx_apps` and `qmx_remote` import `qma`. Only `qma.engine.claude` and `qma.engine.openai` import an SDK. An import-linter contract fails CI otherwise.
+Dependency direction. `qma2` imports no `qmx_*` package and nothing under `qma.*`. `qmx_control`, `qmx_apps` and `qmx_remote` import `qma2`. Only `qma2.engine.claude`, `claude_replay` and `openai` import an SDK. An import-linter contract fails CI otherwise.
 
 ---
 
@@ -67,128 +73,114 @@ Dependency direction. `qma` imports no `qmx_*` package. `qmx_control`, `qmx_apps
 
 ### 1.1 Red-flag screen
 
-**Candidate A (SDK-native, thin).**
-- Shallow module: passes. `Engine` with ten verbs hides a child process or an in-process runner. `ToolWrapper.call` hides eight policy steps.
-- Information leakage: passes. `native_token` is opaque; no SDK type crosses `qma.types`.
-- Split ownership: one real flag. A keeps Claude's live `can_use_tool` Future as the primary approval path and the approvals row as a mirror. After a crash the Future is gone and the row must become primary. Two owners of "is this approved" with a hand-over on restart. Fixed in the synthesis (§1.3 item 3).
-- Two ways to do one task: one real flag. A says the restart path "re-issues the call and the hook allows by effect key" but never designs how a resumed Claude session re-issues a tool call whose `can_use_tool` died. The synthesis replaces this with the SDK's documented `defer` decision.
-- Hand-synced list: the OpenAI base kit and the Claude built-ins are two lists of "baseline tools" with no derivation between them. Accepted as a parity badge, with a lint that reads one declared baseline list.
-- Importable internals: passes (lint on SDK imports).
+**Candidate A.** Shallow module, leakage, temporal decomposition: pass. Split ownership: the live Future and the approval row both owned "is this approved" with a hand-over on restart; fixed by making the row the only truth and the Future a waiter on it. Two ways: A never designed how a dead `can_use_tool` re-issues its call; fixed in §2.5. Hand-synced list: the OpenAI base kit and the Claude built-ins were two lists; now one closed parity table in `compile.py`.
 
-**Candidate B (QMA-owned kernel).**
-- Shallow module: passes for `ToolInvoker` and the five-method port. `Broker` is thin by B's own admission.
-- Split ownership: one real flag. B writes "every model-visible input" into a `journal` table and also keeps blocks, events, `usage_ledger`, `effects` and `approvals` as projections of it, and also keeps the native SDK transcripts, and also exports JSONL segments for the bucket. Four copies of one turn. The journal table is a second evidence store next to the JSONL journal Y07 already names as the single evidence writer. The synthesis keeps one evidence writer (JSONL) and one state store (`control.db`).
-- Temporal decomposition: passes.
-- Pass-through: `TurnHost.submit` is thin by design. Accepted.
-- Importable internals: passes, and B's import-linter contract is adopted.
-- Schedule: B's own §9 says the kernel must land before any live turn and names an in-memory fallback. That is the shape of a plan that slips on Tuesday.
+**Candidate B.** Shallow module and leakage: pass. Split ownership: a `journal` table beside blocks, events, the ledger, native transcripts and exported JSONL segments made four copies of a turn; the synthesis keeps one state store and one evidence writer. Schedule: a kernel-only Monday and Tuesday before any live turn.
 
-**Interface depth.** A's public surface is 14 methods; B's about 20. Both hide the two SDKs. B hides more (CAS claims, leases, outbox) but exposes a journal vocabulary of 21 entry kinds that the UI never needs. The synthesis takes A's surface size with B's hidden mechanisms.
+**Interface depth.** A's surface size with B's hidden mechanisms (CAS claims, leases, outbox, resume rules). Hidden as well now: three principals, the parity table, self-terminating remote runs.
 
-**Fit to the 81 WED FRs.** A serves 69 at full strength and names 12 weakened. B claims full coverage but FR-104 (approval survives restart) is the same unverified resume story as A's. Neither candidate used the one documented Claude mechanism for a parked approval. With `defer` the synthesis serves FR-104 at full strength on both engines, and A's list of weakened FRs shrinks to eight (FR-030 hooks on OpenAI, FR-098 summary quality on cheap models, FR-103 reconciliation for Claude built-ins, FR-119 export is the native file, FR-133 smaller OpenAI kit, and FR-001, FR-025, FR-086 which inherit the parity badge).
-
-**Schedule risk for Wednesday.** A has six slices and puts a live Claude turn in slice 2. B has eight and puts it in slice 3 after a kernel-only Monday and Tuesday. A is the safer path. The synthesis keeps A's ordering and folds B's durable pieces into A's slice 1 and slice 2, because each is under 200 lines when the single-writer `Store` exists.
+**Fit to the 81 WED FRs.** §8.6 cites every WED FR against a packet. Eight land weaker and say so: FR-030 (hooks on OpenAI are `qma.toml` kinds only), FR-098 (summary quality on cheap models unmeasured), FR-103 (Claude built-in writes are reconciled, not pre-checked), FR-119 (export is the native file plus the journal), FR-133 (smaller OpenAI kit, parity badge), FR-001, FR-025, FR-086 (inherit the badge).
 
 ### 1.2 What was taken from each
 
 | Taken | From | Why |
 |---|---|---|
-| One package `qma`, module map, `TurnHost` as the entry point, `qma.toml` as the whole plugin IR, native Claude plugin loading, SDK-native sub-agents, memory as SDK default, remote defaults to the OpenAI engine, six-slice order with slice 1 on a fake engine | A | Builds nothing an SDK gives. Earliest live turn. |
-| `Store` as a single-writer actor with `Write` closures, group commit and the events outbox in the same transaction; typed columns and numbered migrations; `ApprovalQueue.claim` by compare-and-swap; `EffectsLedger` with `IntentOutcome` and the resume rule; `CompiledAgent` as the engine-neutral build output; the import-linter contract; `Broker` with leases; `qma_worker` as the same host without doors; `Credentials.scrub_env/redact` | B | Each is the piece that makes one WED FR true after a crash (FR-014, FR-059, FR-061, FR-104). |
-| `ToolInvoker` as the one policy point, in-process for platform tools, FastMCP proxy for domain tools | B, with HOW-WHY D2's split | One function to test on both engines (FR-102, FR-025). |
-| Five-method adapter port under a ten-verb facade | both | A's verbs are the PRD contract; B's narrow port is what an adapter author must implement. See §1.3 item 2. |
-| `defer`-based Claude approvals | neither | §1.3 item 3. |
+| One package, `TurnHost` as the entry point, `qma.toml` as the whole plugin IR, native Claude plugin loading, SDK-native sub-agents, memory as SDK default, remote defaults to the OpenAI engine, packet 1 on a fake engine | A | Builds nothing an SDK gives. Earliest live turn. |
+| `Store` as a single-writer actor with `Write` closures and the events outbox in one transaction; typed columns and numbered migrations; CAS claims; `EffectsLedger` with `IntentOutcome` and the resume rule; `CompiledAgent`; the import-linter contract; `Broker` leases; the worker as the same host without doors; `Credentials.scrub_env/redact` | B | Each makes one WED FR true after a crash (FR-014, FR-059, FR-061, FR-104). |
+| `ToolInvoker` as the one policy point; platform tools in-process, domain tools and non-first-party MCP through the FastMCP proxy | B, HOW-WHY D2 | One function to test on both engines (FR-102, FR-025). |
+| Five-method adapter port under a ten-verb facade | both | A's verbs are the PRD contract; B's port is what an adapter author implements. |
+| Principals and tokens, engine-native effect keys, self-terminating remote runs, the console, the parity table | the reviews | §10. |
 
 ### 1.3 Resolved divergences
 
-1. **Source of truth.** State is in `control.db` tables. Evidence is the JSONL `RunJournal` per run, extended with request headers and context hashes (HOW-WHY X11). Blocks and events are projections written in the same `Write` as the state change. No `journal` table. Reason: the outbox argument (an approval and its event commit together) is about state rows, which the single-writer `Store` gives. A journal table would be the fourth copy of a turn. The JSONL file is what remote runs already flush to the bucket every 5 s (Y38), so the bucket path needs no export step. Per the laziness protocol, the smallest shape that keeps one evidence writer wins.
-2. **The Engine port.** Two layers, one public. `Engine` is one concrete class with the PRD's ten verbs (FR-020). It is deep: it holds the ledger feed, the checkpoint rule, the delegate tool and the resume refusal once, for both engines. Under it, `EngineAdapter` is a five-method Protocol (`open`, `turn`, `answer`, `interrupt`, `close`) that `ClaudeAdapter`, `OpenAIAdapter` and `FakeAdapter` implement. Reason: A's ten-verb Protocol would make each adapter reimplement `usage`, `checkpoint` and `delegate`, which do not differ by engine. B's five-method port is right for the adapter but is not the contract the PRD names. The FR-020 contract suite runs against `Engine(FakeAdapter)` in CI and against each real adapter by operator script.
-3. **Approval after restart.** One mechanism on both engines: the approval is a row; the engine turn is parked; the answer route marks the row `approved`; the host resumes the session; the same tool call is re-decided by effect key and the decision is claimed once by CAS. On Claude the park is the SDK's `PreToolUse` decision `defer`, which ends the turn with `tool_deferred` and a `deferred_tool_use` record, needs no live process, and resumes by session id with the hook returning `allow` plus `updatedInput` (research 19 §4, documented, no timeout). On OpenAI the park is `RunState.to_json()`. The live `can_use_tool` Future is only the fallback for the one case `defer` does not cover (several tool calls in one Claude turn), and it is bounded by a timeout after which the row stays pending and the turn is interrupted and resumable. Reason: both candidates designed the restart path around an undocumented replay of a dead `can_use_tool`. `defer` is the documented mechanism for exactly this. Its single-call limit is acceptable because QMA already serialises write and money tools (FR-109).
-4. **The orchestrator.** An errand session started by `delegate(mode="async")` as a peer job (HOW-WHY X6), with a state file in its run folder read at every turn start (L4). It is rolled at a phase boundary when the context passes 60 percent of the window or the plugin hash changes. The roll is a new child session under the same errand with L3 rebuilt from the state file, not `fork_session`. Reason: `fork_session` is Claude-only and carries the old transcript, which costs cache and ties the orchestrator to one engine. A new session under the errand is engine-neutral and the errand already records session lineage (USER-JOURNEYS §4.2). Both are NEXT except the errand and state-file primitive, which slice 1 lays down.
-5. **Remote Claude nodes.** Wednesday: remote runs use the OpenAI engine and code nodes only; `Placement.needs_pc` marks any Claude-engine node and the UI shows it before launch (A-02). NEXT: a per-provider "Claude on this machine" option through a wizard in which he runs `claude setup-token` on the rented box himself and the token never passes through QMX, the bucket or chat. Reason: B is right that it is mechanically possible and A is right that it is unverified and off the demo path. Probe P2 decides whether NEXT is real.
-6. **New code to own.** About 3,600 lines. A's 2,900 plus about 700 for the single-writer `Store` with migrations, the `defer` and `RunState` park paths, `ApprovalQueue.claim`, `EffectsLedger` and `Broker` leases. B's extra 1,400 was the journal table, its projections and the mailbox and board, which are NEXT.
-7. **Slice order.** Seven rows (0 to 6), A's order. Slice 1 is a copilot turn end to end through the API on `FakeAdapter`, with the real `Store`, approvals and effects tables already underneath it, so no later slice swaps a store.
+1. **Source of truth.** State in `control.db` tables; evidence in the JSONL `RunJournal` per run with request headers and context hashes (X11); blocks and events as projections in the same `Write`. No journal table. The JSONL file is what remote runs already flush to the bucket (Y38).
+2. **The Engine port.** `Engine` is one concrete class with the PRD's ten verbs: `start`, `resume`, `send`, `stream`, `approve`, `interrupt`, `delegate`, `usage`, `checkpoint`, `close`. `send` queues one input and returns a `TurnHandle`; `stream` yields that turn's `QmaEvent`s. Under it, `EngineAdapter` has five methods. The FR-020 suite runs against `Engine(FakeAdapter)` and `Engine(ClaudeReplayAdapter)` in CI, and against each real adapter by script.
+3. **Approval park and resume.** The approval row is the only truth. On Claude, while the host is up, the live `can_use_tool` Future waits on the row with no SDK bound (the callback may stay pending indefinitely); the watchdog knows a `waiting_approval` session is not stuck. The `PreToolUse` hook answers `defer` for approval-needing calls outside sub-agents; when the turn has one tool call the CLI parks it durably, and when it has several the CLI ignores `defer` and the live path takes over. A live-parked row whose host dies becomes `orphaned` ("the agent will ask again"), never a pending row that cannot resume. One claim point: `invoke`, by engine-native effect key. OpenAI parks the latest `RunState` once per session under a resume lock. Reason: the first draft leaned on `defer` as primary and on an undocumented replay of a dead Future (review-opus 3, 4). Multi-call turns are common, and FR-109 is NEXT, so it could not justify the single-call assumption.
+4. **The orchestrator.** An errand session via `delegate(mode="async")`, a state file, rolled into a new child session (not `fork_session`) at a phase boundary past 60 percent of the window. NEXT, except the errand and state-file primitive in packet 1b.
+5. **Remote Claude nodes.** WED: remote runs use the OpenAI engine and code nodes; `Placement.needs_pc` marks any Claude node before launch; remote `watch` is refused. NEXT: `setup-token` pasted by him on the box, gated on probe P2 (deferred).
+6. **New code to own.** About 4,100 lines: A's 2,900, B's durable pieces (700), and the reviews' additions (500: principals and tokens, `recover()`, the parity table, the console operations, self-terminate).
+7. **Slice order.** Ten packets in three lanes with a clock (§8). Packet 1 is a copilot turn end to end through the API on `FakeAdapter`, with the real tables underneath, and it freezes the shared types so lanes run in parallel.
 
-### 1.4 Rationale, in the template's shape
+### 1.4 Rationale
 
-**Problem.** Two SDKs with different ideas of where state lives, a platform (`qmx-control`, `qmx-apps`, `qmx-remote`) that runs today, 81 requirements due in two days, and a rule that every cross-cutting behaviour (money path, approvals, usage, resume) must hold on both engines after a crash. The shape question is which parts QMA owns and which it lets each SDK own.
+**Problem.** Two SDKs with different ideas of where state lives, a platform that runs today, 81 requirements in two days, and every cross-cutting rule (money path, approvals, usage, resume) must hold on both engines after a crash, on a Windows PC where every process of one user can read that user's credential store.
 
 **Usage (the caller's view).**
 
 ```python
-# qmx_control/server.py: the turn route joins OPERATIONS (REST + MCP), so the copilot may start turns in child sessions
-@app.post("/api/sessions/{sid}/turn")
-async def sessions_turn(sid: str, body: TurnInput) -> RunId:
-    return await qma.turns.submit(SessionId(sid), body)      # returns at once; blocks stream over SSE
+# qmx_control/agent_ops.py: the turn row joins OPERATIONS (REST + MCP, agent principal allowed)
+async def sessions_turn(self, sid: SessionId, body: TurnInput, who: Principal) -> RunId:
+    return await self.qma.turns.submit(sid, body, who)          # returns at once; blocks stream over SSE
 
-# REST-only door (G1): never exported as an MCP tool
-@app.post("/api/approvals/{aid}")
-async def approvals_answer(aid: str, body: AnswerBody) -> ApprovalRow:
-    return await qma.approvals.answer(ApprovalId(aid), body.decision, by=Principal.operator, edited=body.edited_args)
+# qmx_control/server.py: operator-only door; the gate rejects agent and app tokens with 403
+@app.post("/api/approvals/{aid}", dependencies=[Depends(gate.operator)])
+async def approvals_answer(aid: str, body: AnswerBody, who: Principal = Depends(gate.principal)) -> ApprovalRow:
+    return await qma.approvals.answer(ApprovalId(aid), body.decision, by=who, edited=body.edited_args)
 
 # inside either engine adapter, identically
-result = await invoker.invoke(ToolCall(name="lab_backtest_run", args=args), ctx)
+result = await invoker.invoke(ToolCall(name="lab_backtest_run", args=args, native_call_id=call_id), ctx)
 
 # the graph runner's agent node
-ref = await engine.start(spec, router.pick(spec.role, session=run.id, chain=chain))
-async for ev in engine.send(ref, node.brief):
+ref = await engine.start(spec, router.pick(spec.role, session=run.id, chain=chain), plugin)
+handle = await engine.send(ref, node.brief)
+async for ev in engine.stream(ref, handle):
     await checkpoint.observe(ev)
-verdict = await node.checker.check(await engine.result(ref))
+verdict = await node.checker.check(handle.result())
 
 # the remote worker
-await TurnHost.headless(bundle.home, adapters=[OpenAIAdapter()]).run_graph_from_bundle(bundle)
+await TurnHost.headless(bundle.home, adapters=[OpenAIAdapter()], limits=bundle.limits).run_bundle(bundle)
 ```
 
 **Tradeoffs accepted.**
-- We accept two transcript formats (Claude JSONL, OpenAI session rows) in exchange for zero custom session store. FR-119 export means "copy the native file plus the JSONL journal".
-- We accept a smaller tool kit on the OpenAI engine, marked by a parity badge, in exchange for loading plugins natively on Claude.
-- We accept that a Claude turn with several tool calls at once falls back to a bounded live approval, in exchange for the documented `defer` path on every single-call turn.
-- We accept about 1 GB per Claude session and a RAM cap in exchange for Claude Code's capabilities on the plan.
-- We accept an additive `workflow.v1.1` bump (retries, timeouts, recovery class, write scope, `watch`, `command`) in exchange for those living in the definition.
-- We accept that remote runs default to the OpenAI engine in exchange for not depending on an unverified headless Claude sign-in.
+- Two transcript formats in exchange for zero custom session store.
+- A smaller OpenAI tool kit with a parity report in exchange for native plugin loading on Claude.
+- A live-parked Claude approval holds about 1 GB until it is answered or released after `approvals.park_release_minutes`; in exchange the common multi-call turn resumes cleanly.
+- `workflow.v1.1` additive bump; `loop`, `subworkflow`, `watch` and `command` execute NEXT in the WED runner.
+- Remote runs default to the OpenAI engine and exit on approval, in exchange for no unverified headless Claude sign-in and no machine that waits while billing.
+- Until the low-rights account exists (Q10), the money barrier is a barrier against tool calls plus deny patterns, not against arbitrary code. §9 says so.
 
-**Alternatives considered.**
-- Claude engine only, other providers through a LiteLLM gateway inside it. One adapter, but no per-sub-agent providers, 1 GB per cheap worker, unsupported by Anthropic. Rejected.
-- QMX owns the model loop and both SDKs are model clients. Perfect parity, no Claude Code capabilities (C-02 bans it), and the shape the LangChain era failed at. Rejected.
-- A journal table as the single truth (B). Rejected in §1.3 item 1.
-- Temporal or DBOS under the runner. A server to run or an unverified Windows story. Deferred; the checkpoint table is the seam.
+**Alternatives considered.** Claude engine only through a LiteLLM gateway (no per-sub-agent providers, unsupported). QMX owns the model loop (no Claude Code capabilities; the LangChain failure). A journal table as truth (four copies). Temporal or DBOS (a server or an unverified Windows story).
 
-**Next implementation step.** `qma/types.py`, `qma/store.py` with the first migration, and a `FakeAdapter` turn that lands blocks over SSE through the real turn route (slice 1).
+**Next implementation step.** Packet 0: probe scripts, the import-linter contract, `qma2/types.py` with the frozen shared types.
 
 ---
 
 ## 2. The architecture by layer
 
-The operator's clipping orders the layers environment, feedback, flow. QMA follows it. The harness (§2.1 to §2.6) is what surrounds a model. The loops (§2.7) are the feedback cycles with stop rules. The graph (§2.8) is the explicit flow. The harness supplies state, tools and checkers to the loops; loops live inside graph nodes.
+Harness (§2.1 to §2.6, §2.12), loops (§2.7), graph (§2.8), host (§2.9), flows (§2.10).
 
-### 2.0 Package layout and module rules
+### 2.0 Package layout and rules
+
+Path legend (HOW-WHY §0): `ctl/` = `qmx-agents/packages/qmx-control/src/qmx_control/`, `apps/` = `.../qmx-apps/src/qmx_apps/`, `remote/` = `.../qmx-remote/src/qmx_remote/`, `tools/` = `.../qmx-tools/src/qmx_tools/`. `qma2/` = `qmx-agents/packages/qma-v2/src/qma2/`.
 
 ```
-qma/
-  types.py        ids, enums, AgentSpec, SessionRef, ToolDef, ApprovalRow, EffectRow, RunRecord, QmaEvent
-  store.py        Store, Write, Migration, read pool, sqlite assertions
-  journal.py      RunJournal (JSONL), BlockProjector (QmaEvent -> SessionBlock), EventSink
-  policy/         registry.py, invoker.py, approvals.py, effects.py, deny.py, budgets.py, receipts.py
-  router/         accounts.py, router.py, ledger.py, limits.py, probe.py
-  plugins/        manifest.py, loader.py, lint.py, compile.py; defaults: general/, lab/, portfolio/
+qma2/
+  types.py        ids, enums, AgentSpec, SessionRef, ToolDef, ApprovalRow, EffectRow, RunRecord, QmaEvent,
+                  LoadedPlugin, CompiledAgent, ResolvedModel, ModelRow, RouterPick, QmaToml, ToolRegistry protocol
+  store.py        Store (writer thread), Write, Migration, readers, lock, sqlite assertions
+  journal.py      RunJournal (JSONL), BlockProjector, EventSink
+  policy/         registry.py (+ StaticRegistry), invoker.py, approvals.py, effects.py, deny.py, budgets.py,
+                  receipts.py, principals.py (tokens, scopes, PrincipalGate)
+  router/         accounts.py, router.py, ledger.py, limits.py, probe.py, families.py
+  plugins/        manifest.py, loader.py, lint.py, compile.py (parity table), defaults: general/, lab/, portfolio/
   prompts/        layers.py, render.py, snapshots.py; templates/*.xml
   memory.py       MemoryProvider protocol, SdkDefaultMemory
-  engine/         facade.py (Engine), port.py (EngineAdapter), claude.py, openai.py, fake.py, cap.py, watchdog.py
+  engine/         facade.py, port.py, claude.py, claude_replay.py, openai.py, fake.py, cap.py, watchdog.py
   graph/          models.py (moved), runner.py, nodes/*.py, checkpoints.py, checkers.py
-  comms/          broker.py (delegate, jobs, leases), tools.py (agent-facing tools)
-  events/         normalise_claude.py, normalise_openai.py, live.py
-  host/           turns.py (TurnHost), placement.py, scheduler.py (NEXT), worker.py, platform.py
-  client.py       QmaClient for mini apps (delegate, job_result)
+  comms/          broker.py, tools.py
+  events/         normalise_claude.py, normalise_openai.py, live.py, tool_names.py
+  host/           turns.py, recover.py, placement.py, worker.py, console.py, platform.py, scheduler.py (NEXT)
+  client.py       QmaClient for mini apps
+scripts/probe/    p1.py p3.py p4.py p5.py (each prints PASS or FAIL plus one sentence; writes tracker/qma-v2/probes/Pn.json)
+scripts/operator_setup.py   the wizard (§7.2)
 ```
 
-Rules. Files stay at about 400 lines (NFR-029). `qma.types` imports nothing from `qma`. `qma.engine.claude` and `qma.engine.openai` are the only modules that import `claude_agent_sdk` or `agents`. `qma` never imports `qmx_control`, `qmx_apps`, `qmx_tools` or `qmx_remote`. Domain tools (`qmx-tools`) are reached over FastMCP stdio through one in-process proxy, never by import (HOW-WHY F18). The import-linter contract is CI step one of slice 0.
+Rules. Files stay near 400 lines (NFR-029). `qma2.types` imports nothing from `qma2`. Only `qma2.engine.claude`, `claude_replay` and `openai` import an SDK. `qma2` never imports `qmx_control`, `qmx_apps`, `qmx_tools`, `qmx_remote` or `qma.*`. Domain tools are reached over FastMCP stdio through one proxy `ToolDef` per server (F18). New `qmx-control` operations register from `ctl/agent_ops.py`, so `service.py` only loses lines.
 
-### 2.1 Core types
-
-Per foundational thinking, these come first. IDs are branded, enums are closed, invalid states are unrepresentable.
+### 2.1 Core types (frozen in packet 1a)
 
 ```python
-# qma/types.py
+# qma2/types.py
 SessionId = NewType("SessionId", str); RunId = NewType("RunId", str); NodeRunId = NewType("NodeRunId", str)
 ApprovalId = NewType("ApprovalId", str); EffectKey = NewType("EffectKey", str); AccountId = NewType("AccountId", str)
 JobId = NewType("JobId", str); PluginId = NewType("PluginId", str); GraphVersionId = NewType("GraphVersionId", str)
@@ -196,451 +188,460 @@ JobId = NewType("JobId", str); PluginId = NewType("PluginId", str); GraphVersion
 class EngineName(StrEnum): claude = "claude"; openai = "openai"; none = "none"
 class Wire(StrEnum): anthropic = "anthropic"; openai_chat = "openai_chat"; openai_responses = "openai_responses"
 class AccountKind(StrEnum): subscription = "subscription"; api_key = "api_key"; pool = "pool"
-class Principal(StrEnum): operator = "operator"; agent = "agent"; scheduler = "scheduler"
-
-class RunStatus(StrEnum):            # X2: the one status enum, research 32's nine values
+class Principal(StrEnum): operator = "operator"; agent = "agent"; app = "app"; scheduler = "scheduler"
+class RunStatus(StrEnum):            # X2: the one status enum
     queued = "queued"; running = "running"; waiting_approval = "waiting_approval"; stopping = "stopping"
     completed = "completed"; completed_with_warnings = "completed_with_warnings"
     failed = "failed"; cancelled = "cancelled"; interrupted = "interrupted"
-
 class Effect(StrEnum): read = "read"; write = "write"; external = "external"      # G11: never "money"
 class Recovery(StrEnum): idempotent = "idempotent"; keyed = "keyed"; unkeyed = "unkeyed"; irreversible = "irreversible"
 class Decision(StrEnum): allow_once = "allow_once"; allow_session = "allow_session"; remember = "remember"; deny = "deny"; cancel = "cancel"
-class ApprovalStatus(StrEnum): pending = "pending"; approved = "approved"; denied = "denied"; expired = "expired"; consumed = "consumed"
+class ApprovalStatus(StrEnum): pending = "pending"; approved = "approved"; denied = "denied"; expired = "expired"; orphaned = "orphaned"; consumed = "consumed"
 
-class Budget(BaseModel): max_turns: int = 40; max_tool_calls: int = 200; max_usd: float | None = None   # usd pauses (FR-051)
-
+class Budget(BaseModel): max_turns: int = 40; max_tool_calls: int = 200; max_usd: float | None = None   # defaults come from Settings (§3.2)
+class SessionTarget(BaseModel): app: str | None; version: str | None; account: AccountId | None; environment: str | None   # FR-003
 class AgentSpec(BaseModel):          # FR-028, engine-neutral; compiled per engine
     name: str; plugin: PluginId; role: str; engine: EngineName | None = None; model: str | None = None
-    prompt_role: str; tools: list[str]; mcp_servers: list[str]; skills: list[str]
-    subagents: list[str] = []        # empty = leaf (FR-088)
-    memory_scope: Literal["task", "workflow", "session", "global"] = "session"
-    budget: Budget = Budget(); always_ask: list[str] = []; write_roots: dict[str, Path] = {}
+    prompt_role: str; tools: list[str]; mcp_servers: list[str]; skills: list[str]; subagents: list[str] = []
+    memory_scope: Literal["task", "workflow", "session", "global"] = "session"; budget: Budget = Budget()
+    always_ask: list[str] = []; write_roots: dict[str, Path] = {}
     def hash(self) -> str: ...
-
 class SessionRef(BaseModel):         # the engine's resume handle; never a transport object
     session_id: SessionId; engine: EngineName; account_id: AccountId; model: str
-    native_token: str                # Claude session uuid | OpenAI session key
-    parked_state_ref: str | None     # OpenAI RunState blob id while waiting_approval; None on Claude (defer resumes by id)
-    spec_hash: str; plugin_hash: str # mismatch refuses resume
-
-class ToolDef(BaseModel):            # research 31 QmxTool, trimmed
+    native_token: str; cwd: Path         # Claude session uuid | OpenAI session key; cwd fixed at <home>/work/<session_id>
+    spec_hash: str; plugin_hash: str     # mismatch -> approvals orphaned + fresh session with the state file as L3
+class ToolCall(BaseModel): name: str; args: dict; native_call_id: str   # Claude tool_use_id | OpenAI call_id
+class ToolDef(BaseModel):
     name: str; description: str; input_model: type[BaseModel]; output_model: type[BaseModel] | None
     effect: Effect; recovery: Recovery; timeout_s: int = 60; max_result_tokens: int = 4000
-    approval: Literal["none", "always_ask"] = "none"; windows_only: bool = False; defer: bool = False
-    handler: Callable[[BaseModel, "CallContext"], Awaitable[Any]]
-
+    approval: Literal["none", "always_ask"] = "none"; windows_only: bool = False; proxy: bool = False
+    handler: Callable[[BaseModel, "CallContext"], Awaitable[Any]]      # async; sync domain work runs in the FastMCP child
 class CallContext(BaseModel):
     run_id: RunId; session_id: SessionId; node_run_id: NodeRunId | None; agent_path: str
-    principal: Principal; unattended: bool; call_seq: int; effect_key: EffectKey   # host-minted (X5)
-
-class QmaEvent(BaseModel):           # research 32 B3.1 envelope; the only thing adapters emit
+    principal: Principal; unattended: bool; tainted: bool; effect_key: EffectKey
+class QmaEvent(BaseModel):           # research 32 B3.1 envelope
     v: Literal[1] = 1; seq: int | None; after_seq: int | None; ts: datetime; kind: str
     session_id: SessionId; run_id: RunId; turn_id: str; parent_run_id: RunId | None
     agent_path: str; item_id: str | None; engine: EngineName; data: dict; durable: bool
+
+# frozen producer-side types so lanes 2 and 3 build in parallel
+class ModelRow(BaseModel): id: str; family: str; capability: int; context_tokens_window: int; tool_calling: bool; reports_cache: bool; price: PriceRow | None; effort_map: dict[str, str] = {}
+class ResolvedModel(BaseModel): account: AccountId; model: str; engine: EngineName; wire: Wire; base_url: str | None
+class RouterPick(BaseModel): resolved: ResolvedModel; reason: str; credential_ref: str | None   # never the key itself
+class LoadedPlugin(BaseModel):
+    id: PluginId; version: str; hash: str; path: Path; trust: Literal["first_party", "operator", "reviewed", "agent"]
+    tools: list[ToolDef]; skills: list[SkillMeta]; agents: list[AgentSpec]; mcp: dict[str, McpServerConfig]
+    hook_rules: HookRules; parity: ParityReport
+class CompiledAgent(BaseModel):
+    spec_hash: str; system_prompt: str; tools: list[ToolDef]; plugin_dir: Path; claude_agents: dict[str, AgentDefinition]
+    openai_subagents: list[AgentSpec]; mcp: dict[str, McpServerConfig]; model: ResolvedModel; env: dict[str, str]; disallowed_builtins: list[str]
+class QmaToml(BaseModel): ...        # the pydantic model of qma.toml, with one fixture under qma2/tests/fixtures/
+class ToolRegistry(Protocol):
+    def for_plugin(self, plugin: LoadedPlugin, engine: EngineName) -> list[ToolDef]: ...
+    def get(self, name: str) -> ToolDef: ...
+class StaticRegistry(ToolRegistry): ...   # about 30 lines; packet 1 ships it so packet 2 needs no loader
 ```
 
 ### 2.2 Store and journal
 
-Per separate-before-serializing-shared-state: remote runs and apps already own their own files, so `control.db` is the one shared write target left, and one writer task serialises it structurally.
-
 ```python
-# qma/store.py
+# qma2/store.py
 @dataclass(frozen=True)
 class Write:
-    """One mutation inside BEGIN IMMEDIATE. Returns the durable events to append to the outbox in the same transaction."""
+    """One mutation. Runs in its own SAVEPOINT inside the batch transaction; a failure rolls back only this write
+    and fails only its awaiter. Returns the durable events to append to the outbox in the same transaction."""
     apply: Callable[[sqlite3.Connection], list[QmaEvent]]
-
 class Store:
+    """One dedicated writer THREAD per file with a bounded queue (back-pressure: awaiters wait when the queue holds
+    more than settings store.queue_max). Group commit every 25-100 ms. After each commit the thread signals an
+    asyncio.Condition per topic, so SSE tails wait instead of polling. Readers: a read-only pool (mode=ro,
+    query_only=1, wal_autocheckpoint=0) used off the event loop. Never a sqlite3 call on the loop."""
     def __init__(self, path: Path, migrations: Sequence[Migration]) -> None: ...
-    async def write(self, w: Write) -> None: ...            # queued to the one writer task, group commit 25-100 ms, awaits commit
-    async def read(self, q: Callable[[sqlite3.Connection], T]) -> T: ...   # read-only pool, off the event loop (G3)
-    def assert_sqlite(self) -> None: ...                    # §3: version check, integrity_check, single-writer invariants
+    async def write(self, w: Write) -> None: ...
+    async def read(self, q: Callable[[sqlite3.Connection], T]) -> T: ...
+    def lock(self) -> None: ...                 # msvcrt.locking on <file>.lock for the process lifetime; released on death
+    def assert_sqlite(self) -> None: ...        # §3.1
+    def wait_topic(self, topic: str, after_seq: int) -> Awaitable[None]: ...
 class Migration(NamedTuple): version: int; sql: str
 
-# qma/journal.py
+# qma2/journal.py
 class RunJournal:
-    """Append-only JSONL per run under <home>/runs/<run_id>/journal.jsonl (Y07). One exclusive writer per file.
-    Entries: run_start/end, request_header (model, system hash, tool-list hash, context hash), model_call (usage),
-    tool_intent, tool_result (args hash, result ref), approval_asked/answered/consumed, subagent_start/end,
-    compaction, write_receipt, node_start/end, interrupt, error. Secrets scrubbed at write."""
+    """Append-only JSONL per run under <home>/runs/<run_id>/journal.jsonl (Y07), one exclusive writer. Entries:
+    run_start/end, request_header (model, system hash, tool-list hash, context hash), model_call, tool_intent,
+    tool_result, approval_asked/answered/consumed/orphaned, subagent_start/end, compaction, write_receipt,
+    node_start/end, interrupt, error. Secrets scrubbed at write."""
     def append(self, entry: JournalEntry) -> None: ...
-    def rebuild_request(self, call_seq: int) -> RequestHash: ...   # CI test: model-visible means logged
+    def open_intents(self) -> list[JournalEntry]: ...   # tool_intent without tool_result: the truncated-turn check (WED)
 class BlockProjector:
-    def project(self, ev: QmaEvent) -> SessionBlock | None: ...   # the 14 kinds, never a 15th (Y44); new meaning in content
+    def project(self, ev: QmaEvent) -> SessionBlock | None: ...   # 14 kinds (Y44); an update is a new event carrying the full block with the same item_id
 class EventSink:
-    async def emit(self, ev: QmaEvent) -> None: ...   # durable -> Write(block row + events outbox); live -> LiveFanout
+    async def emit(self, ev: QmaEvent) -> None: ...   # durable -> Write(block + outbox); live -> LiveFanout
 ```
 
 ### 2.3 Engine facade, adapter port, SessionRef
 
 ```python
-# qma/engine/port.py
-class EngineEvent(Protocol): kind: str     # closed union: TextDelta, TextDone, ToolCallRequested, ToolProgress,
-# BuiltinToolAsked (Claude only), SubagentStarted/Finished, UsageReported, CompactionHappened, Deferred, TurnDone
+# qma2/engine/port.py
 class EngineAdapter(Protocol):
     name: EngineName
     async def open(self, agent: CompiledAgent, resume: SessionRef | None) -> SessionRef: ...
     def turn(self, ref: SessionRef, input: TurnInput, invoker: ToolInvoker) -> AsyncIterator[EngineEvent]: ...
-    async def answer(self, ref: SessionRef, approval: ApprovalRow) -> SessionRef: ...   # parked: returns the ref to resume with
+    async def answer(self, ref: SessionRef, decisions: list[ApprovalRow]) -> SessionRef: ...   # applies every decided item, resumes once
     async def interrupt(self, ref: SessionRef, mode: Literal["now", "after_turn"]) -> None: ...
     async def close(self, ref: SessionRef) -> None: ...
 
-# qma/engine/facade.py
+# qma2/engine/facade.py
 class Engine:
-    """The PRD's ten verbs (FR-020), implemented once over an adapter. Deep: it owns the ledger feed, the checkpoint
-    rule, the resume refusal on spec-hash mismatch, the delegate tool, the session cap and the watchdog."""
-    def __init__(self, adapters: dict[EngineName, EngineAdapter], store: Store, ledger: Ledger, journal: RunJournalFactory,
-                 sink: EventSink, cap: SessionCap, watchdog: Watchdog, broker: Broker) -> None: ...
+    """The ten verbs (FR-020), implemented once. Owns the ledger feed, the checkpoint rule, the resume refusal on
+    spec-hash mismatch, the delegate tool, the session cap, the watchdog and the per-session resume lock."""
     async def start(self, spec: AgentSpec, pick: RouterPick, plugin: LoadedPlugin) -> SessionRef: ...
     async def resume(self, ref: SessionRef) -> SessionRef: ...
-    def send(self, ref: SessionRef, text: str, attachments: list[ArtifactRef] = ()) -> AsyncIterator[QmaEvent]: ...
-    async def approve(self, ref: SessionRef, approval: ApprovalRow) -> None: ...   # answer + resume + re-decide by effect key
+    async def send(self, ref: SessionRef, text: str, attachments: list[ArtifactRef] = ()) -> TurnHandle: ...
+    def stream(self, ref: SessionRef, handle: TurnHandle) -> AsyncIterator[QmaEvent]: ...
+    async def approve(self, ref: SessionRef) -> None: ...     # single resumer: CAS session.resume_epoch, apply all decided rows, resume once
     async def interrupt(self, ref: SessionRef, mode: Literal["now", "after_turn"]) -> None: ...
-    async def delegate(self, ref: SessionRef, task: DelegateTask) -> JobHandle: ...   # the broker's tool, same on both
+    async def delegate(self, ref: SessionRef, task: DelegateTask) -> JobHandle: ...
     async def usage(self, ref: SessionRef) -> list[LedgerRow]: ...
-    async def checkpoint(self, ref: SessionRef) -> Checkpoint: ...   # SessionRef + journal seq (+ parked_state_ref)
+    async def checkpoint(self, ref: SessionRef) -> Checkpoint: ...   # SessionRef + journal seq + latest_state_ref
     async def close(self, ref: SessionRef) -> None: ...
 
-# qma/engine/claude.py
+# qma2/engine/claude.py
 class ClaudeAdapter:
-    """One ClaudeSDKClient per session; options fixed at open (FR-097). Preflight from native_claude.py:97-160 kept."""
+    """One ClaudeSDKClient per session, owned by the turn job (never shared across request tasks, #576). Options fixed
+    at open and passed identically on resume. The child runs inside a kill-on-close Job Object (platform.py) as the
+    low-rights user when Q10 is yes. Preflight from native_claude.py:97-160 kept."""
     def _options(self, agent: CompiledAgent) -> ClaudeAgentOptions:
-        # system_prompt via SystemPromptFile (#883); setting_sources=[]; env scrubbed + CLAUDE_CONFIG_DIR=<home>/claude
-        # CLAUDE_CODE_DISABLE_AUTO_MEMORY unset (FR-091 uses auto memory inside the QMX home); OTEL_* + TRACEPARENT
-        # plugins=[{"type":"local","path":agent.plugin_dir}]; agents=agent.claude_agents (leaf agents lose "Agent")
-        # mcp_servers={"qmx": create_sdk_mcp_server(invoker.claude_tools(agent.tools)), **agent.mcp}; strict_mcp_config=True
-        # hooks={"PreToolUse":[self._pre], "PostToolUse":[self._post], "PreCompact":[self._precompact]}
-        # can_use_tool=self._live_fallback   (bounded; §2.5)
+        # system_prompt via SystemPromptFile; setting_sources=[]; settings={"cleanupPeriodDays": 3650}; cwd=ref.cwd
+        # env: scrubbed, CLAUDE_CONFIG_DIR=<home>/claude, OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:<host port>/otlp,
+        #      OTEL_LOG_TOOL_DETAILS=0, TRACEPARENT; plugins=[local folder] with hooks.json stripped unless first_party
+        # agents=agent.claude_agents (leaf agents lose "Agent"); disallowed_tools=agent.disallowed_builtins (WebFetch, WebSearch on copilots)
+        # mcp_servers={"qmx": create_sdk_mcp_server(invoker.claude_tools(agent.tools)), **first_party_mcp}; strict_mcp_config=True
+        # hooks={"PreToolUse":[self._pre], "PostToolUse":[self._post], "PreCompact":[self._precompact]}; can_use_tool=self._live
         ...
-    async def _pre(self, input: HookInput) -> HookOutput: ...   # deny > defer > allow from invoker.decide(); builtins via decide_builtin
-    async def open(self, agent, resume) -> SessionRef: ...      # cap.acquire(); refuse ANTHROPIC_* (Y39); auth must be claude.ai
-    def turn(self, ref, input, invoker) -> AsyncIterator[EngineEvent]: ...   # query(); normalise_claude per message; Deferred on tool_deferred
-    async def answer(self, ref, approval) -> SessionRef: ...    # resume=ref.native_token; hook sees approved row by effect key -> allow+updatedInput
+    async def _pre(self, input: HookInput) -> HookOutput: ...
+        # name = normalise_tool_name("claude", input.tool_name); decision = invoker.decide(...) or decide_builtin(...)
+        # deny -> deny; a sibling write/external call in the same assistant message -> deny "issue it alone" (P3f)
+        # needs approval and no agent_id -> defer (the CLI parks single-call turns and ignores defer on multi-call turns)
+        # needs approval inside a sub-agent -> fall through to can_use_tool (live)
+    async def _live(self, tool: str, args: dict, ctx) -> PermissionResult: ...   # waits on the approval row; no SDK bound
+    async def open(self, agent, resume) -> SessionRef: ...   # cap.acquire(); refuse ANTHROPIC_*; auth must be claude.ai
+    def turn(self, ref, input, invoker) -> AsyncIterator[EngineEvent]: ...   # query(); normalise_claude; Deferred on tool_deferred (cap token released)
+    async def answer(self, ref, decisions) -> SessionRef: ...   # resume=native_token with identical options; the hook re-fires and reads status
 
-class SessionCap:                    # FR-141, NFR-007: cap = (free RAM - 4 GB) / 1 GB, default 6; psutil on each acquire
+# qma2/engine/claude_replay.py
+class ClaudeReplayAdapter:            # CI fake for the Claude side: replays recorded stream-json fixtures through the same normaliser
+    def __init__(self, fixture: Path) -> None: ...
+
+class SessionCap:                     # cap = clamp((available - 4 GB) / 1 GB, floor 2, ceiling settings engine.claude.session_cap), hysteresis 1
     def acquire(self) -> CapToken: ...
-class Watchdog:                      # FR-123 (slice 2, not NEXT): last-event timestamp per session; kill + mark interrupted after N min
-    def touch(self, ref: SessionRef) -> None: ...
-    async def sweep(self, now: datetime) -> list[SessionRef]: ...
+class Watchdog:                       # last-event timestamp per session; a session in waiting_approval is not stuck;
+    async def sweep(self, now: datetime) -> list[SessionRef]: ...   # a live park past park_release_minutes -> interrupt, row orphaned, cap released
 
-# qma/engine/openai.py
+# qma2/engine/openai.py
 class OpenAIAdapter:
-    """Agents in-process. One Agent per session, one SQLiteSession file under <home>/openai/<session>.sqlite."""
-    def _agent(self, agent: CompiledAgent) -> Agent:
-        # model = OpenAIResponsesModel (SIWC rows, OpenAI) | OpenAIChatCompletionsModel(base_url, key) | LitellmModel (anthropic wire)
-        # tools = invoker.openai_tools(agent.tools) + base kit (fs_read/fs_search/fs_patch/shell/web_fetch/qmx_python) + plugin MCP
-        # needs_approval = invoker.needs_approval; hooks only journal; as_tool sub-agents with their own RouterPick
-        ...
-    def turn(self, ref, input, invoker) -> AsyncIterator[EngineEvent]: ...   # run_streamed; interruptions -> park RunState -> Deferred
-    async def answer(self, ref, approval) -> SessionRef: ...   # RunState.from_json -> approve|reject -> ref without parked_state_ref
-
-class FakeAdapter:                   # NFR-027: scripted EngineEvents, no network; implements the same port
-    def __init__(self, script: list[FakeStep]) -> None: ...
+    """Agents in-process. One Agent per session, one SQLiteSession under <home>/openai/<session>.sqlite. Context objects
+    never carry RouterPick (a test greps a serialised RunState for the fixture key)."""
+    def _agent(self, agent: CompiledAgent) -> Agent: ...
+        # model = OpenAIResponsesModel (SIWC/OpenAI rows) | OpenAIChatCompletionsModel(base_url, key) | LitellmModel (anthropic wire)
+        # tools = invoker.openai_tools(agent.tools) + base kit (fs_read, fs_search, fs_patch, shell, qmx_python, load_skill) + proxy MCP
+        # ModelSettings(parallel_tool_calls=False) for write-bearing agents; needs_approval=invoker.needs_approval; hooks only journal
+    def turn(self, ref, input, invoker) -> AsyncIterator[EngineEvent]: ...   # interruptions -> one latest_state_ref on the session -> Deferred
+    async def answer(self, ref, decisions) -> SessionRef: ...   # RunState.from_json(latest) -> approve/reject every decided item -> run_streamed once
+class FakeAdapter: ...                # scripted EngineEvents, no network
 ```
 
-### 2.4 Plugin loader, prompt assembly, memory
+### 2.4 Plugins, prompts, memory
 
-A plugin is a Claude plugin folder (`.claude-plugin/plugin.json`, `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`) plus `qma.toml`. Shipped defaults live in the repo under `qma/plugins/`; runtime writes go to the QMX home in the same layout and the home wins by name (X14).
+A plugin is a Claude plugin folder plus `qma.toml` (a file name, not a package). Shipped defaults live under `qma2/plugins/`; runtime writes go to the QMX home and the home wins by name (X14).
 
 ```toml
-# qma.toml, the only QMX-specific file in a plugin
 [plugin]      name = "lab"; version = "1.0.0"; engines = ["claude", "openai"]
-[model]       role = "lab-copilot"; default = "claude:opus"      # the router resolves this to an account row
-[tools]       expose = ["lab_*", "library_*", "run_workflow", "delegate", "jobs_*"]; always_load = ["lab_backtest_run"]
+[model]       role = "lab-copilot"; default = "claude:opus"
+[tools]       expose = ["lab_*", "library_*", "workflows_*", "run_workflow", "delegate", "jobs_*", "portfolio_read_*"]
 [tools.effects] lab_backtest_run = "external"; library_put = "write"
-[hooks]       write_roots = { strategies = "D:/QMX-data/strategies" }   # FR-103; QMX hook kinds run on both engines
-[approvals]   always_ask = ["apps_publish", "apps_install", "schedule_put"]
+[hooks]       write_roots = { strategies = "D:/QMX-data/strategies" }
+[approvals]   always_ask = ["apps_publish", "apps_install", "schedule_put", "portfolio_write_*"]
 ```
 
 ```python
-# qma/plugins/loader.py
-class LoadedPlugin(BaseModel):
-    id: PluginId; version: str; hash: str; path: Path; trust: Literal["first_party", "operator", "reviewed", "agent"]
-    tools: list[ToolDef]; skills: list[SkillMeta]; agents: list[AgentSpec]; mcp: dict[str, McpServerConfig]
-    hook_rules: HookRules; parity: Literal["both", "claude_only"]
-class CompiledAgent(BaseModel):      # engine-neutral build output; each adapter reads only this
-    spec_hash: str; system_prompt: str; tools: list[ToolDef]; plugin_dir: Path; claude_agents: dict[str, AgentDefinition]
-    openai_subagents: list[AgentSpec]; mcp: dict[str, McpServerConfig]; model: ResolvedModel; account: AccountId; env: dict[str, str]
+# qma2/plugins/compile.py
+PARITY: Final[dict[str, Literal["mapped", "emulated", "dropped"]]]   # closed table keyed by file and frontmatter key:
+# skills/* mapped (Claude native | OpenAI load_skill tool), agents/*.md mapped (Agent | as_tool), .mcp.json mapped first-party only,
+# hooks/hooks.json dropped on OpenAI and stripped on Claude unless first_party, agent frontmatter tools/model mapped,
+# permissionMode/hooks dropped, skill allowed-tools emulated, commands/ and output styles dropped. Unknown key -> lint error.
+class ParityReport(BaseModel): mapped: list[str]; emulated: list[str]; dropped: list[str]; badge: Literal["both", "claude_only"]
 class PluginLoader:
-    def discover(self) -> list[LoadedPlugin]: ...                      # repo defaults + home; home wins by name
-    def load(self, id: PluginId) -> LoadedPlugin: ...                  # lint runs here; failed lint loads in safe mode (J01)
-    def lint(self, path: Path) -> list[LintFinding]: ...               # skills name real tools; no effect=money; hooks cannot relax deny-list
+    def discover(self) -> list[LoadedPlugin]: ...
+    def load(self, id: PluginId) -> LoadedPlugin: ...        # lint; failed lint loads in safe mode (J01)
+    def lint(self, path: Path) -> list[LintFinding]: ...     # skills name real tools via {{tool:name}}; no effect=money; no PermissionRequest or
+                                                             # PreToolUse command hooks unless first_party; unknown parity key fails
     def compile(self, plugin: LoadedPlugin, spec: AgentSpec, engine: EngineName, pick: RouterPick, memory: str) -> CompiledAgent: ...
-    def install(self, bundle: Path, approval: ApprovalRow) -> LoadedPlugin: ...   # trust from the approval record, never a tool argument (F1)
-
-# qma/prompts/render.py: five layers (31 §3.2). L0 engine base, L1 role XML, L2 plugin XML, L3 index + frozen memory snapshot,
-# L4 live state prepended to the newest user message as <qmx_state>. L0-L3 byte-stable per session, 1.5k-3k tokens (NFR-038).
-def render_system(spec: AgentSpec, plugin: LoadedPlugin, engine: EngineName, memory_snapshot: str) -> str: ...
-def render_live_state(state: LiveState) -> str: ...
-def snapshot_surface(spec, plugin, engine) -> str: ...   # CI fixture: rendered prompt + sorted tool list (FR-097 guard)
-
-# qma/memory.py
-class MemoryProvider(Protocol):      # P07 protocol minus the LangChain return type
-    async def snapshot(self, scope: Scope, cap_tokens: int) -> str: ...
-    async def propose(self, scope: Scope, rec: MemoryRecord, ctx: CallContext) -> ProposalId: ...   # sub-agents only propose
-    async def commit(self, proposal: ProposalId, by: Principal) -> None: ...                      # global scope needs the operator
-class SdkDefaultMemory(MemoryProvider): ...   # WED: Claude auto memory under <home>/claude; OpenAI session items under <home>/openai
+    def install(self, bundle: Path, approval: ApprovalRow) -> LoadedPlugin: ...   # trust from the approval record (F1); the card shows a capability diff
+# Skills refer to tools as {{tool:lab_backtest_run}}; render expands to mcp__qmx__lab_backtest_run on Claude and the bare name on OpenAI.
+# OpenAI gets a load_skill(name) function tool (about 60 lines) that returns the skill body; the <available_skills> index is L3.
+# Seat overrides: settings seat.<plugin>.engine and seat.<plugin>.model, read by compile (demo 2:15 is one settings_put).
 ```
 
-Memory holds references only (FR-093). A test asserts no memory write touches `work`, `runs.db` or the Library.
+Prompts: five layers (31 §3.2), L0-L3 byte-stable per session at 1.5k-3k tokens, L4 live state in the newest message, rendered surfaces as CI fixtures. L1 carries NFR-024 and the goal-sentence rule ("restate the goal in one line before the first tool call", spin 2). The copilot's `<delegation>` block names native vs `delegate`, and "one write or external tool per message".
+
+Memory: `MemoryProvider` protocol (snapshot, propose, commit), `SdkDefaultMemory` (Claude auto memory inside the QMX home, OpenAI session items). Records never in memory (FR-093); a test asserts no memory write touches `work`, `runs.db` or the Library. Packet 2.
 
 ### 2.5 Policy: registry, invoker, approvals, effects
 
 ```python
-# qma/policy/invoker.py
+# qma2/events/tool_names.py
+def normalise_tool_name(engine: EngineName, raw: str) -> str: ...   # strips mcp__<server>__; a test checks every deny-list entry matches its prefixed form
+
+# qma2/policy/invoker.py
 class ToolInvoker:
-    """The one enforcement point for both engines. Order: deny-list (code constant) -> always-ask list (settings row)
-    -> sticky decisions (never for always-ask, deny-list or money, G14) -> approval claim (CAS) -> budget (FR-051)
-    -> check_descriptor (Y41) -> effects intent -> handler with timeout and size cap -> effects done -> journal tool_result
-    -> write receipt if effect=write."""
-    def __init__(self, registry: ToolRegistry, approvals: ApprovalQueue, effects: EffectsLedger, deny: DenyList,
-                 budgets: BudgetMeter, receipts: Receipts, journal: RunJournalFactory) -> None: ...
-    def decide(self, tool: str, args: dict, ctx: CallContext) -> Literal["deny", "defer", "allow"]: ...   # pure; Claude PreToolUse reads it
-    def decide_builtin(self, name: str, args: dict, ctx: CallContext) -> Literal["deny", "defer", "allow"]: ...   # Bash/Write/Edit
-    async def invoke(self, call: ToolCall, ctx: CallContext) -> ToolResult: ...
-    def claude_tools(self, tools: list[ToolDef]) -> list[SdkTool]: ...          # @tool + readOnlyHint=effect==read
-    def openai_tools(self, tools: list[ToolDef]) -> list[FunctionTool]: ...     # strict schema; needs_approval=self.needs_approval
+    """The one enforcement point for every QMX tool on both engines. Order: deny-list (code constant) -> always-ask
+    list (settings) -> taint rule -> sticky decisions (never for always-ask, deny-list or money, G14) -> approval claim
+    (CAS by effect key) -> budget (FR-051) -> check_descriptor (Y41) -> effects intent -> args-hash guard -> handler
+    with timeout and size cap -> effects settle -> journal tool_result -> receipt if effect=write."""
+    def decide(self, tool: str, args: dict, ctx: CallContext) -> Literal["deny", "ask", "allow"]: ...   # pure; reads only
+    def decide_builtin(self, name: str, args: dict, ctx: CallContext) -> Literal["deny", "ask", "allow"]: ...
+        # Bash/Write/Edit: write roots; deny patterns for credential-store reads (keyring, cmdkey, CredRead, vaultcmd, .NET
+        # PasswordVault), for the control token path and for curl/Invoke-WebRequest to the host's own port; defence in depth only
     def needs_approval(self, tool: str, args: dict, ctx: CallContext) -> bool: ...
+    async def invoke(self, call: ToolCall, ctx: CallContext) -> ToolResult: ...
+    def claude_tools(self, tools: list[ToolDef]) -> list[SdkTool]: ...
+    def openai_tools(self, tools: list[ToolDef]) -> list[FunctionTool]: ...
+# Coverage, stated honestly: platform tools and the FastMCP proxy (domain tools, every non-first-party MCP server, app MCP servers)
+# go through invoke. Claude built-ins get decide_builtin plus PostToolUse receipt reconciliation (verified=false until read-back).
+# First-party .mcp.json servers on Claude get decide in PreToolUse only; the lint allows them for first_party plugins alone.
+# Handler timeouts: in-process handlers are async and cancellable; domain work runs in the FastMCP child, which the proxy kills.
+# The effect key reaches domain tools as MCP _meta, never as a model argument.
 
-class ToolRegistry:
-    def register(self, tool: ToolDef) -> None: ...
-    def for_plugin(self, plugin: LoadedPlugin, engine: EngineName) -> list[ToolDef]: ...   # 10-15 visible; long tail behind search (NEXT)
-    def lint(self) -> list[LintFinding]: ...   # refuses order verbs and effect=money (G11); one declared baseline list for the parity badge
-    # platform tools (sessions, jobs, delegate, approvals read, apps_call, run_workflow, models_status) are in-process;
-    # domain tools (qmx-tools data/backtest/research/node) are one FastMCP proxy ToolDef per server, policy applied here (D2 split)
-
-# qma/policy/approvals.py
+# qma2/policy/approvals.py
 class ApprovalRow(BaseModel):
     id: ApprovalId; session_id: SessionId | None; run_id: RunId; node_run_id: NodeRunId | None; effect_key: EffectKey | None
     kind: Literal["tool", "builtin", "gate", "spend", "outcome_unknown", "install", "schedule", "publish"]
-    request: dict; content_hash: str; revision_hash: str | None   # gate binds to the graph version (FR-058); an edit asks again
-    status: ApprovalStatus; options: list[Decision]; expires_at: datetime | None
-    decision: Decision | None; decided_by: Principal | None; decided_at: datetime | None
-    engine_state_ref: str | None    # OpenAI RunState blob id; None on Claude
+    request: dict; content_hash: str; revision_hash: str | None; status: ApprovalStatus; options: list[Decision]
+    expires_at: datetime | None       # gates: none; spend: 24 h; tool: none while live; an expired gate interrupts its run with a card
+    decision: Decision | None; decided_by: Principal | None; decided_at: datetime | None; source: Literal["desk", "console", "phone"]
 class ApprovalQueue:
-    async def ask(self, row: ApprovalRow) -> ApprovalId: ...                        # row + approval.requested on topic approvals
+    async def ask(self, row: ApprovalRow) -> ApprovalId: ...
     async def answer(self, id: ApprovalId, decision: Decision, by: Principal, edited: dict | None) -> ApprovalRow: ...
-        # REST-only door (G1); refuses principal != operator (Y08); idempotent on (id, decision); then Engine.approve
-    async def claim(self, id: ApprovalId, by: RunId) -> Decision | None: ...   # UPDATE ... WHERE status='approved' RETURNING (30 §3.2)
-    async def pending(self) -> list[ApprovalRow]: ...                              # the "Needs you" list
+        # operator-only door; by comes from the token, never a constant; idempotent; then Engine.approve(ref) once per session
+    async def claim(self, key: EffectKey, by: RunId) -> Decision | None: ...   # the ONLY claim: UPDATE ... WHERE status='approved' RETURNING
+    async def pending(self) -> list[ApprovalRow]: ...
+    async def orphan(self, ids: list[ApprovalId], why: str) -> None: ...   # restart with a live wait, park release, tool_deferred_unavailable, hash mismatch
     async def expire_overdue(self, now: datetime) -> None: ...
-    def live_fallback(self, ref: SessionRef, timeout_s: int) -> CanUseTool: ...    # only when defer is ignored (multi-call turn)
+# Sticky decisions (allow_session, remember) are rows in sticky_decisions(session_id|null, plugin, tool, args_pattern|null, by, at),
+# revoked from the console; never for always-ask, deny-list or money.
 
-# qma/policy/effects.py
+# qma2/policy/effects.py
 class EffectsLedger:
-    def mint(self, ctx: CallContext) -> EffectKey: ...   # "run:node:seq", host-minted (X5), stable across resumes
-    async def intent(self, key: EffectKey, tool: str, recovery: Recovery, args_sha256: str) -> IntentOutcome: ...
-        # Fresh | AlreadyDone(result_ref) | UnknownOutcome(recovery)
+    def key(self, call: ToolCall, ctx: CallContext) -> EffectKey: ...
+        # "{engine}:{session_id}:{native_call_id}" for engine calls; "node:{run_id}:{node_id}:{attempt}" for code nodes (attempt persisted)
+    async def intent(self, key: EffectKey, tool: str, recovery: Recovery, args_sha256: str) -> IntentOutcome: ...   # Fresh | AlreadyDone | UnknownOutcome
+    async def guard(self, session: SessionId, tool: str, args_sha256: str, window_s: int) -> bool: ...   # unkeyed/irreversible repeat -> outcome_unknown approval
     async def settle(self, key: EffectKey, status: Literal["done", "failed", "unknown"], result_ref: str | None, external_ref: str | None) -> None: ...
     def resume_rule(self, o: IntentOutcome) -> Literal["run", "return_stored", "resend_keyed", "ask_outcome_unknown"]: ...
 ```
 
-Money path. No order-capable tool exists in any registry; `qmx-broker` exposes none. `check_descriptor` runs on every MCP descriptor at session init and on every call. Broker credentials are never in a session's environment, so Claude's `Bash` cannot reach an order door either. The sign door is REST-only. The barrier is structural, not a prompt (NFR-015). One two-engine test (FR-102) runs on fakes in CI and by script live.
-
-Claude built-ins (`Bash`, `Write`, `Edit`) are not QMA tools. `PreToolUse` answers them from `decide_builtin` (deny patterns, write roots). Their writes are reconciled from `files_persisted` into receipts marked `verified=false` until a read-back confirms (research 32 A2.4).
-
 ### 2.6 Router, accounts, ledger
 
 ```python
-# qma/router/router.py
-class AccountRow(BaseModel):         # a settings row; credential_ref only (F16)
-    id: AccountId; provider: str; label: str; kind: AccountKind; wire: Wire; base_url: str | None
-    credential_ref: str | None; models: list[ModelRow]; enabled: bool = True; reserve_pct: int = 0
-class ModelRow(BaseModel):
-    id: str; capability: int          # 1..5, operator-tagged after the probe (J20)
-    context_tokens: int; tool_calling: bool; reports_cache: bool; price: PriceRow | None; effort_map: dict[str, str] = {}
-class RouterPick(BaseModel): account: AccountRow; model: ModelRow; engine: EngineName; base_url: str | None; key: SecretStr | None; reason: str
+# qma2/router/accounts.py: the accounts TABLE (not a settings row, so F7 and F16 do not apply)
+class AccountRow(BaseModel):
+    id: AccountId; provider: str; label: str; kind: AccountKind; wire: Wire; base_url: str | None; credential_ref: str | None
+    models: list[ModelRow]; enabled: bool = True; reserve_pct: int = 0; max_concurrent: int | None; window: WindowSpec | None   # subscriptions
+# qma2/router/families.py
+def family(model_id: str) -> Literal["claude", "gpt", "other"]: ...   # claude-*, anthropic/*, gpt-*, o<digit>*, openai/*
+# Rule: a claude or gpt family model is eligible only on kind=subscription rows; AccountRow validation and the probe refuse others
+# with "Claude and GPT run on your plans only". Anthropic-wire key providers run on the OpenAI engine (LitellmModel) only.
+# qma2/router/router.py
 class Router:
     def pick(self, role: str, *, session: SessionId, chain: OverrideChain, engine_hint: EngineName | None = None) -> RouterPick: ...
-        # chain global -> app -> workflow -> node -> sub-agent (FR-026); no request level, so F8 cannot recur
-        # candidates by wire (anthropic wire feeds either engine, openai wire only the OpenAI engine, GPT only via SIWC rows)
-        # rank capability desc, then remaining usage desc above reserve (FR-041); Claude RAM cap checked; LimitReached -> refusal card
-    def status(self) -> list[AccountStatus]: ...          # FR-040; the models_status tool reads this
-    def probe(self, row: AccountRow) -> ProbeResult: ...   # J20: tools, streaming, window, cache
-class Ledger:                        # usage_ledger rows; dedupe_key unique (X12); cost_source in {provider, modelPriced}
+        # chain global -> app -> workflow (workflow.v1.1 field `defaults.model`) -> node -> sub-agent; no request level (F8)
+        # candidates by wire and family; rank capability desc, then usage left (keys: USD against budget; subscriptions: rolling
+        # consumption against WindowSpec plus RateLimitEvent utilisation); max_concurrent per subscription row; Claude RAM cap
+    def status(self) -> list[AccountStatus]: ...     # used, limit|unknown, resets_at|unknown, source, estimated flag
+    def probe(self, row: AccountRow) -> ProbeResult: ...
+class Ledger:   # usage_ledger; dedupe_key unique (X12); per turn: provisional rows from AssistantMessage.usage deduped by message id,
+                # replaced by the ResultMessage totals; a killed turn keeps provisional rows with cost_source="estimated"
     async def record(self, row: LedgerRow) -> None: ...
     async def remaining(self, account: AccountId) -> Remaining: ...
+    async def summary(self) -> UsageSummary: ...     # the usage_summary operation; Claude rows in percent of window, never USD; billed_usd per key row
 ```
 
-A session keeps its pick for life. Failover is a new session or the next job (FR-029).
+`pick_reason` and the resolved `(account, model)` are persisted on the run row and on `node_runs` at first attempt; a resume reuses them and warns if the chain would now resolve differently.
 
 ### 2.7 Loops: agent nodes, sub-agents, the broker, the orchestrator
 
 ```python
-# qma/graph/nodes/agent.py
-class StopRule(BaseModel): max_attempts: int = 3; budget_usd: float | None = None; delta_flat_after: int = 2
-class AgentNode(BaseModel): agent: str; brief: str; checker: CheckerRef; stop: StopRule   # FR-063
+class StopRule(BaseModel): max_attempts: int = 3; budget_usd: float | None = None; delta_flat_after: int = 2; needs_human: bool = True
+class AgentNode(BaseModel): agent: str; brief: str; checker: CheckerRef; stop: StopRule
 class Checker(Protocol):
-    async def check(self, output: ArtifactRef) -> Verdict: ...   # deterministic by default: schema, tests, execution; agent verifier opt-in
-
-# qma/comms/broker.py
-class DelegateTask(BaseModel): role: str; brief: str; inputs: list[ArtifactRef]; engine: EngineName | None; model_hint: str | None
-                              output_schema: dict | None; budget: Budget; mode: Literal["sync", "async"] = "async"
+    async def check(self, output: ArtifactRef) -> Verdict: ...
 class Broker:
-    """Jobs are work rows with leases, not asyncio dicts (F3). Depth: copilot/orchestrator -> worker. Workers get no delegate tool (X6)."""
-    async def delegate(self, task: DelegateTask, parent: SessionId, ctx: CallContext) -> JobHandle: ...   # child session, parent_id set
-    async def job_status(self, id: JobId, ctx: CallContext) -> JobStatus: ...
-    async def job_result(self, id: JobId, ctx: CallContext) -> JobResult: ...   # compact JSON + artifact refs + usage, never long text (FR-084)
-    async def job_cancel(self, id: JobId, ctx: CallContext) -> None: ...        # cooperative; cancels the tree
+    """Jobs are work rows with leases (F3). Depth: copilot/orchestrator -> worker; workers get no delegate tool (X6)."""
+    async def delegate(self, task: DelegateTask, parent: SessionId, ctx: CallContext) -> JobHandle: ...
+    async def job_status(self, id: JobId, ctx) -> JobStatus: ...
+    async def job_list(self, ctx) -> list[JobStatus]: ...
+    async def job_result(self, id: JobId, ctx) -> JobResult: ...     # compact JSON + artifact refs + usage
+    async def job_cancel(self, id: JobId, ctx) -> None: ...
     async def claim_lease(self, kind: str, worker: str, ttl_s: int) -> Job | None: ...
-    async def adopt_orphans(self) -> int: ...   # startup: running rows with a dead lease -> interrupted (F4)
 ```
 
-Agent-facing tools: `delegate`, `job_status`, `job_wait`, `job_cancel`, `job_result`, `models_status`, `run_workflow`. The mailbox (`send`, agent messages never consent) and the board are NEXT.
-
-Claude sub-agents are the plugin's `agents/*.md`, loaded natively; leaf agents get `tools` without `Agent`, which enforces depth 1 (FR-088). Their `task_*` messages project as child sessions and `agents` blocks. OpenAI sub-agents are `as_tool()` with their own `RouterPick`. The prompt's `<delegation>` block names the rule: native for cheap same-engine work, `delegate` for cross-engine or durable work.
-
-The orchestrator (NEXT) is as §1.3 item 4: an errand session, a state file, async delegation, a tool list under 12, a 1h cache TTL, rolled into a new child session at a phase boundary.
+Agent-facing tools: `delegate`, `job_status`, `job_list`, `job_wait`, `job_cancel`, `job_result`, `models_status`, `run_workflow(name, inputs, placement)`, `capabilities_list`. Fetching the web is not a copilot or worker tool: it goes through `delegate(role="reader")`, whose reader has no write tools, an egress allowlist from settings, and returns schema-validated JSON with quoted text fenced as data. A session that has seen untrusted text is `tainted`; every `external` effect after that is always-ask for the session (NFR-017). Claude sub-agents are native (`agents/*.md`, leaf agents lose `Agent`); OpenAI sub-agents are `as_tool()` with their own pick. The orchestrator is NEXT (§1.3 item 4).
 
 ### 2.8 Graph: the runner
 
 ```python
-# qma/graph/models.py (moved from qmx_agents.workflows.models; every v1 file still validates)
-class NodeKind(StrEnum):             # A-08: P10's ten plus two
-    python = "python"; agent = "agent"; tool = "tool"; app_call = "app_call"; condition = "condition"; parallel = "parallel"
-    join = "join"; loop = "loop"; human_gate = "human_gate"; subworkflow = "subworkflow"; watch = "watch"; command = "command"
-class NodePolicy(BaseModel):         # new optional fields on nodes (format bump to workflow.v1.1, additive)
-    retries: int = 0; timeout_s: int | None = None; recovery: Recovery = Recovery.unkeyed; write_scope: list[str] = []
-    fanout_cap: int = 16; merge: Literal["all", "any", "first", "partial"] = "partial"
+class NodeKind(StrEnum):             # WED runner: python, tool, app_call, condition, parallel, join, human_gate, agent
+    ...                              # the format keeps loop, subworkflow and adds watch, command; those four execute NEXT (watch ships as a template)
+class NodePolicy(BaseModel): retries: int = 0; timeout_s: int | None = None; recovery: Recovery = Recovery.unkeyed; write_scope: list[str] = []
+                             fanout_cap: int = 16; merge: Literal["all", "any", "first", "partial"] | None = None   # a join must name one
 class GraphVersion(BaseModel): graph_id: str; version_id: GraphVersionId; content_sha256: str; parent: GraphVersionId | None; definition: WorkflowSpec
-
-# qma/graph/runner.py
 class Runner:
-    def __init__(self, store: Store, engine: Engine, router: Router, invoker: ToolInvoker, approvals: ApprovalQueue,
-                 checkpoints: Checkpoints, placement: Placement) -> None: ...
-    async def run(self, version: GraphVersion, inputs: dict, *, run_id: RunId | None = None) -> RunRecord: ...
-        # validate (models.py, kept) -> pin content hash -> walk; per node: checkpoint-or-skip, execute by kind,
-        # node_runs row + checkpoint in one Write, run.* events
-    async def resume(self, run_id: RunId) -> RunRecord: ...          # skips completed nodes; effects ledger on intent rows
-    async def cancel(self, run_id: RunId) -> None: ...               # stopping -> cancelled at the next node boundary
-    async def run_scope(self, version: GraphVersion, scope: NodeScope) -> RunId: ...   # one node, a section, all (FR-068, NEXT)
-    def validate(self, spec: WorkflowSpec) -> list[FixIt]: ...       # today's four faults (FR-057)
-    async def _agent_node(self, node: AgentNode, state: NodeState) -> NodeResult: ...   # engine.start per attempt; brief + checker feedback; stop rule
-    async def _gate(self, node, state) -> NodeResult: ...            # ApprovalRow(kind="gate", revision_hash=version.content_sha256)
-    async def _parallel(self, node, state) -> NodeResult: ...        # gather with fanout_cap; one failure keeps siblings (FR-061)
-    async def _watch(self, node, state) -> NodeResult: ...           # bookmark diff + debounce + wake cap (spin 6); no model on "no change"
-    async def _command(self, node, state) -> NodeResult: ...         # declared command, streamed log pane, cancel
-class Checkpoints:                   # checkpoints.db, emits no events
-    async def save(self, run_id: RunId, node_run_id: NodeRunId, state: bytes, journal_seq: int) -> None: ...
-    async def latest(self, run_id: RunId) -> Checkpoint | None: ...
-    async def prune(self, run_id: RunId, keep_last: int) -> None: ...
+    async def run(self, version: GraphVersion, inputs: dict, placement: Placement, *, run_id: RunId | None = None) -> RunRecord: ...
+    async def resume(self, run_id: RunId) -> RunRecord: ...      # skips done nodes; an agent node resumes its SessionRef first, then a new attempt
+    async def cancel(self, run_id: RunId) -> None: ...
+    def validate(self, spec: WorkflowSpec, apps: AppManifests) -> list[FixIt]: ...
+        # the four faults (FR-057) + app_call port types against the app manifest provides/feeds (FR-055)
+        # + external-write nodes need a gate upstream and retries=0 + every join names merge (FR-061)
+    async def _agent_node(self, node, state) -> NodeResult: ...  # the node clock pauses while waiting_approval; unattended: external denied, write allowed inside write_scope
+    async def _gate(self, node, state) -> NodeResult: ...
+        # revision_hash = sha256(gate node + upstream subgraph definition); content_hash = the gate's input values;
+        # a running run never re-asks because of an edit; the next run on the new version asks again
 ```
 
-Claude sessions per workflow step are refused unless the node says so and the cap allows (FR-021). Write scopes are declared per parallel node; overlapping scopes serialise or become variants (NEXT).
+Checkpoints are a table in `control.db` (§3), so a `node_runs` row and its checkpoint are one `Write`. A run row carries `resume_attempts`; after two crash-resumes it goes `interrupted` and waits for the operator (no crash loop).
 
-### 2.9 Host: turns, placement, worker
+### 2.9 Host: turns, recover, placement, worker, console
 
 ```python
-# qma/host/turns.py
-class SessionRow(BaseModel):         # errand = parent session; engine sessions are children (D1); target never drifts with UI focus (FR-003)
-    id: SessionId; errand_id: SessionId | None; parent_id: SessionId | None; surface: str; target: Target | None
-    plugin: PluginId; ref: SessionRef | None; status: RunStatus; title: str
+class SessionRow(BaseModel):
+    id: SessionId; errand_id: SessionId | None; parent_id: SessionId | None; surface: str; target: SessionTarget | None
+    plugin: PluginId; ref: SessionRef | None; status: RunStatus; title: str; latest_state_ref: str | None; resume_epoch: int
+    artifacts: list[ArtifactRef]       # errand-to-artifact link (FR-014); apps record built_by and watched_by errand ids (FR-080)
 class TurnHost:
-    async def submit(self, sid: SessionId, input: TurnInput) -> RunId: ...        # returns at once (NFR-032); the turn is a job with a lease
-    async def run_turn(self, run_id: RunId) -> None: ...                           # the job body: router pick if new, engine.send, sink
-    async def stop(self, run_id: RunId) -> None: ...                               # stopping -> cancelled
+    async def submit(self, sid: SessionId, input: TurnInput, who: Principal) -> RunId: ...   # returns at once; the turn is a job with a lease
+    async def run_turn(self, run_id: RunId) -> None: ...
+    async def stop(self, run_id: RunId) -> None: ...
     async def steer(self, run_id: RunId, input: TurnInput, expected_turn: int) -> None: ...
-    async def switch_model(self, sid: SessionId, to: ResolvedModel) -> CostEstimate: ...   # NEXT: compaction first, new child session
+    async def switch_model(self, sid: SessionId, to: ResolvedModel, dry_run: bool = True) -> CostEstimate: ...   # WED: dry_run only (packet 3b)
     @classmethod
-    def headless(cls, home: Path, adapters: list[EngineAdapter]) -> "TurnHost": ...   # the remote worker; no doors, bucket flush every 5 s
+    def headless(cls, home: Path, adapters: list[EngineAdapter], limits: RemoteLimits) -> "TurnHost": ...
 
-# qma/host/placement.py
+# qma2/host/recover.py (packet 1b, with the turn leases)
+async def recover(host: TurnHost) -> RestartReport:
+    """1. kill every claude process whose CLAUDE_CONFIG_DIR is the QMX home; 2. adopt orphans: running rows with a dead lease ->
+    interrupted; 3. orphan live-wait approval rows; 4. resume errands by SessionRef and runs by Runner.resume, each up to
+    resume_attempts=2; 5. Placement.fetch for every remote handle with results; 6. emit restart.report {resumed, failed, waiting}
+    on topic runs (the banner). Convergent: running it twice changes nothing."""
+
 class Placement:
-    def choose(self, req: PlacementRequest) -> Target: ...          # local | provider; refuses remote for windows_only tools (FR-117)
-    def needs_pc(self, spec_or_graph) -> bool: ...                  # any Claude-engine node -> "needs your PC on" (A-02)
-    async def ship(self, run_id: RunId, target: Target) -> RemoteHandle: ...   # bundle (hash pinned) -> ComputeProvider (qmx-remote kept)
-    async def fetch(self, handle: RemoteHandle) -> ImportReport: ...           # verified hashes; journal + approvals imported as new rows (G9)
-    async def setup_verify(self, target: Target) -> VerifyReport: ...          # FR-111: idempotent bootstrap, pass/fail, "has scheduler"
-    async def idle_sweep(self) -> list[Target]: ...                            # spin 5: teardown after N idle minutes
+    def choose(self, req: PlacementRequest) -> Target: ...       # refuses remote for windows_only tools, Claude nodes (needs_pc) and watch nodes (WED)
+    def needs_pc(self, spec_or_graph) -> bool: ...
+    async def ship(self, run_id: RunId, target: Target, limits: RemoteLimits) -> RemoteHandle: ...   # bundle (hash pinned) -> ComputeProvider
+    async def fetch(self, handle: RemoteHandle) -> ImportReport: ...   # verified hashes; journal, state blobs and approvals imported as new rows; then teardown
+    async def answer_remote(self, handle: RemoteHandle, decisions: list[ApprovalRow]) -> RemoteHandle: ...   # relaunch from saved state with a decision file
+    async def setup_verify(self, target: Target) -> VerifyReport: ...   # idempotent; injects key-provider secrets into the provider's secret store from Credential Manager
+    async def idle_sweep(self) -> list[Target]: ...                     # backstop only
+class RemoteLimits(BaseModel): max_lifetime_min: int; idle_after_min: int = 15; price_per_minute: float
+# The worker enforces its own limits: on idle_after or max_lifetime it flushes the journal and state blobs, writes stopped_reason, and calls the
+# provider's self-terminate (or runs under a provider TTL on Modal and E2B). On reaching an approval it saves state and exits (parked_remote).
+# cost_so_far = price_per_minute * minutes alive (FR-112). Key-provider keys never enter the bundle or the bucket.
+
+# qma2/host/console.py: deterministic operations behind the Wednesday console (no model calls)
+async def restart_report() -> RestartReport: ...          # packet 1b
+async def run_receipt(run_id: RunId) -> Receipt: ...      # appended by BlockProjector as a panel block at turn end ("What it did")
+async def seats_list() -> list[Seat]: ...                 # seat, plugin, engine, model, skills, parity badge (packet 3a)
+async def works_today() -> list[SmokeRow]: ...            # smoke rows + every not_implemented (packet 0)
+async def usage_summary() -> UsageSummary: ...            # packet 3b; includes machines_alive and their cost per hour (packet 5b)
+async def run_explain(run_id: RunId) -> str: ...          # packet 4a: where, engine/model/account/pick_reason, approvals and who answered, writes, stop reason, cost, cache share
 ```
 
 ### 2.10 Data flows
 
-**A copilot turn.**
-1. `POST /api/sessions/{sid}/turn` calls `TurnHost.submit`. One `Write` inserts a `work` row (kind `turn`, status `queued`, lease), appends the `user` block, and emits `turn.started`. The route returns the run id.
-2. The turn job starts. If the session has no `SessionRef`, `Router.pick` chooses the account and model, `PluginLoader.compile` builds the `CompiledAgent`, and `Engine.start` opens the adapter session (Claude: child process under the QMX home; OpenAI: an `Agent` plus `SQLiteSession`). The ref is saved on the session row.
-3. `Engine.send` streams `EngineEvent`s through the normaliser into `QmaEvent`s. `message.delta` goes to `/live` and is never stored. `message.done`, `tool.started`, `tool.finished`, `subagent.*` become one block row each plus an events-outbox row in the same `Write`.
-4. `result` or `TurnDone` writes `usage.recorded` rows into the ledger (latest result, never summed), sets the run `completed`, and emits `turn.finished`.
-5. The journal under `<home>/runs/<run_id>/journal.jsonl` has the request header, every tool intent and result, and the usage entry. The UI never reads it; the DevOps lens and replay do.
+**A copilot turn.** `POST /api/sessions/{sid}/turn` with an operator or agent token → `TurnHost.submit` writes the `work` row (queued, lease), the `user` block and `turn.started` in one `Write`, returns the run id. The turn job picks the account on first use (`Router.pick`), compiles the agent, opens the adapter session (cap token, Job Object, cwd), and streams. `message.delta` goes to `/live`; `message.done`, `tool.*`, `subagent.*` become block rows plus outbox rows. The result writes ledger rows (provisional rows replaced by the result totals), the receipt panel block, `completed`, `turn.finished`. The journal under `<home>/runs/<run_id>/journal.jsonl` holds the request header, every intent and result, and usage.
 
-**A tool call with approval.**
-1. The model emits a tool call. On Claude the `PreToolUse` hook calls `ToolInvoker.decide`. On OpenAI `needs_approval` calls the same function. Both read the deny-list, the always-ask settings row, sticky decisions and the effect class.
-2. `decide` returns `defer`. The host mints the effect key, writes an `approvals` row (`pending`, `content_hash` of the exact args, `effect_key`) and emits `approval.requested` on the `approvals` topic, which becomes a `permission` block. The run status becomes `waiting_approval`.
-3. Claude: the hook returns `permissionDecision: "defer"`; the turn ends with `tool_deferred`; the process may exit. OpenAI: the run returns `interruptions`; `RunState.to_json()` is stored as a blob and its id goes on the row and the `SessionRef`.
-4. The operator answers on the REST-only route. `ApprovalQueue.answer` sets `approved` (or `denied`) and calls `Engine.approve`, which resumes the session through the adapter. Claude: `resume=session_id`; the hook fires again for the same call, finds the approved row by effect key, `claim` flips it to `consumed` by CAS, and the hook returns `allow` with `updatedInput`. OpenAI: `RunState.from_json`, `approve(item)`, `Runner.run_streamed(agent, state)`; the invoker claims the same row when the handler runs.
-5. `invoke` records `effects` intent, runs the handler with timeout and size cap, settles the effect, journals the result, writes a receipt if `effect=write`, and the turn continues.
-6. If Claude ignores `defer` because the turn holds several tool calls, `can_use_tool` fires. It waits on a Future for at most the probed bound (§7 P3). On answer within the bound the Future resolves. On timeout the row stays `pending`, the turn is interrupted, and the restart path above applies on the next answer.
+**A tool call with approval.** The model emits a call. On Claude `_pre` normalises the name and calls `decide`; on OpenAI `needs_approval` calls it. Needs approval: the host computes the effect key from the native call id, writes an `approvals` row (`pending`, `content_hash`), emits `approval.requested` (a `permission` block), and sets the run `waiting_approval`. Claude, single-call turn outside a sub-agent: the hook returns `defer`, the turn ends `tool_deferred`, the cap token is released, the process may exit. Claude, multi-call turn or sub-agent: `can_use_tool` waits on the row with the process alive; past `park_release_minutes` the watchdog interrupts and orphans the row. OpenAI: the run returns `interruptions`; the latest `RunState` is stored once on the session. The operator answers through the operator door; `answer` records the decision and calls `Engine.approve(ref)`, which takes the session's resume lock and resumes once with every decided row (Claude: resume by id with identical options, the hook re-fires and sees `approved`; OpenAI: `from_json(latest)`, approve or reject each item, `run_streamed`). When the handler runs, `invoke` claims the row by effect key (the only claim), records intent, checks the args-hash guard, runs the handler, settles, journals, writes the receipt. A `tool_deferred_unavailable` or a spec-hash mismatch orphans the row and shows "the agent will ask again".
 
-**A workflow run.**
-1. `run_workflow` (a platform tool) or the `workflows_run` operation calls `Runner.run` with a `GraphVersion`. Validation runs. The run row pins `content_sha256`.
-2. The runner walks the graph. A `python`, `tool`, `app_call`, `condition` or `command` node runs code with no model. A `parallel` node fans out under `fanout_cap`; a `join` applies the edge mapping; a failed branch keeps siblings' outputs. Each node attempt writes one `node_runs` row and one checkpoint in one `Write`.
-3. An `agent` node resolves its model through the chain at node start, opens one engine session for the attempt, sends the brief plus any checker feedback, runs the checker on the output, and applies the stop rule. A text-only end of turn is not done.
-4. A `human_gate` writes an approval row with `revision_hash`. An edit to the definition creates a new version; the running run keeps its hash and the gate asks again on the new version.
-5. The run ends `completed`, `completed_with_warnings` (a failed branch), `failed` or `cancelled`. The ledger shows zero model calls for a deterministic workflow (FR-054).
+**A workflow run.** `run_workflow(name, inputs, placement)` → `Runner.run`. Validation (four faults, cross-boundary types, gate-and-no-retry on external writes, named joins). The run pins `content_sha256` and the resolved models. Code nodes run with no model; `parallel` fans out under `fanout_cap`; a failed branch keeps siblings. Each attempt writes `node_runs` plus its checkpoint in one `Write`. An agent node resolves its model at node start, checkpoints its `SessionRef`, sends the brief plus checker feedback, applies the stop rule, and pauses its clock while waiting on an approval. A gate writes an approval row bound to the gate's revision hash and input hash. The run ends in one of the nine statuses; a deterministic workflow shows zero model calls (FR-054).
 
-**A delegation across engines.**
-1. A Claude copilot calls `delegate(role="summariser", brief=..., engine="openai", mode="async")`. The invoker runs policy (depth check: the caller must be an errand or copilot session, never a worker).
-2. `Broker.delegate` writes a `work` row (kind `job`) with a lease, a child session with `parent_id`, and emits `subagent.started`. The job runner picks it up, `Router.pick` chooses a DeepSeek row by capability and usage, and `Engine.start` opens an OpenAI session with the worker's own `CompiledAgent`.
-3. The worker runs its turn. Its events carry `agent_path="root/summariser#1"` and `parent_run_id`, so the UI draws it as a child card under the parent errand. Its usage lands in the ledger under its own account (FR-084).
-4. `job_result` returns compact JSON, artifact refs and usage. The parent's turn continues. The run index shows Opus for the parent and DeepSeek for the helper.
+**A delegation across engines.** The copilot calls `delegate(role, brief, engine="openai")`. `invoke` checks depth (errand or copilot only). `Broker.delegate` writes a job row with a lease and a child session with `parent_id`, emits `subagent.started`. The job runner picks a DeepSeek row (family guard passes, capability, usage), opens an OpenAI session with the worker's own `CompiledAgent`, and the worker's events carry `agent_path` and `parent_run_id`. `job_result` returns compact JSON, refs and usage; the ledger shows DeepSeek under the Opus parent.
 
-**A crash and resume.**
-1. On start, `Store.assert_sqlite` runs, migrations apply, and `Broker.adopt_orphans` marks every `running` row with a dead lease `interrupted`. The restart banner lists resumed, failed and waiting items (spin 1).
-2. Each errand resumes its engine session by `SessionRef` and reads its state file. A spec-hash mismatch refuses resume and starts a fresh session with the state file as L3.
-3. A workflow at node 7 of 12 resumes through `Runner.resume`. Nodes 1 to 6 are skipped from checkpoints. Node 7's effect row is consulted: `done` returns the stored result; `intent` with `keyed` re-sends under the same key; `intent` with `unkeyed` or `irreversible` raises an `outcome_unknown` approval instead of re-running.
-4. A pending approval is still `pending` in the table and still answerable; the answer path is the restart path above.
-5. A turn cut off mid-tool-call has a journal `tool_intent` with no `tool_result`. The truncated-reply guard marks it skipped and the resumed session re-plans rather than executing blindly (FR-109, J19 step 4).
+**A crash and resume (J19).** On start: `Store.lock`, `assert_sqlite`, migrations, `recover()`. Orphan `claude` children are killed first (the Job Object already killed those of a dead host; this covers a leaked handle). Errands resume their sessions by ref and read their state files; a hash mismatch starts a fresh session with the state file as L3 and orphans its approvals. A workflow at node 7 resumes through `Runner.resume`: nodes 1 to 6 skip from checkpoints; node 7's effect row decides run, return stored, resend keyed, or raise `outcome_unknown`; the agent node resumes its session before any new attempt. A `defer`-parked or OpenAI-parked approval is still `pending`; a live-wait row is `orphaned` with its reason. A journal `tool_intent` with no `tool_result` marks the turn truncated and the resumed session re-plans instead of executing blindly. The banner lists resumed, failed and waiting items. Two crash-resumes of one run end in `interrupted` with a card.
 
-### 2.11 The DevOps planes, concurrency, self-improvement, security
+### 2.11 DevOps planes, concurrency, self-improvement
 
-Three planes per research 32: blocks (what the model showed the operator), traces (OTLP JSONL per day under `<home>/traces/`, DuckDB for queries), health (content-free counters). `RunRecord` is the extended `work` row with the four axes (caching, where, who, how). Claude traces come from the child's OTEL env with `TRACEPARENT`; OpenAI traces from `set_trace_processors([QmaJsonlProcessor()])` with a startup assertion that no OpenAI exporter is registered (FR-120).
+Three planes (research 32): blocks, traces, health. Traces: Claude's child exports OTLP/HTTP to a tiny receiver inside the host (`127.0.0.1:<port>/otlp`, about 80 lines) that writes `<home>/traces/YYYY-MM-DD.jsonl`; OpenAI uses `set_trace_processors([QmaJsonlProcessor()])` with a startup assertion that no OpenAI exporter is registered (FR-120). `RunRecord` is the `work` row with `kind, status, engine, account_id, model, pick_reason, where, how, caching(cache_read, cache_write, ratio), usage, receipts, artifacts, resume_attempts, cost_so_far`. Concurrency: one writer thread per file; `SessionCap`; OpenAI agents on one loop with `max_function_tool_concurrency`; write and external tools one at a time per session. Self-improvement is NEXT as before.
 
-Concurrency: one writer task per database file, group commit, read-only pool off the loop. Claude sessions capped by `SessionCap`. OpenAI agents share one asyncio loop with `max_function_tool_concurrency` per run. Write and money tools run one at a time per session (FR-109). Variants on git branches are NEXT.
+### 2.12 Principals, tokens and the money barrier
 
-Self-improvement (NEXT): a `lessons` table of proposals, a weekly mining job, a skill draft as a new plugin version, an eval gate against "no skill" on `FakeAdapter`, an approval row before activation, undo by the previous plugin hash (FR-142, FR-037). No machinery beyond `PluginLoader.install` and `ApprovalQueue`.
+Three credentials, one gate.
 
-Security: credentials only by `credential_ref` into Windows Credential Manager; a REST-only write route returns the reference (G15). Session env is built explicitly and scrubbed of `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_CODE_*` (01 §4). Three REST-only doors beside the sign door (G1). A code-constant deny-list no setting reads (FR-108). A value-pattern scrubber on every user block before storage and before any model sees it (spin 12). Readers of downloaded content get read-only tool sets (NFR-017). Unattended runs deny by default.
+| Principal | Credential | Where it lives | Scope |
+|---|---|---|---|
+| operator | a per-launch secret the host prints once into the launch window and the console or UI holds in browser session memory; optionally DPAPI-wrapped for the UI lane | never in Credential Manager, never in any agent environment | everything, including the doors and protected settings |
+| agent | a per-session token minted at `Engine.start`, passed only in the session's MCP server config | the session's process environment | `OPERATIONS` rows minus the doors and protected settings; `sessions_append` refuses `permission`, `needs_you` and `user` kinds; scoped to its own errand tree |
+| app | a per-app token minted at app start with a per-app budget | the app's scrubbed environment | `delegate`, `job_status`, `job_result`, `artifacts_*`; approved apps run under `unattended=True` policy |
+
+`PrincipalGate` replaces `BearerGate`: a token resolves to `(principal, scope, session_id|app_id)`, routes declare the principal they accept, and `OPERATIONS` rows carry an `allowed` set. Protected settings sections (`approvals`, `deny`, `accounts`, `seats`, `budgets`, `remote`) are operator-only through a separate `settings_put_protected` door. A negative test holds the doors and the protected sections at 403 for agent and app tokens.
+
+The money barrier, stated at its real strength. No order tool exists in any registry and `check_descriptor` refuses any descriptor that smells of one (Y05, Y41). Broker credentials are never in an agent environment. But every process of his Windows user can read his Credential Manager, so until Q10 is answered, `decide_builtin` and the OpenAI `shell` executor deny credential-store reads and calls to the host's own port by pattern, the FR-102 test includes "shell reads a `qmx/*` secret: refused with a journal row" and "shell calls the approval door with the agent token: 403" on both engines, and §9 lists the residual (a model that writes its own client with stolen credentials). With Q10 yes, agent shells (the Claude child, the OpenAI `shell` and `qmx_python` executors, mini-app subprocesses) run as a separate low-rights local user `qmx-agent` created by the setup wizard: its own Credential Manager (empty), read access to the QMX Claude home (which the wizard moves to that user) and its work directories, no access to the operator's `qmx/*` entries. That is process separation (one user, one Job Object), not a sandbox (C-09). Live broker keys leave this PC when the trading node ships (QMN).
+
+Other security rules unchanged: credential writes only through the operator door returning a `qmx/*` reference; env built explicitly and scrubbed; a value-pattern scrubber on user blocks; `RouterPick` never enters an SDK context; the bucket flush excludes `openai/*.sqlite` and Claude transcripts unless encrypted; `OTEL_LOG_TOOL_DETAILS=0`; unattended runs deny `external` by default.
 
 ---
 
 ## 3. Storage
 
+### 3.1 Files, tables, the writer, the fix
+
 | Data | Where | Writer |
 |---|---|---|
-| `sessions`, `blocks`, `work` (run records: turn, workflow, node, job, app_action), `events` (outbox), `settings`, `approvals`, `effects`, `usage_ledger`, `accounts`, `limits`, `plugins`, `graph_versions`, `graph_refs`, `triggers` + `trigger_fires` (NEXT), `write_receipts` | `control.db` | one writer task (`Store`) |
-| node checkpoints | `checkpoints.db` (prunable, emits no events) | one writer task |
-| run journal, state files, artifacts, parked `RunState` blobs | `<home>/runs/<run_id>/journal.jsonl`, `state.json`, `blobs/<sha256>` | the host, one exclusive writer per file |
-| Claude transcripts; OpenAI sessions | `<home>/claude/projects/**.jsonl` (native); `<home>/openai/<session>.sqlite` | the SDKs |
-| traces | `<home>/traces/YYYY-MM-DD.jsonl` | the host |
-| `runs.db` | derived index, rebuilt from journals (G4); never precious | rebuild job |
-| memory | per-profile files under `<home>/memory/` without LangGraph (G5) | the provider |
-| home root | `D:\QMX-data` by setting (F20, NFR-034) | |
+| `sessions`, `blocks`, `work`, `events`, `settings`, `approvals`, `sticky_decisions`, `effects`, `checkpoints` (blob, pruned), `usage_ledger`, `accounts`, `limits`, `plugins`, `graph_versions`, `graph_refs`, `write_receipts`, `jobs`; `triggers` (NEXT) | `control.db` | the one writer thread |
+| run journal, state file, blobs (parked `RunState`, large results) | `<home>/runs/<run_id>/` | the host, one exclusive writer per file |
+| Claude transcripts; OpenAI sessions | `<home>/claude/projects/**` (cwd fixed per session); `<home>/openai/<session>.sqlite` | the SDKs |
+| traces | `<home>/traces/YYYY-MM-DD.jsonl` | the host's OTLP receiver and processor |
+| `runs.db` | derived index, rebuilt from journals (G4) | rebuild job |
+| `library.db` | untouched (C-13); see Q12 | the Library |
+| home root | `D:\QMX-data` by setting (F20) | |
 
-**Migration approach.** `PRAGMA user_version` plus numbered SQL migrations in `qma/store/migrations/NNN_*.sql`, applied in order inside one transaction at startup. The first migration creates the new typed tables beside today's JSON tables and adds typed `status`, `version`, `lease_until`, `account_id`, token columns where claims or sums need them (G6). Rows that are only displayed stay JSON. `work` rows gain `status`, `kind`, `lease_until` columns backfilled from their JSON. `qmx-control`'s `CREATE TABLE IF NOT EXISTS` constructors are deleted once the migration owns the schema (migrate callers, then delete).
+Checkpoints moved into `control.db` so a node row and its checkpoint are one transaction (review-opus 8). If P4 fails on size, the fallback is a separate file with the rule "checkpoint first, then the `done` row carrying the checkpoint hash; `done` without its checkpoint means re-run under the effects ledger".
 
-**The SQLite 3.50.4 fix (G2).** Python 3.14.6 bundles SQLite 3.50.4, before the WAL-reset corruption fix (3.51.3; backport 3.50.7). The bug needs two connections writing or checkpointing at once. Three measures, all in slice 0 and slice 1:
-1. One writer connection per file, owned by the `Store` task. `qmx-control` stops opening a connection per call (`_connect`, `Library.connect`, `RunIndex.record` all go through `Store`). The `aggregates` cross-file read moves out of the write transaction (G8).
-2. Readers open `mode=ro` with `PRAGMA query_only=1` and `wal_autocheckpoint=0`, so only the writer ever checkpoints.
-3. `Store.assert_sqlite` at startup: `integrity_check`, log the version, and refuse to start if more than one process holds the file open for write (a PID lock file beside the database). Below 3.50.7 it logs a warning naming the single-writer invariant; the version itself does not block start-up, because the invariant removes the trigger. On Linux (rented boxes) the image installs a newer SQLite; on Windows a DLL swap is a NEXT task, not a WED one. `integrity_check` also runs before every backup.
+Migrations: `PRAGMA user_version` plus numbered SQL files under `qma2/store/migrations/`, applied in order inside one transaction at startup. Typed columns where claims, leases or sums need them (G6); JSON documents for display-only rows.
 
-The 40-agent load test (research 30 rec 13) runs before slice 4 (§7 P4). If it fails, the first split is `usage_ledger` and `events` into a hot file, with the outbox kept inside `control.db`.
+The SQLite 3.50.4 WAL-reset exposure (G2), fixed in packets 0 and 1a: one writer connection per file inside a dedicated thread; readers `mode=ro`, `query_only=1`, `wal_autocheckpoint=0`; an OS file lock (`msvcrt.locking`) held for the process lifetime, so a crash releases it and a second launcher refuses with a plain message; `weekly-backup` becomes a request to the running host, and with no host running it opens read-only and uses `Connection.backup` with no DDL; `quick_check` on a read-only connection before backup, full `integrity_check` at startup only; packet 0 audits `qmx-tools` for any `control.db` access. Linux images install a newer SQLite; the Windows DLL swap is NEXT. Only `control.db` and `runs.db` get the one-writer rule now.
+
+### 3.2 Settings keys (UI-editable, C-16)
+
+| Key | Type | Default | Reader | Packet |
+|---|---|---|---|---|
+| `approvals.always_ask` | list[str] | Q1's list | `ToolInvoker.decide` | 1c |
+| `approvals.park_release_minutes` | int | 30 | `Watchdog` | 2 |
+| `approvals.spend_expires_hours` | int | 24 | `ApprovalQueue` | 1c |
+| `budget.turn.{max_tool_calls,max_usd}`, `budget.job.{max_turns,max_tool_calls,max_usd}` | int, float | 200, null; 40, 200, null | `BudgetMeter` (checked in `invoke` and in the ledger write path; a USD cap raises a `spend` approval and `waiting_approval`) | 1c |
+| `engine.claude.session_cap` | int or `auto` | auto | `SessionCap` | 2 |
+| `watchdog.minutes` | int | 5 | `Watchdog` | 2 |
+| `seat.<plugin>.engine`, `seat.<plugin>.model` | str | from `qma.toml` | `PluginLoader.compile` | 3a |
+| `router.subscription.<account>.window` | WindowSpec | operator-set | `Router.pick` | 3b |
+| `remote.default_target`, `remote.idle_teardown_minutes`, `remote.max_lifetime_minutes` | str, int, int | first rented row, 15, 240 | `Placement` | 5b |
+| `graph.fanout_cap` | int | 16 | `Runner` | 4a |
+| `store.queue_max`, `store.commit_window_ms` | int, int | 1000, 50 | `Store` | 1a |
+| `reader.egress_allowlist` | list[str] | [] | reader role | 3a |
+| `home.root` | path | `D:\QMX-data` | host | 0 |
+
+Packet 1a creates `settings_get` and `settings_put` validated from this table; protected sections go through the operator door.
 
 ---
 
-## 4. The event protocol to the UI and the door split
+## 4. The event protocol, the doors, the console
 
-**Envelope.** Research 32 B3.1, as `QmaEvent` in §2.1. `seq` is set only on durable events (the `events` row id). Live events carry `after_seq`.
+**Envelope and channels.** Research 32 B3.1 as `QmaEvent`. Durable: the `events` table, topics `runs, jobs, sessions, apps, library, settings, aggregates, approvals`; each durable event wraps one block or a run, approval or usage row; `GET /api/events/{topic}` keeps `Last-Event-ID` and waits on the topic condition (no 50 ms poll). Live: `GET /api/sessions/{id}/live`, an asyncio fan-out per session, unstored, opening with `session.snapshot`. A block update is a new durable event carrying the full block with the same `item_id`. Block mapping is unchanged (14 kinds; the journeys' labels map onto them, G13). `restart.report` rides topic `runs`.
 
-**Two channels.**
-1. Durable: the `events` table, topics `runs, jobs, sessions, apps, library, settings, aggregates` plus the new `approvals`. Each durable event wraps one block exactly as `sessions_append` does now, or a run, approval or usage row on its topic. `GET /api/events/{topic}` keeps `Last-Event-ID`; the tail reads through `Store.read` off the loop (G3), not a 50 ms sync poll.
-2. Live: `GET /api/sessions/{id}/live`, an asyncio fan-out per session, nothing stored. Carries `message.delta`, `reasoning.delta`, `tool.progress`, `terminal.output`, `terminal.input`, `diff.updated`, `cursor.*`, `usage.delta`. Opens with one `session.snapshot` (open runs, pending approvals, open terminals). On reconnect the client re-reads blocks, then attaches.
+**Normalisers.** `normalise_claude` and `normalise_openai`, one pure function per SDK message (research 32 B4.1, B4.2), the only places an SDK type is read; `ClaudeReplayAdapter` feeds recorded fixtures through the same function.
 
-**Block mapping.** The 14 kinds are unchanged. `message.done` becomes `text`; `plan.updated` becomes `plan`; `tool.started/finished` become one `tool` block updated in place; `approval.requested/resolved` become `permission`; `subagent.*` become `agents`; `file.changed` becomes `changed`; `terminal.opened` and `browser.opened` become `panel` with `content.pane`; `artifact.created` becomes `artifact`; `alert` becomes `needs_you`; `compact_boundary` becomes `text` with `content.kind="compaction"`; `error` becomes `text` with `content.level="error"`. The journeys' labels (`tools`, `ask`, `changes`, `cards`) are UI labels over these kinds (G13).
+**The door split (G1, hardened).** Every `OPERATIONS` row is a REST route and an MCP tool with identical results and an `allowed` principal set (FR-128). New rows from `ctl/agent_ops.py`: `sessions_turn/stop/steer`, `approvals_list`, `workflows_put/get/list/validate/run/runs`, `jobs_*`, `accounts_*` (no secrets), `plugins_*`, `seats_list`, `router_status`, `usage_summary`, `restart_report`, `works_today`, `run_receipt`, `run_explain`, `switch_model_estimate`. Operator-only doors, never exported as tools and refused for agent and app tokens: `POST /api/approvals/{id}`, `POST /api/credentials`, `POST /api/sessions/{id}/terminal`, the sign door, `settings_put_protected`. A test asserts the two lists do not overlap, that `create_mcp` exports none of the doors, and that agent and app tokens get 403 on each.
 
-**Normalisers.** `normalise_claude` and `normalise_openai` are the two tables in research 32 B4.1 and B4.2, each one pure function per SDK message, the only place an SDK type is read. The graph runner emits `run.*` with kind `workflow` or `node`; agent nodes nest their engine's events under the node's `run_id`.
+**The Wednesday console** (packet 1b, extended by later packets): one static page served by `qmx-control` at `/console`, holding the operator token in session memory. Panels: chat (streamed blocks over SSE and `/live`), Needs you (pending approvals with Allow once, Allow for session, Deny), runs (status, where, engine, model, cost so far, Explain), seats, usage summary, restart banner, machines alive. No framework, about 400 lines of HTML and JS, labelled "Wednesday console, not the UI".
 
-**The door split (G1).** Every `OPERATIONS` row is a REST route and an MCP tool with identical results (FR-128). New rows that join it: `sessions_turn`, `sessions_stop`, `sessions_steer`, `approvals_list`, `workflows_put/get/list/validate/run/runs`, `jobs_*`, `accounts_*` (no secrets), `plugins_*`, `router_status`. Four doors are REST-only and never exported as tools: `POST /api/approvals/{id}` (answer), `POST /api/credentials` (write, returns a `qmx/*` reference), `POST /api/sessions/{id}/terminal`, and the existing sign door. A test asserts the two lists do not overlap and that `create_mcp` exports none of the four.
+**UI handoff packet** (end of packet 1b): `openapi.json`, recorded SSE fixtures for each of the 14 block kinds and for `approval.requested`, the console as a reference client, and `docs/contracts/qma-event-protocol.md`. The UI lane can start Tuesday afternoon without guessing APIs.
 
 ---
 
@@ -648,26 +649,28 @@ The 40-agent load test (research 30 rec 13) runs before slice 4 (§7 P4). If it 
 
 | Part | Keep | Rewrap | Replace or delete |
 |---|---|---|---|
-| qmx-control | all tables and rows, blocks, SSE replay, `OPERATIONS`, `not_implemented`, `record_work`, settings, `_no_secrets`, sign door, Library seam | turn, stop, steer, approvals and workflow routes; `_connect` and `RunIndex.record` go through `Store`; typed columns; `aggregates` read moved out of the write transaction | `workflows_*` 501 stubs; the 50 ms sync poll; the in-memory `_cancellers` |
-| Engines | `native_claude.py` preflight (`:97-160`) as `ClaudeAdapter._preflight`; the init-time advertised-tool check (`:300-306`) | | `native_claude.py` lockdown (`tools=[]`, `max_turns=8`), `native_codex.py`, `native_sessions.py`, `spec._build`, `copilot.py` |
-| AgentSpec | `spec.py:108-143` fields, `load_spec`, `mcp_configuration` | add `engine`, `write_roots`; drop Deep Agents types | `guards()` |
-| Plugins | four `agents/*.yaml` and three skill folders as seeds | into `qma/plugins/{general,lab,portfolio}`; `maintain-app` replaces `debug-app` | `qmx-agents/plugins/` desk packs (F13), deleted in slice 0 |
-| Router | `model_selector`, `RouterConfig` URL rules, `credential()`, `RunContext` chain walk | `Router.pick`; `RunContext` becomes `CallContext` | `init_chat_model`, middleware, CLIProxy calls, `models.yaml`, the `Provider` Literal |
-| Workflows | `models.py`, schema, `pointer/template/input_view`, the four validators, status set | `qma.graph.models` with optional `policy`, `watch`, `command` | `compiler.py`, `runs.py`, `AsyncSqliteSaver`, `to_python` |
-| Guards | `journal.py`, `experiments.py`, `parent_surfaces.py`, `check_descriptor`, `AdmissionGate` content+hash rule, `valid_path` | into `qma.journal`, `qma.policy`, `qma.types`; `WriteProposal` becomes `ApprovalRow(kind="tool")` | `middleware.py`, `BaseTool` classes, `check_tool`, `AdmissionBackend`, in-memory `_staged/_approved` |
-| Memory | `Scope`, `MemoryRecord`, protocol, caps, approval rule | `MemoryProvider` without LangChain tools | `StoreMemoryProvider`, `SqliteStore`, memory middleware |
-| Tools | 13 domain functions, four FastMCP servers, `DomainContext` | reached over stdio through one proxy `ToolDef` per server | `registry.py:274-281` (the LangChain wrap line) |
-| Apps | everything: supervisor, manifest, hash, road, artifacts, breaker, Job Object | trust host-assigned from an approval record (F1, F2); T1 refusal becomes "disabled until approved"; imports `check_descriptor` and the journal from `qma`; `QmaClient` seam | embedded Deep Agents in `weekend-watcher` and `macro-daily-bias` (new versions through the road) |
-| Remote | bundle, providers, store, manifest, bucket flush, verified fetch, resume, `runs/<id>` branch | `worker.py` executors become `TurnHost.headless`; default target a rented provider (K-01); manifest's `langgraph` entry removed | VPS default, Amp provider, `node-bootstrap.sh`'s owned-Ubuntu assumptions |
+| qmx-control | tables, blocks, SSE replay, `OPERATIONS`, `not_implemented`, `record_work`, settings, `_no_secrets`, sign door, Library seam and `library.py` (untouched) | `BearerGate` → `PrincipalGate`; `agent_ops.py`; `_connect` and `RunIndex.record` through `Store`; typed columns; `aggregates` read out of the write transaction; `weekly-backup` as a host request | `workflows_*` 501 stubs; the 50 ms poll; in-memory `_cancellers` |
+| Engines | `native_claude.py` preflight (`:97-160`) and advertised-tool check (`:300-306`) | | its lockdown; `native_codex.py`; `native_sessions.py`; `spec._build`; `copilot.py` |
+| AgentSpec | `spec.py:108-143` fields, `load_spec`, `mcp_configuration` | add `engine`, `write_roots` | `guards()` |
+| Plugins | four `agents/*.yaml`, three skill folders as seeds | into `qma2/plugins/{general,lab,portfolio}`; `maintain-app` replaces `debug-app` | `qmx-agents/plugins/` desk packs (F13), packet 0 |
+| Router | `model_selector`, `RouterConfig` URL rules, `credential()`, chain walk | `Router.pick`; `RunContext` → `CallContext` | `init_chat_model`, middleware, CLIProxy calls, `models.yaml`, the `Provider` Literal |
+| Workflows | `models.py`, schema, `pointer/template/input_view`, validators, status set | `qma2.graph.models` with `policy`, `defaults.model`, `watch`, `command` | `compiler.py`, `runs.py`, `AsyncSqliteSaver`, `to_python` |
+| Guards | `journal.py`, `experiments.py`, `parent_surfaces.py`, `check_descriptor`, admission content+hash rule, `valid_path` | into `qma2.journal`, `qma2.policy`, `qma2.types` | `middleware.py`, `BaseTool` classes, `check_tool`, `AdmissionBackend`, in-memory `_staged/_approved` |
+| Memory | `Scope`, `MemoryRecord`, protocol, caps, approval rule | `MemoryProvider` without LangChain tools | `StoreMemoryProvider`, `SqliteStore`, middleware |
+| Tools | 13 domain functions, four FastMCP servers, `DomainContext` | one proxy `ToolDef` per server; effect key via `_meta` | `registry.py:274-281` |
+| Apps | everything | trust host-assigned from the approval record (F1, F2); T1 refusal → "disabled until approved"; `apps_call` `timeout_s=20` (G12); per-app token; `built_by`/`watched_by`; `QmaClient` with `run_workflow` | embedded Deep Agents in the two example apps (new versions through the road) |
+| Remote | bundle, providers, store, manifest, bucket flush, verified fetch, `runs/<id>` branch, Dockerfile | `worker.py` executors → `TurnHost.headless` with limits and self-terminate; rented default; manifest whitelist gains `openai/*.sqlite` (encrypted) and `state/`; `langgraph` entry removed | VPS default, Amp provider, owned-Ubuntu bootstrap assumptions |
 | Tasks | the four verbs and the ownership rule | `Broker` on work rows with leases | `tasks.py`, `AsyncSqliteSaver` per task |
 
-**The import-cycle fix (A-18).** Slice 0 creates `qma` and moves `journal`, `experiments`, `parent_surfaces` and `check_descriptor` into it. `qmx-apps` and `qmx-remote` change their four imports to `qma`. That removes every edge from apps and remote into `qmx-agents` except the worker's executors, which slice 5 replaces. `qmx-tools` keeps importing `qmx_control` for `DomainContext`; `qma` never imports `qmx-tools`, so no cycle reaches `qma`. The import-linter contract (`qma` imports no `qmx_*`; only `qma.engine.{claude,openai}` import an SDK) is CI step one.
+**Import cycle (A-18).** Packet 0 creates `qma2` and moves the neutral guards in; `qmx-apps` and `qmx-remote` change their four imports; the worker's executors go in packet 5b. `qmx-tools` keeps importing `qmx_control`; `qma2` never imports `qmx-tools`. The import-linter contract is CI step one.
 
-**The two example apps.** `weekend-watcher` and `macro-daily-bias` import `qmx_agents.spec` and `router`. They get new versions through the road: the app calls `QmaClient.delegate` and polls `job_result`; no engine runs inside the app's venv. Macro daily bias is rebuilt live by the copilot as the first acceptance run (FR-079).
+**The `qma` namespace.** `qma-core`, `qma-daemon` and `qma-wire` still exist as a PEP 420 namespace, and QMB spawns `python -m qma.daemon` until the QMB review (PRD §2.2). The new package is `qma2`, so nothing shadows them. Packet 0 records whether P16c has merged and asserts `python -c "import qma.daemon"` still works, or is gone on purpose.
 
-**The Claude driver recipe.** `native_claude.py` is copied into the tracker in slice 0 before P16 deletes the daemon (F11). Its preflight, isolation and advertised-tool check become `ClaudeAdapter` code. Its lockdown is dropped (Y40).
+**The two example apps.** New versions through the road, calling `QmaClient.delegate` and polling `job_result`; no engine inside an app venv. Macro daily bias is the stretch acceptance run (FR-079).
 
-**The LangChain removal.** `qmx-agents` (the package) is deleted in one wave after slice 4 lands, with the `test_all.py` suite list edited in the same PR (F19). `openai-agents` and `claude-agent-sdk` are pinned in `qma`'s pyproject in slice 0 (F10). After the wave, `grep langchain langgraph deepagents` across the workspace returns nothing and `qmx-apps` locks without them (slice 0's first check).
+**The Claude driver recipe.** Copied into the tracker in packet 0 before P16 deletes the daemon; preflight and isolation become `ClaudeAdapter` code; the lockdown is dropped.
+
+**The LangChain removal.** Thursday (packet 7), not demo eve: delete `qmx-agents` (the package), edit `tools/test_all.py` in the same PR (F19), `grep langchain langgraph deepagents` empty. Until then the import-linter keeps `qma2` free of LangChain. `openai-agents` and `claude-agent-sdk` are pinned in `qma-v2`'s pyproject and `qmx-agents/uv.lock` in packet 0 (F10).
 
 ---
 
@@ -677,106 +680,176 @@ The 40-agent load test (research 30 rec 13) runs before slice 4 (§7 P4). If it 
 
 | # | Answer |
 |---|---|
-| A-01 | SIWC is a Responses-only credential (`store:false`, `stream:true`) for open-source and locally hosted apps; remotely hosted apps need the partner form. The OpenAI adapter uses `OpenAIResponsesModel` with the SIWC client for GPT rows only. GPT rows are local-only in the router; remote jobs never get a GPT pick. Whether the SDK accepts the SIWC token on his PC is probe P1. On failure GPT shows "unavailable" (FR-023) and its roles go to Claude or a key provider (Q5). |
-| A-02 | Unverified. `claude setup-token` mints a one-year token that can only make model requests; the SDK needs the bundled binary on the box; issue #926 (hang when stdout is not a TTY) is live. WED: `Placement.needs_pc` marks any Claude-engine node; remote defaults to the OpenAI engine. NEXT: a wizard in which he pastes the token on the box himself; probe P2 decides. Terms read: his own plan on the unmodified binary is the closest allowed case, and always-on remote use stretches "ordinary individual usage", so remote Claude stays limited to orchestrators. |
-| A-03 | Built once in QMA, mapped to both: approvals (queue + `defer`/`RunState` park), policy (`ToolInvoker`), plugins (loader), usage ledger, sub-agent projection, `delegate`, compaction summariser on non-OpenAI providers, base kit, tool search bridge (NEXT). Native on Claude only: built-in tools, auto compaction, skills loading, in-session sub-agents, `hooks/hooks.json`. Native on OpenAI only: `RunState` parking (wrapped), handoffs (same engine), hosted tools (OpenAI models). |
-| A-04 | Claude compacts itself (summary-only), journaled at `compact_boundary`. OpenAI uses `OpenAIResponsesCompactionSession` on OpenAI models and a QMA summariser `Session` wrapper with a chosen model otherwise. A model switch (NEXT) compacts on the old engine first, then starts a new child session on the new pick with the summary as L3. Effort maps per wire from `ModelRow.effort_map`: `effort` on Anthropic wire, `reasoning.effort` on Responses, dropped with a logged note on Chat Completions. Pi and Hermes convert history across providers; QMA does not, because an engine switch is a new session. |
-| A-05 | Five layers (§2.4), XML sections, one template per role with `<engine>` blocks, versions on the root element and logged in every run record, rendered surfaces as CI fixtures. |
-| A-06 | The UI keeps "workflow" and "sub-agent". "Graph" and "loop" are badges on a workflow card and an agent node. The glossary already fixes the words. |
-| A-07 | The chain resolves at node start and at every `delegate`. A node's model is part of the graph version; changing it is a new version. A session is sticky for its life. The router never acts per request. |
-| A-08 | P10's ten plus `watch` and `command` (§2.8). Triggers are rows that start a run, not nodes. `watch` ships as a template first if the node kind slips past slice 4. |
-| A-09 | `graph_versions` and `graph_refs` in `control.db`, content-hashed, parent-linked, exported nightly as files. The Library takes them by the same object model when its seam is ready. |
-| A-10 | Not needed. No journey asked for it. `qmx_python` in the base kit covers data work; RLM stays parked. |
-| A-11 | QMA-owned MCP servers on both engines, NEXT. A two-day spike after Wednesday picks between OpenCUA and cua-driver. The demo lock (spin 10) ships before FR-139. |
-| A-12 | §1.3 item 4: one errand session, a state file, rolled into a new child session at a phase boundary past 60 percent of the window. Cheap driving: delegate everything async, poll `job_status`, tool list under 12, 1h cache TTL. |
-| A-13 | A plugin's `.mcp.json` lists servers; `qma.toml` lists what it brings. Lint plus an always-ask install approval with the "what it brings" card. Agent-written tool code runs as a separate process, disabled until reviewed. MCP-app panels are LATER. |
-| A-14 | Differences live in `qma/host/platform.py` only: shell executor (PowerShell vs bash), Job Object vs cgroups, the Claude binary and `SystemPromptFile`, Litestream Linux-only, `windows_only` tools. |
-| A-15 | One `control.db` per machine, one writer, numbered migrations, typed columns for claims. The 40-agent load test decides any split. The laptop imports remote journal segments and approvals on fetch, so one UI reads one database with a `where` column. |
-| A-16 | A plugin is a folder (Claude layout plus `qma.toml`); an agent is a file in its `agents/`. Defaults: general and Lab copilots on Claude Opus (Max); Portfolio on Claude Sonnet (Max) unless moved; orchestrator on Claude; workers and verdict nodes on key providers by capability; GPT via SIWC when P1 passes; the summariser on the thread's own model, or Haiku when the thread is on a key provider. |
-| A-17 | An app never runs an agent inside a tool call. It calls `QmaClient.delegate`, gets a job handle, and polls. The 20 s deadline stands (G12). |
-| A-18 | §5: `qma` is the bottom package; the neutral guards move in first; the import-linter contract is CI step one. |
-| A-19 | Deltas on `/live` (asyncio push, unstored). Blocks stay the 14 kinds with new `content` fields. The durable tail reads off the loop. |
-| A-20 | API keys of one vendor: yes, per session. Subscriptions: one Claude login per `CLAUDE_CONFIG_DIR`; two Max plans are two homes, chosen at session start, never rotated mid-session. SIWC: one account until the terms say otherwise. Pooling and proxying are not done. |
-| A-21 | Attachments ride `send(..., attachments)` as artifact refs (NEXT). The node editor targets `workflow.v1.1` through `workflows_put`. The Experimentation Board is a `board_items` row kind (NEXT), not a store. |
-| A-22 | Plain words: large companies never let a program open the database. Each program gets a short list of named doors, each with a typed input, an owner and a guard, and one log of who opened which door. QMX does the same: the capability registry is the list, the tool invoker is the guard, the journal is the log, and no agent opens a database file. |
-| A-23 | Partly. The Lab's authoring complexity (graph, code and import views, runs, variants) belongs to the Lab. Its packaging complexity (versions, road, data, schedules) belongs to mini apps. Keeping both is right; one object that is both would be the mistake. |
-| A-24 | `FakeAdapter` plus the SDKs' own test utilities (`ScriptedModel`, scripted sandbox), and a `FakeComputeProvider`. Every engine test runs on fakes in CI; live scripts stay in `scripts/live/`. Slice 0 adds a GitHub Actions workflow that runs `just ci` and the import contract, and every PR body links the Actions run (F14). |
+| A-01 | SIWC is Responses-only (`store:false`, `stream:true`) for locally hosted apps; GPT rows are local-only; probe P1 decides; on failure GPT is "unavailable" (Q5). |
+| A-02 | Unverified. WED: `needs_pc` marks Claude nodes; remote uses the OpenAI engine. NEXT: `setup-token` pasted by him on the box; probe P2 (deferred). Always-on remote Claude stays limited to orchestrators under the terms' "ordinary individual usage". |
+| A-03 | Built once in QMA: approvals, policy, plugins (with the parity table), ledger, sub-agent projection, `delegate`, summariser, base kit, `load_skill`. Claude-only native: built-ins, auto compaction, in-session sub-agents, first-party `hooks.json`. OpenAI-only native: `RunState` parking (wrapped), handoffs, hosted tools. |
+| A-04 | Claude compacts itself; OpenAI uses the compaction session on OpenAI models and the QMA summariser otherwise; a switch compacts first, then opens a new child session; effort maps per wire; no cross-provider history conversion. WED ships `switch_model(dry_run=True)` only. |
+| A-05 | Five layers, XML, versions logged, CI snapshots (§2.4). |
+| A-06 | The UI says workflow and sub-agent; graph and loop are badges. |
+| A-07 | The chain resolves at node start and at every `delegate`; the resolved model is persisted on the node row and reused on resume. |
+| A-08 | WED runner: eight kinds (§2.8). `loop`, `subworkflow`, `watch`, `command` execute NEXT; `watch` ships as a template. |
+| A-09 | `graph_versions` and `graph_refs` in `control.db`, exported nightly as files. |
+| A-10 | Not needed for WED or NEXT; FR-090 stays LATER as the PRD says (the earlier "closed" wording is withdrawn). |
+| A-11 | QMA-owned MCP servers, NEXT; a spike after Wednesday; the demo lock first. |
+| A-12 | §1.3 item 4. |
+| A-13 | Lint plus an install approval with a mechanical capability diff; non-first-party hooks stripped; agent tool code disabled until reviewed. |
+| A-14 | `host/platform.py`: shell executor, Job Object vs cgroups, the Claude binary and `SystemPromptFile`, the low-rights user spawn, `windows_only` tools. |
+| A-15 | One `control.db` per machine, one writer thread, checkpoints inside it; P4 decides any split; the laptop imports remote rows on fetch. |
+| A-16 | A plugin is a folder plus `qma.toml`; an agent is a file in `agents/`. Defaults: general and Lab on Claude Opus (Max), Portfolio on Claude Sonnet unless `seat.portfolio.engine` says otherwise, workers and verdict nodes on key providers by capability, GPT via SIWC when P1 passes. |
+| A-17 | Apps call `QmaClient.delegate` or `run_workflow`; the 20 s deadline stands. |
+| A-18 | §5. |
+| A-19 | Deltas on `/live`; blocks stay the 14 kinds; the tail waits on a condition. |
+| A-20 | Keys per vendor yes, per session. Subscriptions: one login per home, never rotated mid-session; SIWC one account; no pooling or proxying. |
+| A-21 | Attachments NEXT; the node editor targets `workflow.v1.1`; the Board is a row kind NEXT. |
+| A-22 | Large companies never let a program open the database; each program gets a few named doors with a guard and one log. QMX: the registry is the list, the invoker the guard, the journal the log; and now each kind of caller has its own key to the building. |
+| A-23 | Partly: authoring stays in the Lab, packaging in mini apps. |
+| A-24 | `FakeAdapter`, `ClaudeReplayAdapter` (recorded stream-json), the SDKs' scripted models, `FakeComputeProvider`. `battery.yml` exists and has never run; the homework checks Actions is enabled; packet 0 edits `tools/ci.py`, not a new workflow. |
 
-### 6.2 §9.1, the operator's questions, with the design's behaviour under each answer
+### 6.2 The operator's questions, in his words
 
-| # | Question | Recommendation | How the design behaves |
+Each is yes or no with a recommendation and what changes. Builders' notes are in brackets.
+
+| # | Question | Recommend | If you say otherwise |
 |---|---|---|---|
-| Q1 | Always-ask list | Publish, install or grant, schedule, spend over budget, demo-account actions, delete | The list is a settings row read by `ToolInvoker.decide`. Any list works; the deny-list and money stay outside it whatever he picks. An empty list still asks for `always_ask` tools in `qma.toml`. |
-| Q2 | The one standing rule | "Answer research questions yourself; ask me only real decisions, with a recommendation, after I've read" | Rendered into L1 of every copilot role once he names it (FR-012, NEXT). Until then L1 carries NFR-024 as written. |
-| Q3 | Effort dial | Automatic per role default, optional per-chat override | `ModelRow.effort_map` plus a per-session override in `TurnInput`. A fixed dial is the same field with the override always set. |
-| Q4 | One general copilot window, Lab and Portfolio as plugins | Yes | `sessions_list` returns every surface; a seat is a plugin row; only the general plugin exposes `apps_update`. If he wants separate agents instead, each becomes its own errand with its own plugin; nothing else changes. |
-| Q5 | GPT when SIWC fails | "unavailable", roles go to Claude or a key provider | The router skips disabled GPT rows; the picker greys them with the reason; no OpenAI key is ever accepted for a GPT model id. |
-| Q6 | Broker accounts agents may touch | Demo under approval; live read-only; never an order | Broker read tools in the Portfolio plugin; demo-account writes are `always_ask`; live writes are deny-listed; no order tool exists (NEXT for the demo flow). |
-| Q7 | Branches | Answered: ship into `rebuild/base` | Every slice PR targets `rebuild/base`. |
-| Q8 | The Library's name and QMF's role | Keep "Library"; QMF is a tool seam | Both are named seam modules in the registry; a rename is a string change. |
+| Q1 | Which actions must always ask you first? | Publish, install, schedule, spend over budget, demo-account actions, delete. | Any list works; money and the hard deny-list stay outside it. [`approvals.always_ask`] |
+| Q2 | The one rule every copilot must remember? | "Answer research questions yourself; ask me only real decisions, with a recommendation, after I've read." | It goes into every copilot's prompt once you name it. |
+| Q3 | A "think harder" switch beside the chat box? | No: automatic per role, with a per-chat override. | Yes means one extra control. [`effort_map`, `TurnInput.effort`] |
+| Q4 | One general copilot that lists every session, with Lab and Portfolio as plugins it loads? | Yes. | Separate agents each become their own errand; nothing else changes. |
+| Q5 | If ChatGPT sign-in cannot drive QMX, what happens to GPT? | GPT shows "unavailable"; its roles go to Claude or a key provider; never a paid OpenAI key. | Same mechanics either way. |
+| Q6 | Which broker accounts may agents touch for testing? | Demo under approval; live read-only; never an order. | Later work (NEXT); no order tool exists in any case. |
+| Q7 | Branches | Answered: ship into `rebuild/base`. | |
+| Q8 | The Library's name and QMF's role | Keep "Library"; QMF is a tool seam. | A rename is a string change. |
+| Q9 | **On Wednesday, do I prove the six points from a plain console page with a few buttons (A), or do you click through the real UI (B)?** | A. The console is built anyway for approvals; the real UI starts from the handoff packet and lands later. | B puts the UI lane on the critical path and risks the demo. |
+| Q10 | **May QMX create a second, low-rights Windows user on your PC and run agent shells as that user?** It is process separation, not a sandbox. | Yes. Without it, an agent that writes its own code could read your stored keys. | No: the deny patterns and the separate tokens stay; the residual risk is listed in §9 and your broker keys should not be on this PC. |
+| Q11 | **Which rented provider for Wednesday (Modal or E2B), funded by you, with a spend cap set in its dashboard?** | Modal, with a small cap. | E2B works the same; no provider means SC-5 shows the fake-provider run and an honest card. |
+| Q12 | **May packet 0 touch the Library's database connection handling (no behaviour change) to apply the single-writer rule?** | No for now; the Library is out of scope and its file is separate. | Yes means `library.py` joins packet 0's file list. |
+| Q13 | **On Wednesday, remote agent steps run on DeepSeek or GLM, not Claude. OK?** | Yes. Claude on rented machines is unverified. | No means SC-5 is a code-only workflow with the agent step marked "needs your PC on". |
+| Q14 | **If time runs out, drop in this order: the Macro app rebuild, then the live remote run (fake provider plus honest card), then helper breadth. Never the copilot, the seats or the money refusal. Agreed?** | Yes. | Tell me a different order. |
+| Q15 | **The refusal demo: gold CFD or a crypto pair?** | Whichever matches your current instrument ruling. | The script changes one line. |
+| R1 | Ratify: Claude's built-in tools (Bash, Write, Edit) are governed by a hook before the call and checked after, not by QMX's tool wrapper (an exception to NFR-020). | Yes. | No means built-ins are disabled on copilots, which loses most of Claude Code. |
+| R2 | Ratify: FR-048's "fill gaps from local session files" becomes "mark estimates" (X10). | Yes. | |
 
 ---
 
-## 7. Verification probes for Tuesday morning
+## 7. Verification probes and homework
 
-Each is a script under `scripts/probe/`, run by the operator before the slice that depends on it. Pass or fail is recorded in the tracker.
+### 7.1 Probes (written in packet 0; the agent runs P3, P4, P5; he runs P1; P2 is deferred)
 
-| # | Probe | Check (pass when) | Fallback if it fails | Blocks |
+| # | Probe | Pass when | Fallback | Blocks |
 |---|---|---|---|---|
-| P1 | SIWC drives the OpenAI SDK on his PC | An `Agent` on `OpenAIResponsesModel` with the SIWC client completes one streamed tool call with `store=False`; no `OPENAI_API_KEY` in the env | GPT rows disabled with reason "SIWC unavailable"; Q5 applies; nothing else in slice 3 changes | slice 3 GPT rows only |
-| P2 | `setup-token` on a rented box | On one Modal or E2B box with the pinned binary, a `ClaudeSDKClient` session with `CLAUDE_CODE_OAUTH_TOKEN` (pasted by him, never through QMX) streams one reply with stdout piped (not a TTY) | `needs_pc=True` for every Claude node; remote stays OpenAI-only; the wizard moves to LATER | nothing on the WED path |
-| P3 | Approval park and resume on Claude | (a) A `PreToolUse` hook returning `defer` on a QMX tool ends the turn with `tool_deferred`; resuming by session id re-fires the hook and `allow`+`updatedInput` runs the call. (b) `can_use_tool` held for 5 min then resolved still completes the call; record the bound where it stops | (a) fails: use `can_use_tool` with the P3b bound, and on timeout interrupt the turn and resume by session id, accepting a re-planned turn (A's X4 path). (b) short: lower the live timeout to that bound and route every write tool through `defer` | slice 2 approvals |
-| P4 | 40-agent SQLite load | Research 30 rec 13 script: 40 writers through one `Store` task plus 8 SSE readers for 10 min; p95 write latency under 50 ms; no `database is locked`; `integrity_check` ok | Move `usage_ledger` and `events` to a hot file with the outbox kept in `control.db`; raise the group-commit window | slice 4 |
-| P5 | Claude SDK on his PC: hangs, watchdog, Windows | A session with a long system prompt via `SystemPromptFile`, an in-process MCP server with 12 tools (#902), a killed CLI mid-turn: the watchdog marks the run `interrupted` within 5 min (#1110) and the next turn resumes by id; no console flash blocks the host (#480); a resumed session with a dangling `tool_use` continues | Hang: watchdog kill plus a fresh session with the state file as L3. #902: tools over a stdio FastMCP server instead of in-process. Dangling `tool_use` breaks resume: the truncated-reply guard starts a fresh session | slice 2 |
+| P1 | SIWC drives the OpenAI SDK on his PC (one command, one browser click) | A streamed tool call completes with `store=False` and no `OPENAI_API_KEY` | GPT rows disabled with reason; Q5 | packet 3b GPT rows only |
+| P2 | `setup-token` on a rented box | Deferred to NEXT | `needs_pc=True` | nothing on the WED path |
+| P3 | Claude approvals, six cases: (a) `defer` from a `ClaudeSDKClient` streaming session: the turn ends `tool_deferred`, process state observed; (b) a live `can_use_tool` held 30 min then answered still runs the call; (c) 20 sample tasks: how many turns emit several `tool_use` blocks; (d) `defer` from inside a sub-agent; (e) resume after a tool-list change expects `tool_deferred_unavailable`; (f) the hook can see sibling calls through `transcript_path` | Each case prints PASS or FAIL with one sentence; (c) prints the ratio | (a) fails: `defer` is never used, live only; (b) fails: `park_release_minutes` set to the measured bound; (d) fails: no defer in sub-agents (already the design); (f) fails: the sibling rule becomes prompt-only and P3c's ratio is reported in §9 | packet 2 |
+| P4 | 40 writers through one `Store` thread plus 2 windows × 8 topic tails plus 40 `/live` readers for 10 min | p95 write < 50 ms; no `database is locked`; `quick_check` ok; event-loop lag p95 < 20 ms | split `usage_ledger` and `events` into a hot file (outbox kept with `approvals`); checkpoints to their own file with the order rule | packet 4a |
+| P5 | Claude SDK on his PC: long prompt via `SystemPromptFile`; 12 in-process MCP tools (#902); CLI killed mid-turn → watchdog marks `interrupted` within 5 min (#1110) and the next turn resumes by id; a resumed session with a dangling `tool_use` continues; `files_persisted` arrives for a `Write`; no console flash blocks the host (#480); the Job Object kills the child when the host dies | PASS per item | #902: tools over a stdio FastMCP server; dangling `tool_use` breaks resume: the truncated-turn check starts a fresh session; `files_persisted` missing: built-in writes stay `verified=false` until a git diff | packet 2 |
 
-P1 and P2 can run while slice 1 is coded. P3 and P5 run on his PC with the pinned SDK before slice 2 starts. P4 runs after slice 1's `Store` exists and before slice 4.
+Assumed and checked inside a packet rather than probed: a parked OpenAI `RunState` surviving a host restart (3a done-when), `OpenAIResponsesCompactionSession` (3a), `SystemPromptFile` (P5).
+
+### 7.2 His homework by Tuesday 18:00 (`scripts/operator_setup.py`, wizard style, each step ends PASS or FAIL)
+
+1. Repo Settings → Actions: enabled? (two minutes; `battery.yml` has never run).
+2. Claude sign-in into QMX's own home: the script sets `CLAUDE_CONFIG_DIR=D:\QMX-data\claude` and launches the bundled binary's sign-in once; QMX never sees the token.
+3. One key (DeepSeek or GLM) into the hidden field; it lands in Credential Manager; the script prints only the `qmx/*` label.
+4. The rented-provider token (Modal or E2B) the same way, and a spend cap in the provider's dashboard.
+5. ChatGPT sign-in (P1), optional.
+6. If Q10 is yes: the script creates the `qmx-agent` local user and moves the Claude home to it.
+7. Seat switch for the demo: `seat.portfolio.engine = openai` (one settings call the script offers).
 
 ---
 
 ## 8. The WED path
 
-Each slice ends in a check that runs without the UI. Docs are updated in the same PR (live documentation rule). Every PR targets `rebuild/base` and links its Actions run.
+### 8.1 Packets, lanes, acceptance commands
 
-| # | Slice | Scope | Files touched | Done when (headless) | Docs | Parallel |
-|---|---|---|---|---|---|---|
-| 0 | Subtract and scaffold | Delete `qmx-agents/plugins/` and the two example apps' agent cores; copy `native_claude.py` to the tracker; create `qma` with `types.py`, `platform.py` and the moved guards; `qmx-apps` and `qmx-remote` import `qma`; pin both SDKs; import-linter contract; GitHub Actions runs `just ci`; `Store` single writer wired under `qmx-control`'s existing tables with the first migration and the SQLite assertions | `qma/*` new; `qmx-apps/supervisor.py`, `road/*`; `qmx-remote/models.py`, `runs.py`; `tools/ci.py`; `.github/workflows/ci.yml` | `qmx-apps` locks without `langchain`; the import contract passes; one GitHub run is green; `control.db` opens through one writer with `user_version=1` | `tracker/qma-v2/ARCHITECTURE.md` §5 ticks; `rebuild/DESIGN.md` storage note | none |
-| 1 | A copilot turn end to end through the API | `Store` tables for sessions (status, target), work, approvals, effects, usage_ledger, accounts, graph_versions; `TurnHost.submit/run_turn/stop`; `Engine` facade over `FakeAdapter`; `BlockProjector`, `EventSink`, `/live`; turn, stop and approvals-list operations; the REST-only answer route; `ToolInvoker` with deny-list, always-ask row and `ApprovalQueue.claim`; `EffectsLedger`; `RunJournal` | `qma/store.py`, `journal.py`, `engine/facade.py`, `engine/fake.py`, `policy/*`, `host/turns.py`, `events/live.py`; `qmx-control/server.py`, `service.py` | `POST /api/sessions/{id}/turn` on the fake adapter: typed blocks arrive over SSE; a 1,000-token reply writes one block row (FR-013, FR-130); a deferred approval survives `kill -9` of the host and is answerable after restart (FR-104 on the fake); an effect is not repeated on resume; money denial test passes on the fake; `openapi.json` shows the answer route and `create_mcp` does not | `qmx-control/README.md` routes table; `docs/` event protocol page | none |
-| 2 | Claude engine live | `ClaudeAdapter` with preflight, `SystemPromptFile`, `setting_sources=[]`, QMX home, plugin folder, in-process SDK MCP server over the invoker, `PreToolUse` deny/defer/allow, `PostToolUse` receipts, `SessionCap`, `Watchdog`; `normalise_claude`; `PromptAssembly` and the general plugin with `qma.toml` | `qma/engine/claude.py`, `cap.py`, `watchdog.py`, `events/normalise_claude.py`, `prompts/*`, `plugins/general/*` | Operator script: a turn with a tool call streams on his plan (SC-1); turn 2 reports cache reads > 0 (FR-097); `~/.claude` byte-identical after the run (FR-032); cap+1 refused (FR-141); a deferred approval answered after a host restart runs the call once (FR-104 live) | `docs/` Claude engine page; probe results P3, P5 | with 3 |
-| 3 | Plugins, OpenAI engine, router | `PluginLoader` with lint and `compile`; Lab and Portfolio plugins with the three skills; `OpenAIAdapter` with `SQLiteSession`, `RunState` park, base kit, summariser; `normalise_openai`; `AccountRow` settings, `Router.pick/status/probe`, `Ledger`; the credential write route; `Credentials.scrub_env/redact` | `qma/plugins/*`, `engine/openai.py`, `events/normalise_openai.py`, `router/*`, `policy/registry.py`; `qmx-control/server.py` | Lab and Portfolio sessions list different tools on either engine (SC-3); a DeepSeek row completes a tool call (FR-024); money denial passes on both engines (SC-6, FR-102); a parked OpenAI approval survives a restart; 40 simulated sessions over 3 accounts stay sticky (FR-039) | `docs/` plugin format page with `qma.toml`; accounts page | with 2 |
-| 4 | Runner, jobs, delegate | `Runner` over `workflow.v1.1` with checkpoints, gates, parallel, join, loop, agent node with checker, `watch`, `command`; `workflows_*` operations; `run_workflow` tool; `Broker` with leases, `delegate` and `job_*` tools; `adopt_orphans`; `RunRecord` four axes | `qma/graph/*`, `comms/*`; `qmx-control/service.py` | P10 test list passes on the new runner; kill mid-run and resume skips finished nodes and does not repeat a keyed effect (FR-059, FR-061); copilot writes, validates, runs, edits and reruns a 3-node workflow headless (FR-056); a DeepSeek helper shows under the Opus parent in the ledger (SC-4) | `docs/` workflow runner page; `workflow.v1.1` schema note | after 2; P4 first |
-| 5 | Apps rewrap and remote | Host-assigned trust and the approval record replacing the T1 refusal; `QmaClient`; Macro daily bias rebuilt through the road; `TurnHost.headless` as the worker; rented default target; `setup_verify`; fetch imports journal and approvals; OpenAI trace processor and the no-exporter assertion | `qmx-apps/supervisor.py`, `manifest.py`; `qma/client.py`, `host/worker.py`, `host/placement.py`; `qmx-remote/worker.py`, `models.py`, `providers.py` | Copilot rebuilds Macro daily bias live and it passes its road tests (FR-079); a workflow runs on a rented provider with the laptop runner stopped and results fetch with verified hashes (SC-5); no trace upload in a network capture (FR-120) | `qmx-apps/README.md` trust section; `qmx-remote/README.md` rented default | after 3 and 4 |
-| 6 | Demo rehearsal | USER-JOURNEYS §5 script end to end; fix-its only; the `qmx-agents` deletion wave with `test_all.py` edited | fix-its; `qmx-agents/` removed; `tools/test_all.py` | The 10-minute script runs with honest cards where it fails; `grep langchain` across the workspace is empty | `tracker/qma-v2/README.md` pass log | none |
+Every packet is one PR to `rebuild/base` with its Actions link, docs in the same PR, and one acceptance file `qma2/tests/acceptance/test_packet_<n>.py`. "Run by": CI (fakes, no network), Agent-live (the builder runs it on his PC with Claude signed in), Operator-live (he runs it). Windows commands only ("terminate the host process without cleanup" means `taskkill /F`).
 
-Slice 1 is the scaffold every later slice checks against. Slices 2 and 3 run in parallel after slice 1. Slice 4 needs slice 2 (the invoker is exercised live) and P4. Slice 5 needs slices 3 and 4. Everything NEXT waits: scheduler and triggers, mailbox and board, variants, self-improvement, tool search, phone relay, browser and computer use, model switching, the orchestrator roll.
+| # | Packet | Scope | Files | Done when (command) | Run by | Needs | FRs |
+|---|---|---|---|---|---|---|---|
+| 0 | Subtract and scaffold | probe scripts; delete `qmx-agents/plugins/` and the two example apps' agent cores; copy `native_claude.py` to the tracker; create `qma-v2`/`qma2` with the moved guards, `platform.py`, the import-linter contract, SDK pins; `qmx-apps`/`qmx-remote` imports; `tools/ci.py` workspace list; `works_today` smoke rows; audit `qmx-tools` for `control.db` access; record P16c state | `qmx-agents/pyproject.toml`, `uv.lock`, `tools/ci.py`, `tools/test_all.py`, `qmx-apps/pyproject.toml`, `apps/supervisor.py`, `apps/road/*`, `remote/models.py`, `remote/runs.py`, `scripts/probe/*`, `scripts/operator_setup.py` | `uv run python tools/ci.py --workspace qma-v2 && uv run lint-imports && uv run pytest qma2/tests/acceptance/test_packet_0.py` (asserts `qmx-apps` locks without `langchain`, `import qma.daemon` state recorded, probes print PASS/FAIL) | CI | homework 1 | 006, 073, 074, 076, 078, 129, 144 |
+| 1a | Store, types, journal | `Store` thread, lock, assertions, migration 001 (every table incl. `checkpoints`, `accounts`, `approvals`, `effects`, `usage_ledger`, `settings` from §3.2); frozen shared types; `RunJournal`; `_connect`/`RunIndex` through `Store` | `qma2/types.py`, `store.py`, `store/migrations/001.sql`, `journal.py`; `ctl/service.py` | `uv run pytest qma2/tests/acceptance/test_packet_1a.py` (user_version=1; a second launcher refused by the lock; a failed `Write` in a batch fails only itself; backup via host request) | CI | 0 | 106, 127 |
+| 1b | A copilot turn through the API, recover, console | `Engine` facade over `FakeAdapter`, `TurnHost`, `recover()`, `BlockProjector`, `EventSink`, `/live`, `PrincipalGate` with three tokens, `agent_ops.py` rows (turn, stop, approvals_list, restart_report, run_receipt, works_today), the operator doors, the console page, the UI handoff packet, the errand and state-file primitive | `qma2/engine/facade.py`, `fake.py`, `host/turns.py`, `recover.py`, `console.py`, `events/live.py`, `policy/principals.py`; `ctl/server.py`, `ctl/agent_ops.py`, `ctl/static/console.html` | `uv run pytest qma2/tests/acceptance/test_packet_1b.py` (POST turn → typed blocks over SSE; a 1,000-token reply is one block row; three errands, host terminated, restart: all three resume and the banner lists them; agent token 403 on every door; forged `permission` block refused; `openapi.json` lacks the doors) | CI | 1a | 003, 004, 013, 014, 126, 128, 130 |
+| 1c | Policy core | `ToolInvoker`, `StaticRegistry`, `DenyList`, `normalise_tool_name`, `ApprovalQueue` with one claim, `EffectsLedger` with native keys and the args-hash guard, `BudgetMeter`, settings validation, truncated-turn check | `qma2/policy/*`, `events/tool_names.py` | `uv run pytest qma2/tests/acceptance/test_packet_1c.py` (money denial on the fake; `mcp__qmx__x` matches deny entry `x`; an approval survives host termination; an effect is not repeated on resume; a repeated unkeyed call → `outcome_unknown`; a USD cap → `spend` approval) | CI | 1a | 051, 102, 104, 105, 108 |
+| 2 | Claude engine live | `ClaudeAdapter`, `ClaudeReplayAdapter`, `normalise_claude`, `SessionCap`, `Watchdog`, Job Object spawn, OTLP receiver, prompts, the general plugin with `qma.toml`, `SdkDefaultMemory` and the memory test | `qma2/engine/claude*.py`, `cap.py`, `watchdog.py`, `events/normalise_claude.py`, `prompts/*`, `memory.py`, `plugins/general/*`, `host/platform.py` | CI: `uv run pytest qma2/tests/acceptance/test_packet_2.py` (replay fixtures through the normaliser; the FR-020 suite on the replay adapter). Agent-live: `uv run python scripts/live/packet_2.py` (a turn with a tool call streams; turn 2 cache reads > 0; `~/.claude` byte-identical; cap+1 refused; a deferred approval answered after host termination runs the call once; a live approval answered after 10 min runs; a shell keyring read refused with a journal row; the traces file written) | CI + Agent-live | 1b, 1c, P3, P5 | 001, 020, 021, 022, 032, 091, 093, 096, 097, 120, 126, 133, 141 |
+| 3a | Plugins and the OpenAI engine | `PluginLoader` with lint, the parity table, `load_skill`, `{{tool}}` rendering, seat settings; Lab and Portfolio plugins (skeleton skills); `OpenAIAdapter` with `SQLiteSession`, latest-`RunState` park, base kit, summariser, `parallel_tool_calls=False`; `normalise_openai`; `ToolRegistry` with the domain proxy and seam modules; `capabilities_list`; `seats_list` | `qma2/plugins/*`, `engine/openai.py`, `events/normalise_openai.py`, `policy/registry.py` | `uv run pytest qma2/tests/acceptance/test_packet_3a.py` (Lab and Portfolio load with different tool lists on `FakeAdapter`; the parity report lists dropped keys; a parked OpenAI approval survives host termination and two answers resume once; the FR-020 suite on OpenAI with `ScriptedModel`; money denial on OpenAI; the registry names the Library, QMB and QMF seams) | CI | 1c | 002, 005, 024, 025, 028, 030, 031, 035, 098, 132, 134, 138 |
+| 3b | Router, ledger, usage, credentials, wizard | `accounts` table ops, the `families` guard, `Router.pick/status/probe`, `Ledger` with the per-turn rules, `usage_summary`, `pick_reason` on runs, `switch_model(dry_run=True)`, the credential door, `scrub_env/redact`, `operator_setup.py` finished | `qma2/router/*`; `ctl/agent_ops.py`, `ctl/server.py`, `scripts/operator_setup.py` | `uv run pytest qma2/tests/acceptance/test_packet_3b.py` (Anthropic-key, OpenAI-key and OpenRouter-claude rows all refused; 40 simulated sessions over 3 rows stay sticky; a Claude-only day returns `billed_usd = 0.00`; an estimate is returned without switching; secret scan clean). Operator-live: `uv run python scripts/operator_setup.py` prints PASS per step | CI + Operator-live | 1c | 023, 026, 038, 039, 040, 041, 042, 046, 048, 049 |
+| J23 | Join check 2+3 | nothing new | | Agent-live: `uv run python scripts/live/join_2_3.py` (Lab on Claude and Portfolio on OpenAI list their own tools, SC-3; a DeepSeek row completes a tool call, FR-024; money denial live on both, SC-6; a shell call to the approval door with the agent token gets 403) | Agent-live | 2, 3a, 3b | 024, 085, 086, 102 |
+| 4a | Runner | `Runner` over `workflow.v1.1` with the eight WED kinds, checkpoints in `control.db`, gates with the revision rule, `validate` with the three new rules, `workflows_*` ops, `run_workflow`, `run_explain`, `RunRecord` fields; `examples/workflows/gold-morning-check.json` | `qma2/graph/*`; `ctl/agent_ops.py`; `examples/workflows/*` | `uv run pytest qma2/tests/acceptance/test_packet_4a.py` (the P10 list on the new runner; host terminated mid-run, restart: finished nodes skipped, a keyed effect not repeated, two crash-resumes → `interrupted`; an `app_call` type mismatch rejected; `gold-morning-check` validates and runs on fakes with 0 model calls on the false branch) | CI | 1c, P4 | 052, 053, 054, 055, 056, 057, 058, 059, 060, 061, 062, 121 |
+| 4b | Broker and delegate | `Broker` with leases, `delegate`, `job_*`, `models_status`, the reader role with taint | `qma2/comms/*` | CI: `uv run pytest qma2/tests/acceptance/test_packet_4b.py`. Agent-live: `scripts/live/packet_4b.py` (the copilot writes, validates, runs, edits and reruns a 3-node workflow; a DeepSeek helper shows under the Opus parent, SC-4; a worker's spawn refused at depth 1) | CI + Agent-live | J23, 4a | 015, 084, 085, 088, 089 |
+| 5a | Apps rewrap | host-assigned trust, "disabled until approved", the per-app token, `apps_call` 20 s, `built_by`/`watched_by`, `QmaClient`, the maintain-app path; `examples/apps/macro-daily-bias/PARAGRAPH.md` and fixture data | `apps/supervisor.py`, `apps/manifest.py`, `qma2/client.py`, `examples/apps/*` | CI: `uv run pytest qma2/tests/acceptance/test_packet_5a.py` (an agent app installs disabled and an approval enables it; the app token gets 403 on the doors; `apps_call` times out at 20 s). Agent-live (stretch): the copilot rebuilds Macro daily bias and it passes its road tests | CI + Agent-live | 2, 4a | 072, 075, 077, 079 |
+| 5b | Remote | `TurnHost.headless` with `RemoteLimits`, self-terminate, exit-on-approval, `answer_remote`, provider secrets via `setup_verify`, the rented default, fetch then teardown, `cost_so_far`, machines alive in `usage_summary`, the OpenAI trace assertion, the remote image | `remote/worker.py`, `remote/models.py`, `remote/providers.py`, `remote/Dockerfile`, `qma2/host/worker.py`, `host/placement.py` | CI: `uv run pytest qma2/tests/acceptance/test_packet_5b.py` (on `FakeComputeProvider`: run, lid closed, fetch verifies hashes, machines return to 0, cost_so_far = price × minutes, a parked remote approval relaunches with the decision, no key in the bundle). Operator-live: the same on the real provider | CI + Operator-live | 3b, 4a | 110, 111, 112, 113, 119 |
+| S | Skills and role prompts | `build-workflow`, `build-mini-app`, `maintain-app` written against real tools; three golden scenarios in `docs/scenarios/` (a 3-node workflow; an app from a paragraph; fix a broken app) | `qma2/plugins/*/skills/*`, `prompts/templates/*`, `docs/scenarios/*` | Agent-live: `scripts/live/scenarios.py` passes all three on the live engine; two live rounds budgeted | Agent-live | 2, 3a, 4a | 035, 056, 072 |
+| 6 | Rehearsal | the USER-JOURNEYS §5 script with §8.5's changes; fix-its only; feature freeze three hours before | | the 10-minute script runs with honest cards where it fails | Operator-live | all | SC-1..6 |
+| 7 | Thursday | the LangChain deletion wave; the Windows SQLite DLL; P2; NEXT backlog | | `grep -ri langchain` empty; the suite count edited | CI | 6 | |
+
+Lanes after packet 1 (0 → 1a → 1b, 1c): lane A = 2 → J23 → 4b → S; lane B = 3a, 3b → J23; lane C = 4a → 5a, 5b. Critical path: 0 → 1a → 1c → 2 (needs P3, P5) → J23 → 4b → S → 6. A probe failure moves only the packet it blocks; the fallbacks in §7 are the alternatives, not a delay.
+
+### 8.2 Clock, cut line, drop order
+
+| When | Gate |
+|---|---|
+| Mon night | packet 0 merged; probes written; `qma2/types.py` frozen |
+| Tue 08:00 | homework 1 (Actions); P3, P5 running on his PC; P1 by him |
+| Tue 12:00 | 1a, 1b, 1c green in CI; the UI handoff packet published; fallback if late: 2 starts on an in-memory `Store` with the same interface and 1a lands by Tue 18:00 (FR-104 and FR-059 are then proven Wednesday morning, not Tuesday) |
+| Tue 14:00 | P4 result; 4a starts |
+| Tue 18:00 | his homework done; `seat.portfolio.engine` set |
+| Tue 22:00 | 2, 3a, 3b green; J23 run |
+| Wed 02:00 | 4a, 4b, 5a (CI half) green; 5b on the fake provider |
+| Wed 06:00 | S scenarios pass; 5b on the real provider attempted once |
+| Wed 09:00 | feature freeze (demo minus three hours); rehearsal |
+| Wed 12:00 | demo |
+
+Drop in this order if a gate slips (Q14): the Macro rebuild live (show the review-repair counter and the unverified label); SC-5 live (show the fake-provider run and an honest card); helper breadth (one helper, not a team). Never SC-1, SC-3, SC-6. CI runs on `battery.yml` take up to an hour per PR on two OSes; packets merge in lane order and builders do not wait on each other's runs.
+
+### 8.3 Max 5x budget
+
+Live Claude checks are batched into three windows: the packet 2 gate (Tue evening), the J23 plus 4b plus S gate (Wed early morning), the rehearsal (Wed 09:00). Builders run on fakes and the replay adapter; the cheapest tier that passes for any live round; no live Claude check in the five hours before the demo except the rehearsal itself; `usage_summary` is read before each window and the window is skipped if the plan shows under 30 percent left.
+
+### 8.4 Lane and docs
+
+The README's step 6 lane: one orchestrator session dispatches one builder agent per packet into `rebuild/base` worktrees; the project `CLAUDE.md` factory rule applies to implementation. Docs per packet: `docs/components/qma-store.md` (1a), `docs/contracts/qma-event-protocol.md` and `docs/contracts/principals.md` (1b), `docs/components/qma-approvals.md` (1c), `docs/components/qma-claude-engine.md` (2), `docs/components/qma-plugins.md` (3a), `docs/components/qma-router.md` (3b), `docs/components/qma-runner.md` (4a), `docs/components/qma-remote.md` (5b), `docs/scenarios/wednesday-demo.md` (6), plus DEC entries for no-journal-table, single-writer, live-primary approvals, principals. The PR checklist enforces the component page; the documentation-factory pass after release does the rest.
+
+### 8.5 Demo script changes (USER-JOURNEYS §5)
+
+- Pre: homework §7.2; `gold-morning-check.json` from 4a; the Macro paragraph and fixtures from 5a; the console open.
+- 0:00: `run_workflow("gold-morning-check", placement="remote")`; the job card shows `cost_so_far` and the log tail; the workflow is code-only with the agent step on DeepSeek (Q13).
+- 1:15: the reply quotes `usage_summary` and the runs list; first-event latency printed by the console (NFR-032).
+- 2:15: Portfolio on the OpenAI engine through `seat.portfolio.engine`, set by the wizard.
+- 9:00: show both seats' tool lists (no order tool), then the FR-102 test output, then "read my `qmx/*` secret through the shell" refused with a journal row. "Allow all" is dropped from the script.
+- 9:45: `usage_summary` in the console: Claude as percent of window, DeepSeek USD, rented minutes and USD, cache reads, `billed_usd = 0.00`.
+
+### 8.6 WED FR coverage
+
+Packet 0: 006, 073, 074, 076, 078, 129, 144. 1a: 106, 127. 1b: 003, 004, 013, 014, 126, 128, 130. 1c: 051, 102, 104, 105, 108. 2: 001, 020, 021, 022, 032, 091, 093, 096, 097, 120, 133, 141. 3a: 002, 005, 025, 028, 030, 031, 035, 098, 132, 134, 138. 3b: 023, 026, 038, 039, 040, 041, 042, 046, 048, 049. J23: 024, 085, 086. 4a: 052 to 062, 121. 4b: 015, 084, 088, 089. 5a: 072, 075, 077, 079. 5b: 110, 111, 112, 113, 119. S: 035, 056, 072. Journeys: J01 (the sign-in wizard, `works_today`, `capabilities_list`), J02 (fetch inside `recover()`; Portfolio reads in the general plugin's expose list), J04 (`built_by`), J05 (the FR-055 check), J06 (Lab exposes `workflows_*`; `defaults.model`), J07 runs locally on WED with the honest "remote watch is NEXT" card, J09 (`needs_pc`, exit-on-approval), J11 (the watchdog restarts a hung native sub-agent only by restarting the session: NEXT, honest card), J19 fixed, J20 clean.
 
 ---
 
 ## 9. Risks and the "not owned on purpose" list
 
-**Risks.**
-1. `defer` is documented but untested here. P3 decides. If it fails, approvals on Claude fall back to a bounded live wait plus resume-by-id, and FR-104 on Claude degrades to "the turn restarts from its last saved point".
-2. Claude SDK hangs (#926, #1110, #576, #1162). The watchdog lands in slice 2, not NEXT. `ClaudeSDKClient` objects never cross FastAPI request tasks (#576); the turn job owns the client.
-3. SIWC inside the OpenAI SDK is unverified (P1). Failure costs nothing on the WED path.
-4. The 40-agent SQLite load is unmeasured (P4). The single-writer design is in; the number is not.
-5. The parity badge depends on the lint catching every Claude-only feature. A plugin that silently degrades on the OpenAI engine is the failure mode. The lint reads one declared baseline list.
-6. `workflow.v1.1` touches the schema file; every P10 test must still pass. Deleting `qmx-agents` changes the CI suite count (F19). Each lands as one PR with the tests edited in the same diff.
-7. Reconciling Claude built-in writes from `files_persisted` can miss edits. Receipts stay `verified=false` until a read-back or git diff confirms.
-8. Checkpoints grow on day-long loops. Prune to `keep_last` and segment runs every 24 h.
-9. Windows traps on the Claude adapter (#480, #883, #902) are probed on his PC (P5), not in CI.
-10. Monday night to Wednesday is two working days. Slice 1 must be green by Tuesday noon. If it is not, slice 2 starts on an in-memory `Store` with the same interface and durability lands Thursday. That is a decision written here, not a drift.
+1. The money barrier against arbitrary code depends on Q10. Until then an agent that writes its own broker client with credentials read from the operator's store is possible in principle; the deny patterns and the journal row are defence in depth. Keep live broker keys off this PC until the trading node ships.
+2. P3 decides the Claude approval shape. If `defer` fails in streaming mode, every Claude approval is live and a host restart orphans the pending ones ("the agent will ask again"); FR-104 then holds durably on OpenAI and on Claude only through re-ask.
+3. Multi-call turns (P3c) make live parks common; each holds about 1 GB until answered or released.
+4. Claude SDK hangs (#926, #1110, #576, #1162): the watchdog lands in packet 2 and the client never crosses request tasks.
+5. SIWC unverified (P1): costs nothing on the WED path.
+6. The 40-agent load (P4) decides the file split.
+7. The parity table catches only keys it lists; an unknown key fails lint rather than passing silently.
+8. Claude built-in writes stay `verified=false` until read-back or a git diff.
+9. Rented machines: self-terminate is enforced by the worker and by a provider TTL where one exists; the laptop sweep is a backstop; his dashboard cap is the last line.
+10. Windows traps (#480, #883, #902) are probed on his PC (P5), not in CI.
+11. Ten packets in two days. The clock has one fallback (1a late) and one drop order (Q14). A green suite with nothing to click is the failure mode Q9 and the console exist to prevent.
+12. Subscription "usage left" is an estimate from rolling consumption and `RateLimitEvent`; `max_concurrent` stops the herd.
 
-**Not owned on purpose.**
-- The model loop. Both SDKs run it.
-- Claude's built-in tools, auto compaction, skills loading, in-session sub-agents, tool search. They run in the CLI child; QMA answers hooks and projects events.
-- SDK transcripts. Claude JSONL under the QMX home; OpenAI session rows. No `SessionStore` mirror in release 1.
-- Compute provisioning and bucket transfer. `qmx-remote` providers, store and code modules stay.
-- The mini-app runtime, the Library, QMB, QML, QMF, QMN. Named seams only.
-- A journal table. The JSONL journal is the evidence writer.
-- A traces viewer. JSONL plus DuckDB; Phoenix is the operator's call.
-- Any server. Cross-host traffic is the bucket plus verified fetch, and later a bucket mailbox for the phone.
-- Per-request routing, token pooling, account rotation, proxying of subscription tokens.
-- Sandboxes by default. Process separation (venv, Job Object, scrubbed env) is the default tier.
+**Not owned on purpose.** The model loop. Claude's built-in tools, auto compaction, skills loading, in-session sub-agents, tool search. SDK transcripts. Compute provisioning and bucket transfer. The mini-app runtime, the Library, QMB, QML, QMF, QMN. A journal table. A traces viewer. Any server. Per-request routing, token pooling, account rotation, proxying. Sandboxes by default.
 
 ---
 
-Principles that shaped this document, each with the choice it changed: laziness protocol (no journal table; `qma.toml` is the whole plugin IR; 3,600 lines, not 5,000), foundational thinking (types and `Store` in slice 1 before any engine; CI and the import contract in slice 0), model the domain (one status enum, one approval row with a status machine, one effect row with a recovery class), separate before serializing shared state (one writer task for `control.db`; per-run journal files; per-session SDK files), make operations idempotent (effect keys minted by the host, CAS-consumed approvals, `adopt_orphans` on start, convergent migrations), boundary discipline (SDK types stop at the two normalisers; policy is pure `decide` functions the adapters call), subtract before you add (slice 0 deletes the desk packs and the embedded app agents before `qma` grows), sequence work into verifiable units (seven slices, each ending in a headless check, slice 1 proving the stream every later slice writes into).
+## 10. Revision log
+
+Status: fixed, partly (why), rejected (why).
+
+**ARCHITECTURE-CHECK fixes.** 1 fixed (§2.12, Q10, FR-102 tests). 2 fixed (one claim in `invoke`). 3 fixed (engine-native keys). 4 fixed (live primary, P3c). 5 fixed (checkpoints in `control.db`). 6 fixed (`recover()` in 1b). 7 fixed (§2.6 wire rule). 8 fixed (`validate` against manifests). 9 fixed (provider secret store; manifest whitelist). 10 fixed (OTLP receiver). 11 fixed (`usage_summary`, `price_per_minute`). 12 fixed (`ClaudeReplayAdapter`). 13 fixed (`accounts` table; `context_tokens_window`). 14 fixed (`apps_call` 20 s). 15 fixed (`SessionTarget`). 16 fixed (§3.2 budgets; the ledger path; `spend` pause). 17 fixed (`works_today`, packet 0 and the console). 18 fixed (the wizard). 19 fixed (`seat.<plugin>.engine`). 20 fixed (expose lists; `job_list`). 21 fixed (§8.5). 22 fixed (validator rules). 23 fixed (`SessionRow.artifacts`, `built_by/watched_by`). 24 fixed (memory in 2; seams and `capabilities_list` in 3a). 25 fixed (ten verbs, `send`+`stream`). 26 fixed (cap released on defer park). 27 fixed (R1, R2, A-10 withdrawn). 28 partly: the 30-item complexity walk is deferred to the next ARCHITECTURE-CHECK pass for length; §8.6 and §3.2 cover the items that touch WED. 29 partly: `needs_human` added; watchdog restart, X8, mailbox binding, templates and per-workflow settings stay NEXT and are listed. 30 fixed (5a and 5b lanes).
+
+**review-opus.** 1 fixed (§2.12 principals; protected settings; `sessions_append` kinds; negative test). 2 fixed at the design level, partly in practice: Q10 is the operator's; until then deny patterns, FR-102 tests and §9 item 1. 3 fixed (live primary; `orphaned`; the sibling rule; the FR-109 citation removed). 4 fixed (P3 a, d, e; `orphaned`; no defer in sub-agents; identical options on resume). 5 fixed (hooks stripped unless first-party; lint; test in 3a). 6 fixed (native call ids; node attempt keys; the args-hash guard; the truncated-turn check in 1c; `_meta`). 7 fixed (one `latest_state_ref`, `resume_epoch`, single resumer). 8 fixed (one file; the order rule as the P4 fallback). 9 fixed (coverage stated; non-first-party MCP through the proxy; `normalise_tool_name`). 10 fixed (writer thread, SAVEPOINT, OS lock, backup via host, `quick_check`, audit). 11 fixed (topic condition; P4 readers). 12 fixed (per-turn ledger rule; estimated; rolling window; `max_concurrent`). 13 fixed (resolved model persisted on node rows). 14 fixed (parity table, lint on unknown keys, `{{tool}}`, `load_skill`). 15 fixed (clock pause; per-class unattended policy; session resume first; `resume_attempts`). 16 fixed (gate hash rule). 17 fixed (worker-enforced limits; exit on approval; backstop). 18 fixed (provider secrets; `answer_remote`; remote watch refused). 19 fixed (`cwd`; `cleanupPeriodDays`; Job Object; orphan kill). 20 fixed (reader role, taint, egress allowlist, built-in fetch disallowed on copilots). 21 fixed (app token, unattended policy, capability diff card). 22 fixed (`RouterPick` rule and test; bucket exclusions; `OTEL_LOG_TOOL_DETAILS`). 23 fixed (`qma2`). 24 fixed (eight WED kinds; 5b code-only; Macro as stretch; critical path; probes print PASS/FAIL). 25 fixed (available memory, floor, ceiling, hysteresis; `taskkill`). J1 to J13: answered in §2.1 and §2.5 (keys), §2.9 (`recover`, attempts), §2.10 (a resumed approval continues the same session; each turn is its own `work` row), §2.5 (sticky scope and storage; `expires_at`), §2.2 (the writer), §2.12 (`QmaClient` token), §2.1 (`cwd`), §2.6 (usage units), §2.4 (parity), §2.9 (remote keys), §2.5 (handler timeouts), §4 (the block update event).
+
+**review-sonnet.** 1 fixed (console, handoff packet, Q9). 2 fixed (types frozen in 1a; `StaticRegistry`; J23). 3 fixed (lanes, clock, cut line, the 4a/4b and 5a/5b split; CI time noted). 4 fixed (wizard, seat setting, homework). 5 fixed (probes in packet 0; who runs what; P2 deferred; results file). 6 fixed (demo ingredients in 4a and 5a; the image in 5b). 7 fixed (`usage_summary`; percent not USD; `billed_usd`). 8 fixed (`restart_report`, `seats_list`, `run_receipt`, `works_today`, goal sentence, machines alive). 9 fixed (teardown after fetch, idle, price, dashboard cap). 10 fixed (`run_explain`, `pick_reason`). 11 fixed (family guard, test). 12 fixed (reworded; patterns; the Wednesday check; residual in §9). 13 fixed (packets, commands, run-by). 14 fixed (§8.6 cites every WED FR; the CHECK's WED half is the next pass). 15 fixed (packet S). 16 fixed (`qma2`; packet 0 records P16c). 17 fixed (no new workflow; files added; path legend). 18 fixed (Library untouched; Q12). 19 fixed (packet 7 Thursday). 20 fixed (§8.3). 21 fixed (§0 card; two databases and one evidence file). 22 fixed (Q9 to Q15, R1, R2 in his words). 23 fixed (§3.2). 24 fixed (§0 "not yet"; `switch_model(dry_run=True)` in 3b). 25 fixed (§7.1 assumed list). 26 fixed (signatures reconciled). 27 fixed (§8.4 one file per packet; DEC entries). 28 partly: out of this file's scope (README, PRD); §8.4 names the lane; the coordinator should update the README table and FR-144's branch note. 29 fixed (Q15). 30 fixed (`agent_ops.py`).
+
+Principles that shaped this revision: boundary discipline (principals and scopes at the gate, policy pure inside), model the domain (`ApprovalStatus` with `orphaned`, one claim point, one parity table), make operations idempotent (`recover()` convergent, native effect keys, a single resumer), separate before serializing shared state (one writer thread, one file for node row and checkpoint, an OS lock), sequence work into verifiable units (ten packets with acceptance commands, lanes, a clock), subtract before you add (the deletion wave moved off demo eve, node kinds cut), laziness protocol (no journal table, `qma.toml` unchanged, a console in 400 lines).
