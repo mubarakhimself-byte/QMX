@@ -14,7 +14,7 @@ from __future__ import annotations
 
 # The old modules import each other in cycles that resolve only when the hook
 # registry loads first. The retired permission enforcer used to do that.
-import qma.daemon.hooks.registry  # noqa: F401
+import qma.daemon.hooks.registry  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 # isort: split
 
