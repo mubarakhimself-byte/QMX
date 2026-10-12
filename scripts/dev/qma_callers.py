@@ -365,7 +365,9 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 pending.append(target)
     candidates = set(modules) - reasons.keys()
     neighbors = defaultdict(set)
-    for edge in edges:
+    # A planned facade trim between two deletable modules still ties them: an
+    # initializer is not deleted apart from the module it re-exports.
+    for edge in [*edges, *planned_trims]:
         source = by_path.get(edge["path"])
         target = edge["target"]
         if source in candidates and target in candidates:
