@@ -12,6 +12,12 @@ SemVer is display-only provenance in lockstep with the QMF workspace (AR-Q11).
 
 from __future__ import annotations
 
+# The old modules import each other in cycles that resolve only when the hook
+# registry loads first. The retired permission enforcer used to do that.
+import qma.daemon.hooks.registry  # noqa: F401
+
+# isort: split
+
 from qma.daemon.capabilities import (
     AGENT_PATH_ENFORCEMENT_EVENTS,
     AgentCapabilityStore,
