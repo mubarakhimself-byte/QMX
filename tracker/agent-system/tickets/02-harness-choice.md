@@ -57,3 +57,22 @@ The decision fixes:
 - **Hermes on mid-session switches** (`user-guide/configuring-models`, "Mid-session switches and context warnings"): allowed; caches are per model, so the next message re-reads the whole conversation at full price; asks for confirmation above 100,000 context tokens (`switch_context_confirm_tokens`); if the new model's window is smaller, compresses before the first message. Replaces the earlier "never switch mid-thread" rule with "switch allowed, with a cost confirmation". In the Claude Code engine a provider change means a new process (one base URL per process), continued from the QMX transcript.
 - **Live accounts:** he may use live accounts to test (cTrader/MT5 scenario). Goes to ticket 07 (money-path rule).
 - **Keys:** never in `settings.json` as Kimi's guide shows; QMX keeps them in Windows Credential Manager and injects them per session.
+
+## Operator decisions, 2026-10-12 evening (via the question tool)
+
+- **Two lanes: RATIFIED.**
+  - Subscription lane: Claude Code driven through the Agent SDK, for his Claude plans (several accounts), with a capped number of sessions.
+  - API lane: QMX's own engine.
+- **The API lane is designed for two formats only: Anthropic Messages and OpenAI.** Every provider plugs in by **API compatibility** (base URL + key), the way Kimi's Claude Code guide works. Don't limit the provider list.
+  - Single providers: GLM, MiniMax, Kimi, DeepSeek (confirm its endpoints), GPT, Claude.
+  - Pools are a different shape: OpenRouter, Ollama Cloud, OpenCode.
+  - Gemini possibly for a Library agent.
+  - Later: "System 1" models (e.g. Jev) and voice/conversational mode.
+  - Not wanted: Grok.
+- **Coding plans:** API keys only; "just design based off the SDK".
+- **Server lane:** design now, ship after local works.
+  - The design must cover the DevOps lens: logs in both formats/SDKs.
+  - It must cover buckets (DESIGN.md storage table and the remote-run section).
+  - It must cover agents editing the same files. Git branches keep variants; both versions are often needed for comparison.
+  - It must cover how all of this renders in the UI.
+- **He asked for the architecture to be thought through in a fresh session** (a background architect pass).
