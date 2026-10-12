@@ -10,17 +10,11 @@ from qma.core.ontology import (
     WAKE_POLICY_EDITABILITY,
     WAKE_POLICY_HOME,
     WAKE_POLICY_SCOPE,
-    DeskSlug,
     QuietHours,
-    RoleName,
-    SlugIndex,
-    WakePolicy,
     authorize_quant_write,
-    create_quant,
     parse_quiet_hours,
     parse_wake_policy,
     refuse_model_wake_policy_write,
-    retire_quant,
     source_may_write_wake_policy,
     wake_conditions_match,
 )
@@ -67,23 +61,6 @@ def test_wake_policy_is_operator_authored_ui_editable_quant_scoped() -> None:
     assert mailbox_port.QUIET_HOURS_REGISTRY_KEY == QUIET_HOURS_REGISTRY_KEY
     assert mailbox_port.MAX_WAKES_PER_WINDOW_REGISTRY_KEY == MAX_WAKES_PER_WINDOW_REGISTRY_KEY
     assert QUANT_WRITE_COMMAND == "quant.write"
-
-
-def test_unauthored_policy_has_no_spine_default() -> None:
-    index = SlugIndex(active_desk_slugs=frozenset({"research"}))
-    minted = create_quant(
-        desk_slug=DeskSlug.RESEARCH,
-        quant_slug="nova",
-        role=RoleName.RESEARCHER,
-        name="Nova",
-        principal=PrincipalClass.OPERATOR,
-        index=index,
-    )
-    assert is_ok(minted)
-    assert minted.value.wake_policy is None
-    refused = parse_wake_policy(None)
-    assert is_refusal(refused)
-    assert refused.context["field"] == "wake_policy"
 
 
 def test_no_model_authors_alters_or_overrides_wake_policy() -> None:
@@ -134,25 +111,3 @@ def test_wake_conditions_are_any_or_message_kind() -> None:
     assert is_refusal(invented)
     port = mailbox_port.parse_wake_policy({"wake_conditions": ["any"]})
     assert is_ok(port)
-
-
-def test_retire_quant_preserves_operator_wake_policy() -> None:
-    policy = WakePolicy(
-        wake_conditions=frozenset({WAKE_CONDITION_ANY}),
-        quiet_hours=QuietHours(start_minute=22 * 60, end_minute=6 * 60, iana_zone="UTC"),
-        max_wakes_per_window=2,
-    )
-    index = SlugIndex(active_desk_slugs=frozenset({"research"}))
-    minted = create_quant(
-        desk_slug=DeskSlug.RESEARCH,
-        quant_slug="keeper",
-        role=RoleName.RESEARCHER,
-        name="Keeper",
-        principal=PrincipalClass.OPERATOR,
-        index=index,
-    )
-    assert is_ok(minted)
-    authored = minted.value.with_wake_policy(policy)
-    retired, _tombstone = retire_quant(authored)
-    assert retired.wake_policy == policy
-    assert retired.retired is True

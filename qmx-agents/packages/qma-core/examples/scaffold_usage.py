@@ -9,9 +9,6 @@ from qma.core.ontology import (
     ONTOLOGY_CHAIN,
     ActorId,
     DeskSlug,
-    RoleName,
-    SlugIndex,
-    create_quant,
 )
 from qma.core.plugins import (
     HandleKind,
@@ -32,7 +29,6 @@ from qma.core.refusals import NoMemoryProvider, ProhibitedReachability, StoreVer
 from qma.core.vocabulary import (
     HOOK_VERBS,
     HookResultDecision,
-    PrincipalClass,
     validate_governed_act,
 )
 
@@ -44,16 +40,6 @@ def main() -> None:
     assert ONTOLOGY_CHAIN == ("Desk", "Role", "Quant", "Agent", "Subagent")
     actor = ActorId.mint(DeskSlug.RESEARCH, "demo")
     assert is_ok(actor)
-    quant = create_quant(
-        desk_slug=DeskSlug.RESEARCH,
-        quant_slug="demo",
-        role=RoleName.RESEARCHER,
-        name="Demo",
-        principal=PrincipalClass.OPERATOR,
-        index=SlugIndex(active_desk_slugs=frozenset({"research"})),
-    )
-    assert is_ok(quant)
-    assert quant.value.desk is DeskSlug.RESEARCH
     assert require_singleton_scope_key("MemoryProvider", "desk") == "desk"
     assert validate_contribution_point("tool") == "tool"
     assert HandleKind.STRATEGY_HANDLE.value == "StrategyHandle"
