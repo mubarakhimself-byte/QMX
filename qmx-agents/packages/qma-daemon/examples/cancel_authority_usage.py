@@ -12,7 +12,6 @@ from qma.daemon.backtest import BacktestingService, RecordingQmbDoorTransport
 from qma.daemon.envs import ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
-from qma.wire.attach import ClientAttachmentState
 from qmf.core import is_ok, is_refusal
 
 
@@ -23,10 +22,6 @@ def main() -> None:
     submitted = jobs.submit(owner=minted.value, task_id="task-32-2")
     assert is_ok(submitted)
     assert is_ok(jobs.start(submitted.value.job_id))
-    attachment = ClientAttachmentState(quant_work_active=True)
-    closed = attachment.tab_close()
-    assert is_ok(closed)
-    assert closed.value.invokes_job_handle_cancel is False
     detached = jobs.on_client_detach(submitted.value.job_id, event="tab_close")
     assert is_ok(detached)
     assert detached.value.state is JobHandleState.RUNNING

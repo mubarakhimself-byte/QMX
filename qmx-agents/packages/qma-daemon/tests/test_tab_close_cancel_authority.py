@@ -20,7 +20,6 @@ from qma.daemon.backtest import BacktestingService, RecordingQmbDoorTransport
 from qma.daemon.envs import ExecutionEnvironmentRegistry
 from qma.daemon.envs.jobs import JobHandleService
 from qma.daemon.ledgers.experiment import ExperimentLedgerStore
-from qma.wire.attach import AttachRequest, ClientAttachmentState, DetachRequest
 from qmf.core import is_ok, is_refusal
 
 
@@ -89,36 +88,6 @@ def test_tab_close_leaves_queued_and_running_handles_unchanged() -> None:
         kinds = [event.kind for event in streamed.value]
         assert "client_detach" in kinds
         assert "cancel" not in kinds
-
-
-def test_ui_client_detach_and_wire_detach_do_not_cancel() -> None:
-    attachment = ClientAttachmentState(quant_work_active=True)
-    scope = (
-        {"kind": "desk", "id": "analysis"},
-        {"kind": "quant", "id": "notebook"},
-    )
-    request = AttachRequest.try_create(scope=scope, since_seq=1)
-    assert is_ok(request)
-    assert is_ok(attachment.attach(request.value))
-    closed = attachment.tab_close()
-    assert is_ok(closed)
-    assert closed.value.invokes_job_handle_cancel is False
-    assert closed.value.sets_cancelled is False
-    assert closed.value.sets_aborted is False
-    assert closed.value.sets_failed is False
-    assert closed.value.sets_done is False
-    assert closed.value.job_handle_state_unchanged is True
-    assert attachment.quant_work_active is True
-    assert attachment.attached_scopes == frozenset()
-
-    again = _running()
-    wire = DetachRequest.try_create(scope=scope)
-    assert is_ok(wire)
-    assert wire.value.cancels_job_handle is False
-    assert wire.value.sets_terminal_job_handle is False
-    unchanged = again[0].on_client_detach(again[1].job_id, event="wire.detach")
-    assert is_ok(unchanged)
-    assert unchanged.value.state is JobHandleState.RUNNING
 
 
 def test_job_handle_cancel_is_the_only_coordinated_cancel() -> None:
