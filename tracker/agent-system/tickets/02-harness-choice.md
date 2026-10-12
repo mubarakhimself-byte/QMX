@@ -37,3 +37,15 @@ The decision fixes:
 - **The backend must work without the UI.** The turn host, API and database must run and be testable on their own.
 - **Keep** `request_runtime/native_claude.py` and `native_codex.py` (the only working Claude Code and Codex drivers; they already isolate with `CLAUDE_CONFIG_DIR` and `setting_sources=[]`). P16's deletion plan must not remove them; they seed the Claude Code worker.
 - Modes stay out: withdrawn 2026-10-09 because skills cover what modes did and the Copilot should feel like Claude Code or Codex; safety rules live in always-on hooks (approvals, the order-tool block, budgets, secrets). `copilot.py` still takes `mode="plan"|"do"`: remove it.
+
+## Revised framing after re-reading the 2026-10-12 research (same afternoon)
+
+- **The Agent SDK is not a second option. It is how QMX drives Claude Code** (a Python library that starts the unmodified Claude Code program and reads its stream). The old driver `native_claude.py` already uses it (`claude_agent_sdk` 0.2.163, `setting_sources=[]`, own `CLAUDE_CONFIG_DIR`). Operator-facing name: **Claude Code engine**.
+- **Correction to the first framing ("Claude Code workers for heavy jobs").** The operator pays no API keys, and the Claude subscription is usable only inside Claude Code (`models-routing.md` §0-1). So a copilot conversation that runs on Claude must itself run in the Claude Code engine, not only heavy jobs. Today's route (Claude through CLIProxy with cloaking) is the one the terms forbid and goes.
+- **Revised B: one QMX system, two engines, chosen per agent and per thread.**
+  - Claude Code engine: Claude models on the operator's plan(s). Brings Claude Code's own compaction (summary-only, safe on Opus 5.5), caching, hooks and sub-agents.
+  - QMX engine (LangGraph + Deep Agents): every other model on API keys (Kimi, DeepSeek, GLM; GPT by key or by "Sign in with ChatGPT" for locally hosted apps, with conditions). Lab workflows always run here; a Claude Code step can be one node.
+  - Switching off Claude when usage runs low = the next thread or sub-task starts on the QMX engine. Never mid-thread (caches are per model; Opus thinking blocks).
+- **Costs carried from `01-agent-sdk-capability-audit.md`:** ~1 GiB RAM per Claude Code session (cap them; sub-agents run inside it); QMX tools as in-process SDK tools; money-path guard as a `PreToolUse` deny hook plus `disallowed_tools`; approvals via `can_use_tool`; memory as a tool; events normalised into one UI stream; isolation (own config dir, `setting_sources=[]`, auto-memory off, strict MCP); known hangs (#1110, #926, #576) and missing usage under concurrency (#435).
+- **Terms:** plan limits assume "ordinary, individual usage". Many always-on agents on the plan, or two Claude accounts, is a grey zone. Kimi Code membership and the GLM Coding Plan are coding-agent-only, so the QMX engine needs Kimi and GLM API keys.
+- **Measure before ratifying:** RAM and cold start of one Claude Code engine session on the operator's PC; isolation from his own Claude Code.
