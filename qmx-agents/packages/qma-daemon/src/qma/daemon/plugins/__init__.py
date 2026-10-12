@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from qma.daemon.plugins.context import DaemonPluginContext, PluginContextError
 from qma.daemon.plugins.exit_stack import PluginExitStack
-from qma.daemon.plugins.extensibility import ExtensionSurface, plugin_context_mints_ui_view
 from qma.daemon.plugins.lifecycle import (
     COMPOSITION_MODES,
     EXPORTS_SECRETS_AUTHORIZES_EXPORT,
@@ -143,7 +142,6 @@ __all__ = [
     "DeskPluginRoster",
     "DisableReceipt",
     "ExportScanReport",
-    "ExtensionSurface",
     "ForwardOnlyConfirmation",
     "InstallPreflightResult",
     "JournalCheckpointEvidence",
@@ -175,7 +173,6 @@ __all__ = [
     "excluded_contribution_refusal",
     "load_pack_activator",
     "load_pack_manifest_raw",
-    "plugin_context_mints_ui_view",
     "refuse_cut_plugin_surface",
     "require_singleton_bindings_met",
     "research_corpus_plugin_load_config",
