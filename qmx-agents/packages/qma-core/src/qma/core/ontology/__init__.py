@@ -21,17 +21,6 @@ from qma.core.ontology.chain import (
     WORK_VOCABULARY,
     is_ontology_object,
 )
-from qma.core.ontology.creation import (
-    CREATION_ACTS,
-    CreationAct,
-    CreationRequest,
-    SlugIndex,
-    authorize_creation,
-    create_desk,
-    create_quant,
-    validate_desk_slug,
-    validate_quant_slug,
-)
 from qma.core.ontology.desks import (
     DESK_DISPLAY_NAMES,
     DESK_PREFIX_TOKENS,
@@ -106,7 +95,6 @@ from qma.core.ontology.wake_policy import (
 
 __all__ = [
     "ACTOR_ID_PREFIX",
-    "CREATION_ACTS",
     "DESK_DISPLAY_NAMES",
     "DESK_PREFIX_TOKENS",
     "DESK_SLUG_VALUES",
@@ -140,8 +128,6 @@ __all__ = [
     "WORK_VOCABULARY",
     "ActorId",
     "Agent",
-    "CreationAct",
-    "CreationRequest",
     "Desk",
     "DeskSlug",
     "Goal",
@@ -155,7 +141,6 @@ __all__ = [
     "Routine",
     "RoutineSchedule",
     "Session",
-    "SlugIndex",
     "SlugTombstone",
     "Subagent",
     "Task",
@@ -163,12 +148,9 @@ __all__ = [
     "Worker",
     "assert_profile_presentation_only",
     "assert_role_names_are_not_desk_names",
-    "authorize_creation",
     "authorize_quant_write",
     "authorize_routine_catch_up",
     "authorize_routine_write",
-    "create_desk",
-    "create_quant",
     "has_routine_edit_kind",
     "is_ontology_object",
     "is_valid_slug_form",
@@ -185,8 +167,6 @@ __all__ = [
     "role_slug_collision_key",
     "source_may_write_routine",
     "source_may_write_wake_policy",
-    "validate_desk_slug",
-    "validate_quant_slug",
     "validate_slug_form",
     "wake_conditions_match",
 ]
