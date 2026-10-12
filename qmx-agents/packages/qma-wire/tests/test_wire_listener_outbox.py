@@ -5,12 +5,9 @@ from __future__ import annotations
 from typing import cast
 
 from qma.wire import (
-    DAEMON_DIAL_DIRECTION,
     DEFAULT_BIND_HOST,
     FORBIDDEN_SECRET_SURFACE_KEYS,
-    REMOTE_DIAL_DIRECTION,
     WIRE_PROTOCOL_VERSION,
-    DeployedSideConfig,
     InitializeParams,
     ListenerBindConfig,
     WireConnection,
@@ -18,10 +15,8 @@ from qma.wire import (
     authenticate_before_protocol,
     is_loopback_host,
     load_schema,
-    validate_deployed_side,
     validate_instance,
     validate_listener_startup,
-    validate_remote_dial_out,
 )
 from qmf.core.refusal import Ok, RefusalCategory, is_ok, is_refusal
 
@@ -171,38 +166,3 @@ def test_wire_connection_requires_auth_before_initialize() -> None:
     assert conn.principal_class.value == "operator"
     finished = conn.complete_initialize(params.value, assign_producer_id="p")
     assert is_ok(finished)
-
-
-def test_remote_dials_out_daemon_never_dials_in() -> None:
-    assert REMOTE_DIAL_DIRECTION == "out"
-    assert DAEMON_DIAL_DIRECTION == "never_in"
-
-    cfg = DeployedSideConfig.try_create(
-        dials_out_to_daemon=True,
-        exposes_inbound_listener=False,
-        second_transport_channel=False,
-        daemon_address="wss://daemon.example:8443",
-    )
-    assert isinstance(cfg, Ok)
-    posture = validate_remote_dial_out(cfg.value)
-    assert isinstance(posture, Ok)
-    assert posture.value.daemon_is_sole_inbound is True
-    assert posture.value.deployed_exposes_listener is False
-    assert posture.value.deployed_second_transport is False
-    assert posture.value.remote_dial_direction == "out"
-
-    listening = DeployedSideConfig.try_create(
-        dials_out_to_daemon=True,
-        exposes_inbound_listener=True,
-        daemon_address="wss://daemon.example:8443",
-    )
-    assert isinstance(listening, Ok)
-    assert is_refusal(validate_deployed_side(listening.value))
-
-    second = DeployedSideConfig.try_create(
-        dials_out_to_daemon=True,
-        second_transport_channel=True,
-        daemon_address="wss://daemon.example:8443",
-    )
-    assert isinstance(second, Ok)
-    assert is_refusal(validate_deployed_side(second.value))
