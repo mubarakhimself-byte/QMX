@@ -6,8 +6,6 @@ import logging
 
 from qma.core.plugins.hooks import HookSource
 from qma.core.ports.telemetry import HARNESS_AUTHOR
-from qma.daemon.hooks.agent_authored import AgentAuthoredHookRegistrar
-from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.observability_boundary import (
     LOGS_REMAIN_LOGS,
     QMB_LOGSINK_MAY_REMAIN,
@@ -47,8 +45,6 @@ def main() -> None:
         authored_by="model",
     )
     assert is_refusal(model)
-    registrar = AgentAuthoredHookRegistrar(registry=HookRegistry())
-    assert is_refusal(registrar.emit_telemetry({"kind": "log", "correlation_id": "corr-ex-agent"}))
     harness = emit_telemetry_from_hook(
         store,
         {

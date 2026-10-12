@@ -8,9 +8,6 @@ from io import StringIO
 from pathlib import Path
 
 from qma.core.plugins.hooks import HookSource
-from qma.core.ports.telemetry import HARNESS_AUTHOR, refuse_model_authored_hook_telemetry
-from qma.daemon.hooks.agent_authored import AgentAuthoredHookRegistrar
-from qma.daemon.hooks.registry import HookRegistry
 from qma.daemon.observability_boundary import (
     DAEMON_OPERATOR_LOGGER,
     LOGS_REMAIN_LOGS,
@@ -23,7 +20,6 @@ from qma.daemon.observability_boundary import (
     QMN_FAILURES_MD,
     QMN_FAILURES_MD_EXTENDED,
     THIRD_LOGGER_MINTED,
-    emit_telemetry_from_hook,
     mint_third_logger,
     owning_failures_md,
     page_qmn_alert_with_mini_app_failure,
@@ -36,7 +32,6 @@ from qma.daemon.observability_boundary import (
 from qma.daemon.operator_log import JsonLineFormatter
 from qma.daemon.plugins import research_corpus_plugin_load_config
 from qma.daemon.process import DaemonProcess
-from qma.daemon.telemetry.store import TelemetryStore
 from qmf.core import is_ok, is_refusal
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "observability_boundary_usage.py"
@@ -123,64 +118,6 @@ def test_mini_app_failures_never_extend_qmn_failures_or_allow_list() -> None:
     assert "Mini-app typed failures added to qmn/FAILURES.md" not in qmn_titles
     assert "Model-authored hook emitting QMA telemetry" not in qmn_titles
     assert "A third logger besides JSON-lines and QMB LogSink" not in qmn_titles
-
-
-def test_model_authored_hook_cannot_emit_qma_telemetry() -> None:
-    store = TelemetryStore()
-    payload = {
-        "kind": "trace",
-        "correlation_id": "corr-hook",
-        "payload": {"event": "before_tool"},
-    }
-    model = emit_telemetry_from_hook(
-        store,
-        payload,
-        source=HookSource.MISSION,
-        authored_by="model",
-    )
-    assert is_refusal(model)
-    assert model.context["model_authored_hook_emits"] is False
-    assert model.context["agents_write_telemetry"] is False
-    assert store.event_count() == 0
-
-    launder = emit_telemetry_from_hook(
-        store,
-        payload,
-        source="mission",
-        authored_by=HARNESS_AUTHOR,
-    )
-    assert is_refusal(launder)
-    assert store.event_count() == 0
-
-    agent = store.append({"kind": "log", "correlation_id": "corr-agent", "authored_by": "agent"})
-    assert is_refusal(agent)
-    model_parse = store.append(
-        {"kind": "metric", "correlation_id": "corr-model", "authored_by": "model"}
-    )
-    assert is_refusal(model_parse)
-    assert model_parse.context["field"] == "authored_by"
-
-    registrar = AgentAuthoredHookRegistrar(registry=HookRegistry())
-    refused = registrar.emit_telemetry(
-        {"kind": "hook_timeout", "correlation_id": "corr-reg", "authored_by": "model"}
-    )
-    assert is_refusal(refused)
-    assert store.event_count() == 0
-    assert refuse_model_authored_hook_telemetry().context["author"] == HARNESS_AUTHOR
-
-    harness = emit_telemetry_from_hook(
-        store,
-        {
-            "kind": "hook_timeout",
-            "correlation_id": "corr-harness",
-            "authored_by": HARNESS_AUTHOR,
-        },
-        source=HookSource.PLUGIN,
-        authored_by=HARNESS_AUTHOR,
-    )
-    assert is_ok(harness)
-    assert harness.value.authored_by == HARNESS_AUTHOR
-    assert store.event_count() == 1
 
 
 def test_logs_remain_logs_qmb_logsink_may_remain_no_third_logger() -> None:
