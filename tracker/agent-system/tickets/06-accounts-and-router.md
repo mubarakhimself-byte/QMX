@@ -5,6 +5,7 @@ label: wayfinder:grilling
 status: open
 assignee:
 blocked-by: [01, 05]
+who-decides: Operator (HITL); his risk call on the Claude subscription path
 ---
 
 ## Question

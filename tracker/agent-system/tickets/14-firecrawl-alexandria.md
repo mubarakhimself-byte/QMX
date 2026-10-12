@@ -5,6 +5,7 @@ label: wayfinder:research
 status: open
 assignee:
 blocked-by: []
+who-decides: Claude (research, AFK)
 ---
 
 ## Question

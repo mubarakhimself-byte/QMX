@@ -5,6 +5,7 @@ label: wayfinder:grilling
 status: open
 assignee:
 blocked-by: [02]
+who-decides: Claude decides and reports back (AFK); operator reviews the chat mock-up
 ---
 
 ## Question

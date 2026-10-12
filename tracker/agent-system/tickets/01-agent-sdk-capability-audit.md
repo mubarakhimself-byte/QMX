@@ -5,6 +5,7 @@ label: wayfinder:research
 status: claimed
 assignee: claude-research-agent
 blocked-by: []
+who-decides: Claude (research, AFK)
 ---
 
 ## Question

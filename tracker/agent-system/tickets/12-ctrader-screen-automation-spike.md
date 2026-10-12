@@ -5,6 +5,7 @@ label: wayfinder:task
 status: open
 assignee:
 blocked-by: []
+who-decides: Operator runs the checklist (HITL task: needs cTrader installed)
 ---
 
 ## Question

@@ -1,10 +1,11 @@
 ---
 id: 04
-title: Baseline capability and tool surface
+title: Tools: baseline capability, catalogue and access
 label: wayfinder:grilling
 status: open
 assignee:
 blocked-by: [02]
+who-decides: Operator (HITL)
 ---
 
 ## Question

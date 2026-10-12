@@ -5,6 +5,7 @@ label: wayfinder:grilling
 status: open
 assignee:
 blocked-by: [01]
+who-decides: Operator (HITL)
 ---
 
 ## Question

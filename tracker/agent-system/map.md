@@ -17,12 +17,21 @@ A ratified design for the QMX agent system, ready to cut into build packets and 
 - long-running and server agents
 - context (caching and compaction)
 - the chat and event protocol the UI shows
+- skills and system prompts
+- a shipping plan: packets that can run in parallel, tracked against this map, inside usage limits
+
+Today and the next sittings are planning only. No code ships until ticket 16.
 
 ## Notes
 
 - **Operator:** Mubarak. Non-technical, dictates (expect transcription noise), reads plain words and diagrams rather than walls of text.
   - Give reading time: never deliver an artifact and fire questions in the same beat.
   - Don't re-ask settled decisions. Answer research-shaped questions yourself.
+- **Who decides:** each ticket carries a `who-decides` line.
+  - Claude decides alone and reports back on: sessions, caching and compaction, server agents and cron, the event protocol, and folder layout.
+  - The operator decides: harness, organogram, tools and access, accounts, approvals, memory, skills and prompts, and the shipping plan.
+  - Follow the skill's spirit, not its letter (operator, 2026-10-12).
+- **Backlog** (other efforts and follow-ups, kept apart from the map): `tracker/agent-system/backlog.md`.
 - **One ticket per session**, research tickets excepted. Load this map first in every session. It is the tracker that survives compaction and session switches.
 - **HITL tickets:** use `/grilling` and `/domain-modeling`. Use `/codebase-design` for module and seam questions.
 - **Research inputs (fresh, 2026-10-12, primary sources):** `rebuild/research/2026-10-12-agent-system/`
