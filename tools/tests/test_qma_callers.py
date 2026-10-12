@@ -51,7 +51,13 @@ def test_cycle_retires_together_but_external_import_keeps_transitive_closure(
         "qmx-agents/packages/qma-core/tests/test_old.py": "import qma.core.alpha\n",
     }
     result = scan(tmp_path, monkeypatch, files)
-    assert result["deletion_sets"] == [{"modules": ["qma.core.alpha", "qma.core.beta"], "lines": 3}]
+    assert result["deletion_sets"] == [
+        {
+            "modules": ["qma.core.alpha", "qma.core.beta"],
+            "lines": 3,
+            "retiring_callers": ["qmx-agents/packages/qma-core/tests/test_old.py"],
+        }
+    ]
     files["qmn/src/consumer.py"] = "def run():\n    from qma.core.alpha import value\n"
     result = scan(tmp_path, monkeypatch, files)
     assert result["deletion_sets"] == []
@@ -84,7 +90,9 @@ def test_named_aliased_and_star_reexports_survive_facade_planning(
     if "*" in consumer:
         assert result["deletion_sets"] == []
     else:
-        assert result["deletion_sets"] == [{"modules": ["qma.core.unused"], "lines": 1}]
+        assert result["deletion_sets"] == [
+            {"modules": ["qma.core.unused"], "lines": 1, "retiring_callers": []}
+        ]
 
 
 def test_literal_cli_and_manifest_loader_keep_entrypoints(
@@ -165,3 +173,66 @@ def test_facade_plan_keeps_imports_used_by_initializer_code(
         trim=True,
     )
     assert result["deletion_sets"] == []
+
+
+def test_ids_comparisons_and_history_notes_are_not_callers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    daemon = "qmx-agents/packages/qma-daemon/src/qma/daemon/"
+    files = {
+        daemon + "__init__.py": "",
+        daemon + "__main__.py": "",
+        CORE + "__init__.py": "",
+        CORE + "checker.py": "def hit(name):\n    return name == 'qma.daemon'\n",
+        "qmb/src/variants.py": (
+            "SCHEMA = 'qma.daemon.field_diff.v1'\nID = 'qma.daemon.panel-x.v1'\n"
+        ),
+        "rebuild/notes.md": "Run `python -m qma.daemon` to start.\n",
+        "qmx-agents/packages/qma-daemon/examples/demo.py": "import qma.daemon\n",
+    }
+    result = scan(tmp_path, monkeypatch, files)
+    assert {m for s in result["deletion_sets"] for m in s["modules"]} == {
+        "qma.core",
+        "qma.core.checker",
+        "qma.daemon",
+        "qma.daemon.__main__",
+    }
+    assert result["stale_doc_mentions"] == ["rebuild/notes.md:1: qma.daemon.__main__"]
+    files["docs/run.md"] = "Run `python -m qma.daemon` to start.\n"
+    result = scan(tmp_path, monkeypatch, files)
+    assert result["modules"]["qma.daemon.__main__"]["kept_because"][0].startswith("docs/run.md:1")
+
+
+def test_pinned_schema_keeps_parent_initializer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wire = "qmx-agents/packages/qma-wire/src/qma/wire/"
+    result = scan(
+        tmp_path,
+        monkeypatch,
+        {
+            wire + "__init__.py": "from .old import X\n",
+            wire + "old.py": "X = 1\n",
+            wire + "schemas.py": "",
+        },
+    )
+    assert result["modules"]["qma.wire"]["kept_because"]
+    assert result["modules"]["qma.wire.old"]["kept_because"]
+
+
+def test_facade_plan_never_trims_a_reexport_a_caller_uses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = scan(
+        tmp_path,
+        monkeypatch,
+        {
+            CORE + "__init__.py": "from .alpha import Public\nfrom .unused import Old\n",
+            CORE + "alpha.py": "class Public: pass\n",
+            CORE + "unused.py": "class Old: pass\n",
+            "qmb/src/door.py": "from qma.core import Public\n",
+        },
+        trim=True,
+    )
+    trimmed = {(edge["path"], edge["line"]) for edge in result["planned_facade_trims"]}
+    assert trimmed == {(CORE + "__init__.py", 2)}

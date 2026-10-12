@@ -31,7 +31,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = {f"qma.{name}": f"qmx-agents/packages/qma-{name}" for name in ("daemon", "core", "wire")}
 PINNED = {"qma.wire.schemas", "qma.wire.money_path_diff"}
-REFERENCE = re.compile(r"\bqma\.(?:core|daemon|wire)(?:\.[A-Za-z_]\w*)*")
+# Possessive, so "qma.daemon.panel-composition.v1" (an id) is not read as "qma.daemon".
+REFERENCE = re.compile(r"\bqma\.(?:core|daemon|wire)(?:\.[A-Za-z_]\w*)*+(?![-\w])")
 CLI_REFERENCE = re.compile(r"\bpython(?:\.exe)?(?:\s+-[BIu])*\s+-m\s+(qma\.[\w.]+)")
 
 
@@ -64,6 +65,14 @@ def category(path: str) -> str:
     ):
         return "new"
     return "other"
+
+
+def owned_extra(path: str) -> bool:
+    return any(
+        path.startswith(f"{root}/{folder}/")
+        for root in PACKAGES.values()
+        for folder in ("tests", "examples")
+    )
 
 
 def module_name(path: str) -> str:
@@ -114,6 +123,8 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 for alias in node.names:
                     exports[module, alias.asname or alias.name] = (base, alias.name)
 
+    used_exports = set()
+
     def resolve(base: str, name: str = "", seen: frozenset = frozenset()) -> set[str]:
         if (base, name) in seen:
             return {base} if base in modules else set()
@@ -126,17 +137,33 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
         if qualified in modules:
             result.add(qualified)
         elif (base, name) in exports:
+            used_exports.add((base, name))
             target, symbol = exports[base, name]
             result |= resolve(target, symbol, seen | {(base, name)})
         return result
 
     edges = []
     planned_trims = []
+    trim_candidates = []
     missing_imports = set()
     for path, tree in trees.items():
         module = module_name(path)
         initializer = path.endswith("/__init__.py")
         expression_strings = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Expr)}
+        # Strings that are only compared against (`name == "qma.daemon"`,
+        # `name.startswith("qma.daemon.")`) inspect imports; they load nothing.
+        for n in ast.walk(tree):
+            compared = []
+            if isinstance(n, ast.Compare):
+                compared = [n.left, *n.comparators]
+            elif (
+                isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr in {"startswith", "endswith", "removeprefix", "removesuffix"}
+            ):
+                compared = list(n.args)
+            for part in compared:
+                expression_strings |= {id(c) for c in ast.walk(part) if isinstance(c, ast.Constant)}
         loaded_names = {
             n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
         }
@@ -191,6 +218,10 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                     target = match.group()
                     while target and target not in modules:
                         target = target.rpartition(".")[0]
+                    # "qma.wire.money_path_field_diff.v1" is a schema id, not a
+                    # module: allow a module plus at most one attribute name.
+                    if target and match.group().count(".") - target.count(".") > 1:
+                        continue
                     if target:
                         targets.add(target)
                         # A literal package can be invoked with python -m.
@@ -225,9 +256,13 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                         (alias.asname or alias.name) in loaded_names for alias in node.names
                     )
                 ):
-                    planned_trims.append(edge)
+                    names = {(module, alias.asname or alias.name) for alias in node.names}
+                    trim_candidates.append((edge, names))
                 else:
                     edges.append(edge)
+    # A re-export some caller imports from the package is not dead facade.
+    for edge, names in trim_candidates:
+        (edges if names & used_exports else planned_trims).append(edge)
     if missing_imports:
         raise ValueError("Imports of missing QMA modules:\n" + "\n".join(sorted(missing_imports)))
     # The retained loader uses spec_from_file_location with manifest entrypoints,
@@ -256,7 +291,12 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 )
     # Documented CLI entrypoints are real invocation surfaces even without a
     # Python importer. Do not mistake their absence from the AST for dead code.
-    for path in sorted(p for p in paths if Path(p).suffix in {".md", ".ps1", ".sh"}):
+    # Only scripts and operator docs instruct anyone to run something; planning
+    # notes, reviews and release evidence describe the past and are listed only.
+    stale_mentions = []
+    for path in sorted(
+        p for p in paths if Path(p).suffix in {".md", ".ps1", ".sh", ".cmd", ".bat"}
+    ):
         if ref:
             raw = git("show", f"{ref}:{path}")
         elif (ROOT / path).exists():
@@ -268,7 +308,9 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
                 target = match.group(1)
                 if target + ".__main__" in modules:
                     target += ".__main__"
-                if target in modules:
+                if target in modules and path.endswith(".md") and not path.startswith("docs/"):
+                    stale_mentions.append(f"{path}:{line}: {target}")
+                elif target in modules:
                     edges.append(
                         {
                             "path": path,
@@ -284,16 +326,21 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
     for edge in edges:
         outgoing[edge["path"]].append(edge)
         incoming[edge["target"]].append(edge)
-    reasons = {
-        m: ["DESIGN section 12c: preserve QMB wire schema contract"] for m in PINNED if m in modules
-    }
+    reasons = {}
+    for pinned in PINNED:
+        # Importing a module runs its parent package initializers too.
+        owner = pinned
+        while owner in modules:
+            reasons.setdefault(owner, ["DESIGN section 12c: preserve QMB wire schema contract"])
+            owner = owner.rpartition(".")[0]
     for edge in sorted(
         edges, key=lambda e: (not e["protected"], e["category"] != "new", e["path"], e["line"])
     ):
         path = edge["path"]
         if path in by_path or path in retired:
             continue
-        if any(path.startswith(root + "/tests/") for root in PACKAGES.values()):
+        # A QMA package's own tests and usage examples retire with its code.
+        if owned_extra(path):
             continue
         reasons.setdefault(edge["target"], [f"{path}:{edge['line']} ({edge['kind']})"])
     pending = deque(sorted(reasons))
@@ -331,6 +378,15 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
             {
                 "modules": sorted(component),
                 "lines": sum(len(sources[modules[m]].splitlines()) for m in component),
+                # Own tests/examples and named retired callers that touch the set.
+                "retiring_callers": sorted(
+                    {
+                        e["path"]
+                        for e in edges
+                        if e["target"] in component
+                        and (owned_extra(e["path"]) or e["path"] in retired)
+                    }
+                ),
             }
         )
     sets.sort(key=lambda item: (-item["lines"], item["modules"]))
@@ -361,6 +417,7 @@ def inventory(ref: str | None, retired: set[str], trim: bool) -> dict:
         "edges": edges,
         "planned_facade_trims": planned_trims,
         "retired_callers": sorted(retired),
+        "stale_doc_mentions": stale_mentions,
         "deletion_sets": sets,
     }
 
@@ -396,6 +453,10 @@ def main() -> None:
     )
     for index, component in enumerate(result["deletion_sets"], 1):
         print(f"{index}: {component['lines']} lines; " + ", ".join(component["modules"]))
+        for path in component["retiring_callers"]:
+            print(f"    retires with: {path}")
+    if result["stale_doc_mentions"]:
+        print(f"\nHistorical doc mentions (not callers): {len(result['stale_doc_mentions'])}")
 
 
 if __name__ == "__main__":
