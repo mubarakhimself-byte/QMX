@@ -15,11 +15,8 @@ from qma.core.barriers.money_path import (
     MoneyPathDeniedAct,
 )
 from qma.core.barriers.parent_surfaces import ProhibitedRecordFamily
-from qma.core.ports.permissions import PermissionMode, PermissionPolicy
 from qma.core.ports.tools import ToolAdapterRecord, ToolKind, ToolRecord
 from qma.core.refusals import ProhibitedMoneyPathTool
-from qma.daemon.capabilities import PermissionPolicyEnforcer
-from qma.daemon.hooks import HookRegistry
 from qma.daemon.tools import DEV_ZONE, ToolRegistry
 from qma.daemon.tools.parent_writes import MONEY_PATH_VALUE_FIELDS
 from qmf.core import is_ok, is_refusal
@@ -175,26 +172,6 @@ def test_role_mission_hook_toolset_check_fn_cannot_lift_denial() -> None:
     selected = registry.select_for_act("open_position")
     assert is_refusal(selected)
     assert ProhibitedMoneyPathTool.matches(selected)
-
-
-def test_enforcer_refuses_money_path_act_without_dispatching_hooks() -> None:
-    hooks = HookRegistry()
-    enforcer = PermissionPolicyEnforcer(hooks, mode=PermissionMode.PERMISSIVE)
-    enforcer.register_role_policy(
-        PermissionPolicy(
-            role="Trader",
-            permissions=frozenset({"submit_order", "tool.read"}),
-        )
-    )
-    refused = enforcer.enforce(
-        "before_tool",
-        role="Trader",
-        required_permission="submit_order",
-        payload={"act": "submit_order", "tool_id": "trading:place_order"},
-    )
-    assert is_refusal(refused)
-    assert ProhibitedMoneyPathTool.matches(refused)
-    assert refused.context["matched_act"] == "submit_order"
 
 
 def test_read_and_calculate_surface_refuses_money_path_writes() -> None:

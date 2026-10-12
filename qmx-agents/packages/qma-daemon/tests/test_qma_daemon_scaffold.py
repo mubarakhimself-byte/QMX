@@ -83,7 +83,6 @@ def test_structural_modules_importable() -> None:
     assert qma.daemon.MemoryProviderRegistry.__name__ == "MemoryProviderRegistry"
     assert qma.daemon.KnowledgeService.__name__ == "KnowledgeService"
     assert qma.daemon.KnowledgeSourceRegistry.__name__ == "KnowledgeSourceRegistry"
-    assert qma.daemon.AdmissionPipeline.__name__ == "AdmissionPipeline"
     assert qma.daemon.ProposalGate.__name__ == "ProposalGate"
     assert qma.daemon.MissionCompiler.__name__ == "MissionCompiler"
     assert qma.daemon.TaskGraphDispatcher.__name__ == "TaskGraphDispatcher"

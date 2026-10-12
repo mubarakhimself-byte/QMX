@@ -27,7 +27,6 @@ from qma.core.ports.permissions import (
     narrow_permissions,
     resolve_enforcement_decision,
 )
-from qma.daemon.capabilities.enforcer import PermissionPolicyEnforcer
 from qma.daemon.capabilities.spawn import (
     AgentCapabilityStore,
     SpawnRequest,
@@ -41,7 +40,6 @@ __all__ = [
     "EffectiveCapabilitySet",
     "PermissionMode",
     "PermissionPolicy",
-    "PermissionPolicyEnforcer",
     "RoleBase",
     "RoleOverlay",
     "SpawnRequest",

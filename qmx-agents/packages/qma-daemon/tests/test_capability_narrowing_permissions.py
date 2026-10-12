@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from qma.core.control.primitives import Skill
 from qma.core.ontology import ActorId, Agent, DeskSlug, Role, RoleName
-from qma.core.plugins.hooks import HookEvent, HookResult, HookSource, build_hook_result
 from qma.core.ports.capabilities import (
     CAPABILITY_NARROWING_ORDER,
     RoleBase,
@@ -30,11 +29,9 @@ from qma.core.ports.permissions import (
 from qma.core.vocabulary.enums import HookResultDecision
 from qma.daemon.capabilities import (
     AgentCapabilityStore,
-    PermissionPolicyEnforcer,
     SpawnRequest,
     spawn_agent,
 )
-from qma.daemon.hooks import HookRegistry
 from qmf.core import is_ok, is_refusal
 
 
@@ -342,63 +339,6 @@ def test_deny_binds_under_every_permissive_mode() -> None:
         mode=PermissionMode.PERMISSIVE,
     )
     assert winner is HookResultDecision.DENY
-
-
-def test_enforcer_routes_through_hooks_and_role_ceiling() -> None:
-    registry = HookRegistry()
-    enforcer = PermissionPolicyEnforcer(
-        registry,
-        mode=PermissionMode.PERMISSIVE,
-    )
-    enforcer.register_role_policy(
-        PermissionPolicy(
-            role="Researcher",
-            permissions=frozenset({"tool.read"}),
-        )
-    )
-
-    # Missing permission → deny binds under permissive mode.
-    denied = enforcer.enforce(
-        "before_tool",
-        role="Researcher",
-        required_permission="tool.write",
-    )
-    assert is_ok(denied)
-    assert denied.value.decision is HookResultDecision.DENY
-    assert enforcer.deny_binds(denied.value.decision)
-
-    # Bypass event refused.
-    bypass = enforcer.enforce("after_tool")
-    assert is_refusal(bypass)
-
-    # Registered hook deny still binds under permissive mode.
-    def deny_handler(_event: HookEvent) -> HookResult:
-        return build_hook_result(HookResultDecision.DENY, reason="policy")
-
-    assert is_ok(
-        registry.register_handler(
-            "before_memory_write",
-            deny_handler,
-            source=HookSource.PLUGIN,
-        )
-    )
-    memory = enforcer.enforce("before_memory_write", mode=PermissionMode.PERMISSIVE)
-    assert is_ok(memory)
-    assert memory.value.decision is HookResultDecision.DENY
-
-    load = enforcer.check_plugin_load(
-        plugin_id="research-corpus",
-        requested=("tool.read", "admin.escalate"),
-        allowed=("tool.read",),
-    )
-    assert is_refusal(load)
-
-    missing_role = enforcer.enforce(
-        "before_tool",
-        role="Trader",
-        required_permission="tool.read",
-    )
-    assert is_refusal(missing_role)
 
 
 def test_parent_cannot_widen_capability_set() -> None:
