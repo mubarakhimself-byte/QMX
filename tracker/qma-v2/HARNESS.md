@@ -1,5 +1,7 @@
 # QMA v2 harness: the design
 
+> **ON HOLD (2026-10-13, night).** The operator ruled one engine (Claude Agent SDK) plus a small translator for GPT. This file still describes two engines. Do not execute it. The re-plan starts from `trail/RESUME-2026-10-14.md`.
+
 Status: synthesized 2026-10-13 by the planning session through `/architect` (arena of two runners, Opus and Fable, judged by Fable). This file is the contract for the harness coding session. The type sketch in `sketch/` is the starting point. Where this file's **Amendments** section and the sketch disagree, the Amendments win.
 
 Inputs: `research/architect/FRAME.md`, `research/architect/JUDGE.md`, both candidates under `research/architect/`, `research/how/HOW-harness-surface.md`, `research/why/WHY-harness.md`, `research/H1-sdk-facts.md`, `BASELINE.md` (with its corrections box).

@@ -1,5 +1,7 @@
 # Prompt: the QMA v2 harness coding session
 
+> **ON HOLD (2026-10-13, night).** The operator ruled one engine (Claude Agent SDK) plus a small translator for GPT. This file still describes two engines. Do not execute it. The re-plan starts from `trail/RESUME-2026-10-14.md`.
+
 The operator pastes the short prompt from chat into a fresh Claude Code session opened in `C:\Users\Mubarak\Desktop\QMX`. That prompt points here. This file is the full brief.
 
 ## Who you are

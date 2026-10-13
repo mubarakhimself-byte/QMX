@@ -1,5 +1,7 @@
 # QMA v2 harness build plan
 
+> **ON HOLD (2026-10-13, night).** The operator ruled one engine (Claude Agent SDK) plus a small translator for GPT. This file still describes two engines. Do not execute it. The re-plan starts from `trail/RESUME-2026-10-14.md`.
+
 This program builds `qma2`, the agent harness that `qmx-control` embeds, for the operator (Mubarak). When it lands, he can sign in with Claude in the temporary console at `http://localhost:8766/console` and chat with an agent that has vanilla Claude Code tools on two engines. Those engines are the Claude Agent SDK on his one Max plan and the OpenAI Agents SDK on an OpenRouter key or a ChatGPT sign-in.
 The rule the program enforces is one QMX policy point for every tool call on both engines, and money stays read-only for agents.
 The design contract is `tracker/qma-v2/HARNESS.md` with its Amendments A1 to A11, plus the binding rules V1 to V6 in `research/interrogate/VERDICT.md`.
