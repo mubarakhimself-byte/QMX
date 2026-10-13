@@ -322,6 +322,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Run Claude-format command hooks in qmx-control for PreToolUse, PostToolUse, PermissionRequest, UserPromptSubmit and Stop. The actor fires SessionStart, SessionEnd and PostCompact itself.
 - [ ] Load layers from `~/.qmx/config/` and `<cwd>/.qmx/`, never `<cwd>/.claude/` (A4). Ignore project hooks until he trusts the root (V1.6). Materialise the Claude plugin directory with no hooks.
 - [ ] Send `ProjectContext` (CLAUDE.md plus AGENTS.md) as the first user message, without MEMORY.md on the Claude engine (V5.4). Pass agents as `AgentDefinition`. Gate sub-agent calls with `agent_path` and show child sessions. List MCP descriptors at segment start and deny unknown names (V2.5). Refuse the `qmx` name and the `qmx-mcp-*` servers in agent MCP config (V6.5).
+- [ ] Apply the QMX `subagents` setting natively on the Claude engine (HARNESS A13). `host_env` sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, and the host passes `max_budget_usd`. With a custom system prompt, `PromptBuilder` adds the Opus 5 delegation instruction. A read-only agent omits `Agent` from its tools.
 
 **You see.**
 - [ ] A hook that exits 2 on `rm -rf` blocks "rm -rf build" in the console and shows the hook's message.
