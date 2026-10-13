@@ -272,6 +272,8 @@ The per-engine surface is the six-verb `Adapter` protocol. Adapters only transla
   - projection is idempotent;
   - there is a model-family guard on API keys.
 
+- **A12. Platform-neutral secrets and separation (operator, 2026-10-13 evening).** QMX is not Windows-only. `SecretStore` has one interface with a backend per OS: Windows Credential Manager, macOS Keychain and Linux Secret Service through `keyring`, plus an encrypted-file fallback and an in-memory backend. The process supervisor uses Job Objects on Windows and process groups on POSIX. U10's separate OS user has a backend per OS. The trading node is a plain server, and moving broker credentials there is the long-term money guarantee. The operator accepted the same-user speed bump until then (2026-10-13 evening), which answers open question 1.
+
 ## Known gaps outside the harness (tracked, not built here)
 
 - **The qmx-tools second writer.** The qmx-tools stdio servers still build their own `ControlService`, so `control.db` keeps a second writer process (backlog B1). The harness never adds a writer to `control.db`; it appends only through `sessions_append` in the control process.

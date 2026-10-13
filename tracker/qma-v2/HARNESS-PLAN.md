@@ -27,7 +27,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] `git -C D:/QMX-worktrees/agent-system show plan/agent-system:tracker/qma-v2/HARNESS-PLAN.md`, then the same for `HARNESS.md`, `research/interrogate/VERDICT.md` and `research/H3-code-map.md`. The plan branch is local only, so read it without `origin/`.
   - [ ] Read `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/orchestrate.md`, `shipping.md`, `pause-safely.md`, `session-pickup.md` and `opening-a-pr.md` from the same folder, then `C:/Users/Mubarak/.claude/skills/swarm/SKILL.md` and `show-me-your-work/SKILL.md`. The pstack skills live in this local install, not in the QMX repo.
   - [ ] Load the control skill for the console with the Skill tool, `anthropic-skills:built-in-browser`. From U1b on, also run `git show origin/rebuild/base:.claude/skills/verify-qmx-agents/SKILL.md`.
-  - [ ] Read `~/.agents/pstack-models.md`. Program override from the operator's brief is that builders and verifiers run on `opus`, `sonnet` only for very small tasks, never Fable, never the `bulk-worker` agent type.
+  - [ ] Read `~/.agents/pstack-models.md`. Program override from the operator's brief is that builders and verifiers run on `opus`, `sonnet` only for very small tasks, `fable` only as the second reviewer on U2 and U7 and in the final cross-model trail review (never for coding), never the `bulk-worker` agent type.
 - [ ] Install the store at `D:/QMX-worktrees/qma2-ship/`. Write `preferences.md`, `units.tsv`, `ledger.tsv`, `gates.md`, `decisions.tsv`, `probes.md` and `turns.tsv` before any spawn. `orch.ts` is not installed (`C:/Users/Mubarak/.claude/skills/poteto-mode/scripts/orch/` is empty), so keep the TSV files by hand.
 - [ ] Write these standing orders into `preferences.md`, one numbered line each, and paste the file verbatim into every builder brief.
   - [ ] Base branch `rebuild/base` (tip `4eac8f69` or newer) in repo `C:/Users/Mubarak/Desktop/QMX`, GitHub `MubarakHimself/QMX`. Each builder works in its own worktree `D:/QMX-worktrees/qma2-<pr-id>` on branch `qma2/<pr-id>`. Never touch `main` or `integration`.
@@ -37,7 +37,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] Never edit `qmb/` or `qmn/`. Never import `qmx_*`, `qma.*`, LangChain, LangGraph or deepagents from `qma2`. Builders make no live model calls. Fake clients back unit tests, and live checks belong to the coordinator.
   - [ ] Live checks use short prompts. Log every live model turn in `turns.tsv` (unit, lane, engine, model, prompt, tokens). Stop a unit's checks at 15 Claude turns unless the operator raises the cap. Run checks that need only "a model" on OpenRouter.
   - [ ] No branch or worktree deletion without the operator's go.
-- [ ] Park the gates that only the operator can answer in `gates.md` before asking. They are his `/login` in QMX's claude-home (U1), his OpenRouter key in Credential Manager (U4a), his ChatGPT browser approval (U8), and his written answer to HARNESS open question 1 on the money guarantee (SIGNOFF).
+- [ ] Park the gates that only the operator can answer in `gates.md` before asking. They are his `/login` in QMX's claude-home (U1), his OpenRouter key in the OS secret store (U4a), his ChatGPT browser approval (U8), and his reconfirmation at SIGNOFF of the money-guarantee answer he gave on 2026-10-13 (HARNESS A12).
 - [ ] On the operator's go, arm the audit tick as `/loop 1h` with the tick prompt below. Never leave the cadence to memory.
 - [ ] Use this tick prompt, verbatim. "Re-read the execution playbook from trunk. Audit the operation against it and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then post a short status message to the operator in chat only when the audit found a tracked change that no earlier status message reported, such as a PR opened, a code-ready head, a round launched or closed, a verdict, a merge, a stuck agent and the action taken, a blocker added or cleared, or a decision only the operator can make. Name every such change and nothing else. Do not repeat a table, the merged list, or an unchanged blocker. If the audit found none, end the turn with no reply text. Either way, log this tick's row in your decision trail. The row names the items reported, or none."
 - [ ] On the operator's hold or stand-down, send every builder a zero-writes order at once.
@@ -67,7 +67,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### Verdict and merge, for every PR
 
 - [ ] At the code-ready head SHA and at each later push that changes the patch, the coordinator runs the swarm lanes per `C:/Users/Mubarak/.claude/skills/swarm/SKILL.md` inline, in one boot. One gates lane runs `just ci` under the lock and saves `ci.log`. The ten live lanes come from the PR's **Verify, live** block. The perf lane comes from its **Verify, perf** block. Two audit lanes read the diff and the receipts and distrust the PR body. Audit lane A checks the VERDICT rules the unit owns. Audit lane B checks import edges, secrets, and the money rule.
-- [ ] Spawn one extra `opus` verifier agent only for a high-blast-radius PR (U2, U7) and log the reason. Opus is the only family allowed, so state in the ledger that the verifier shares the builder's model family.
+- [ ] For a high-blast-radius PR (U2, U7), run `/interrogate` with one `opus` and one `fable` reviewer and log the reason. Fable reviews only. It never codes.
 - [ ] Clean only when every lane is `PASS`. Findings go back to a fresh builder with consolidated scope, including a defect that a lane filed as a note. A new head gets a fresh run and a fresh verdict, except for results that stay valid under the patch-id rule in `playbooks/shipping.md`. Record the verdict in `ledger.tsv` with the PR number, head SHA, base SHA and `git patch-id --stable`. A new head voids the row unless the patch-id is unchanged.
 - [ ] Merge only the contiguous verified run from the lowest unmerged PR in the graph, one PR at a time, with `gh pr merge <number> --merge --repo MubarakHimself/QMX`. Recompute the frontier after each merge. A review-gated PR merges only after the operator's click or his written go in chat.
 
@@ -286,7 +286,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_host_openai.py` gains a fake-model run proving every kit call passes through the link gate, and a startup assertion that fails when an OpenAI trace exporter is registered. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. Before lane 1, stop and ask the operator to store his OpenRouter key himself in Credential Manager under `qmx/openrouter`. Choose one OpenRouter model whose `supported_parameters` list `tools` and implicit caching, and record its id in `decisions.tsv`.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. Before lane 1, stop and ask the operator to store his OpenRouter key himself in the OS secret store under `qmx/openrouter` (Credential Manager on this Windows laptop). Choose one OpenRouter model whose `supported_parameters` list `tools` and implicit caching, and record its id in `decisions.tsv`.
 - [ ] Lane 1. Regression lane against trunk. Trunk has no OpenAI engine, so record that, run the **You see.** turn on the OpenRouter model at head, and repeat the U1 turn on Claude at head. Save `u4a-smoke.log`. Pass when both engines reach `turn.finished` with Glob and Read events.
 - [ ] Lane 2. Send "create hello.txt containing hi, then read it back". Save `u4a-write-read.log`. Pass when the file holds `hi` and both calls show in the log.
 - [ ] Lane 3. Send "Run dir in PowerShell" with no allow rule. Save `u4a-policy.log`. Pass when the verdict and reason match the Claude engine's for the same call at this head.
@@ -625,7 +625,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Create `tracker/qma-v2/review/SIGNOFF.md` with his answers and the evidence paths.
 
 **Build.**
-- [ ] Ask him HARNESS open question 1 in plain words. Record in `SIGNOFF.md` whether he accepts the same-user speed bump on money in writing or asks for U10.
+- [ ] Remind him in plain words of the money answer he gave on 2026-10-13 (HARNESS A12, which accepts the same-user speed bump until broker credentials move to the trading node or U10 ships). Record in `SIGNOFF.md` that he reconfirms it or asks for U10.
 - [ ] Record his ten actions below as event samples and copy them into `docs/handoff/events/`.
 
 **You see.**
@@ -689,7 +689,7 @@ This was a planning-only pass. No prototype ran, so there is no branch, SHA or a
 - U0 moves the workspace to `claude-agent-sdk` 0.2.165. The old native-session tests in `qma-daemon` check the SDK version (HOW section 4), so they may fail before D1 deletes them. U0 owns keeping the old QMA suite green and reports any test it had to mark.
 - U6 lane 2 fills a 128K context on OpenRouter and costs money. The coordinator records the cost and picks a cheap model.
 - GitHub Actions has never run (BACKLOG B2), so every green is a local `just ci` of about 29 minutes under one lock. Three builders queue on the lock. The coordinator's gates lane waits its turn.
-- All verifiers share the builders' model family, because Fable is barred and `sonnet` is for very small tasks only. Every ledger row states that limit.
+- Builders and verifiers run on `opus`. Fable is the second model family only for the U2 and U7 interrogate reviews and the final trail review, per the operator on 2026-10-13. `sonnet` is for very small tasks only.
 - Money safety against deliberate code is a same-user speed bump until U10 or credential absence (HARNESS tension 1). SIGNOFF records his written answer. U10, the separate OS account, is not scheduled and runs only if he asks for it there.
 - The `qmx-tools` stdio servers stay a second writer on `control.db` (BACKLOG B1). U3 refuses them in agent MCP config. Fixing B1 is outside this program.
 - U8 depends on an unverified route. The probe can close U8 without code, and SIGNOFF then skips ChatGPT.
@@ -697,5 +697,5 @@ This was a planning-only pass. No prototype ran, so there is no branch, SHA or a
 ## Appendix D. Links and reading list
 
 - Read before editing. `tracker/qma-v2/HARNESS.md`, `research/interrogate/VERDICT.md`, `research/H3-code-map.md` (builder quick-reference and traps), `research/how/HOW-harness-surface.md`, `research/H1-sdk-facts.md` (builder reading list in section 4), `research/H2-skills-method.md` (builder Method block), `BASELINE.md` (H1 to H18), `UI-NOTES.md`, and `sketch/`. The base unit list is `research/architect/candidate-1-opus/units.md`, amended here by A5, A6, A8, A10 and VERDICT V6. Nothing under `archive/` is a source.
-- U2 and U7 get `C:/Users/Mubarak/.claude/skills/interrogate/SKILL.md` with `opus` reviewers only, because Fable is barred in this program. No PR gets `how`, since the HOW synthesis already exists.
+- U2 and U7 get `C:/Users/Mubarak/.claude/skills/interrogate/SKILL.md` with one `opus` and one `fable` reviewer (the operator allowed Fable for review only on 2026-10-13). No PR gets `how`, since the HOW synthesis already exists.
 - The trail is `D:/QMX-worktrees/qma2-ship/decisions.tsv`, per `C:/Users/Mubarak/.claude/skills/show-me-your-work/SKILL.md`.

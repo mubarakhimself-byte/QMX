@@ -23,9 +23,9 @@ Never treat anything under `tracker/qma-v2/archive/` as the plan.
 
 ## Rules that override everything else
 
-1. **Models.** Builders and verifiers run on `opus`. Use Sonnet only for a very small task. Never use Fable. Never use the `bulk-worker` agent type. Every brief tells the builder not to spawn sub-agents.
+1. **Models.** Builders, verifiers and all coding run on `opus` (operator: "I would really prefer just Opus"). Fable is allowed only as the second reviewer where a second model family adds value: `/interrogate` on U2 and U7, and the final show-me-your-work cross-model review. Fable never codes. Sonnet only for very small, light tasks. Never use the `bulk-worker` agent type. Every brief tells the builder not to spawn sub-agents.
 2. **Skills are real calls.** For every skill, either call the Skill tool or Read its full SKILL.md. Log which one you did in `D:/QMX-worktrees/qma2-ship/decisions.tsv` per the show-me-your-work skill. Never write "followed in spirit". Before a builder's verdict, grep its transcript for its Read of poteto-mode SKILL.md and its `tdd` Skill call. If either is missing, a fresh builder redoes the unit.
-3. **Nested-agent guard.** Before the first spawn, run `echo $env:CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (PowerShell) or the Bash equivalent. If it is not `1`, stop and ask the operator to apply the guard step from the planning session before any builder starts. Never rely on brief text alone.
+3. **Nested-agent guard.** Before the first spawn, run `echo $env:CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (PowerShell) or the Bash equivalent. The planning session set it in the QMX project's `.claude/settings.local.json` on 2026-10-13. If it is not `1`, stop and tell the operator before any builder starts. Never rely on brief text alone.
 4. **Pilot first.** U0 goes through brief, build, verify, ledger and merge before a second builder starts. Fix the brief template from what U0 shows.
 5. **Live checks.** They run on his one Claude Max plan, which he also uses himself. Use short prompts. Log every live model turn in `turns.tsv`. Stop a unit's checks at 15 Claude turns and ask him. Run checks that need only "a model" on OpenRouter.
 6. **Stop for him at these points, and only these:**
