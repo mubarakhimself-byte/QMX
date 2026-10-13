@@ -1,5 +1,15 @@
 # QMA v2 harness baseline: Claude Code / Codex / OpenAI Agents SDK parity
 
+> **Known corrections (2026-10-13 evening).** This file is the base for the harness, but these points are wrong or open. Where they conflict, `research/H1-sdk-facts.md` and `reviews/2026-10-13-*.md` win.
+> - Claude sign-in: QMX never stores or injects a Claude token. The operator runs `/login` in QMX's own `CLAUDE_CONFIG_DIR` (H1 fact 4). H17's "ChatGPT token refresh" stays for the OpenAI route only.
+> - ChatGPT plan route: use `api.openai.com/v1/responses` with the OAuth token, never `chatgpt.com/backend-api` (H1 fact 17). Probe it first.
+> - Agent and skill folders come from QMX's own config home, never the operator's personal `~/.claude` (lines ~206, ~253).
+> - Line ~360 (other providers on the Claude engine) is rejected by the operator.
+> - Computer use is not in the harness: no subscription route offers it (H1 facts 8, 16).
+> - The UI protocol is research 32 Part B (today's 14 block kinds plus a live SSE channel), not Codex JSON-RPC (H2 row).
+> - Missing here and required: router and accounts, the money read-only hook, long-lived sessions with transcript export.
+
+
 Status: research, 2026-10-13. Not ratified. Feeds the "harness first" ruling.
 
 Sources read:
