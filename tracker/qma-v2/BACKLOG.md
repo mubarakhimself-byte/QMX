@@ -87,11 +87,11 @@ How to read it:
 
 | # | Item | What and why | His words (UTC) | Trigger | Easy win? |
 |---|---|---|---|---|---|
-| B8 | **Strats (the Library) v2** | The Library's name is **Strats**. New version as a git-style database (content-addressed blobs, immutable versions, refs for variants; research 30). He floated Gemini for a Library agent. | "strats S T R A T" (10-13 04:28); "refactor it to know like a database of Git" (15:40); "for things like a library-based agent, it might be better" (15:22) | After the harness | No |
-| B7 | **QMB review and reorganisation** | The tamper-proof backtest tool, edited by many models. Dead helpers in `qmb/src/qmb/doors/cli/host.py` keep about 110k old QMA lines importable. Editing QMB needs his say. | "I feel like it has been touched a lot" (16:22) | Once QMX is in normal use | No |
-| B9 | **QML changes** | Proposal from the risk-and-sizing session. | "QML is going to change based off another transcript" (16:22) | His other session | No |
+| B8 | ~~**Strats (the Library) v2**~~ **OUT OF THIS BACKLOG (operator, 2026-10-13 night): handled in its own session.** | The Library's name is **Strats**. New version as a git-style database (content-addressed blobs, immutable versions, refs for variants; research 30). He floated Gemini for a Library agent. | "strats S T R A T" (10-13 04:28); "refactor it to know like a database of Git" (15:40); "for things like a library-based agent, it might be better" (15:22) | After the harness | No |
+| B7 | ~~**QMB review and reorganisation**~~ **OUT OF THIS BACKLOG (operator, 2026-10-13 night): handled in its own session.** | The tamper-proof backtest tool, edited by many models. Dead helpers in `qmb/src/qmb/doors/cli/host.py` keep about 110k old QMA lines importable. Editing QMB needs his say. | "I feel like it has been touched a lot" (16:22) | Once QMX is in normal use | No |
+| B9 | ~~**QML changes**~~ **OUT OF THIS BACKLOG (operator, 2026-10-13 night): handled in its own session.** | Proposal from the risk-and-sizing session. | "QML is going to change based off another transcript" (16:22) | His other session | No |
 | B42 | **Backend API and database ready for agents** | Make the backend and database usable by agents, and check whether the mini-app runtime needs a refactor. | "make it usable for agents" (15:16) | Before workflows and mini apps (B33, B23) | No |
-| B43 | **What QMF is now** | He no longer recalls QMF's role. A short read-and-explain before QMB and QML work. | "I don't fully recall what QMF is per se" (16:22) | With B7 | Yes, reading |
+| B43 | **QMF refactor** | QMF will be refactored "whether I like it or not" (operator, 2026-10-13 night). Replaces the earlier read-and-explain item. | "QMF is just going to be refactored" (10-13 night) | His call on timing | No |
 
 ## H. Running elsewhere
 
