@@ -89,3 +89,16 @@ When you've answered, say "go".
 - **Then 1a:** the store and its tables. **Then 1b:** a copilot turn working end to end through the API, with the console.
 
 The timetable, the Wednesday 06:00 dry run and the 09:00 freeze are in `SHIPPING-PLAN.md`.
+
+## 5. Operator answers (Tuesday 2026-10-13, morning)
+
+- **Q9.** A console for now. It is temporary and gets deleted later; the real UI is the goal.
+- **Q10.** Design QMX to be **platform-neutral** (Windows, macOS, Linux), not Windows-only. Secrets and process separation should be centralised, with a backend per platform where needed. He asked how Claude Code and Codex store credentials:
+  - **Codex** has a setting: a file `CODEX_HOME/auth.json` (the default), the OS keyring, auto, or memory only (`codex-rs/config/src/types.rs:136-146`).
+  - **Claude Code** uses `.credentials.json` in its config folder (audit 01 §4), and the macOS Keychain on a Mac.
+  - Neither one protects against another process running as the same user.
+  - He also asked whether computer use is covered. It is NOT designed yet (FR-137 is NEXT; A-11 was deferred). This must be designed.
+- **Q11.** No rented provider for now; he can't fund one yet. Test the remote lane on his own machine or server with **Docker**, and keep the provider adapters ready so nothing has to be reshipped when he pays later.
+- **Q13.** Remote agents use **OpenRouter** for testing. For the first month most agents run on his machine, with Claude doing the heavy lifting. OpenRouter must be a supported provider, alongside the direct providers agreed on 2026-10-12.
+- **Q14.** No drop list. "Time is not going to run short." Shape the work so more of it runs **in parallel**; a fresh start should be quick.
+- **Process concern:** he asked whether an agent checked the overnight work, suspecting some steps were skipped. Answer and follow-up: see the audit below.
