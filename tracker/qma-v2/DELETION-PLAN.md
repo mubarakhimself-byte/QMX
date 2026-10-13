@@ -88,7 +88,7 @@ The coordinator runs every lane of a PR on this machine in one boot, with the ve
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] Run the `qmb` suite and the `tools/tests` suite with `-n 2`, then `just ci` under the lock. Save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Run the U4a smoke turn on OpenRouter and one Claude turn through `drive.py` at trunk and head. Save `d1-smoke.log`. Pass when both turns reach `turn.finished` with the same tool events on both sides.
 - [ ] Lane 2. Run the `git grep` from **You see.** Save `d1-grep.log`. Pass when it prints nothing.
 - [ ] Lane 3. Run `uv lock --check` at the root and in `qmx-agents/`. Save `d1-lock.log`. Pass when both pass.
@@ -107,7 +107,7 @@ The coordinator runs every lane of a PR on this machine in one boot, with the ve
 - [ ] Rule. Fail when head is not at least 300 s faster than the mean of the two trunk runs. H3 expects about 600 s from dropping the QMA suite.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 4 and lane 10 evidence into `tracker/qma-v2/review/D1-review-<slug>.png` as screenshots. Record a 30 to 60 second video of `qmb host start`, `status`, `stop` and the console turn, saved as `tracker/qma-v2/review/D1-review.mp4`.
+- [ ] Copy lane 4 and lane 10 evidence into `tracker/qma-v2/review/D1-review-<slug>.png` as screenshots. No screen-recording tool is installed, so the video is a numbered screenshot sequence plus its drive.py event log. It shows `qmb host start`, `status`, `stop` and the console turn. Save it under `tracker/qma-v2/review/D1-review/`.
 - [ ] Post the screenshots, the video, the `qmb/` and `qmn/` diff, and the line counts removed in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -134,7 +134,7 @@ The coordinator runs every lane of a PR on this machine in one boot, with the ve
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_journal.py` gains hash-chain and stale-lock cases copied from the old journal tests. Run the qma-v2, qmx-apps and qmx-remote suites with `-n 2`, then `just ci` under the lock. Save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Run the qmx-apps and qmx-remote suites at trunk and head. Save `d2-suites.log`. Pass when both report the same pass and fail counts.
 - [ ] Lane 2. Run `python -c "import qma2.journal as j, qmx_agents.guards.journal as o; assert o.RunJournal is j.RunJournal"`. Save `d2-shim.log`. Pass when the assertion holds.
 - [ ] Lane 3. Run the `git grep` from **You see.** Save `d2-grep.log`. Pass when it prints nothing.

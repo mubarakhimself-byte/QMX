@@ -103,7 +103,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_doctor.py` gains one case per doctor line. `tests/test_import_contract.py` runs `lint-imports`. Run `uv run --no-sync python -m pytest tests -q -n 2 --basetemp D:/Temp/pytest-u0` in `qmx-agents/packages/qma-v2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Run the qmx-control suite and `python -c "import qmx_control"` at trunk and head. Trunk has no `qma2`, so record that and gate `import qma2` at head. Save `u0-regression.log`. Pass when both suites report the same pass and fail counts and `import qma2` succeeds only at head.
 - [ ] Lane 2. Plant `import qmx_control` in `qma2/model.py` in a scratch copy and run `lint-imports`. Save `u0-contract-qmx.log`. Pass when the contract fails and names the forbidden edge.
 - [ ] Lane 3. Plant `import claude_agent_sdk` in `qma2/wire.py` in a scratch copy and run `lint-imports`. Save `u0-contract-sdk.log`. Pass when the contract fails and names `qma2.host.claude` as the only allowed importer.
@@ -148,7 +148,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_host_claude.py` gains cases for deny-on-exception, unknown `tool_use_id`, mode mirroring and an unknown advertised tool refused at `Started`. `tests/test_secrets_env.py` asserts `host_env` drops `ANTHROPIC_*`, `CLAUDE_CODE_*` and `QMX_*`. Run `uv run --no-sync python -m pytest tests -q -n 2 --basetemp D:/Temp/pytest-u1` in the package. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Before lane 1, stop and ask the operator to run `/login` himself with `CLAUDE_CONFIG_DIR` set to QMX's claude-home, using the bundled CLI path that doctor prints. Log his answer in `gates.md`.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. Before lane 1, stop and ask the operator to run `/login` himself with `CLAUDE_CONFIG_DIR` set to QMX's claude-home, using the bundled CLI path that doctor prints. Log his answer in `gates.md`.
 - [ ] Lane 1. Regression lane against trunk. Trunk has no turn path, so record that and run `live_turn.py` with "List the files here and summarise README.md" at head. Save `u1-turn.log`. Pass when `turn.finished` arrives with `model_usage` present and Glob and Read tool events in between.
 - [ ] Lane 2. Run `claude auth status` with `CLAUDE_CONFIG_DIR` set to QMX's claude-home. Save `u1-auth.log`. Pass when it reports `loggedIn`, `authMethod` `claude.ai` and that config directory.
 - [ ] Lane 3. Send "Run dir with Bash". Save `u1-bash-denied.log`. Pass when `tool.finished` is denied with the QMX reason "approvals arrive in U2" and no shell process started (VERDICT V6.3).
@@ -194,7 +194,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_projection.py` gains a crash-between-writes case that ends with one block per item. `qmx-control/tests/test_operator.py` gains a forged-row case and a bearer-on-OPERATOR case. Run the qma-v2 and qmx-control suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Create a session, append three blocks and read `GET /api/events/sessions` at trunk and head. Trunk has no console, so also gate one console chat turn at head. Save `u1b-regression.log`. Pass when the SSE payloads match byte for byte and the head turn finishes.
 - [ ] Lane 2. Run `start`, follow the pairing page, and open the console. Save `u1b-paired.png`. Pass when the console shows `Claude: signed in (Max)` and the session list shows the pairing notice.
 - [ ] Lane 3. Type "list the files here and summarise README" in the console. Save `u1b-chat.png`. Pass when text streams and Glob and Read cards appear.
@@ -213,7 +213,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Rule. Fail when p95 event-to-client delay exceeds 100 ms or 1,000 item writes take longer than the trunk 1,000-block loop.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 2, 3, 4 and 9 screenshots into `tracker/qma-v2/review/U1b-review-<slug>.png`. Record a 30 to 60 second video of pairing, a chat turn and the restart. Save it as `tracker/qma-v2/review/U1b-review.mp4`.
+- [ ] Copy lane 2, 3, 4 and 9 screenshots into `tracker/qma-v2/review/U1b-review-<slug>.png`. No screen-recording tool is installed, so the video is a numbered screenshot sequence of the flow plus its drive.py event log. It shows pairing, a chat turn and the restart. Save it under `tracker/qma-v2/review/U1b-review/`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -241,7 +241,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_policy.py` gains the H6 table, the precedence case "act tokens beat read tokens", and a `MONEY_ACT` row for every mode including bypass. `tests/test_money.py` gains a remote `propose_order` denied as `MONEY_ACT`. Run the qma-v2, qmx-control and qmx-apps suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. With rules `deny: Bash(git push *)`, `ask: Bash(rm *)` and `allow: Bash(npm test *)`, send `git push`, `cd x && rm -f y` and `npm test` to vanilla Claude Code and to QMX at head. Trunk QMX has no policy, so the vanilla column stands in for it. Save `u2-h6.log`. Pass when QMX gives deny, ask and allow, the same as vanilla.
 - [ ] Lane 2. Send "delete notes.txt" and click Allow once. Save `u2-allow-once.png`. Pass when the card appears and the file is gone afterwards.
 - [ ] Lane 3. Click Always allow on `npm run lint`, then send it in a new chat. Save `u2-always.png`. Pass when the new chat runs it with no card and the rule shows in the rules list (H7).
@@ -260,7 +260,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Rule. Fail when the head p95 exceeds 5 ms or exceeds the U1b p95 by more than 3 ms.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 2, 3, 5 and 8 screenshots into `tracker/qma-v2/review/U2-review-<slug>.png`. Record a 30 to 60 second video of an approval card answered three ways. Save it as `tracker/qma-v2/review/U2-review.mp4`.
+- [ ] Copy lane 2, 3, 5 and 8 screenshots into `tracker/qma-v2/review/U2-review-<slug>.png`. No screen-recording tool is installed, so the video is a numbered screenshot sequence of the flow plus its drive.py event log. It shows an approval card answered three ways. Save it under `tracker/qma-v2/review/U2-review/`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -286,7 +286,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_host_openai.py` gains a fake-model run proving every kit call passes through the link gate, and a startup assertion that fails when an OpenAI trace exporter is registered. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Before lane 1, stop and ask the operator to store his OpenRouter key himself in Credential Manager under `qmx/openrouter`. Choose one OpenRouter model whose `supported_parameters` list `tools` and implicit caching, and record its id in `decisions.tsv`.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. Before lane 1, stop and ask the operator to store his OpenRouter key himself in Credential Manager under `qmx/openrouter`. Choose one OpenRouter model whose `supported_parameters` list `tools` and implicit caching, and record its id in `decisions.tsv`.
 - [ ] Lane 1. Regression lane against trunk. Trunk has no OpenAI engine, so record that, run the **You see.** turn on the OpenRouter model at head, and repeat the U1 turn on Claude at head. Save `u4a-smoke.log`. Pass when both engines reach `turn.finished` with Glob and Read events.
 - [ ] Lane 2. Send "create hello.txt containing hi, then read it back". Save `u4a-write-read.log`. Pass when the file holds `hi` and both calls show in the log.
 - [ ] Lane 3. Send "Run dir in PowerShell" with no allow rule. Save `u4a-policy.log`. Pass when the verdict and reason match the Claude engine's for the same call at this head.
@@ -329,7 +329,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_hooks.py` gains exit 0, exit 2, `updatedInput`, `additionalContext` and timeout cases. `tests/test_config.py` gains the trust case and the `qmx-mcp-data` refusal. Run the qma-v2 and qmx-control suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Put the same exit-2 hook in a scratch project's `.claude/settings.json` for vanilla Claude Code and in `<cwd>/.qmx/settings.json` for QMX, then send "rm -rf build" to both. Trunk QMX has no hooks, so vanilla stands in. Save `u3-h8.png`. Pass when both block the call and QMX shows the hook's message.
 - [ ] Lane 2. Add a PreToolUse hook that rewrites `updatedInput` and adds `additionalContext`, then ask the agent to repeat the context. Save `u3-rewrite.log`. Pass when the rewritten input runs and the reply quotes the context.
 - [ ] Lane 3. Use a repo with one rule only in AGENTS.md and one only in CLAUDE.md, and send a prompt that tests both. Save `u3-h9.png`. Pass when both rules are obeyed.
@@ -372,7 +372,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_parity_openai.py` replays the U2 policy table and the U3 hook cases through a fake OpenAI model with no policy code in `host/`. Run the qma-v2 and qmx-control suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Run the same five-step refactor script in vanilla Claude Code and in a QMX OpenRouter chat (H5). Trunk QMX has no key form, so vanilla stands in. Save `u4b-h5.png`. Pass when both change the same files, the tests give the same result, and QMX shows the edits as diffs.
 - [ ] Lane 2. Submit the key form with the generated test value `sk-or-v1-qmxtest0000`, then call the same route with the bearer token. Save `u4b-key-form.png`. Pass when the console reports the key as rejected by the provider, the bearer call returns 403, and `rg` finds the value nowhere in the lane home.
 - [ ] Lane 3. Send the U2 lane 1 prompts on the OpenAI engine. Save `u4b-h6.log`. Pass when the outcomes are deny, ask and allow.
@@ -391,7 +391,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Rule. Fail when the head ratio from turn 2 is under 80% where the provider reports cache, or more than 5 points under the U4a ratio.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 1, 2, 6 and 7 screenshots into `tracker/qma-v2/review/U4b-review-<slug>.png`. Record a 30 to 60 second video of an OpenRouter chat with an approval card and the money refusal. Save it as `tracker/qma-v2/review/U4b-review.mp4`.
+- [ ] Copy lane 1, 2, 6 and 7 screenshots into `tracker/qma-v2/review/U4b-review-<slug>.png`. No screen-recording tool is installed, so the video is a numbered screenshot sequence of the flow plus its drive.py event log. It shows an OpenRouter chat with an approval card and the money refusal. Save it under `tracker/qma-v2/review/U4b-review/`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -417,7 +417,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_router.py` gains the background-cap, lockout-per-account and family-guard cases. `tests/test_usage.py` gains dedupe by message id. Run the qma-v2 and qmx-control suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Trunk has no usage page, so record that, send one Claude turn at head, and open the usage page. Save `u5-usage.png`. Pass when it shows the 5-hour percent, the reset time, and the label "as of the last QMX turn".
 - [ ] Lane 2. Compare QMX usage rows with the Claude `ResultMessage` usage and the OpenRouter `GET /api/v1/key` usage delta for one turn each. Save `u5-h18.log`. Pass when both match within 1%.
 - [ ] Lane 3. Switch a Claude chat to the OpenRouter model, confirm, and ask "what did I say first?". Save `u5-switch.png`. Pass when the pop-up names a token count and the reply quotes the first prompt.
@@ -436,7 +436,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Rule. Fail when pick p95 exceeds 1 ms or the usage route p95 exceeds 200 ms.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 1, 3, 6 and 8 screenshots into `tracker/qma-v2/review/U5-review-<slug>.png`. Record a 30 to 60 second video of the usage page and a switch with its warning. Save it as `tracker/qma-v2/review/U5-review.mp4`.
+- [ ] Copy lane 1, 3, 6 and 8 screenshots into `tracker/qma-v2/review/U5-review-<slug>.png`. No screen-recording tool is installed, so the video is a numbered screenshot sequence of the flow plus its drive.py event log. It shows the usage page and a switch with its warning. Save it under `tracker/qma-v2/review/U5-review/`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -462,7 +462,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_compact.py` gains threshold, focus and archive cases. `tests/test_steer.py` gains steer-before-next-call and kill-tree cases. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Send "/compact focus on the parser" after a short parser discussion in vanilla Claude Code and in a QMX Claude chat. Trunk QMX has no compaction route, so vanilla stands in. Save `u6-h11.log`. Pass when both keep the parser details in the next answer.
 - [ ] Lane 2. Fill a 128K OpenRouter model chat until auto-compaction fires, then ask for a rule from CLAUDE.md. Save `u6-auto.png`. Pass when the compaction event shows, the chat continues, and the rule holds. Record the OpenRouter cost.
 - [ ] Lane 3. Send "/compact focus on the parser" on the OpenAI engine. Save `u6-focus-openai.log`. Pass when the next answer keeps the parser details.
@@ -505,7 +505,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_callop.py` gains replayed-id, swapped-args and FIFO cases. `tests/test_agent_tool.py` gains the depth-4 refusal and the cap of 6. Run the qma-v2 and qmx-control suites with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Run the U3 `reviewer` agent on Claude and on the OpenAI engine (H13). Trunk has no OpenAI sub-agents, so the Claude run is the comparison. Save `u7-h13.png`. Pass when both run read-only and show as child cards.
 - [ ] Lane 2. Ask for a helper that starts a helper that starts a helper that starts a helper, on both engines. Save `u7-depth.log`. Pass when the fourth level is refused on both.
 - [ ] Lane 3. Start a background helper that tries to delete a file. Save `u7-helper-card.png`. Pass when the approval card shows the helper's name.
@@ -548,7 +548,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_export.py` gains a secrets-redaction case. `tests/test_recovery.py` gains pending-to-expired and running-to-interrupted cases. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents.
 - [ ] Lane 1. Regression lane against trunk. Fork a two-turn chat after turn 2 and continue both (H4). Trunk has no fork, so record that. Save `u9-fork.png`. Pass when the two histories differ and the original is unchanged.
 - [ ] Lane 2. Click Export and list the zip. Save `u9-export.log`. Pass when it holds the transcript, logs, traces and the Claude JSONL.
 - [ ] Lane 3. Run `rg` for every stored key, the control token and the Claude token over the unzipped export. Save `u9-export-grep.log`. Pass when there are zero hits.
@@ -591,7 +591,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_chatgpt.py` gains refresh-on-expiry and no-backend-api cases against a fake server. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Before lane 1, stop and ask the operator to click the sign-in button and approve in his own browser.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. Before lane 1, stop and ask the operator to click the sign-in button and approve in his own browser.
 - [ ] Lane 1. Regression lane against trunk. Trunk has no ChatGPT route, so record that and send "delete notes.txt" in a GPT chat at head. Save `u8-gpt-chat.png`. Pass when the card appears and Allow once deletes the file.
 - [ ] Lane 2. Run `chatgpt_probe.py`. Save `u8-probe.json`. Pass when headers and compaction reachability are recorded as yes or no.
 - [ ] Lane 3. Run a three-step subset of the H5 refactor on GPT. Save `u8-h5.log`. Pass when it changes the same files as the U4b vanilla run.
@@ -634,7 +634,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 - [ ] `tests/test_handoff.py` asserts that `docs/handoff/API.md` lists every OPERATIONS row and its `who`. Run the qma-v2 suite with `-n 2`. Then run `just ci` under the lock and save `ci.log`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The operator performs lanes 2 to 10 in his own words. The coordinator prepares each lane and saves the evidence.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. The coordinator runs these lanes itself inline; they are not ten agents. The operator performs lanes 2 to 10 in his own words. The coordinator prepares each lane and saves the evidence.
 - [ ] Lane 1. Regression lane against trunk. Re-run lane 1 of every earlier PR through `drive.py` at trunk (the U9 merge SHA) and at head. Save `signoff-regression.log`. Pass when every lane 1 passes on both.
 - [ ] Lane 2. He signs in with Claude in the console, then asks it to read a file and edit it. Save `signoff-files.png`. Pass when the edit shows as a diff and the file changed.
 - [ ] Lane 3. He asks it to run a command. Save `signoff-command.png`. Pass when the approval card appears and the output shows after he allows it.
@@ -653,7 +653,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Rule. Fail when the head gate p95 exceeds trunk by more than 2 ms or TTFT p50 exceeds the U1 p50 by more than 50%.
 
 **Review gate.** The operator reviews before merge.
-- [ ] Copy lane 2 to 10 screenshots into `tracker/qma-v2/review/SIGNOFF-review-<slug>.png`. Record a 30 to 60 second video of his session. Save it as `tracker/qma-v2/review/SIGNOFF-review.mp4`.
+- [ ] Copy lane 2 to 10 screenshots into `tracker/qma-v2/review/SIGNOFF-review-<slug>.png`. No screen-recording tool is installed, so the video is a numbered screenshot sequence of the flow plus its drive.py event log. It shows his session. Save it under `tracker/qma-v2/review/SIGNOFF-review/`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**

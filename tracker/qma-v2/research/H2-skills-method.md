@@ -23,14 +23,14 @@ sources: creators' GitHub pages and guide (read in the built-in browser), Claude
 3. Install the runtime. Write `preferences.md` (numbered standing orders), `LEDGER.md` (one row per packet), and `decisions.tsv` per **show-me-your-work**. `orch.ts` is optional. bun is installed.
 4. Pilot. Run the first packet through the whole path (brief, builder, verify, ledger row, merge) before any second builder starts.
 5. Scale. Keep a rolling window of up to 3 `poteto-agent` builders on `opus`, refilled as each one finishes.
-6. Verify each PR yourself, using **Shipping** steps 1 to 3 (independent verdict, patch-id) and the Orchestrate Verification section. Run gates and live lanes inline. Spawn a verifier (`sonnet`) only for expensive or judgment-heavy units.
+6. Verify each PR yourself, using **Shipping** steps 1 to 3 (independent verdict, patch-id) and the Orchestrate Verification section. Run gates and live lanes inline. Spawn a verifier (`opus`) only for expensive or judgment-heavy units.
 7. Land. Merge only the contiguous verified run into `rebuild/base`. Recompute after each merge.
 8. Pause with **Pause safely** and resume with **Session pickup**. Close with the predicate count, the ledger, and the show-me-your-work audit.
 
 **Each builder (`poteto-agent`, `opus`, background, own worktree).**
 1. Read the poteto-mode SKILL.md at its absolute path, then `pstack-models.md`, `playbooks/feature.md` and `playbooks/opening-a-pr.md`.
 2. Open a todo list with the Feature steps verbatim. A skipped step keeps a line `skip: <reason>`.
-3. Step 1 `how`: one inline pass over the files in the brief. Step 2 `architect`: `skip: shape fixed by ARCHITECTURE section 8` unless the brief says otherwise.
+3. Step 1 `how`: one inline pass over the files in the brief. Step 2 `architect`: `skip: shape fixed by tracker/qma-v2/HARNESS.md and sketch/` unless the brief says otherwise.
 4. Step 3 is the throughput checkpoint. Step 4: own the diff directly, as feature.md:12 allows, and call `Skill("tdd")` at the seams the brief names.
 5. Step 5: verify on the real surface with the project verify skill. Step 6: small ordered commits. Step 7 `interrogate`: skip, because the orchestrator owns review.
 6. Step 8, Opening a PR. Reread the diff to stand in for deslop. Run the Comment Sicko prompt yourself over the diff for `/no-comments`. Write the PR body with `technical-writing` then `unslop`. Open the PR ready, report, and stop. No babysitting.
@@ -42,7 +42,7 @@ sources: creators' GitHub pages and guide (read in the built-in browser), Claude
 ```text
 ## Method
 /poteto-mode is loaded by this message. Work under it for the whole session.
-1. Read ~/.agents/pstack-models.md now. Models: builders opus, verifiers and swarm workers sonnet. Never Fable without Mubarak's explicit OK. Never the bulk-worker agent type.
+1. Read ~/.agents/pstack-models.md now. Models: builders, verifiers and swarm workers opus (operator ruling 2026-10-13: Sonnet only for very small tasks). Never Fable without Mubarak's explicit OK. Never the bulk-worker agent type.
 2. Playbook: Orchestrate (~/.claude/skills/poteto-mode/playbooks/orchestrate.md). Copy its seven steps verbatim as the first todos. A step you skip stays with "skip: <reason>".
    Also read shipping.md, pause-safely.md and session-pickup.md in the same folder. Use Shipping steps 1-3 for every verdict.
 3. Never spawn a poteto-agent to run the playbook. This chat runs it. Builders are delegates.
@@ -58,11 +58,11 @@ sources: creators' GitHub pages and guide (read in the built-in browser), Claude
    ACCEPTANCE, VERIFY (exact commands), TIMEBOX, FORBIDDEN, REPORT and STANDING. A field you cannot fill means the packet is not ready.
 9. Verification is yours, at the exact head SHA. CI green and a builder's word are inputs, not verdicts.
    Run the gates and the live lanes yourself. Lanes are coverage boxes, not agents.
-   Spawn a sonnet verifier (or a /swarm of at most 3 lanes, each with its own port and data dir) only when a unit's
+   Spawn an opus verifier (or a /swarm of at most 3 lanes, each with its own port and data dir) only when a unit's
    verification is expensive, judgment-heavy or high blast radius. Write the reason in decisions.tsv.
 10. Record each verdict with head SHA, base SHA and git patch-id --stable. A new head voids the verdict unless the patch-id is unchanged.
 11. Land only the contiguous verified run into rebuild/base, one PR at a time, then recompute. Never main or integration.
-12. Contested design in a PR: run interrogate (reviewers per pstack-models: opus plus sonnet). Otherwise skip it with the reason.
+12. Contested design in a PR: run interrogate (reviewers per pstack-models: opus plus fable, or opus only if the operator has not allowed Fable). Otherwise skip it with the reason.
 13. Wake: background-agent completions are the main wake. On Mubarak's go, arm /loop 1h with the multi-phase-plan tick prompt.
     That prompt re-reads orchestrate.md, judges progress only by side effects (commits, pushes, PR deltas), and replaces a stuck builder.
 14. After any context compaction, Read poteto-mode SKILL.md and orchestrate.md again before the next action.
@@ -82,7 +82,7 @@ You are a poteto-mode delegate. The orchestrator owns the playbook for the progr
 2. To use any other skill, call the Skill tool with its name. If the call is refused, Read its SKILL.md in full. Say which in your report.
 3. Open a todo list whose first items are the eight Feature steps, verbatim. Then mark them this way:
    - Step 1 (how): one inline pass over the files in SCOPE. You do not spawn. how allows "run each role yourself".
-   - Step 2 (architect): "skip: shape fixed by ARCHITECTURE section 8", unless this brief asks for a sketch.
+   - Step 2 (architect): "skip: shape fixed by tracker/qma-v2/HARNESS.md and sketch/", unless this brief asks for a sketch.
    - Step 4: own the diff directly. feature.md allows this for "A subagent forbidden to spawn".
      Call Skill("tdd"). Its pre-agreed seams are <acceptance file and public entry points>. Do not ask the user to confirm them.
    - Step 7 (interrogate): "skip: orchestrator reviews".
@@ -102,7 +102,7 @@ You are a poteto-mode delegate. The orchestrator owns the playbook for the progr
 |---|---|
 | `Task` tool, `generalPurpose` | `Agent` tool. Use `poteto-agent` for delegates (registered in `~/.claude/agents/`) and `general-purpose` where a routed skill prescribes it. |
 | `environment: "cloud"` workers, Cursor Projects | Local worktrees under `D:\QMX-worktrees\`, one writer each. One standing orchestrator session plus `RESUME.md`. |
-| `grok-4.7-xhigh-fast` (code), `claude-opus-5-5-xhigh` (judgment) | `opus` for code and judgment, `sonnet` for swarm workers and how/why explorers, per `~/.agents/pstack-models.md`. No Fable without the operator's OK. Never `bulk-worker`. |
+| `grok-4.7-xhigh-fast` (code), `claude-opus-5-5-xhigh` (judgment) | `opus` for code and judgment, `opus` for swarm workers and how/why explorers too (Sonnet only for very small tasks), per `~/.agents/pstack-models.md`. No Fable without the operator's OK. Never `bulk-worker`. |
 | `~/.cursor/rules/pstack-models.mdc` | `~/.agents/pstack-models.md` (exists, budget medium). |
 | "verifier on a different model family" | Opus and Sonnet are one family. State that limit, or ask the operator for a one-time Fable OK on a high-stakes verdict. |
 | `control-ui` | Now: the built-in Browser pane for `/console`. Later, for SvelteKit: Reticle via `install-and-verify` or `verify-unattended`, then `verify-ui-change`, `agentic-tdd` and `audit-my-app`. |
@@ -134,8 +134,8 @@ You are a poteto-mode delegate. The orchestrator owns the playbook for the progr
 **3. What makes poteto-mode work in Claude Code.**
 - **Invocation.** The operator's pasted prompt must begin with `/poteto-mode`. Docs: at the start of a message "Claude Code runs the skill directly". After plain text a slash name only counts "as your permission for that message".
 - **Builders.** `poteto-agent` already tells the builder to Read SKILL.md, which is the creator's own route for delegates (Harness, SKILL.md:106). Upstream adds that the parent should "put this file's absolute path in every `poteto-agent` prompt". For every other skill, try the Skill tool first (fact 2 above).
-- **Models.** `/setup-pstack` is done. `~/.agents/pstack-models.md` maps every role to `opus` or `sonnet`. Skills read it when they pick a model (setup-pstack:11, SKILL.md:107).
-- **Swarm lanes.** The multi-phase-plan default is "Ten lanes" on cloud VMs (multi-phase-plan.md:13), and check-plan.mjs:141 enforces exactly 10. Keep 10 lanes in the plan as coverage boxes, but run them in one boot by the orchestrator, which is top level and may spawn. Use `/swarm` with at most 3 sonnet workers only where orchestrate.md:87 says a dedicated verifier earns its place. Ten agents per PR times 10 PRs is about 100 runs, and that is not justified on Max 5x.
+- **Models.** `/setup-pstack` is done. `~/.agents/pstack-models.md` maps every role to `opus` (architect, interrogate and cross-judge also list `fable`). Skills read it when they pick a model (setup-pstack:11, SKILL.md:107).
+- **Swarm lanes.** The multi-phase-plan default is "Ten lanes" on cloud VMs (multi-phase-plan.md:13), and check-plan.mjs:141 enforces exactly 10. Keep 10 lanes in the plan as coverage boxes, but run them in one boot by the orchestrator, which is top level and may spawn. Use `/swarm` with at most 3 opus workers only where orchestrate.md:87 says a dedicated verifier earns its place. Ten agents per PR times 10 PRs is about 100 runs, and that is not justified on Max 5x.
 
 **4. Where Matt's skills fit now.**
 - `tdd`: yes. It is model-invocable, so builders call it as a real Skill tool call, as upstream `implement` now says ("Call the Skill tool with tdd"). Name the seams in the brief, because tdd otherwise asks the user to confirm them (tdd:22). The local `tdd` is Matt's. pstack's own `tdd` (bug-fix only) is not installed.
@@ -172,7 +172,7 @@ Local files (C:/Users/Mubarak/.claude/):
 - skills/poteto-mode/SKILL.md:15 (cite only principles you read), :93 (poteto-agent for delegates), :95 (Task defaults), :99 (fresh subagents), :101-111 (Harness), :133 (verbatim todo list with skip lines), :135 (figure-it-out versus Orchestrate), :152-154.
 - skills/poteto-mode/playbooks/orchestrate.md:3, :5, :15, :52, :60, :62, :87. autopilot-stack.md:3, :14. autopilot-full.md:3, :9. multi-phase-plan.md:8, :13, :15. feature.md:12. shipping.md:7-9. opening-a-pr.md:36.
 - skills/how/SKILL.md:22, skills/swarm/SKILL.md:34, skills/no-comments/SKILL.md:18, skills/create-verification-skill/SKILL.md:9, :40, skills/setup-pstack/SKILL.md:11, skills/tdd/SKILL.md:22, skills/implement/SKILL.md:9, skills/ask-matt/SKILL.md:23, skills/poteto-mode/scripts/check-plan.mjs:141.
-- agents/poteto-agent.md:9. ~/.agents/pstack-models.md (budget medium, opus and sonnet only).
+- agents/poteto-agent.md:9. ~/.agents/pstack-models.md (budget medium, opus; fable as the second family).
 - Version drift: `diff` against upstream main gives 0 lines for orchestrate, autopilot-stack, autopilot-full, multi-phase-plan, feature, shipping and pause-safely. It gives 126 lines for poteto-mode/SKILL.md (cursor) and 106 (mirror). Matt: 6 to 75 lines per skill, implement-spec absent.
 - QMX: tracker/qma-v2/ORCHESTRATOR-PROMPT.md:76, :116. reviews/2026-10-13-planning-phase-audit.md:21-22, :98-99 (the "in spirit" runs, zero Skill calls, Wayfinder never re-run).
 - Measured: this subagent's transcript `.../subagents/agent-a9c0263d855ebc71a.jsonl` contains `"name":"Skill","input":{"skill":"unslop"}`.
