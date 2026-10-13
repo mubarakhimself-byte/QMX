@@ -31,7 +31,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Install the store at `D:/QMX-worktrees/qma2-ship/`. Write `preferences.md`, `units.tsv`, `ledger.tsv`, `gates.md`, `decisions.tsv`, `probes.md` and `turns.tsv` before any spawn. `orch.ts` is not installed (`C:/Users/Mubarak/.claude/skills/poteto-mode/scripts/orch/` is empty), so keep the TSV files by hand.
 - [ ] Write these standing orders into `preferences.md`, one numbered line each, and paste the file verbatim into every builder brief.
   - [ ] Base branch `rebuild/base` (tip `4eac8f69` or newer) in repo `C:/Users/Mubarak/Desktop/QMX`, GitHub `MubarakHimself/QMX`. Each builder works in its own worktree `D:/QMX-worktrees/qma2-<pr-id>` on branch `qma2/<pr-id>`. Never touch `main` or `integration`.
-  - [ ] Builders never spawn sub-agents. Assumption, unverified. The operator has set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`. If he has not, the brief text is the only guard.
+  - [ ] Builders never spawn sub-agents. The QMX project's `.claude/settings.local.json` sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` to `1` through its `env` block, which is the method the Claude Code sub-agents docs give. Check it before the first spawn.
   - [ ] Unset every `ANTHROPIC_*` variable before any test or CI run. Put `TMP`, `TEMP`, `UV_CACHE_DIR` and every `--basetemp` on `D:`.
   - [ ] Run `just ci` only while holding `D:\QMX-worktrees\.ci-lock`, created with `File.Open(..., 'CreateNew')`, with rclone on `PATH`. Never delete a lock you did not create. Pytest runs at most two workers (`-n 2`). Run poe tasks as `python -m poethepoet`, because App Control blocks `poe.exe`.
   - [ ] Never edit `qmb/` or `qmn/`. Never import `qmx_*`, `qma.*`, LangChain, LangGraph or deepagents from `qma2`. Builders make no live model calls. Fake clients back unit tests, and live checks belong to the coordinator.
@@ -495,7 +495,7 @@ The coordinator runs every lane of a PR on this machine in one boot. Lanes drive
 - [ ] Edit `qmx-control/src/qmx_control/agent_ops.py` (`ControlAgentOps`, `BrokerProposals`). Create `qmx-agents/packages/qma-v2/tests/fixtures/echo_mcp.py`, `tests/test_agent_tool.py` and `tests/test_callop.py`.
 
 **Build.**
-- [ ] Write `AgentTool` with depth 3, concurrency 6, mode inheritance that never escalates, and a background registry with SendMessage, wait, list and interrupt. Child sessions show as child cards.
+- [ ] Write `AgentTool` reading `max_depth` and `max_concurrent` from the QMX `subagents` setting (defaults 3 and 6, HARNESS A13), with mode inheritance that never escalates, and a background registry with SendMessage, wait, list and interrupt. Child sessions show as child cards.
 - [ ] Bind each `CallOp` grant to name plus canonical args digest, consume grants FIFO, and run the op with the stored allowed input (V3.1).
 - [ ] Confine agent thread ops. A child thread gets `origin=AGENT`, the caller as parent, and the lower of the two modes. Thread verbs work only in the caller's lineage. QMX offers no ALLOW_ALWAYS rule for `mcp__qmx__threads_*` (V1.3). Wire the proposal tool from `money_proposal_spec(sink)` to write an unsigned proposal (A2). Reap an idle host only when no background child is alive (VERDICT A28).
 

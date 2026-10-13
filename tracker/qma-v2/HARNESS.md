@@ -112,7 +112,7 @@ No pattern needs an index or cache added later.
 
 ### The policy chain (policy.py, money.py, hooks.py)
 
-money(input) → PreToolUse hooks → money(updated input) → depth and concurrency caps → deny rules → ask rules → protected paths → mode → allow rules → read-only defaults → ask the operator.
+money(input) → PreToolUse hooks → money(updated input) → deny rules → ask rules → protected paths → mode → allow rules → read-only defaults → ask the operator.
 
 `decide` is pure. `evaluate` only adds the hooks and the money check, and `_ThreadActor.gate` is its only caller.
 - **Claude engine.** QMX passes `setting_sources=[]`, no rules, and a materialised plugin with no hooks. The in-code PreToolUse callback therefore sees every call (built-ins, MCP, the `qmx` server, and sub-agent calls carrying agent_id) and returns allow, deny or ask. Ask leads to `can_use_tool`, which waits on the link with no timeout.
@@ -273,6 +273,14 @@ The per-engine surface is the six-verb `Adapter` protocol. Adapters only transla
   - there is a model-family guard on API keys.
 
 - **A12. Platform-neutral secrets and separation (operator, 2026-10-13 evening).** QMX is not Windows-only. `SecretStore` has one interface with a backend per OS: Windows Credential Manager, macOS Keychain and Linux Secret Service through `keyring`, plus an encrypted-file fallback and an in-memory backend. The process supervisor uses Job Objects on Windows and process groups on POSIX. U10's separate OS user has a backend per OS. The trading node is a plain server, and moving broker credentials there is the long-term money guarantee. The operator accepted the same-user speed bump until then (2026-10-13 evening), which answers open question 1.
+
+- **A13. Sub-agent limits use each SDK's own mechanism (checked against the docs 2026-10-13).** One QMX setting, `subagents`, holds `max_depth` (default 3), `max_concurrent` (default 6) and a per-turn `max_budget_usd`. It is UI-editable (A4). Each engine enforces it the way its SDK documents:
+  - **Claude engine.** The Agent SDK caps nesting and parallelism itself through environment variables passed in the `env` option: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default 3; `1` turns nesting off) and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (default 20). It caps spend with `max_budget_usd`, which also stops background sub-agents. Source: code.claude.com/docs/en/agent-sdk/subagents, section "Limit subagent depth, concurrency and spend". `secrets.host_env` adds these two variables from the QMX setting, and the host passes `max_budget_usd`. QMX does not re-implement depth or concurrency on this engine. `policy.decide` has no cap step.
+  - **The Python SDK merges `env` into the inherited environment.** That is why the host process, not the SDK `env` option, is the place where the allow-list is applied (V2, A5).
+  - **Opus 5 delegation.** Opus 5 delegates readily. With the `claude_code` system-prompt preset, Claude Code adds its own "don't call Agent unless asked" line. With a custom system prompt it does not, so `PromptBuilder` adds the delegation instruction from Anthropic's Opus 5 prompting guide. The limits stay set either way.
+  - **A read-only sub-agent** omits `Agent` from its `tools`, or lists it in `disallowedTools`, as the docs advise.
+  - **OpenAI engine.** The Agents SDK has no sub-agent depth or concurrency limit. Its patterns are agents-as-tools (`Agent.as_tool()`) and handoffs (openai.github.io/openai-agents-python/multi_agent/). Its only built-in bound is `Runner` `max_turns`, which defaults to 10 and raises `MaxTurnsExceeded`, with an `error_handlers["max_turns"]` hook (running_agents page). QMX's `AgentTool` therefore enforces the same `max_depth` and `max_concurrent` values. The host sets `max_turns` from QMX settings and handles `max_turns` through `error_handlers`. The per-turn budget is enforced from the usage rows (V4.3).
+  - **One setting, two native mechanisms.** The user sees the same limits on both engines.
 
 ## Known gaps outside the harness (tracked, not built here)
 
