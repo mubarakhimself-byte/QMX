@@ -166,10 +166,6 @@ class Chat:
     def session_id(self) -> SessionId:
         return self.record.session_id
 
-    @property
-    def is_live(self) -> bool:
-        return self._live is not None
-
     async def send(self, prompt: Prompt) -> None:
         """Connect if Cold, write the `user` block and turn "running", then `client.query`.
         While a turn runs, the SDK queues the message, like typing into Claude Code."""
@@ -212,7 +208,7 @@ class Chat:
             await asyncio.wait_for(live.client.disconnect(), CLOSE_WAIT_S)
         if live.reader is not None and live.reader is not asyncio.current_task():
             live.reader.cancel()
-            with contextlib.suppress(BaseException):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.reader
         await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
 
