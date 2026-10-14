@@ -31,7 +31,7 @@ def version_of(command: list[str], log: Log) -> str:
 
 
 async def connect(log: Log) -> None:
-    options = chat_options(home_env(), SCRATCH / "s01")
+    options = chat_options(home_env(), SCRATCH / "s01", tools=[])
     try:
         async with ClaudeSDKClient(options=options) as client:
             info = await client.get_server_info()

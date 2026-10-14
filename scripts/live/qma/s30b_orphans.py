@@ -20,12 +20,13 @@ import time
 from pathlib import Path
 
 import psutil
-from claude_agent_sdk import ClaudeSDKClient, ResultMessage
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ResultMessage
 from common import LAUNCHER, SCRATCH, Log, boot, chat_env, chat_options, home_env, require_login
 from qma.harness.procs import AgentProcessCap
 from qma.launcher import bundled_cli
 
-CHATS = ("bg", "idle-1", "idle-2")
+TOOLS: dict[str, list[str]] = {"bg": ["Bash"], "idle-1": [], "idle-2": []}
+CHATS = tuple(TOOLS)
 GONE_WITHIN_S = 10.0
 BACKGROUND = (
     "Use the Bash tool with run_in_background set to true to run exactly: sleep 300\n"
@@ -33,12 +34,16 @@ BACKGROUND = (
 )
 
 
+def options(chat: str, procs_dir: Path, cap: str) -> ClaudeAgentOptions:
+    env = chat_env(chat, procs_dir, cap)
+    return chat_options(env, SCRATCH / "s30b" / chat, tools=TOOLS[chat])
+
+
 async def hold(procs: Path, ready: Path) -> None:
     cap = AgentProcessCap.for_platform(procs, None)
     clients: list[ClaudeSDKClient] = []
     for chat in CHATS:
-        env = chat_env(chat, procs, cap.handle_name)
-        client = ClaudeSDKClient(options=chat_options(env, SCRATCH / "s30b" / chat))
+        client = ClaudeSDKClient(options=options(chat, procs, cap.handle_name))
         await client.connect()
         clients.append(client)
     await clients[0].query(BACKGROUND)
@@ -53,11 +58,20 @@ async def hold(procs: Path, ready: Path) -> None:
             "ppid": child.ppid(),
             "name": child.name(),
             "created": child.create_time(),
+            "tools": tools_flag(child),
         }
         for child in psutil.Process().children(recursive=True)
     ]
     ready.write_text(json.dumps({"result": result, "tree": tree}), encoding="utf-8")
     await asyncio.sleep(3600)
+
+
+def tools_flag(process: psutil.Process) -> str | None:
+    try:
+        args = process.cmdline()
+    except psutil.Error:
+        return None
+    return args[args.index("--tools") + 1] if "--tools" in args[:-1] else None
 
 
 def gone(member: dict[str, object]) -> bool:
@@ -84,11 +98,17 @@ def crash(log: Log) -> None:
     tree: list[dict[str, object]] = state["tree"]
     log(f"background turn: {state['result']}")
     for member in tree:
-        log(f"member pid={member['pid']} parent={member['ppid']} name={member['name']}")
+        log(
+            f"member pid={member['pid']} parent={member['ppid']} name={member['name']}"
+            f" tools={member['tools']!r}"
+        )
     clis = [m for m in tree if str(m["name"]).lower().startswith("claude")]
     cli_pids = {m["pid"] for m in clis}
     shells = [m for m in tree if m["ppid"] in cli_pids]
     log.check("three CLIs live", len(clis) == len(CHATS), len(clis))
+    given = sorted(str(m["tools"]) for m in clis)
+    wanted = sorted(",".join(tools) for tools in TOOLS.values())
+    log.check("each CLI runs with only its chat's tools", given == wanted, given)
     log.check(
         "a CLI child (the background Bash) runs", len(shells) >= 1, [m["name"] for m in shells]
     )

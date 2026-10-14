@@ -13,14 +13,20 @@ import sys
 import time
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeSDKClient, ResultMessage
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ResultMessage
 from common import SCRATCH, Log, boot, chat_env, chat_options, require_login
 from qma.harness.procs import AgentProcessCap
 
-CHATS = ("calm-1", "heavy", "calm-2")
+TOOLS: dict[str, list[str]] = {"calm-1": [], "heavy": ["Bash"], "calm-2": []}
+CHATS = tuple(TOOLS)
 HEADROOM_MB = 600
 ALLOCATE = "b = [bytearray(64 * 2**20) for _ in range(96)]; print(len(b))"
 ASK_BASH = "Use the Bash tool once to run this exact command, then reply with its output:\n"
+
+
+def options(chat: str, procs_dir: Path, cap: str) -> ClaudeAgentOptions:
+    env = chat_env(chat, procs_dir, cap)
+    return chat_options(env, SCRATCH / "s30" / chat, tools=TOOLS[chat])
 
 
 async def ask(client: ClaudeSDKClient, prompt: str, log: Log, chat: str) -> bool:
@@ -41,8 +47,7 @@ async def ask(client: ClaudeSDKClient, prompt: str, log: Log, chat: str) -> bool
 async def run(log: Log, cap: AgentProcessCap) -> None:
     clients: dict[str, ClaudeSDKClient] = {}
     for chat in CHATS:
-        env = chat_env(chat, cap.procs_dir, cap.handle_name)
-        clients[chat] = ClaudeSDKClient(options=chat_options(env, SCRATCH / "s30" / chat))
+        clients[chat] = ClaudeSDKClient(options=options(chat, cap.procs_dir, cap.handle_name))
         await clients[chat].connect()
     try:
         report = cap.report()
