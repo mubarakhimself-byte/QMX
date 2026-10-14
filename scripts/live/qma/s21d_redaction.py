@@ -3,12 +3,13 @@
 login involved), then is asked to read a repo file and write `hello.txt`.
 
 PASS when control.db and the live channel show `[redacted sk-ant token]`, neither holds the fake
-token or any 8-character-or-longer tail of it, and the write is rejected by the floor with no
-file created.
+token or any 8-character-or-longer tail of it, the model streamed the token over more than one
+delta, and the write is rejected by the floor with no file created.
 
-How the model splits the token over stream deltas is up to the model, so the log records the
-split it got. Every split at every point, in text, thinking and tool progress, is proved through
-the real `Chat` by `test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_db`.
+How the model splits the token over stream deltas is up to the model, so a run where it arrives
+in one delta proves nothing about the gate and fails. Every split at every point, in text,
+thinking and tool progress, is proved through the real `Chat` by
+`test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_db`.
 
     s21d_redaction.py [--home D:/QMX-worktrees/qma-ship/home] [--model haiku]
 """
@@ -80,7 +81,8 @@ async def run(log: Log) -> None:
             f"nothing else: {FAKE}",
         )
         parser.parse_message = original
-        log(f"the model streamed the fake token over {token_deltas(raw)} text deltas")
+        split = token_deltas(raw)
+        log.check("the model streamed the fake token over more than one delta", split > 1, split)
         stored = json.dumps(
             [block["content"] for block in session_blocks(session.control, session.chat)]
         )

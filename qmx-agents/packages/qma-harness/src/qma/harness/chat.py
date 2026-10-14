@@ -132,9 +132,8 @@ def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusRespo
 
 
 def unexpected_plugins(init: Mapping[str, Any]) -> list[str]:
-    """Plugins the `init` message lists besides the inline QMX plugin and the CLI's built-ins.
-    `init` arrives only after a prompt, so a plugin that adds nothing but hooks shows here
-    first."""
+    """The CLI sends `init` only after a prompt, and a plugin that adds nothing but hooks shows
+    nowhere earlier."""
     sources = [str(plugin.get("source")) for plugin in init.get("plugins", [])]
     return [
         f"plugin {source}"
@@ -198,9 +197,8 @@ class Chat:
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._unanswered = 0
-        """Prompts sent and not yet ended by their own `ResultMessage`. The CLI answers a
-        prompt queued during a turn with a turn of its own, so the record stays "running"
-        until every sent prompt has its result."""
+        """The CLI answers a prompt queued during a turn with a turn and `ResultMessage` of
+        its own."""
 
     @property
     def session_id(self) -> SessionId:
