@@ -2388,20 +2388,23 @@ version = "0.1.0"
 source = { editable = "packages/qma-harness" }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "keyring" },
+    { name = "psutil" },
+    { name = "pydantic" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "qma-core" },
     { name = "qmx-broker" },
     { name = "qmx-control" },
     { name = "qmx-ledger" },
     { name = "qmx-tools" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "poethepoet" },
-    { name = "psutil" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2413,20 +2416,23 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk", specifier = "==0.2.166" },
+    { name = "fastapi", specifier = "==0.142.2" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "keyring", specifier = "==25.7.0" },
+    { name = "psutil", specifier = "==7.2.2" },
+    { name = "pydantic", specifier = "==2.13.4" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
     { name = "qma-core", editable = "packages/qma-core" },
     { name = "qmx-broker", editable = "packages/qmx-broker" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
     { name = "qmx-tools", editable = "packages/qmx-tools" },
+    { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "poethepoet", specifier = "==0.48.0" },
-    { name = "psutil", specifier = ">=7,<9" },
     { name = "pyright", specifier = "==1.1.411" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-cov", specifier = ">=7,<8" },
