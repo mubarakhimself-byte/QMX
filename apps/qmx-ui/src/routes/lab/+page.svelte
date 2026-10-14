@@ -140,18 +140,7 @@
         >
       {/each}
     </div>
-    {#if !workbench.demoMode}
-      {@const first = lab.bench === "pods" ? FIRST.pod : FIRST.template}
-      {@const [path, query] = first.href.split("?")}
-      <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
-      <Button
-        variant="ghost"
-        size="sm"
-        href={`${resolve(path as "/")}${query ? `?${query}` : ""}`}
-        ><Plus />{first.label}</Button
-      >
-      <!-- eslint-enable svelte/no-navigation-without-resolve -->
-    {:else if lab.bench === "pods"}
+    {#if workbench.demoMode && lab.bench === "pods"}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -210,7 +199,7 @@
           </DropdownMenu.Sub>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
-    {:else}
+    {:else if workbench.demoMode}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}

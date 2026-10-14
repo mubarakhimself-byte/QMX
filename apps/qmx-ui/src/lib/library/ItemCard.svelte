@@ -23,8 +23,8 @@
   onclick={onselect}
 >
   <span
-    class="flex h-9 items-center gap-2 px-3 text-xs font-medium text-white"
-    style="background:{color}"
+    class="flex h-9 items-center gap-2 px-3 text-xs font-medium"
+    style="background:color-mix(in oklab, {color} 16%, transparent);color:color-mix(in oklab, {color} 70%, white)"
     ><shelf.icon class="size-3.5" />{item.family ?? shelf.label}
     {#if item.stage}<span class="ml-auto rounded bg-black/20 px-1.5"
         >{item.stage}</span
