@@ -1059,6 +1059,10 @@ class ToolsServerErrorRoute(ToolsRateLimitedRoute):
     error = b'{"detail": "busy"}'
 
 
+class ToolsTimeoutRoute(ToolsServerErrorRoute):
+    status = 408
+
+
 def _dns_fails(
     monkeypatch: pytest.MonkeyPatch, failing: Callable[[urllib.request.Request], bool]
 ) -> None:
@@ -1089,6 +1093,11 @@ DNS_FAILED = "transport: <urlopen error [Errno 11001] getaddrinfo failed>"
             False,
             "turn1 not completed (status 503, code None, message 'busy')",
         ),
+        (
+            ToolsTimeoutRoute,
+            False,
+            "turn1 not completed (status 408, code None, message 'busy')",
+        ),
         (StubRoute, True, f"turn1 not completed (status 0, code None, message '{DNS_FAILED}')"),
     ],
 )
@@ -1115,6 +1124,33 @@ def test_a_transient_error_in_both_tool_shapes_is_inconclusive_not_unviable(
     assert verdict.row().split(" | ")[2:4] == [
         "inconclusive",
         f"rerun: P3 (namespace: {turn1}; plain: {turn1})",
+    ]
+
+
+class ToolsRefusedRoute(ToolsRateLimitedRoute):
+    status = 400
+    error = b'{"error": {"code": null, "message": "Unknown parameter: tools"}}'
+
+
+def test_a_client_refusal_in_both_tool_shapes_is_the_stop_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, ToolsRefusedRoute)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert [(s.step, s.passed, s.detail) for s in verdict.steps[2:]] == [
+        (
+            f"P3-{shape}",
+            False,
+            "turn1 not completed (status 400, code None, message 'Unknown parameter: tools')",
+        )
+        for shape in ("namespace", "plain")
+    ]
+    assert verdict.row().split(" | ")[2:4] == [
+        "not viable",
+        "stop rule at P3 (both tool shapes failed)",
     ]
 
 

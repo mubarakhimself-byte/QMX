@@ -1,8 +1,9 @@
 """Probe GPT on the ChatGPT plan through Sign in with ChatGPT (HARNESS-PLAN HP2, 02b section D).
 
-A throwaway client registered as "QMA" runs probes P0 to P5 in order. 02b's stop rule (P2
-not eligible, or a completed P3 turn with no tool call in both tool shapes) ends the run as
-not viable; any other failure, such as a 429, a 5xx or a network error, ends it as
+A throwaway client registered as "QMA" runs probes P0 to P5 in order. 02b's stop rule ends
+the run as not viable: P2 not eligible, or P3 turn one failing in both tool shapes with a
+completed turn and no tool call or with a 4xx refusal other than 408 or 429. Any other
+failure, such as a 408, a 429, a 5xx, a network error or a failed turn two, ends it as
 inconclusive. The refresh token lives in the OS keyring under
 `qmx/chatgpt`. Access tokens live in this process only. No log line, file or stdout line
 carries a token.
@@ -449,6 +450,7 @@ def epoch_seconds(value: object) -> float | None:
 
 
 TRANSPORT_FAILED = 0
+TRANSIENT_4XX = frozenset({408, 429})
 
 
 @dataclass(frozen=True)
@@ -829,7 +831,8 @@ def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -
             f"message {first.error_message!r})"
         )
         log(f"result: FAIL {detail}")
-        return StepResult(f"P3-{shape}", False, detail)
+        refused = 400 <= first.status < 500 and first.status not in TRANSIENT_4XX
+        return StepResult(f"P3-{shape}", False, detail, stop_rule=refused)
     if not calls:
         detail = (
             f"no echo_word call (status {first.status}, code {first.error_code}, "
