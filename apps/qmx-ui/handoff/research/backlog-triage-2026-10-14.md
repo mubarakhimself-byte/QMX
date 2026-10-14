@@ -74,7 +74,7 @@ Size: S = under half a day, M = about a day, L = several days.
 
 ### Start-up and day one
 33. **Start-up screen**: QMX appears, then the world fills in slowly in the theme's colours, with loading states. L65, L131. Nothing like this exists in the code. It can be built in the browser now (R9). **M**
-34. **Day one with no demo data**: how every screen looks fresh out of the box. L133. Demo mode is always on (`workbench.svelte.ts:287`). There has been no pass over the empty states with demo mode off. **L**
+34. **[DONE] Day one with no demo data**: how every screen looks fresh out of the box. L133. Demo mode is always on (`workbench.svelte.ts:287`). There has been no pass over the empty states with demo mode off. **L** DONE 2026-10-14 (6a816aab..2edc419b). Demo is a switch in Settings, Developer; every screen has a day-one state and Home leads with Get started.
 
 ## 3. Other statuses
 
