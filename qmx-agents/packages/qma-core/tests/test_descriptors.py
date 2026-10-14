@@ -56,9 +56,7 @@ def test_money_metadata_is_refused_under_a_read_name(
         check_descriptor("read_bars", metadata)
 
 
-def test_proposal_writer_has_no_exemption_here() -> None:
-    """The proposal-writer exemption is keyed on the writer's type by the caller,
-    so the descriptor alone always refuses `propose_order`."""
+def test_propose_order_is_refused_without_the_callers_writer_type_exemption() -> None:
     with pytest.raises(MoneyPathDenyError, match="Money-path tool refused: propose_order"):
         check_descriptor("propose_order", {"money_path": True})
     with pytest.raises(MoneyPathDenyError, match="Money-path act refused: propose_order"):

@@ -36,7 +36,6 @@ def check_descriptor(name: str, metadata: dict[str, Any]) -> None:
                 tokens.append(value)
             elif isinstance(value, (list, tuple, set)):
                 tokens.extend(str(item) for item in cast("list[Any]", value))
-    # Resolve server prefixes on both advertised names and original MCP metadata.
     for token in list(tokens):
         for separator in ("_", ".", ":", "/"):
             parts = token.split(separator)
