@@ -63,7 +63,7 @@
       <button
         type="button"
         class={cn(
-          "hover:bg-muted/40 p-panel flex flex-col gap-3 rounded-xl border-2 text-left transition-colors",
+          "hover:bg-muted/40 p-panel flex flex-col gap-2 rounded-xl border-2 text-left transition-colors",
           portfolio.pod === p.id && "bg-muted/50",
           v.paused && "opacity-70",
         )}
@@ -84,7 +84,7 @@
             >{v.paused ? "Paused" : p.mode === "LIVE" ? "Live" : "Paper"}</span
           >
         </span>
-        <span class="block h-10"
+        <span class="block h-8"
           ><Sparkline values={v.curve} class="block h-full w-full" /></span
         >
         <span class="flex items-baseline gap-2">

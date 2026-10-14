@@ -304,7 +304,14 @@
     status={v.paused ? "Paused" : `${pct(v.today)} today · ${usd(v.room)} room`}
     tone={v.paused ? "warn" : v.roomShare < 0.25 ? "bad" : "good"}
     values={v.curve}
-  />
+  >
+    <Button
+      size="sm"
+      variant={v.paused ? "default" : "outline"}
+      onclick={() => podSim.togglePause(id)}
+      >{#if v.paused}<Play />Resume{:else}<Pause />Pause{/if}</Button
+    >
+  </PanelSummary>
 {:else}
   <div class="flex h-full min-h-0 flex-col">
     <div class="px-panel flex h-11 shrink-0 items-center gap-2">

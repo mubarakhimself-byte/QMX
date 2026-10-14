@@ -5,7 +5,10 @@
    * position size (notional), not the margin behind it. The pod's own
    * record is shown beside what the exchange reports; they are never merged.
    */
-  import { onMount } from "svelte";
+  import { onMount, type Snippet } from "svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import PanelSummary from "$lib/workbench/PanelSummary.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Search from "@lucide/svelte/icons/search";
@@ -27,6 +30,9 @@
     mode: "LIVE" | "PAPER";
     p: number;
   };
+  /** `lead` sits at the start of the toolbar (Holdings puts its toggle there). */
+  let { lead }: { lead?: Snippet } = $props();
+  const size = panelSize();
   let rows = $state<Pos[]>([
     {
       sym: "XAUUSD",
@@ -222,112 +228,119 @@
   ];
 </script>
 
-<div class="flex h-full flex-col">
-  <div class="flex h-9 shrink-0 items-center gap-2 border-b px-2 text-xs">
-    <span class="relative">
-      <Search
-        class="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2"
-      />
-      <input
-        bind:value={q}
-        placeholder="Market or bot"
-        aria-label="Filter positions"
-        class="bg-background/40 h-7 w-36 rounded-md border pr-2 pl-7 text-xs"
-      />
-    </span>
-    <span class="text-muted-foreground ml-auto">Group</span>
-    {#each ["none", "pod", "bot"] as const as g (g)}
-      <button
-        type="button"
-        class={cn(
-          "h-6 rounded-md px-2 capitalize",
-          group === g
-            ? "bg-muted text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        aria-pressed={group === g}
-        onclick={() => (group = g)}>{g}</button
+{#if size.mode === "compact"}
+  {@const total = shown.reduce((n, r) => n + value(r), 0)}
+  {@const up = shown.filter((r) => pnl(r) >= 0).length}
+  <PanelSummary
+    label={`${shown.length} open positions`}
+    value={usd(total)}
+    status={`${up} up · ${shown.length - up} down`}
+    tone={up >= shown.length - up ? "good" : "bad"}
+  />
+{:else}
+  <div class="flex h-full flex-col">
+    <div class="px-panel flex h-11 shrink-0 items-center gap-2 text-xs">
+      {@render lead?.()}
+      <span class="relative">
+        <Search
+          class="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2"
+        />
+        <input
+          bind:value={q}
+          placeholder="Market or bot"
+          aria-label="Filter positions"
+          class="bg-background/40 h-7 w-36 rounded-md border pr-2 pl-7 text-xs"
+        />
+      </span>
+      <select
+        bind:value={group}
+        class="bg-background/40 ml-auto h-6 rounded border px-1.5 text-xs"
+        aria-label="Group positions"
       >
-    {/each}
-  </div>
-  <div class="min-h-0 flex-1 overflow-auto">
-    <table class="w-full text-sm whitespace-nowrap">
-      <thead
-        class="bg-panel text-muted-foreground sticky top-0 z-10 text-left text-xs"
-      >
-        <tr class="border-b">
-          {#each COLS as c (c.k)}
-            <th
-              class={cn(
-                "py-1.5 font-normal",
-                c.right ? "pr-3 text-right" : "pr-3 first:pl-3",
-              )}
-            >
-              <button
-                type="button"
-                class="hover:text-foreground inline-flex items-center gap-0.5"
-                onclick={() => sortBy(c.k)}
-              >
-                {c.label}{#if key === c.k}{#if desc}<ArrowDown
-                      class="size-3"
-                    />{:else}<ArrowUp class="size-3" />{/if}{/if}
-              </button>
-            </th>
-          {/each}
-          <th class="py-1.5 pr-3 font-normal">Account</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each groups as g (g.name)}
-          {#if g.name}
-            <tr class="bg-muted/30"
-              ><td colspan="6" class="px-3 py-1 text-xs font-medium"
-                >{g.name}
-                <span class="text-muted-foreground font-normal"
-                  >· {usd(g.items.reduce((n, r) => n + value(r), 0))}</span
-                ></td
-              ></tr
-            >
-          {/if}
-          {#each g.items as r (r.sym + r.bot)}
-            <tr class="border-b border-border/50">
-              <td class="py-1.5 pr-3 pl-3">
-                <span class="flex items-center gap-2">
-                  <span
-                    class="h-4 w-0.5 rounded-full"
-                    style="background: var(--tone-{r.mode === 'LIVE'
-                      ? 'live'
-                      : 'paper'})"
-                  ></span>
-                  <span class="font-medium">{r.sym}</span>
-                  <span class="num text-muted-foreground text-xs"
-                    >{r.qty} {r.unit}</span
-                  >
-                </span>
-              </td>
-              <td class="num py-1.5 pr-3 text-right">{usd(value(r))}</td>
-              <td
+        <option value="none">No groups</option><option value="pod"
+          >By pod</option
+        ><option value="bot">By bot</option>
+      </select>
+      <InfoTip
+        label="Explain positions"
+        text="Open positions across every account. CFD values are the full position, not the margin behind it. Sample prices tick every second. Nothing is ordered from here: orders come only from bots inside their pods."
+      />
+    </div>
+    <div class="min-h-0 flex-1 overflow-auto">
+      <table class="w-full text-sm whitespace-nowrap">
+        <thead
+          class="bg-panel text-muted-foreground sticky top-0 z-10 text-left text-xs"
+        >
+          <tr class="border-b">
+            {#each COLS as c (c.k)}
+              <th
                 class={cn(
-                  "num py-1.5 pr-3 text-right",
-                  pnl(r) >= 0 ? "text-success" : "text-destructive",
-                )}>{pnl(r) >= 0 ? "+" : ""}{pnl(r).toFixed(2)}%</td
+                  "py-1.5 font-normal",
+                  c.right ? "pr-3 text-right" : "pr-3 first:pl-3",
+                )}
               >
-              <td
-                class="num text-muted-foreground py-1.5 pr-3 text-right text-xs"
-                >{r.risk ? `${r.risk} R` : "—"}</td
+                <button
+                  type="button"
+                  class="hover:text-foreground inline-flex items-center gap-0.5"
+                  onclick={() => sortBy(c.k)}
+                >
+                  {c.label}{#if key === c.k}{#if desc}<ArrowDown
+                        class="size-3"
+                      />{:else}<ArrowUp class="size-3" />{/if}{/if}
+                </button>
+              </th>
+            {/each}
+            <th class="py-1.5 pr-3 font-normal">Account</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each groups as g (g.name)}
+            {#if g.name}
+              <tr class="bg-muted/30"
+                ><td colspan="6" class="px-3 py-1 text-xs font-medium"
+                  >{g.name}
+                  <span class="text-muted-foreground font-normal"
+                    >· {usd(g.items.reduce((n, r) => n + value(r), 0))}</span
+                  ></td
+                ></tr
               >
-              <td class="py-1.5 pr-3 text-xs">{r.bot}</td>
-              <td class="text-muted-foreground py-1.5 pr-3 text-xs"
-                >{ACCOUNTS.find((a) => a.id === r.account)?.name}</td
-              >
-            </tr>
+            {/if}
+            {#each g.items as r (r.sym + r.bot)}
+              <tr class="border-b border-border/50">
+                <td class="py-1.5 pr-3 pl-3">
+                  <span class="flex items-center gap-2">
+                    <span
+                      class="h-4 w-0.5 rounded-full"
+                      style="background: var(--tone-{r.mode === 'LIVE'
+                        ? 'live'
+                        : 'paper'})"
+                    ></span>
+                    <span class="font-medium">{r.sym}</span>
+                    <span class="num text-muted-foreground text-xs"
+                      >{r.qty} {r.unit}</span
+                    >
+                  </span>
+                </td>
+                <td class="num py-1.5 pr-3 text-right">{usd(value(r))}</td>
+                <td
+                  class={cn(
+                    "num py-1.5 pr-3 text-right",
+                    pnl(r) >= 0 ? "text-success" : "text-destructive",
+                  )}>{pnl(r) >= 0 ? "+" : ""}{pnl(r).toFixed(2)}%</td
+                >
+                <td
+                  class="num text-muted-foreground py-1.5 pr-3 text-right text-xs"
+                  >{r.risk ? `${r.risk} R` : "—"}</td
+                >
+                <td class="py-1.5 pr-3 text-xs">{r.bot}</td>
+                <td class="text-muted-foreground py-1.5 pr-3 text-xs"
+                  >{ACCOUNTS.find((a) => a.id === r.account)?.name}</td
+                >
+              </tr>
+            {/each}
           {/each}
-        {/each}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <p class="text-muted-foreground border-t px-3 py-1.5 text-xs">
-    Sample prices tick every second. Nothing is ordered from here: orders come
-    only from bots inside their pods.
-  </p>
-</div>
+{/if}

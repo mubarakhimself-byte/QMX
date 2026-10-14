@@ -182,7 +182,7 @@ class PodSim {
       s.knobs.daily !== undefined ? (base.equity * s.knobs.daily) / 100 : null;
     const limits: PodView["limits"] = [
       {
-        name: "Room to kill line",
+        name: "Kill-line room",
         now: usd(room),
         limit: `line ${usd(floor)}`,
         used: Math.max(0, Math.min(1, 1 - room / (p.start - floor))),
