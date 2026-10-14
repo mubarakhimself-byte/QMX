@@ -17,6 +17,12 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
+from qma.core.barriers.money_path import (
+    MONEY_PATH_ACT_ALIASES,
+    MONEY_PATH_DENIED_ACTS,
+    MoneyPathDenyError,
+)
+from qma.core.barriers.parent_surfaces import is_parent_surface_permitted
 from qmx_ledger.journal import RunJournal, fingerprint
 from test_spec import call, write_spec
 
@@ -24,13 +30,10 @@ from qmx_agents.guards import (
     AdmissionBackend,
     AdmissionDenied,
     AdmissionGate,
-    MoneyPathDenyError,
     WriteProposal,
     check_tool,
     propose_order,
 )
-from qmx_agents.guards.money_path import MONEY_PATH_ACT_ALIASES, MONEY_PATH_DENIED_ACTS
-from qmx_agents.guards.parent_surfaces import is_parent_surface_permitted
 from qmx_agents.router import ModelRouter, RouterConfig
 from qmx_agents.spec import Budget, BuildContext
 

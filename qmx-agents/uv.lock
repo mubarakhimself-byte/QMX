@@ -2579,6 +2579,7 @@ dependencies = [
     { name = "langgraph-checkpoint-sqlite" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "qma-core" },
     { name = "qmx-broker" },
     { name = "qmx-ledger" },
     { name = "qmx-tools" },
@@ -2610,6 +2611,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-sqlite", specifier = "==3.1.1" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "qma-core", editable = "packages/qma-core" },
     { name = "qmx-broker", editable = "packages/qmx-broker" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
     { name = "qmx-tools", editable = "packages/qmx-tools" },
@@ -2639,7 +2641,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
-    { name = "qmx-agents" },
+    { name = "qma-core" },
     { name = "qmx-ledger" },
 ]
 
@@ -2652,7 +2654,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
-    { name = "qmx-agents" },
     { name = "ruff" },
     { name = "types-cachetools" },
     { name = "types-jsonschema" },
@@ -2669,7 +2670,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7,<9" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
-    { name = "qmx-agents", editable = "packages/qmx-agents" },
+    { name = "qma-core", editable = "packages/qma-core" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
 ]
 
@@ -2682,7 +2683,6 @@ dev = [
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-cov", specifier = ">=7,<8" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
-    { name = "qmx-agents", editable = "packages/qmx-agents" },
     { name = "ruff", specifier = "==0.16.5" },
     { name = "types-cachetools", specifier = ">=7.0.0.20260713" },
     { name = "types-jsonschema" },

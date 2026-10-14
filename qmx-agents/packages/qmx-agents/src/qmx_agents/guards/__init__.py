@@ -6,13 +6,12 @@ from qmx_agents.guards.admission import (
     AdmissionGate,
     WriteProposal,
 )
-from qmx_agents.guards.money_path import MoneyPathDenyError, check_tool, propose_order
+from qmx_agents.guards.money_path import check_tool, propose_order
 
 __all__ = [
     "AdmissionBackend",
     "AdmissionDenied",
     "AdmissionGate",
-    "MoneyPathDenyError",
     "WriteProposal",
     "check_tool",
     "propose_order",
