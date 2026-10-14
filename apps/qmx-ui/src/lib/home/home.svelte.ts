@@ -79,9 +79,29 @@ function loadTicker(): string[] {
   return ["XAUUSD", "US500", "NAS100", "EURUSD", "USOIL", "BTC", "ETH"];
 }
 
+const MARKETS_KEY = "qmx.home.markets.from";
+function loadFrom(): string {
+  try {
+    return localStorage.getItem(MARKETS_KEY) ?? "all";
+  } catch {
+    return "all";
+  }
+}
+
 class HomeState {
   layouts = new LayoutStore("qmx.home.layouts.v1", HOME_LAYOUTS);
   ticker = $state<string[]>(loadTicker());
+  /** Markets panel filter: "all", a broker ("venue:<id>") or an account ("acct:<id>"). */
+  marketsFrom = $state(loadFrom());
+
+  setMarketsFrom(value: string) {
+    this.marketsFrom = value;
+    try {
+      localStorage.setItem(MARKETS_KEY, value);
+    } catch {
+      /* storage unavailable */
+    }
+  }
 
   setTicker(list: string[]) {
     this.ticker = list;

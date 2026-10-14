@@ -11,6 +11,7 @@
   import SpecView from "$lib/sdk/SpecView.svelte";
   import type { PanelSpec } from "$lib/sdk/spec";
   import { workbench } from "$lib/workbench/workbench.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
 
   const SPEC: PanelSpec = {
     title: "Momentum screener",
@@ -19,7 +20,7 @@
     data: "screener.momentum",
     root: "page",
     elements: {
-      page: { type: "Stack", children: ["table", "note"] },
+      page: { type: "Stack", children: ["table"] },
       table: {
         type: "Table",
         props: {
@@ -40,13 +41,6 @@
           ],
         },
       },
-      note: {
-        type: "Callout",
-        props: {
-          tone: "info",
-          text: "Built by the copilot from a description. Ask it to change the columns or filters.",
-        },
-      },
     },
   };
 
@@ -59,15 +53,20 @@
 </script>
 
 <div class="flex h-full flex-col">
-  <div class="min-h-0 flex-1 overflow-auto p-3">
+  <div class="px-panel flex h-10 shrink-0 items-center gap-2">
+    <span class="truncate text-sm font-medium">{SPEC.title}</span>
+    <InfoTip
+      label="Explain the screener"
+      text="The copilot built this from a description: top coins by 7-day momentum, with volume, funding and news mood. Ask it to change the columns or filters."
+    />
+    <Button size="sm" variant="ghost" class="ml-auto h-7" onclick={change}
+      ><Sparkles />Change</Button
+    >
+  </div>
+  <div class="px-panel pb-panel min-h-0 flex-1 overflow-auto">
     <SpecView
       spec={SPEC}
       onaction={(op) => workbench.notify(`Asked the host to run ${op}.`)}
     />
-  </div>
-  <div class="flex shrink-0 justify-end border-t px-3 py-1.5">
-    <Button size="sm" variant="ghost" onclick={change}
-      ><Sparkles />Change with the copilot</Button
-    >
   </div>
 </div>

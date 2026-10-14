@@ -1,6 +1,9 @@
 <script lang="ts">
   /** Coming up: macro events and crypto events that move prices, with which pods care. Sample items. */
   import { cn } from "$lib/utils";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
+
+  const size = panelSize();
 
   const EVENTS = [
     {
@@ -39,6 +42,10 @@
       pods: "Weekend throttle",
     },
   ];
+  let high = $state(false);
+  const shown = $derived(
+    high ? EVENTS.filter((e) => e.impact === "high") : EVENTS,
+  );
   const DOT = {
     high: "bg-destructive",
     medium: "bg-warning",
@@ -46,21 +53,67 @@
   };
 </script>
 
-<ul class="h-full overflow-auto p-1.5">
-  {#each EVENTS as e (e.what)}
-    <li class="flex items-start gap-3 rounded-md px-2 py-2">
-      <span
-        class={cn(
-          "mt-1.5 size-2 shrink-0 rounded-full",
-          DOT[e.impact as keyof typeof DOT],
-        )}
-      ></span>
-      <span class="min-w-0 flex-1">
-        <span class="block text-sm font-medium">{e.what}</span>
-        <span class="text-muted-foreground block text-sm"
-          >{e.when} · {e.kind} · {e.pods}</span
-        >
-      </span>
-    </li>
-  {/each}
-</ul>
+{#if size.mode === "compact"}
+  <div class="p-panel gap-row flex h-full flex-col overflow-hidden">
+    <p class="text-muted-foreground text-xs">Next · {EVENTS[0].when}</p>
+    <p class="text-base font-medium">{EVENTS[0].what}</p>
+    <ul class="mt-group flex flex-col gap-0.5 text-sm">
+      {#each EVENTS.slice(1) as e (e.what)}
+        <li class="flex min-w-0 items-center gap-2" title={e.when}>
+          <span
+            class={cn(
+              "size-1.5 shrink-0 rounded-full",
+              DOT[e.impact as keyof typeof DOT],
+            )}
+          ></span>
+          <span class="truncate">{e.what}</span>
+        </li>
+      {/each}
+    </ul>
+  </div>
+{:else}
+  <div class="flex h-full flex-col">
+    <div class="px-panel flex h-10 shrink-0 items-center">
+      <div
+        class="bg-muted flex rounded-md p-0.5 text-xs"
+        role="radiogroup"
+        aria-label="Show"
+      >
+        {#each [false, true] as h (h)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={high === h}
+            class={cn(
+              "h-6 rounded px-2.5",
+              high === h
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onclick={() => (high = h)}>{h ? "High impact" : "All"}</button
+          >
+        {/each}
+      </div>
+    </div>
+    <ul class="px-panel pb-panel min-h-0 flex-1 overflow-auto">
+      {#each shown as e (e.what)}
+        <li class="py-row flex items-start gap-3">
+          <span
+            class={cn(
+              "mt-2 size-2 shrink-0 rounded-full",
+              DOT[e.impact as keyof typeof DOT],
+            )}
+          ></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm">{e.what}</span>
+            <span class="text-muted-foreground block truncate text-xs"
+              >{e.when}{size.mode === "expanded"
+                ? ` · ${e.kind} · ${e.pods}`
+                : ` · ${e.pods}`}</span
+            >
+          </span>
+        </li>
+      {/each}
+    </ul>
+  </div>
+{/if}
