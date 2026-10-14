@@ -75,7 +75,7 @@ class TokenGate:
 
     def feed(self, text: str) -> str:
         pending = self._held + text
-        cut = _settled(pending)
+        cut = _settled_length(pending)
         self._held = pending[cut:]
         return redact(pending[:cut])
 
@@ -84,8 +84,7 @@ class TokenGate:
         return redact(held)
 
 
-def _settled(text: str) -> int:
-    """Where the text that cannot grow into a token ends."""
+def _settled_length(text: str) -> int:
     open_token = _OPEN_TOKEN.search(text)
     if open_token:
         return open_token.start()
@@ -290,7 +289,6 @@ def _result_text(content: str | list[dict[str, Any]] | None) -> str:
 
 
 def _tool_results(message: UserMessage) -> list[Fact]:
-    """Tool results only. The operator's own prompt is written by `chat.py` when it is sent."""
     if isinstance(message.content, str):
         return []
     target = _target(message.parent_tool_use_id)

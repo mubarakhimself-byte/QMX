@@ -217,8 +217,6 @@ class Chat:
         await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
 
     async def _connect(self) -> _Live:
-        """Each step can refuse before any prompt goes out. A refusal leaves a `needs_you`
-        block naming the reason."""
         try:
             return await self._launch()
         except LaunchRefused as refused:
@@ -284,7 +282,6 @@ class Chat:
                 await self._lost(live)
 
     async def _lost(self, live: _Live) -> None:
-        """The CLI ended without `close`. A turn in flight has an unknown outcome."""
         if self._live is live:
             self._live = None
         self._flush()
@@ -323,7 +320,6 @@ class Chat:
                 self._stream.publish(Delta(key[0], cast("Any", key[1]), text))
 
     async def _note(self, kind: str, content: dict[str, Any]) -> None:
-        """A block the chat writes itself, redacted like every projected block."""
         if self._deps.redaction:
             content = redacted(content)
         await self._append(Here(), SessionBlock.model_validate({"type": kind, "content": content}))
@@ -333,7 +329,6 @@ class Chat:
         await asyncio.to_thread(self._deps.control.sessions_append, session, block)
 
     async def _child(self, target: InChild) -> str:
-        """The qmx-control child session of a native sub-agent, created on first sight."""
         child = self._children.get(target.tool_use_id)
         if child is None:
             control = self._deps.control
@@ -358,7 +353,6 @@ class Chat:
     async def _can_use_tool(
         self, tool_name: str, tool_input: dict[str, Any], context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
-        """The floor: every call that would ask is rejected and shown."""
         await self._note(
             "permission",
             {"tool": tool_name, "input": tool_input, "state": "rejected", "reason": FLOOR_REASON},
