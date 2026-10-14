@@ -77,84 +77,86 @@
     status={`${DEMO_STEPS.length} steps · published v6`}
   />
 {:else}
-<div class="flex h-full flex-col">
-  <div class="px-panel flex h-11 shrink-0 items-center gap-2">
-    <Segmented
-      label="Build mode"
-      options={MODES.map((m) => ({ value: m, label: m }))}
-      bind:value={mode}
-    />
-    <span class="text-muted-foreground hidden truncate text-xs @xl:inline"
-      >Breakout research · draft v7 · published v6</span
-    >
-    {#if mode === "Graph"}
-      <button
-        type="button"
-        class={cn(
-          "ml-auto flex h-6 items-center gap-1 rounded-md px-2 text-xs",
-          showMap ? "bg-muted" : "text-muted-foreground hover:text-foreground",
-        )}
-        aria-pressed={showMap}
-        onclick={() => (showMap = !showMap)}><Map class="size-3.5" />Map</button
+  <div class="flex h-full flex-col">
+    <div class="px-panel flex h-11 shrink-0 items-center gap-2">
+      <Segmented
+        label="Build mode"
+        options={MODES.map((m) => ({ value: m, label: m }))}
+        bind:value={mode}
+      />
+      <span class="text-muted-foreground hidden truncate text-xs @xl:inline"
+        >Breakout research · draft v7 · published v6</span
       >
-    {/if}
+      {#if mode === "Graph"}
+        <button
+          type="button"
+          class={cn(
+            "ml-auto flex h-6 items-center gap-1 rounded-md px-2 text-xs",
+            showMap
+              ? "bg-muted"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-pressed={showMap}
+          onclick={() => (showMap = !showMap)}
+          ><Map class="size-3.5" />Map</button
+        >
+      {/if}
+    </div>
+    <div class="relative min-h-0 flex-1" bind:this={canvas}>
+      {#if mode === "Graph"}
+        <SvelteFlow
+          bind:nodes
+          bind:edges
+          {nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.08, maxZoom: 1.6 }}
+          defaultEdgeOptions={{
+            markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
+          }}
+          onnodeclick={({ node }) => lab.select(link, node.id)}
+          colorMode={workbench.theme === "paper" ? "light" : "dark"}
+          proOptions={{ hideAttribution: true }}
+        >
+          <FitOnResize target={canvas} />
+          <Background gap={22} />
+          <Controls position="bottom-left" showLock={false} />
+          {#if showMap}
+            <MiniMap
+              width={150}
+              height={92}
+              bgColor="var(--panel)"
+              nodeColor="var(--muted-foreground)"
+              position="bottom-right"
+              pannable
+              zoomable
+              ariaLabel="Workflow overview"
+            />
+          {/if}
+        </SvelteFlow>
+      {:else if mode === "Code"}
+        <CodeEditor value={source} label="Bot logic (Python)" />
+      {:else}
+        <div
+          class="grid h-full content-start gap-3 overflow-auto p-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]"
+        >
+          {#each IMPORTS as im (im.title)}
+            <button
+              type="button"
+              class="hover:border-ring p-panel flex flex-col gap-2 rounded-lg border border-dashed text-left"
+              title={im.note}
+              onclick={() =>
+                workbench.notify(
+                  `${im.title}: choose a file. Upload needs the daemon.`,
+                )}
+            >
+              <im.icon class="text-muted-foreground size-5" />
+              <span class="text-sm font-medium">{im.title}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
-  <div class="relative min-h-0 flex-1" bind:this={canvas}>
-    {#if mode === "Graph"}
-      <SvelteFlow
-        bind:nodes
-        bind:edges
-        {nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.08, maxZoom: 1.6 }}
-        defaultEdgeOptions={{
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-        }}
-        onnodeclick={({ node }) => lab.select(link, node.id)}
-        colorMode={workbench.theme === "paper" ? "light" : "dark"}
-        proOptions={{ hideAttribution: true }}
-      >
-        <FitOnResize target={canvas} />
-        <Background gap={22} />
-        <Controls position="bottom-left" showLock={false} />
-        {#if showMap}
-          <MiniMap
-            width={150}
-            height={92}
-            bgColor="var(--panel)"
-            nodeColor="var(--muted-foreground)"
-            position="bottom-right"
-            pannable
-            zoomable
-            ariaLabel="Workflow overview"
-          />
-        {/if}
-      </SvelteFlow>
-    {:else if mode === "Code"}
-      <CodeEditor value={source} label="Bot logic (Python)" />
-    {:else}
-      <div
-        class="grid h-full content-start gap-3 overflow-auto p-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]"
-      >
-        {#each IMPORTS as im (im.title)}
-          <button
-            type="button"
-            class="hover:border-ring p-panel flex flex-col gap-2 rounded-lg border border-dashed text-left"
-            title={im.note}
-            onclick={() =>
-              workbench.notify(
-                `${im.title}: choose a file. Upload needs the daemon.`,
-              )}
-          >
-            <im.icon class="text-muted-foreground size-5" />
-            <span class="text-sm font-medium">{im.title}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
-
 {/if}
 
 <style>

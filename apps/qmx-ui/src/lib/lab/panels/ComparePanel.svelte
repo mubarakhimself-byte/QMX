@@ -113,7 +113,9 @@
             </tr>
           {/each}
           <tr class="border-b border-border/50">
-            <td class="text-muted-foreground py-row pl-panel text-xs">Procedure</td>
+            <td class="text-muted-foreground py-row pl-panel text-xs"
+              >Procedure</td
+            >
             {#each runs as r (r.id)}<td class="py-row pr-3 text-xs"
                 >{r.procedure} · {r.role}</td
               >{/each}
@@ -131,7 +133,9 @@
               >{/each}
           </tr>
           <tr>
-            <td class="text-muted-foreground py-row pl-panel text-xs">Changed</td>
+            <td class="text-muted-foreground py-row pl-panel text-xs"
+              >Changed</td
+            >
             {#each runs as r (r.id)}<td class="py-row pr-3 text-xs"
                 >{(r.changed ?? ["procedure"]).join(", ")}</td
               >{/each}
@@ -139,6 +143,5 @@
         </tbody>
       </table>
     </div>
-
   {/if}
 </div>

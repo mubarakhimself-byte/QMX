@@ -1,11 +1,14 @@
 <script lang="ts">
   /** Console output of the selected run, as the run's own process wrote it. */
   import RunConsole from "$lib/qmx/RunConsole.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
+  import { cn } from "$lib/utils";
   import type { LinkGroup } from "$lib/workbench/tiles/tiles";
   import { RUNS, envById } from "../demo";
   import { lab } from "../lab.svelte";
 
   let { link }: { link?: LinkGroup } = $props();
+  const size = panelSize();
   const run = $derived(RUNS.find((r) => r.id === lab.selectedFor(link)));
   const lines = $derived(
     run
@@ -40,16 +43,38 @@
   );
 </script>
 
-<div class="h-full p-2">
-  {#if run}
+{#if !run}
+  <div
+    class="text-muted-foreground p-panel flex h-full items-center justify-center text-sm"
+  >
+    No run selected
+  </div>
+{:else if size.mode === "compact"}
+  <div
+    class="px-panel gap-row flex h-full flex-col justify-center font-mono text-xs"
+  >
+    <p class="flex items-center gap-2">
+      <span
+        class={cn(
+          "size-1.5 shrink-0 rounded-full",
+          status === "failed"
+            ? "bg-destructive"
+            : status === "done"
+              ? "bg-success"
+              : "bg-info",
+        )}
+      ></span>
+      <span class="truncate">{run.id}</span>
+      <span class="text-muted-foreground ml-auto uppercase">{status}</span>
+    </p>
+    <p class="text-muted-foreground truncate">{lines.at(-1)}</p>
+  </div>
+{:else}
+  <div class="h-full p-2">
     <RunConsole
       command={`qmb ${run.procedure.toLowerCase().replace(" ", "-")} ${run.id}`}
       {lines}
       {status}
     />
-  {:else}
-    <p class="text-muted-foreground p-4 text-sm">
-      Select a run to see its log.
-    </p>
-  {/if}
-</div>
+  </div>
+{/if}

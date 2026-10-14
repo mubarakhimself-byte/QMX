@@ -7,11 +7,13 @@
   import { DEMO_STEPS } from "$lib/demo/workflow";
   import { cn } from "$lib/utils";
   import type { LinkGroup } from "$lib/workbench/tiles/tiles";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import EnvChip from "../EnvChip.svelte";
   import { lab } from "../lab.svelte";
 
   let { link }: { link?: LinkGroup } = $props();
   const step = $derived(DEMO_STEPS.find((s) => s.id === lab.selectedFor(link)));
+  const size = panelSize();
   let tab = $state<"settings" | "code">("settings");
   const env = $derived(
     step?.kind === "Model"
@@ -22,35 +24,58 @@
   );
 </script>
 
-{#if step}
-  <div class="flex h-full flex-col">
-    <div class="shrink-0 border-b px-3 py-2">
-      <p class="text-muted-foreground text-xs">{step.kind} step</p>
-      <p class="text-base font-medium">{step.label}</p>
-      <p class="text-muted-foreground text-xs">{step.detail}</p>
-      <div class="mt-2 flex items-center gap-2">
-        <span class="text-muted-foreground text-xs">Runs on</span>
-        <EnvChip {env} status="done" />
-      </div>
-    </div>
-    <div class="flex h-8 shrink-0 items-center gap-0.5 border-b px-2">
-      {#each ["settings", "code"] as const as t (t)}
-        <button
-          type="button"
-          class={cn(
-            "h-6 rounded-md px-2 text-xs capitalize",
-            tab === t
-              ? "bg-muted"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          aria-pressed={tab === t}
-          onclick={() => (tab = t)}>{t}</button
-        >
+{#if !step}
+  <EmptyState class="h-full" icon={MousePointerClick} title="Select a step" />
+{:else if size.mode === "compact"}
+  <div class="p-panel gap-row flex h-full flex-col">
+    <p class="text-muted-foreground text-xs">{step.kind} step</p>
+    <p class="truncate text-base font-medium">{step.label}</p>
+    <EnvChip {env} status="done" />
+    <dl class="gap-row mt-group flex flex-col text-sm">
+      {#each step.settings as [k, v] (k)}
+        <div class="flex min-w-0 flex-col">
+          <dt class="text-muted-foreground truncate text-xs">{k}</dt>
+          <dd class="truncate">{v}</dd>
+        </div>
       {/each}
+    </dl>
+  </div>
+{:else}
+  <div class="flex h-full flex-col">
+    <div class="px-panel pt-panel pb-row shrink-0">
+      <div class="flex items-center gap-2">
+        <p class="min-w-0 truncate text-base font-medium">{step.label}</p>
+        <span class="ml-auto shrink-0"><EnvChip {env} status="done" /></span>
+      </div>
+      <p class="text-muted-foreground truncate text-xs">
+        {step.kind} · {step.detail}
+      </p>
+    </div>
+    <div class="px-panel flex h-9 shrink-0 items-center">
+      <div
+        class="bg-muted flex rounded-md p-0.5 text-xs"
+        role="radiogroup"
+        aria-label="Show"
+      >
+        {#each ["settings", "code"] as const as t (t)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={tab === t}
+            class={cn(
+              "h-6 rounded px-2.5 capitalize",
+              tab === t
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onclick={() => (tab = t)}>{t}</button
+          >
+        {/each}
+      </div>
     </div>
     <div class="min-h-0 flex-1 overflow-auto">
       {#if tab === "settings"}
-        <div class="flex flex-col gap-2.5 p-3">
+        <div class="gap-row p-panel flex flex-col">
           {#each step.settings as [k, v] (k)}
             <label class="flex flex-col gap-1 text-xs">
               <span class="text-muted-foreground">{k}</span>
@@ -63,11 +88,4 @@
       {/if}
     </div>
   </div>
-{:else}
-  <EmptyState
-    class="h-full"
-    icon={MousePointerClick}
-    title="Select a step"
-    description="Click a step in a linked editor to see its settings, code and where it runs."
-  />
 {/if}

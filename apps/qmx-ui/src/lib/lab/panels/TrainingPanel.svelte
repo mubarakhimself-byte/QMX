@@ -9,8 +9,10 @@
   import Lock from "@lucide/svelte/icons/lock";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import LineChart from "$lib/qmx/LineChart.svelte";
+  import Sparkline from "$lib/demo/Sparkline.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import { cn } from "$lib/utils";
-  import { workbench } from "$lib/workbench/workbench.svelte";
   import EnvChip from "../EnvChip.svelte";
   import { TRAINING as T, envById } from "../demo";
   import { lab } from "../lab.svelte";
@@ -24,30 +26,79 @@
     { id: "evaluate", label: "Evaluate", state: "waiting" },
     { id: "plug", label: "Plug into slots", state: "waiting" },
   ];
-  const gap = $derived(T.valid.at(-1)! - T.train.at(-1)!);
+  const size = panelSize();
+  const overfit = $derived(T.valid.at(-1)! - T.train.at(-1)! > 0.05);
 </script>
+
+{#snippet split()}
+  <div
+    class={cn(
+      "px-panel py-row grid shrink-0 gap-x-4 text-xs",
+      size.mode === "expanded" ? "grid-cols-5" : "grid-cols-3",
+    )}
+  >
+    <div>
+      <span class="text-muted-foreground block">Train</span>{T.split.train}
+    </div>
+    <div>
+      <span class="text-muted-foreground block">Validation</span>{T.split
+        .validation}
+    </div>
+    <div>
+      <span class="text-muted-foreground flex items-center gap-1"
+        ><Lock class="size-3" />Sealed test</span
+      >{T.split.sealed}
+    </div>
+    {#if size.mode === "expanded"}
+      <div>
+        <span class="text-muted-foreground block">Purge</span>{T.purge}
+      </div>
+      <div>
+        <span class="text-muted-foreground block">Embargo</span>{T.embargo}
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
 {#if lab.machine && lab.machine !== T.env}
   <div
-    class="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm"
+    class="text-muted-foreground p-panel flex h-full items-center justify-center text-center text-sm"
   >
-    <p>No model is training on {envById(lab.machine)?.name}.</p>
-    <p class="text-xs">
-      {T.model} is training on {envById(T.env)?.name}.
+    Nothing training on {envById(lab.machine)?.name}
+  </div>
+{:else if size.mode === "compact"}
+  <div class="p-panel gap-row flex h-full flex-col">
+    <p class="truncate text-sm font-medium">{T.model}</p>
+    <p class="num text-2xl font-semibold">{T.epoch} / {T.epochs}</p>
+    <p
+      class="truncate text-xs {overfit
+        ? 'text-warning'
+        : 'text-muted-foreground'}"
+    >
+      {overfit ? "Likely overfitting" : "epochs"}
     </p>
+    <Sparkline values={T.valid} class="mt-auto h-8 w-full shrink-0" />
   </div>
 {:else}
   <div class="flex h-full flex-col">
-    <div
-      class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2"
-    >
-      <span class="text-sm font-medium">{T.model}</span>
-      <span class="text-muted-foreground text-xs">{T.kind}</span>
-      <span class="num text-xs">epoch {T.epoch} / {T.epochs}</span>
-      <span class="ml-auto"><EnvChip env={T.env} status="running" /></span>
+    <div class="px-panel flex h-11 shrink-0 items-center gap-x-3">
+      <span class="truncate text-sm font-medium">{T.model}</span>
+      <span class="num text-muted-foreground text-xs"
+        >epoch {T.epoch} / {T.epochs}</span
+      >
+      {#if overfit}<span
+          class="text-warning flex items-center gap-1 text-xs whitespace-nowrap"
+          ><TriangleAlert class="size-3.5" />Likely overfitting</span
+        >{/if}
+      <span class="ml-auto flex shrink-0 items-center gap-1"
+        ><EnvChip env={T.env} status="running" /><InfoTip
+          label="Explain training"
+          text={`${T.kind}. Validation loss pulling away from training loss means the model is learning noise. Purge ${T.purge} and embargo ${T.embargo} keep the split honest; the sealed year opens once, at the end. Click a step to edit it in Build.`}
+        /></span
+      >
     </div>
     <ol
-      class="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-2"
+      class="px-panel pb-row flex shrink-0 items-center gap-1 overflow-x-auto"
       aria-label="Pipeline"
     >
       {#each STEPS as s, i (s.id)}
@@ -56,14 +107,12 @@
           <button
             type="button"
             class={cn(
-              "flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs whitespace-nowrap",
+              "hover:border-ring flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs whitespace-nowrap",
               s.state === "running" && "border-info text-info",
               s.state === "waiting" && "text-muted-foreground border-dashed",
             )}
-            onclick={() =>
-              workbench.notify(
-                `${s.label}: open it in the Build layout to edit or swap it.`,
-              )}
+            title={`Edit ${s.label} in Build`}
+            onclick={() => lab.open("build")}
           >
             <span
               class={cn(
@@ -82,14 +131,12 @@
         <button
           type="button"
           class="text-muted-foreground hover:text-foreground flex h-7 items-center gap-1 rounded-md px-2 text-xs"
-          onclick={() =>
-            workbench.notify(
-              "Add a step: pick from your saved steps, or describe one to the Lab copilot.",
-            )}><Plus class="size-3.5" />Step</button
+          onclick={() => lab.ask(`Add a step to the ${T.model} pipeline that `)}
+          ><Plus class="size-3.5" />Step</button
         >
       </li>
     </ol>
-    <div class="min-h-0 flex-1 p-3">
+    <div class="px-panel pt-row min-h-0 flex-1">
       <LineChart
         series={[
           { label: "Training loss", values: T.train, color: "var(--chart-2)" },
@@ -102,28 +149,6 @@
         height={180}
       />
     </div>
-    <div class="grid shrink-0 grid-cols-3 gap-px border-t text-xs">
-      <div class="px-3 py-2">
-        <span class="text-muted-foreground block">Train</span>{T.split.train}
-      </div>
-      <div class="px-3 py-2">
-        <span class="text-muted-foreground block">Validation</span>{T.split
-          .validation}
-      </div>
-      <div class="px-3 py-2">
-        <span class="text-muted-foreground flex items-center gap-1"
-          ><Lock class="size-3" />Sealed test</span
-        >{T.split.sealed}
-      </div>
-    </div>
-    <p
-      class="text-muted-foreground flex items-center gap-1.5 border-t px-3 py-2 text-xs"
-    >
-      {#if gap > 0.05}<TriangleAlert
-          class="text-warning size-3.5 shrink-0"
-        />Validation loss is pulling away from training loss: likely
-        overfitting.{:else}Purge
-        {T.purge}, embargo {T.embargo}. The sealed year opens once, at the end.{/if}
-    </p>
+    {@render split()}
   </div>
 {/if}

@@ -15,11 +15,14 @@
   import { cn } from "$lib/utils";
   import type { LinkGroup } from "$lib/workbench/tiles/tiles";
   import { workbench } from "$lib/workbench/workbench.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import EnvChip from "../EnvChip.svelte";
   import { RUNS } from "../demo";
   import { lab } from "../lab.svelte";
 
   let { link }: { link?: LinkGroup } = $props();
+  const size = panelSize();
   const run = $derived(RUNS.find((r) => r.id === lab.selectedFor(link)));
 
   type CheckRow = {
@@ -83,6 +86,14 @@
     skipped: "text-muted-foreground",
   };
   const firstFail = $derived(checks.findIndex((c) => c.state === "fail"));
+  const passed = $derived(checks.filter((c) => c.state === "pass").length);
+  const verdict = $derived(
+    firstFail >= 0
+      ? { text: `Failed: ${checks[firstFail].name}`, tone: "text-destructive" }
+      : checks.some((c) => c.state === "running")
+        ? { text: "Running", tone: "text-info" }
+        : { text: "Passed", tone: "text-success" },
+  );
   const MORE = [
     "Spread widening",
     "Missing bars",
@@ -92,69 +103,92 @@
   ];
 </script>
 
-<div class="flex h-full flex-col">
-  <div class="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs">
-    <span class="font-medium"
-      >{run
-        ? `${run.symbol} ${run.timeframe} · ${run.id}`
-        : "No run selected"}</span
-    >
-    <span class="text-muted-foreground"
-      >cheapest first; stops at the first fail</span
-    >
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} variant="ghost" size="sm" class="ml-auto h-7"
-            ><Plus />Add check</Button
-          >
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        {#each MORE as m (m)}
-          <DropdownMenu.Item
-            onclick={() => workbench.notify(`${m} added to this run's checks.`)}
-            >{m}</DropdownMenu.Item
-          >
-        {/each}
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item
-          onclick={() =>
-            workbench.notify(
-              "Describe the check to the Lab copilot to build it.",
-            )}>Build your own…</DropdownMenu.Item
-        >
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+{#if size.mode === "compact"}
+  <div class="p-panel gap-row flex h-full flex-col">
+    <p class="text-muted-foreground truncate text-xs">
+      {run ? `${run.symbol} ${run.timeframe} · ${run.id}` : "No run selected"}
+    </p>
+    <p class="num text-2xl font-semibold">{passed} / {checks.length}</p>
+    <p class="truncate text-xs {verdict.tone}">{verdict.text}</p>
+    <ol class="mt-group gap-row flex flex-col text-xs" aria-label="Checks">
+      {#each checks as c (c.name)}
+        {@const Icon = ICON[c.state]}
+        <li class="flex min-w-0 items-center gap-2" title={c.result}>
+          <Icon class={cn("size-3.5 shrink-0", TONE[c.state])} />
+          <span class="truncate">{c.name}</span>
+        </li>
+      {/each}
+    </ol>
   </div>
-  <ol class="min-h-0 flex-1 overflow-auto">
-    {#each checks as c, i (c.name)}
-      {@const Icon = ICON[c.state]}
-      <li
-        class={cn(
-          "grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-3 gap-y-0.5 border-b border-border/50 px-3 py-2",
-          firstFail >= 0 && i > firstFail && "opacity-60",
-        )}
+{:else}
+  <div class="flex h-full flex-col">
+    <div class="px-panel flex h-11 shrink-0 items-center gap-2 text-xs">
+      <span class="truncate font-medium"
+        >{run
+          ? `${run.symbol} ${run.timeframe} · ${run.id}`
+          : "No run selected"}</span
       >
-        <Icon class={cn("size-4", TONE[c.state])} />
-        <span class="text-sm">{c.name}</span>
-        <span class="num text-sm {c.state === 'fail' ? 'text-destructive' : ''}"
-          >{c.result}</span
+      <InfoTip
+        label="Explain the robustness checks"
+        text="Checks run cheapest first and stop at the first fail. Passing them shows the result is not fragile; it does not prove an edge. Each bar is yours to set: the docs leave thresholds open."
+      />
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="sm" class="ml-auto h-7"
+              ><Plus />Add check</Button
+            >
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          {#each MORE as m (m)}
+            <DropdownMenu.Item
+              onclick={() =>
+                workbench.notify(`${m} added to this run's checks.`)}
+              >{m}</DropdownMenu.Item
+            >
+          {/each}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            onclick={() => lab.ask("Build me a robustness check that ")}
+            >Build your own…</DropdownMenu.Item
+          >
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </div>
+    <ol class="min-h-0 flex-1 overflow-auto">
+      {#each checks as c, i (c.name)}
+        {@const Icon = ICON[c.state]}
+        <li
+          class={cn(
+            "px-panel py-row grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-3 border-t",
+            firstFail >= 0 && i > firstFail && "opacity-60",
+          )}
         >
-        <span></span>
-        <span class="text-muted-foreground text-xs"
-          >Bar: {c.bar} · {c.cost}</span
-        >
-        <EnvChip
-          env={c.env}
-          status={c.state === "running" ? "running" : "done"}
-          compact
-        />
-      </li>
-    {/each}
-  </ol>
-  <p class="text-muted-foreground border-t px-3 py-2 text-xs">
-    Passing these shows the result is not fragile. It does not prove an edge.
-    Bars are yours to set; the docs leave thresholds open.
-  </p>
-</div>
+          <Icon class={cn("size-4", TONE[c.state])} />
+          <span class="min-w-0">
+            <span class="block truncate text-sm">{c.name}</span>
+            {#if size.mode === "expanded"}
+              <span class="text-muted-foreground block text-xs"
+                >Bar: {c.bar} · {c.cost}</span
+              >
+            {/if}
+          </span>
+          <span class="flex items-center gap-2">
+            {#if size.mode === "expanded"}
+              <EnvChip
+                env={c.env}
+                status={c.state === "running" ? "running" : "done"}
+                compact
+              />
+            {/if}
+            <span
+              class="num text-sm {c.state === 'fail' ? 'text-destructive' : ''}"
+              title={`Bar: ${c.bar} · ${c.cost}`}>{c.result}</span
+            >
+          </span>
+        </li>
+      {/each}
+    </ol>
+  </div>
+{/if}
