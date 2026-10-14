@@ -1,4 +1,5 @@
-"""Shared setup for the QMA live checks: the ship home, a throwaway HOME, the evidence log.
+"""Shared setup for the QMA live checks: the ship home, a throwaway HOME, the evidence log in
+`QMA_EVIDENCE_DIR`.
 
 Every check runs the agents workspace Python (`qmx-agents/.venv`). No check reads the login
 token; `require_login` only tests that the credentials file exists.
@@ -19,7 +20,6 @@ from qma.boot import scrub_process_env
 
 SHIP: Final = Path("D:/QMX-worktrees/qma-ship")
 CONFIG_DIR: Final = SHIP / "home" / "claude"
-EVIDENCE: Final = SHIP / "evidence" / "hp4"
 SCRATCH: Final = Path(os.environ.get("QMA_LIVE_SCRATCH", "D:/Temp/qma-live"))
 FAKE_HOME: Final = SCRATCH / "home"
 MODEL: Final = "haiku"
@@ -29,9 +29,14 @@ LAUNCHER: Final = Path(sys.executable).parent / (
 
 
 class Log:
+    """Writes `<QMA_EVIDENCE_DIR>/<slug>.log`."""
+
     def __init__(self, slug: str) -> None:
-        EVIDENCE.mkdir(parents=True, exist_ok=True)
-        self.path = EVIDENCE / f"{slug}.log"
+        evidence = os.environ.get("QMA_EVIDENCE_DIR")
+        if not evidence:
+            raise SystemExit("set QMA_EVIDENCE_DIR, e.g. D:/QMX-worktrees/qma-ship/evidence/<pr>")
+        Path(evidence).mkdir(parents=True, exist_ok=True)
+        self.path = Path(evidence) / f"{slug}.log"
         self.path.write_text("", encoding="utf-8")
         self.passed = True
 
