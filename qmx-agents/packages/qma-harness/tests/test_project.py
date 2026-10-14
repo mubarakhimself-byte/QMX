@@ -199,9 +199,23 @@ def test_a_printed_token_is_redacted_unless_the_check_turns_redaction_off() -> N
 def test_the_token_gate_redacts_a_token_split_across_deltas() -> None:
     gate = TokenGate()
     pieces = ["the login is s", "k-an", "t-oat01-QMX", "CANARY", "a1B2c3D4e5 and more", " text"]
-    shown = [gate.feed(piece) for piece in pieces] + [gate.flush()]
-    assert "".join(shown) == f"the login is {REDACTED} and more text"
-    assert all("QMX" not in piece and "oat01" not in piece for piece in shown)
+    shown = [gate.feed("text", piece) for piece in pieces] + [gate.close()]
+    assert shown == [
+        [("text", "the login is ")],
+        [],
+        [],
+        [],
+        [("text", f"{REDACTED} and more")],
+        [("text", " text")],
+        [],
+    ]
+
+
+def test_the_token_gate_holds_a_prefix_until_the_turn_ends_and_labels_each_kind() -> None:
+    gate = TokenGate()
+    assert gate.feed("thinking", "check the tests") == [("thinking", "check the test")]
+    assert gate.feed("text", "! sk-ant-oat01") == [("thinking", "s"), ("text", "! ")]
+    assert gate.close() == [("text", REDACTED)]
 
 
 def streamed(kind: str, text: str, parent: str | None = None) -> StreamEvent:
@@ -236,11 +250,12 @@ def test_streamed_deltas_reach_the_token_gate_unredacted() -> None:
     ]
 
 
-def test_only_the_operators_own_result_ends_a_turn() -> None:
-    mine = [fact for fact in project(result()) if isinstance(fact, TurnEnded)]
+def test_every_result_ends_its_turn_including_an_injected_one() -> None:
+    mine = project(result())
     injected = project(result(origin={"kind": "task-notification"}))
-    assert mine == [TurnEnded(ok=True, terminal_reason="completed", deferred_tool_use=False)]
-    assert [type(fact).__name__ for fact in injected] == ["TurnUsage"]
+    ended = TurnEnded(ok=True, terminal_reason="completed", deferred_tool_use=False)
+    assert [fact for fact in mine if isinstance(fact, TurnEnded)] == [ended]
+    assert [fact for fact in injected if isinstance(fact, TurnEnded)] == [ended]
 
 
 def test_a_failed_turn_and_a_model_error_each_ask_for_the_operator() -> None:

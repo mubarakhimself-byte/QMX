@@ -15,10 +15,15 @@ from claude_agent_sdk import (
     ResultMessage,
     StreamEvent,
     SystemMessage,
+    TaskNotificationMessage,
     TaskProgressMessage,
+    TaskStartedMessage,
     TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
 )
-from claude_agent_sdk.types import ToolPermissionContext
+from claude_agent_sdk.types import TaskUpdatedMessage, ToolPermissionContext
 from fastapi.testclient import TestClient
 from qmx_control.server import create_app
 
@@ -366,22 +371,70 @@ def test_an_interrupt_ends_the_running_turn(home: QmxHome) -> None:
     run(body, home)
 
 
+def turn_of(home: QmxHome, chat: SessionId) -> str:
+    return getattr(read_record(home, chat), "turn", "")
+
+
 def test_a_queued_prompt_keeps_the_turn_running_until_its_own_result(home: QmxHome) -> None:
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(NewChat(title="queued", model="haiku"))
         await harness.send(chat, OperatorText("first"))
         await harness.send(chat, OperatorText("second"))
         inbox = FakeClient.made[0].inbox
-        for message in [init(), *replies("first")]:
+        for message in [init(), *replies("first"), init()]:
             inbox.put_nowait(message)
         await settle(lambda: ("text", {"text": "echo first"}) in blocks(home, chat))
         await asyncio.sleep(0.05)
-        assert getattr(read_record(home, chat), "turn", "") == "running"
-        for message in [init(), *replies("second")]:
+        assert turn_of(home, chat) == "running"
+        for message in replies("second"):
             inbox.put_nowait(message)
-        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        await settle(lambda: turn_of(home, chat) == "idle")
         assert blocks(home, chat)[-1] == ("text", {"text": "echo second"})
-        assert getattr(read_record(home, chat), "turn", "") == "idle"
+        assert turn_of(home, chat) == "idle"
+
+    run(body, home)
+
+
+def test_a_prompt_folded_into_the_running_turn_ends_with_that_turn(home: QmxHome) -> None:
+    holder: list[SessionId] = []
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="folded", model="haiku"))
+        holder.append(chat)
+        await harness.send(chat, OperatorText("first"))
+        await harness.send(chat, OperatorText("typed while the tool ran"))
+        for message in [
+            init(),
+            AssistantMessage(content=[ToolUseBlock("toolu_1", "Glob", {"pattern": "*"})], model="m"),
+            UserMessage(content=[ToolResultBlock("toolu_1", "No files found")]),
+            *replies("both"),
+        ]:
+            FakeClient.made[0].inbox.put_nowait(message)
+        await settle(lambda: ("text", {"text": "echo both"}) in blocks(home, chat))
+        await asyncio.sleep(0.05)
+        assert turn_of(home, chat) == "idle"
+
+    async def again(_: Harness) -> None:
+        return None
+
+    run(body, home)
+    run(again, home)
+    assert [kind for kind, _ in blocks(home, holder[0])] == ["user", "user", "tool", "tool", "text"]
+
+
+def test_a_background_task_turn_runs_from_its_init_to_its_result(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="injected", model="haiku"))
+        await harness.send(chat, OperatorText("start a background job"))
+        FakeClient.made[0].go.set()
+        await settle(lambda: turn_of(home, chat) == "idle")
+        inbox = FakeClient.made[0].inbox
+        inbox.put_nowait(init())
+        await settle(lambda: turn_of(home, chat) == "running")
+        assert turn_of(home, chat) == "running"
+        inbox.put_nowait(result(origin={"kind": "task-notification"}))
+        await settle(lambda: turn_of(home, chat) == "idle")
+        assert turn_of(home, chat) == "idle"
 
     run(body, home)
 
@@ -420,24 +473,13 @@ def progress(description: str) -> TaskProgressMessage:
     )
 
 
-def test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_db(
-    home: QmxHome,
-) -> None:
-    deliveries = split_deliveries(SAID)
-    stream: list[Message] = []
-    for pieces in deliveries:
-        for piece in pieces:
-            stream += [delta("text_delta", piece), delta("thinking_delta", piece, "toolu_child")]
-    stream += [progress(f"check {TOKEN}") for _ in range(3)]
-    FakeClient.script = lambda _: [
-        *stream,
-        AssistantMessage(content=[TextBlock(SAID)], model="haiku"),
-        result(),
-    ]
+def watch(home: QmxHome, script: list[Message]) -> tuple[dict[str, str], list[str]]:
+    FakeClient.script = lambda _: script
     shown: list[tuple[str, str]] = []
+    leaked: list[str] = []
 
     async def body(harness: Harness) -> None:
-        chat = await harness.start_chat(NewChat(title="split", model="haiku"))
+        chat = await harness.start_chat(NewChat(title="watch", model="haiku"))
 
         async def listen() -> None:
             async for item in harness.live(chat):
@@ -447,21 +489,97 @@ def test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_d
         await asyncio.sleep(0.05)
         await harness.send(chat, OperatorText("print it"))
         FakeClient.made[0].go.set()
-        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        await settle(lambda: turn_of(home, chat) == "idle")
         await asyncio.sleep(0.05)
         listener.cancel()
-        live = {kind: "".join(text for k, text in shown if k == kind) for kind, _ in shown}
-        assert live == {
-            "text": SHOWN * len(deliveries),
-            "thinking": SHOWN * len(deliveries),
-            "tool_progress": f"check {REDACTED}: Read" * 3,
-        }
-        stored = json.dumps(blocks(home, chat))
-        assert ("text", {"text": SHOWN}) in blocks(home, chat)
-        everything = stored + "".join(text for _, text in shown)
-        assert [TOKEN[i:] for i in range(len(TOKEN) - 7) if TOKEN[i:] in everything] == []
+        everything = json.dumps(blocks(home, chat)) + "".join(text for _, text in shown)
+        leaked.extend(TOKEN[i:] for i in range(len(TOKEN) - 7) if TOKEN[i:] in everything)
 
     run(body, home)
+    return {kind: "".join(text for k, text in shown if k == kind) for kind, _ in shown}, leaked
+
+
+def test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_db(
+    home: QmxHome,
+) -> None:
+    deliveries = split_deliveries(SAID)
+    stream: list[Message] = []
+    for pieces in deliveries:
+        for piece in pieces:
+            stream += [delta("text_delta", piece), delta("thinking_delta", piece, "toolu_child")]
+    stream += [progress(f"check {TOKEN}") for _ in range(3)]
+    live, leaked = watch(
+        home, [*stream, AssistantMessage(content=[TextBlock(SAID)], model="haiku"), result()]
+    )
+    assert live == {
+        "text": SHOWN * len(deliveries),
+        "thinking": SHOWN * len(deliveries),
+        "tool_progress": f"check {REDACTED}: Read" * 3,
+    }
+    assert leaked == []
+
+
+HEAD = "the login is sk-ant-oat01-QMX"
+TAIL = SAID[len(HEAD) :]
+BETWEEN: dict[str, Message] = {
+    "task_started": TaskStartedMessage(
+        subtype="task_started",
+        data={},
+        task_id="bg2",
+        description="background job",
+        uuid="u",
+        session_id="s",
+    ),
+    "task_notification": TaskNotificationMessage(
+        subtype="task_notification",
+        data={},
+        task_id="bg1",
+        status="completed",
+        output_file="out.txt",
+        summary="background job done",
+        uuid="u",
+        session_id="s",
+    ),
+    "task_updated": TaskUpdatedMessage(
+        subtype="task_updated",
+        data={},
+        task_id="bg1",
+        patch={"status": "completed"},
+        status="completed",
+    ),
+    "tool_use": AssistantMessage(
+        content=[ToolUseBlock("toolu_1", "Read", {"file_path": "x"})], model="haiku"
+    ),
+    "child_text": AssistantMessage(
+        content=[TextBlock("child says hi")], model="haiku", parent_tool_use_id="toolu_child"
+    ),
+}
+
+
+@pytest.mark.parametrize("between", list(BETWEEN))
+def test_a_block_landing_mid_token_never_releases_the_token_tail(
+    home: QmxHome, between: str
+) -> None:
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD), BETWEEN[between], delta("text_delta", TAIL), result()]
+    )
+    assert (live, leaked) == ({"text": SHOWN}, [])
+
+
+def test_a_token_split_from_text_into_thinking_is_redacted_where_it_started(
+    home: QmxHome,
+) -> None:
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD), delta("thinking_delta", TAIL), result()]
+    )
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}", "thinking": " and more"}, [])
+
+
+def test_a_token_still_open_when_the_turn_ends_is_redacted(home: QmxHome) -> None:
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD), BETWEEN["task_notification"], result()]
+    )
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
 
 
 def test_a_cli_that_ends_mid_turn_leaves_an_unknown_outcome(home: QmxHome) -> None:
