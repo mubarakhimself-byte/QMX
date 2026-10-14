@@ -4,9 +4,11 @@ The block kinds are the 14 `SessionBlock` kinds that `qmx_agents.copilot.stream_
 today, served by the existing SSE route. New meaning goes inside `content`, never a new block
 type.
 
-Every Block and Delta passes through `redact`, so a Claude token an agent printed or read never
-reaches `sessions_append`, the live channel or the UI. A streamed token can arrive split over
-several deltas; `TokenGate` holds back text that could still grow into one.
+Every Block passes through `redact`, so a Claude token an agent printed or read never reaches
+`sessions_append`. Deltas leave here raw: a streamed token can arrive split over several deltas,
+and a per-delta `redact` would hide the prefix and let the rest through. `chat.py` feeds them to
+a `TokenGate`, the only redactor on the live channel, which holds back text that could still
+grow into a token.
 """
 
 from __future__ import annotations
@@ -119,7 +121,7 @@ class Block:
 
 @dataclass(frozen=True)
 class Delta:
-    """Live only (token text, tool progress). Never stored."""
+    """Live only (token text, tool progress). Never stored. Unredacted until `TokenGate`."""
 
     target: Target
     kind: Literal["text", "thinking", "tool_progress"]
@@ -197,8 +199,6 @@ def _redact_fact(fact: Fact) -> Fact:
             return replace(
                 fact, block=SessionBlock(type=block.type, content=redacted(block.content))
             )
-        case Delta(text=text):
-            return replace(fact, text=redact(text))
         case _:
             return fact
 

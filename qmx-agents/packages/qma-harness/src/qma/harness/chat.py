@@ -9,7 +9,8 @@ Lifecycle, one owner:
     Cold --connect--> Live --close, or the CLI ends--> Cold
 
 While Live, the reader task drains `receive_messages()` and routes each `project()` fact.
-The record's turn is "running" from before a prompt goes out until its `ResultMessage`. A
+The record's turn is "running" from before a prompt goes out until every prompt sent has its
+own `ResultMessage`. A
 record still "running" when the harness opens, or when the CLI ends mid-turn, means the
 outcome is unknown: the chat shows a `needs_you` block and continues only when the operator
 sends the next message.
@@ -22,13 +23,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from claude_agent_sdk import ClaudeSDKClient, PermissionResultDeny
+from claude_agent_sdk import ClaudeSDKClient, PermissionResultDeny, SystemMessage
 from qmx_control.service import SessionBlock, SessionInput
 
 from qma.harness.home import (
@@ -130,6 +132,41 @@ def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusRespo
     return found
 
 
+def unexpected_plugins(init: Mapping[str, Any]) -> list[str]:
+    """Plugins the `init` message lists besides the inline QMX plugin and the CLI's built-ins.
+    `init` arrives only after a prompt, so a plugin that adds nothing but hooks shows here
+    first."""
+    sources = [str(plugin.get("source")) for plugin in init.get("plugins", [])]
+    return [
+        f"plugin {source}"
+        for source in sources
+        if source != f"{PLUGIN}@inline" and not source.endswith("@builtin")
+    ]
+
+
+def installed_plugins(claude_home: Path) -> list[str]:
+    """Plugins a Claude home's own files enable or install. With `setting_sources=[]` the CLI
+    loads none of them (HP0 OQ5), so this refuses a plant before it can matter."""
+    enabled = _json(claude_home / "settings.json").get("enabledPlugins", {})
+    installed = _json(claude_home / "plugins" / "installed_plugins.json").get("plugins", {})
+    names = [name for name, on in enabled.items() if on]
+    names += [name for name, copies in installed.items() if copies and name not in names]
+    return names
+
+
+def _json(path: Path) -> dict[str, Any]:
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return cast("dict[str, Any]", loaded) if isinstance(loaded, dict) else {}
+
+
+def _loaded(found: list[str]) -> str:
+    found_text = ", ".join(found)
+    return f"the CLI loaded {found_text} besides the QMX plugin; remove it from the Claude home"
+
+
 @dataclass
 class _Live:
     client: ClaudeSDKClient
@@ -161,6 +198,10 @@ class Chat:
         self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
+        self._unanswered = 0
+        """Prompts sent and not yet ended by their own `ResultMessage`. The CLI answers a
+        prompt queued during a turn with a turn of its own, so the record stays "running"
+        until every sent prompt has its result."""
 
     @property
     def session_id(self) -> SessionId:
@@ -173,6 +214,7 @@ class Chat:
             live = self._live or await self._connect()
             self._live = live
             await self._note("user", {"text": prompt.text})
+            self._unanswered += 1
             self._write(turn="running")
             await live.client.query(prompt.text)
 
@@ -224,6 +266,16 @@ class Chat:
         if await asyncio.to_thread(deps.procs.alive, chat):
             raise LaunchRefused("an earlier agent process of this chat is still running")
         ensure_homes(deps.home)
+        planted = [
+            name
+            for claude_home in (deps.home.plan_dir, deps.home.relayed_dir)
+            for name in await asyncio.to_thread(installed_plugins, claude_home)
+        ]
+        if planted:
+            raise LaunchRefused(
+                f"the Claude home has plugin {', '.join(planted)} installed besides the QMX "
+                "plugin; remove it from the Claude home"
+            )
         user = parse_claude_settings(await asyncio.to_thread(deps.control.settings_get, "claude"))
         settings = code_settings(
             user,
@@ -258,10 +310,7 @@ class Chat:
                 await live.client.get_server_info(), await live.client.get_mcp_status()
             )
             if found:
-                raise LaunchRefused(
-                    f"the CLI loaded {', '.join(found)} besides the QMX plugin; "
-                    "remove it from the Claude home"
-                )
+                raise LaunchRefused(_loaded(found))
         except BaseException:
             await self._end(live)
             raise
@@ -271,6 +320,13 @@ class Chat:
     async def _read(self, live: _Live) -> None:
         try:
             async for message in live.client.receive_messages():
+                if isinstance(message, SystemMessage) and message.subtype == "init":
+                    found = unexpected_plugins(message.data)
+                    if found:
+                        await self._note("needs_you", {"reason": _loaded(found)})
+                        self._unanswered = 0
+                        self._write(turn="idle")
+                        return
                 for fact in project(message, redact_tokens=self._deps.redaction):
                     await self._route(fact)
         finally:
@@ -281,6 +337,7 @@ class Chat:
         if self._live is live:
             self._live = None
         self._flush()
+        self._unanswered = 0
         if self.record.turn == "running":
             await self._note(
                 "needs_you",
@@ -303,7 +360,8 @@ class Chat:
                     self._stream.publish(Delta(target, kind, text))
             case TurnEnded():
                 self._flush()
-                self._write(turn="idle", started=True)
+                self._unanswered = max(self._unanswered - 1, 0)
+                self._write(turn="running" if self._unanswered else "idle", started=True)
             case Compacted(trigger=trigger):
                 await self._note("changed", {"kind": "compacted", "trigger": trigger})
             case TurnUsage() | Limits():

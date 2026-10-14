@@ -9,7 +9,8 @@ Routes:
     POST /api/chats                     NewChat  -> {session_id}
     POST /api/sessions/{sid}/turns      {text}   -> 202, always `OperatorText`
     POST /api/sessions/{sid}/interrupt           -> 202
-    GET  /api/sessions/{sid}/live                SSE of deltas, never stored
+    GET  /api/sessions/{sid}/live                SSE of deltas, never stored; 404 first for an
+                                                 unknown chat
     GET  /api/doctor                             DoctorLine list
     GET  /api/claude-settings                    settings.toml [claude]
     PUT  /api/claude-settings                    `home.parse_claude_settings`, then
@@ -26,7 +27,7 @@ from pathlib import Path
 from typing import cast
 
 import uvicorn
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qmx_control.models import ControlError, Document
@@ -38,7 +39,7 @@ from qma.harness.chat import OperatorText
 from qma.harness.harness import Harness, NewChat, UnknownChat
 from qma.harness.home import QmxHome, SessionId, claude_section, doctor, session_id
 from qma.harness.launch import LAUNCHER, Effort, LaunchRefused, PermissionMode
-from qma.harness.project import InChild
+from qma.harness.project import Delta, InChild
 
 
 def parse_claude_document(values: Document, current: Document) -> Document:
@@ -123,9 +124,14 @@ def chat_router(harness: Harness) -> APIRouter:
         await harness.interrupt(chat_id(sid))
         return {"status": "interrupted"}
 
+    def live_deltas(sid: str) -> AsyncIterator[Delta]:
+        return harness.live(chat_id(sid))
+
     @api.get("/api/sessions/{sid}/live", response_class=EventSourceResponse)
-    async def live(sid: str) -> AsyncIterator[ServerSentEvent]:
-        async for delta in harness.live(chat_id(sid)):
+    async def live(
+        deltas: AsyncIterator[Delta] = Depends(live_deltas),  # noqa: B008
+    ) -> AsyncIterator[ServerSentEvent]:
+        async for delta in deltas:
             child = delta.target.tool_use_id if isinstance(delta.target, InChild) else None
             data = {"kind": delta.kind, "text": delta.text, "tool_use_id": child}
             yield ServerSentEvent(data=data, event="delta")

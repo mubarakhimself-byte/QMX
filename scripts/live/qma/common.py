@@ -29,11 +29,15 @@ LAUNCHER: Final = Path(sys.executable).parent / (
 )
 
 
+EVIDENCE: Final = os.environ.get("QMA_EVIDENCE_DIR")
+"""Read at import, because `boot` scrubs the variable like `qma.serve` does."""
+
+
 class Log:
     """Writes `<QMA_EVIDENCE_DIR>/<slug>.log`."""
 
     def __init__(self, slug: str) -> None:
-        evidence = os.environ.get("QMA_EVIDENCE_DIR")
+        evidence = EVIDENCE
         if not evidence:
             raise SystemExit("set QMA_EVIDENCE_DIR, e.g. D:/QMX-worktrees/qma-ship/evidence/<pr>")
         Path(evidence).mkdir(parents=True, exist_ok=True)
