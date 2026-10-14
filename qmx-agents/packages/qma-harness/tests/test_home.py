@@ -319,11 +319,10 @@ def test_concurrent_remembers_all_land(home: QmxHome) -> None:
         thread.start()
     for thread in threads:
         thread.join()
-    remembered = control.settings_get("claude")["remembered"]
-    assert isinstance(remembered, dict)
-    allow = remembered[workspace_key(home.root / "ws")]
-    assert isinstance(allow, dict)
-    assert sorted(allow["allow"]) == sorted(rules)  # type: ignore[arg-type]
+    remembered = cast(
+        "dict[str, dict[str, list[str]]]", control.settings_get("claude")["remembered"]
+    )
+    assert sorted(remembered[workspace_key(home.root / "ws")]["allow"]) == sorted(rules)
 
 
 def test_a_whole_section_put_keeps_remembered_rules_unless_it_names_them(

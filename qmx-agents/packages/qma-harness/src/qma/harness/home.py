@@ -129,7 +129,6 @@ def relayed_logins(home: QmxHome) -> list[Path]:
 
 
 def _inside_personal_claude(path: Path) -> bool:
-    """True when `path`, links followed, is the operator's `~/.claude` or anywhere inside it."""
     return path.resolve().is_relative_to((Path.home() / ".claude").resolve())
 
 
@@ -203,7 +202,6 @@ HOOK_TYPES: Final = frozenset({"command", "http", "prompt", "agent"})
 SECRET_NAME: Final = re.compile(
     r"api[-_]?key|token|secret|passw|authorization|cookie|credential", re.IGNORECASE
 )
-"""A header or settings key whose value is a credential."""
 ENV_REFERENCE: Final = re.compile(r"\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)")
 REDACTED: Final = "<redacted>"
 TEXT_KEYS: Final = frozenset({"outputStyle", "language"})
@@ -688,8 +686,6 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
 
 
 def _redact(value: Any, key: str = "") -> Any:
-    """`value` with every header value, every env value outside `CLAUDE_ENV_NAMES` and every
-    credential-named key's value replaced, for display."""
     if isinstance(value, dict):
         return {
             name: REDACTED
@@ -714,8 +710,6 @@ DOCTOR_CHAT: Final = session_id("00000000-0000-4000-8000-000000000000")
 
 
 def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) -> DoctorLine:
-    """The whole command line of a plan launch in `workspace`, measured as
-    `launch.assert_argv_fits` measures it."""
     options = build_options(
         ChatConfig(PLAN, "opus", None, "default", workspace, Interactive()),
         session_id=DOCTOR_CHAT,
