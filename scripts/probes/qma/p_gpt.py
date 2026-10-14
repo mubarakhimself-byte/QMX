@@ -19,6 +19,7 @@ import argparse
 import base64
 import hashlib
 import importlib
+import itertools
 import json
 import secrets
 import statistics
@@ -609,7 +610,7 @@ def post_responses(token: str, body: Mapping[str, Any]) -> StreamResult:
     with response:
         first = response.readline()
         first_byte_s = time.perf_counter() - started
-        lines = (raw.decode() for raw in (first, *response))
+        lines = (raw.decode() for raw in itertools.chain([first], response))
         return fold_events(
             response.status, response.headers.get("x-request-id"), first_byte_s, parse_sse(lines)
         )

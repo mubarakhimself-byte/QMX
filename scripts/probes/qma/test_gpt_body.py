@@ -7,6 +7,7 @@ import json
 import threading
 import urllib.parse
 import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import p_gpt
@@ -377,3 +378,136 @@ def test_stop_rule_row_names_the_step() -> None:
 
     assert "not viable | stop rule at P2 (stop rule: subscription_sharing_user_not_eligible)" in row
     assert "P1 PASS: 3 models" in row
+
+
+BARRED_KEYS = {"max_output_tokens", "temperature", "metadata"}
+
+
+class StubRoute(BaseHTTPRequestHandler):
+    """Speaks the documented route rules: 400 on barred fields and system items, namespaced
+    function calls, reasoning blobs when `include` asks for them."""
+
+    not_eligible = False
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def do_GET(self) -> None:
+        models = {"models": [{"slug": "gpt-stub", "visibility": "list"}]}
+        self._send(200, "application/json", json.dumps(models).encode())
+
+    def do_POST(self) -> None:
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert self.headers["Authorization"] == "Bearer at-stub"
+        if self.not_eligible:
+            error = {"error": {"code": "subscription_sharing_user_not_eligible"}}
+            self._send(403, "application/json", json.dumps(error).encode())
+            return
+        barred = BARRED_KEYS & body.keys()
+        if barred or any(item.get("role") == "system" for item in body["input"]):
+            error = {"error": {"code": "subscription_sharing_unsupported_capability"}}
+            self._send(400, "application/json", json.dumps(error).encode())
+            return
+        assert body["store"] is False and body["stream"] is True
+        kinds = {item.get("type") for item in body["input"]}
+        if "include" in body and "function_call_output" in kinds and "reasoning" not in kinds:
+            error = {"error": {"code": "reasoning_not_replayed"}}
+            self._send(400, "application/json", json.dumps(error).encode())
+            return
+        self._send(200, "text/event-stream", self._stream(body))
+
+    def _stream(self, body: p_gpt.Json) -> bytes:
+        output: list[dict[str, object]] = []
+        answered = any(item.get("type") == "function_call_output" for item in body["input"])
+        if body.get("tools") and not answered:
+            if "include" in body:
+                output.append({"type": "reasoning", "id": "rs_1", "encrypted_content": "blob"})
+            output.append(
+                {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_1",
+                    "name": "echo_word",
+                    "namespace": "qma",
+                    "arguments": '{"word": "pineapple"}',
+                }
+            )
+        events: list[p_gpt.Json] = [
+            {"type": "response.created", "response": {}},
+            {"type": "response.output_text.delta", "delta": "hello from QMA"},
+            {"type": "response.completed", "response": {"output": output}},
+        ]
+        return "".join(f"data: {json.dumps(e)}\n\n" for e in events).encode()
+
+    def _send(self, status: int, kind: str, payload: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+def _stub_session(monkeypatch: pytest.MonkeyPatch, handler: type[StubRoute]) -> p_gpt.Session:
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(p_gpt, "API", f"http://127.0.0.1:{server.server_address[1]}/v1")
+    session = p_gpt.Session(
+        p_gpt.Registration("oaiapp_1", "urn:uuid:1", "rt-stub", ()), FakeVault()
+    )
+    session.accept({"access_token": "at-stub", "refresh_token": "rt-stub-2", "expires_in": 3600})
+    return session
+
+
+def test_chain_against_a_stub_route_reads_viable_and_leaves_no_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, StubRoute)
+    ev = p_gpt.Evidence(tmp_path)
+    verdict = p_gpt.run_chain(session, ev, model=None, perf_runs=2, perf_spacing_s=0)
+    findings = tmp_path / "FINDINGS.md"
+    findings.write_text(verdict.row(), encoding="utf-8")
+
+    assert [(s.step, s.passed) for s in verdict.steps] == [
+        ("P1", True),
+        ("P2", True),
+        ("P3-namespace", True),
+        ("P3-plain", True),
+        ("P4", True),
+        ("P5", True),
+        ("perf", True),
+    ]
+    assert (verdict.viable, verdict.model, verdict.tools_shape, verdict.reasoning_replay) == (
+        True,
+        "gpt-stub",
+        "namespace",
+        True,
+    )
+    assert p_gpt.secrets_scan(session, ev, findings).passed
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "FINDINGS.md",
+        "hp2-p1.log",
+        "hp2-p2.log",
+        "hp2-p3-namespace.log",
+        "hp2-p3-plain.log",
+        "hp2-p4.log",
+        "hp2-p5.log",
+        "hp2-perf.log",
+        "hp2-secrets.log",
+    ]
+
+
+class NotEligibleRoute(StubRoute):
+    not_eligible = True
+
+
+def test_chain_stops_at_p2_when_the_plan_is_not_eligible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, NotEligibleRoute)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert not verdict.viable
+    assert verdict.stopped_at == "P2 (stop rule: subscription_sharing_user_not_eligible)"
+    assert [s.step for s in verdict.steps] == ["P1", "P2"]
