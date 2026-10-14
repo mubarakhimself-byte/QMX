@@ -28,9 +28,8 @@ BASH_PROMPT = "Run this exact Bash command and reply with its output only: env |
 BANNED = ("ANTHROPIC_API_KEY", "HTTPS_PROXY", "NODE_EXTRA_CA_CERTS", "CLAUDE_CODE_USE_BEDROCK")
 
 
-def verdict(messages: list[Message]) -> tuple[bool, bool]:
-    """(a plan RateLimitEvent arrived, the turn ended without error)."""
-    return any(isinstance(m, RateLimitEvent) for m in messages), is_ok(messages)
+def saw_rate_limit(messages: list[Message]) -> bool:
+    return any(isinstance(m, RateLimitEvent) for m in messages)
 
 
 async def main() -> int:
@@ -43,7 +42,7 @@ async def main() -> int:
     run1 = await run_turns(log, plan_options(), [BASH_PROMPT])
     seen = " ".join(map(str, run1))
     leaked = [name for name in BANNED if name in seen]
-    _, ok1 = verdict(run1)
+    ok1 = is_ok(run1)
     log.row(
         "S19 Bash runs under reduced env",
         f"ok={ok1} banned names seen={leaked}",
@@ -55,7 +54,7 @@ async def main() -> int:
     removed = scrub_process_env(os.environ)
     log(f"run 2 removed names: {removed}")
     run2 = await run_turns(log, plan_options(), ["say ok"])
-    plan2, ok2 = verdict(run2)
+    plan2, ok2 = saw_rate_limit(run2), is_ok(run2)
     log.row(
         "S19 fake key in parent env, scrubbed",
         f"RateLimitEvent={plan2} ok={ok2}",
@@ -67,7 +66,7 @@ async def main() -> int:
         os.environ.update(reduced_env(original) | {"ANTHROPIC_API_KEY": FAKE_KEY})
         log("control: fake key left in the env the SDK merges")
         run3 = await run_turns(log, plan_options(), ["say ok"])
-        plan3, ok3 = verdict(run3)
+        plan3, ok3 = saw_rate_limit(run3), is_ok(run3)
         log.row(
             "S19 control, fake key not scrubbed",
             f"RateLimitEvent={plan3} ok={ok3}",

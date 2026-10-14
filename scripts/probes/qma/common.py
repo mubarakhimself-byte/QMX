@@ -49,7 +49,6 @@ PROBE_KEEP: Final = KEEP_NAMES | {"CLAUDE_CONFIG_DIR"}
 
 
 def reduced_env(environ: Mapping[str, str]) -> dict[str, str]:
-    """The variables of `environ` whose names are in `PROBE_KEEP`, matched case-insensitively."""
     return {name: value for name, value in environ.items() if name.upper() in PROBE_KEEP}
 
 
@@ -66,14 +65,11 @@ def scrub_process_env(environ: MutableMapping[str, str]) -> tuple[str, ...]:
 
 
 def parse_version(text: str) -> tuple[int, ...]:
-    """`2.1.296 (Claude Code)` gives `(2, 1, 296)`."""
     head = text.strip().split()[0]
     return tuple(int(part) for part in head.split("."))
 
 
 class Log:
-    """Prints each line and appends it to `EVIDENCE/<slug>.log`."""
-
     def __init__(self, slug: str) -> None:
         EVIDENCE.mkdir(parents=True, exist_ok=True)
         self.path = EVIDENCE / f"{slug}.log"
@@ -86,12 +82,10 @@ class Log:
         self._file.flush()
 
     def row(self, question: str, value: object, verdict: str) -> None:
-        """One FINDINGS-shaped line: question, observed value, PASS/FAIL/BLOCKED."""
         self(f"FINDING\t{question}\t{value}\t{verdict}")
 
 
 def bundled_cli() -> Path:
-    """The `claude.exe` inside the installed SDK wheel."""
     import claude_agent_sdk  # noqa: PLC0415
 
     exe = "claude.exe" if os.name == "nt" else "claude"
@@ -105,7 +99,6 @@ def sdk_version() -> str:
 
 
 def uv_env() -> dict[str, str]:
-    """The process environment with TMP, TEMP and the uv cache on D:."""
     SCRATCH.mkdir(parents=True, exist_ok=True)
     return (
         {"UV_CACHE_DIR": str(UV_CACHE)}
@@ -115,7 +108,6 @@ def uv_env() -> dict[str, str]:
 
 
 def home_env() -> dict[str, str]:
-    """The ship's `CLAUDE_CONFIG_DIR` and the throwaway HOME and USERPROFILE."""
     FAKE_HOME.mkdir(parents=True, exist_ok=True)
     return {
         "CLAUDE_CONFIG_DIR": str(CONFIG_DIR),
@@ -125,7 +117,6 @@ def home_env() -> dict[str, str]:
 
 
 def cli_env() -> dict[str, str]:
-    """The full environment of a CLI a probe starts directly, without the SDK."""
     return reduced_env(os.environ) | home_env()
 
 
@@ -148,7 +139,6 @@ def auth_method(cli: Path) -> dict[str, Any]:
 
 
 def require_plan_login(log: Log, cli: Path) -> None:
-    """Exit before any turn unless the ship home holds a claude.ai login."""
     status = auth_method(cli)
     log(f"auth status fields: {status}")
     if not status.get("loggedIn") or status.get("apiProvider") not in (None, "firstParty"):
@@ -158,7 +148,6 @@ def require_plan_login(log: Log, cli: Path) -> None:
 
 
 def plan_options(**overrides: Any) -> ClaudeAgentOptions:
-    """`ClaudeAgentOptions` for one plan turn in the ship home, isolated from his setup."""
     from claude_agent_sdk import ClaudeAgentOptions  # noqa: PLC0415
 
     kwargs: dict[str, Any] = {
@@ -175,7 +164,6 @@ def plan_options(**overrides: Any) -> ClaudeAgentOptions:
 
 
 def describe(message: Message) -> str:
-    """One line per SDK message: its type plus the fields a probe reads."""
     from claude_agent_sdk import (  # noqa: PLC0415
         AssistantMessage,
         RateLimitEvent,
@@ -221,7 +209,6 @@ def _blocks(blocks: list[ContentBlock]) -> list[str]:
 
 
 def is_ok(messages: list[Message]) -> bool:
-    """The last `ResultMessage` ended without error."""
     from claude_agent_sdk import ResultMessage  # noqa: PLC0415
 
     results = [m for m in messages if isinstance(m, ResultMessage)]
@@ -247,7 +234,6 @@ def tap_raw(log: Log) -> Generator[None]:
 
 
 async def run_turns(log: Log, options: ClaudeAgentOptions, prompts: list[str]) -> list[Message]:
-    """Send each prompt in one session and log every message. Returns all messages."""
     from claude_agent_sdk import ClaudeSDKClient  # noqa: PLC0415
 
     seen: list[Message] = []
@@ -262,13 +248,11 @@ async def run_turns(log: Log, options: ClaudeAgentOptions, prompts: list[str]) -
 
 
 def cli_pid(client: ClaudeSDKClient) -> int:
-    """The pid of the CLI a connected `ClaudeSDKClient` started."""
     transport: Any = client._transport  # pyright: ignore[reportPrivateUsage]
     return int(transport._process.pid)
 
 
 def working_set_mb(pid: int) -> float:
-    """Current working set of a Windows process, in MB."""
     import ctypes  # noqa: PLC0415
     from ctypes import wintypes  # noqa: PLC0415
 

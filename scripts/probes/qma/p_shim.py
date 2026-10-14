@@ -142,7 +142,6 @@ def in_job() -> bool:
 
 
 def join_jobs(parent_name: str, process: int) -> dict[str, Any]:
-    """Put `process` in the named parent job, then in a fresh kill-on-close job nested in it."""
     kernel32 = _kernel32()
     access = JOB_OBJECT_ASSIGN_PROCESS | JOB_OBJECT_SET_ATTRIBUTES | JOB_OBJECT_QUERY
     parent = kernel32.OpenJobObjectW(access, False, parent_name)
@@ -176,7 +175,7 @@ def run_breakaway(cli: str, args: list[str], parent_name: str) -> tuple[int, dic
 
 
 def find_bundled_cli() -> str | None:
-    """The no-input mode: locate the SDK's bundled CLI without importing the SDK."""
+    """The no-input mode. `find_spec` skips importing the SDK, which the 2 s budget needs."""
     spec = find_spec("claude_agent_sdk")
     if spec is None or spec.origin is None:
         return None
@@ -222,7 +221,6 @@ def _append_start(record: dict[str, Any]) -> None:
 
 
 def read_starts() -> list[dict[str, Any]]:
-    """Every start since the last `clear_starts`, oldest first."""
     if not STARTS.exists():
         return []
     return [json.loads(path.read_text()) for path in sorted(STARTS.glob("*.json"))]

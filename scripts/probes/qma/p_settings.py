@@ -101,7 +101,6 @@ def unplant(earlier: str | None) -> None:
 
 
 def argv_length(options: ClaudeAgentOptions) -> int:
-    """Length of the command line the SDK would start the bundled CLI with."""
     transport: Any = SubprocessCLITransport(prompt="", options=options)
     transport._cli_path = str(bundled_cli())
     return len(subprocess.list2cmdline(transport._build_command()))

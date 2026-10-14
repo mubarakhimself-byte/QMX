@@ -19,7 +19,6 @@ WHEEL_TAG = "win_amd64"
 
 
 def windows_releases() -> list[tuple[str, str]]:
-    """(version, wheel filename) for every release with a win_amd64 wheel, newest first."""
     with urllib.request.urlopen(PYPI, timeout=60) as response:
         releases: dict[str, list[dict[str, str]]] = json.load(response)["releases"]
     found = [
@@ -47,7 +46,6 @@ def install(uv: str, version: str) -> None:
 
 
 def installed_versions() -> tuple[str, str, str]:
-    """SDK version, bundled CLI path and the CLI's `--version` output, read inside the venv."""
     code = (
         "import claude_agent_sdk, pathlib;"
         "print(claude_agent_sdk.__version__);"
