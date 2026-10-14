@@ -81,6 +81,7 @@ async def main_async(log: Log) -> int:
     if secret is None:
         log.row("S36 plan to OpenRouter resume", "keyring qmx/openrouter empty", "BLOCKED NO KEY")
         return 0
+    log.redact(secret)
     require_plan_login(log, bundled_cli())
 
     word = f"persimmon-{secrets.token_hex(3)}"

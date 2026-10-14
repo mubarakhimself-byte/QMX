@@ -182,6 +182,7 @@ async def b1(log: Log, env: dict[str, str]) -> tuple[str, list[Message]]:
 
 
 async def probe_row(log: Log, provider: Provider, secret: str) -> None:
+    log.redact(secret)
     env = provider_env(os.environ, provider, secret, fresh_home(provider.name))
     name = provider.name
 
@@ -286,6 +287,7 @@ async def perf(log: Log) -> int:
         for name, row_ms in times.items():
             options = plan
             if name != "plan":
+                log.redact(keyed[name])
                 env = provider_env(os.environ, PROVIDERS[name], keyed[name], fresh_home(name))
                 options = row_options(
                     env | TOOL_SEARCH_ON, include_partial_messages=True, max_turns=1

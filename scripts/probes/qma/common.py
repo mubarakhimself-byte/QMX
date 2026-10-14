@@ -93,10 +93,17 @@ class Log:
         directory = directory or EVIDENCE
         directory.mkdir(parents=True, exist_ok=True)
         self.path = directory / f"{slug}.log"
+        self._secrets: list[str] = []
         self._file: TextIO = self.path.open("a", encoding="utf-8")
         self(f"=== {slug} {time.strftime('%Y-%m-%dT%H:%M:%S%z')} python {sys.version.split()[0]}")
 
+    def redact(self, secret: str) -> None:
+        """Every later line has `secret` cut out, in case a provider echoes its key back."""
+        self._secrets.append(secret)
+
     def __call__(self, line: str) -> None:
+        for secret in self._secrets:
+            line = line.replace(secret, "<redacted key>")
         print(line, flush=True)
         self._file.write(line + "\n")
         self._file.flush()

@@ -60,6 +60,17 @@ def test_provider_env_sends_the_base_url_with_its_own_token_and_pins_every_tier(
     }
 
 
+def test_log_cuts_a_registered_key_out_of_every_later_line(tmp_path: Path) -> None:
+    log = Log("redact", tmp_path)
+    log("before sk-or-fake-123")
+    log.redact("sk-or-fake-123")
+    log.row("B1 openrouter", "401 invalid key sk-or-fake-123", "FAIL")
+    assert log.path.read_text(encoding="utf-8").splitlines()[1:] == [
+        "before sk-or-fake-123",
+        "FINDING	B1 openrouter	401 invalid key <redacted key>	FAIL",
+    ]
+
+
 def test_scrub_removes_names_in_place_and_is_idempotent() -> None:
     environ = dict(PARENT)
     assert scrub_process_env(environ) == (
