@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import sys
 
 from claude_agent_sdk import (
@@ -32,7 +31,6 @@ from common import (
 
 HOOK_TIMEOUT_S = 2.0
 HOOK_SLEEP_S = 10.0
-SECRET = re.compile(r"(sk-ant-\S+|Bearer \S+|oauth\S*token\S*)", re.IGNORECASE)
 
 
 def subtypes(messages: list[Message]) -> list[str]:
@@ -52,26 +50,29 @@ async def usage() -> None:
 
 async def effort() -> None:
     log = Log("hp0-effort")
-    debug_file = SCRATCH / "effort-debug.txt"
-    debug_file.unlink(missing_ok=True)
+    levels: list[object] = []
+
+    async def on_stop(
+        hook_input: HookInput, _tool_use_id: str | None, _context: HookContext
+    ) -> HookJSONOutput:
+        level = hook_input.get("effort", {}).get("level")
+        levels.append(level)
+        log(f"Stop hook effort level: {level}")
+        return {}
+
     options = plan_options(
-        model="sonnet", effort="low", extra_args={"debug-file": debug_file.as_posix()}
+        model="sonnet", effort="low", hooks={"Stop": [HookMatcher(hooks=[on_stop])]}
     )
     messages = await run_turns(log, options, ["say ok", "/effort high", "say ok"])
-    lines = debug_file.read_text(encoding="utf-8", errors="replace").splitlines()
-    debug_file.unlink(missing_ok=True)
-    effort_lines = [
-        SECRET.sub("[redacted]", line)[:300] for line in lines if "effort" in line.lower()
-    ]
-    for line in effort_lines:
-        log(f"debug: {line}")
     replies = [str(m.result)[:200] for m in messages if isinstance(m, ResultMessage)]
     log(f"replies: {replies}")
-    log.row(
-        "S37 /effort high changes the next request",
-        f"{len(effort_lines)} effort debug lines",
-        "RECORDED",
-    )
+    if levels[:1] == ["low"] and levels[-1:] == ["high"]:
+        verdict = "PASS"
+    elif levels[:1] == ["low"] and levels[-1:] == ["low"]:
+        verdict = "FAIL"
+    else:
+        verdict = "INCONCLUSIVE"
+    log.row("S37 /effort high changes the next request", f"Stop effort levels={levels}", verdict)
 
 
 async def timeout() -> None:

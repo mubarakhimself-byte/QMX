@@ -388,6 +388,7 @@ async def turn(log: Log) -> None:
         cli_path=str(SHIM_EXE), env=home_env() | {"QMA_CLI_PATH": str(bundled_cli())}
     )
     ok = False
+    clear_starts()
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query("say ok")
@@ -398,6 +399,8 @@ async def turn(log: Log) -> None:
     except OSError as error:
         log(f"start refused: {error!r}")
         app_control_events(log)
+    for start in read_starts():
+        log(f"turn start record: {start}")
     log.row("Shim turn through cli_path, App Control result", f"ok={ok}", "PASS" if ok else "FAIL")
 
 

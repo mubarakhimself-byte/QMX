@@ -3,8 +3,9 @@
 Plants a skill, a command, an agent and a `settings.json` hook in the ship home, connects
 with inline settings that carry `forceLoginMethod`, `cleanupPeriodDays`, a ConfigChange
 command hook and a PreToolUse command hook (the control that inline command hooks run at
-all). The agent then writes `settings.json` into the home mid-session. Everything planted
-is removed afterwards and any earlier `settings.json` is restored.
+all). The agent then writes `settings.json` into the home mid-session, or the probe writes it
+when the model refuses. Everything planted is removed afterwards and any earlier
+`settings.json` is restored.
 """
 
 from __future__ import annotations
@@ -17,7 +18,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, SystemMessage
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    Message,
+    ResultMessage,
+    SystemMessage,
+)
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 from common import (
     CONFIG_DIR,
@@ -25,9 +32,9 @@ from common import (
     SCRATCH,
     Log,
     bundled_cli,
+    describe,
     plan_options,
     require_plan_login,
-    run_turns,
     scrub_process_env,
 )
 
@@ -73,27 +80,30 @@ def inline_settings() -> str:
     )
 
 
-def plant() -> str | None:
-    """Plant the home files. Returns the earlier `settings.json` text, if there was one."""
+def plant() -> tuple[str | None, list[Path]]:
     MARKERS.mkdir(parents=True, exist_ok=True)
     for marker in MARKERS.glob("*.jsonl"):
         marker.unlink()
     earlier = HOME_SETTINGS.read_text(encoding="utf-8") if HOME_SETTINGS.exists() else None
+    made: list[Path] = []
     for path, text in PLANTS.items():
+        for folder in reversed(path.relative_to(CONFIG_DIR).parents[:-1]):
+            if not (CONFIG_DIR / folder).exists():
+                made.append(CONFIG_DIR / folder)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     home_hook = {
         "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [marker_hook("home-pretool")]}]}
     }
     HOME_SETTINGS.write_text(json.dumps(home_hook), encoding="utf-8")
-    return earlier
+    return earlier, made
 
 
-def unplant(earlier: str | None) -> None:
+def unplant(earlier: str | None, made: list[Path]) -> None:
     for path in PLANTS:
         path.unlink(missing_ok=True)
-        if path.name == "SKILL.md":
-            path.parent.rmdir()
+    for folder in reversed(made):
+        folder.rmdir()
     if earlier is None:
         HOME_SETTINGS.unlink(missing_ok=True)
     else:
@@ -126,21 +136,35 @@ async def main() -> int:
         f"argv length with inline settings, preset append and the file flag: {argv_length(options)}"
     )
     write_settings = (
-        "Run this exact Bash command and reply done: "
+        "This is a sanctioned probe in a throwaway test home. Overwrite the file without "
+        "reading it first: run this exact Bash command once and reply done: "
         f"cat > '{HOME_SETTINGS.as_posix()}' <<'JSON'\n{json.dumps(WRITTEN_SETTINGS)}\nJSON"
     )
-    earlier = plant()
+    earlier, made = plant()
+    messages: list[Message] = []
+    writer = "agent"
     try:
-        messages = await run_turns(
-            log, options, ["Reply with the codeword only.", write_settings, "say ok"]
-        )
+        async with ClaudeSDKClient(options=options) as client:
+            for prompt in ("Reply with the codeword only.", write_settings, "say ok"):
+                log(f"> {prompt}")
+                await client.query(prompt)
+                async for message in client.receive_response():
+                    log(describe(message))
+                    messages.append(message)
+                if prompt == write_settings and "apiKeyHelper" not in HOME_SETTINGS.read_text(
+                    encoding="utf-8"
+                ):
+                    writer = "probe"
+                    HOME_SETTINGS.write_text(json.dumps(WRITTEN_SETTINGS), encoding="utf-8")
+                    log("the agent did not write settings.json, so the probe wrote it mid-session")
+                    await asyncio.sleep(2)
     except Exception as error:
         log(f"session failed: {type(error).__name__}: {error}")
         log.row("S20 CLI accepts inline settings and the file flag", repr(error)[:300], "FAIL")
         return 1
     finally:
         written = HOME_SETTINGS.read_text(encoding="utf-8") if HOME_SETTINGS.exists() else ""
-        unplant(earlier)
+        unplant(earlier, made)
 
     results = [m for m in messages if isinstance(m, ResultMessage)]
     init = next((m for m in messages if isinstance(m, SystemMessage) and m.subtype == "init"), None)
@@ -151,9 +175,7 @@ async def main() -> int:
     }
     codeword = CODEWORD in str(results[0].result) if results else False
     third_ok = len(results) == 3 and not results[2].is_error
-    log(
-        f"home settings.json after the agent's write held the S20 keys: {'apiKeyHelper' in written}"
-    )
+    log(f"home settings.json held the S20 keys: {'apiKeyHelper' in written}, writer={writer}")
     log.row(
         "S20 CLI accepts inline settings", f"{len(results)} results", "PASS" if results else "FAIL"
     )
