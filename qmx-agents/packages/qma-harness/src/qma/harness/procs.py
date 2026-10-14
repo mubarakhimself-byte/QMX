@@ -38,6 +38,7 @@ from qma.launcher import (
     JOB_OBJECT_QUERY,
     JOB_OBJECT_TERMINATE,
     PROCESS_QUERY_LIMITED_INFORMATION,
+    SYSTEMD_RUN,
     ExtendedLimits,
     PidRecord,
     chat_job_name,
@@ -385,7 +386,7 @@ def _systemctl(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _user_systemd() -> bool:
-    if shutil.which("systemd-run") is None or shutil.which("systemctl") is None:
+    if not Path(SYSTEMD_RUN).exists() or shutil.which("systemctl") is None:
         return False
     try:
         return _systemctl("show-environment").returncode == 0

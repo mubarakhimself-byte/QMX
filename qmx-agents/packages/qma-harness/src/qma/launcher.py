@@ -40,16 +40,14 @@ import json
 import os
 import re
 import select
-import shutil
 import signal
 import subprocess
 import sys
 import threading
 from ctypes import wintypes
-from dataclasses import asdict, dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, NamedTuple
 
 BLOCK_CONFIG_CHANGE: Final = "--qma-block-config-change"
 INPUT_NAMES: Final[tuple[str, ...]] = ("QMA_REAL_CLI", "QMA_CHAT_ID", "QMA_PROC_DIR", "QMA_CAP")
@@ -58,6 +56,7 @@ CHAT_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
 EXIT_BLOCKED: Final = 2
 EXIT_REFUSED: Final = 125
 EXIT_NO_CLI: Final = 127
+SYSTEMD_RUN: Final = "/usr/bin/systemd-run"
 
 PROCESS_TERMINATE: Final = 0x0001
 PROCESS_SET_QUOTA: Final = 0x0100
@@ -103,8 +102,7 @@ class ExtendedLimits(ctypes.Structure):
     )
 
 
-@dataclass(frozen=True)
-class PidRecord:
+class PidRecord(NamedTuple):
     launcher_pid: int
     cli_pid: int
     cli_started: str
@@ -198,7 +196,7 @@ def process_started(pid: int) -> str | None:
         fields = stat.rpartition(")")[2].split()
         return None if fields[0] == "Z" else fields[19]
     done = subprocess.run(
-        [shutil.which("ps") or "/bin/ps", "-o", "lstart=", "-p", str(pid)],
+        ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
         capture_output=True,
         text=True,
         check=False,
@@ -248,7 +246,7 @@ def _block_config_change() -> int:
 
 def _write_record(path: Path, record: PidRecord) -> None:
     staged = path.with_suffix(".tmp")
-    staged.write_text(json.dumps(asdict(record)), encoding="utf-8")
+    staged.write_text(json.dumps(record._asdict()), encoding="utf-8")
     staged.replace(path)
 
 
@@ -320,8 +318,7 @@ def _place(pid: int, job: int, cap: str, record: Path) -> None:
 def _run_posix(command: list[str], chat: str, record: Path, cap: str) -> int:
     if sys.platform == "linux" and cap:
         unit = f"--unit=qma-chat-{chat}-{os.getpid()}"
-        run = shutil.which("systemd-run") or "/usr/bin/systemd-run"
-        command = [run, "--user", "--scope", "--quiet", f"--slice={cap}", unit, *command]
+        command = [SYSTEMD_RUN, "--user", "--scope", "--quiet", f"--slice={cap}", unit, *command]
     child = subprocess.Popen(
         command,
         start_new_session=True,
