@@ -754,6 +754,21 @@ def test_a_chat_on_an_unknown_profile_or_a_refused_model_never_starts(
     run(body, home)
 
 
+def test_a_bad_provider_row_blocks_only_itself(home: QmxHome) -> None:
+    broken: Document = {"base_url": "http://openrouter.ai/api"}
+    control_service(home).settings_put("providers", {"broken": broken, "openrouter": ROUTER_ROW})
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="plan", model="opus"))
+        await harness.send(chat, OperatorText("hi"))
+        assert len(FakeClient.made) == 1
+        await harness.start_chat(NewChat(title="key", model="opus", profile="openrouter"))
+        with pytest.raises(LaunchRefused, match=re.escape("[providers.broken]")):
+            await harness.start_chat(NewChat(title="x", model="opus", profile="broken"))
+
+    run(body, home)
+
+
 def test_relay_usage_lands_as_one_model_call_row_that_the_run_index_reads(home: QmxHome) -> None:
     chat = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
     usage = RelayUsage(chat, ProfileName("openrouter"), "/v1/messages", 200, "m", 5, 6, 7, 8)

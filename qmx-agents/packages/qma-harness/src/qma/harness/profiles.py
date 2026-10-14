@@ -20,6 +20,7 @@ Rows come from `settings.toml [providers]`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Final, Literal, NewType, cast, get_args
@@ -53,6 +54,9 @@ class TierMap:
 
     def get(self, alias: str) -> ModelId | None:
         return cast("ModelId | None", getattr(self, alias, None)) if alias in TIERS else None
+
+    def models(self) -> tuple[ModelId, ...]:
+        return tuple(getattr(self, tier.name) for tier in fields(self))
 
 
 TIERS: Final = tuple(tier.name for tier in fields(TierMap))
@@ -143,8 +147,13 @@ SECRET_REF: Final = re.compile(r"qmx/[a-z0-9][a-z0-9_-]{0,39}")
 
 
 def normalize(model: str) -> str:
-    """Lowercase, without a trailing `[1m]`-style suffix."""
-    return SUFFIX.sub("", model.strip()).lower()
+    """NFKC, without format characters such as zero-width spaces, lowercase, and without a
+    trailing `[1m]`-style suffix. Lookalike letters from other scripts survive, so the caller
+    refuses anything that is not ASCII."""
+    folded = "".join(
+        char for char in unicodedata.normalize("NFKC", model) if unicodedata.category(char) != "Cf"
+    )
+    return SUFFIX.sub("", folded.strip()).lower()
 
 
 def family_refusal(model: str) -> str | None:
@@ -153,6 +162,8 @@ def family_refusal(model: str) -> str | None:
     norm = normalize(model)
     if not norm:
         return "no model id"
+    if not norm.isascii():
+        return f"{model!r} is not an ASCII model id"
     if norm.startswith(ROUTER_SLUGS):
         return f"{model} lets the vendor pick the model"
     for segment in re.split(r"[/:]", norm):
@@ -169,7 +180,7 @@ def family_refusal(model: str) -> str | None:
 def resolve_model(profile: Profile, requested: str) -> ModelId | None:
     """The one parser for a requested model id, used for `ChatConfig.model` and by the relay.
     None means refused. Behind a key an id must be a tier alias or equal a tier model after
-    normalization."""
+    normalization, and the result is that tier's pinned id, which the relay forwards."""
     match profile:
         case ClaudePlan():
             norm = normalize(requested)
@@ -181,21 +192,23 @@ def resolve_model(profile: Profile, requested: str) -> ModelId | None:
             alias = tiers.get(norm)
             if alias is not None:
                 return alias
-            pinned = {normalize(getattr(tiers, tier)) for tier in TIERS}
-            return ModelId(requested) if norm in pinned else None
+            pinned = {normalize(model): model for model in tiers.models()}
+            return pinned.get(norm)
 
 
 @dataclass(frozen=True)
 class Profiles:
-    """All configured profiles by name. Always holds the plan profile."""
+    """All configured profiles by name. Always holds the plan profile. A row that does not
+    validate is kept in `errors` and refuses only its own name."""
 
     by_name: Mapping[ProfileName, Profile]
+    errors: Mapping[str, str] = field(default_factory=dict[str, str])
 
     def get(self, name: str) -> Profile:
         found = self.by_name.get(ProfileName(name))
-        if found is None:
-            raise ProfileError(f"no provider is named {name!r}")
-        return found
+        if found is not None:
+            return found
+        raise ProfileError(self.errors.get(name, f"no provider is named {name!r}"))
 
 
 class ProfileError(ValueError):
@@ -203,16 +216,18 @@ class ProfileError(ValueError):
 
 
 def parse_profiles(rows: Mapping[str, object], *, allow_loopback_http: bool = False) -> Profiles:
-    """`settings.toml [providers]` into typed profiles. Raises `ProfileError` naming the row."""
+    """`settings.toml [providers]` into typed profiles. A bad row lands in `errors`, worded
+    with its row name, and never blocks the plan or another row."""
     found: dict[ProfileName, Profile] = {PLAN: ClaudePlan()}
+    errors: dict[str, str] = {}
     for name, row in rows.items():
         if name in NON_MODEL_ROWS:
             continue
         try:
             found[ProfileName(name)] = _key_provider(name, row, allow_loopback_http)
         except ProfileError as error:
-            raise ProfileError(f"[providers.{name}] {error}") from None
-    return Profiles(found)
+            errors[name] = f"[providers.{name}] {error}"
+    return Profiles(found, errors)
 
 
 def _key_provider(name: str, row: object, allow_loopback_http: bool) -> KeyProvider:

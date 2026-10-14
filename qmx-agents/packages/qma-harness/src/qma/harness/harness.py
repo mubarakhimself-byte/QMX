@@ -43,7 +43,14 @@ from qma.harness.launch import (
     assert_scrubbed,
 )
 from qma.harness.procs import AgentProcessCap
-from qma.harness.profiles import PLAN, ProfileError, Profiles, parse_profiles, resolve_model
+from qma.harness.profiles import (
+    PLAN,
+    ClaudePlan,
+    ProfileError,
+    Profiles,
+    parse_profiles,
+    resolve_model,
+)
 from qma.harness.relay import Relay, RelayUsage, UsageSink, keyring_secret
 
 if TYPE_CHECKING:
@@ -137,7 +144,9 @@ class Harness:
         if workspace is not None and not workspace.is_dir():
             raise LaunchRefused(f"the workspace {workspace} is not a folder")
         try:
-            profile = self._deps.relay.profiles().get(spec.profile)
+            profile = (
+                ClaudePlan() if spec.profile == PLAN else self._deps.relay.profiles().get(spec.profile)
+            )
         except ProfileError as error:
             raise LaunchRefused(str(error)) from None
         if resolve_model(profile, spec.model) is None:

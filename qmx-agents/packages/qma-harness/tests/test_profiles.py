@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -52,8 +53,11 @@ ROUTER = KeyProvider(
         (KIMI, "haiku", "kimi-k2.6"),
         (KIMI, "Sonnet[1m]", "kimi-k3"),
         (KIMI, "kimi-k3", "kimi-k3"),
-        (KIMI, "kimi-k3[1m]", "kimi-k3[1m]"),
-        (KIMI, "KIMI-K3", "KIMI-K3"),
+        (KIMI, "kimi-k3[1m]", "kimi-k3"),
+        (KIMI, "KIMI-K3", "kimi-k3"),
+        (KIMI, "ｋｉｍｉ-k3", "kimi-k3"),
+        (KIMI, "kimi​-k3", "kimi-k3"),
+        (KIMI, "kіmi-k3", None),
         (KIMI, "kimi-k2.7-code", None),
         (KIMI, "claude-opus-5-5", None),
         (KIMI, "claude-opus-5-5[1m]", None),
@@ -89,6 +93,9 @@ def test_resolve_model(profile: Any, requested: str, resolved: str | None) -> No
         ("gpt-5", True),
         ("o3-pro", True),
         ("openrouter/auto", True),
+        ("аnthropic/сlaude-opus-4", True),
+        ("c​laude-3", True),
+        ("ｃｌａｕｄｅ-x", True),
     ],
 )
 def test_the_family_test_alone_passes_dated_ids_of_an_allowed_family(
@@ -161,9 +168,13 @@ def test_a_row_overrides_the_host_defaults() -> None:
     ],
 )
 def test_a_bad_row_is_refused_by_name(name: str, row: object, message: str) -> None:
-    with pytest.raises(ProfileError) as refused:
-        parse_profiles({name: row})
-    assert message in str(refused.value)
+    profiles = parse_profiles({name: row, "openrouter": OPENROUTER_ROW})
+    assert message in profiles.errors[name]
+    assert isinstance(profiles.get("openrouter"), KeyProvider)
+    assert profiles.get(PLAN) == ClaudePlan()
+    if name != PLAN:
+        with pytest.raises(ProfileError, match=re.escape(message)):
+            profiles.get(name)
 
 
 def test_plain_http_to_loopback_needs_the_test_switch() -> None:
