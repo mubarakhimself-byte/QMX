@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from common import (
     is_final_release,
-    oq5_plugin_verdict,
+    oq5_home_verdict,
     parse_version,
     s19_scrub_verdict,
     s25_verdict,
@@ -49,8 +49,22 @@ def test_s25_passes_only_when_the_control_compacts_and_the_model_answered_verbat
     assert s25_verdict(control=True, answered=True, turns=1, boundary=True) == "FAIL"
 
 
-def test_oq5_home_plugin_passes_only_when_the_control_loads_it_and_the_probe_does_not() -> None:
-    assert oq5_plugin_verdict(control=True, probe=False) == "PASS"
-    assert oq5_plugin_verdict(control=True, probe=True) == "FAIL"
-    assert oq5_plugin_verdict(control=False, probe=True) == "FAIL"
-    assert oq5_plugin_verdict(control=False, probe=False) == "UNMEASURED"
+HOME = frozenset({"hp0-plant-plugin", "hp0-plant-skill", "hp0-plant-cmd", "hp0-plant-agent"})
+CONTROL = {
+    "commands": ["hp0-plant-skill", "hp0-plant-cmd", "hp0-plant-plugin:hp0-plant-plugin-cmd"],
+    "agents": ["hp0-plant-agent"],
+}
+PROBE = {"commands": ["hp0-sdk-plugin:hp0-sdk-plugin-cmd"], "agents": []}
+
+
+def test_oq5_passes_only_when_the_control_loads_every_plant_and_the_probe_loads_none() -> None:
+    assert oq5_home_verdict(HOME, CONTROL, PROBE, home_hook=0, hook_control=True) == "PASS"
+    skill = {"commands": [*PROBE["commands"], "hp0-plant-skill"], "agents": []}
+    assert oq5_home_verdict(HOME, CONTROL, skill, home_hook=0, hook_control=True) == "FAIL"
+    agent = {"commands": PROBE["commands"], "agents": ["hp0-plant-agent"]}
+    assert oq5_home_verdict(HOME, CONTROL, agent, home_hook=0, hook_control=True) == "FAIL"
+    assert oq5_home_verdict(HOME, CONTROL, CONTROL, home_hook=0, hook_control=True) == "FAIL"
+    assert oq5_home_verdict(HOME, CONTROL, PROBE, home_hook=1, hook_control=True) == "FAIL"
+    no_agent = {"commands": CONTROL["commands"], "agents": []}
+    assert oq5_home_verdict(HOME, no_agent, PROBE, home_hook=0, hook_control=True) == "UNMEASURED"
+    assert oq5_home_verdict(HOME, CONTROL, PROBE, home_hook=0, hook_control=False) == "UNMEASURED"

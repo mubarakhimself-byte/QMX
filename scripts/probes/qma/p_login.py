@@ -11,13 +11,23 @@ from __future__ import annotations
 import json
 import subprocess
 
-from common import CONFIG_DIR, FORCE_LOGIN, SCRATCH, Log, auth_method, bundled_cli, cli_env
+from common import (
+    CONFIG_DIR,
+    FORCE_LOGIN,
+    SCRATCH,
+    Log,
+    auth_method,
+    bundled_cli,
+    cli_env,
+    heal_ship_home,
+)
 
 
 def main() -> int:
     log = Log("hp0-login")
     cli = bundled_cli()
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    heal_ship_home(log)
     argv = [str(cli), "--settings", json.dumps(FORCE_LOGIN)]
     log(f"starting {argv} with CLAUDE_CONFIG_DIR={CONFIG_DIR}")
     log("Type /login, note whether a Console option appears, sign in, then type /exit.")

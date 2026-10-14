@@ -40,7 +40,7 @@ from common import (
     bundled_cli,
     cli_env,
     describe,
-    oq5_plugin_verdict,
+    oq5_home_verdict,
     plan_options,
     require_plan_login,
     scrub_process_env,
@@ -56,6 +56,7 @@ FILE_CODEWORD = "HP0-MANGO"
 INLINE_CODEWORD = "HP0-KIWI"
 MARKETPLACE = "hp0-local"
 HOME_PLUGIN = "hp0-plant-plugin"
+HOME_PLANTS = frozenset({HOME_PLUGIN, "hp0-plant-skill", "hp0-plant-cmd", "hp0-plant-agent"})
 SDK_PLUGIN = "hp0-sdk-plugin"
 PLANTS = {
     CONFIG_DIR / "skills" / "hp0-plant-skill" / "SKILL.md": (
@@ -305,12 +306,10 @@ async def planted_run(log: Log) -> int:
         "RECORDED",
     )
     log.row(
-        "OQ5 home plugin, skill, command and agent at connect",
+        "OQ5 home plugin, skill, command, agent and settings.json hook",
         f"control setting_sources=['user']: {control}; setting_sources=[] with plugins set: "
-        f"{at_connect}",
-        oq5_plugin_verdict(
-            plugin_loaded(control, HOME_PLUGIN), plugin_loaded(at_connect, HOME_PLUGIN)
-        ),
+        f"{at_connect}; home hook calls={home_hook}",
+        oq5_home_verdict(HOME_PLANTS, control, at_connect, home_hook, hook_control),
     )
     log.row(
         "OQ5 plugin passed through the plugins option loads",

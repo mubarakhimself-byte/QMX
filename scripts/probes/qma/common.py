@@ -149,9 +149,7 @@ def auth_method(cli: Path) -> dict[str, Any]:
     return {key: status.get(key) for key in keep}
 
 
-def require_plan_login(log: Log, cli: Path) -> None:
-    """Checks only that the credentials file exists, never its content, before any CLI start,
-    so a probe run without the login leaves the ship home untouched."""
+def heal_ship_home(log: Log) -> None:
     try:
         failures = heal(PLANT_BACKUP, PLANT_LOCK)
     except Locked as error:
@@ -160,6 +158,12 @@ def require_plan_login(log: Log, cli: Path) -> None:
     if failures:
         log.row("ship home free of plants", failures, "BLOCKED")
         raise SystemExit(3)
+
+
+def require_plan_login(log: Log, cli: Path) -> None:
+    """Checks only that the credentials file exists, never its content, before any CLI start,
+    so a probe run without the login leaves the ship home untouched."""
+    heal_ship_home(log)
     status: dict[str, Any] = {"credentials_file": (CONFIG_DIR / ".credentials.json").exists()}
     if status["credentials_file"]:
         status = auth_method(cli)
@@ -361,7 +365,16 @@ def s25_verdict(control: bool, answered: bool, turns: int, boundary: bool) -> st
     return "PASS" if control and answered and turns >= 1 and not boundary else "FAIL"
 
 
-def oq5_plugin_verdict(control: bool, probe: bool) -> str:
-    if probe:
+def oq5_home_verdict(
+    planted: frozenset[str],
+    control: Mapping[str, Iterable[str]],
+    probe: Mapping[str, Iterable[str]],
+    home_hook: int,
+    hook_control: bool,
+) -> str:
+    def loaded(names: Mapping[str, Iterable[str]]) -> set[str]:
+        return {n.partition(":")[0] for group in names.values() for n in group} & planted
+
+    if loaded(probe) or home_hook:
         return "FAIL"
-    return "PASS" if control else "UNMEASURED"
+    return "PASS" if loaded(control) >= planted and hook_control else "UNMEASURED"

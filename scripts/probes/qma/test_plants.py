@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from plants import Locked, exclusive, heal, restore, snapshot
@@ -71,42 +70,74 @@ def test_snapshot_refuses_to_overwrite_an_unrestored_backup(tmp_path: Path) -> N
     assert (root / "settings.json").read_text(encoding="utf-8") == EARLIER
 
 
+HOLD = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from plants import exclusive
+with exclusive(Path(sys.argv[2])):
+    print("held", flush=True)
+    sys.stdin.read()
+"""
+
+
 @contextmanager
-def live_process() -> Generator[int]:
-    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+def holder(lock: Path) -> Generator[subprocess.Popen[str]]:
+    here = str(Path(__file__).parent)
+    process = subprocess.Popen(
+        [sys.executable, "-I", "-c", HOLD, here, str(lock)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
     try:
-        yield process.pid
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "held"
+        yield process
     finally:
         process.kill()
         process.wait()
 
 
-def dead_pid() -> int:
-    process = subprocess.Popen([sys.executable, "-c", "pass"])
-    process.wait()
-    return process.pid
+def refused(lock: Path) -> bool:
+    try:
+        with exclusive(lock):
+            return False
+    except Locked:
+        return True
 
 
-def test_a_second_holder_is_refused_while_the_first_holder_lives(tmp_path: Path) -> None:
+def test_two_holders_cannot_coexist_even_when_a_reclaimer_deletes_the_lock_file(
+    tmp_path: Path,
+) -> None:
     lock = tmp_path / "plant.lock"
-    with live_process() as pid:
-        lock.write_text(str(pid), encoding="utf-8")
-        refused: int | None = None
-        try:
-            with exclusive(lock):
-                pass
-        except Locked as error:
-            refused = error.pid
-        assert refused == pid
-        assert lock.read_text(encoding="utf-8") == str(pid)
+    with holder(lock):
+        assert refused(lock)
+        with suppress(PermissionError):
+            lock.unlink()
+        assert refused(lock)
+        assert refused(lock)
 
 
-def test_a_dead_holders_lock_is_reclaimed_and_released(tmp_path: Path) -> None:
+def test_a_crashed_holders_lock_frees_when_its_process_dies(tmp_path: Path) -> None:
     lock = tmp_path / "plant.lock"
-    lock.write_text(str(dead_pid()), encoding="utf-8")
-    with exclusive(lock):
-        assert lock.read_text(encoding="utf-8") == str(os.getpid())
-    assert not lock.exists()
+    with holder(lock) as process:
+        assert refused(lock)
+        process.kill()
+        process.wait()
+        assert not refused(lock)
+    assert not refused(lock)
+
+
+def test_a_lock_file_naming_a_live_unrelated_pid_does_not_block(tmp_path: Path) -> None:
+    lock = tmp_path / "plant.lock"
+    unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        lock.write_text(str(unrelated.pid), encoding="utf-8")
+        assert not refused(lock)
+    finally:
+        unrelated.kill()
+        unrelated.wait()
 
 
 def test_heal_leaves_a_live_runs_plant_alone_and_restores_it_once_that_run_is_dead(
@@ -115,20 +146,18 @@ def test_heal_leaves_a_live_runs_plant_alone_and_restores_it_once_that_run_is_de
     root = home(tmp_path)
     backup = plant(root)
     lock = tmp_path / "plant.lock"
-    with live_process() as pid:
-        lock.write_text(str(pid), encoding="utf-8")
-        refused: int | None = None
+    with holder(lock):
+        healed = True
         try:
             heal(backup, lock)
-        except Locked as error:
-            refused = error.pid
-        assert refused == pid
+        except Locked:
+            healed = False
+        assert not healed
         assert (root / "settings.json").read_text(encoding="utf-8") == PLANTED
         assert backup.exists()
     assert heal(backup, lock) == []
     assert (root / "settings.json").read_text(encoding="utf-8") == EARLIER
     assert not backup.exists()
-    assert not lock.exists()
 
 
 def test_heal_without_a_backup_changes_nothing(tmp_path: Path) -> None:

@@ -1,14 +1,15 @@
 """The launcher shim, DESIGN open questions 17 and 18. `p_shim.py [build|version|jobs|turn]`.
 
-`build` installs this file and `common.py` as a uv console script, `qma-cli-launcher.exe`,
-into the probe venv. The `.exe` runs `shim_main`, which appends one record per start to
-`SCRATCH/shim-starts/` and then runs the bundled CLI with the same args. The
-`version`, `jobs` and `turn` cases drive it and write `hp0-shim.log`. Only `turn` needs the
-plan login.
+`build` installs this file and the probe modules it imports as a uv console script,
+`qma-cli-launcher.exe`, into the probe venv. The `.exe` runs `shim_main`, which appends one
+record per start to `SCRATCH/shim-starts/` and then runs the bundled CLI with the same args.
+The `version`, `jobs` and `turn` cases drive it and write `hp0-shim.log`. Only `turn` needs
+the plan login.
 """
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import ctypes
 import json
@@ -59,7 +60,7 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["p_shim", "common"]
+py-modules = {modules}
 """
 
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
@@ -248,12 +249,35 @@ def app_control_events(log: Log) -> None:
     log(f"App Control events: {done.stdout.strip()[:1500]}")
 
 
-def build(log: Log) -> None:
-    PACKAGE.mkdir(parents=True, exist_ok=True)
+def local_modules(root: str, here: Path) -> list[str]:
+    found: set[str] = set()
+    pending = [root]
+    while pending:
+        name = pending.pop()
+        if name in found or not (here / f"{name}.py").exists():
+            continue
+        found.add(name)
+        tree = ast.parse((here / f"{name}.py").read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                pending += [alias.name.partition(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                pending.append(node.module.partition(".")[0])
+    return sorted(found)
+
+
+def stage(package: Path) -> None:
+    package.mkdir(parents=True, exist_ok=True)
     here = Path(__file__).parent
-    for name in ("p_shim.py", "common.py"):
-        shutil.copy2(here / name, PACKAGE / name)
-    (PACKAGE / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    modules = local_modules("p_shim", here)
+    for name in modules:
+        shutil.copy2(here / f"{name}.py", package / f"{name}.py")
+    pyproject = PYPROJECT.format(modules=json.dumps(modules))
+    (package / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+
+
+def build(log: Log) -> None:
+    stage(PACKAGE)
     uv = shutil.which("uv")
     if uv is None:
         raise SystemExit("uv is not on PATH")

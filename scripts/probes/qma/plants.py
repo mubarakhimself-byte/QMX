@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import ctypes
 import json
+import msvcrt
 import os
 import shutil
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from ctypes import wintypes
 from pathlib import Path
 from typing import Final
 
@@ -16,54 +15,26 @@ LOGIN: Final = ".credentials.json"
 
 
 class Locked(Exception):
-    def __init__(self, lock: Path, pid: int) -> None:
-        super().__init__(f"{lock} is held by live process {pid}")
-        self.pid = pid
-
-
-def _alive(pid: int) -> bool:
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    handle = kernel32.OpenProcess(0x1000, False, pid)
-    if not handle:
-        access_denied = 5
-        return ctypes.get_last_error() == access_denied
-    try:
-        code = wintypes.DWORD()
-        still_active = 259
-        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and (
-            code.value == still_active
-        )
-    finally:
-        kernel32.CloseHandle(handle)
-
-
-def _holder(lock: Path) -> int | None:
-    try:
-        pid = int(lock.read_text(encoding="utf-8"))
-    except (FileNotFoundError, ValueError):
-        return None
-    return pid if _alive(pid) else None
+    def __init__(self, lock: Path) -> None:
+        super().__init__(f"{lock} is held by another running probe")
 
 
 @contextmanager
 def exclusive(lock: Path) -> Generator[None]:
+    """An OS lock on the first byte of `lock`, which Windows drops when the holder dies."""
     lock.parent.mkdir(parents=True, exist_ok=True)
-    while True:
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            if (pid := _holder(lock)) is not None:
-                raise Locked(lock, pid) from None
-            lock.unlink(missing_ok=True)
-            continue
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            file.write(str(os.getpid()))
-        break
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR)
     try:
-        yield
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError:
+            raise Locked(lock) from None
+        try:
+            yield
+        finally:
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
     finally:
-        lock.unlink(missing_ok=True)
+        os.close(fd)
 
 
 def heal(backup: Path, lock: Path) -> list[str]:
