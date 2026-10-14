@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 from qma.boot import KEEP_NAMES, banned_fragment
 
@@ -13,33 +14,47 @@ STDLIB_ONLY = ("qma.boot", "qma.launcher")
 SDK_ALLOWED = ("qma.harness", "qma.gpt.probe")
 
 
-def modules() -> dict[str, ast.Module]:
-    found: dict[str, ast.Module] = {}
-    for path in sorted((SRC / "qma").rglob("*.py")):
-        parts = path.relative_to(SRC).with_suffix("").parts
-        name = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
-        found[name] = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+class Source(NamedTuple):
+    tree: ast.Module
+    package: str
+
+
+Modules = dict[str, Source]
+
+
+def modules(src: Path = SRC) -> Modules:
+    found: Modules = {}
+    for path in sorted((src / "qma").rglob("*.py")):
+        parts = path.relative_to(src).with_suffix("").parts
+        package = ".".join(parts[:-1])
+        name = package if parts[-1] == "__init__" else ".".join(parts)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        found[name] = Source(tree, package)
     return found
 
 
-def imports(tree: ast.Module) -> set[str]:
+def imports(source: Source) -> set[str]:
     names: set[str] = set()
-    for node in ast.walk(tree):
+    for node in ast.walk(source.tree):
         if isinstance(node, ast.Import):
             names |= {alias.name for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            names.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            parts = source.package.split(".")
+            base = parts[: len(parts) - node.level + 1] if node.level else []
+            origin = ".".join([*base, *([node.module] if node.module else [])])
+            names.add(origin)
+            names |= {f"{origin}.{alias.name}" for alias in node.names if alias.name != "*"}
     return names
 
 
-def calls(tree: ast.Module, name: str) -> bool:
+def calls(source: Source, name: str) -> bool:
     return any(
         isinstance(node, ast.Call)
         and (
             (isinstance(node.func, ast.Name) and node.func.id == name)
             or (isinstance(node.func, ast.Attribute) and node.func.attr == name)
         )
-        for node in ast.walk(tree)
+        for node in ast.walk(source.tree)
     )
 
 
@@ -47,25 +62,50 @@ def within(module: str, packages: tuple[str, ...]) -> bool:
     return any(module == package or module.startswith(f"{package}.") for package in packages)
 
 
-def test_the_sdk_is_imported_only_in_the_harness_and_the_gpt_probe() -> None:
-    offenders = [
+def sdk_offenders(found: Modules) -> list[str]:
+    return [
         module
-        for module, tree in modules().items()
+        for module, source in found.items()
         if not within(module, SDK_ALLOWED)
-        and any(within(name, ("claude_agent_sdk",)) for name in imports(tree))
+        and any(within(name, ("claude_agent_sdk",)) for name in imports(source))
     ]
-    assert offenders == []
+
+
+def non_stdlib_imports(found: Modules) -> dict[str, list[str]]:
+    allowed = sys.stdlib_module_names | {"__future__"}
+    return {
+        module: sorted(name for name in imports(found[module]) if name.split(".")[0] not in allowed)
+        for module in STDLIB_ONLY
+        if module in found
+    }
+
+
+def harness_submodule_imports(found: Modules) -> list[tuple[str, str]]:
+    return [
+        (module, name)
+        for module, source in found.items()
+        if not within(module, ("qma.harness",))
+        for name in sorted(imports(source))
+        if name.startswith("qma.harness.")
+    ]
+
+
+def plant(root: Path, files: dict[str, str]) -> Modules:
+    for relative, source in files.items():
+        path = root / "qma" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    return modules(root)
+
+
+def test_the_sdk_is_imported_only_in_the_harness_and_the_gpt_probe() -> None:
+    assert sdk_offenders(modules()) == []
 
 
 def test_boot_and_launcher_import_only_the_standard_library() -> None:
-    allowed = sys.stdlib_module_names | {"__future__"}
     found = modules()
     assert set(STDLIB_ONLY) <= set(found)
-    offenders = {
-        module: sorted(name for name in imports(found[module]) if name.split(".")[0] not in allowed)
-        for module in STDLIB_ONLY
-    }
-    assert offenders == {module: [] for module in STDLIB_ONLY}
+    assert non_stdlib_imports(found) == {module: [] for module in STDLIB_ONLY}
 
 
 def test_the_console_imports_nothing_from_the_harness() -> None:
@@ -74,20 +114,34 @@ def test_the_console_imports_nothing_from_the_harness() -> None:
 
 
 def test_nothing_outside_the_harness_imports_its_submodules() -> None:
-    offenders = [
-        (module, name)
-        for module, tree in modules().items()
-        if not within(module, ("qma.harness",))
-        for name in imports(tree)
-        if name.startswith("qma.harness.")
+    assert harness_submodule_imports(modules()) == []
+
+
+def test_relative_and_from_package_imports_are_resolved(tmp_path: Path) -> None:
+    found = plant(
+        tmp_path,
+        {
+            "harness/__init__.py": "",
+            "harness/procs.py": "from . import chat\nfrom .chat import Chat\n",
+            "launcher.py": "from .harness import procs\n",
+            "boot.py": "from qma.harness import procs\nfrom ctypes import wintypes\n",
+            "serve.py": "from qma import harness\n",
+        },
+    )
+    assert non_stdlib_imports(found) == {
+        "qma.boot": ["qma.harness", "qma.harness.procs"],
+        "qma.launcher": ["qma.harness", "qma.harness.procs"],
+    }
+    assert harness_submodule_imports(found) == [
+        ("qma.boot", "qma.harness.procs"),
+        ("qma.launcher", "qma.harness.procs"),
     ]
-    assert offenders == []
 
 
 def test_test_mode_and_probe_passed_are_built_only_where_allowed() -> None:
     found = modules()
-    assert [module for module, tree in found.items() if calls(tree, "TestMode")] == []
-    probe_passed = [module for module, tree in found.items() if calls(tree, "ProbePassed")]
+    assert [module for module, source in found.items() if calls(source, "TestMode")] == []
+    probe_passed = [module for module, source in found.items() if calls(source, "ProbePassed")]
     assert set(probe_passed) <= {"qma.gpt.probe"}
 
 
