@@ -200,7 +200,6 @@ class Harness:
 
 
 def journal_path(home: QmxHome, session: SessionId) -> Path:
-    """The run journal `RunIndex` reads for this chat."""
     return home.root / "runs" / session / "journal.jsonl"
 
 

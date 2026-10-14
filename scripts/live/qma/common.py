@@ -323,8 +323,6 @@ def use_fake_key() -> None:
 
 
 class NoJournal:
-    """A usage journal that keeps nothing, for checks that read the relay's counters only."""
-
     def append(self, usage: Any) -> None:
         return None
 
@@ -333,7 +331,6 @@ class NoJournal:
 
 
 USAGE_EVENTS = ("model_call", "token_count")
-"""The journal rows the relay writes, one per upstream request."""
 
 
 def capture_grants() -> list[Any]:

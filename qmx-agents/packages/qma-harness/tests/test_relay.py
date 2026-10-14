@@ -91,8 +91,6 @@ class Upstream:
 
 @dataclass
 class Journals:
-    """Stands in for the run journal: one writer per session, opened and closed by the relay."""
-
     broken: bool = False
     opened: list[SessionId] = field(default_factory=list[SessionId])
     closed: list[SessionId] = field(default_factory=list[SessionId])

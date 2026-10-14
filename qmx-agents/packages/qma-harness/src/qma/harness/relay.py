@@ -196,7 +196,7 @@ def _error(status: int, kind: str, message: str) -> Reply:
 
 
 class _ClientGone(Exception):
-    """The CLI disconnected before its request body arrived."""
+    pass
 
 
 class _Server(uvicorn.Server):
@@ -209,15 +209,12 @@ class _Server(uvicorn.Server):
 
 @dataclass
 class _Upstream:
-    """One forwarded request: what its reply reported so far, and its one journal row."""
-
     relay: Relay
     held: RelayGrant
     path: str
     response: httpx.Response
     served: str
-    status: int | None = None
-    """Overrides the upstream status in the journal when the reply broke off."""
+    journal_status: int | None = None
     usage: dict[str, Any] = field(default_factory=dict[str, Any])
     finished: bool = False
 
@@ -227,7 +224,7 @@ class _Upstream:
         self.finished = True
         with contextlib.suppress(Exception):
             await self.response.aclose()
-        status = self.status or self.response.status_code
+        status = self.journal_status or self.response.status_code
         await self.relay.tee(self.held, self.path, status, self.served, self.usage)
 
 
@@ -415,7 +412,7 @@ class Relay:
             if not isinstance(pump.exception(), _ClientGone):
                 pump.result()
         elif watch.cancelled():
-            await _cut_off(send, started=started)
+            await _end_revoked(send, started=started)
 
     async def handle(
         self,
@@ -467,7 +464,6 @@ class Relay:
         return await self._forward(held, path, query, headers, body, pinned)
 
     async def _token_bearer(self) -> Reply:
-        """A Claude token as the bearer names no grant, so every chat that holds one hears."""
         self.counters.egress += 1
         reason = (
             "egress stop: a request to the relay used a Claude credential as its bearer, so "
@@ -541,7 +537,7 @@ class Relay:
         try:
             data = await response.aread()
         except httpx.HTTPError as error:
-            upstream.status = 502
+            upstream.journal_status = 502
             return _error(502, "api_error", f"the provider reply broke off: {type(error).__name__}")
         parsed = _json(data)
         document = cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
@@ -558,9 +554,6 @@ class Relay:
         return Reply(response.status_code, kept, _once(data))
 
     async def _events(self, upstream: _Upstream, *, guarded: bool) -> AsyncGenerator[bytes]:
-        """SSE events, each passed on once complete. A guarded stream holds every byte until a
-        `message_start` passes the family test, and ends with an error event when the served
-        model is barred, content comes first, or no `message_start` comes in time."""
         held, pending, started, failed = b"", b"", not guarded, False
         chunks = aiter(upstream.response.aiter_bytes())
         deadline = asyncio.get_running_loop().time() + START_WAIT_S
@@ -669,8 +662,7 @@ class Relay:
                 await asyncio.to_thread(journal.close)
 
 
-async def _cut_off(send: Send, *, started: bool) -> None:
-    """The grant was revoked while the CLI still listens: end its answer."""
+async def _end_revoked(send: Send, *, started: bool) -> None:
     with contextlib.suppress(Exception):
         if not started:
             reply = _error(401, "authentication_error", "the relay grant was revoked")

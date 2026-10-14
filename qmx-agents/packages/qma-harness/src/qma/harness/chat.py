@@ -179,7 +179,6 @@ def _loaded(found: list[str]) -> str:
 class _Live:
     client: ClaudeSDKClient
     grant: RelayGrant | None
-    """The relay grant this CLI runs on, revoked exactly when this CLI goes."""
     reader: asyncio.Task[None] | None = None
 
 
@@ -342,8 +341,7 @@ class Chat:
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile
-        through a fresh relay grant, minted after every other launch check so a refused
-        launch leaves no live grant behind."""
+        through a fresh relay grant."""
         deps, config = self._deps, self.record.config
         if config.profile == PLAN:
             auth = await asyncio.to_thread(plan_auth_method, deps.home, settings)
@@ -371,8 +369,6 @@ class Chat:
                 await self._lost(live)
 
     async def _lost(self, live: _Live) -> None:
-        """The CLI went on its own. Holds the chat lock, so the next CLI starts only after
-        this one's grant is revoked and its tree is stopped."""
         async with self._lock:
             if self._live is live:
                 self._live = None
