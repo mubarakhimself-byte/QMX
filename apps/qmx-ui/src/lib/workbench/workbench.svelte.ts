@@ -46,7 +46,7 @@ export const MODELS = [
   },
   {
     id: "haiku",
-    label: "Haiku 4.5",
+    label: "Haiku 5.5",
     note: "Quickest; lookups and small edits",
   },
 ];

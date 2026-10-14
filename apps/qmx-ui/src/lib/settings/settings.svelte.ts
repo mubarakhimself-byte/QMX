@@ -112,7 +112,7 @@ const PROVIDERS: Provider[] = [
     id: "claude-plan",
     name: "Claude through your plan",
     how: "Claude Code on this laptop. No key; uses your Claude plan.",
-    models: ["Opus 5.5", "Sonnet 5.5", "Haiku 4.5"],
+    models: ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"],
     paid: false,
     on: true,
   },
@@ -120,7 +120,7 @@ const PROVIDERS: Provider[] = [
     id: "anthropic-api",
     name: "Anthropic API",
     how: "API key in the credential store. Billed per use.",
-    models: ["Opus 5.5", "Sonnet 5.5", "Haiku 4.5"],
+    models: ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"],
     paid: true,
     on: false,
   },
@@ -354,7 +354,7 @@ const COPILOT_DEFAULTS: Record<string, CopilotConfig> = {
 };
 
 const APP_COPILOT: CopilotConfig = {
-  model: "claude-plan/Haiku 4.5",
+  model: "claude-plan/Haiku 5.5",
   instructions: "",
   uses: ["claude-plan"],
   reach: ["apps"],

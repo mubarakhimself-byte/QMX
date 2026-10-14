@@ -6,7 +6,7 @@ describe("settings: what a copilot may use", () => {
     expect(settings.modelsFor("portfolio").map((m) => m.value)).toEqual([
       "claude-plan/Opus 5.5",
       "claude-plan/Sonnet 5.5",
-      "claude-plan/Haiku 4.5",
+      "claude-plan/Haiku 5.5",
     ]);
     settings.setUse("portfolio", "ollama", true);
     expect(settings.modelsFor("portfolio").map((m) => m.value)).toContain(
