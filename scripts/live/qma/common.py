@@ -13,7 +13,7 @@ import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from claude_agent_sdk import ClaudeAgentOptions
 from qma.boot import scrub_process_env
@@ -195,7 +195,15 @@ class Session:
 
     @classmethod
     async def start(
-        cls, root: Path, *, model: str, workspace: Path, title: str, test: Any = None
+        cls,
+        root: Path,
+        *,
+        model: str,
+        workspace: Path,
+        title: str,
+        test: Any = None,
+        profile: str = "claude",
+        mode: str = "default",
     ) -> Session:
         from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
         from qma.harness.routes import control_service  # noqa: PLC0415
@@ -204,8 +212,27 @@ class Session:
         control = control_service(home)
         harness = await Harness.open(home, control=control, test=test)
         workspace.mkdir(parents=True, exist_ok=True)
-        chat = await harness.start_chat(NewChat(title=title, model=model, workspace=workspace))
+        spec = NewChat(
+            title=title, model=model, workspace=workspace, profile=profile, mode=cast(Any, mode)
+        )
+        chat = await harness.start_chat(spec)
         return cls(harness, home, control, chat)
+
+    @property
+    def relay(self) -> Any:
+        return self.harness._deps.relay
+
+    def transcript(self) -> str:
+        from qma.harness.chat import transcript  # noqa: PLC0415
+
+        path = transcript(self.home, self.chat)
+        return path.read_text(encoding="utf-8") if path else ""
+
+    def journal(self) -> list[dict[str, Any]]:
+        path = self.home.root / "runs" / self.chat / "journal.jsonl"
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
     async def turn(self, log: Log, text: str) -> tuple[Any, list[dict[str, Any]]]:
         """Send operator text, wait for the turn to end, and log the blocks it wrote."""
@@ -220,3 +247,120 @@ class Session:
             show(log, block)
         log(f"record turn={record.turn} started={record.started}")
         return record, found
+
+
+def throwaway_home(slug: str) -> Path:
+    """A fresh QMX home under the scratch folder. Fake-model and key checks never need the plan
+    login, so they never touch the ship home."""
+    import shutil  # noqa: PLC0415
+
+    root = SCRATCH / "homes" / slug
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True)
+    return root
+
+
+CANARY: Final = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
+"""A fake login of the real token shape. Never a real credential."""
+
+
+def plant_canary_login(root: Path) -> None:
+    """A fake plan login in a throwaway QMX home, so a check can grep for it."""
+    if root.resolve() == SHIP_HOME.resolve():
+        raise SystemExit("refusing to plant a canary in the ship home")
+    plan = root / "claude"
+    plan.mkdir(parents=True, exist_ok=True)
+    (plan / ".credentials.json").write_text(
+        json.dumps({"claudeAiOauth": {"accessToken": CANARY}}), encoding="utf-8"
+    )
+
+
+def put_providers(root: Path, rows: Mapping[str, Any]) -> None:
+    from qma.harness import QmxHome  # noqa: PLC0415
+    from qma.harness.routes import control_service  # noqa: PLC0415
+
+    control_service(QmxHome(root)).settings_put("providers", dict(rows))
+
+
+def put_claude(root: Path, values: Mapping[str, Any]) -> None:
+    from qma.harness import QmxHome  # noqa: PLC0415
+    from qma.harness.routes import control_service  # noqa: PLC0415
+
+    control_service(QmxHome(root)).settings_put("claude", dict(values))
+
+
+def fake_row(url: str, model: str = "fake-model") -> dict[str, Any]:
+    from fake_model import FAKE_REF  # noqa: PLC0415
+
+    return {
+        "base_url": url,
+        "credential_ref": FAKE_REF,
+        "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), model),
+    }
+
+
+def use_fake_key() -> None:
+    """The relay reads `qmx/hp7-fake` as the fake model's key; every other reference still goes
+    to the OS keyring. Nothing is written to the keyring."""
+    import qma.harness.harness as harness_module  # noqa: PLC0415
+    from fake_model import FAKE_KEY, FAKE_REF  # noqa: PLC0415
+
+    real = harness_module.keyring_secret
+
+    def lookup(reference: str) -> str:
+        return FAKE_KEY if reference == FAKE_REF else real(reference)
+
+    harness_module.keyring_secret = lookup
+
+
+def capture_grants() -> list[Any]:
+    """Every grant the relay mints from now on, so a check can grep for its secret."""
+    from qma.harness.relay import Relay  # noqa: PLC0415
+
+    minted: list[Any] = []
+    original = Relay.grant
+
+    def grant(self: Relay, *args: Any, **kwargs: Any) -> Any:
+        found = original(self, *args, **kwargs)
+        minted.append(found)
+        return found
+
+    Relay.grant = grant  # type: ignore[method-assign]
+    return minted
+
+
+def capture_launches() -> list[Any]:
+    """The `ClaudeAgentOptions` of every chat launch from now on, and each CLI's messages."""
+    import qma.harness.chat as chat_module  # noqa: PLC0415
+
+    launched: list[Any] = []
+    base = chat_module.ClaudeSDKClient
+
+    class Tap(base):  # type: ignore[valid-type, misc]
+        def __init__(self, options: Any) -> None:
+            super().__init__(options)
+            self.seen: list[Any] = []
+            launched.append(self)
+
+        async def receive_messages(self) -> Any:
+            async for message in super().receive_messages():
+                self.seen.append(message)
+                yield message
+
+    chat_module.ClaudeSDKClient = Tap
+    return launched
+
+
+def files_holding(roots: list[Path], needle: str) -> list[Path]:
+    """Every file under `roots` whose bytes hold `needle`. Prints nothing of the needle."""
+    data = needle.encode()
+    found: list[Path] = []
+    for root in roots:
+        for path in [root] if root.is_file() else root.rglob("*"):
+            if path.is_file():
+                try:
+                    if data in path.read_bytes():
+                        found.append(path)
+                except OSError:
+                    continue
+    return found
