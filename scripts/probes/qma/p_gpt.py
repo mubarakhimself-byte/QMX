@@ -1,8 +1,9 @@
 """Probe GPT on the ChatGPT plan through Sign in with ChatGPT (HARNESS-PLAN HP2, 02b section D).
 
 A throwaway client registered as "QMA" runs probes P0 to P5 in order. 02b's stop rule (P2
-not eligible, or P3 failing in both tool shapes) ends the run as not viable; any other P1 or
-P2 failure ends it as inconclusive. The refresh token lives in the OS keyring under
+not eligible, or a completed P3 turn with no tool call in both tool shapes) ends the run as
+not viable; any other failure, such as a 429, a 5xx or a network error, ends it as
+inconclusive. The refresh token lives in the OS keyring under
 `qmx/chatgpt`. Access tokens live in this process only. No log line, file or stdout line
 carries a token.
 
@@ -788,6 +789,8 @@ def probe_models(session: Session, ev: Evidence) -> tuple[StepResult, list[str]]
     log(f"request_id: {reply.request_id}")
     if reply.status != 200:
         log(f"body: {reply.body[:400]!r}")
+        if reply.status == TRANSPORT_FAILED:
+            return StepResult("P1", False, reply.body.decode(errors="replace")), []
         return StepResult("P1", False, f"/v1/models returned {reply.status}"), []
     slugs = model_slugs(json.loads(reply.body))
     log(f"slugs: {slugs}")
@@ -820,13 +823,20 @@ def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -
     first = post_responses(session.access_token(), body)
     _log_result(log, "turn1", first)
     calls = [c for c in first.function_calls() if c.get("name") == ECHO_TOOL["name"]]
-    if not first.completed or not calls:
+    if not first.completed:
+        detail = (
+            f"turn1 not completed (status {first.status}, code {first.error_code}, "
+            f"message {first.error_message!r})"
+        )
+        log(f"result: FAIL {detail}")
+        return StepResult(f"P3-{shape}", False, detail)
+    if not calls:
         detail = (
             f"no echo_word call (status {first.status}, code {first.error_code}, "
             f"param {first.error_param})"
         )
         log(f"result: FAIL {detail}")
-        return StepResult(f"P3-{shape}", False, detail)
+        return StepResult(f"P3-{shape}", False, detail, stop_rule=True)
     call = calls[0]
     namespace = call.get("namespace")
     log(f"function_call: name={call.get('name')} namespace={namespace}")
@@ -1020,27 +1030,34 @@ def run_chain(
     def stop(outcome: Outcome, at: str) -> Verdict:
         return Verdict(outcome, model, None, None, at, tuple(steps))
 
-    p1, gpt = probe_models(session, ev)
-    steps.append(p1)
-    if not p1.passed:
-        return stop("inconclusive", f"P1 ({p1.detail})")
-    model = model or gpt[0]
-    p2 = probe_hello(session, ev, model)
-    steps.append(p2)
-    if not p2.passed:
-        return stop("not viable" if p2.stop_rule else "inconclusive", f"P2 ({p2.detail})")
-    namespace = probe_tools(session, ev, model, "namespace")
-    plain = probe_tools(session, ev, model, "plain")
-    steps += [namespace, plain]
-    if not namespace.passed and not plain.passed:
-        return stop("not viable", "P3 (both tool shapes failed)")
-    shape: ToolsShape = "namespace" if namespace.passed else "plain"
-    p4 = probe_reasoning(session, ev, model, shape)
-    steps.append(p4)
-    steps.append(probe_barred(session, ev, model))
-    if perf_runs:
-        steps.append(perf_series(session, ev, model, perf_runs, perf_spacing_s))
-    return Verdict("viable", model, shape, p4.passed, None, tuple(steps))
+    try:
+        p1, gpt = probe_models(session, ev)
+        steps.append(p1)
+        if not p1.passed:
+            return stop("inconclusive", f"P1 ({p1.detail})")
+        model = model or gpt[0]
+        p2 = probe_hello(session, ev, model)
+        steps.append(p2)
+        if not p2.passed:
+            return stop("not viable" if p2.stop_rule else "inconclusive", f"P2 ({p2.detail})")
+        namespace = probe_tools(session, ev, model, "namespace")
+        plain = probe_tools(session, ev, model, "plain")
+        steps += [namespace, plain]
+        if not namespace.passed and not plain.passed:
+            if namespace.stop_rule and plain.stop_rule:
+                return stop("not viable", "P3 (both tool shapes failed)")
+            return stop(
+                "inconclusive", f"P3 (namespace: {namespace.detail}; plain: {plain.detail})"
+            )
+        shape: ToolsShape = "namespace" if namespace.passed else "plain"
+        p4 = probe_reasoning(session, ev, model, shape)
+        steps.append(p4)
+        steps.append(probe_barred(session, ev, model))
+        if perf_runs:
+            steps.append(perf_series(session, ev, model, perf_runs, perf_spacing_s))
+        return Verdict("viable", model, shape, p4.passed, None, tuple(steps))
+    except SignInError as err:
+        return stop("inconclusive", f"token refresh ({err})")
 
 
 def _write_verdict(ev: Evidence, verdict: Verdict) -> None:
@@ -1059,7 +1076,9 @@ def _write_verdict(ev: Evidence, verdict: Verdict) -> None:
 def cmd_run(args: argparse.Namespace) -> int:
     ev = Evidence(args.evidence)
     vault = KeyringVault()
+    step = "reuse" if args.reuse else "P0"
     log = ev.writer("hp2-reuse" if args.reuse else "hp2-p0")
+    session: Session | None = None
     try:
         if args.reuse:
             session = load_session(vault)
@@ -1068,14 +1087,25 @@ def cmd_run(args: argparse.Namespace) -> int:
             session = sign_in(vault, timeout_s=args.signin_timeout, log=log)
     except SignInError as err:
         log(f"result: FAIL {err}")
+        failed = (StepResult(step, False, str(err)),)
+        verdict = Verdict("inconclusive", args.model, None, None, f"{step} ({err})", failed)
+        _write_verdict(ev, verdict)
+        print(verdict.row())
+        if session is not None:
+            secrets_scan(session, ev, args.findings)
         return 1
-    granted = DIRECT_SCOPE in session.registration.scopes
-    source = "refresh reply" if session.scopes_from_reply else "stored record"
-    log(f"granted_scopes: {' '.join(session.registration.scopes)}")
-    mark = "PASS" if granted else "FAIL"
-    log(f"result: {mark} {DIRECT_SCOPE} granted={granted} (scopes from {source})")
-    if not granted:
-        return 1
+    if session.scopes_from_reply:
+        granted = DIRECT_SCOPE in session.registration.scopes
+        log(f"granted_scopes: {' '.join(session.registration.scopes)}")
+        mark = "PASS" if granted else "FAIL"
+        log(f"result: {mark} {DIRECT_SCOPE} granted={granted} (scopes from refresh reply)")
+        if not granted:
+            return 1
+    else:
+        log(
+            f"result: UNVERIFIED {DIRECT_SCOPE} "
+            "(the token reply carried no scope; the stored scopes are not trusted)"
+        )
     verdict = run_chain(
         session, ev, model=args.model, perf_runs=args.perf_runs, perf_spacing_s=args.perf_spacing
     )
@@ -1092,7 +1122,12 @@ def cmd_refresh(args: argparse.Namespace) -> int:
     session = load_session(vault)
     log = ev.writer("hp2-refresh")
     before = session.registration.refresh_token
-    session.refresh()
+    try:
+        session.refresh()
+    except SignInError as err:
+        log(f"result: FAIL {err}")
+        secrets_scan(session, ev, args.findings)
+        return 1
     stored = load_session(vault).registration.refresh_token
     rotated = stored != before
     in_store = stored == session.registration.refresh_token

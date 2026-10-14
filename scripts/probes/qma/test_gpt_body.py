@@ -9,9 +9,10 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import p_gpt
 import pytest
@@ -950,12 +951,9 @@ class StubRefresh(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         raw = self.rfile.read(int(self.headers["Content-Length"])).decode()
         assert dict(urllib.parse.parse_qsl(raw))["grant_type"] == "refresh_token"
-        tokens = {
-            "access_token": "at-stub",
-            "refresh_token": "rt-stub-3",
-            "expires_in": 3600,
-            "scope": self.scope,
-        }
+        tokens = {"access_token": "at-stub", "refresh_token": "rt-stub-3", "expires_in": 3600}
+        if self.scope:
+            tokens["scope"] = self.scope
         body = json.dumps(tokens).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -1039,3 +1037,204 @@ def test_a_network_error_mid_chain_still_writes_the_verdict_and_scans(
     assert "run 2: first_byte_s=None terminal=None error=" in perf
     assert "getaddrinfo failed" in perf
     assert (evidence / "hp2-secrets.log").read_text(encoding="utf-8").endswith("result: PASS\n")
+
+
+class ToolsRateLimitedRoute(StubRoute):
+    status = 429
+    error = (
+        b'{"error": {"code": "subscription_sharing_usage_limit_exceeded", '
+        b'"message": "Usage limit"}}'
+    )
+
+    def do_POST(self) -> None:
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if body.get("tools"):
+            self._send(self.status, "application/json", self.error)
+            return
+        self._send(200, "text/event-stream", self._stream(body))
+
+
+class ToolsServerErrorRoute(ToolsRateLimitedRoute):
+    status = 503
+    error = b'{"detail": "busy"}'
+
+
+def _dns_fails(
+    monkeypatch: pytest.MonkeyPatch, failing: Callable[[urllib.request.Request], bool]
+) -> None:
+    real = urllib.request.urlopen
+
+    def urlopen(request: urllib.request.Request, *rest: Any, **kw: Any) -> Any:
+        if failing(request):
+            raise urllib.error.URLError(socket.gaierror(11001, "getaddrinfo failed"))
+        return real(request, *rest, **kw)
+
+    monkeypatch.setattr(p_gpt.urllib.request, "urlopen", urlopen)
+
+
+DNS_FAILED = "transport: <urlopen error [Errno 11001] getaddrinfo failed>"
+
+
+@pytest.mark.parametrize(
+    ("route", "dns", "turn1"),
+    [
+        (
+            ToolsRateLimitedRoute,
+            False,
+            "turn1 not completed (status 429, code subscription_sharing_usage_limit_exceeded, "
+            "message 'Usage limit')",
+        ),
+        (
+            ToolsServerErrorRoute,
+            False,
+            "turn1 not completed (status 503, code None, message 'busy')",
+        ),
+        (StubRoute, True, f"turn1 not completed (status 0, code None, message '{DNS_FAILED}')"),
+    ],
+)
+def test_a_transient_error_in_both_tool_shapes_is_inconclusive_not_unviable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    route: type[StubRoute],
+    dns: bool,
+    turn1: str,
+) -> None:
+    session = _stub_session(monkeypatch, route)
+    if dns:
+        _dns_fails(monkeypatch, lambda request: b'"tools"' in cast("bytes", request.data or b""))
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert [(s.step, s.passed) for s in verdict.steps] == [
+        ("P1", True),
+        ("P2", True),
+        ("P3-namespace", False),
+        ("P3-plain", False),
+    ]
+    assert verdict.row().split(" | ")[2:4] == [
+        "inconclusive",
+        f"rerun: P3 (namespace: {turn1}; plain: {turn1})",
+    ]
+
+
+def _verdict_json(tmp_path: Path) -> p_gpt.Json:
+    return json.loads((tmp_path / "ev" / "hp2-verdict.json").read_text(encoding="utf-8"))
+
+
+def _scan_passed(tmp_path: Path) -> bool:
+    log = (tmp_path / "ev" / "hp2-secrets.log").read_text(encoding="utf-8")
+    return log.endswith("result: PASS\n")
+
+
+def test_a_network_error_at_the_token_endpoint_on_reuse_writes_the_verdict_and_scans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path)
+    _dns_fails(monkeypatch, lambda request: request.full_url.endswith("/oauth/token"))
+
+    assert p_gpt.main(args) == 1
+    log = (tmp_path / "ev" / "hp2-reuse.log").read_text(encoding="utf-8")
+    assert f"result: FAIL refresh failed: {DNS_FAILED}" in log
+    verdict = _verdict_json(tmp_path)
+    assert (verdict["outcome"], verdict["stopped_at"]) == (
+        "inconclusive",
+        f"reuse (refresh failed: {DNS_FAILED})",
+    )
+    assert _scan_passed(tmp_path)
+
+
+def test_a_network_error_at_the_models_list_writes_the_verdict_and_scans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path)
+    _dns_fails(monkeypatch, lambda request: request.full_url.endswith("/v1/models"))
+
+    assert p_gpt.main(args) == 1
+    verdict = _verdict_json(tmp_path)
+    assert (verdict["outcome"], verdict["stopped_at"]) == ("inconclusive", f"P1 ({DNS_FAILED})")
+    assert _scan_passed(tmp_path)
+
+
+def test_a_network_error_at_the_token_endpoint_mid_chain_writes_the_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, StubRoute)
+    session.accept({"access_token": "at-stub", "expires_in": p_gpt.REFRESH_MARGIN_S})
+    _dns_fails(monkeypatch, lambda request: request.full_url == p_gpt.TOKEN_URL)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert (verdict.outcome, verdict.stopped_at, verdict.steps) == (
+        "inconclusive",
+        f"token refresh (refresh failed: {DNS_FAILED})",
+        (),
+    )
+
+
+def test_a_network_error_on_a_forced_refresh_logs_fail_and_scans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _reuse_args(monkeypatch, tmp_path)
+    _dns_fails(monkeypatch, lambda request: request.full_url.endswith("/oauth/token"))
+    findings = str(tmp_path / "FINDINGS.md")
+    args = ["refresh", "--evidence", str(tmp_path / "ev"), "--findings", findings]
+
+    assert p_gpt.main(args) == 1
+    log = (tmp_path / "ev" / "hp2-refresh.log").read_text(encoding="utf-8")
+    assert log.endswith(f"result: FAIL refresh failed: {DNS_FAILED}\n")
+    assert _scan_passed(tmp_path)
+
+
+def test_secrets_scan_reads_a_findings_file_outside_the_evidence_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, StubRoute)
+    evidence = tmp_path / "ev"
+    evidence.mkdir()
+    (evidence / "hp2-p1.log").write_text("http_status: 200\n", encoding="utf-8")
+    findings = tmp_path / "repo" / "FINDINGS.md"
+    findings.parent.mkdir()
+    findings.write_text("Bearer at-stub\n", encoding="utf-8")
+
+    result = p_gpt.secrets_scan(session, p_gpt.Evidence(evidence), findings)
+
+    assert (result.passed, result.detail) == (False, "1 files hold a token value")
+    log = (evidence / "hp2-secrets.log").read_text(encoding="utf-8")
+    assert f"files_with_a_token_value: {[str(findings)]}" in log
+
+
+def test_refresh_waits_up_to_the_3600_s_cap_and_refuses_beyond_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(p_gpt, "TOKEN_URL", f"{_serve(StubRefresh)}/api/accounts/oauth/token")
+    now = 1_790_000_000.0
+    slept: list[float] = []
+    monkeypatch.setattr(p_gpt.time, "time", lambda: now)
+    monkeypatch.setattr(p_gpt.time, "sleep", slept.append)
+
+    def session(earliest: float) -> p_gpt.Session:
+        registration = p_gpt.Registration("oaiapp_1", "urn:uuid:1", "rt-stub", (), earliest)
+        return p_gpt.Session(registration, FakeVault())
+
+    at_cap = session(now + 3600)
+    at_cap.refresh()
+    assert (slept, at_cap.registration.refresh_token) == ([3601], "rt-stub-3")
+
+    with pytest.raises(p_gpt.SignInError, match=r"^earliest_refresh_at is 3601 s away; rerun"):
+        session(now + 3601).refresh()
+    assert slept == [3601]
+
+
+def test_reuse_records_scope_unverified_when_the_refresh_reply_has_no_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path, scope="")
+
+    assert p_gpt.main(args) == 0
+    log = (tmp_path / "ev" / "hp2-reuse.log").read_text(encoding="utf-8")
+    assert log.splitlines()[-1] == (
+        "result: UNVERIFIED chatgpt.tokens.use.direct "
+        "(the token reply carried no scope; the stored scopes are not trusted)"
+    )

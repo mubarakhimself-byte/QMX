@@ -36,7 +36,7 @@ Trunk has no GPT route on the plan, so there is no trunk baseline. The head medi
 
 P0 passed on the operator's sign-in. `hp2-p0.log` (13:16 UTC) shows an `oaiapp_` client issued and `chatgpt.tokens.use.direct` among the granted scopes. The row above is the fourth run, `run --reuse` on 2026-10-14 from 18:04 to 18:47 UTC. It refreshed the stored token after waiting 2,270 s for `earliest_refresh_at`, and `hp2-reuse.log` shows the refresh reply still grants `chatgpt.tokens.use.direct`. The secrets scan read 79 files, subfolders included, and found no token value. Runs one to three are kept under `run1-fold-bug/`, `run2-p5-stop/` and `run3-04a95899/`.
 
-The verdict reads `not viable` only when 02b's stop rule fires: P2 returns `subscription_sharing_user_not_eligible`, or P3 fails in both tool shapes. Any other P1 or P2 failure, such as a 429 usage limit or a network error, reads `inconclusive`, and the run should be repeated.
+The verdict reads `not viable` only when 02b's stop rule fires. Either P2 returns `subscription_sharing_user_not_eligible`, or P3's turn one completes with no tool call in both tool shapes. Any other failure reads `inconclusive`, and the run should be repeated. That covers a 429 usage limit, a 5xx, a network error at any step, a failed token refresh, and a P3 shape that fails for another reason.
 
 What the row means for the HP16 translator:
 
@@ -69,3 +69,12 @@ The documented `subscription_sharing_unsupported_capability` code never appeared
 - F9. `earliest_refresh_at` is the access token's expiry minus 300 s. P0 issued a token at 13:16:06 UTC with `earliest_refresh_at` 14:11:06, and each later refresh set the next one about 54 minutes later. A refresh is allowed only in the last five minutes of a token's life. The probe now waits up to 3,600 s. The old 1,800 s cap refused any `run --reuse` or `refresh` started within about 25 minutes of the last refresh, and this run's 2,270 s wait would have been refused.
 - F10. "No reasoning item returned" is measured. "Replay is unsupported" is not proven. Each of the samples used one trivial tool prompt and got 0 reasoning items, and 02b's P4 fail signal, a 400 with `param` `include`, never fired. HP16 should re-probe with a prompt that needs reasoning before it turns carry-over on.
 - F12. `x-request-id` is absent on every `api.openai.com` reply in every run. OpenAI's errors page says to keep the request ID, so HP16 has to find which header this route uses.
+
+### Fix round 2 (verifier notes N1 to N5)
+
+This round changes only error paths. Nothing on the happy path changed, so the round-2 live lanes at `aa5a6f09` stand and no live run was made. Every log line, verdict and exit code that a passing run writes is the same as before.
+
+- N4. P3 counts toward the stop rule only when turn one completes with no `echo_word` call. A turn one that does not complete (a 429, a 5xx or a network error) is logged as `turn1 not completed` with its status, code and message. If both shapes fail and either failure is of that kind, the verdict reads `inconclusive`.
+- N2. A network error at the token endpoint or at `/v1/models` is a FAIL step. `run` still writes `hp2-verdict.json` and the findings row as `inconclusive`, and runs the secrets scan when a session exists. This holds for a refresh at `--reuse`, a refresh mid-chain, and the `refresh` command.
+- N5. If the token reply carries no `scope`, the reuse log reads `UNVERIFIED chatgpt.tokens.use.direct`, and the stored scopes are not used for that check. The chain still runs, and P2 then tests eligibility at inference.
+- N1 and N3. New tests cover a FINDINGS.md outside the evidence folder and the 3,600 s refresh wait cap. The code did not change for these.
