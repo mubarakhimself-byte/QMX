@@ -5,8 +5,8 @@
    * servers folded in). A tiling board like the Lab, with its own copilot.
    * Showing live or paper is a view filter, never a control.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import { page } from "$app/state";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -67,16 +67,11 @@
 </script>
 
 <div class="scrim flex h-full flex-col">
-  {#if workbench.demoMode}
-    <div
-      class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
-    >
-      <FlaskConical class="text-warning size-3.5" /> Demo portfolio. Sample CFD and
-      crypto accounts, pods and prices; no money is real.
-    </div>
-  {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
     <h1 class="text-base font-semibold">Portfolio</h1>
+    <DemoChip
+      note="Sample CFD and crypto accounts, pods and prices. No money is real."
+    />
     <div
       class="bg-muted/50 flex items-center gap-0.5 rounded-md p-0.5"
       role="radiogroup"
@@ -161,7 +156,8 @@
         size="sm"
         onclick={() => (portfolio.templatesOpen = true)}
         title="Templates"
-        ><LayoutTemplate /><span class="hidden 2xl:inline">Templates</span
+        ><LayoutTemplate /><span class="hidden min-[106rem]:inline"
+          >Templates</span
         ></Button
       >
       <Button
@@ -170,7 +166,7 @@
         aria-pressed={L.editing}
         onclick={() => (L.editing = !L.editing)}
         title={L.editing ? "Done" : "Edit layout"}
-        ><Pencil /><span class="hidden 2xl:inline"
+        ><Pencil /><span class="hidden min-[106rem]:inline"
           >{L.editing ? "Done" : "Edit layout"}</span
         ></Button
       >
@@ -178,7 +174,8 @@
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button {...props} variant="ghost" size="sm" title="Add a panel"
-              ><Plus /><span class="hidden 2xl:inline">Panel</span></Button
+              ><Plus /><span class="hidden min-[106rem]:inline">Panel</span
+              ></Button
             >
           {/snippet}
         </DropdownMenu.Trigger>

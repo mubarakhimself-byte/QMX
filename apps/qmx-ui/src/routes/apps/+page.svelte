@@ -7,6 +7,7 @@
    * box it runs in. New apps come from a description, from widgets you
    * already have, or from a template. DEMO data.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import Plus from "@lucide/svelte/icons/plus";
   import ShieldOff from "@lucide/svelte/icons/shield-off";
   import { goto } from "$app/navigation";
@@ -64,18 +65,14 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-  {#if workbench.demoMode}
-    <p
-      class="bg-warning/15 flex h-8 shrink-0 items-center px-4 text-sm"
-      role="note"
-    >
-      Demo apps. Stages, evidence and logs come from the backend once it is
-      wired.
-    </p>
-  {/if}
   <header class="flex flex-wrap items-center gap-4 border-b px-8 py-5">
     <div class="min-w-0 flex-1">
-      <h1 class="text-3xl font-semibold tracking-tight">Apps</h1>
+      <div class="flex items-center gap-3">
+        <h1 class="text-3xl font-semibold tracking-tight">Apps</h1>
+        <DemoChip
+          note="Sample apps. Stages, evidence and logs come from the backend once it is wired."
+        />
+      </div>
       <p class="text-muted-foreground mt-1 text-lg">
         {apps.all.filter((a) => a.stage === 4).length} live ·
         {apps.all.filter((a) => a.stage > 0 && a.stage < 4).length} proving ·

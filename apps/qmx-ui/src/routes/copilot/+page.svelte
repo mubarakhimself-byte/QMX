@@ -9,9 +9,9 @@
    * the same list. DEMO: replies are scripted and say so.
    * Params: ?session=, ?start=train|import|workflow, ?ask=, ?focus=1.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -119,14 +119,6 @@
 </script>
 
 <div class="flex h-full flex-col">
-  {#if demo}
-    <div
-      class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
-    >
-      <FlaskConical class="text-warning size-3.5" />
-      Demo copilot. Replies are scripted and say so; nothing here ran.
-    </div>
-  {/if}
   <header class="flex h-12 shrink-0 items-center gap-2 border-b px-3">
     {#if !focus}
       <Button
@@ -139,6 +131,7 @@
       >
     {/if}
     <h1 class="text-base font-semibold">Copilot</h1>
+    <DemoChip note="Replies are scripted and say so. Nothing here ran." />
     <div class="ml-auto flex items-center gap-1">
       <Button
         variant={focus ? "secondary" : "ghost"}

@@ -6,6 +6,7 @@
    * and a Lab copilot. Docs still call this destination Authoring (DEC-0470);
    * the rename is flagged for Codex.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import { page } from "$app/state";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import Layers2 from "@lucide/svelte/icons/layers-2";
@@ -105,16 +106,9 @@
 </script>
 
 <div class="scrim flex h-full flex-col">
-  {#if workbench.demoMode}
-    <div
-      class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
-    >
-      <FlaskConical class="text-warning size-3.5" /> Demo Lab. Sample runs, models
-      and machines; nothing here ran.
-    </div>
-  {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
     <h1 class="text-base font-semibold">Lab</h1>
+    <DemoChip note="Sample runs, models and machines. Nothing here ran." />
     <div
       class="bg-muted flex rounded-lg p-0.5"
       role="radiogroup"
@@ -141,7 +135,9 @@
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button {...props} variant="ghost" size="sm" class="gap-1.5">
-              <span class="text-muted-foreground text-xs">Working on</span>
+              <span class="text-muted-foreground hidden text-xs 2xl:inline"
+                >Working on</span
+              >
               <span class="size-2 rounded-full" style="background:{pod.color}"
               ></span>
               {pod.name}
@@ -198,7 +194,9 @@
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button {...props} variant="ghost" size="sm" class="gap-1.5">
-              <span class="text-muted-foreground text-xs">Working on</span>
+              <span class="text-muted-foreground hidden text-xs 2xl:inline"
+                >Working on</span
+              >
               {subject.name}<ChevronDown class="size-3.5" />
             </Button>
           {/snippet}

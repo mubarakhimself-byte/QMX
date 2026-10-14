@@ -5,6 +5,7 @@
    * Portfolio: built-in tabs (Today, Markets, Research) plus tabs you save
    * yourself. Panels link to the screen each thing lives on.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import Bell from "@lucide/svelte/icons/bell";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
@@ -13,7 +14,6 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
@@ -88,18 +88,16 @@
 </script>
 
 <div class="flex h-full flex-col">
-  {#if demo}
-    <div
-      class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
-    >
-      <FlaskConical class="text-warning size-3.5" />
-      Demo Home. Items come from the other screens' samples, so every link opens the
-      real place.
-    </div>
-  {/if}
   <header class="flex h-14 shrink-0 items-center gap-3 border-b px-4">
     <div class="min-w-0">
-      <h1 class="truncate text-lg leading-tight font-semibold">{hello}</h1>
+      <h1
+        class="flex items-center gap-2 truncate text-lg leading-tight font-semibold"
+      >
+        {hello}
+        <DemoChip
+          note="Items are the other screens' samples, so every link opens the real place."
+        />
+      </h1>
       <p class="text-muted-foreground text-sm">{today}</p>
     </div>
     <nav class="ml-4 flex items-center gap-0.5" aria-label="Tabs">

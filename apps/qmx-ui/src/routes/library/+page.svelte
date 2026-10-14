@@ -9,6 +9,7 @@
    * keep the reader (with a reading mode); sources keep the in-app browser.
    * Deep links: ?shelf=<id>&item=<id>; old ?tab= links still land.
    */
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import { onMount, type Component } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -28,7 +29,6 @@
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
   import RotateCw from "@lucide/svelte/icons/rotate-cw";
   import AppWindow from "@lucide/svelte/icons/app-window";
-  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
   import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
@@ -406,16 +406,6 @@
 {/snippet}
 
 <div class="flex h-full flex-col">
-  {#if demo}
-    <div
-      class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
-    >
-      <FlaskConical class="text-warning size-3.5" />
-      Demo Library. Items are the samples from the Lab, Portfolio and Copilot, so
-      every "used in" link opens the real screen; MQL5 text comes from your local
-      catalog.
-    </div>
-  {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
     <Button
       variant="ghost"
@@ -429,6 +419,9 @@
     <h1 class="flex items-center gap-2 text-base font-semibold">
       <Library class="size-4" />Library
     </h1>
+    <DemoChip
+      note="Items are samples from the Lab, Portfolio and Copilot. MQL5 text comes from your local catalog."
+    />
     <div class="relative w-full max-w-md">
       <Search
         class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
