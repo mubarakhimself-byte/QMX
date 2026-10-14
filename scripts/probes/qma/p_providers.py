@@ -34,12 +34,20 @@ from common import (
     provider_env,
     read_key,
     require_plan_login,
-    run_turns,
     scrub_process_env,
     tool_results,
     tool_uses,
 )
 from p_echo import FAKE_KEY, serve
+from spend import (
+    LEDGER,
+    MAX_OUTPUT_VAR,
+    Ledger,
+    Prices,
+    guarded_turns,
+    key_usage,
+    max_output,
+)
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions, McpSdkServerConfig, Message
@@ -52,14 +60,21 @@ PROVIDERS: Final = {
         Provider("deepseek", "https://api.deepseek.com/anthropic", "deepseek-v4-pro"),
         Provider("minimax", "https://api.minimax.io/anthropic", "MiniMax-M3"),
         Provider("meta", "https://api.meta.ai", "muse-wonder-1.0"),
-        Provider("openrouter", "https://openrouter.ai/api", "moonshotai/kimi-k3"),
+        Provider("openrouter", "https://openrouter.ai/api", "deepseek/deepseek-v4-flash-0731"),
     )
 }
+PRICES: Final = {
+    "openrouter": Prices(PROVIDERS["openrouter"].model, prompt=1.6e-8, completion=6.4e-7),
+}
+"""USD per token from the public OpenRouter model list. A keyed row with no entry here
+does not run, so no provider spends past the guard."""
 
 PROBES: Final = ("B1", "B3", "B4", "WebSearch", "tool search")
 TOOL_SEARCH_ON: Final = {"ENABLE_TOOL_SEARCH": "true"}
 BETAS_OFF: Final = {"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1"}
-THINKING: Final = {"type": "enabled", "budget_tokens": 2048}
+THINKING: Final = {"type": "enabled", "budget_tokens": 1024}
+OUTPUT_CAP: Final = {MAX_OUTPUT_VAR: "512"}
+THINKING_OUTPUT_CAP: Final = {MAX_OUTPUT_VAR: "1536"}
 PERF_RUNS: Final = 3
 SLOW_FACTOR: Final = 3
 
@@ -159,6 +174,15 @@ def perf_verdict(plan_ms: list[float], row_ms: list[float]) -> str:
     )
 
 
+def ledger(provider: Provider, secret: str) -> Ledger | None:
+    prices = PRICES.get(provider.name)
+    return None if prices is None else Ledger(LEDGER, prices, key_usage(secret))
+
+
+def capped_env(provider: Provider, secret: str, home: Path) -> dict[str, str]:
+    return provider_env(os.environ, provider, secret, home) | OUTPUT_CAP
+
+
 def no_key_rows(log: Log, provider: Provider) -> None:
     for probe in PROBES:
         log.row(f"{probe} {provider.name}", f"keyring {provider.keyring_service} empty", "NO KEY")
@@ -170,10 +194,12 @@ def row_options(env: dict[str, str], **overrides: Any) -> ClaudeAgentOptions:
     )
 
 
-async def b1(log: Log, env: dict[str, str]) -> tuple[str, list[Message]]:
+async def b1(log: Log, spend: Ledger, env: dict[str, str]) -> tuple[str, list[Message]]:
     marker = "hp1-b1-marker"
-    seen = await run_turns(
+    seen = await guarded_turns(
+        spend,
         log,
+        "B1",
         row_options(env),
         [f"Run this exact Bash command: echo {marker}. Then reply with its output only."],
     )
@@ -181,25 +207,27 @@ async def b1(log: Log, env: dict[str, str]) -> tuple[str, list[Message]]:
     return b1_verdict(tool_uses(seen, "Bash"), marker_seen, is_ok(seen)), seen
 
 
-async def probe_row(log: Log, provider: Provider, secret: str) -> None:
+async def probe_row(log: Log, provider: Provider, secret: str, spend: Ledger) -> None:
     log.redact(secret)
-    env = provider_env(os.environ, provider, secret, fresh_home(provider.name))
+    env = capped_env(provider, secret, fresh_home(provider.name))
     name = provider.name
 
-    verdict, seen = await b1(log, env)
+    verdict, seen = await b1(log, spend, env)
     log(f"init tools, default env: {init_tools(seen)}")
     default_state = tool_search_state(init_tools(seen))
     betas = "on"
     if verdict != "PASS":
         log(f"B1 failed with {api_errors(seen)}; retrying with experimental betas off")
         env |= BETAS_OFF
-        verdict, seen = await b1(log, env)
+        verdict, seen = await b1(log, spend, env)
         betas = "off needed" if verdict == "PASS" else "off did not help"
     log.row(f"B1 {name}", f"betas {betas}; errors {api_errors(seen)}", verdict)
 
     env |= TOOL_SEARCH_ON
-    seen = await run_turns(
+    seen = await guarded_turns(
+        spend,
         log,
+        "B3",
         row_options(env),
         [
             "Reply with the single word one.",
@@ -217,9 +245,11 @@ async def probe_row(log: Log, provider: Provider, secret: str) -> None:
         "PASS" if "ToolSearch=on" in on_state else "FAIL",
     )
 
-    seen = await run_turns(
+    seen = await guarded_turns(
+        spend,
         log,
-        row_options(env, thinking=THINKING),
+        "B4",
+        row_options(env | THINKING_OUTPUT_CAP, thinking=THINKING),
         [
             "Think it through, then run the Bash command `echo hp1-b4-a` and tell me its output.",
             "Now run the Bash command `echo hp1-b4-b` and tell me its output.",
@@ -232,8 +262,10 @@ async def probe_row(log: Log, provider: Provider, secret: str) -> None:
         b4_verdict(is_ok(seen), tool_uses(seen, "Bash"), errors),
     )
 
-    seen = await run_turns(
+    seen = await guarded_turns(
+        spend,
         log,
+        "WebSearch",
         row_options(env),
         [
             "Use the WebSearch tool to search for 'Anthropic Messages API'. "
@@ -273,9 +305,13 @@ async def first_event_ms(
 
 async def perf(log: Log) -> int:
     require_plan_login(log, bundled_cli())
-    keyed = {n: k for n, p in PROVIDERS.items() if (k := read_key(p)) is not None}
+    keyed = {
+        n: (k, spend)
+        for n, p in PROVIDERS.items()
+        if (k := read_key(p)) is not None and (spend := ledger(p, k)) is not None
+    }
     for name in PROVIDERS.keys() - keyed.keys():
-        log.row(f"perf {name}", f"keyring qmx/{name} empty", "NO KEY")
+        log.row(f"perf {name}", f"keyring qmx/{name} empty or no prices pinned", "NO KEY")
     times: dict[str, list[float]] = {"plan": [], **{n: [] for n in keyed}}
     plan = plan_options(
         env=home_env(),
@@ -285,14 +321,21 @@ async def perf(log: Log) -> int:
     )
     for run in range(PERF_RUNS):
         for name, row_ms in times.items():
-            options = plan
-            if name != "plan":
-                log.redact(keyed[name])
-                env = provider_env(os.environ, PROVIDERS[name], keyed[name], fresh_home(name))
+            if name == "plan":
+                ms, seen = await first_event_ms(log, plan)
+            else:
+                secret, spend = keyed[name]
+                log.redact(secret)
+                env = capped_env(PROVIDERS[name], secret, fresh_home(name))
                 options = row_options(
                     env | TOOL_SEARCH_ON, include_partial_messages=True, max_turns=1
                 )
-            ms, seen = await first_event_ms(log, options)
+                ms, seen = await spend.spend(
+                    f"perf {name} run {run}",
+                    2,
+                    max_output(options),
+                    lambda: first_event_ms(log, options),  # noqa: B023
+                )
             if run == 0 and name == "plan":
                 log(f"plan init tools {init_tools(seen)}")
                 log.row(
@@ -327,7 +370,8 @@ def collect_toolsearch(log: Log) -> int:
 async def stub(log: Log) -> int:
     log(f"scrubbed from this process: {scrub_process_env(os.environ)}")
     with serve() as (url, echo):
-        await probe_row(log, Provider("stub", url, "echo-model"), FAKE_KEY)
+        free = Ledger(SCRATCH / "hp1" / "stub-spend.tsv", Prices("echo-model", 0, 0), lambda: None)
+        await probe_row(log, Provider("stub", url, "echo-model"), FAKE_KEY, free)
     log(f"echo received {[f'{r.method} {r.path} {r.auth}' for r in echo.requests]}")
     return 0
 
@@ -339,7 +383,11 @@ async def row(log: Log, name: str) -> int:
     if secret is None:
         no_key_rows(log, provider)
         return 0
-    await probe_row(log, provider, secret)
+    spend = ledger(provider, secret)
+    if spend is None:
+        log.row(f"B1 {name}", "no prices pinned for the spend guard", "BLOCKED")
+        return 0
+    await probe_row(log, provider, secret, spend)
     return 0
 
 

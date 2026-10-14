@@ -23,13 +23,13 @@ from common import (
     Log,
     bundled_cli,
     plan_options,
-    provider_env,
     read_key,
     require_plan_login,
     run_turns,
     scrub_process_env,
 )
-from p_providers import PROVIDERS, THINKING
+from p_providers import PROVIDERS, THINKING, capped_env, ledger
+from spend import Ledger, guarded_turns
 
 if TYPE_CHECKING:
     from claude_agent_sdk import Message, ResultMessage
@@ -58,10 +58,14 @@ def recall_verdict(answer: str | None, word: str) -> str:
     return "PASS" if answer and word in answer else "FAIL"
 
 
-async def recall(log: Log, env: dict[str, str], session: str, word: str) -> tuple[str, str]:
+async def recall(
+    log: Log, spend: Ledger, env: dict[str, str], session: str, word: str
+) -> tuple[str, str]:
     result = last_result(
-        await run_turns(
+        await guarded_turns(
+            spend,
             log,
+            "S36 recall",
             plan_options(env=env, model="sonnet", resume=session, max_turns=2),
             ["What was the codeword I gave you earlier? Reply with the codeword only."],
         )
@@ -80,6 +84,10 @@ async def main_async(log: Log) -> int:
         log.row("S36 plan to OpenRouter resume", "keyring qmx/openrouter empty", "BLOCKED NO KEY")
         return 0
     log.redact(secret)
+    spend = ledger(openrouter, secret)
+    if spend is None:
+        log.row("S36 plan to OpenRouter resume", "no prices pinned for the spend guard", "BLOCKED")
+        return 0
     require_plan_login(log, bundled_cli())
 
     word = f"persimmon-{secrets.token_hex(3)}"
@@ -94,8 +102,8 @@ async def main_async(log: Log) -> int:
     log(f"plan session {session}")
 
     home = linked_home(RESUME_HOME, CONFIG_DIR / "projects")
-    env = provider_env(os.environ, openrouter, secret, home)
-    verdict, detail = await recall(log, env, session, word)
+    env = capped_env(openrouter, secret, home)
+    verdict, detail = await recall(log, spend, env, session, word)
     log.row("S36 plan to OpenRouter resume, recall", detail, verdict)
     if verdict == "PASS":
         return 0
@@ -104,7 +112,7 @@ async def main_async(log: Log) -> int:
         await run_turns(log, plan_options(resume=session, max_turns=2), ["/compact"])
     )
     log(f"compact on the plan: is_error={compacted.is_error} session {compacted.session_id}")
-    verdict, detail = await recall(log, env, compacted.session_id, word)
+    verdict, detail = await recall(log, spend, env, compacted.session_id, word)
     log.row("S36 plan to OpenRouter resume, recall after /compact", detail, verdict)
     return 0
 
