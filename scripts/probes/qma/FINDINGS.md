@@ -32,14 +32,40 @@ Trunk has no GPT route on the plan, so there is no trunk baseline. The head medi
 
 | Route | Date | Verdict | Model | tools_shape | reasoning_replay | Steps |
 |---|---|---|---|---|---|---|
-| GPT on ChatGPT plan | 2026-10-14 | viable | model `gpt-6.1-sol` | tools_shape `namespace` | reasoning_replay `false` | P1 PASS: 7 models, gpt slugs ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']; P2 PASS: completed, first byte 3.87 s; P3-namespace PASS: call echo_word namespace=qma, turn2 response.completed; P3-plain PASS: call echo_word namespace=None, turn2 response.completed; P4 FAIL: turn1 response.completed, code None, param None, encrypted 0; P5 FAIL: 400 for ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']; perf PASS: median first byte 2.45 s over 5 runs |
+| GPT on ChatGPT plan | 2026-10-14 | viable | model `gpt-6.1-sol` | tools_shape `namespace` | reasoning_replay `false` | P1 PASS: 7 models, gpt slugs ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']; P2 PASS: completed, first byte 3.99 s; P3-namespace PASS: call echo_word namespace=qma, turn2 response.completed; P3-plain PASS: call echo_word namespace=None, turn2 response.completed; P4 FAIL: turn1 response.completed, code None, param None, encrypted 0; P5 PASS: refused ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']; unclassified []; perf PASS: median first byte 2.70 s over 5 runs |
 
-P0 passed on the operator's sign-in with `chatgpt.tokens.use.direct` granted (`hp2-p0.png`). The row above is the third `run --reuse`; runs one and two are kept under `run1-fold-bug/` and `run2-p5-stop/` in the evidence folder.
+P0 passed on the operator's sign-in. `hp2-p0.log` (13:16 UTC) shows an `oaiapp_` client issued and `chatgpt.tokens.use.direct` among the granted scopes. The row above is the fourth run, `run --reuse` on 2026-10-14 from 18:04 to 18:47 UTC. It refreshed the stored token after waiting 2,270 s for `earliest_refresh_at`, and `hp2-reuse.log` shows the refresh reply still grants `chatgpt.tokens.use.direct`. The secrets scan read 79 files, subfolders included, and found no token value. Runs one to three are kept under `run1-fold-bug/`, `run2-p5-stop/` and `run3-04a95899/`.
+
+The verdict reads `not viable` only when 02b's stop rule fires: P2 returns `subscription_sharing_user_not_eligible`, or P3 fails in both tool shapes. Any other P1 or P2 failure, such as a 429 usage limit or a network error, reads `inconclusive`, and the run should be repeated.
 
 What the row means for the HP16 translator:
 
-- Tools. Both shapes return a function call and complete turn two. The namespace shape is kept because the route's rules ask for it.
+- Tools. Both shapes return a function call and complete turn two. In the namespace shape the call names namespace `qma`, which P3 now requires. The namespace shape is kept because the route's rules ask for it.
 - Stream. The route sends an empty `output` on `response.completed`. Output items arrive only in `response.output_item.done`, which is where OpenAI's streaming reference says to take an item for replay.
-- Reasoning. `include: ["reasoning.encrypted_content"]` with `reasoning.effort` medium is accepted, but no reasoning item comes back, so there is nothing to replay. Carry-over is off.
-- Field strip. `temperature`, `metadata` and a `system` role item return 400. `max_output_tokens` returned 200, against the preview-limitations page. The translator drops it anyway.
-- Perf. Median first byte 2.45 s over five P2 runs one minute apart, under the 10 s rule.
+- Reasoning. `include: ["reasoning.encrypted_content"]` with `reasoning.effort` medium is accepted, but no reasoning item came back, so there was nothing to replay. Carry-over is off.
+- Field strip. The translator strips all four probed fields, `max_output_tokens`, `temperature`, `metadata` and a `system` role item, whatever the route does with them. On this route `max_output_tokens` returns 200 and completes, against the preview-limitations page. The other three return 400.
+- Perf. Median first byte 2.70 s over five P2 runs one minute apart, under the 10 s rule. Run 3 had a 2.45 s median and the verifier's run had 2.39 s.
+
+### Lane 8 ruling
+
+The coordinator ruled that the route accepting `max_output_tokens` is a fact, not a bug. Lane 8 passes when every barred field's outcome is recorded with the route's real error message, or with its 200. P5 now checks that rule. A 400 counts as a refusal only when its message or `param` names the field. A 400 for any other cause leaves the field unclassified and fails P5.
+
+### Error messages for HP16's error mapping
+
+Every 400 from this route had `code` and `param` null. Only `error.message` names the cause:
+
+| Field | HTTP | `error.message` |
+|---|---|---|
+| `max_output_tokens` | 200 | none, the request completes |
+| `temperature` | 400 | `Unsupported parameter: temperature` |
+| `metadata` | 400 | `Unsupported parameter: metadata` |
+| `system` role item | 400 | `System messages are not allowed` |
+
+The documented `subscription_sharing_unsupported_capability` code never appeared, so HP16 cannot map these errors on the code alone (`hp2-p5.log`, and the verifier's `verify/hp2-wire-spy-run.log`).
+
+### Notes for HP16 from the HP2 verify
+
+- F8. The probe checks the id_token's `iss`, `aud` and `nonce` only. It does not check the signature against OpenAI's JWKS, does not check `exp`, does not match the account (`sub`) on reauthorization, and does not keep the id_token. `qma.gpt.siwc` in HP16 must add the signature, `exp` and account checks.
+- F9. `earliest_refresh_at` is the access token's expiry minus 300 s. P0 issued a token at 13:16:06 UTC with `earliest_refresh_at` 14:11:06, and each later refresh set the next one about 54 minutes later. A refresh is allowed only in the last five minutes of a token's life. The probe now waits up to 3,600 s. The old 1,800 s cap refused any `run --reuse` or `refresh` started within about 25 minutes of the last refresh, and this run's 2,270 s wait would have been refused.
+- F10. "No reasoning item returned" is measured. "Replay is unsupported" is not proven. Each of the samples used one trivial tool prompt and got 0 reasoning items, and 02b's P4 fail signal, a 400 with `param` `include`, never fired. HP16 should re-probe with a prompt that needs reasoning before it turns carry-over on.
+- F12. `x-request-id` is absent on every `api.openai.com` reply in every run. OpenAI's errors page says to keep the request ID, so HP16 has to find which header this route uses.
