@@ -88,7 +88,29 @@ function loadFrom(): string {
   }
 }
 
+const STARTED_KEY = "qmx.home.started";
+function loadStarted(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(STARTED_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
 class HomeState {
+  /** Get started steps the operator has done (opened), and whether he hid the list. */
+  started = $state<string[]>(loadStarted());
+
+  markStarted(id: string) {
+    if (this.started.includes(id)) return;
+    this.started = [...this.started, id];
+    try {
+      localStorage.setItem(STARTED_KEY, JSON.stringify(this.started));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
   layouts = new LayoutStore("qmx.home.layouts.v1", HOME_LAYOUTS);
   ticker = $state<string[]>(loadTicker());
   /** Markets panel filter: "all", a broker ("venue:<id>") or an account ("acct:<id>"). */

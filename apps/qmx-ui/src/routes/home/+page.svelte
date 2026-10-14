@@ -29,9 +29,10 @@
   import { MARKETS } from "$lib/demo/markets";
   import { HOME_PANELS } from "$lib/home/catalog";
   import { needs } from "$lib/home/needs";
+  import GetStarted from "$lib/home/GetStarted.svelte";
+  import { FIRST } from "$lib/workbench/day-one";
 
   const L = home.layouts;
-  const demo = workbench.demoMode;
   const hour = new Date().getHours();
   const hello =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -226,31 +227,51 @@
     </div>
   </header>
 
+  {#if !workbench.demoMode}<GetStarted />{/if}
+
   <div class="flex shrink-0 items-center">
-    <div class="min-w-0 flex-1"><TickerTape items={ticker} /></div>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        class="bg-panel hover:bg-muted flex h-8 shrink-0 items-center gap-1 border-b border-l px-2 text-xs"
-        aria-label="Choose what the ticker shows"
-        title="Choose what the ticker shows"
-        ><SlidersHorizontal class="size-3.5" /></DropdownMenu.Trigger
-      >
-      <DropdownMenu.Content align="end" class="w-56">
-        <DropdownMenu.Label>Ticker</DropdownMenu.Label>
-        {#each MARKETS as c (c.sym)}
-          <DropdownMenu.CheckboxItem
-            checked={home.ticker.includes(c.sym)}
-            onCheckedChange={() => toggleMarket(c.sym)}
-            closeOnSelect={false}>{c.sym}</DropdownMenu.CheckboxItem
-          >
-        {/each}
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item
-          onclick={() => askCopilot("Change my Home ticker to show ")}
-          ><Sparkles />Ask the copilot</DropdownMenu.Item
+    <div class="min-w-0 flex-1">
+      {#if workbench.demoMode}
+        <TickerTape items={ticker} />
+      {:else}
+        <div
+          class="bg-panel text-muted-foreground flex h-8 items-center gap-3 border-b px-4 text-sm"
         >
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+          No prices yet
+          <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
+          <a
+            class="text-primary hover:underline"
+            href={`${resolve("/settings")}?tab=brokers`}>{FIRST.broker.label}</a
+          >
+          <!-- eslint-enable svelte/no-navigation-without-resolve -->
+        </div>
+      {/if}
+    </div>
+    {#if workbench.demoMode}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          class="bg-panel hover:bg-muted flex h-8 shrink-0 items-center gap-1 border-b border-l px-2 text-xs"
+          aria-label="Choose what the ticker shows"
+          title="Choose what the ticker shows"
+          ><SlidersHorizontal class="size-3.5" /></DropdownMenu.Trigger
+        >
+        <DropdownMenu.Content align="end" class="w-56">
+          <DropdownMenu.Label>Ticker</DropdownMenu.Label>
+          {#each MARKETS as c (c.sym)}
+            <DropdownMenu.CheckboxItem
+              checked={home.ticker.includes(c.sym)}
+              onCheckedChange={() => toggleMarket(c.sym)}
+              closeOnSelect={false}>{c.sym}</DropdownMenu.CheckboxItem
+            >
+          {/each}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            onclick={() => askCopilot("Change my Home ticker to show ")}
+            ><Sparkles />Ask the copilot</DropdownMenu.Item
+          >
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
   </div>
 
   <div class="scrim min-h-0 flex-1">

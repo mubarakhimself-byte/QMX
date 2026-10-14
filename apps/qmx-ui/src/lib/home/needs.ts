@@ -6,6 +6,7 @@
 import { ACCOUNTS, CANDIDATES } from "$lib/portfolio/demo";
 import { LAB_PODS, PAPER_RUNS } from "$lib/lab/pods";
 import { copilot } from "$lib/copilot/store.svelte";
+import { workbench } from "$lib/workbench/workbench.svelte";
 
 export type Need = {
   id: string;
@@ -19,6 +20,7 @@ export type Need = {
 
 export function needs(): Need[] {
   const out: Need[] = [];
+  if (!workbench.demoMode) return out;
   for (const s of copilot.sessions) {
     const p = copilot.pending(s.id);
     if (!p) continue;
