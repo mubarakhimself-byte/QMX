@@ -47,10 +47,29 @@ class UsageLedger:
         raise NotImplementedError
 
     def hard_stop(self) -> str | None:
-        """A reason when the plan must stop for every chat, else None. Hard rule 1 (no API
-        spend, ever): any `overage` window whose status is not `rejected` (the account is
-        drawing paid extra usage) or any `credits_required` fact. Lasts until that fact's
-        `resets_at` passes. Plan chats refuse sends and running ones are interrupted."""
+        """A reason when the plan must stop for every chat, else None. Hard rule 1 (no paid
+        use, ever). Read from the newest fact per window. Stops on any of:
+        1. `using_overage` is True: the account is drawing paid extra usage now.
+        2. a plan window is `rejected` while `overage_status` is `allowed` or
+           `allowed_warning`: the next request would draw paid extra usage. This is the
+           common paid case (a `five_hour` event, `status: "rejected"`,
+           `overage_status: "allowed"`).
+        3. an `overage` window whose status is not `rejected`, unless the same fact says
+           `using_overage` is False. Fails closed on a shape the rules above do not cover.
+        4. any `credits_required` fact.
+        A plan window `rejected` with `overage_status` `rejected` (extra usage off or out of
+        credits) is not an overage stop: the plan is limited, the CLI refuses natively, and
+        the page shows the window and its reset.
+        The stop lasts until a newer fact for that window clears the condition or the
+        latest of `resets_at` and `overage_resets_at` passes. Plan chats refuse sends and
+        running ones are interrupted."""
+        raise NotImplementedError
+
+    def extra_usage_on(self) -> bool | None:
+        """True when the newest plan fact has `overage_enabled` True or `overage_status`
+        `allowed` or `allowed_warning`. None when no fact says. Feeds the doctor line
+        "extra usage is on for this account; switch it off at claude.ai so the plan can
+        never bill", which B5 asked for. Informational: the stop is `hard_stop`."""
         raise NotImplementedError
 
 
@@ -86,6 +105,8 @@ class UsagePage:
     background_cap_note: str
     """Plain words: the cap acts on the last plan reading, not a live 50%."""
     hard_stop: str | None
+    extra_usage_on: bool | None
+    """`UsageLedger.extra_usage_on`. The page and `doctor` say it in plain words."""
     posture: MoneyPosture
     exposure: ExposureReport | None
     """None until the first probe ran. The page names each reachable secret in plain words,

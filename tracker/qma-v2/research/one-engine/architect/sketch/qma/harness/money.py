@@ -1,14 +1,16 @@
 """The money rule and the credential guards: agents may read money data and can never move
 money, and the plan token never leaves this PC through QMA.
 
-Honest layering. Against agent Bash under the operator's own OS user, exactly two things are
-structural:
-- Broker credential scope, when proven (`MoneyPosture.STRUCTURAL`). If no broker credential
-  on this PC can trade, no Bash or Python path can place an order. Measured by check S27
-  (M1) per credential, never assumed. The cTrader scope names come from the runner's own
-  knowledge of the Open API, not from the grounding, so S27 settles them.
-- The relay's egress stop (`relay.py`). No request body carrying an `sk-ant-` prefix reaches
-  a third-party provider, whatever an agent read.
+Honest layering. Against agent Bash under the operator's own OS user, exactly one thing is
+structural: broker credential scope, when proven (`MoneyPosture.STRUCTURAL`). If no broker
+credential on this PC can trade, no Bash or Python path can place an order. Measured by check
+S27 (M1) per credential, never assumed. The cTrader scope names come from the runner's own
+knowledge of the Open API, not from the grounding, so S27 settles them.
+
+The relay's egress stop (`relay.py`) is a tripwire for plain-text Claude tokens: a request
+body matching a full token shape never reaches a key or GPT provider. It is not structural.
+An encoded, split or reversed token passes it, and a plan chat can send a token out with
+WebFetch, curl or an MCP server without touching the relay (fix check 2.4).
 
 Everything else in this module is a guard against accidents and against the model's own tool
 calls. Bash can get around each of them (variable expansion, string concatenation, a tool

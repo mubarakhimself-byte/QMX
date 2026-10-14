@@ -1,9 +1,10 @@
 """One chat: one `ClaudeSDKClient`, one CLI process while live, one reader task.
 
-Identity. The chat's qmx-control session id is passed to the SDK as `session_id` until the
-chat's first `ResultMessage`, and as `resume` afterwards. The SDK transcript, the qmx-control
-block log and the chat record share one key, so there is no mapping table. Once a chat has
-started, a missing transcript is an error, not a fresh start.
+Identity. The chat's qmx-control session id is passed to the SDK as `resume` when its JSONL
+exists, and as `session_id` when it does not (fix check 2.8; `home.ChatRecord.started` has the
+table). The SDK transcript, the qmx-control block log and the chat record share one key, so
+there is no mapping table. Once a chat has started, a missing transcript is an error, not a
+fresh start.
 
 Lifecycle (a small state machine, one owner):
 
@@ -105,7 +106,8 @@ class AllowOnce:
 @dataclass(frozen=True)
 class AllowAlways:
     """Allow and remember, for built-in tools and QMX tools that do not ask. QMA appends the
-    CLI's suggested rule to `settings.toml [claude]` (`home.remember_rule`, one writer) and
+    CLI's suggested rule to `settings.toml [claude.remembered."<workspace>"]`
+    (`home.remember_rule`, one writer), so it applies in this chat's workspace only, and
     returns it to the CLI with destination "session" for this process. Not offered for
     asking QMX tools."""
 
@@ -225,8 +227,10 @@ class Chat:
         4. Launch: PlanLaunch after `home.plan_auth_method` reports the subscription method
            (LaunchRefused otherwise), or RelayedLaunch with
            `relay.grant(session_id, profile, unattended=launch.unattended(kind))`.
-        5. `launch_env` -> `tool_defs` / `build_server(grants)` / `gate_rules` ->
-           `build_options(cli_path=launcher, settings=..., setting_sources=[], ...)`.
+        5. `launch_env` -> `tool_defs` / `build_server(grants)` / `gate_rules` -> the
+           transcript check (`home.ChatRecord.started` table) ->
+           `build_options(cli_path=launcher, settings=..., setting_sources=[], ...)` ->
+           `launch.assert_argv_fits` (LaunchRefused naming the largest part).
         6. `ClaudeSDKClient(options).connect()`. The launcher has already put the CLI under
            the OS limits.
         7. `get_server_info()` and `get_mcp_status()`: the plugins must be exactly the QMX

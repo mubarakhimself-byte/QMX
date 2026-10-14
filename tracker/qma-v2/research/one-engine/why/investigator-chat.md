@@ -22,8 +22,8 @@ The chat record. This covers the operator's planning conversations with Claude o
 - Extracted all five AskUserQuestion results from the raw transcript with a script: 08:25, 15:17 and 16:43 on 10-12, and 03:59 and 04:15 on 10-13.
 - Read EVE lines 1-120 (skipping the pasted skill bodies at 119-530) and 532-1197 in full.
 - Read BRF briefs 1, 4 and 13-18. Read SUB briefs for Ticket 01, `/architect` (15:24), the Two-SDK study (15:41), the PRD merge (17:36), the plain explainer (04:15) and the Harness baseline (04:24).
-- Opened HARNESS.md only to learn what each shape is called (headings and the "both engines" lines). I did not read it for motivation.
-- Not read: `tracker/qma-v2/archive/`, RESUME-2026-10-14.md, decisions.tsv and the research docs (19-two-sdk-study, 01-agent-sdk-capability-audit, FRAME.md, BASELINE.md body). These belong to the documents investigator.
+- Opened archive/2026-10-13-two-engine/HARNESS.md only to learn what each shape is called (headings and the "both engines" lines). I did not read it for motivation.
+- Not read: `tracker/qma-v2/archive/`, RESUME-2026-10-14.md, decisions.tsv and the research docs (19-two-sdk-study, 01-agent-sdk-capability-audit, archive/2026-10-13-two-engine/architect/FRAME.md, archive/2026-10-13-two-engine/BASELINE.md body). These belong to the documents investigator.
 
 ## Direct Evidence Found
 
@@ -179,7 +179,7 @@ Listed in time order. "Both engines" means different pairs before and after 10-1
 6. **Remote placement was bent toward the OpenAI engine.**
    - Design A: "remote defaults to the OpenAI engine and a run declares 'needs your PC' when any Claude node exists" (DLG ~3224).
    - Synthesis: "WED remote = OpenAI engine + code nodes" (DLG ~3261).
-   - What it suggests: placement assumed Claude can't run on rented machines (probe A-02, `setup-token`), so the OpenAI engine was the remote default. This is a two-engine-dependent shape. I don't know whether it survives into HARNESS.md (documents investigator).
+   - What it suggests: placement assumed Claude can't run on rented machines (probe A-02, `setup-token`), so the OpenAI engine was the remote default. This is a two-engine-dependent shape. I don't know whether it survives into archive/2026-10-13-two-engine/HARNESS.md (documents investigator).
 
 7. **Operator answers at 04:14-04:22 on 10-13 narrowed scope to "harness first".**
    - "build the harness first ... just ship the harness" (ASK 04:22).
@@ -231,9 +231,9 @@ Listed in time order. "Both engines" means different pairs before and after 10-1
   - `tracker/agent-system/research/19-two-sdk-study.md`, for whether the translator point was examined and how "talks to any compatible provider" was established.
   - `research/01-agent-sdk-capability-audit.md`, for Ticket 01's "GPT only via a translating proxy?" answer and the 1 GiB figure's source.
   - `tracker/agent-system/tickets/02-harness-choice.md`, for the "RATIFIED" lines written after the 15:22 answers.
-  - `research/architect/FRAME.md`, for the "Known tensions" given to the 10-13 runners.
-  - `research/H1-sdk-facts.md`, for facts 13, 14, 16 and 17.
-  - BASELINE.md, for the corrections box.
+  - `archive/2026-10-13-two-engine/architect/FRAME.md`, for the "Known tensions" given to the 10-13 runners.
+  - `archive/2026-10-13-two-engine/H1-sdk-facts.md`, for facts 13, 14, 16 and 17.
+  - archive/2026-10-13-two-engine/BASELINE.md, for the corrections box.
   - `trail/decisions.tsv` and `trail/RESUME-2026-10-14.md`, for the logged reasons behind A1-A13 and V1-V6.
 - **Git investigator:** commit messages on `plan/agent-system` around 10-12 15:2x (ticket 02 "two lanes" ratified), the overnight ARCHITECTURE revisions (`00a1d1b5..32806d83`) for the S14 router rule, and `b2da7150` (ON HOLD banners).
-- **Archived overnight ARCHITECTURE.md §2.x router rule** ("Anthropic-wire key providers on the OpenAI engine only"): in `archive/`, which I was told not to read. The documents investigator may check whether HARNESS.md inherited it.
+- **Archived overnight ARCHITECTURE.md §2.x router rule** ("Anthropic-wire key providers on the OpenAI engine only"): in `archive/`, which I was told not to read. The documents investigator may check whether archive/2026-10-13-two-engine/HARNESS.md inherited it.

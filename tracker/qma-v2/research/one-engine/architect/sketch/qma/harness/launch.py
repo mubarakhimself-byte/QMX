@@ -15,7 +15,7 @@ Load-bearing choices:
   `RelayGrant`, which only the relay mints and only for key and GPT profiles. No provider
   key passes through this module, because no key goes into any env.
 - The environment. `qma.boot` reduced this process's env to an allow-list at startup, and
-  `assert_scrubbed` re-checks it at every launch. `launch_env` then sets exactly the names a
+  `assert_scrubbed` re-checks the banned fragments at every launch. `launch_env` then sets exactly the names a
   launch needs; there is nothing inherited left to blank out.
 - `cli_path` is the QMA launcher (`qma.launcher`), which puts the CLI under the OS limits
   before the CLI starts.
@@ -218,9 +218,12 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
 
 
 def assert_scrubbed(environ: Mapping[str, str]) -> None:
-    """Raise `home.LaunchRefused` if this process's environment holds any name outside
-    `qma.boot.KEEP_NAMES`. The same list the boot scrub used, so tests and `scripts/live`
-    that import `qma.harness` directly get the same protection as `qma.serve`."""
+    """Raise `home.LaunchRefused` if this process's environment holds a name carrying a
+    `qma.boot.BANNED_FRAGMENTS` fragment (except `CLAUDE_CODE_GIT_BASH_PATH`). The full
+    allow-list runs once, at boot; at launch only the banned fragments refuse, so a library or
+    the mini-app supervisor setting an unrelated name never stops every launch (fix check
+    2.18, fixed with 2.9). Tests and `scripts/live` that import `qma.harness` directly get the
+    same check as `qma.serve`."""
     raise NotImplementedError
 
 
@@ -228,7 +231,24 @@ def instructions(home: QmxHome, workspace: Path) -> str:
     """QMX-wide rules plus the CLAUDE.md and AGENTS.md text at the workspace root, for
     `system_prompt.append`. No setting source loads CLAUDE.md files, so this is how both
     reach the model. The preset snapshots `append` until compaction (02a section 2), while
-    vanilla re-reads CLAUDE.md; that is a listed departure."""
+    vanilla re-reads CLAUDE.md. `@import` lines stay raw text; parent and subfolder CLAUDE.md,
+    `.claude/rules/` and CLAUDE.local.md are not read. Each is a listed departure (DESIGN,
+    departures from vanilla)."""
+    raise NotImplementedError
+
+
+ARGV_BUDGET: Final = 30_000
+"""Characters for the whole CLI command line after Windows quoting (every `"` gains a
+backslash). Windows caps a command line at 32,767. The SDK puts `--settings`,
+`--mcp-config`, `--append-system-prompt` and `--disallowedTools` all on argv
+(`subprocess_cli._build_command`), so the budget covers all four (fix check 2.2)."""
+
+
+def assert_argv_fits(options: ClaudeAgentOptions) -> None:
+    """Raise `home.LaunchRefused` when the rendered argv exceeds `ARGV_BUDGET`, naming the
+    largest part (`[claude]` settings, workspace CLAUDE.md and AGENTS.md, MCP config or deny
+    rules) and its size. A clear refusal, never a truncated rule set. `doctor` and S20 report
+    the full length, not only the settings."""
     raise NotImplementedError
 
 
@@ -236,7 +256,7 @@ def build_options(
     config: ChatConfig,
     *,
     session_id: SessionId,
-    started: bool,
+    transcript_exists: bool,
     env: Env,
     home: QmxHome,
     settings_json: str,
@@ -268,8 +288,10 @@ def build_options(
     can_use_tool=can_use_tool
     disallowed_tools=money.deny_rules(gate) (empty if not test.deny_rules)
                      + (["Agent"] if Child)
-    session_id=session_id if not started else None
-    resume=session_id if started else None
+    session_id=session_id if not transcript_exists else None
+    resume=session_id if transcript_exists else None
+        (keyed on the JSONL on disk, not on `ChatRecord.started`; `chat._connect` refuses a
+        started chat whose transcript is gone before this runs. Fix check 2.8.)
     include_partial_messages=True        (live token deltas for the UI)
     enable_file_checkpointing=True, extra_args={"replay-user-messages": None}  (/rewind)
     verbatim_prompts=verbatim(config.kind)

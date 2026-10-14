@@ -3,8 +3,18 @@
 Standard library only. Installed as the console script `qma-cli-launcher` (a real `.exe`
 shim on Windows, so the SDK's batch-file refusal does not apply). `launch.build_options`
 passes it as `cli_path` (02a section 14: "`cli_path` overrides" the CLI lookup). The SDK
-then runs `qma-cli-launcher <cli args>`, including its `-v` version probe, and the launcher
-runs the bundled CLI with the same args, the same stdio and the same exit code.
+then runs `qma-cli-launcher <cli args>`, and the launcher runs the bundled CLI with the same
+args, the same stdio and the same exit code.
+
+The version probe is the exception (fix check 2.5). Before the main spawn, SDK 0.2.163 runs
+`[cli_path, "-v"]` with this process's environment only, not `options.env`
+(`subprocess_cli._check_claude_version`), and swallows any failure. So that start carries no
+`QMA_*` input, and the `verbatim_prompts` version warning depends on its output. How the
+launcher answers it is settled by HP0's version-probe box, with these fallbacks in order: a
+no-input mode (on `-v`, or with no `QMA_*` names, find the bundled CLI, skip the job and the
+pid file, pass the output through); else `qma.serve` sets
+`CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK=1` after the scrub (the SDK reads it from `os.environ`
+in `connect`) and `doctor` checks the version floor itself.
 
 Why a launcher and not adoption after `connect()`: the SDK does not hand back the CLI's
 pid, and enumerating qmx-control's children races with every other child it starts
@@ -24,7 +34,10 @@ Per OS, set before the CLI starts:
   qmx-control), then close that handle so only qmx-control keeps it alive. Create a per-chat
   job with kill-on-close, nested in the parent, held only by this launcher. Start the CLI;
   it and everything it starts inherit both jobs. If the launcher dies, the chat's tree dies.
-  If qmx-control dies, every tree dies.
+  If qmx-control dies, every tree dies. Unverified (fix check 2.6): a pip or uv console
+  script `.exe` is a trampoline that starts `python.exe`, possibly inside its own job, and a
+  process already in a job may be unable to join the parent job. HP0's trampoline-job box
+  measures it with two chats and picks the fallback.
 - Linux. Set `PR_SET_PDEATHSIG=SIGKILL`, then exec `systemd-run --user --scope
   --slice=<QMA_CAP> --unit=qma-chat-<id>-<n> <cli> <args>`. The slice carries `MemoryMax`.
   The scope is per chat, so a memory kill names one chat and `procs.stop_chat` can stop one

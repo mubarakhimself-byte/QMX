@@ -14,13 +14,13 @@ Sources, all under `tracker/qma-v2/` unless stated:
 | HOW | `research/one-engine/how/HOW-one-engine.md` |
 | WHY-S | `research/one-engine/why/investigator-source-control.md` |
 | WHY-C | `research/one-engine/why/investigator-chat.md` |
-| HAR | `HARNESS.md` (line numbers) |
-| PLAN | `HARNESS-PLAN.md` (line numbers) |
-| BASE | `BASELINE.md` (line numbers) |
-| VER | `research/interrogate/VERDICT.md` (line numbers) |
+| HAR | `archive/2026-10-13-two-engine/HARNESS.md` (line numbers) |
+| PLAN | `archive/2026-10-13-two-engine/HARNESS-PLAN.md` (line numbers) |
+| BASE | `archive/2026-10-13-two-engine/BASELINE.md` (line numbers) |
+| VER | `archive/2026-10-13-two-engine/interrogate/VERDICT.md` (line numbers) |
 | BL | `BACKLOG.md` (line numbers) |
 | UI | `UI-NOTES.md` (line numbers) |
-| H1 | `research/H1-sdk-facts.md` (fact numbers) |
+| H1 | `archive/2026-10-13-two-engine/H1-sdk-facts.md` (fact numbers) |
 
 HAR, PLAN, BASE, VER, BL, UI and H1 were used as evidence of what the old plan relied on. Their conclusions were not copied.
 

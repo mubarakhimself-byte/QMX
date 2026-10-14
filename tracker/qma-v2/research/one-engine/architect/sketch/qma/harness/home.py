@@ -15,6 +15,8 @@ Layout under the QMX home (never under the operator's `~/.claude`):
     <qmx_home>/state/               Exposure report, GPT probe result. Correctness records,
                                     under the protected paths; not security gates.
     <qmx_home>/workspaces/          Default working folders, outside any dev repo.
+    <qmx_home>/agent-memory/<ws>/   Auto memory per workspace (`autoMemoryDirectory`). Not
+                                    protected: agents write it, as in vanilla.
     <repo>/qmx-agents/plugin/       QMX's shipped skills, agents, commands (read-only, versioned).
 
 Settings in code (interrogate verdict, premise change). QMA writes no `settings.json` that
@@ -79,6 +81,11 @@ class QmxHome:
     def workspaces_dir(self) -> Path:
         raise NotImplementedError
 
+    def memory_dir(self, workspace: Path) -> Path:
+        """`<root>/agent-memory/<workspace key>/`, the `autoMemoryDirectory` for launches in
+        `workspace`. Not a protected path, so agents read and write it as in vanilla."""
+        raise NotImplementedError
+
     @property
     def plugin_dir(self) -> Path:
         """QMX's shipped plugin folder (skills, agents, commands)."""
@@ -93,10 +100,22 @@ def ensure_homes(home: QmxHome) -> None:
 
 # --- Claude settings, passed in code ---
 
-CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset({"permissions", "env", "hooks"})
+CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "permissions", "env", "hooks",
+        # non-routing, non-billing display and behaviour keys (fix check 3.3); each is in
+        # Claude Code 2.1.296's settings schema (read from the CLI's strings, 2026-10-14)
+        "outputStyle", "attribution", "includeCoAuthoredBy", "alwaysThinkingEnabled",
+        "language", "respectGitignore",
+        "remembered",  # QMX-only, never passed through as is (see below)
+    }
+)
 """Top-level keys allowed in `settings.toml [claude]`. Everything else refuses, including
-`apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins` and marketplaces.
-`permissions` may hold only `allow`, `ask`, `deny` and `additionalDirectories`."""
+`apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins`, marketplaces and
+`model` (`ChatConfig.model` owns it). `permissions` may hold only `allow`, `ask`, `deny` and
+`additionalDirectories`. Every key not listed is a departure from vanilla, listed in DESIGN.
+`remembered` is a QMX key, not a Claude one: per-workspace "always allow" rules
+(`remember_rule`), merged into `permissions.allow` only for launches in that workspace."""
 
 CLAUDE_ENV_NAMES: Final[frozenset[str]] = frozenset(
     {
@@ -134,26 +153,34 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
     raise NotImplementedError
 
 
-def code_settings(user: ClaudeSettings, *, launcher: Path) -> str:
-    """The one inline JSON string for the SDK `settings` option. Pure.
+def code_settings(user: ClaudeSettings, *, launcher: Path, workspace: Path, memory_dir: Path) -> str:
+    """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
 
-    The operator's validated keys, then these fixed values, which win:
-        forceLoginMethod   "claudeai" (no Console login, so no API billing through /login)
-        cleanupPeriodDays  CLEANUP_PERIOD_DAYS
-        env                CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH "1" unless the operator set it
-        hooks.ConfigChange [{"hooks": [{"type": "command", "command": <launcher>,
-                             "args": ["--qma-block-config-change"], "timeout": 10}]}]
+    The operator's validated keys, plus `[claude.remembered."<workspace>"]` rules appended to
+    `permissions.allow` for this launch's workspace only, then these fixed values, which win:
+        forceLoginMethod     "claudeai" (no Console login, so no API billing through /login)
+        cleanupPeriodDays    CLEANUP_PERIOD_DAYS
+        autoMemoryDirectory  `memory_dir` (`QmxHome.memory_dir(workspace)`), outside both
+                             Claude homes, so auto memory reads and writes pass the gate and
+                             the deny rules (fix check 3.1). One memory per workspace, shared
+                             by every provider.
+        env                  CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH "1" unless the operator set it
+        hooks.ConfigChange   [{"hooks": [{"type": "command", "command": <launcher>,
+                               "args": ["--qma-block-config-change"], "timeout": 10}]}]
     The ConfigChange entry has no matcher, so it blocks every source the CLI lets a hook
-    block (`policy_settings` cannot be blocked, by design of the CLI).
+    block (`policy_settings` cannot be blocked, by design of the CLI). That includes skill and
+    plugin reloads, a listed departure.
     """
     raise NotImplementedError
 
 
-def remember_rule(control: ControlService, rule: str) -> None:
-    """Append an allow rule to `settings.toml [claude] permissions.allow` through
+def remember_rule(control: ControlService, rule: str, workspace: Path) -> None:
+    """Append an allow rule to `settings.toml [claude.remembered."<workspace>"]` through
     `ControlService` (the one writer), after `parse_claude_settings` accepts the result.
-    Running chats pick it up at their next launch; `chat.py` also hands the rule back to
-    the live CLI with destination "session"."""
+    Keyed by workspace, as vanilla saves it to that project's local settings (fix check 3.2);
+    the ask says "remembered for this workspace". Chats in that workspace pick it up at their
+    next launch; `chat.py` also hands the rule back to the live CLI with destination
+    "session"."""
     raise NotImplementedError
 
 
@@ -182,9 +209,13 @@ class ChatRecord:
     session_id: SessionId
     config: ChatConfig
     started: bool
-    """False until the first `ResultMessage` of this chat. Decides `session_id=` versus
-    `resume=`. A connect, crash or relaunch before the first result leaves it False, so the
-    next send starts the session fresh instead of resuming a transcript that never existed."""
+    """False until the first `ResultMessage` of this chat. A hint, not the resume key (fix
+    check 2.8). `_connect` decides by the transcript on disk:
+        JSONL exists                 -> `resume=` (also a first turn that died after the
+                                        CLI wrote the prompt)
+        no JSONL, `started` False    -> `session_id=` (a fresh start)
+        no JSONL, `started` True     -> `LaunchRefused`: the transcript is gone, error block,
+                                        no new transcript."""
     turn: TurnState
     """Written "running" before a prompt is sent and "idle" on its ResultMessage.
     "running" found at boot means the outcome is unknown."""
@@ -221,8 +252,11 @@ def doctor(home: QmxHome, *, scrubbed: tuple[str, ...]) -> list[DoctorLine]:
     (subscription or not); `[claude]` parse result; the plugins and MCP servers the last
     connect reported; managed-policy files on Windows, macOS and Linux (HOW gotcha 7); the
     names the boot scrub removed, never values; whether Git Bash resolves on Windows
-    (`CLAUDE_CODE_GIT_BASH_PATH` or the default); the launcher cap per OS; each profile's
-    last provider probe; the GPT probe result; each departure from vanilla Claude Code.
-    The stored exposure report and money posture are added by `Harness.doctor`.
+    (`CLAUDE_CODE_GIT_BASH_PATH` or the default); the UI keep list in force and that an edit
+    applies at the next start; the full CLI argv length of the last launch against
+    `launch.ARGV_BUDGET`; the launcher cap per OS; each profile's last provider probe; the
+    GPT probe result; each departure from vanilla Claude Code.
+    The stored exposure report, money posture and the "extra usage is on" line
+    (`UsageLedger.extra_usage_on`) are added by `Harness.doctor`.
     """
     raise NotImplementedError

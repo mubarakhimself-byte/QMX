@@ -33,6 +33,7 @@ Each fact carries a source URL and a short quote. "Inferred" marks my reasoning,
 Clearly allowed:
 - The operator signs in to the unmodified Claude Code CLI with his own Max plan, and his own locally run app drives it through the Agent SDK. Sources: items 1, 2, 5, 12.
 - Using the Max plan's $100 monthly API credits with a Console key for the Agent SDK. Source: item 14. This path has no gray at all.
+  Note. The operator ruled out all API spend, including this credit (2026-10-12 17:11; `BACKLOG.md` table "Rejected or settled against"). It is not a fallback.
 
 Clearly barred:
 - Offering claude.ai login to other people inside QMX, or serving other people's requests from his plan. Items 3, 6, 10.
@@ -48,6 +49,7 @@ Gray:
 
 **Verdict A.** The harness floor is safe. The operator's own Max plan driving his own local Agent SDK app is explicitly allowed, as long as the CLI owns sign-in and QMA never touches the token.
 The $100 monthly API credits on Max 5x give a zero-gray fallback, and the trading clause in the Consumer Terms needs the operator's attention.
+Note. The operator ruled out all API spend, including this credit (2026-10-12 17:11; `BACKLOG.md` table "Rejected or settled against"). It is not a fallback.
 
 ---
 
@@ -291,6 +293,7 @@ Every claim below must be tested live before the coding session relies on it.
 A1. Agent SDK `query()` signed in only through the CLI's own `/login` (no API key, no `CLAUDE_CODE_OAUTH_TOKEN`) runs on Max limits. Signal: a `RateLimitEvent` or `/status` shows plan usage, Console shows no API spend.
 A2. `ANTHROPIC_API_KEY` absent in the SDK child env. Signal: no API charge. The docs warn a stray key silently switches billing.
 A3. Max 5x API credits are claimable and fund an Agent SDK run with a Console key. Signal: Console balance drops, plan usage does not.
+Note. The operator ruled out all API spend, including this credit (2026-10-12 17:11; `BACKLOG.md` table "Rejected or settled against"). It is not a fallback.
 B1. Each provider (Z.ai, Kimi, DeepSeek, MiniMax, Meta, OpenRouter with a non-Claude model) completes one Agent SDK run with one Bash tool call, with every tier variable pinned. Signal: tool runs, `ResultMessage` without error.
 B2. Same run with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` on Meta if B1 fails with 400.
 B3. Cache reuse per provider over three turns. Signal: `cache_read_input_tokens` above zero on turn three.
@@ -312,7 +315,7 @@ F4. Codex app-server `account/rateLimits/read` with a SIWC token. Signal: return
 
 ## Comparison with H1-sdk-facts.md facts 17 to 20
 
-Written after the sections above, from `tracker/qma-v2/research/H1-sdk-facts.md` (dated 2026-10-13).
+Written after the sections above, from `tracker/qma-v2/archive/2026-10-13-two-engine/H1-sdk-facts.md` (dated 2026-10-13).
 
 Fact 17 (Sign in with ChatGPT). Correct on the flow, endpoint, `store:false`, `stream:true`, and the backend-api ban. Stale or incomplete in five places:
 - It frames GPT use through the OpenAI Agents SDK. Under the one-engine plan that is moot. GPT now needs a translator in front of the Claude Agent SDK (section D).
@@ -330,3 +333,4 @@ Fact 19 (Meta Muse). Base URLs match. Stale or incomplete:
 Fact 20 (OpenRouter). Matches what I read: same base URL, same auth variables, same "only guaranteed" caveat. I did not re-check the usage API it cites. One addition: OpenRouter says the Agent SDK connects with the same variables.
 
 Not in facts 17 to 20 but worth flagging against H1 as a whole: H1 predates the 2026-10-07 support update. Max plans now include monthly API credits that cover the Agent SDK with a Console key ($100 on Max 5x), and Anthropic restated that Agent SDK use on plan limits still works.
+Note. The operator ruled out all API spend, including this credit (2026-10-12 17:11; `BACKLOG.md` table "Rejected or settled against"). It is not a fallback.

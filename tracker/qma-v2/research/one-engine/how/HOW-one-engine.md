@@ -317,7 +317,7 @@ Store the SDK `session_id` against the qmx-control session id and pass it as `re
 
 ## Where the earlier explanation differs
 
-The earlier document is `tracker/qma-v2/research/how/HOW-harness-surface.md` (same commit, written 2026-10-13). I read it only after the sections above were written. Most of its facts agree with mine. The differences fall into three groups.
+The earlier document is `tracker/qma-v2/archive/2026-10-13-two-engine/how/HOW-harness-surface.md` (same commit, written 2026-10-13). I read it only after the sections above were written. Most of its facts agree with mine. The differences fall into three groups.
 
 ### It was shaped for two engines
 

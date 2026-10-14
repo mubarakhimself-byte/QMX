@@ -5,7 +5,7 @@ Everything about the UI that came up while planning QMA v2 (2026-10-12/13). The 
 Source pointers:
 - `op HH:MM` = the operator's own words in the planning session, UTC, 2026-10-12 unless marked 10-13. Full texts are in the raw session transcript; the digest cuts long messages.
 - `R32 §x` = `tracker/agent-system/research/32-devops-and-ui-protocol.md`.
-- `HIW §x` = `tracker/qma-v2/HOW-IT-WORKS.md`. `H1 fact n` = `tracker/qma-v2/research/H1-sdk-facts.md`.
+- `HIW §x` = `tracker/qma-v2/archive/2026-10-13-wednesday-frame/HOW-IT-WORKS.md` (archived; evidence only). `H1 fact n` = `tracker/qma-v2/archive/2026-10-13-two-engine/H1-sdk-facts.md`.
 - "Proposal" marks Claude's design work he has not ratified.
 
 ## 1. Where the UI stands
@@ -25,7 +25,7 @@ Source pointers:
 - **New topic `approvals`** beside the seven existing topics. (R32 §B3.2)
 - On attach, `/live` sends one snapshot: open runs, pending approvals, open terminals, current cursor. Keepalive every 10 s. (R32 §B9)
 - One recorded-session contract test must pass on the old and the new render paths. (R32 §B11)
-- **Open:** BASELINE.md proposed Codex's app-server JSON-RPC instead. The planning audit recommends keeping SSE and the stored blocks and only borrowing Codex's thread/turn/item names and approval shape. Decide once, before this session starts. (planning audit §3.1 "UI protocol")
+- **Open:** archive/2026-10-13-two-engine/BASELINE.md proposed Codex's app-server JSON-RPC instead. The planning audit recommends keeping SSE and the stored blocks and only borrowing Codex's thread/turn/item names and approval shape. Decide once, before this session starts. (planning audit §3.1 "UI protocol")
 - Watch the browser's ~6 connections per origin over HTTP/1.1; proposal is one multiplexed live stream per window. (R32 §B10)
 
 ## 3. The chat and sessions screen

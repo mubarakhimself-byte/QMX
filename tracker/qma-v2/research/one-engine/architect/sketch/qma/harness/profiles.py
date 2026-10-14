@@ -11,7 +11,8 @@ Invariants encoded here, not checked later:
   Claude token (hard rule 1). The CLI's own /login owns it.
 - No Claude or GPT model behind a key (old V4.1 family guard, rule R4), and no router
   slug that could pick one. Enforced in `parse_profiles` and, per request, by the relay
-  through `resolve_model`, the one parse function.
+  through `resolve_model` for the requested model and `family_refusal` for the served one.
+  `resolve_model` calls `family_refusal`, so the family rule lives once.
 - Every tier is pinned on a key provider. Kimi warns that partial tier maps fail
   silently (02b B), and Claude Code sends background work to the haiku tier.
 - A key provider's credential is a keyring reference that only the relay reads
@@ -149,16 +150,26 @@ ROUTER_SLUGS: Final[tuple[str, ...]] = ("openrouter/", "@preset/")
 `auto`, because the vendor could route them to Claude or GPT (A18, B15)."""
 
 
-def resolve_model(profile: Profile, requested: str) -> ModelId | str | None:
-    """Pure. The one model-id parser, used by `quote` for `ChatConfig.model` and by the
-    relay for every requested and served model (A28). None means refused.
+def family_refusal(profile: KeyProvider | GptPlan, model: str) -> str | None:
+    """Pure. The family test alone: a refusal reason, or None.
 
     Normalise first: strip a trailing `[1m]`-style suffix and lowercase. Split on `/` and
-    `:` into segments. ClaudePlan: tier aliases and `claude-*` ids pass through for the CLI
-    to resolve. KeyProvider: a tier alias maps through `tiers`; an id must equal a tier
-    model after the same normalisation; refused if any segment contains a
-    `FORBIDDEN_ON_KEY` fragment, matches `OPENAI_REASONING_SEGMENT`, equals `auto`, or the
-    id starts with a `ROUTER_SLUGS` prefix. GptPlan: alias or tier model only.
+    `:` into segments. KeyProvider: refused if any segment contains a `FORBIDDEN_ON_KEY`
+    fragment, matches `OPENAI_REASONING_SEGMENT`, equals `auto`, or the id starts with a
+    `ROUTER_SLUGS` prefix. GptPlan: refused unless the id is a GPT-family id.
+    The relay checks the served model (`message_start.message.model`) with this alone,
+    because vendors report dated or canonical ids that differ from the requested one
+    (fix check 2.7)."""
+    raise NotImplementedError
+
+
+def resolve_model(profile: Profile, requested: str) -> ModelId | str | None:
+    """Pure. The one parser for a requested model id, used by `quote` for `ChatConfig.model`
+    and by the relay for every requested model (A28). None means refused.
+
+    ClaudePlan: tier aliases and `claude-*` ids pass through for the CLI to resolve.
+    KeyProvider and GptPlan: `family_refusal` first, then the tier test: a tier alias maps
+    through `tiers`, and an id must equal a tier model after the same normalisation.
     """
     raise NotImplementedError
 

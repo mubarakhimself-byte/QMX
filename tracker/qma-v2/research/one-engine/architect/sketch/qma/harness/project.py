@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 
 
 TOKEN_PATTERN: Final = r"sk-ant-[A-Za-z0-9_-]+"
-"""Any Claude credential (`sk-ant-oat`, `sk-ant-ort`, `sk-ant-api`)."""
+"""Any Claude credential (`sk-ant-oat`, `sk-ant-ort`, `sk-ant-api`). Broader than the relay's
+`TOKEN_SHAPES` on purpose: redaction only rewrites displayed text and never blocks a turn."""
 
 
 def redact(text: str) -> str:
@@ -73,14 +74,36 @@ class TurnUsage:
     num_turns: int
 
 
+type LimitStatus = Literal["allowed", "allowed_warning", "rejected"]
+
+
 @dataclass(frozen=True)
 class Limits:
-    """From `RateLimitEvent`. Account-level fact, merged by `usage.UsageLedger`."""
+    """From `RateLimitEvent`. Account-level fact, merged by `usage.UsageLedger`.
+
+    Every field the SDK's `RateLimitInfo` models is carried (SDK 0.2.163 `types.py` and
+    `_internal/message_parser.py`, read 2026-10-14). The overage fields arrive on every event,
+    whatever `window` is, so a `five_hour` event can say the plan is `rejected` while paid
+    extra usage is `allowed`. That is the common paid case, and `UsageLedger.hard_stop` reads
+    it."""
 
     window: Literal["five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "overage"]
-    status: Literal["allowed", "allowed_warning", "rejected"]
+    status: LimitStatus
     utilization: float | None
     resets_at: datetime | None
+    overage_status: LimitStatus | None
+    """`RateLimitInfo.overage_status`: the state of paid extra usage. None when absent."""
+    overage_resets_at: datetime | None
+    """`RateLimitInfo.overage_resets_at`."""
+    overage_disabled_reason: str | None
+    """`RateLimitInfo.overage_disabled_reason`, such as `out_of_credits` or
+    `org_level_disabled`. Present when extra usage is unavailable."""
+    using_overage: bool | None
+    """`raw["isUsingOverage"]` or `raw["overageInUse"]`, True if either is True. The SDK does
+    not model these; Claude Code 2.1.296's `rate_limit_info` schema carries both (read from the
+    CLI's strings). None when both are absent."""
+    overage_enabled: bool | None
+    """`raw["overageEnabled"]`, same source. Feeds the "extra usage is on" doctor line."""
     credits_required: bool
     """True when `raw` carries `credits_required` (included usage exhausted, 02a section 9)."""
 

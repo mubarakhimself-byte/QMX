@@ -22,7 +22,7 @@ This file turns that floor into a list for one engine, the Claude Agent SDK in P
 | 02a | `research/one-engine/02a-claude-agent-sdk.md`, cited by section number. Python SDK 0.2.166 with CLI 2.1.299. |
 | 02b | `research/one-engine/02b-providers-translator-policy.md`, cited by section letter and probe id (A1, B1, D1 and so on). |
 | HOW | `research/one-engine/how/HOW-one-engine.md`, cited by seam number (1 to 5, plus "event wire" and "session resume") and gotcha number. Commit `4eac8f69` of `rebuild/base`. |
-| BL | `BASELINE.md` (2026-10-13 two-engine matrix). Used as evidence only. Its corrections box still holds and is applied here. |
+| BL | `archive/2026-10-13-two-engine/BASELINE.md` (2026-10-13 two-engine matrix). Used as evidence only. Its corrections box still holds and is applied here. |
 | BACKLOG | `BACKLOG.md` item ids (B1 to B57, S1 to S4). |
 
 Labels carried from the sources. **Fact** means a source states it. **Inferred** means derived from facts. **UNCONFIRMED** means no primary source confirmed it. Each UNCONFIRMED row has an agent-run check in section 5 that settles it.

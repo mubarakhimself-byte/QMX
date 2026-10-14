@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import os
 
-from qma.boot import scrub_process_env
+from qma.boot import read_keep_names, scrub_process_env
 
 
 def main() -> None:
-    """Scrub, then import the harness and serve:
+    """Parse `--home` with `argparse`, scrub, then import the harness and serve:
 
-        removed = scrub_process_env(os.environ)
+        extra = read_keep_names(home / "settings.toml")     # the UI keep list, stdlib only
+        removed = scrub_process_env(os.environ, extra)
         from qma.harness.routes import serve
         serve(scrubbed=removed)
     """

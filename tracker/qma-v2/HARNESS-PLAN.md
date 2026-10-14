@@ -10,9 +10,15 @@ Old-code deletion is a separate program in `DELETION-PLAN.md`. It starts only af
 
 One box is one unit of work. Every box names the evidence that checks it. A nested box is a sub-step of the box above it. Check a box only when its evidence exists, a file, a log line, a screenshot, a test run, or a SHA. The body is a how-to. The appendices explain and record.
 
-The program runs `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-full.md`. The rule at the end of `playbooks/autopilot-stack.md` picks it, and Appendix B gives the reason. The coordinator session is the root. It dispatches one builder per PR, verifies each PR itself, and merges it into `rebuild/base` after a clean verdict. Owners stop at merge-ready and never merge, which is the project rule and replaces step 5 of autopilot-full. HP15, HP16 and HP17 are the operator's items. They stop at merge-ready for his review and his click or written go. `main` moves only by his own click. `integration` is not used.
+The program runs `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-full.md`. That choice goes against the selection rule at the end of `playbooks/autopilot-stack.md`, which reads as follows.
 
-Each PR lists ten live lanes. They are a coverage list, not ten agents. One verifier, the coordinator itself, runs them in sequence in one boot of the PR head on the operator's PC, because he has one Claude Max 5x plan. Every lane is real. It uses the bundled CLI, the plan login in the ship home, real provider keys from the OS keyring and real files. `S<n>` names a check in DESIGN section 5. "Operator check <n>" names a row of `research/one-engine/04-baseline.md` section 4.
+> **Choosing between the autopilots.** Autopilot-full when the PRs are independent and landing authority is granted. Autopilot-stack when the operator wants review before landing, the work is sequenced or coupled, or merge authority is withheld.
+
+This program is sequenced, so the rule points to autopilot-stack. The plan overrides it because of the project rule. The project CLAUDE.md says the coordinator verifies each PR itself and merges it into `rebuild/base`. Appendix B gives the full reason.
+
+The plan makes two overrides to autopilot-full. Override 1 replaces step 5. Owners stop at merge-ready and never merge. Override 2 is that the coordinator, not the owner, merges each PR into `rebuild/base` after a clean verdict. The coordinator session is the root. It dispatches one builder per PR and verifies each PR itself. HP15, HP16 and HP17 are the operator's items. They stop at merge-ready for his review and his click or written go. `main` moves only by his own click. `integration` is not used.
+
+Each PR lists ten live lanes. They are a coverage list, not ten agents. The coordinator runs the ten lanes itself, in sequence, with no extra agents. It runs them on `opus` in one boot of the PR head on the operator's PC, because he has one Claude Max 5x plan. Every lane is real. It uses the bundled CLI, the plan login in the ship home, real provider keys from the OS keyring and real files. `S<n>` names a check in DESIGN section 5. "Operator check <n>" names a row of `research/one-engine/04-baseline.md` section 4.
 
 Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -22,7 +28,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
 - [ ] In the same message, list the four things only he can do, with a time for each. Log his answers in `D:/QMX-worktrees/qma-ship/decisions.tsv`.
-  - [ ] Add the provider keys he wants tested to the OS keyring under `qmx/kimi`, `qmx/glm`, `qmx/deepseek`, `qmx/minimax`, `qmx/meta` and `qmx/openrouter`. The coordinator reads names only, never values.
+  - [ ] Add his OpenRouter key to the OS keyring under `qmx/openrouter`. The operator ruled on 2026-10-14 that live provider tests use OpenRouter only. The coordinator reads key names only, never values. The GLM, Kimi, DeepSeek, MiniMax and Meta Muse rows record `NO KEY` until he adds those keys later. OpenRouter takes the share of every lane that needs "a keyed provider", about 90 calls in all. GPT needs no key. It makes about 50 calls on his ChatGPT plan through his own sign-in (HP2 10, HP16 30, HP17 10). These are the planner's estimates, not measurements.
   - [ ] Type `/login` once in HP0, so the CLI stores the plan login in the ship home.
   - [ ] Approve "QMA" on OpenAI's page once in HP2, and again in HP16 if the stored session expired.
   - [ ] Run `scripts/live/qma/s27_broker_scope.py` himself on a demo account in HP14.
@@ -33,8 +39,8 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Create the store `D:/QMX-worktrees/qma-ship/` with `decisions.tsv`, `ledger.tsv`, `turns.tsv`, `evidence/`, `review/` and `home/`. Write these standing orders into `decisions.tsv` as its first rows.
   - [ ] Builders run on `opus`. Never `bulk-worker`. Fable only when the operator asks. Every brief says "do not spawn sub-agents".
   - [ ] At most two builders run at once, plus the coordinator.
-  - [ ] Live lanes use the `haiku` tier on the plan unless the check names another model. Each plan turn gets a row in `turns.tsv`.
-  - [ ] When the plan's five-hour window reaches 50%, the coordinator pauses live lanes until the window resets (R6).
+  - [ ] The coordinator runs live lanes itself, in sequence, on `opus` unless the check names another model. No extra agents run lanes. Each plan turn gets a row in `turns.tsv`.
+  - [ ] When the plan's five-hour window reaches 50%, the coordinator pauses live lanes until the window resets. This 50% is a pacing default the planner chose, and the operator can change it. His ruling R6 sets 50% for QMX's own background agents, not for this build.
 - [ ] On the operator's go, arm the audit tick as `/loop 1h` with the tick prompt below. Never leave the cadence to memory.
 - [ ] Use this tick prompt, verbatim. "Re-read the execution playbook from trunk. Audit the operation against it and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then post a short status message to the operator in chat only when the audit found a tracked change that no earlier status message reported, such as a PR opened, a code-ready head, a round launched or closed, a verdict, a merge, a stuck agent and the action taken, a blocker added or cleared, or a decision only the operator can make. Name every such change and nothing else. Do not repeat a table, the merged list, or an unchanged blocker. If the audit found none, end the turn with no reply text. Either way, log this tick's row in your decision trail. The row names the items reported, or none."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
@@ -106,15 +112,17 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 - [ ] In `p_install.py`, pick the newest `claude-agent-sdk` release with a `win_amd64` wheel and a bundled CLI at 2.1.248 or later, install it in a throwaway venv on `D:`, and print both versions (S1).
 - [ ] In `p_login.py`, start the bundled CLI in a terminal with `CLAUDE_CONFIG_DIR=D:/QMX-worktrees/qma-ship/home/claude` and `--settings '{"forceLoginMethod": "claudeai"}'`. The operator types `/login`. Then print only the auth method field of `claude auth status` (S2, DESIGN open question 6).
 - [ ] In `common.py`, write `reduced_env()`, which keeps the names in the sketch's `boot.KEEP_NAMES` plus `CLAUDE_CONFIG_DIR`. In `p_env.py`, run one plan turn with a Bash call under it, then again with a fake `ANTHROPIC_API_KEY` in the parent env (S19 prototype).
-- [ ] In `p_settings.py`, connect a raw SDK client with `setting_sources=[]` and an inline `settings` JSON that carries `forceLoginMethod`, `cleanupPeriodDays` and a ConfigChange command hook. Have the agent write `settings.json` into the home mid-session. Record whether ConfigChange fired, whether a plugin planted in the home loads, and the argument length (S20 prototype, DESIGN open questions 3 to 5).
+- [ ] In `p_settings.py`, connect a raw SDK client with `setting_sources=[]` and an inline `settings` JSON that carries `forceLoginMethod`, `cleanupPeriodDays` and a ConfigChange command hook. Have the agent write `settings.json` into the home mid-session. Record whether ConfigChange fired, whether a plugin planted in the home loads, the full argv length, and whether `extra_args={"append-system-prompt-file": <path>}` works next to the preset (S20 prototype, DESIGN open questions 3 to 5).
 - [ ] In `p_sdk.py`, record whether `/usage` reaches Python (S10), whether `/effort high` changes the next request (S37), whether a PreToolUse callback that sleeps past `HookMatcher.timeout` blocks a Bash call in bypass mode (S38), and whether `verbatim_prompts=True` stops `/compact` from dispatching (S25).
 - [ ] In `p_ram.py`, measure the working set of one idle and one busy CLI (S18).
 - [ ] In `p_shim.py`, build a uv console-script `.exe` in a `D:` venv that runs the bundled CLI with the same args, pass it as `cli_path`, and run one turn. Record whether Windows App Control blocks it.
+  - [ ] Probe the SDK version check (DESIGN open question 17). Set the `QMA_*` names only in `options.env`, connect, and have the shim log the args and the `QMA_*` names of every start. SDK 0.2.163 runs `[cli_path, "-v"]` with the process environment only, so the expected first start is `-v` with no `QMA_*` name. If the shim cannot find the CLI on that start, HP4 gives the launcher a no-input mode that finds the bundled CLI itself, skips the job and the pid file, and passes `-v` through. If that mode cannot find the CLI either, `qma.serve` sets `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK=1` after the scrub and `doctor` checks the version floor itself. Record which path HP4 takes.
+  - [ ] Probe the trampoline job (DESIGN open question 18). In the shim's Python child, log `IsProcessInJob`. Then, from a parent that holds a named job with kill-on-close as qmx-control would, start two shims at once, and have each join the parent job and nest its own job. Record each join result and the working set of the shim's extra Python process in MB. If both joins succeed, HP4 builds the sketch's path. If a join fails, HP4 starts the CLI with breakaway, suspended, and assigns it to the nested jobs. If that also fails, the HP4 owner reports it and the coordinator brings the operator a choice of a small native launcher.
 - [ ] In `FINDINGS.md`, write one row per question with the observed value, PASS or FAIL, and the later PR the value feeds.
 
 **You see.**
 
-- [ ] `FINDINGS.md` has a filled row for each of the nine probes, and `p_install.py` prints a `win_amd64` wheel tag and a CLI version of 2.1.248 or later.
+- [ ] `FINDINGS.md` has a filled row for each of the nine probes and the two launcher boxes, and `p_install.py` prints a `win_amd64` wheel tag and a CLI version of 2.1.248 or later.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -131,7 +139,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 - [ ] Lane 7. Run the `/effort` case of `p_sdk.py`. Save `hp0-effort.log`. Pass when the log records whether the next request used the new effort.
 - [ ] Lane 8. Run the timeout and verbatim cases of `p_sdk.py`. Save `hp0-timeout.log`. Pass when the sleeping callback blocks the Bash call with an error that names the timeout, and the verbatim `/compact` produces no `compact_boundary`.
 - [ ] Lane 9. Run `p_ram.py`. Save `hp0-ram.log`. Pass when the idle and busy working sets are recorded in MB.
-- [ ] Lane 10. Run `p_shim.py`. Save `hp0-shim.log`. Pass when the SDK runs a turn through the shim, or the App Control block is recorded with its event text.
+- [ ] Lane 10. Run `p_shim.py`. Save `hp0-shim.log`. Pass when the SDK runs a turn through the shim, or the App Control block is recorded with its event text, and the log records the version-probe start's args and `QMA_*` names, both job-join results, the extra process size and the path HP4 takes.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -160,12 +168,12 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Build.**
 
-- [ ] In `p_providers.py`, run the bundled CLI against GLM, Kimi, DeepSeek, MiniMax, Meta Muse and OpenRouter. Set `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` together from keyring `qmx/<provider>`, pin all four tier models, and use `reduced_env()` and a fresh home with no login. On OpenRouter use only a model that is neither Claude nor GPT (R4).
+- [ ] In `p_providers.py`, run the bundled CLI against OpenRouter, the only key in this program (operator ruling 2026-10-14). Keep rows for GLM, Kimi, DeepSeek, MiniMax and Meta Muse, which print `NO KEY` until he adds those keys. Set `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` together from keyring `qmx/<provider>`, pin all four tier models, and use `reduced_env()` and a fresh home with no login. On OpenRouter use only a model that is neither Claude nor GPT (R4).
   - [ ] Run 02b probes B1 (one Bash call), B3 (cache reads on turn three) and B4 (a two-turn tool loop with thinking), plus one WebSearch.
   - [ ] Record the init tool-search state with and without `ENABLE_TOOL_SEARCH=true`.
   - [ ] Retry Meta Muse with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` when it rejects a request.
   - [ ] Print `NO KEY` for a row whose keyring entry is missing.
-- [ ] In `p_resume.py`, start a plan chat with thinking in the ship home, then resume the same session id under the first keyed provider from a home whose `projects/` links to the plan home's, and ask a recall question. On failure, retry after `/compact` (S36).
+- [ ] In `p_resume.py`, start a plan chat with thinking in the ship home, then resume the same session id under OpenRouter from a home whose `projects/` links to the plan home's, and ask a recall question. On failure, retry after `/compact` (S36).
 - [ ] In `p_echo.py`, run a local http echo server. Point a profile at it with a fake key, from a throwaway home whose login file holds the canary `sk-ant-oat01-QMXCANARY`. Run once with a token and once with a base URL and no token (S9 prototype, 02a trap 7).
 - [ ] In `FINDINGS.md`, write one row per provider with B1, B3, B4, WebSearch, tool search and the quirks it needed, plus the S36 and trap 7 results.
 
@@ -326,8 +334,8 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Build.**
 
-- [ ] Write `boot.KEEP_NAMES` and `scrub_process_env` as the sketch's `boot.py` states.
-- [ ] Write `launcher.main` per OS as the sketch's `launcher.py` states. That covers nested Job Objects on Windows, the parent-death signal plus a `systemd-run --user --scope` under `qma-agents.slice` on Linux with a fallback, a kqueue parent watch on macOS, the pid file, and `--qma-block-config-change`, which exits 2.
+- [ ] Write `boot.KEEP_NAMES`, `BANNED_FRAGMENTS`, `parse_keep_names`, `read_keep_names` and `scrub_process_env` as the sketch's `boot.py` states.
+- [ ] Write `launcher.main` per OS as the sketch's `launcher.py` states. That covers the `-v` handling and the Windows job path that HP0's `FINDINGS.md` chose, nested Job Objects on Windows, the parent-death signal plus a `systemd-run --user --scope` under `qma-agents.slice` on Linux with a fallback, a kqueue parent watch on macOS, the pid file, and `--qma-block-config-change`, which exits 2.
 - [ ] Write `AgentProcessCap` as the sketch's `procs.py` states, after the precedent in `qmx_apps/windows_job.py`.
 - [ ] Write `test_import_rules.py` as an AST scan with no new dependency. It enforces the DESIGN section 2 rules. `claude_agent_sdk` is imported only in `qma.harness` and `qma.gpt.probe`. `qma.boot` and `qma.launcher` import only the standard library. `qma.console` imports nothing from `qma.harness`. `KEEP_NAMES` holds no forbidden fragment. `TestMode(` appears only under `scripts/live/` and tests, and `ProbePassed(` only in `probe.py`.
 
@@ -375,7 +383,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 **Files.**
 
 - [ ] Create `src/qma/serve.py`, `src/qma/harness/home.py`, `src/qma/harness/launch.py` and `src/qma/harness/routes.py`, with `tests/test_home.py` and `tests/test_launch.py`.
-- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/server.py` so `create_app` takes `extra_routers`, and `service.py` so `SettingsSection` gains `claude`.
+- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/server.py` so `create_app` takes `extra_routers`, and `service.py` so `SettingsSection` gains `claude` and `environment`, with `environment.keep` validated by `qma.boot.parse_keep_names`.
 - [ ] Create `scripts/live/qma/drive.py`, `s02_login.py`, `s19_boot.py` and `s20_settings.py`.
 
 **Build.**
@@ -437,7 +445,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Build.**
 
-- [ ] Write `Chat` as the sketch states for plan chats. That covers the Cold and Live states, `_connect` steps 1 to 7, `_read` routing, the `ChatRecord` rules for `started` and `turn`, and `session_id` before the first result and `resume` after it.
+- [ ] Write `Chat` as the sketch states for plan chats. That covers the Cold and Live states, `_connect` steps 1 to 7, `_read` routing, the `ChatRecord` rules for `started` and `turn`, and `resume` when the JSONL exists, `session_id` when it does not, and a refusal for a started chat whose JSONL is gone.
 - [ ] Give `can_use_tool` a floor that rejects every call that would ask, with the reason "approvals are not wired yet". HP9 replaces it.
 - [ ] Write `project` as one pure function over the SDK message union, with `redact` applied first and the 14 block kinds.
 - [ ] Write `Harness.open` steps 1 to 4, `start_chat`, `send`, `interrupt`, `live` and `close`.
@@ -449,7 +457,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_project.py` gains cases over recorded transcripts with literal expected blocks for text, tool started and finished, plan, agents, compact and result, plus `redact`. `test_chat.py` gains cases with a fake client that `started` turns true only on the first `ResultMessage` and that a record left "running" yields one `needs_you` block at open. Run the qma-harness suite with `-n 2`.
+- [ ] `test_project.py` gains cases over recorded transcripts with literal expected blocks for text, tool started and finished, plan, agents, compact and result, plus `redact`. `test_chat.py` gains cases with a fake client that `started` turns true only on the first `ResultMessage`, that the resume table picks `resume` for an unstarted chat with a partial JSONL, and that a record left "running" yields one `needs_you` block at open. Run the qma-harness suite with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
 
@@ -466,7 +474,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Time to the first text delta of a `say ok` turn on the `haiku` tier.
+- [ ] Metric. Time to the first text delta of a `say ok` turn on `opus`.
 - [ ] Probe. Five vanilla `claude -p` runs and five head turns through `drive.py`, interleaved. Trunk has no harness, so vanilla is the reference.
 - [ ] Baseline. Record the vanilla median first.
 - [ ] Rule. Fail when the head median exceeds the vanilla median by more than 1.5 s, which bounds the connect, post-connect check and projection the diff adds.
@@ -502,16 +510,16 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_profiles.py` gains a literal `resolve_model` table covering tier aliases, `[1m]` suffixes, router slugs, `auto`, the `o3` segment and Claude or GPT ids behind a key. `test_relay.py` gains cases against an in-process upstream for a 401 before the body is read, the 400 egress stop, the 404 path, the forwarded query string, literal `swap_auth` headers, literal wire-quirk bodies and the served-model abort. Run the qma-harness suite with `-n 2`.
+- [ ] `test_profiles.py` gains a literal `resolve_model` table covering tier aliases, `[1m]` suffixes, router slugs, `auto`, the `o3` segment and Claude or GPT ids behind a key. `test_relay.py` gains cases against an in-process upstream for a 401 before the body is read, the 400 egress stop on each `TOKEN_SHAPES` form, no stop on the bare `sk-ant-` text or on `relay.py`'s own source, the 404 path, the forwarded query string, literal `swap_auth` headers, literal wire-quirk bodies, the served-model abort, and a dated served id of the right family that streams through. Run the qma-harness suite with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Trunk reaches providers only through `models.yaml` and `cliproxy`. Record that, and run operator check 2 on the OpenRouter profile at head. Save `hp7-check2.log`. Pass when the reads and the text arrive and each upstream request has one `model_call` row.
 - [ ] Lane 2. Run `s08_providers.py` for each keyed row (S8). Save `hp7-s08.log`. Pass when each row matches its HP1 result and records tool search and quirks.
 - [ ] Lane 3. Run `s09_leak.py` against `fake_model.py` (S9). Save `hp7-s09.log`. Pass when the fake model received only the fake provider key, never the plan login and never the grant secret.
-- [ ] Lane 4. Run `s21c_egress.py` (S21c). Save `hp7-s21c.log`. Pass when the relay returns 400, its egress counter moves, and the fake model never receives the string.
+- [ ] Lane 4. Run `s21c_egress.py` (S21c). Save `hp7-s21c.log`. Pass when the chat that read `relay.py` and an `.env.example` keeps working, then the full-shape fake token gets 400, the egress counter moves, the fake model never receives the string, and the chat works again after a rewind.
 - [ ] Lane 5. Run `s21e_relayed_home.py` (S21e). Save `hp7-s21e.log`. Pass when no login file exists in the relayed home and its `projects` resolves to the plan home's.
-- [ ] Lane 6. Run `s22_relay.py` (S22). Save `hp7-s22.log`. Pass when the statuses read 401, 401, 400, 400, 400, 400, refused, 404 and forwarded with the query string, and the mismatched served model aborts the stream and moves the family counter.
+- [ ] Lane 6. Run `s22_relay.py` (S22). Save `hp7-s22.log`. Pass when the statuses read 401, 401, 400, 400, 400, 400, refused, 404 and forwarded with the query string, the barred served model aborts the stream and moves the family counter, and the dated id of the right family streams to the end.
 - [ ] Lane 7. Run `s23_no_key_env.py`, where the fake model scripts a Bash `env` call in bypass mode (S23). Save `hp7-s23.log`. Pass when only the relay URL and grant secret appear and no key value is in the transcript or the QMX home.
 - [ ] Lane 8. Run `s24_usage_once.py` with scripted usage on the fake model (S24 key half). Save `hp7-s24.log`. Pass when `RunIndex` equals the relay sum with one row per upstream request.
 - [ ] Lane 9. Run `s41_model_ids.py` against the relay with a Kimi grant (S41 relay half). Save `hp7-s41.log`. Pass when an id outside the tier set gets 400 and `kimi-k3[1m]` and a tier alias pass.
@@ -610,8 +618,8 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Trunk answers asks only through the stdin of `copilot_build_app.py`. Record that, and run operator checks 3 and 4 on the plan through `op_checks_3_to_5.py`. Save `hp9-checks-3-4.log`. Pass when `hello.txt` holds "goodbye" after the allowed steps, and still exists after the rejected delete.
-- [ ] Lane 2. Run `s05_permissions.py` on the fake model (S5). Save `hp9-s05.log`. Pass when push is denied, rm asks, echo runs, plan mode blocks the write, and the remembered rule takes effect in the next chat.
-- [ ] Lane 3. Run `s33_one_writer.py` (S33). Save `hp9-s33.log`. Pass when the `settings.toml` diff is exactly the new rule in `[claude] permissions.allow`.
+- [ ] Lane 2. Run `s05_permissions.py` on the fake model (S5). Save `hp9-s05.log`. Pass when push is denied, rm asks, echo runs, plan mode blocks the write, and the remembered rule takes effect in the next chat in the same workspace and not in a second workspace.
+- [ ] Lane 3. Run `s33_one_writer.py` (S33). Save `hp9-s33.log`. Pass when the `settings.toml` diff is exactly the new rule in `[claude.remembered."<workspace>"]`.
 - [ ] Lane 4. Run `s15_event_wire.py` on the fake model (S15). Save `hp9-s15.log`. Pass when `text`, `tool`, `plan`, `agents` and `permission` blocks arrive in order, the second answer is `already_answered`, the answer after a restart is `expired`, and all 50 concurrent answers resolve.
 - [ ] Lane 5. Run `s29_approvals.py` on the fake model (S29). Save `hp9-s29.log`. Pass when one unsigned row exists, the replay and the changed call each ask again, the `[claude]` allow rule does not let it run, AllowAlways returns `invalid`, Reject writes no row, and the broker log shows no connection.
 - [ ] Lane 6. Run `s29a_grants_alone.py` (S29a). Save `hp9-s29a.log`. Pass when the replay reaches the handler and is refused for a missing grant.
@@ -643,27 +651,27 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, not on
 **Files.**
 
 - [ ] Create `src/qma/harness/usage.py` (`UsageLedger`, `BackgroundCap`, `UsagePage`) and `tests/test_usage.py`.
-- [ ] Edit `project.py` (`Limits`, `TurnUsage`), `chat.py` (`TurnUsage` journaled for plan chats only, `on_plan_limits`), `harness.py` (`usage`, hard-stop interrupts) and `routes.py` (GET `/api/usage`).
+- [ ] Edit `project.py` (`Limits` with every `RateLimitInfo` field plus `using_overage`, `overage_enabled` and `credits_required` from `raw`, and `TurnUsage`), `chat.py` (`TurnUsage` journaled for plan chats only, `on_plan_limits`), `harness.py` (`usage`, hard-stop interrupts) and `routes.py` (GET `/api/usage`).
 - [ ] Create `scripts/live/qma/s10_usage.py`, `s18_ram.py` and `s24_usage_plan.py`.
 
 **Build.**
 
-- [ ] Write `usage.py` as the sketch states. The hard stop covers any `overage` window that is not `rejected` and any `credits_required` fact.
+- [ ] Write `usage.py` as the sketch states. The hard stop fires on `using_overage`, on a plan window `rejected` while `overage_status` is `allowed` or `allowed_warning`, on an `overage` window not `rejected` unless `using_overage` is False, and on any `credits_required` fact. `extra_usage_on` feeds the doctor line.
 - [ ] Use the HP0 `/usage` finding for the meter. If `/usage` reaches Python, a non-verbatim meter chat refreshes the reading. Otherwise the page says the cap acts on the last reading.
 
 **You see.**
 
-- [ ] `GET /api/usage` returns the plan windows with `as_of`, the token sums per profile, the cap 0.5, the cap note and `hard_stop`.
+- [ ] `GET /api/usage` returns the plan windows with `as_of` and their overage fields, the token sums per profile, the cap 0.5, the cap note, `hard_stop` and `extra_usage_on`.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_usage.py` gains cases for newest-wins merging, a replayed older fact, expiry on read, both hard-stop triggers and `BackgroundCap.allows` at and above the fraction. Run the qma-harness suite with `-n 2`.
+- [ ] `test_usage.py` gains cases for newest-wins merging, a replayed older fact, expiry on read, each of the four hard-stop rules, the `rejected` plus `overage_status` `rejected` negative case, the raw key names `isUsingOverage`, `overageInUse` and `overageEnabled` checked against the pinned CLI's schema strings, and `BackgroundCap.allows` at and above the fraction. Run the qma-harness suite with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Trunk's `RunIndex.refresh` sums `model_call` costs. Run ten plan turns at head and refresh `RunIndex`. Save `hp10-runindex.log`. Pass when there is one row per turn and the sum equals the `ResultMessage` costs within 0.0001.
 - [ ] Lane 2. Run `s10_usage.py` for the event count and the `/usage` shape (S10). Save `hp10-s10.log`. Pass when both are recorded and match HP0's finding.
-- [ ] Lane 3. Feed a recorded `overage` event to the ledger in-process, then send on the plan (S10). Save `hp10-overage.log`. Pass when the send is refused and a running plan chat is interrupted.
+- [ ] Lane 3. Feed the ledger in-process, one at a time, a `five_hour` event with `status` `rejected` and `overage_status` `allowed`, an event with `isUsingOverage` true, and an `overage` window `allowed`, sending on the plan after each (S10). Then the negative case, `rejected` with `overage_status` `rejected`. Save `hp10-overage.log`. Pass when each of the first three refuses the send and interrupts a running plan chat with the rule named, and the negative case gives no overage stop.
 - [ ] Lane 4. Feed a `credits_required` fact the same way. Save `hp10-credits.log`. Pass when the send is refused and a running plan chat is interrupted.
 - [ ] Lane 5. Read `GET /api/usage`. Save `hp10-page.log`. Pass when it holds every field in **You see.** and the note says the cap acts on the last reading.
 - [ ] Lane 6. Run `s24_usage_plan.py`, ten plan turns plus one relayed chat (S24 plan half). Save `hp10-s24.log`. Pass when the plan has one row per turn and the relayed chat is counted once.
@@ -1079,6 +1087,9 @@ No prototype ran in this planning pass. The coding session runs HP0, HP1 and HP2
 | Does a timed-out PreToolUse callback block the call (S38), does `verbatim_prompts` stop dispatch (S25) | HP0 lane 8 | HP8, HP11 |
 | RAM per CLI, idle and busy (S18, DESIGN question 11) | HP0 lane 9 | HP11 default `max_live_chats` |
 | Does Windows App Control let a venv console-script `.exe` run as `cli_path` | HP0 lane 10 | HP4 |
+| What the SDK's `-v` version probe passes the launcher (DESIGN question 17) | HP0 lane 10, version-probe box | HP4 |
+| Can the uv trampoline's Python join the parent job with two chats live (DESIGN question 18) | HP0 lane 10, trampoline-job box | HP4 |
+| Full argv length, and whether `--append-system-prompt-file` passes through `extra_args` (DESIGN question 4) | HP0 lane 5 | HP5 |
 | Tool calls, caching, thinking, WebSearch and tool search on GLM, Kimi, DeepSeek, MiniMax, Meta Muse and OpenRouter (S8) | HP1 lanes 2 to 7 and 10 | HP7 quirks |
 | Cross-provider resume of a plan session with thinking (S36, DESIGN question 9) | HP1 lane 8 | HP12 |
 | Does a base URL without its own token send the login (02a trap 7) | HP1 lane 9, on a canary only | HP7 types |
@@ -1088,7 +1099,7 @@ Unproven after the probes, by design. P6 and P7 need the relay, so HP16 settles 
 
 ## Appendix B. Alternatives rejected
 
-- **Autopilot-stack.** The rule at the end of `playbooks/autopilot-stack.md` sends sequenced work to the stack when the operator wants review before landing or withholds merge authority. Here he granted merge authority on `rebuild/base` in the project rules, he does not review code, and his gate is the console sign-off. Autopilot-full step 3 covers sequenced work by merge-then-branch, so each PR is built and verified on real trunk. A stack of eighteen PRs would rebase from the bottom on every fix and void verdicts at each rewrite. That costs plan usage he does not have.
+- **Autopilot-stack.** The rule at the end of `playbooks/autopilot-stack.md` says "Autopilot-stack when the operator wants review before landing, the work is sequenced or coupled, or merge authority is withheld." This work is sequenced, so the rule points to autopilot-stack, and the plan overrides it. The reason is the project rule. The project CLAUDE.md says the coordinator verifies each PR itself and merges it into `rebuild/base`, so merge authority is granted. He does not review code, and his gate is the console sign-off. Autopilot-full step 3 covers sequenced work by merge-then-branch, so each PR is built and verified on real trunk. A stack of eighteen PRs would rebase from the bottom on every fix and void verdicts at each rewrite. That costs plan usage he does not have.
 - **One probe PR.** The three probe sets need three different credentials and two operator clicks. One PR would wait on the slowest click, and its evidence would mix three questions. Three PRs, which one agent can run back to back, keep each verdict small.
 - **Money gate before the relay.** The relay PR adds `fake_model.py`, which lets the gate, approval and canary lanes script tool calls with no plan turns. Building the relay first cuts those lanes' plan usage to near zero. Until HP8 lands, the HP6 floor rejects every call that would ask, so no chat runs Bash without the operator's approval except the scripted bypass lanes on the fake model.
 - **A separate `qma-gpt` distribution.** `relay.py` imports `translate.py`, and `probe.py` calls the relay, so two distributions would import each other. One `qma-harness` distribution holds every `qma.*` module DESIGN names, and the AST rules in `test_import_rules.py` keep the boundaries.
@@ -1098,16 +1109,17 @@ Unproven after the probes, by design. P6 and P7 need the relay, so HP16 settles 
 
 ## Appendix C. Risks
 
+- **The SDK version probe or the trampoline job breaks the launcher (HP4).** HP0's two launcher boxes measure both and name the fallback before HP4 builds. If neither fallback holds, the coordinator brings the operator a choice of a native launcher.
 - **App Control blocks the launcher shim (HP4).** Windows App Control already blocks `poe.exe` and `pyright` under nested venvs (comment in `qmx-agents/pyproject.toml`). HP0 lane 10 measures it first. If the shim is blocked, the HP4 owner reports it before building on it, and the coordinator brings the operator a choice with a recommendation.
 - **uv_build module lists (HP4).** `qma-harness` lists six `qma.*` modules. If `uv_build` refuses a list, the owner splits the entry modules into a second distribution and records why.
-- **Plan usage (all PRs).** Builder sessions draw far more of the plan than the lanes do. At most two builders run at once, lanes use the `haiku` tier, and lanes pause at 50% of the five-hour window.
+- **Plan usage (all PRs).** Builder sessions draw far more of the plan than the lanes do. At most two builders run at once, and the coordinator runs the lanes itself in sequence. Lanes pause at 50% of the five-hour window. That 50% is a pacing default the planner chose, and the operator can change it.
 - **Provider keys missing (HP1, HP7, HP12, HP13).** A missing key turns a row into `NO KEY`. Kimi stands in for "a keyed provider" in several lanes. The owner substitutes the first keyed row and records it.
 - **Money is a speed bump in month one (HP8, HP14).** The trading node shares this PC (R25), so the posture stays `SPEED_BUMP`. The operator accepted that on 2026-10-13 (R21). The usage page says so.
 - **S27 can place a demo order (HP14).** If a credential can trade, the scope check sends an order on the demo account. The script refuses non-demo account ids, and only the operator runs it.
 - **The GPT route may fail (HP2, HP16).** The stop rule parks HP16, and the operator decides whether GPT waits.
 - **Cross-provider resume may fail (HP1, HP12).** Then a switch forks with a summary, which is DESIGN question 9's fallback. The HP12 owner applies the HP1 finding.
-- **Windows command-line length (HP5).** If `[claude]` grows past 32,767 characters, the only native fallback is a settings file path an agent could write. Doctor reports the length, and HP5 lane 8 records the headroom.
-- **No macOS machine (all PRs).** macOS rows stay unverified. The Linux rows run only in Docker.
+- **Windows command-line length (HP5).** The settings, MCP config, `append` text and deny rules share 32,767 characters. `assert_argv_fits` refuses a launch past 30,000 and names the largest part. Doctor reports the full length, and HP5 lane 8 records the headroom. HP0 lane 5 says whether the append text can move to a file.
+- **No macOS machine (all PRs).** No Mac is available, so macOS paths are checked only by code review, and by CI if a macOS runner exists. No live lane runs on macOS. The Linux rows run only in Docker.
 
 ## Appendix D. Links and reading list
 
@@ -1122,7 +1134,7 @@ Unproven after the probes, by design. P6 and P7 need the relay, so HP16 settles 
 
 ## Appendix E. Sizing
 
-These numbers are estimates from the lane designs, not measurements. Effort is focused agent hours for the owner, excluding the coordinator's verification, which adds about one hour per PR. Plan turns are first-pass live turns on the Claude plan, mostly on the `haiku` tier. Key calls go to provider keys, and GPT calls go to the ChatGPT plan.
+These numbers are estimates from the lane designs, not measurements. Effort is focused agent hours for the owner, excluding the coordinator's verification, which adds about one hour per PR. Plan turns are first-pass live turns on the Claude plan, on `opus`. Key calls go to provider keys, and GPT calls go to the ChatGPT plan.
 
 | PR | Effort (h) | Plan turns | Key calls | GPT calls | Back-to-back group |
 |---|---|---|---|---|---|

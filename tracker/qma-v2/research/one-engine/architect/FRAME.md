@@ -21,7 +21,7 @@ Root: `D:/QMX-worktrees/agent-system/tracker/qma-v2/research/one-engine/`.
 - `how/HOW-one-engine.md` covers today's code at origin/rebuild/base (checked out read-only at `D:/QMX-worktrees/harness-survey`), its seams and the deletion traps.
 - `why/WHY-one-engine.md` gives the Preserve / Change / Avoid / Risk constraints from the old two-engine design.
 
-The old design at `tracker/qma-v2/HARNESS.md` and `sketch/` is one candidate to compare against, not a base. Never read `tracker/qma-v2/archive/`.
+The old design at `tracker/qma-v2/archive/2026-10-13-two-engine/HARNESS.md` and `archive/2026-10-13-two-engine/sketch/` was one candidate to compare against, not a base. Read nothing else under `tracker/qma-v2/archive/`, and never treat the archive as the plan.
 
 ## Hard rules (from the operator, not negotiable)
 

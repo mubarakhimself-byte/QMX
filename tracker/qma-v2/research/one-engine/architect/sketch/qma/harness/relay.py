@@ -6,12 +6,14 @@ any body that carries a Claude token, runs the family guard on the requested and
 model, swaps in the real key from the OS keyring, applies the provider's wire quirks and
 forwards the stream.
 
-What it is worth, stated plainly (interrogate A25, B14). It is the one structural stop
-between an agent and a third party for the plan token: the egress stop below. Everything
-else it gives is correctness and accounting: wire quirks, authoritative usage, the family
-guard, one home for the GPT lane, and keys that never sit in a CLI env or a transcript by
-accident. It is not a key boundary against agent Bash, which can read `qmx/*` keyring
-entries as the same OS user; the usage page lists those entries.
+What it is worth, stated plainly (interrogate A25, B14; fix check 2.4). Its egress stop below
+is a tripwire for plain-text Claude tokens, not a structural guarantee. It stops an accidental
+verbatim leak to a key or GPT provider. An agent that encodes, splits or reverses a token gets
+past it, and a plan chat can send a token out with WebFetch, curl or an MCP server without
+touching the relay. Everything else it gives is correctness and accounting: wire quirks,
+authoritative usage, the family guard, one home for the GPT lane, and keys that never sit in a
+CLI env or a transcript by accident. It is not a key boundary against agent Bash, which can
+read `qmx/*` keyring entries as the same OS user; the usage page lists those entries.
 
 Plan traffic never comes here. A plan chat's CLI has no base URL and talks to Anthropic with
 its own login, so no QMX process is in the plan token's path (02b A, "clearly barred":
@@ -24,13 +26,17 @@ Invariants:
   qmx-control process, not under `BearerGate`.
 - A request whose bearer (Authorization or x-api-key) is not a live grant gets 401 before
   the body is read and before anything is logged. Only a counter moves.
-- Egress stop: a body containing `SECRET_PREFIX` gets 400 naming the rule and is never
-  forwarded or logged. Only a counter moves. Both lanes.
+- Egress stop: a body matching `TOKEN_SHAPES` gets 400 naming the rule and is never
+  forwarded or logged. Only a counter moves. Both lanes. The chat shows a `needs_you` block.
+  Recovery: every later request carries the same history, so the operator rewinds or forks
+  the chat to before the turn that carried the token, or switches it to the plan and
+  compacts there (plan traffic never passes the relay), then switches back.
 - Header values are never logged. The access record is grant session, profile, model,
   status and usage.
-- Family guard on the way in: `profiles.resolve_model(profile, body.model)` must accept it.
-  On the way out: `message_start.message.model` is checked with the same function; a
-  barred served family aborts the stream and moves a counter (R4).
+- Family guard on the way in: `profiles.resolve_model(profile, body.model)` must accept it
+  (family and tier). On the way out: `message_start.message.model` is checked with
+  `profiles.family_refusal` only, so a dated or canonical id of an allowed family passes;
+  a barred served family aborts the stream and moves a counter (R4).
 - Forwarded bytes are unchanged except the auth swap and the profile's declared
   `WireQuirks`. `anthropic-beta`, `cache_control`, system order, SSE pings and the
   rate-limit response headers pass through (02b C item 5).
@@ -64,9 +70,16 @@ if TYPE_CHECKING:
     from qma.harness.launch import SecretLookup, TestMode
     from qma.harness.profiles import Profiles
 
-SECRET_PREFIX: Final = b"sk-ant-"
-"""The prefix every Claude credential carries (`sk-ant-oat`, `sk-ant-ort`, `sk-ant-api`).
-A body that contains it never leaves this process."""
+TOKEN_SHAPES: Final = rb"sk-ant-(?:oat|ort|api|admin)\d{2}-[A-Za-z0-9_-]{20,}"
+"""Full Claude credential shapes, never the bare `sk-ant-` text. Source: the secret-scanner
+patterns inside Claude Code 2.1.296 (read from the CLI's strings, 2026-10-14): OAuth access and
+refresh tokens `sk-ant-oat01-` and `sk-ant-ort01-` (`(?:oat|ort)\\d{2}-[\\w-]{20,}`), API keys
+`sk-ant-api03-` (93 token characters then `AA`) and admin keys `sk-ant-admin01-`. 02b C2 uses
+`sk-ant-oat01-` for its fake token. A body that matches never leaves this process.
+
+A chat that read this file, API docs or an `.env.example` holds the bare prefix and keeps
+working (S21c negative case). A tripwire for plain-text tokens, not a structural guarantee
+(module docstring)."""
 
 GrantSecret = NewType("GrantSecret", str)
 """256 random bits, minted per CLI launch. Lives in relay memory and in one CLI's env. Not a
@@ -172,11 +185,12 @@ class Relay:
 
     async def handle(self, path: str, query: str, headers: Mapping[str, str], body: bytes) -> AsyncIterator[bytes]:
         """The request pipeline, each step owning one decision:
-        bearer -> grant (401 if none, nothing logged) -> egress stop (400 if `SECRET_PREFIX`
-        is in `body`, unless the test switch turned it off) -> parse `model` ->
+        bearer -> grant (401 if none, nothing logged) -> egress stop (400 if `body` matches
+        `TOKEN_SHAPES`, unless the test switch turned it off) -> parse `model` ->
         `guard_model` (400 naming the rule) -> key lane: `swap_auth` + `apply_wire_quirks`
-        + stream to `<base_url><path>?<query>`, checking the served model and teeing
-        `RelayUsage`; GPT lane: `qma.gpt.translate`, teeing its count.
+        + stream to `<base_url><path>?<query>`, checking the served model with
+        `guard_served_model` and teeing `RelayUsage`; GPT lane: `qma.gpt.translate`,
+        teeing its count.
         """
         raise NotImplementedError
         yield  # pragma: no cover
@@ -187,8 +201,15 @@ class Relay:
 
 
 def guard_model(profile: KeyProvider | GptPlan, model: str) -> str | None:
-    """Pure. A refusal reason, or None. Delegates to `profiles.resolve_model`, the same
-    function `quote` uses for `ChatConfig.model`."""
+    """Pure. A refusal reason for a requested model, or None. Delegates to
+    `profiles.resolve_model`, the same function `quote` uses for `ChatConfig.model`."""
+    raise NotImplementedError
+
+
+def guard_served_model(profile: KeyProvider | GptPlan, served: str) -> str | None:
+    """Pure. A refusal reason for `message_start.message.model`, or None. Delegates to
+    `profiles.family_refusal` only. Vendors often report a dated or canonical id that differs
+    from the requested one, so the served id is never held to tier equality (fix check 2.7)."""
     raise NotImplementedError
 
 
