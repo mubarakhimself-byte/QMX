@@ -1,15 +1,11 @@
 <script lang="ts">
   /**
-   * Pod resources: a pod's ingredients, which are not a strategy's
-   * (operator, 2026-10-03). Your pods and where each stands, the bots a
-   * test runs over, blocks by slot, stress scenarios (yours included) and
-   * the paper money a pod soaks on. Ticks here are what Test runs.
+   * Pod resources: a pod's ingredients (operator, 2026-10-03). One list in
+   * groups, no tabs (DESIGN-RULES.md §4): your pods, the bots a test runs
+   * over, stress scenarios and paper money. Ticks here are what Test runs.
+   * Blocks are added from the Pod stack's "+" in each slot.
    */
-  import Layers2 from "@lucide/svelte/icons/layers-2";
-  import Bot from "@lucide/svelte/icons/bot";
-  import Puzzle from "@lucide/svelte/icons/puzzle";
-  import Siren from "@lucide/svelte/icons/siren";
-  import Wallet from "@lucide/svelte/icons/wallet";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Plus from "@lucide/svelte/icons/plus";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import History from "@lucide/svelte/icons/history";
@@ -20,45 +16,29 @@
   import { cn } from "$lib/utils";
   import InfoTip from "$lib/workbench/InfoTip.svelte";
   import { usd } from "$lib/portfolio/bits";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import {
-    BLOCKS,
     LAB_PODS,
     MY_STRESS,
     PAPER_MONEY,
     POD_TEMPLATES,
-    SLOTS,
     STAGE_LABEL,
     STRESS,
     TEST_BOTS,
   } from "../pods";
+  import { podModel } from "../pod-model.svelte";
   import { lab } from "../lab.svelte";
 
-  const EXPLAIN: Record<string, string> = {
-    pods: "Tick the pods a test should run. The highlighted one is the pod you are working on.",
-    bots: "Every pod in a test sizes the same trades from these bots, so the difference you see is the pod.",
-    blocks:
-      "A green dot means the block is in the pod you are working on. Click a block to read and tune it; add it with the + in its slot.",
-    stress:
-      "Tick the crises a test replays. Yours sit beside the built-in ones.",
-    money:
-      "Pods soak on paper money first. Real money is only wired in Portfolio, after you sign the promotion.",
-  };
-  const TABS = [
-    { id: "pods", label: "Pods", icon: Layers2 },
-    { id: "bots", label: "Bots", icon: Bot },
-    { id: "blocks", label: "Blocks", icon: Puzzle },
-    { id: "stress", label: "Stress", icon: Siren },
-    { id: "money", label: "Money", icon: Wallet },
-  ] as const;
-  let tab = $state<(typeof TABS)[number]["id"]>("pods");
-  const pod = $derived(LAB_PODS.find((p) => p.id === lab.labPod));
+  const size = panelSize();
   const STAGE_TONE = {
     draft: "var(--muted-foreground)",
     tested: "var(--info)",
     paper: "var(--tone-paper)",
     live: "var(--tone-live)",
   };
+  const SCENARIOS = [...STRESS.map((s) => ({ ...s, by: "" })), ...MY_STRESS];
+  let open = $state({ pods: true, bots: true, stress: true, money: false });
 
   function toggle(list: string[], id: string) {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
@@ -71,101 +51,96 @@
     class="accent-primary size-3.5 shrink-0"
     checked={on}
     aria-label={label}
-    title={label}
     onchange={flip}
   />
 {/snippet}
 
-<div class="flex h-full flex-col">
-  <div
-    class="flex h-9 shrink-0 items-center gap-0.5 border-b px-1.5"
-    role="tablist"
-    aria-label="Pod resources"
+{#snippet group(key: keyof typeof open, title: string, count: string)}
+  <button
+    type="button"
+    class="text-muted-foreground hover:text-foreground py-row flex w-full items-center gap-1.5 text-xs font-medium"
+    aria-expanded={open[key]}
+    onclick={() => (open[key] = !open[key])}
   >
-    {#each TABS as t (t.id)}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={tab === t.id}
-        class={cn(
-          "flex h-7 items-center gap-1.5 rounded-md px-1.5 text-xs @[20rem]:px-2",
-          tab === t.id
-            ? "bg-muted text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        title={t.label}
-        onclick={() => (tab = t.id)}
-        ><t.icon class="size-3.5" /><span class="hidden @[20rem]:inline"
-          >{t.label}</span
-        ></button
-      >
-    {/each}
+    <ChevronDown
+      class={cn("size-3.5 transition-transform", !open[key] && "-rotate-90")}
+    />
+    {title}
+    <span class="num ml-auto font-normal">{count}</span>
+  </button>
+{/snippet}
+
+<div class="flex h-full flex-col">
+  <div class="px-tile flex h-9 shrink-0 items-center gap-1">
+    <span class="text-muted-foreground truncate px-1.5 text-xs"
+      >{lab.podsTicked.length} pods · {lab.botsTicked.length} bots · {lab
+        .stressTicked.length} crises</span
+    >
     <InfoTip
       class="ml-auto"
       label="Explain this list"
-      text={EXPLAIN[tab] ?? ""}
+      text="Tick what a test runs: pods, the bots they all size, and the crises they replay. The highlighted pod is the one you are working on. Pods soak on paper money before real money, which is wired in Portfolio after you sign."
     />
     <!-- eslint-disable svelte/no-navigation-without-resolve -->
     <a
       href={`${resolve("/library")}?shelf=pods`}
-      class="text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 items-center justify-center rounded-md"
+      class="text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 shrink-0 items-center justify-center rounded-md"
       aria-label="Open the Library"
       title="Open the Library"><LibraryBig class="size-3.5" /></a
     >
     <!-- eslint-enable svelte/no-navigation-without-resolve -->
   </div>
 
-  <div class="min-h-0 flex-1 overflow-auto">
-    {#if tab === "pods"}
-      <ul class="p-1.5">
-        {#each LAB_PODS as p (p.id)}
-          <li
-            class={cn(
-              "flex items-center gap-2 rounded-md px-2 py-2",
-              lab.labPod === p.id ? "bg-muted" : "hover:bg-muted/40",
-            )}
-          >
-            {@render tick(
-              lab.podsTicked.includes(p.id),
-              `Include ${p.name} in tests`,
-              () => (lab.podsTicked = toggle(lab.podsTicked, p.id)),
-            )}
-            <button
-              type="button"
-              class="flex min-w-0 flex-1 items-center gap-2 text-left"
-              onclick={() => (lab.labPod = p.id)}
+  <div
+    class="px-panel pb-panel gap-group flex min-h-0 flex-1 flex-col overflow-auto"
+  >
+    <section aria-label="Pods">
+      {@render group(
+        "pods",
+        "Pods",
+        `${lab.podsTicked.length}/${LAB_PODS.length}`,
+      )}
+      {#if open.pods}
+        <ul>
+          {#each LAB_PODS as p (p.id)}
+            {@const stage = podModel.stage(p.id)}
+            <li
+              class={cn(
+                "py-row -mx-1.5 flex items-center gap-2 rounded-md px-1.5",
+                lab.labPod === p.id ? "bg-muted" : "hover:bg-muted/40",
+              )}
             >
-              <span
-                class="size-2.5 shrink-0 rounded-full"
-                style="background:{p.color}"
-              ></span>
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm font-medium"
-                  >{p.name}
-                  <span class="text-muted-foreground font-normal"
-                    >{p.version}</span
-                  ></span
-                >
-                <span class="text-muted-foreground block truncate text-xs"
-                  >{p.template}</span
-                >
-              </span>
-              <span
-                class="shrink-0 rounded border px-1.5 text-xs"
-                style="color:{STAGE_TONE[
-                  p.stage
-                ]}; border-color:color-mix(in oklab, {STAGE_TONE[
-                  p.stage
-                ]} 50%, transparent)">{STAGE_LABEL[p.stage]}</span
+              {@render tick(
+                lab.podsTicked.includes(p.id),
+                `Include ${p.name} in tests`,
+                () => (lab.podsTicked = toggle(lab.podsTicked, p.id)),
+              )}
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
+                aria-pressed={lab.labPod === p.id}
+                onclick={() => (lab.labPod = p.id)}
               >
-            </button>
-          </li>
-        {/each}
-      </ul>
-      <div class="px-3 pb-3">
+                <span
+                  class="size-2 shrink-0 rounded-full"
+                  style="background:{p.color}"
+                ></span>
+                <span class="min-w-0 flex-1 truncate">{p.name}</span>
+                {#if size.mode !== "compact"}<span
+                    class="shrink-0 text-xs"
+                    style="color:{STAGE_TONE[stage]}">{STAGE_LABEL[stage]}</span
+                  >{:else}<span
+                    class="size-1.5 shrink-0 rounded-full"
+                    style="background:{STAGE_TONE[stage]}"
+                    title={STAGE_LABEL[stage]}
+                  ></span>{/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
-            class="hover:bg-muted flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-sm"
+            class="text-muted-foreground hover:text-foreground mt-row flex items-center gap-1.5 text-xs"
             ><Plus class="size-3.5" />New pod</DropdownMenu.Trigger
           >
           <DropdownMenu.Content class="w-72">
@@ -193,82 +168,65 @@
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-      </div>
-    {:else if tab === "bots"}
-      <ul class="p-1.5">
-        {#each TEST_BOTS as b (b.id)}
-          <li class="hover:bg-muted/40 flex items-center gap-2 rounded-md px-2">
-            <label class="flex flex-1 items-center gap-2 py-2">
-              {@render tick(
-                lab.botsTicked.includes(b.id),
-                `Run tests over ${b.name}`,
-                () => (lab.botsTicked = toggle(lab.botsTicked, b.id)),
-              )}
-              <span class="flex-1 text-sm">{b.name}</span>
-              <span class="text-muted-foreground num text-xs">{b.symbol}</span>
-            </label>
-          </li>
-        {/each}
-      </ul>
-      <p class="text-muted-foreground px-3 pb-3 text-xs">
-        <!-- eslint-disable svelte/no-navigation-without-resolve -->
-        <a
-          href={`${resolve("/library")}?shelf=bots`}
-          class="text-primary underline">More bots in the Library</a
-        >
-        <!-- eslint-enable svelte/no-navigation-without-resolve -->
-      </p>
-    {:else if tab === "blocks"}
-      <div class="flex flex-col gap-3 p-3">
-        {#each SLOTS as s (s.id)}
-          <div>
-            <p class="text-muted-foreground mb-1 text-xs">{s.label}</p>
-            <div class="flex flex-wrap gap-1">
-              {#each BLOCKS.filter((b) => b.slot === s.id) as b (b.id)}
-                {@const inPod = pod?.stack[s.id].includes(b.id)}
-                <button
-                  type="button"
-                  class={cn(
-                    "rounded-md border px-2 py-1 text-left text-xs",
-                    lab.block === b.id
-                      ? "border-primary bg-primary/12"
-                      : "hover:border-ring/60",
-                    inPod && "font-medium",
-                  )}
-                  title={`${b.what}${inPod ? " (in this pod)" : ""}`}
-                  onclick={() => (lab.block = b.id)}
-                  >{#if inPod}<span class="text-success mr-1">●</span
-                    >{/if}{b.name}</button
+      {/if}
+    </section>
+
+    <section aria-label="Bots">
+      {@render group(
+        "bots",
+        "Bots",
+        `${lab.botsTicked.length}/${TEST_BOTS.length}`,
+      )}
+      {#if open.bots}
+        <ul>
+          {#each TEST_BOTS as b (b.id)}
+            <li>
+              <label class="py-row flex items-center gap-2 text-sm">
+                {@render tick(
+                  lab.botsTicked.includes(b.id),
+                  `Run tests over ${b.name}`,
+                  () => (lab.botsTicked = toggle(lab.botsTicked, b.id)),
+                )}
+                <span class="min-w-0 flex-1 truncate">{b.name}</span>
+                {#if size.mode !== "compact"}<span
+                    class="text-muted-foreground num text-xs">{b.symbol}</span
+                  >{/if}
+              </label>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    <section aria-label="Stress">
+      {@render group(
+        "stress",
+        "Crises",
+        `${lab.stressTicked.length}/${SCENARIOS.length}`,
+      )}
+      {#if open.stress}
+        <ul>
+          {#each SCENARIOS as s (s.id)}
+            <li>
+              <label class="py-row flex items-center gap-2 text-sm">
+                {@render tick(
+                  lab.stressTicked.includes(s.id),
+                  `Include ${s.name}`,
+                  () => (lab.stressTicked = toggle(lab.stressTicked, s.id)),
+                )}
+                <span class="min-w-0 flex-1 truncate" title={s.name}
+                  >{s.name}</span
                 >
-              {/each}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {:else if tab === "stress"}
-      <ul class="p-1.5">
-        {#each [...STRESS.map( (s) => ({ ...s, by: "" }) ), ...MY_STRESS] as s (s.id)}
-          <li class="hover:bg-muted/40 flex items-center gap-2 rounded-md px-2">
-            <label class="flex flex-1 items-center gap-2 py-2">
-              {@render tick(
-                lab.stressTicked.includes(s.id),
-                `Include ${s.name}`,
-                () => (lab.stressTicked = toggle(lab.stressTicked, s.id)),
-              )}
-              <span class="flex-1 text-sm"
-                >{s.name}{#if s.by}<span
-                    class="text-muted-foreground block text-xs">{s.by}</span
-                  >{/if}</span
-              >
-            </label>
-          </li>
-        {/each}
-      </ul>
-      <div class="px-3 pb-3">
+                {#if s.by}<span class="text-info shrink-0 text-xs">Yours</span
+                  >{/if}
+              </label>
+            </li>
+          {/each}
+        </ul>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
-            class="hover:bg-muted flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-sm"
-            ><Plus class="size-3.5" />New scenario</DropdownMenu.Trigger
+            class="text-muted-foreground hover:text-foreground mt-row flex items-center gap-1.5 text-xs"
+            ><Plus class="size-3.5" />New crisis</DropdownMenu.Trigger
           >
           <DropdownMenu.Content class="w-72">
             <DropdownMenu.Item
@@ -292,19 +250,24 @@
             >
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-      </div>
-    {:else}
-      <ul class="p-1.5">
-        {#each PAPER_MONEY as m (m.id)}
-          <li class="rounded-md px-2 py-2">
-            <div class="flex items-baseline justify-between gap-2">
-              <span class="text-sm font-medium">{m.name}</span>
-              <span class="num text-sm">{usd(m.balance)}</span>
-            </div>
-            <p class="text-muted-foreground text-xs">{m.note}</p>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+      {/if}
+    </section>
+
+    <section aria-label="Paper money">
+      {@render group("money", "Paper money", `${PAPER_MONEY.length}`)}
+      {#if open.money}
+        <ul>
+          {#each PAPER_MONEY as m (m.id)}
+            <li
+              class="py-row flex items-baseline justify-between gap-2 text-sm"
+              title={m.note}
+            >
+              <span class="truncate">{m.name}</span>
+              <span class="num shrink-0">{usd(m.balance)}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
   </div>
 </div>
