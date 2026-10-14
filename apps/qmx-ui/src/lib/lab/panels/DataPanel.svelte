@@ -16,15 +16,24 @@
   const features = ASSETS.filter((a) => a.kind === "feature");
   const COVER: Record<string, [number, number]> = {
     "d-fx": [0, 100],
+    "d-crypto": [0, 100],
     "d-news": [30, 100],
     "d-csv": [78, 96],
   };
   /** Dataset node fields the docs require (provider … revision). */
   const DETAIL: Record<string, [string, string][]> = {
     "d-fx": [
+      ["Provider", "IC Markets through cTrader"],
+      ["Schema", "OHLC + bid/ask spread, swap rates"],
+      ["Timezone", "UTC; sessions from the calendar"],
+      ["Freshness", "Updated 06:00 today"],
+      ["Gaps", "Weekends and holidays, as expected"],
+      ["Revision", "release 9 · fp1:4b02…"],
+    ],
+    "d-crypto": [
       ["Provider", "Binance public data (data.binance.vision)"],
       ["Schema", "OHLCV + bid/ask spread"],
-      ["Timezone", "UTC; sessions from the calendar"],
+      ["Timezone", "UTC"],
       ["Freshness", "Updated 06:00 today"],
       ["Gaps", "3 known, all under 2 days"],
       ["Revision", "release 14 · fp1:a91c…"],

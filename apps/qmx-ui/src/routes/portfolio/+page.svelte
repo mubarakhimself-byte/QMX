@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * Portfolio (operator rulings 2026-10-02/03): books, risk and sizing,
+   * Portfolio (operator rulings 2026-10-02/03): pods, risk and sizing,
    * promotions and approvals, allocation, MIS, and live trading (the trading
-   * node folded in). A tiling board like the Lab, with its own copilot.
+   * servers folded in). A tiling board like the Lab, with its own copilot.
    * Showing live or paper is a view filter, never a control.
    */
   import { page } from "$app/state";
@@ -71,8 +71,8 @@
     <div
       class="bg-warning/15 flex h-7 shrink-0 items-center gap-2 px-3 text-xs"
     >
-      <FlaskConical class="text-warning size-3.5" /> Demo portfolio. Sample spot accounts,
-      pods and prices; no money is real.
+      <FlaskConical class="text-warning size-3.5" /> Demo portfolio. Sample CFD and
+      crypto accounts, pods and prices; no money is real.
     </div>
   {/if}
   <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">

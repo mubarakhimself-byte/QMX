@@ -127,12 +127,12 @@ export function activity(env: string, layout: string): number {
 }
 
 export const SYMBOLS = [
+  "XAUUSD",
+  "NAS100",
+  "EURUSD",
+  "USOIL",
   "BTCUSDT",
   "ETHUSDT",
-  "SOLUSDT",
-  "AVAXUSDT",
-  "LINKUSDT",
-  "DOGEUSDT",
 ];
 export const TIMEFRAMES = ["M15", "H1", "H4"];
 
@@ -172,15 +172,15 @@ function sweep(): Run[] {
     for (const s of SYMBOLS) {
       n++;
       const edge =
-        (s.startsWith("BTC") || s === "ETHUSDT" ? 0.0012 : 0.0002) +
+        (s.startsWith("BTC") || s === "XAUUSD" ? 0.0012 : 0.0002) +
         (tf === "H1" ? 0.0006 : 0) +
         (r() - 0.5) * 0.0018;
       const status: RunStatus =
-        s === "DOGEUSDT" && tf === "H4"
+        s === "EURUSD" && tf === "H4"
           ? "running"
-          : s === "LINKUSDT" && tf === "M15"
+          : s === "USOIL" && tf === "M15"
             ? "failed"
-            : s === "AVAXUSDT" && tf === "H4"
+            : s === "NAS100" && tf === "H4"
               ? "queued"
               : "done";
       const eq =
@@ -328,7 +328,7 @@ export const ASSETS: Asset[] = [
     meta: "v7 · research-paper",
   },
   { id: "bot-trend", kind: "bot", name: "ETH trend", meta: "v12 · live" },
-  { id: "bot-fade", kind: "bot", name: "SOL momentum", meta: "v4 · paper" },
+  { id: "bot-fade", kind: "bot", name: "Gold scalper", meta: "v4 · live" },
   {
     id: "m-scorer",
     kind: "model",
@@ -353,6 +353,12 @@ export const ASSETS: Asset[] = [
   {
     id: "d-fx",
     kind: "dataset",
+    name: "IC Markets CFDs 1m 2019–2026",
+    meta: "cTrader history · FX, indices, metals, energy · 52 GB",
+  },
+  {
+    id: "d-crypto",
+    kind: "dataset",
     name: "Binance spot 1m 2019–2026",
     meta: "Binance public data · 38 GB",
   },
@@ -360,7 +366,7 @@ export const ASSETS: Asset[] = [
     id: "d-news",
     kind: "dataset",
     name: "Calendar events",
-    meta: "Forex Factory + crypto news · daily",
+    meta: "Forex Factory + market news · daily",
   },
   {
     id: "d-csv",

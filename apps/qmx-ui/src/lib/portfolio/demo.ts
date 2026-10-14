@@ -1,19 +1,33 @@
 /**
- * DEMO data for Portfolio: spot crypto only (operator ruling 2026-10-03; no
- * CFDs, no FX broker, no prop firms). Money is run by **pods**: a pod is one
+ * DEMO data for Portfolio: CFDs through cTrader at IC Markets (FX, indices,
+ * metals, energy) beside crypto through CCXT exchanges (operator, 2026-10-07;
+ * no prop firms). Several accounts per broker. Money is run by **pods**: a pod is one
  * way of doing risk management and position sizing (a Book + BMS from the
  * docs is one method; models, Lab workflows and hybrids are others). Every
  * value here names the backend source it would come from. Nothing is real.
  */
 import { equityWalk } from "$lib/qmx/charts";
 import type { Entity } from "$lib/qmx/entities";
+import { MARKETS } from "$lib/demo/markets";
 
-export type Venue = { id: string; name: string; market: string };
+/** A broker or exchange, and the connector QMX reaches it through. */
+export type Venue = {
+  id: string;
+  name: string;
+  via: "cTrader" | "CCXT";
+  market: string;
+};
 export const VENUES: Venue[] = [
-  { id: "binance", name: "Binance", market: "Spot" },
-  { id: "bybit", name: "Bybit", market: "Spot" },
-  { id: "coinbase", name: "Coinbase", market: "Advanced spot" },
-  { id: "kraken", name: "Kraken", market: "Spot" },
+  {
+    id: "icmarkets",
+    name: "IC Markets",
+    via: "cTrader",
+    market: "CFDs: FX, indices, metals, energy",
+  },
+  { id: "binance", name: "Binance", via: "CCXT", market: "Spot" },
+  { id: "bybit", name: "Bybit", via: "CCXT", market: "Spot" },
+  { id: "coinbase", name: "Coinbase", via: "CCXT", market: "Advanced spot" },
+  { id: "kraken", name: "Kraken", via: "CCXT", market: "Spot" },
 ];
 
 export type Ksa = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
@@ -27,9 +41,35 @@ export type Account = {
   quote: string;
   node: string;
   ksa: Ksa;
+  /** CFD accounts trade on margin: what is tied up now, and the leverage. */
+  margin?: { used: number; leverage: number };
 };
 
 export const ACCOUNTS: Account[] = [
+  {
+    id: "icm-live",
+    venue: "icmarkets",
+    name: "IC Markets live",
+    role: "live",
+    equity: 31560,
+    today: 0.9,
+    quote: "USD",
+    node: "london",
+    ksa: "GREEN",
+    margin: { used: 4210, leverage: 30 },
+  },
+  {
+    id: "icm-demo",
+    venue: "icmarkets",
+    name: "IC Markets demo",
+    role: "paper",
+    equity: 50000,
+    today: 0.3,
+    quote: "USD",
+    node: "local",
+    ksa: "GREEN",
+    margin: { used: 2950, leverage: 30 },
+  },
   {
     id: "bn-spot",
     venue: "binance",
@@ -99,6 +139,16 @@ export type Node = {
 };
 export const NODES: Node[] = [
   {
+    id: "london",
+    name: "London",
+    where: "Equinix LD5 VPS",
+    latency: [{ venue: "IC Markets", ms: 2 }],
+    status: "up",
+    mode: "live",
+    cpu: 18,
+    uptime: "26 days",
+  },
+  {
     id: "tokyo",
     name: "Tokyo",
     where: "AWS ap-northeast-1",
@@ -128,7 +178,10 @@ export const NODES: Node[] = [
     id: "local",
     name: "This laptop",
     where: "Dell Precision 5550",
-    latency: [{ venue: "Binance testnet", ms: 140 }],
+    latency: [
+      { venue: "Binance testnet", ms: 140 },
+      { venue: "IC Markets demo", ms: 38 },
+    ],
     status: "up",
     mode: "paper",
     cpu: 22,
@@ -398,6 +451,146 @@ export const PODS = [
     ],
   },
   {
+    id: "cfd",
+    name: "Gold & indices",
+    method: {
+      kind: "rules",
+      label: "Fixed loss per trade",
+      from: "Lab · Scalper rules v1",
+    },
+    account: "icm-live",
+    mode: "LIVE",
+    version: "v2",
+    equity: 23640,
+    start: 22000,
+    floor: 19000,
+    today: 0.9,
+    curve: equityWalk(57, 120, 0.0014, 0.008),
+    knobs: [
+      {
+        key: "risk",
+        label: "Loss per trade",
+        value: 0.3,
+        min: 0.1,
+        max: 1,
+        step: 0.05,
+        unit: "%",
+      },
+      {
+        key: "leverage",
+        label: "Most leverage used",
+        value: 10,
+        min: 1,
+        max: 30,
+        step: 1,
+        unit: "×",
+      },
+      {
+        key: "daily",
+        label: "Daily loss stop",
+        value: 1.5,
+        min: 0.5,
+        max: 5,
+        step: 0.25,
+        unit: "%",
+      },
+    ],
+    guards: [
+      { name: "Margin used", now: "$3,180", limit: "$9,450", used: 0.34 },
+      { name: "Gold share", now: "48%", limit: "50%", used: 0.96 },
+      { name: "Daily loss", now: "$70", limit: "$355", used: 0.2 },
+    ],
+    bots: [
+      {
+        id: "xau-scalp",
+        name: "Gold scalper",
+        symbol: "XAUUSD",
+        weight: 45,
+        state: "trading",
+        pnl: 880,
+      },
+      {
+        id: "nas-brk",
+        name: "NAS100 breakout",
+        symbol: "NAS100",
+        weight: 35,
+        state: "trading",
+        pnl: 515,
+      },
+      {
+        id: "oil-trend",
+        name: "Oil trend",
+        symbol: "USOIL",
+        weight: 20,
+        state: "benched",
+        pnl: -140,
+      },
+    ],
+  },
+  {
+    id: "fx",
+    name: "FX majors",
+    method: { kind: "book", label: "Book + BMS", from: "Docs default ladder" },
+    account: "icm-demo",
+    mode: "PAPER",
+    version: "v1",
+    equity: 50420,
+    start: 50000,
+    floor: 45000,
+    today: 0.3,
+    curve: equityWalk(63, 120, 0.0006, 0.005),
+    knobs: [
+      {
+        key: "risk",
+        label: "Risk per trade",
+        value: 0.25,
+        min: 0.1,
+        max: 1,
+        step: 0.05,
+        unit: "%",
+      },
+      {
+        key: "leverage",
+        label: "Most leverage used",
+        value: 15,
+        min: 1,
+        max: 30,
+        step: 1,
+        unit: "×",
+      },
+    ],
+    guards: [
+      { name: "Margin used", now: "$2,950", limit: "$12,600", used: 0.23 },
+      { name: "Daily loss", now: "$0", limit: "$1,010", used: 0 },
+    ],
+    bots: [
+      {
+        id: "eur-mr",
+        name: "EURUSD mean reversion",
+        symbol: "EURUSD",
+        weight: 50,
+        state: "trading",
+        pnl: 260,
+      },
+      {
+        id: "gbp-brk",
+        name: "GBPUSD breakout",
+        symbol: "GBPUSD",
+        weight: 30,
+        state: "trading",
+        pnl: -90,
+      },
+      {
+        id: "jpy-trend",
+        name: "USDJPY trend",
+        symbol: "USDJPY",
+        weight: 20,
+        state: "trading",
+        pnl: 250,
+      },
+    ],
+  },
+  {
     id: "meanrev",
     name: "Mean reversion",
     method: {
@@ -450,7 +643,7 @@ export const PODS = [
   },
 ] as unknown as Pod[];
 
-// Paper sides: same pod, testnet capital.
+// Paper sides: same pod, testnet or demo-account capital.
 const PAPER_SIDE: Record<string, Pod["paper"]> = {
   core: {
     account: "bn-test",
@@ -469,6 +662,12 @@ const PAPER_SIDE: Record<string, Pod["paper"]> = {
     equity: 6040,
     today: -0.4,
     curve: equityWalk(131, 120, 0.0004, 0.011),
+  },
+  cfd: {
+    account: "icm-demo",
+    equity: 22310,
+    today: 0.6,
+    curve: equityWalk(157, 120, 0.0012, 0.008),
   },
 };
 for (const p of PODS) {
@@ -494,9 +693,12 @@ export const TRADING_BOTS = PODS.flatMap((p) =>
     .map((b) => ({ ...b, pod: p.name, mode: p.mode })),
 );
 export const BASE_PRICE: Record<string, [number, number]> = {
-  BTCUSDT: [64210, 0],
-  ETHUSDT: [3118, 1],
-  SOLUSDT: [152.4, 2],
+  ...Object.fromEntries(
+    MARKETS.map((m) => [
+      m.kind === "crypto" ? `${m.sym}USDT` : m.sym,
+      [m.px, m.digits] as [number, number],
+    ]),
+  ),
   AVAXUSDT: [27.6, 2],
   LINKUSDT: [11.84, 3],
 };
@@ -579,14 +781,14 @@ export const CANDIDATES: Candidate[] = [
   },
   {
     entity: bot(
-      "doge-brk",
-      "DOGE breakout",
-      "Breakouts on DOGE with volume confirmation",
+      "gbp-brk",
+      "GBPUSD breakout",
+      "London-open breakouts on GBPUSD",
       "Paper",
       ["−0.8%", "−3.9%", "44%", "21"],
     ),
     stage: "paper",
-    pod: "Alt momentum (paper copy)",
+    pod: "FX majors",
     days: 9,
     checks: [
       { name: "30 days on paper", ok: false },
@@ -594,7 +796,7 @@ export const CANDIDATES: Candidate[] = [
       { name: "Matches its Lab evidence", ok: false },
     ],
     summary:
-      "Paper results trail the Lab evidence; review before going further.",
+      "Paper results trail the Lab evidence on the IC Markets demo; review before going further.",
   },
   {
     entity: bot(
@@ -618,21 +820,21 @@ export const CANDIDATES: Candidate[] = [
   },
   {
     entity: bot(
-      "sol-mom",
-      "SOL momentum",
-      "Momentum on SOL, sized by the volatility target",
+      "xau-scalp",
+      "Gold scalper",
+      "Short scalps on gold around the London and New York opens",
       "Live",
-      ["+6.3%", "−3.4%", "55%", "64"],
+      ["+5.1%", "−2.6%", "58%", "212"],
     ),
     stage: "live",
-    pod: "Alt momentum",
-    days: 18,
+    pod: "Gold & indices",
+    days: 22,
     checks: [
       { name: "Signed", ok: true },
       { name: "Activated", ok: true },
       { name: "First 30 live days", ok: null },
     ],
-    summary: "Live since Sep 15 in Alt momentum.",
+    summary: "Live since Sep 22 in Gold & indices on IC Markets.",
   },
 ];
 
@@ -662,30 +864,30 @@ export const JOURNAL: Record<string, JournalNote[]> = {
       text: "Day 30 on paper: all checks passed.",
     },
   ],
-  "sol-mom": [
+  "xau-scalp": [
     {
-      time: "Today 07:55",
+      time: "Today 08:02",
       kind: "trade",
-      text: "Bought 24 SOL at 146.10; volatility target allows 0.9 R.",
-      r: 0,
+      text: "Bought 0.5 lots XAUUSD at 2,381.40 at the London open; closed at 2,384.10.",
+      r: 0.9,
     },
     {
       time: "Yesterday 15:20",
       kind: "event",
-      text: "SOL token unlock announced for Friday; size held.",
+      text: "Paused for 15 minutes around US jobless claims.",
     },
   ],
-  "doge-brk": [
+  "gbp-brk": [
     {
-      time: "Today 10:05",
+      time: "Today 08:05",
       kind: "trade",
-      text: "Bought DOGE at 0.1172; stopped at 0.1151.",
+      text: "Bought 0.3 lots GBPUSD at 1.30410; stopped at 1.30280.",
       r: -1,
     },
     {
       time: "Yesterday",
       kind: "note",
-      text: "Paper results trail the Lab by 2.1%; slippage looks higher than modelled.",
+      text: "Paper results trail the Lab by 2.1%; spreads at the open look wider than modelled.",
     },
   ],
   "eth-mr": [
@@ -730,7 +932,7 @@ export const NEWS: NewsItem[] = [
     kind: "fx",
     impact: "high",
     sentiment: -0.2,
-    affects: ["BTC", "ETH"],
+    affects: ["XAUUSD", "US500", "EURUSD", "BTC"],
     source: "Forex Factory calendar",
   },
   {
@@ -739,7 +941,7 @@ export const NEWS: NewsItem[] = [
     kind: "fx",
     impact: "high",
     sentiment: -0.1,
-    affects: ["BTC", "ETH", "SOL"],
+    affects: ["NAS100", "USDJPY", "BTC"],
     source: "Forex Factory calendar",
   },
   {
@@ -748,7 +950,7 @@ export const NEWS: NewsItem[] = [
     kind: "fx",
     impact: "medium",
     sentiment: -0.4,
-    affects: ["BTC"],
+    affects: ["EURUSD", "GBPUSD", "XAUUSD"],
     source: "Price feed (DXY)",
   },
   {
@@ -762,21 +964,21 @@ export const NEWS: NewsItem[] = [
   },
   {
     when: "40m ago",
-    title: "SOL token unlock of 2.1M on Friday",
-    kind: "crypto",
+    title: "US crude stocks fell 3.1M barrels",
+    kind: "fx",
     impact: "medium",
-    sentiment: -0.3,
-    affects: ["SOL"],
-    source: "CryptoPanic",
+    sentiment: 0.3,
+    affects: ["USOIL"],
+    source: "Forex Factory calendar",
   },
   {
     when: "1h ago",
-    title: "Binance lists a new AVAX pair",
-    kind: "crypto",
+    title: "Wider gold spreads expected over the weekend",
+    kind: "fx",
     impact: "low",
-    sentiment: 0.3,
-    affects: ["AVAX"],
-    source: "Binance announcements RSS",
+    sentiment: -0.2,
+    affects: ["XAUUSD"],
+    source: "IC Markets notices",
   },
   {
     when: "2h ago",
@@ -790,25 +992,42 @@ export const NEWS: NewsItem[] = [
 ];
 
 export const CORR: { names: string[]; m: number[][] } = {
-  names: ["Core", "Alt mom.", "Rotation", "Mean rev."],
+  names: [
+    "Core",
+    "Alt mom.",
+    "Rotation",
+    "Gold & ind.",
+    "FX majors",
+    "Mean rev.",
+  ],
   m: [
-    [1, 0.64, 0.58, 0.12],
-    [0.64, 1, 0.71, 0.08],
-    [0.58, 0.71, 1, 0.1],
-    [0.12, 0.08, 0.1, 1],
+    [1, 0.64, 0.58, 0.31, 0.05, 0.12],
+    [0.64, 1, 0.71, 0.22, 0.03, 0.08],
+    [0.58, 0.71, 1, 0.19, 0.02, 0.1],
+    [0.31, 0.22, 0.19, 1, 0.27, 0.06],
+    [0.05, 0.03, 0.02, 0.27, 1, 0.04],
+    [0.12, 0.08, 0.1, 0.06, 0.04, 1],
   ],
 };
 
 export const EXPOSURE = [
-  { asset: "BTC", share: 41 },
-  { asset: "ETH", share: 24 },
-  { asset: "SOL", share: 11 },
-  { asset: "AVAX", share: 6 },
-  { asset: "LINK", share: 2 },
-  { asset: "Stablecoins", share: 16 },
+  { asset: "BTC", share: 26 },
+  { asset: "XAUUSD", share: 17 },
+  { asset: "ETH", share: 15 },
+  { asset: "NAS100", share: 12 },
+  { asset: "SOL", share: 7 },
+  { asset: "USOIL", share: 4 },
+  { asset: "AVAX", share: 4 },
+  { asset: "LINK", share: 1 },
+  { asset: "Cash", share: 14 },
 ];
 
 export const TEMPLATES = [
+  {
+    id: "t-scalp",
+    name: "CFD scalper",
+    note: "Fixed loss per trade, a leverage cap, pauses around big news",
+  },
   {
     id: "t-core",
     name: "BTC & ETH core",

@@ -68,21 +68,7 @@ export const HOME_LAYOUTS: TileLayout[] = [
   },
 ];
 
-export const COINS = [
-  { sym: "BTC", px: 64210, chg: 1.83 },
-  { sym: "ETH", px: 3118, chg: 2.41 },
-  { sym: "SOL", px: 141.2, chg: -3.1 },
-  { sym: "AVAX", px: 27.6, chg: 0.9 },
-  { sym: "LINK", px: 12.3, chg: 3.2 },
-  { sym: "DOGE", px: 0.1214, chg: -1.4 },
-  { sym: "XRP", px: 0.5891, chg: 0.6 },
-  { sym: "BNB", px: 581.4, chg: 0.4 },
-  { sym: "DXY", px: 104.2, chg: -0.18 },
-  { sym: "EURUSD", px: 1.0883, chg: 0.22 },
-  { sym: "Gold", px: 2384.1, chg: -0.22 },
-];
-
-const KEY = "qmx.home.ticker";
+const KEY = "qmx.home.ticker.v2";
 function loadTicker(): string[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -90,7 +76,7 @@ function loadTicker(): string[] {
   } catch {
     /* storage unavailable */
   }
-  return ["BTC", "ETH", "SOL", "AVAX", "LINK", "DXY"];
+  return ["XAUUSD", "US500", "NAS100", "EURUSD", "USOIL", "BTC", "ETH"];
 }
 
 class HomeState {

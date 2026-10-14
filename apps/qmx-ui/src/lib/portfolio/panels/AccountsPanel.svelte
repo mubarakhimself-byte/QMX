@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** Exchanges → spot accounts → pods, with the server each trades from and its kill-switch level. */
+  /** Brokers and exchanges → accounts → pods, with the server each trades from and its kill-switch level. CFD accounts show the margin in use. */
   import Plus from "@lucide/svelte/icons/plus";
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
@@ -22,7 +22,8 @@
         <section class="pb-1">
           <p class="flex items-baseline gap-1.5 px-3 pt-2 pb-1 text-xs">
             <span class="font-medium">{v.name}</span><span
-              class="text-muted-foreground">{v.market}</span
+              class="text-muted-foreground truncate"
+              title={`${v.via} · ${v.market}`}>{v.via} · {v.market}</span
             >
           </p>
           {#each accts as a (a.id)}
@@ -41,6 +42,11 @@
                 class="text-muted-foreground flex items-center gap-2 pl-4 text-xs"
               >
                 <span class="num text-foreground">{usd(a.equity)}</span>
+                {#if a.margin}<span
+                    class="num"
+                    title={`Margin in use, leverage up to 1:${a.margin.leverage}`}
+                    >margin {usd(a.margin.used)}</span
+                  >{/if}
                 <span
                   class={cn(
                     "num",
@@ -89,7 +95,7 @@
     class="text-muted-foreground hover:text-foreground flex h-9 shrink-0 items-center gap-1.5 border-t px-3 text-xs"
     onclick={() =>
       workbench.notify(
-        "Connecting an exchange needs the daemon. API keys stay in your credential store; trade-only keys, never withdrawal.",
-      )}><Plus class="size-3.5" />Connect an exchange</button
+        "Connecting a broker or exchange needs the daemon. Keys stay in your credential store; trade-only keys, never withdrawal.",
+      )}><Plus class="size-3.5" />Connect a broker or exchange</button
   >
 </div>

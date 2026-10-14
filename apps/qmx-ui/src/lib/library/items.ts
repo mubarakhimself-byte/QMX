@@ -28,6 +28,7 @@ import Inbox from "@lucide/svelte/icons/inbox";
 import GraduationCap from "@lucide/svelte/icons/graduation-cap";
 import { DEMO_ARTIFACTS, DEMO_ENTITIES } from "$lib/demo/assets";
 import { SOURCES } from "$lib/demo/feeds";
+import { instrumentFor, isCfd } from "$lib/demo/markets";
 import type { Entity } from "$lib/qmx/entities";
 import { ASSETS, RUNS } from "$lib/lab/demo";
 import {
@@ -385,6 +386,15 @@ function entityItems(): LibraryItem[] {
   });
 }
 
+/** What and where a bot trades, e.g. a CFD on gold at IC Markets or BTCUSDT on an exchange. */
+function botSummary(symbol: string) {
+  if (symbol === "Basket") return "Crypto strategy on a basket of coins";
+  const m = instrumentFor(symbol);
+  return m && isCfd(m.kind)
+    ? `CFD strategy on ${m.name} (${symbol}) at IC Markets`
+    : `Crypto strategy on ${symbol}`;
+}
+
 /** Bots trading in Portfolio that have no full Library page in the demo yet. */
 function moreBots(): LibraryItem[] {
   const known = new Set(DEMO_ENTITIES.map((e) => e.id));
@@ -395,8 +405,16 @@ function moreBots(): LibraryItem[] {
       id: b.id,
       shelf: "bots" as const,
       name: b.name,
-      summary: `${b.symbol === "Basket" ? "A basket of coins" : b.symbol} spot strategy`,
-      family: /mom|rotat/.test(b.id) ? "Momentum" : "Breakout",
+      summary: botSummary(b.symbol),
+      family: /scalp/.test(b.id)
+        ? "Scalper"
+        : /-mr$/.test(b.id)
+          ? "Mean reversion"
+          : /trend/.test(b.id)
+            ? "Trend"
+            : /mom|rotat/.test(b.id)
+              ? "Momentum"
+              : "Breakout",
       stage: b.state === "trading" ? "Live" : "Paper",
       updated: "This week",
       uses: botUses(b.id, b.name),
@@ -491,7 +509,7 @@ function templateItems(): LibraryItem[] {
     t(
       "news",
       "News & sentiment workflow",
-      "Fetch crypto news and the macro calendar, score sentiment, tag coins and pods",
+      "Fetch market news and the macro calendar, score sentiment, tag markets and pods",
       "Workflow",
       lab("Opens as a new workflow", "build"),
     ),

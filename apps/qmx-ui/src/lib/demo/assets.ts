@@ -159,7 +159,72 @@ const JOURNAL: JournalEntry[] = [
   },
 ];
 
+const GOLD_JOURNAL: JournalEntry[] = [
+  {
+    time: "Oct 14 08:02",
+    symbol: "XAUUSD",
+    side: "Buy",
+    lots: 0.5,
+    entry: "2381.40",
+    exit: "2384.10",
+    pnl: 135.0,
+    note: "London open push; target hit",
+  },
+  {
+    time: "Oct 13 14:31",
+    symbol: "XAUUSD",
+    side: "Sell",
+    lots: 0.5,
+    entry: "2390.20",
+    exit: "2391.60",
+    pnl: -70.0,
+    note: "Stopped out; spread widened before US data",
+  },
+  {
+    time: "Oct 13 08:10",
+    symbol: "XAUUSD",
+    side: "Buy",
+    lots: 0.5,
+    entry: "2376.90",
+    exit: "2379.30",
+    pnl: 120.0,
+    note: "",
+  },
+];
+
 export const DEMO_ENTITIES: Entity[] = [
+  {
+    id: "xau-scalp",
+    kind: "bot",
+    name: "Gold scalper",
+    summary:
+      "Short scalps on gold (XAUUSD CFD) around the London and New York opens",
+    stage: "Live",
+    version: "v4",
+    fp: "fp1:9c41…e2b7",
+    family: "Scalper",
+    measures: [M.sharpe("1.42"), M.dd("−2.6%"), M.win("58%"), M.ret("+5.1%")],
+    spark: walk(17, 0.1),
+    evidence: runs(4),
+    journal: GOLD_JOURNAL,
+    connections: [
+      {
+        server: "London",
+        pod: "Gold & indices",
+        mode: "Live",
+        seat: "active",
+      },
+    ],
+    parameters: [
+      ["Market", "XAUUSD CFD at IC Markets (cTrader)"],
+      ["Sessions", "London and New York opens, 30 minutes each"],
+      ["Loss per trade", "0.3% of the pod, fixed"],
+      ["Leverage", "Up to 10× of the account's 30×"],
+      ["News", "Pauses 15 minutes around high-impact events"],
+    ],
+    streams: ["XAUUSD · 1m bars and spread", "Economic calendar"],
+    artifacts: ["r3"],
+  },
   {
     id: "eth-trend",
     kind: "bot",

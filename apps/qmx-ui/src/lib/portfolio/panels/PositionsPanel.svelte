@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Open positions and working orders across every account, ticking live.
-   * Sort by any column, group by pod or bot, filter by coin. The pod's own
+   * Sort by any column, group by pod or bot, filter by market. CFD values are the full
+   * position size (notional), not the margin behind it. The pod's own
    * record is shown beside what the exchange reports; they are never merged.
    */
   import { onMount } from "svelte";
@@ -27,6 +28,45 @@
     p: number;
   };
   let rows = $state<Pos[]>([
+    {
+      sym: "XAUUSD",
+      qty: 50,
+      unit: "oz",
+      entry: 2378.2,
+      last: 2384.1,
+      risk: 0.3,
+      bot: "Gold scalper",
+      pod: "Gold & indices",
+      account: "icm-live",
+      mode: "LIVE",
+      p: 2,
+    },
+    {
+      sym: "NAS100",
+      qty: 1,
+      unit: "contract",
+      entry: 19650,
+      last: 19742.6,
+      risk: 0.3,
+      bot: "NAS100 breakout",
+      pod: "Gold & indices",
+      account: "icm-live",
+      mode: "LIVE",
+      p: 1,
+    },
+    {
+      sym: "EURUSD",
+      qty: 30000,
+      unit: "EUR",
+      entry: 1.0861,
+      last: 1.0883,
+      risk: 0.25,
+      bot: "EURUSD mean reversion",
+      pod: "FX majors",
+      account: "icm-demo",
+      mode: "PAPER",
+      p: 5,
+    },
     {
       sym: "BTCUSDT",
       qty: 0.18,
@@ -190,7 +230,7 @@
       />
       <input
         bind:value={q}
-        placeholder="Coin or bot"
+        placeholder="Market or bot"
         aria-label="Filter positions"
         class="bg-background/40 h-7 w-36 rounded-md border pr-2 pl-7 text-xs"
       />

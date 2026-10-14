@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** What the portfolio holds, by coin, across every account (spot: long only). A report, never used to stop an order. */
+  /** What the portfolio holds, by market, across every account (cash includes stablecoins). A report, never used to stop an order. */
   import { EXPOSURE } from "../demo";
 
   const max = Math.max(...EXPOSURE.map((r) => r.share));
@@ -11,12 +11,12 @@
       <div
         class="grid grid-cols-[5.5rem_1fr_3rem] items-center gap-2 py-1.5 text-sm"
       >
-        <span class={r.asset === "Stablecoins" ? "text-muted-foreground" : ""}
+        <span class={r.asset === "Cash" ? "text-muted-foreground" : ""}
           >{r.asset}</span
         >
         <span class="bg-muted h-3 overflow-hidden rounded-sm">
           <span
-            class="block h-full rounded-sm {r.asset === 'Stablecoins'
+            class="block h-full rounded-sm {r.asset === 'Cash'
               ? 'bg-muted-foreground/50'
               : 'bg-primary/80'}"
             style="width:{(r.share / max) * 100}%"

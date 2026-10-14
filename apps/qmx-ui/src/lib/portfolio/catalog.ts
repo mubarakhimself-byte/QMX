@@ -44,7 +44,7 @@ export const PORTFOLIO_PANELS: Record<string, PortfolioPanel> = {
   accounts: {
     title: "Accounts",
     icon: Building2,
-    note: "Exchanges, spot accounts and their pods",
+    note: "Brokers, exchanges, accounts and their pods",
     view: AccountsPanel,
   },
   pods: {
@@ -69,7 +69,7 @@ export const PORTFOLIO_PANELS: Record<string, PortfolioPanel> = {
   exposure: {
     title: "Exposure",
     icon: PieChart,
-    note: "What you hold, by coin",
+    note: "What you hold, by market",
     view: ExposurePanel,
   },
   botcharts: {

@@ -25,7 +25,8 @@
   import { addPane, pane } from "$lib/workbench/tiles/tiles";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
-  import { COINS, fmtPx, home } from "$lib/home/home.svelte";
+  import { fmtPx, home } from "$lib/home/home.svelte";
+  import { MARKETS } from "$lib/demo/markets";
   import { HOME_PANELS } from "$lib/home/catalog";
   import { needs } from "$lib/home/needs";
 
@@ -42,7 +43,7 @@
   const waiting = $derived(needs());
   const ticker = $derived(
     home.ticker
-      .map((s) => COINS.find((c) => c.sym === s))
+      .map((s) => MARKETS.find((c) => c.sym === s))
       .filter((c) => !!c)
       .map((c) => ({ sym: c.sym, px: fmtPx(c.px), chg: c.chg })),
   );
@@ -69,7 +70,7 @@
     naming = false;
     workbench.notify(`New tab: ${t.name}`);
   }
-  function toggleCoin(sym: string) {
+  function toggleMarket(sym: string) {
     home.setTicker(
       home.ticker.includes(sym)
         ? home.ticker.filter((s) => s !== sym)
@@ -238,10 +239,10 @@
       >
       <DropdownMenu.Content align="end" class="w-56">
         <DropdownMenu.Label>Ticker</DropdownMenu.Label>
-        {#each COINS as c (c.sym)}
+        {#each MARKETS as c (c.sym)}
           <DropdownMenu.CheckboxItem
             checked={home.ticker.includes(c.sym)}
-            onCheckedChange={() => toggleCoin(c.sym)}
+            onCheckedChange={() => toggleMarket(c.sym)}
             closeOnSelect={false}>{c.sym}</DropdownMenu.CheckboxItem
           >
         {/each}
