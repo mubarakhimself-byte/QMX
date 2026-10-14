@@ -4,14 +4,14 @@ import asyncio
 import json
 import os
 import secrets
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager, suppress
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any
 
 import keyring
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -141,7 +141,11 @@ def _mcp_method(method: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def create_app(
-    service: ControlService, token: str | None = None, ui_origin: str = "http://127.0.0.1:5173"
+    service: ControlService,
+    token: str | None = None,
+    ui_origin: str = "http://127.0.0.1:5173",
+    *,
+    extra_routers: Sequence[APIRouter] = (),
 ) -> FastAPI:
     token = token or local_token()
     service.app_runtime().road.signing_key(token)
@@ -230,6 +234,9 @@ def create_app(
     @app.get("/api/health", dependencies=[Depends(authenticate)])
     def health() -> dict[str, str | int]:
         return {"status": "ok", "pid": os.getpid()}
+
+    for extra in extra_routers:
+        app.include_router(extra, dependencies=[Depends(authenticate)])
 
     # Keep decorated callables visible to strict type checking.
     _ = control_error, stream_events, health, sign
