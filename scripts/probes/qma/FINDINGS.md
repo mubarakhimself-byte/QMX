@@ -1,4 +1,6 @@
-# HP0 findings
+# QMA probe findings
+
+## HP0 findings
 
 Each row is one question from HARNESS-PLAN HP0. Evidence logs live in `D:/QMX-worktrees/qma-ship/evidence/hp0/`.
 
@@ -18,3 +20,16 @@ Run every probe with the probe venv's Python, `D:/QMX-worktrees/qma-ship/probe-v
 | Shim. A uv console-script `.exe` as `cli_path` runs a turn, App Control result | `p_shim.py turn` | The SDK ran a `say ok` turn on the plan through `qma-cli-launcher.exe` as `cli_path`. App Control blocked nothing and no start was refused. Start records: the `-v` version probe with no `QMA_*` name and `cli_found: false`, then the turn start with `QMA_CLI_PATH` and `cli_found: true`. Both shim processes were in a job at start. The launcher package ships `p_shim.py` and every probe module it imports, directly or through another, so `plants.py` comes with `common.py`; `p_shim.py` and `p_shim.py turn` both exit 0 (`fix3/hp0-shim.log`). | PASS | HP4 launcher |
 | OQ17. What the shim receives on the SDK version-probe start | `p_shim.py version` | SDK 0.2.166 starts the shim as `[shim, "-v"]` with the process env only: no `QMA_*` name, so the shim cannot find the CLI (cold and warm runs agree). The SDK swallows the failure and connects anyway. A no-input mode that finds the bundled CLI with `find_spec` answered `-v` in 0.43 s to 1.13 s, inside the SDK's 2 s budget but with little margin. In 1 of 4 connects the `-v` start left no record, so the 2 s budget can end a cold start before the shim logs. | PASS | HP4 takes the no-input mode |
 | OQ18. Trampoline job joins and the extra Python process size | `p_shim.py jobs` | The shim's Python child always starts inside the uv trampoline's job (`IsProcessInJob` true). Two shims joining one parent job: the first joins, the second fails with error 5 (access denied), in 4 of 4 runs with one record file per start. Both nest their own job. With the first fallback (CLI started with breakaway, suspended, assigned to the parent job and then a nested job), both shims succeed in 4 of 4 runs. The shim's Python process is 24.5 MB to 25.8 MB. | FAIL for the sketch path, PASS for the fallback | HP4 takes breakaway, suspended, assign to nested jobs |
+
+## GPT on the ChatGPT plan (HP2)
+
+Probe: `scripts/probes/qma/p_gpt.py`, run from the repo root with
+`uv run --project qmx-agents --no-sync python scripts/probes/qma/p_gpt.py run`.
+Contract: `tracker/qma-v2/research/one-engine/02b-providers-translator-policy.md` section D, probes P0 to P5.
+Evidence: `D:/QMX-worktrees/qma-ship/evidence/hp2/`. The probe writes the row below to `hp2-findings-row.md` there.
+
+Trunk has no GPT route on the plan, so there is no trunk baseline. The head median of the P2 first byte is the reference for HP16.
+
+| Route | Date | Verdict | Model | tools_shape | reasoning_replay | Steps |
+|---|---|---|---|---|---|---|
+| GPT on ChatGPT plan | pending | pending: P0 needs the operator to approve "QMA" on OpenAI's page | | | | |
