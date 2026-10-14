@@ -37,8 +37,8 @@ from .native_boundary import (
 from .native_sessions import SessionEvent
 from .providers import ProviderError
 
-CLAUDE_SDK_VERSION = "0.2.163"
-CLAUDE_CLI_VERSION = "2.1.286"
+CLAUDE_SDK_VERSION = "0.2.166"
+CLAUDE_CLI_VERSION = "2.1.299"
 _API_ENV = frozenset(
     {
         "ANTHROPIC_API_KEY",
@@ -61,7 +61,7 @@ class _ClaudeSDKLifecycle:  # pyright: ignore[reportUnusedClass] - offline revie
     verbatim_prompts prevents @file/slash-command preprocessing. No subagents.
     """
 
-    provider_id = "claude-agent-sdk:0.2.163:cli-2.1.286"
+    provider_id = "claude-agent-sdk:0.2.166:cli-2.1.299"
 
     def __init__(
         self,
