@@ -5,6 +5,7 @@
    * the board, dragged onto each other to swap, closed and added in edit
    * mode. The parent owns the layout and the catalog; panels render through
    * the `panel` snippet. Unknown panels show a reason, never an error.
+   * With demo mode off, known panels show their day-one line (day-one.ts).
    */
   import type { Component, Snippet } from "svelte";
   import Minus from "@lucide/svelte/icons/minus";
@@ -18,6 +19,9 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { cn } from "$lib/utils";
   import PanelBody from "./PanelBody.svelte";
+  import FirstStep from "../FirstStep.svelte";
+  import { DAY_ONE } from "../day-one";
+  import { workbench } from "../workbench.svelte";
   import {
     LINK_GROUPS,
     panes,
@@ -252,7 +256,9 @@
       </div>
     </header>
     <PanelBody maximised={isExpanded}>
-      {#if catalog[p.panel]}
+      {#if catalog[p.panel] && !workbench.demoMode && DAY_ONE[p.panel]}
+        <FirstStep {...DAY_ONE[p.panel]} />
+      {:else if catalog[p.panel]}
         {@render panel(p)}
       {:else}
         <div
