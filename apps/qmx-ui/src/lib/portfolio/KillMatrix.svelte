@@ -74,7 +74,7 @@
     kill.set(scope, to);
     armed = null;
     workbench.notify(
-      `${label} on ${title.split(":")[0]}. Demo only: the real switch goes to the trading node, is checked again the moment you click, and is journaled with your signature.`,
+      `${label} on ${title.split(":")[0]}. Demo only: the real switch goes to the trading server, is checked again the moment you click, and is journaled with your signature.`,
     );
   }
 </script>

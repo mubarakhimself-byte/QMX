@@ -3,7 +3,7 @@
    * Trading servers you can act on: test latency to each exchange (runs a
    * demo probe here), restart, drain (finish open work, take nothing new),
    * move accounts to another server, open its log. Destructive actions ask
-   * first and need the trading node.
+   * first and need the trading server.
    */
   import Server from "@lucide/svelte/icons/server";
   import Plus from "@lucide/svelte/icons/plus";
@@ -35,7 +35,7 @@
   }
   const act = (what: string, node: string) =>
     workbench.notify(
-      `${what} ${node}: needs the trading node. You'd confirm first; open positions stay protected.`,
+      `${what} ${node}: needs the trading server. You'd confirm first; open positions stay protected.`,
     );
 </script>
 

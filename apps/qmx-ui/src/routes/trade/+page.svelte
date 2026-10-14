@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The trading node folded into Portfolio → Live (operator ruling 2026-10-03).
+  // The trading servers folded into Portfolio → Live (operator ruling 2026-10-03).
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";

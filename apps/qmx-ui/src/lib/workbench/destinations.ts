@@ -47,8 +47,8 @@ export const PRODUCT_DESTINATIONS: readonly Destination[] = [
     shortcut: "4",
   },
   {
-    // Books, risk, promotions, allocation and live trading (the trading node
-    // folded in, operator ruling 2026-10-03). Not yet a docs destination.
+    // Pods, risk, promotions, allocation and live trading (the trading
+    // servers folded in, operator ruling 2026-10-03). Not yet a docs destination.
     id: "portfolio",
     label: "Portfolio",
     href: "/portfolio",

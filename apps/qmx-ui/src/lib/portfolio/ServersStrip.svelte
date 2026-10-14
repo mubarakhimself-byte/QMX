@@ -20,7 +20,7 @@
   };
   const act = (what: string, node: string) =>
     workbench.notify(
-      `${what} ${node}: needs the trading node. You'd confirm first; open positions stay protected.`,
+      `${what} ${node}: needs the trading server. You'd confirm first; open positions stay protected.`,
     );
 </script>
 

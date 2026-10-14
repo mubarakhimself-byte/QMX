@@ -3,7 +3,7 @@
    * Kill switch and your powers. Levels only rise on their own; coming back
    * down is your Resume, naming the scope. Every power is checked again
    * against live state when you click, and journaled with your signature.
-   * Shows what was requested apart from what the node enforces.
+   * Shows what was requested apart from what the trading server enforces.
    */
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Button } from "$lib/components/ui/button";
@@ -31,7 +31,7 @@
     {
       id: "paper",
       label: "Move to paper",
-      note: "Route this account's Books to their demo pair",
+      note: "Route this account's pods to their demo pair",
     },
     {
       id: "reset",
@@ -46,7 +46,7 @@
   ];
   function power(p: (typeof POWERS)[number]) {
     workbench.notify(
-      `${p.label} on ${acct.name}: needs the trading node. You'd sign it, it's rechecked at the moment you click, then journaled.`,
+      `${p.label} on ${acct.name}: needs the trading server. You'd sign it, it's rechecked at the moment you click, then journaled.`,
     );
   }
 </script>
@@ -85,8 +85,8 @@
         at 11:42.
       </p>
       <p>
-        <span class="font-medium">Enforced:</span> YELLOW on the Tokyo node since
-        11:42:03 (source: node, received 11:42:04).
+        <span class="font-medium">Enforced:</span> YELLOW on the Tokyo server since
+        11:42:03 (source: server, received 11:42:04).
       </p>
     </div>
   {/if}

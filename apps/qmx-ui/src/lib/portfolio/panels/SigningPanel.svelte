@@ -73,7 +73,7 @@
       disabled={blocked && c.stage !== "live"}
       onclick={() =>
         workbench.notify(
-          `${action} needs the trading node. You sign with your operator key; it's journaled.`,
+          `${action} needs the trading server. You sign with your operator key; it's journaled.`,
         )}><PenLine />{action}</Button
     >
     {#if blocked && c.stage !== "live"}<span class="text-destructive text-sm"

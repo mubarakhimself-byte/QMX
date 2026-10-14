@@ -52,7 +52,7 @@ export const SOURCES: Source[] = [
     name: "Forex Factory calendar",
     kind: "Calendar",
     url: "https://www.forexfactory.com/calendar",
-    how: "Free weekly file; opens news windows on the node",
+    how: "Free weekly file; opens news windows on the trading servers",
     status: "ruled",
   },
   {
@@ -192,7 +192,7 @@ export const NEWS_CONSUMERS = [
     what: "Any mini app can show headlines filtered to its symbols.",
   },
   {
-    name: "Trading node news windows",
+    name: "Trading server news windows",
     what: "High-impact calendar events block new entries around the release (ruled).",
   },
   {

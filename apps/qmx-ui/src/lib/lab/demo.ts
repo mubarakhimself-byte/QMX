@@ -523,7 +523,7 @@ export const SLOTS: Slot[] = [
     id: "sizing",
     label: "Position sizing",
     model: null,
-    owner: "Book decides today",
+    owner: "The pod decides today",
     scope: "new",
   },
   {

@@ -3,8 +3,8 @@
  * server or per pod"). A scope is everything, one server, one pod, or one
  * pod on one server. What a cell does is the strictest of the scopes above
  * it. The docs allow flatten at any scope (DEC-0150); stopping new trades or
- * halting a whole pod or server is not yet on the node's powers list, so
- * those are flagged for the backend. Demo state only; nothing reaches a node.
+ * halting a whole pod or server is not yet on the trading server's powers list, so
+ * those are flagged for the backend. Demo state only; nothing reaches a server.
  */
 import { accountById, type Pod } from "./demo";
 

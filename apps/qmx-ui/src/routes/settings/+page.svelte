@@ -143,8 +143,8 @@
       detail: "Pairing proof held in memory only",
     },
     { axis: "Model provider", detail: "At least one provider answers" },
-    { axis: "Market data", detail: "Free feeds respond" },
-    { axis: "Trading node", detail: "Paper node heartbeat" },
+    { axis: "Market data", detail: "Price feeds respond" },
+    { axis: "Trading server", detail: "Paper server heartbeat" },
   ];
   const SOURCES = [
     {

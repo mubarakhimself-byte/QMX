@@ -302,9 +302,9 @@
               </div>
             {:else}
               <div class="surface rounded-xl p-4">
-                <p class="font-medium">Not on any node yet</p>
+                <p class="font-medium">Not on a trading server yet</p>
                 <p class="text-muted-foreground text-sm">
-                  A bot reaches a node only after you promote it.
+                  A bot reaches a trading server only after you promote it.
                 </p>
               </div>
             {/each}

@@ -416,7 +416,7 @@
         size="sm"
         onclick={() =>
           workbench.notify(
-            `${p.name} ${next} would run on paper first, then wait for your signature. Saving needs the trading node.`,
+            `${p.name} ${next} would run on paper first, then wait for your signature. Saving needs the trading server.`,
           )}>Save {next} to paper</Button
       >
     </div>

@@ -104,10 +104,10 @@ export const TARGETS = [
     },
   },
   {
-    id: "paper-node",
-    name: "Paper node",
-    kind: "Trading node",
-    ops: ["node.status", "node.journal"],
+    id: "paper-server",
+    name: "Paper server",
+    kind: "Trading server",
+    ops: ["server.status", "server.journal"],
     axes: {
       published: true,
       configured: true,
@@ -117,10 +117,10 @@ export const TARGETS = [
     },
   },
   {
-    id: "live-node",
-    name: "Live node",
-    kind: "Trading node",
-    ops: ["node.status"],
+    id: "live-server",
+    name: "Live server",
+    kind: "Trading server",
+    ops: ["server.status"],
     axes: {
       published: true,
       configured: true,

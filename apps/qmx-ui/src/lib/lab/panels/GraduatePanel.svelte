@@ -62,7 +62,7 @@
       variant="ghost"
       onclick={() =>
         workbench.notify(
-          `${pod.name} would soak 7 more days on ${run.money}. Needs the trading node.`,
+          `${pod.name} would soak 7 more days on ${run.money}. Needs the trading server.`,
         )}>Extend soak</Button
     >
     <Button
@@ -71,7 +71,7 @@
       class="text-destructive ml-auto"
       onclick={() =>
         workbench.notify(
-          `Stopping the paper run closes ${pod.name}'s paper positions and keeps the record. Needs the trading node.`,
+          `Stopping the paper run closes ${pod.name}'s paper positions and keeps the record. Needs the trading server.`,
         )}>Stop paper run</Button
     >
   </div>

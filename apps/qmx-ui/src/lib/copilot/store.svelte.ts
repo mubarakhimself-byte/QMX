@@ -6,8 +6,8 @@
  * shows is what the log holds). Answers to question and permission cards are
  * kept here too, so the composer can take over while one is pending.
  *
- * DEMO: replies come from a scripted responder, clearly labelled. The daemon
- * (LangGraph) streams the same block shapes once wired.
+ * DEMO: replies come from a scripted responder, clearly labelled. The agent
+ * engine streams the same block shapes once wired.
  */
 import { SAMPLE_PANEL } from "$lib/sdk/spec";
 import {

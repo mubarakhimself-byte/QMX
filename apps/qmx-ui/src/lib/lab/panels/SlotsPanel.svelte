@@ -2,8 +2,8 @@
   /**
    * Where models plug in. Four default slots, and the operator can add more.
    * Only "entry signal" exists in the docs today (inside the bot's code,
-   * DEC-0172); sizing, regime and throttle are owned elsewhere now (Book,
-   * node labeler, kill switch) and are marked new scope.
+   * DEC-0172); sizing, regime and throttle are owned elsewhere now (the pod,
+   * the servers' labelers, the kill switch) and are marked new scope.
    */
   import Plus from "@lucide/svelte/icons/plus";
   import Plug from "@lucide/svelte/icons/plug";

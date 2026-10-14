@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** How the Books move together (daily P&L). Above 0.7 is flagged: two Books doing the same thing. */
+  /** How the pods move together (daily P&L). Above 0.7 is flagged: two pods doing the same thing. */
   import { CORR } from "../demo";
 
   const fill = (v: number) =>

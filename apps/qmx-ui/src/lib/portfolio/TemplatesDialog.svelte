@@ -70,7 +70,7 @@
           }
           portfolio.templatesOpen = false;
           workbench.notify(
-            `${t.name} drafted on ${ACCOUNTS.find((a) => a.id === account)?.name}. Creating it needs the trading node.`,
+            `${t.name} drafted on ${ACCOUNTS.find((a) => a.id === account)?.name}. Creating it needs the trading server.`,
           );
         }}>Create {t.name}</Button
       >
