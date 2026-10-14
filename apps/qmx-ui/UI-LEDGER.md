@@ -13,33 +13,33 @@ How the UI work is chunked and where it stands. The backlog (`UI-BACKLOG.md`) ho
 
 ## Pass order
 
-| # | Pass | Status |
-|---|------|--------|
-| 1 | **Lab**: Authoring + Backtest lab + ML Studio merged into one permanent section (ruled 2026-10-02) | in progress |
-| 2 | Portfolio: books, risk, position sizing, promotions and approvals, allocation, MIS, live trading | first cut done 2026-10-03; awaiting operator review |
-| 3 | Trading nodes: folded into Portfolio → Live (ruled 2026-10-03); node manager lives in Settings → Compute and Portfolio | merged into pass 2 |
-| 4 | Settings: depth and real controls on every tab; data sources you can add (keys, scraping, schedules) | queued |
-| 5 | Home: your own tabs, notifications, many accounts across exchanges, widget reflow on minimise | queued |
-| 6 | Library: full-width reader, Artifacts rethink, card art by family, list/card view, detail pages | queued |
-| 7 | Copilot (main): collapsible sessions, sub-agent preview, attachments shown in messages, copilot-built widgets | queued |
+| #   | Pass                                                                                                                   | Status                                              |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 1   | **Lab**: Authoring + Backtest lab + ML Studio merged into one permanent section (ruled 2026-10-02)                     | in progress                                         |
+| 2   | Portfolio: books, risk, position sizing, promotions and approvals, allocation, MIS, live trading                       | first cut done 2026-10-03; awaiting operator review |
+| 3   | Trading nodes: folded into Portfolio → Live (ruled 2026-10-03); node manager lives in Settings → Compute and Portfolio | merged into pass 2                                  |
+| 4   | Settings: depth and real controls on every tab; data sources you can add (keys, scraping, schedules)                   | queued                                              |
+| 5   | Home: your own tabs, notifications, many accounts across exchanges, widget reflow on minimise                          | queued                                              |
+| 6   | Library: full-width reader, Artifacts rethink, card art by family, list/card view, detail pages                        | queued                                              |
+| 7   | Copilot (main): collapsible sessions, sub-agent preview, attachments shown in messages, copilot-built widgets          | queued                                              |
 
 Cross-cutting items land in the first pass that needs them: per-context composer (tools, target, attach) and app-copilot sessions in pass 1; widget reflow on minimise in the first pass that uses a widget board.
 
 ## Pass 1: Lab
 
-| Chunk | What | Status |
-|-------|------|--------|
-| L1 | Research: what the docs define for experiments, QMB, QML, graphs, compute; reference products (StrategyQuant, QuantConnect, MLflow/W&B, node editors, Bloomberg tiling) | done (docs brief + reference patterns) |
-| L2 | 2–3 whole-screen layout options for the operator | shown 2026-10-02 (A workbench, B evidence first, C tiling presets) |
-| L3 | Operator picks; record the ruling | done: C tiling engine with A (Build) and B (Test, Compare) as default layouts; name "Lab" |
-| L4 | Lab shell and navigation: one rail entry, old Authoring / Backtest / ML entries folded in, links redirected | done: tiling engine (`lib/workbench/tiles`), `/lab`, 4 layouts, 14 panels, rail shows Lab, redirects |
-| L5 | Build: node editor rethink (readable over the background, specific copilot), code mode, import a model built elsewhere | first cut: Graph / Code / Import modes, map toggle, refit on resize, inspector shows where a step runs. Open: run state on nodes, saved steps palette, copilot edits to the graph |
-| L6 | Test: runs, scenario generator (pairs × timeframes × pair trading), robustness, compare | done (demo): runs table, sweep grid, scenario builder with run count / time / luck warning, robustness ladder, compare with refusal note |
-| L7 | Train: ML datasets, features, split/leakage, models, plug into slots | first cut: pipeline, loss curves, CT-12 split, four slots + add a slot (three marked new scope) |
-| L8 | Data and compute: datasets, features, presets as reusable items; where it runs (local, Colab, GPU provider) | done (demo): toolbox with add-your-own per group, data with dataset details, compute with slots, cost, evidence status; off-machine work pulses |
-| L9 | Lab copilot: its own tools, targets and attach sources; multiple sessions with history | done: per-surface context in the composer; Lab tools, quants as targets, Lab attach sources; sessions, new session, settings |
-| L10 | Click-through journeys and fixes | first round done at 1280/1920/2560: minimise reflow, link follow, drag swap, save layout + reload, edit close/add, redirects, scenario counts; fixed edited-mark bug, table wrap, graph refit. Next round after operator review |
-| L11 | Backend mapping for Codex; gaps flagged as new scope | — |
+| Chunk | What                                                                                                                                                                    | Status                                                                                                                                                                                                                          |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1    | Research: what the docs define for experiments, QMB, QML, graphs, compute; reference products (StrategyQuant, QuantConnect, MLflow/W&B, node editors, Bloomberg tiling) | done (docs brief + reference patterns)                                                                                                                                                                                          |
+| L2    | 2–3 whole-screen layout options for the operator                                                                                                                        | shown 2026-10-02 (A workbench, B evidence first, C tiling presets)                                                                                                                                                              |
+| L3    | Operator picks; record the ruling                                                                                                                                       | done: C tiling engine with A (Build) and B (Test, Compare) as default layouts; name "Lab"                                                                                                                                       |
+| L4    | Lab shell and navigation: one rail entry, old Authoring / Backtest / ML entries folded in, links redirected                                                             | done: tiling engine (`lib/workbench/tiles`), `/lab`, 4 layouts, 14 panels, rail shows Lab, redirects                                                                                                                            |
+| L5    | Build: node editor rethink (readable over the background, specific copilot), code mode, import a model built elsewhere                                                  | first cut: Graph / Code / Import modes, map toggle, refit on resize, inspector shows where a step runs. Open: run state on nodes, saved steps palette, copilot edits to the graph                                               |
+| L6    | Test: runs, scenario generator (pairs × timeframes × pair trading), robustness, compare                                                                                 | done (demo): runs table, sweep grid, scenario builder with run count / time / luck warning, robustness ladder, compare with refusal note                                                                                        |
+| L7    | Train: ML datasets, features, split/leakage, models, plug into slots                                                                                                    | first cut: pipeline, loss curves, CT-12 split, four slots + add a slot (three marked new scope)                                                                                                                                 |
+| L8    | Data and compute: datasets, features, presets as reusable items; where it runs (local, Colab, GPU provider)                                                             | done (demo): toolbox with add-your-own per group, data with dataset details, compute with slots, cost, evidence status; off-machine work pulses                                                                                 |
+| L9    | Lab copilot: its own tools, targets and attach sources; multiple sessions with history                                                                                  | done: per-surface context in the composer; Lab tools, quants as targets, Lab attach sources; sessions, new session, settings                                                                                                    |
+| L10   | Click-through journeys and fixes                                                                                                                                        | first round done at 1280/1920/2560: minimise reflow, link follow, drag swap, save layout + reload, edit close/add, redirects, scenario counts; fixed edited-mark bug, table wrap, graph refit. Next round after operator review |
+| L11   | Backend mapping for Codex; gaps flagged as new scope                                                                                                                    | —                                                                                                                                                                                                                               |
 
 ## Rulings for the Lab (2026-10-02)
 
@@ -58,6 +58,7 @@ Cross-cutting items land in the first pass that needs them: per-context composer
 ## Lab round 2 (operator review 2026-10-02: "good enough for the first stable release")
 
 Doing now (L12):
+
 - [x] Composer: icons with count badges, no overflow, drop the Offline label, better new-session empty state; copilot settings link to Settings (agents and models).
 - [x] Styled selects everywhere (scenario builder used native ones); add your own markets, parameters and metrics in the scenario builder.
 - [x] One **Resources** tile (toolbox + data + compute + model slots + presets + recent indicators), the same in every layout, a quick menu into the Library. Machine status moves to the bottom bar; adding a machine goes to Settings.
@@ -66,6 +67,7 @@ Doing now (L12):
 - [x] "Start something new": a guided flow (what are you testing → steps → layout), e.g. compare versions (regime study v1 vs v3 + hybrid), train a model, test a hypothesis, custom workflow.
 
 Backlog (needs backend or later passes):
+
 - [ ] Agents live: their nodes, sub-agents and streamed work (after the QMA refactor). Agents get their own machines (EC2, Modal).
 - [ ] Compare: save compare sets as presets, "watch" sets; better equity and compare views; primary and secondary layers.
 - [ ] Training: start a session from the editor; a proper training-runs tile.
@@ -83,19 +85,19 @@ Backlog (needs backend or later passes):
 
 ## Pass 2: Portfolio
 
-| Chunk | What | Status |
-|-------|------|--------|
-| P1 | Research (done 2026-10-03: docs brief + 20 verified reference products): what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress |
-| P2 | 2–3 whole-screen options | shown: Risk, Books, Promotions, Optimise on one tiling board |
-| P3 | Operator picks (or "surprise me") | "surprise me, take it further" (see rulings) |
-| P4 | Portfolio shell on the tiling engine; rail entry; layouts | done: /portfolio, Risk, Books, Live, Promotions, MIS, Allocate; shared LayoutStore; /trade redirects |
-| P5 | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide | done (demo): 5 venues, 6 accounts, nodes, KSA per account, USDT flagged |
-| P6 | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates | done (demo): risk source (rules/model/hybrid/Lab workflow), ladder, rules stack, wall, 10 templates |
-| P7 | Promotions and approvals: research-paper → node-paper → live, signed cards | done (demo): lanes, card with server checks (blocks on fail), activation; agent requests with diffs |
-| P8 | Optimisation (new scope): allocation across Books and bots, correlation, what-if | first cut: aims, limits, frontier, now vs proposed with resample bands, correlation |
-| P9 | Portfolio copilot context (tools, targets, attach), templates | done: own tools, PM/Trader/Analyst targets, attach Book/account/Lab/event, sessions, starters |
-| P10 | Click-through journeys and fixes | round 1 at 1280/1920: link follow, paper/live borders, blocked signing, activation, templates, redirect; fixed grid width and frontier size |
-| P11 | Backend mapping for Codex | done (BACKEND-REQUIREMENTS.md) |
+| Chunk | What                                                                                                                                                                                                                                                                                                                                 | Status                                                                                                                                      |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1    | Research (done 2026-10-03: docs brief + 20 verified reference products): what the docs define (Books, BMS, sizing ladder, kill line, KSA, promotion, approvals, seats, bindings); reference products (StrategyQuant/QuantAnalyzer, Darwinex, Myfxbook, Bloomberg PORT, IBKR, Portfolio Visualizer, 3Commas, Riskfolio, approval UIs) | in progress                                                                                                                                 |
+| P2    | 2–3 whole-screen options                                                                                                                                                                                                                                                                                                             | shown: Risk, Books, Promotions, Optimise on one tiling board                                                                                |
+| P3    | Operator picks (or "surprise me")                                                                                                                                                                                                                                                                                                    | "surprise me, take it further" (see rulings)                                                                                                |
+| P4    | Portfolio shell on the tiling engine; rail entry; layouts                                                                                                                                                                                                                                                                            | done: /portfolio, Risk, Books, Live, Promotions, MIS, Allocate; shared LayoutStore; /trade redirects                                        |
+| P5    | Accounts and venues: many brokers/exchanges, live risk per account and platform-wide                                                                                                                                                                                                                                                 | done (demo): 5 venues, 6 accounts, nodes, KSA per account, USDT flagged                                                                     |
+| P6    | Books: charter, sizing ladder, loss budget, kill line, seats; edits mint versions; templates                                                                                                                                                                                                                                         | done (demo): risk source (rules/model/hybrid/Lab workflow), ladder, rules stack, wall, 10 templates                                         |
+| P7    | Promotions and approvals: research-paper → node-paper → live, signed cards                                                                                                                                                                                                                                                           | done (demo): lanes, card with server checks (blocks on fail), activation; agent requests with diffs                                         |
+| P8    | Optimisation (new scope): allocation across Books and bots, correlation, what-if                                                                                                                                                                                                                                                     | first cut: aims, limits, frontier, now vs proposed with resample bands, correlation                                                         |
+| P9    | Portfolio copilot context (tools, targets, attach), templates                                                                                                                                                                                                                                                                        | done: own tools, PM/Trader/Analyst targets, attach Book/account/Lab/event, sessions, starters                                               |
+| P10   | Click-through journeys and fixes                                                                                                                                                                                                                                                                                                     | round 1 at 1280/1920: link follow, paper/live borders, blocked signing, activation, templates, redirect; fixed grid width and frontier size |
+| P11   | Backend mapping for Codex                                                                                                                                                                                                                                                                                                            | done (BACKEND-REQUIREMENTS.md)                                                                                                              |
 
 ### Portfolio rulings (operator, 2026-10-03)
 
@@ -104,7 +106,6 @@ Backlog (needs backend or later passes):
 - **The trading node folds into Portfolio** as a Live section (paper and live portfolios; trading locally or on one or many servers). A separate trading node screen is no longer needed.
 - QMX's edge over other platforms: agents, news and workflows feed the portfolio; things built in the Lab or the main copilot arrive here.
 - Main copilot can take in conversations from other screens (e.g. a Lab chat) and its changes show live elsewhere, e.g. the Lab popped out on a second monitor (Copilot pass).
-
 
 ### Portfolio round 2 rulings (operator, 2026-10-03)
 
@@ -133,7 +134,6 @@ Backlog (needs backend or later passes):
 - [x] Lab pods: Pods (stack, block, size trail), Pod test (equity, drawdown fan, stress board, interventions), Pod compare (no total score), Allocate (fund plan). 25 blocks, 10 spot templates. Lab demo data switched to spot crypto (Home still FX: next).
 - [ ] Library templates.
 
-
 ### Rulings (operator, 2026-10-03, round 3)
 
 - **Every pod has a live side and a paper side**, running together, so changes are watched on paper before going live (or both trade). Done in the UI; backend needs it.
@@ -143,7 +143,6 @@ Backlog (needs backend or later passes):
 - **Agent requests removed.** Agents mostly run off-machine for long stretches; the operator won't start work he's unsure of. Instead: **copilot sessions that run for days**, using sub-agents (Copilot pass).
 - Wants a built-in help or guide feature for things like "how do I train something new" (Copilot pass).
 - Mini apps need re-thinking now that Lab, Portfolio and Library are first-class; the Research demo app is redundant (Mini apps pass).
-
 
 ### Rulings (operator, 2026-10-03, round 4)
 
@@ -234,7 +233,6 @@ Design intent (our own): judge an app the way you judge a pod, by what it can to
 - [x] Checked by click-through at 1600 and 1280 (select, tripped app, money app, make from widgets, open app, Settings): no overflow, no console errors.
 - [ ] Not done: Lab panels as widgets; opened apps on the rail; extensions (in-app code) as a third kind; real runs, logs and evidence (backend, contract sections 4-6).
 
-
 ### 2026-10-14: stale fixes after the pause (R1, R2, R4, R10)
 
 - [x] No copilot modes (d40b1135). Ask / Plan / Do is gone from the desk composer and from Settings, Copilots. The composer chip now says what the copilot may touch and who answers. Skills stay on "/".
@@ -270,3 +268,18 @@ Ruling that drove this (dictated today): Settings "has so many words" and "littl
 - [x] Word budget (d411db62): Brokers intro, Appearance and Developer captions moved into info tips.
 - [x] Checked on the built preview at 1600 and 1280 by a scripted click-through (toggle, edit, add, remove on every page; persistence after reload): no page overflow, no console errors. Screenshots, metrics and scripts: `workroom/ui-review-2026-10-01/2026-10-14-declutter/settings/`.
 - [ ] Not done: the start-screen choice is stored but Home does not read it yet. Mini app names wrap at 1280. Machines cannot be removed (daemon-only). The copilot gear icons open Copilots on Main, not on that copilot.
+
+### 2026-10-14: Apps redesign (awaiting operator review)
+
+Ruling that drove this (dictated today): the Apps page is "ugly", reads as "an observability layer", and took the Docker analogy literally. Apps should feel like a product: things you open and use.
+
+- [x] Tiles that show what each app gives you (17d3c48d). Every tile has an icon, a name, a health dot and a glimpse of its own output: a figure with a sparkline, a headline, a few rows or its last alert. Background apps show their next run. Pinned first, then Markets, Watching, Research and Trading helpers, in one grid with the group name above each group's first tile. Click a tile with a screen to open it; a background app opens About.
+- [x] A stopped app says Stopped in red and offers Restart on its tile (demo restart, no daemon call). Safe mode is one small switch with an info tip, still shared with Settings.
+- [x] Apps still on their road to live sit in one slim In progress row (name, dot, step).
+- [x] About sheet (replaces the side pane): stage track with what each step proved in an info tip, its box (runs on, budget today, network, breaker, approval), last log lines, Open, Run now, Pin, Ask the copilot, Remove for your own apps. Settings, Mini apps opens the same sheet.
+- [x] Discover (New app): describe an app in one box and it goes to the copilot; From widgets; a template gallery with group filters and sample output, each with Use.
+- [x] Opened app (ed2cfca5): the full-width "Not live yet" banner is now a status beside the name, with the Demo chip, a pin and About.
+- [x] Demo models: Haiku 5.5 next to Opus 5.5 and Sonnet 5.5 (ac73ae60). Three new demo apps: Funding rates, Morning brief, Position sizer. "Broker and exchange status" renamed Broker status.
+- [x] Words and enabled controls in `main` (plus any open sheet), same at 1280, 1600 and 1920. Main view: 380 words, 21 controls before; 143 words, 34 controls after (12 of those are pin and About buttons that show on hover or focus). About on the stopped app: 561 / 26 before, 239 / 43 after. New app: 587 / 27 (menu over the list) before, 164 / 22 (Discover) after.
+- [x] Checked on the built preview at 1280, 1600 and 1920 by a scripted click-through: open an app and its About, restart the stopped app, pin and unpin (kept after reload), safe mode, filter templates, make an app from widgets and remove it, template and describe hand off to the copilot, the Settings link opens About. No page overflow, no console errors. Screenshots, metrics and scripts: `workroom/ui-review-2026-10-01/2026-10-14-declutter/apps/` (`before/`, `after/`, `click/`).
+- [ ] Not done: groups are fixed (no way to add your own group or move an app between groups). The group heading shows only above a group's first tile, so a group that wraps onto a new row continues without a heading. Previews are demo values; real ones need each app's output from the backend. Opened apps on the rail and extensions as a third kind are still open from pass 1.
