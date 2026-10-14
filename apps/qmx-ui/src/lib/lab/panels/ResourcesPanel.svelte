@@ -106,7 +106,7 @@
         </ul>
         <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
         <a
-          href={`${resolve("/settings")}?tab=compute`}
+          href={`${resolve("/settings")}?tab=servers`}
           class="text-muted-foreground hover:text-foreground flex h-9 shrink-0 items-center gap-1.5 border-t px-3 text-xs"
           ><Settings2 class="size-3.5" />Add or manage machines in Settings</a
         >

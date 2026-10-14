@@ -81,7 +81,7 @@
     <DropdownMenu.Item
       onclick={() =>
         // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path plus a query string
-        goto(`${resolve("/settings")}?tab=compute`)}
+        goto(`${resolve("/settings")}?tab=servers`)}
       ><Settings2 />Add or manage machines</DropdownMenu.Item
     >
   </DropdownMenu.Content>

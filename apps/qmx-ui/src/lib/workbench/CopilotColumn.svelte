@@ -155,7 +155,7 @@
         size="icon-xs"
         aria-label={`${title} settings`}
         title="Model, tools and instructions for this copilot"
-        href={`${resolve("/settings")}?tab=models`}><Settings2 /></Button
+        href={`${resolve("/settings")}?tab=copilots`}><Settings2 /></Button
       >
       {#if onclose}
         <Button

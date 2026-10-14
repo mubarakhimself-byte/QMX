@@ -1,15 +1,18 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import KeyRound from "@lucide/svelte/icons/key-round";
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
   import { workbench, type Theme } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
   import BrokersSection from "$lib/settings/BrokersSection.svelte";
-  import ServersSection from "$lib/settings/ServersSection.svelte";
-  import ConnectionsSection from "$lib/settings/ConnectionsSection.svelte";
+  import ServersDataSection from "$lib/settings/ServersDataSection.svelte";
+  import ModelsToolsSection from "$lib/settings/ModelsToolsSection.svelte";
+  import GeneralSection from "$lib/settings/GeneralSection.svelte";
+  import Group from "$lib/settings/Group.svelte";
+  import Row from "$lib/settings/Row.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
   import CopilotsSection from "$lib/settings/CopilotsSection.svelte";
   import MiniAppsSection from "$lib/settings/MiniAppsSection.svelte";
   import SafetySection from "$lib/settings/SafetySection.svelte";
@@ -28,11 +31,8 @@
     type ArtConfig,
   } from "$lib/workbench/art";
 
-  // Settings chrome (UI EXPERIENCE §7). Layout after the storyboard's settings
-  // reference: one centred title, tab pills, cards in two columns, tables.
-  // Anything the daemon owns is shown read-only until a transport is bound.
-  // Settings, regrouped (2026-10-04): a list of sections on the left,
-  // one section at a time on the right, big text and room to breathe.
+  // Settings (declutter, 2026-10-14): sections on the left, one page at a
+  // time on the right using the full width. Old ?tab= links still land.
   const GROUPS = [
     {
       label: "You",
@@ -45,10 +45,8 @@
       label: "Connections",
       items: [
         { id: "brokers", label: "Brokers and accounts" },
-        { id: "servers", label: "Servers" },
-        { id: "providers", label: "Model providers" },
-        { id: "mcp", label: "MCP servers" },
-        { id: "data", label: "Data and sources" },
+        { id: "tools", label: "Models and tools" },
+        { id: "servers", label: "Servers and data" },
       ],
     },
     {
@@ -67,11 +65,13 @@
     },
   ];
   const TABS = GROUPS.flatMap((g) => g.items);
-  // Old links keep working.
   const OLD: Record<string, string> = {
     models: "copilots",
+    providers: "tools",
+    mcp: "tools",
     nodes: "servers",
     compute: "servers",
+    data: "servers",
     exchanges: "brokers",
   };
   const asked = page.url.searchParams.get("tab") ?? "";
@@ -136,46 +136,6 @@
     },
   ];
 
-  const READINESS = [
-    { axis: "Daemon reachable", detail: "qmb host on this machine" },
-    {
-      axis: "Paired with this window",
-      detail: "Pairing proof held in memory only",
-    },
-    { axis: "Model provider", detail: "At least one provider answers" },
-    { axis: "Market data", detail: "Price feeds respond" },
-    { axis: "Trading server", detail: "Paper server heartbeat" },
-  ];
-  const SOURCES = [
-    {
-      name: "arXiv · q-fin",
-      kind: "Papers",
-      note: "RSS feed of new quantitative finance papers",
-    },
-    {
-      name: "alphaXiv",
-      kind: "Papers",
-      note: "Discussion and summaries for arXiv papers",
-    },
-    {
-      name: "SSRN · financial economics",
-      kind: "Papers",
-      note: "Working papers",
-    },
-    {
-      name: "MQL5 articles",
-      kind: "Articles",
-      note: "Local catalog, 3,057 articles",
-    },
-    { name: "Economic calendar", kind: "Calendar", note: "Forex Factory" },
-    { name: "Market news", kind: "News", note: "Headline feeds" },
-    {
-      name: "Firecrawl",
-      kind: "Web",
-      note: "Paid · search, scraping and Alexandria data · asks you before every use",
-      paid: true,
-    },
-  ];
   const card = "solid-backing surface flex flex-col gap-3 rounded-xl p-5";
 </script>
 
@@ -207,130 +167,41 @@
     {/each}
   </nav>
   <div class="min-w-0 flex-1 overflow-auto">
-    <div class="mx-auto flex max-w-6xl flex-col gap-6 px-10 pt-10 pb-14">
-      <h2 class="text-3xl font-semibold">
-        {TABS.find((t) => t.id === tab)?.label}
-      </h2>
+    <div class="flex max-w-[150rem] flex-col gap-group px-page py-page">
+      <div class="flex items-center gap-3">
+        <h2 class="text-3xl font-semibold">
+          {TABS.find((t) => t.id === tab)?.label}
+        </h2>
+        <DemoChip
+          note="Sample providers, machines, sources, copilots and approvals. Your choices are kept on this machine; nothing connects yet."
+        />
+      </div>
 
       {#if tab === "general"}
-        <div class="grid gap-4 md:grid-cols-2">
-          <section class={card} aria-labelledby="s-ready">
-            <div>
-              <h2 id="s-ready" class="text-lg font-semibold">Readiness</h2>
-              <p class="text-muted-foreground text-sm">
-                Start the QMX daemon, then pair this window with it.
-              </p>
-            </div>
-            <ul class="flex flex-col">
-              {#each READINESS as r (r.axis)}
-                <li
-                  class="flex items-center justify-between gap-3 border-t py-2.5"
-                >
-                  <span>
-                    <span class="block text-sm font-medium">{r.axis}</span>
-                    <span class="text-muted-foreground block text-xs"
-                      >{r.detail}</span
-                    >
-                  </span>
-                  <Badge variant="outline" class="text-muted-foreground"
-                    >Not checked</Badge
-                  >
-                </li>
-              {/each}
-            </ul>
-            <div class="flex gap-2">
-              <Button size="sm" disabled>Pair</Button>
-              <Button size="sm" variant="outline" disabled>Check again</Button>
-            </div>
-          </section>
-          <section class={card} aria-labelledby="s-work">
-            <div>
-              <h2 id="s-work" class="text-lg font-semibold">Workspace</h2>
-              <p class="text-muted-foreground text-sm">
-                Where QMX keeps your work.
-              </p>
-            </div>
-            <dl class="flex flex-col text-sm">
-              <div class="flex justify-between border-t py-2.5">
-                <dt class="text-muted-foreground">Location</dt>
-                <dd>Local daemon</dd>
-              </div>
-              <div class="flex justify-between border-t py-2.5">
-                <dt class="text-muted-foreground">Currency</dt>
-                <dd>USD</dd>
-              </div>
-              <div class="flex justify-between border-t py-2.5">
-                <dt class="text-muted-foreground">Time zone</dt>
-                <dd>UTC</dd>
-              </div>
-              <div class="flex justify-between border-t py-2.5">
-                <dt class="text-muted-foreground">Broker credentials</dt>
-                <dd class="flex items-center gap-1.5">
-                  <KeyRound class="size-3.5" /> Windows Credential Manager
-                </dd>
-              </div>
-            </dl>
-            <p class="text-muted-foreground text-xs">
-              These are stored by the daemon. Credentials never pass through
-              this window.
-            </p>
-          </section>
-        </div>
+        <GeneralSection />
       {:else if tab === "brokers"}
         <BrokersSection />
+      {:else if tab === "tools"}
+        <ModelsToolsSection />
       {:else if tab === "servers"}
-        <ServersSection />
-      {:else if tab === "providers"}
-        <ConnectionsSection part="providers" />
-      {:else if tab === "mcp"}
-        <ConnectionsSection part="mcp" />
+        <ServersDataSection />
       {:else if tab === "copilots"}
         <CopilotsSection />
       {:else if tab === "apps"}
         <MiniAppsSection />
       {:else if tab === "safety"}
         <SafetySection />
-      {:else if tab === "data"}
-        <section class={card} aria-labelledby="s-src">
-          <div>
-            <h2 id="s-src" class="text-lg font-semibold">Sources</h2>
-            <p class="text-muted-foreground text-sm">
-              Feeds the Library, widgets and workflows can read. Paid sources
-              stay off, and ask you before every use.
-            </p>
-          </div>
-          <ul class="grid gap-x-6 md:grid-cols-2">
-            {#each SOURCES as s (s.name)}
-              <li class="flex items-center justify-between gap-3 border-t py-3">
-                <span
-                  ><span class="block text-sm font-medium">{s.name}</span><span
-                    class="text-muted-foreground block text-xs"
-                    >{s.kind} · {s.note}</span
-                  ></span
-                >
-                <Switch
-                  checked={!s.paid}
-                  disabled
-                  aria-label={`${s.name} ${s.paid ? "off until you approve it" : "enabled"} (needs daemon)`}
-                />
-              </li>
-            {/each}
-          </ul>
-          <p class="text-muted-foreground text-xs">
-            Subscriptions are stored and fetched by the daemon.
-          </p>
-        </section>
       {:else if tab === "appearance"}
         <section class={card} aria-labelledby="s-theme">
-          <div>
+          <div class="flex items-center gap-1">
             <h2 id="s-theme" class="text-lg font-semibold">Theme</h2>
-            <p class="text-muted-foreground text-sm">
-              Glass panels over an ink map of fractal price paths. Charts and
-              trading panels sit on a solid backing so they stay readable.
-            </p>
+            <InfoTip
+              label="About themes"
+              text="Glass panels over an ink map of fractal price paths. Charts and trading panels sit on a solid backing so they stay readable."
+            />
           </div>
           <div
-            class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7"
             role="radiogroup"
             aria-label="Theme"
           >
@@ -358,12 +229,8 @@
                     style="background: {t.swatch[2]}"
                   ></span>
                 </span>
-                <span>
-                  <span class="block text-sm font-medium">{t.label}</span>
-                  <span class="text-muted-foreground block text-xs"
-                    >{t.note}</span
-                  >
-                </span>
+                <span class="text-sm font-medium" title={t.note}>{t.label}</span
+                >
               </button>
             {/each}
           </div>
@@ -371,13 +238,12 @@
         <LookSettings {card} />
         <section class={cn(card, "mt-4")} aria-labelledby="s-art">
           <div class="flex items-start justify-between gap-3">
-            <div>
+            <div class="flex items-center gap-1">
               <h2 id="s-art" class="text-lg font-semibold">Background art</h2>
-              <p class="text-muted-foreground text-sm">
-                The art behind the panels, drawn in your theme's ink. Pick a
-                style, tune it, and save the ones you like. Saved on this
-                machine.
-              </p>
+              <InfoTip
+                label="About background art"
+                text="The art behind the panels, drawn in your theme's ink. Pick a style, tune it, and save the ones you like. Saved on this machine."
+              />
             </div>
             <Switch
               checked={workbench.inkEnabled}
@@ -501,9 +367,11 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 border-t pt-4 text-sm">
-            <span class="font-medium">Change the art on its own</span>
-            <span class="text-muted-foreground"
-              >Picks a new style and variation</span
+            <span class="flex items-center gap-1 font-medium"
+              >Change the art on its own<InfoTip
+                label="About changing the art"
+                text="Picks a new style and variation on the schedule you choose."
+              /></span
             >
             <div
               class="ml-auto flex gap-1"
@@ -593,42 +461,26 @@
           </div>
         </section>
       {:else if tab === "developer"}
-        <div class="grid gap-4 md:grid-cols-2">
-          <section class={card} aria-labelledby="s-demo">
-            <div>
-              <h2 id="s-demo" class="text-lg font-semibold">Demo mode</h2>
-              <p class="text-muted-foreground text-sm">
-                Labelled sample apps, workflows, Library items and conversations
-                for design review. Nothing is saved or run.
-              </p>
-            </div>
-            <label
-              class="flex items-center justify-between gap-3 border-t pt-3"
+        <Group title="Developer" class="max-w-4xl">
+          <Row
+            label="Show demo content"
+            tip="Labelled sample apps, workflows, Library items and conversations for design review. Nothing is saved or run."
+          >
+            <Switch
+              checked={workbench.demoMode}
+              onCheckedChange={(v) => (workbench.demoMode = v)}
+              aria-label="Show demo content"
+            />
+          </Row>
+          <Row
+            label="Component library"
+            tip="Every QMX building block rendered live, with the spec the copilot uses to compose mini apps."
+          >
+            <Button size="sm" variant="outline" href={resolve("/gallery")}
+              >Open library</Button
             >
-              <span class="text-sm">Show demo content</span>
-              <Switch
-                checked={workbench.demoMode}
-                onCheckedChange={(v) => (workbench.demoMode = v)}
-              />
-            </label>
-          </section>
-          <section class={card} aria-labelledby="s-lib">
-            <div>
-              <h2 id="s-lib" class="text-lg font-semibold">
-                Component library
-              </h2>
-              <p class="text-muted-foreground text-sm">
-                Every QMX building block rendered live, with the spec the
-                copilot uses to compose mini apps.
-              </p>
-            </div>
-            <div>
-              <Button size="sm" variant="outline" href={resolve("/gallery")}
-                >Open library</Button
-              >
-            </div>
-          </section>
-        </div>
+          </Row>
+        </Group>
       {/if}
     </div>
   </div>

@@ -66,7 +66,7 @@
         <DropdownMenu.Item>
           {#snippet child({ props })}
             <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
-            <a {...props} href={`${resolve("/settings")}?tab=compute`}
+            <a {...props} href={`${resolve("/settings")}?tab=servers`}
               >Manage machines</a
             >
             <!-- eslint-enable svelte/no-navigation-without-resolve -->
