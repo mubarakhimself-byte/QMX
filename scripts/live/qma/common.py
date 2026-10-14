@@ -208,6 +208,7 @@ class Session:
         profile: str = "claude",
         mode: str = "default",
         tools: list[str] | None = None,
+        plugin_dir: Path | None = None,
     ) -> Session:
         """`tools` replaces the harness's `claude_code` preset for every launch in this process,
         and bypass mode needs it."""
@@ -217,7 +218,7 @@ class Session:
         from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
         from qma.harness.routes import control_service  # noqa: PLC0415
 
-        home = QmxHome(root)
+        home = QmxHome(root) if plugin_dir is None else QmxHome(root, plugin_dir)
         control = control_service(home)
         harness = await Harness.open(home, control=control, test=test)
         workspace.mkdir(parents=True, exist_ok=True)
