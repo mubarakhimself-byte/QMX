@@ -5,7 +5,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import AssistantMessage, Message, TextBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    Message,
+    RateLimitEvent,
+    ResultMessage,
+    StreamEvent,
+    TextBlock,
+)
+from claude_agent_sdk.types import RateLimitInfo, ServerToolResultBlock
 from claude_agent_sdk._internal.message_parser import parse_message
 
 from qma.harness.project import (
@@ -193,3 +201,80 @@ def test_the_token_gate_redacts_a_token_split_across_deltas() -> None:
     shown = [gate.feed(piece) for piece in pieces] + [gate.flush()]
     assert "".join(shown) == f"the login is {REDACTED} and more text"
     assert all("QMX" not in piece and "oat01" not in piece for piece in shown)
+
+
+def streamed(kind: str, text: str, parent: str | None = None) -> StreamEvent:
+    field = "text" if kind == "text_delta" else "thinking"
+    return StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_delta", "index": 0, "delta": {"type": kind, field: text}},
+        parent_tool_use_id=parent,
+    )
+
+
+def result(**changes: Any) -> ResultMessage:
+    fields: dict[str, Any] = {
+        "subtype": "success",
+        "duration_ms": 1,
+        "duration_api_ms": 1,
+        "is_error": False,
+        "num_turns": 1,
+        "session_id": "s",
+        "terminal_reason": "completed",
+    }
+    return ResultMessage(**(fields | changes))
+
+
+def test_streamed_deltas_reach_the_token_gate_unredacted() -> None:
+    assert project(streamed("text_delta", "key sk-ant-oat01-QMX")) == [
+        Delta(HERE, "text", "key sk-ant-oat01-QMX")
+    ]
+    assert project(streamed("thinking_delta", "hmm", parent="toolu_1")) == [
+        Delta(InChild("toolu_1"), "thinking", "hmm")
+    ]
+
+
+def test_only_the_operators_own_result_ends_a_turn() -> None:
+    mine = [fact for fact in project(result()) if isinstance(fact, TurnEnded)]
+    injected = project(result(origin={"kind": "task-notification"}))
+    assert mine == [TurnEnded(ok=True, terminal_reason="completed", deferred_tool_use=False)]
+    assert [type(fact).__name__ for fact in injected] == ["TurnUsage"]
+
+
+def test_a_failed_turn_and_a_model_error_each_ask_for_the_operator() -> None:
+    failed = project(result(subtype="error_during_execution", is_error=True, result="boom"))
+    errored = AssistantMessage(content=[], model="haiku", error="rate_limit")
+    assert blocks(failed) == [("needs_you", {"reason": "the turn failed: boom"})]
+    assert blocks(project(errored)) == [("needs_you", {"reason": "model error: rate_limit"})]
+
+
+def test_a_server_tool_result_finishes_its_tool_block() -> None:
+    message = AssistantMessage(
+        content=[ServerToolResultBlock(tool_use_id="srvtoolu_1", content={"hits": 2})],
+        model="haiku",
+    )
+    assert blocks(project(message)) == [
+        ("tool", {"id": "srvtoolu_1", "state": "finished", "result": '{"hits": 2}'})
+    ]
+
+
+def test_credits_required_in_raw_reaches_the_limits_fact() -> None:
+    info = RateLimitInfo(
+        status="rejected", rate_limit_type="five_hour", raw={"credits_required": 1}
+    )
+    event = RateLimitEvent(rate_limit_info=info, uuid="u", session_id="s")
+    assert project(event) == [
+        Limits(
+            window="five_hour",
+            status="rejected",
+            utilization=None,
+            resets_at=None,
+            overage_status=None,
+            overage_resets_at=None,
+            overage_disabled_reason=None,
+            using_overage=None,
+            overage_enabled=None,
+            credits_required=True,
+        )
+    ]
