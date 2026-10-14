@@ -180,6 +180,7 @@ class StreamResult:
     event_types: tuple[str, ...]
     terminal: str | None
     output: tuple[Json, ...]
+    terminal_output_items: int
     text: str
     error_code: str | None
     error_param: str | None
@@ -201,6 +202,7 @@ class StreamResult:
             f"error: code={self.error_code} param={self.error_param} msg={self.error_message}",
             f"event_types: {' '.join(dict.fromkeys(self.event_types))}",
             f"output_item_types: {[item.get('type') for item in self.output]}",
+            f"terminal_output_items: {self.terminal_output_items}",
             f"text: {self.text[:400]!r}",
         ]
 
@@ -223,20 +225,26 @@ def parse_sse(lines: Iterable[str]) -> Iterator[Json]:
 def fold_events(
     status: int, request_id: str | None, first_byte_s: float | None, events: Iterable[Json]
 ) -> StreamResult:
+    """Output items come from `response.output_item.done`. This route sends an empty
+    `output` on `response.completed`, and OpenAI's streaming reference says to replay the
+    item from `output_item.done`."""
     types: list[str] = []
     text: list[str] = []
     terminal: str | None = None
-    output: tuple[Json, ...] = ()
+    items: dict[int, Json] = {}
+    terminal_output_items = 0
     error: Json = {}
     for event in events:
         kind = str(event.get("type"))
         types.append(kind)
         if kind == "response.output_text.delta":
             text.append(event.get("delta", ""))
+        elif kind == "response.output_item.done":
+            items[int(event["output_index"])] = event["item"]
         elif kind in {"response.completed", "response.failed", "response.incomplete"}:
             terminal = kind
             response: Json = event.get("response") or {}
-            output = tuple(response.get("output") or ())
+            terminal_output_items = len(response.get("output") or ())
             error = response.get("error") or error
         elif kind == "error":
             error = event.get("error") or event
@@ -246,7 +254,8 @@ def fold_events(
         first_byte_s=first_byte_s,
         event_types=tuple(types),
         terminal=terminal,
-        output=output,
+        output=tuple(items[index] for index in sorted(items)),
+        terminal_output_items=terminal_output_items,
         text="".join(text),
         error_code=error.get("code"),
         error_param=error.get("param"),
@@ -272,6 +281,7 @@ def error_result(status: int, request_id: str | None, raw: bytes) -> StreamResul
         event_types=(),
         terminal=None,
         output=(),
+        terminal_output_items=0,
         text="",
         error_code=error.get("code"),
         error_param=error.get("param"),
