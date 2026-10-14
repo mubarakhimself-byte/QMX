@@ -268,3 +268,29 @@
   padding-left: 1rem;
   color: var(--muted-foreground);
 }
+
+/* Motion with intent: tiles settle in one after another, the ink art fades
+   up behind them, places cross-fade. All of it is cut by reduced motion. */
+.tile {
+  animation: tile-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms);
+}
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.985);
+  }
+}
+.ink-in {
+  animation: ink-in 1600ms ease-out both;
+}
+@keyframes ink-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}

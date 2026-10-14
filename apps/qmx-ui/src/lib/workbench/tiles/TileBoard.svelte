@@ -186,11 +186,13 @@
       "tile flex h-full min-h-0 flex-col overflow-hidden rounded-lg",
       dropTarget === p.id && "ring-ring ring-2",
     )}
-    style={borderFor?.(p)
-      ? `border-color: ${borderFor(p)}; border-width: 2px`
-      : p.link
-        ? `border-color: ${LINK_BORDER[p.link]}`
-        : undefined}
+    style={`--i:${all.findIndex((x) => x.id === p.id)};${
+      borderFor?.(p)
+        ? `border-color: ${borderFor(p)}; border-width: 2px`
+        : p.link
+          ? `border-color: ${LINK_BORDER[p.link]}`
+          : ""
+    }`}
     aria-label={i.title}
     ondragover={(e) => {
       if (!dragging) return;

@@ -5,6 +5,8 @@
   import PlatformRail from "$lib/workbench/PlatformRail.svelte";
   import StatusBar from "$lib/workbench/StatusBar.svelte";
   import InkBackground from "$lib/workbench/InkBackground.svelte";
+  import StartUp from "$lib/workbench/StartUp.svelte";
+  import { onNavigate } from "$app/navigation";
   import { workbench, THEMES } from "$lib/workbench/workbench.svelte";
   import { SURFACES, ROTATE_EVERY } from "$lib/workbench/look";
   import { ART_STYLES } from "$lib/workbench/art";
@@ -12,6 +14,21 @@
   import { resolve } from "$app/paths";
 
   let { children } = $props();
+
+  // Moving between places cross-fades instead of jumping, where supported.
+  onNavigate((nav) => {
+    if (
+      !document.startViewTransition ||
+      nav.from?.url.pathname === nav.to?.url.pathname
+    )
+      return;
+    return new Promise((done) => {
+      document.startViewTransition(async () => {
+        done();
+        await nav.complete;
+      });
+    });
+  });
 
   // `?demo=off` / `?demo=on` on any URL switches demo mode and remembers it.
   $effect(() => {
@@ -107,7 +124,7 @@
 
 <Tooltip.Provider delayDuration={300}>
   <div class="text-foreground flex h-svh flex-col overflow-hidden">
-    {#if showInk}<InkBackground />{/if}
+    {#if showInk}<InkBackground class="ink-in" />{/if}
     <div class="flex min-h-0 flex-1">
       <PlatformRail />
       <main class="min-w-0 flex-1 overflow-hidden">{@render children()}</main>
@@ -129,4 +146,5 @@
       </div>
     {/if}
   </div>
+  <StartUp />
 </Tooltip.Provider>
