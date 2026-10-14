@@ -67,7 +67,9 @@
 </script>
 
 <div class="scrim flex h-full flex-col">
-  <header class="flex h-12 shrink-0 items-center gap-3 border-b px-3">
+  <header
+    class="flex h-12 shrink-0 items-center gap-2 border-b px-3 min-[90rem]:gap-3"
+  >
     <h1 class="text-base font-semibold">Portfolio</h1>
     <DemoChip
       note="Sample CFD and crypto accounts, pods and prices. No money is real."

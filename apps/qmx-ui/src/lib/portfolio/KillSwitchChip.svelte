@@ -39,7 +39,7 @@
   >
     <ShieldAlert class="size-4" />
     <span class={cn("size-2.5 rounded-full", KSA_TONE[worst])}></span>
-    {worst}
+    <span class="hidden min-[90rem]:inline">{worst}</span>
     {#if raised.length}<span
         class="text-muted-foreground hidden max-w-28 truncate text-xs font-normal 2xl:inline"
         >{raised.map((a) => a.name).join(", ")}</span

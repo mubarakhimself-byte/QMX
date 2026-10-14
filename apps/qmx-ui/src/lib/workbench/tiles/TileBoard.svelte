@@ -171,7 +171,9 @@
       drop(p.id);
     }}
   >
-    <header class="flex h-9 shrink-0 items-center gap-1.5 border-b pr-1 pl-1.5">
+    <header
+      class="group/head @container flex h-9 shrink-0 items-center gap-1.5 border-b pr-1 pl-1.5"
+    >
       <div
         class="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 active:cursor-grabbing"
         role="button"
@@ -188,7 +190,7 @@
         }}
       >
         <GripVertical
-          class="text-muted-foreground/60 size-3.5 shrink-0"
+          class="text-muted-foreground/60 size-3.5 shrink-0 @max-[18rem]:hidden"
           aria-hidden="true"
         />
         <i.icon class="text-muted-foreground size-4 shrink-0" />
@@ -202,7 +204,7 @@
               <button
                 {...props}
                 type="button"
-                class="hover:bg-muted flex size-7 items-center justify-center rounded-md"
+                class="hover:bg-muted flex size-7 items-center justify-center rounded-md @max-[18rem]:hidden @max-[18rem]:group-hover/head:flex @max-[18rem]:group-focus-within/head:flex"
                 aria-label={p.link
                   ? `Linked to the ${p.link} group; change`
                   : "Not linked; link to a group"}
@@ -224,7 +226,7 @@
         {#if !isExpanded}
           <button
             type="button"
-            class="hover:bg-muted flex size-7 items-center justify-center rounded-md"
+            class="hover:bg-muted flex size-7 items-center justify-center rounded-md @max-[18rem]:hidden @max-[18rem]:group-hover/head:flex @max-[18rem]:group-focus-within/head:flex"
             aria-label={`Minimise ${i.title}`}
             onclick={() => minimise(p.id)}><Minus class="size-3.5" /></button
           >
