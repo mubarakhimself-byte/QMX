@@ -1,0 +1,71 @@
+[project]
+name = "qma-harness"
+version = "0.1.0"
+description = "QMA v2 harness: one Claude Agent SDK engine behind qmx-control"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "claude-agent-sdk==0.2.166",
+    "qmx-control",
+    "qmx-tools",
+    "qmx-broker",
+    "qma-core",
+    "qmx-ledger",
+    "keyring==25.7.0",
+    "httpx==0.28.1",
+    "pywin32==312; sys_platform == 'win32'",
+]
+
+[project.scripts]
+qma-cli-launcher = "qma.launcher:main"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# qma.boot, qma.serve, qma.launcher, qma.console, qma.harness and qma.gpt share the PEP 420
+# namespace `qma` with qma-core. uv_build takes only packages in a module list, so the whole
+# namespace under src/qma ships, and test_import_rules.py holds the module boundaries.
+module-name = "qma"
+namespace = true
+
+[tool.uv.sources]
+qmx-control = { workspace = true }
+qmx-tools = { workspace = true }
+qmx-broker = { workspace = true }
+qma-core = { workspace = true }
+qmx-ledger = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.5",
+    "pyright==1.1.411",
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "pytest-cov>=7,<8",
+    "poethepoet==0.48.0",
+    "types-pywin32==312.0.0.20261006",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n 2 --dist worksteal"
+markers = ["serial: requires exclusive access to shared resources"]
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+extend-exclude = []
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.poe.tasks]
+fmt-check = "ruff format --config pyproject.toml --check src tests"
+lint = "ruff check --config pyproject.toml src tests"
+types = "python -m pyright"
