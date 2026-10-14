@@ -118,20 +118,20 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     name: "Test",
     group: "pods",
     root: split("row", [
-      [pane("pt-res", "podres"), 18],
+      [pane("pt-res", "podres"), 16],
       [
         split("col", [
           [pane("pt-equity", "podequity", "teal"), 52],
           [pane("pt-stress", "stress", "teal"), 48],
         ]),
-        50,
+        48,
       ],
       [
         split("col", [
           [pane("pt-h2h", "headtohead", "teal"), 58],
           [pane("pt-fan", "fan", "teal"), 42],
         ]),
-        32,
+        36,
       ],
       [pane("pt-int", "interventions", "teal"), 20],
     ]),

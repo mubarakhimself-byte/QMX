@@ -20,7 +20,8 @@
   import InfoTip from "$lib/workbench/InfoTip.svelte";
   import { panelSize } from "$lib/workbench/tiles/panel-size";
   import { workbench } from "$lib/workbench/workbench.svelte";
-  import { LAB_PODS, POD_EQUITY, TEST_BOTS } from "../pods";
+  import { LAB_PODS, TEST_BOTS } from "../pods";
+  import { podModel } from "../pod-model.svelte";
   import { lab } from "../lab.svelte";
 
   const size = panelSize();
@@ -31,9 +32,13 @@
   const share = (id: string) => weight(id) / total;
   const together = $derived(lab.together && pods.length > 1);
 
+  /** Each pod's test curve under its current Design settings. */
+  const curves = $derived(
+    Object.fromEntries(pods.map((p) => [p.id, podModel.equity(p.id).curve])),
+  );
   const combined = $derived(
-    POD_EQUITY.classic.map((_, i) =>
-      pods.reduce((v, p) => v + share(p.id) * POD_EQUITY[p.id][i], 0),
+    (curves[pods[0]?.id] ?? []).map((_, i) =>
+      pods.reduce((v, p) => v + share(p.id) * curves[p.id][i], 0),
     ),
   );
   function dip(values: number[]) {
@@ -71,7 +76,7 @@
       id: p.id,
       name: p.name,
       color: p.color,
-      values: POD_EQUITY[p.id],
+      values: curves[p.id],
       share: together ? share(p.id) : undefined,
     })),
   ]);
@@ -97,7 +102,7 @@
     // Equal risk: weight by the inverse of each pod's own deepest dip.
     for (const p of pods)
       lab.mix[p.id] =
-        kind === "equal" ? 50 : Math.round(500 / dip(POD_EQUITY[p.id]));
+        kind === "equal" ? 50 : Math.round(500 / dip(curves[p.id]));
   }
 </script>
 

@@ -333,7 +333,10 @@ class PodModel {
 
   fan(id: string) {
     const f = FAN[id];
-    const k = this.scale(id) * (this.has(id, "ladder") ? 1 : 1.25);
+    // Removing the ladder widens the fan; adding one narrows it.
+    const ladder =
+      Number(this.has(id, "ladder", true)) - Number(this.has(id, "ladder"));
+    const k = this.scale(id) * 1.25 ** ladder;
     const kill = this.kill(id);
     const pKill = Math.min(
       99,
