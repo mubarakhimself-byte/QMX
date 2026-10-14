@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import common
 import p_login
-from common import Log, reduced_env, require_plan_login, scrub_process_env
+from common import Log, Provider, provider_env, reduced_env, require_plan_login, scrub_process_env
 from plants import snapshot
 
 PARENT = {
@@ -28,6 +28,35 @@ def test_reduced_env_keeps_git_bash_and_drops_routing_names() -> None:
         "SystemRoot": "C:/Windows",
         "CLAUDE_CODE_GIT_BASH_PATH": "D:/Git/bin/bash.exe",
         "CLAUDE_CONFIG_DIR": "D:/ship/claude",
+    }
+
+
+def test_provider_env_sends_the_base_url_with_its_own_token_and_pins_every_tier(
+    tmp_path: Path,
+) -> None:
+    provider = Provider(
+        "openrouter",
+        "https://openrouter.ai/api",
+        "moonshotai/kimi-k3",
+        {"ENABLE_TOOL_SEARCH": "true"},
+    )
+    with patch.object(common, "FAKE_HOME", tmp_path / "home"):
+        env = provider_env(PARENT, provider, "fake-provider-key", tmp_path / "claude")
+    assert env == {
+        "Path": "C:/Windows",
+        "SystemRoot": "C:/Windows",
+        "CLAUDE_CODE_GIT_BASH_PATH": "D:/Git/bin/bash.exe",
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+        "HOME": str(tmp_path / "home"),
+        "USERPROFILE": str(tmp_path / "home"),
+        "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+        "ANTHROPIC_AUTH_TOKEN": "fake-provider-key",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL": "moonshotai/kimi-k3",
+        "ENABLE_TOOL_SEARCH": "true",
     }
 
 

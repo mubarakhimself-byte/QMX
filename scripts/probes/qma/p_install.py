@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from common import (
     CLI_FLOOR,
@@ -43,6 +43,10 @@ def windows_releases() -> list[tuple[str, str]]:
     return sorted(found, key=lambda pair: parse_version(pair[0]), reverse=True)
 
 
+KEYRING_PIN: Final = "keyring==25.7.0"
+"""Same pin as qmx-control. HP1 reads provider keys by keyring name only."""
+
+
 def venv_python() -> Path:
     return PROBE_VENV / "Scripts" / "python.exe"
 
@@ -52,7 +56,15 @@ def install(uv: str, version: str) -> None:
     if not venv_python().exists():
         subprocess.run([uv, "venv", str(PROBE_VENV), "--python", "3.14"], env=env, check=True)
     subprocess.run(
-        [uv, "pip", "install", "--python", str(venv_python()), f"claude-agent-sdk=={version}"],
+        [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(venv_python()),
+            f"claude-agent-sdk=={version}",
+            KEYRING_PIN,
+        ],
         env=env,
         check=True,
     )

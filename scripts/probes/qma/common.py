@@ -14,6 +14,7 @@ import sys
 import time
 from collections.abc import Generator, Iterable, Mapping, MutableMapping
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO
 
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 SHIP: Final = Path("D:/QMX-worktrees/qma-ship")
 CONFIG_DIR: Final = SHIP / "home" / "claude"
 EVIDENCE: Final = SHIP / "evidence" / "hp0" / os.environ.get("HP0_EVIDENCE_SUBDIR", "")
+HP1_EVIDENCE: Final = SHIP / "evidence" / "hp1"
 PROBE_VENV: Final = SHIP / "probe-venv"
 SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
@@ -35,6 +37,12 @@ PLANT_LOCK: Final = SCRATCH / "settings-plant.lock"
 CLI_FLOOR: Final = (2, 1, 248)
 PROBE_MODEL: Final = "haiku"
 FORCE_LOGIN: Final = {"forceLoginMethod": "claudeai"}
+TIER_VARS: Final = (
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL",
+)
 
 KEEP_NAMES: Final[frozenset[str]] = frozenset(
     {
@@ -81,9 +89,10 @@ def is_final_release(version: str) -> bool:
 
 
 class Log:
-    def __init__(self, slug: str) -> None:
-        EVIDENCE.mkdir(parents=True, exist_ok=True)
-        self.path = EVIDENCE / f"{slug}.log"
+    def __init__(self, slug: str, directory: Path | None = None) -> None:
+        directory = directory or EVIDENCE
+        directory.mkdir(parents=True, exist_ok=True)
+        self.path = directory / f"{slug}.log"
         self._file: TextIO = self.path.open("a", encoding="utf-8")
         self(f"=== {slug} {time.strftime('%Y-%m-%dT%H:%M:%S%z')} python {sys.version.split()[0]}")
 
@@ -129,6 +138,47 @@ def home_env() -> dict[str, str]:
 
 def cli_env() -> dict[str, str]:
     return reduced_env(os.environ) | home_env()
+
+
+@dataclass(frozen=True)
+class Provider:
+    """An Anthropic-compatible host the bundled CLI reaches by base URL and its own key."""
+
+    name: str
+    base_url: str
+    model: str
+    """Every tier alias is pinned to this one id. Kimi warns that a partial map fails silently."""
+    quirks: Mapping[str, str] = field(default_factory=dict[str, str])
+
+    @property
+    def keyring_service(self) -> str:
+        return f"qmx/{self.name}"
+
+
+def provider_env(
+    environ: Mapping[str, str], provider: Provider, secret: str, config_dir: Path
+) -> dict[str, str]:
+    """The CLI env for one provider launch. The base URL never goes out without its own
+    token (02a trap 7), and `config_dir` must hold no plan login."""
+    return (
+        reduced_env(environ)
+        | home_env()
+        | {
+            "CLAUDE_CONFIG_DIR": str(config_dir),
+            "ANTHROPIC_BASE_URL": provider.base_url,
+            "ANTHROPIC_AUTH_TOKEN": secret,
+            "ANTHROPIC_API_KEY": "",
+        }
+        | dict.fromkeys(TIER_VARS, provider.model)
+        | dict(provider.quirks)
+    )
+
+
+def read_key(provider: Provider) -> str | None:
+    """By keyring name only. Callers pass the value to the CLI env and never print it."""
+    import keyring  # noqa: PLC0415
+
+    return keyring.get_password(provider.keyring_service, provider.name)
 
 
 def auth_method(cli: Path) -> dict[str, Any]:
