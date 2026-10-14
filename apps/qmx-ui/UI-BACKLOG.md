@@ -9,6 +9,46 @@ Later rulings win. Rulings applied: Grok UI scrapped; Books are now Pods (each w
 
 ---
 
+## Revision 2026-10-14: changes since the last design pass (read this first)
+
+The UI paused on 2026-10-05. Three sessions ran after it: risk and sizing (10-05 to 10-08), the backend rebuild on `rebuild/base` (P01 to P24, 10-07 to 10-09) and the QMA v2 agent planning (10-12, 10-13). Their rulings below change the UI. Later rulings win over everything further down this file.
+
+**Operator, 2026-10-14 (resume):**
+- Home, the desk, Settings and Apps: "most of it looks okay to me". He wants more personality, "to the animations or something". He was satisfied, which is why designing stopped.
+- The agentic system is held back from UI design: the copilot's skills, workflows, and how agents work with mini apps and their databases. Designs may be sketched; nothing is fixed until the agent session settles. Small copilot fixes still go ahead.
+- Lab and Portfolio need a backend design session. The engines exist (QMB, QML, QMN, QMF, MIS); the layer the screens show (pods with live and paper sides, pod tests, run together, the kill-switch grid, promotions, many servers) does not.
+- Stack stays SvelteKit with shadcn-svelte.
+
+**Triage of everything below:** `handoff/research/backlog-triage-2026-10-14.md` checked every open item against the code (149 after merging duplicates: 34 open UI work, 53 done, 10 superseded, 23 parked for the agentic system, 14 waiting on the Lab and Portfolio backend, 12 other backend, 3 not UI). Work from its OPEN-UI list; the older sections below are history.
+
+**R1. Markets: CFDs are back (10-07).** "we are going back to trading CFD"; IC Markets and cTrader back; "multiple brokers, multiple connections, multiple accounts"; CCXT stays for crypto; a cTrader MCP for the copilot by default. Risk session 10-05: spot crypto and FX are "not really out"; prop firms "take a back seat". Replaces "spot crypto only" (2026-10-03).
+- UI: demo data on Portfolio, Lab, Library, Home and the ticker becomes CFD plus crypto. Settings, Exchange accounts becomes brokers and accounts (cTrader / IC Markets, CCXT exchanges, several accounts each). The kill switch's account tab follows.
+
+**R2. No copilot modes (10-09).** "I want a skill to help me plan. I don't want a planning mode." Copilots differ by their skills: "a co-pilot in portfolio rather is different from a co-pilot in ... the lab because these are all different skills".
+- UI: remove Ask / Plan / Do from the desk and the side copilots; skills are invoked instead ("/" in the composer). Which skills exist is agent-session work (parked).
+
+**R3. Mini apps will be redesigned (10-07).** "for the mini apps section ... don't take it like it is ... in terms of design, yeah, we are going to change it a bit." Still extension-like, but "many apps were not meant to be just like VS Code style extensions". The backend now has a sandbox runtime, a Docker tier and road to live (P12, P14, P17).
+- UI: Apps pass 1 stays as a first cut. The redesign is parked with the agentic system.
+
+**R4. Agent engine under re-plan.** The 10-04 note "agents on LangChain and LangGraph" is out of date: QMA v2 plans one engine (Claude Agent SDK, with a translator for GPT). What the chat screen needs from it is listed in `tracker/qma-v2/UI-NOTES.md` on branch `plan/agent-system` (effort control, compaction, model-switch cost warning, usage page, approvals as events, sub-agents as child sessions, export per session, cursor overlay, session home badges).
+- UI: parked. Do not build these until the agent session hands over.
+
+**R5. Risk and sizing redesign (10-05 to 10-08, `workroom/risk-lab-2026-10-05`).** Loss points, fast invalidation, a scalper-first system; "are we still using books?". The unit structure is not agreed.
+- UI: the Pods bench in the Lab and the Portfolio pod screens wait for the Lab and Portfolio backend design. Pod vocabulary may change.
+
+**R6. Workflows (10-08, 10-09, 10-12).** Cron jobs belong to workflows. A daily decay-spotting workflow (the old WF3) under the Lab. He now prefers graphs and loops to an n8n-style node editor.
+- UI: parked with the agentic system.
+
+**R7. Charting is open (10-07).** "who's going to provide charting for us that is very paramount". Decide in the Lab and Portfolio design session.
+
+**R8. The backend was rebuilt.** `rebuild/base` P01 to P24: `qmx-control` (one REST and MCP door), mini-app runtime, brokers and accounts (P18), Library and run index (P22), remote runs (P21). `handoff/` and `BACKEND-REQUIREMENTS.md` describe the old daemon and are stale; re-derive them after the Lab and Portfolio design. Wiring still waits.
+
+**R9. Browser app first** (10-12): ship the UI in the browser so agents can click through it; the desktop wrapper comes later.
+
+**R10. Firecrawl:** he is willing to pay for it, including Alexandria (10-07). Every call still needs his approval. An MQL5 article scraper runs on a schedule (P19).
+
+---
+
 ## Operator rulings 2026-10-04 (after Copilot pass 2)
 
 Added from the resume brief. Later rulings win over older notes below.
