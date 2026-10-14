@@ -244,3 +244,14 @@ Design intent (our own): judge an app the way you judge a pod, by what it can to
 - [x] Portfolio header (0040e7a6). With four servers the header spilled at 1280 and 1600, so the server chips fold into one "Servers" chip below 1800 wide. News opens on All.
 - [x] Checked by a scripted click-through at 1600 and 1280: desk send, Settings (brokers, MCP, data, copilots), Portfolio, Home, Apps, the Gold scalper page. No overflow. One console 404 on the Library list: the dev-only MQL5 article route, which the preview server does not have. Screenshots: `workroom/ui-review-2026-10-01/2026-10-14-stale-fixes/`.
 - [ ] Not done: Lab pods (`lab/pods.ts`) stay crypto until the risk redesign (R5). The Markets panel has no broker or account filter yet (triage item 13).
+
+### 2026-10-14: declutter foundation (awaiting operator review)
+
+Ruling that drove this (dictated today): layouts are fine, the problem is clutter and text. "More text than actual functionality", "we need more space", and the Lab Pods Test "Run together" view is cluttered unless expanded.
+
+- [x] `DESIGN-RULES.md` (0b4b47a4): word budget (title, numbers, controls; one subtitle line; explanations behind an info tip), every block is data or an action, named spacing, tables for many rows and cards only for things you own, panel size modes, one Demo chip.
+- [x] Building blocks (e2101d28): `InfoTip` and `DemoChip` in `lib/workbench`, a Popover primitive, and size modes in the tile engine. Every tile body measures itself; a panel calls `panelSize()` to get compact, regular or expanded (or styles on `data-size`). Spacing names `p-panel`, `gap-group`, `py-row`, `gap-tile`, `px-page`. Numbers never wrap.
+- [x] Demo banners gone (6da7aa17): Lab, Portfolio, Apps, Home, Copilot and Library show one Demo chip beside the title; it opens the one-line note.
+- [x] Worked example (5696c720), Lab Pods Test. Pod equity: compact is one headline, its dip and a sparkline; regular is the chart beside a figures table, with the split behind a Split button; expanded lays the split controls out beside the chart with an editable pot. Sliders move the combined curve and figures (measured: Together +28%, −7.0% dip to +29%, −9.9% after six slider steps). Stress board, Drawdown fan and Pod resources: caption sentences moved into info tips; compact summaries added.
+- [x] Checked on the built preview at 1600 and 1280 (each pod, together, Split open, info tip open, compact, expanded, expanded together, Portfolio, Apps with the chip open): no page overflow, no console errors. Screenshots: `workroom/ui-review-2026-10-01/2026-10-14-declutter/foundation/` (baseline in `before/`).
+- [ ] Not done: Pod resources still uses tabs for different things (pods, bots, blocks, stress, money), which the rules forbid; the Stress board scrolls sideways at 1280; Head to head has no compact mode. Settings, Apps, Portfolio, Lab and Home passes follow.
