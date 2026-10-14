@@ -15,7 +15,7 @@ import os
 import shutil
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +25,7 @@ from typing import Any, Final, Literal
 from common import (
     HP1_EVIDENCE,
     SCRATCH,
+    Lockdown,
     Log,
     Provider,
     describe,
@@ -55,17 +56,63 @@ class Request:
     canary_anywhere: bool
 
 
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    input: dict[str, Any]
+
+
 @dataclass
 class Echo:
     requests: list[Request] = field(default_factory=list[Request])
+    script: list[ToolCall] = field(default_factory=list[ToolCall])
+    bodies: list[bytes] = field(default_factory=list[bytes])
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def record(self, request: Request) -> None:
+    def record(self, request: Request, body: bytes) -> None:
         with self.lock:
             self.requests.append(request)
+            self.bodies.append(body)
+
+    def next_call(self, offers_tools: bool) -> ToolCall | None:
+        with self.lock:
+            return self.script.pop(0) if offers_tools and self.script else None
 
 
-def sse_reply(model: str) -> bytes:
+def tool_use_events(call: ToolCall) -> list[dict[str, Any]]:
+    start: dict[str, Any] = {
+        "type": "tool_use",
+        "id": f"toolu_hp1_{call.name}",
+        "name": call.name,
+        "input": {},
+    }
+    delta = {"type": "input_json_delta", "partial_json": json.dumps(call.input)}
+    return [
+        {"type": "content_block_start", "index": 0, "content_block": start},
+        {"type": "content_block_delta", "index": 0, "delta": delta},
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+            "usage": {"output_tokens": 1},
+        },
+    ]
+
+
+def text_events() -> list[dict[str, Any]]:
+    return [
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+            "usage": {"output_tokens": 1},
+        },
+    ]
+
+
+def sse_reply(model: str, call: ToolCall | None = None) -> bytes:
     events: list[dict[str, Any]] = [
         {
             "type": "message_start",
@@ -80,14 +127,7 @@ def sse_reply(model: str) -> bytes:
                 "usage": {"input_tokens": 1, "output_tokens": 1},
             },
         },
-        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
-        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}},
-        {"type": "content_block_stop", "index": 0},
-        {
-            "type": "message_delta",
-            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
-            "usage": {"output_tokens": 1},
-        },
+        *(tool_use_events(call) if call else text_events()),
         {"type": "message_stop"},
     ]
     return b"".join(
@@ -128,7 +168,8 @@ def handler(echo: Echo) -> type[BaseHTTPRequestHandler]:
                         if name.lower() in AUTH_HEADERS
                     },
                     canary_anywhere=CANARY in headers or CANARY.encode() in body,
-                )
+                ),
+                body,
             )
             return body
 
@@ -157,7 +198,8 @@ def handler(echo: Echo) -> type[BaseHTTPRequestHandler]:
             if self.path.split("?")[0].endswith("/count_tokens"):
                 self._send(200, "application/json", b'{"input_tokens": 1}')
             elif request.get("stream"):
-                self._send(200, "text/event-stream", sse_reply(model))
+                call = echo.next_call(bool(request.get("tools")))
+                self._send(200, "text/event-stream", sse_reply(model, call))
             else:
                 self._send(200, "application/json", json_reply(model))
 
@@ -165,8 +207,8 @@ def handler(echo: Echo) -> type[BaseHTTPRequestHandler]:
 
 
 @contextmanager
-def serve() -> Generator[tuple[str, Echo]]:
-    echo = Echo()
+def serve(script: Iterable[ToolCall] = ()) -> Generator[tuple[str, Echo]]:
+    echo = Echo(script=list(script))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler(echo))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -209,7 +251,7 @@ def without_token_verdict(requests: list[Request]) -> str:
 async def one_turn(log: Log, env: dict[str, str]) -> None:
     from claude_agent_sdk import ClaudeSDKClient  # noqa: PLC0415
 
-    options = plan_options(env=env, model="sonnet", max_turns=1)
+    options = plan_options(Lockdown(), env=env, model="sonnet", max_turns=1)
     async with ClaudeSDKClient(options=options) as client:
         await client.query("say ok")
         async for message in client.receive_response():

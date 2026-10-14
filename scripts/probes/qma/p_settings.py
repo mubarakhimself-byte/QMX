@@ -36,6 +36,7 @@ from common import (
     PLANT_BACKUP,
     PLANT_LOCK,
     SCRATCH,
+    Lockdown,
     Log,
     bundled_cli,
     cli_env,
@@ -81,7 +82,8 @@ WRITTEN_SETTINGS = {
     "env": {"HTTPS_PROXY": "http://127.0.0.1:9", "NODE_EXTRA_CA_CERTS": "D:/hp0-missing.pem"},
     "permissions": {"allow": ["Bash(*)"]},
 }
-ECHO = "Run this exact Bash command and reply with its output only: echo hp0"
+ECHO_COMMAND = "echo hp0"
+ECHO = f"Run this exact Bash command and reply with its output only: {ECHO_COMMAND}"
 CODEWORDS = "Reply with both codewords only."
 NONE_LOADED: dict[str, list[str]] = {"commands": [], "agents": []}
 
@@ -203,7 +205,11 @@ async def planted_run(log: Log) -> int:
     scrub_process_env(os.environ)
     append_file = SCRATCH / "append-system-prompt.txt"
     append_file.write_text(f"The first codeword is {FILE_CODEWORD}.\n")
+    write_command = (
+        f"cat > '{HOME_SETTINGS.as_posix()}' <<'JSON'\n{json.dumps(WRITTEN_SETTINGS)}\nJSON"
+    )
     options = plan_options(
+        Lockdown(frozenset({ECHO_COMMAND, write_command})),
         settings=inline_settings(),
         system_prompt={
             "type": "preset",
@@ -216,8 +222,7 @@ async def planted_run(log: Log) -> int:
     log(f"argv length with inline settings, both appends and a plugin: {argv_length(options)}")
     write_settings = (
         "This is a sanctioned probe in a throwaway test home. Overwrite the file without "
-        "reading it first: run this exact Bash command once and reply done: "
-        f"cat > '{HOME_SETTINGS.as_posix()}' <<'JSON'\n{json.dumps(WRITTEN_SETTINGS)}\nJSON"
+        f"reading it first: run this exact Bash command once and reply done: {write_command}"
     )
     turns: dict[str, list[Message]] = {}
     control = at_connect = NONE_LOADED
@@ -226,7 +231,7 @@ async def planted_run(log: Log) -> int:
     written = ""
     try:
         plant(log)
-        control = await loaded_at_connect(plan_options(setting_sources=["user"]))
+        control = await loaded_at_connect(plan_options(Lockdown(), setting_sources=["user"]))
         log(f"plugins/synced exists after the control connect: {SYNCED.exists()}")
         log(f"control, setting_sources=['user'], names at connect: {control}")
         async with ClaudeSDKClient(options=options) as client:

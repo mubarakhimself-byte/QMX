@@ -16,12 +16,21 @@ from collections.abc import Generator, Iterable, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO, cast
 
 from plants import Locked, heal
 
 if TYPE_CHECKING:
-    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ContentBlock, Message
+    from claude_agent_sdk import (
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
+        ContentBlock,
+        HookCallback,
+        HookContext,
+        HookInput,
+        HookJSONOutput,
+        Message,
+    )
 
 SHIP: Final = Path("D:/QMX-worktrees/qma-ship")
 CONFIG_DIR: Final = SHIP / "home" / "claude"
@@ -31,7 +40,7 @@ PROBE_VENV: Final = SHIP / "probe-venv"
 SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
 FAKE_HOME: Final = SCRATCH / "home"
-"""HOME and USERPROFILE for every CLI a probe starts, so nothing reads or writes his `~/.claude`."""
+CHAT_CWD: Final = SCRATCH / "chat"
 PLANT_BACKUP: Final = SCRATCH / "settings-plant-backup.json"
 PLANT_LOCK: Final = SCRATCH / "settings-plant.lock"
 CLI_FLOOR: Final = (2, 1, 248)
@@ -134,11 +143,15 @@ def uv_env() -> dict[str, str]:
 
 
 def home_env() -> dict[str, str]:
-    FAKE_HOME.mkdir(parents=True, exist_ok=True)
+    roaming, local = FAKE_HOME / "AppData" / "Roaming", FAKE_HOME / "AppData" / "Local"
+    roaming.mkdir(parents=True, exist_ok=True)
+    local.mkdir(parents=True, exist_ok=True)
     return {
         "CLAUDE_CONFIG_DIR": str(CONFIG_DIR),
         "HOME": str(FAKE_HOME),
         "USERPROFILE": str(FAKE_HOME),
+        "APPDATA": str(roaming),
+        "LOCALAPPDATA": str(local),
     }
 
 
@@ -227,16 +240,74 @@ def require_plan_login(log: Log, cli: Path) -> None:
         raise SystemExit(3)
 
 
-def plan_options(**overrides: Any) -> ClaudeAgentOptions:
-    from claude_agent_sdk import ClaudeAgentOptions  # noqa: PLC0415
+@dataclass(frozen=True)
+class Lockdown:
+    """What one probe chat may run. The CLI gets only these built-in tools, and a PreToolUse
+    hook denies every other call and every Bash command that is not exactly in `commands`.
+    Probe chats run under the operator's own account, where Credential Manager holds the
+    `qmx/*` broker keys, so a tool call no probe needs must never run."""
 
+    commands: frozenset[str] = frozenset()
+    tools: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if "Bash" in self.tools:
+            raise ValueError("Bash is allowed only through exact commands")
+
+    @property
+    def builtins(self) -> list[str]:
+        named = {tool for tool in self.tools if not tool.startswith("mcp__")}
+        return sorted(named | ({"Bash"} if self.commands else set()))
+
+    def refusal(self, tool: str, tool_input: Mapping[str, Any]) -> str | None:
+        if tool != "Bash":
+            return None if tool in self.tools else f"This probe chat may not use {tool}."
+        if str(tool_input.get("command", "")).strip() in self.commands:
+            return None
+        return f"This probe chat may run only these exact Bash commands: {sorted(self.commands)}."
+
+
+LOCKED_OPTIONS: Final = frozenset(
+    {"tools", "allowed_tools", "cwd", "permission_mode", "can_use_tool", "add_dirs"}
+)
+
+
+def guard(lockdown: Lockdown) -> HookCallback:
+    async def deny_outside(
+        hook_input: HookInput, _tool_use_id: str | None, _context: HookContext
+    ) -> HookJSONOutput:
+        call: Mapping[str, Any] = cast("Mapping[str, Any]", hook_input)
+        reason = lockdown.refusal(str(call.get("tool_name", "")), call.get("tool_input") or {})
+        if reason is None:
+            return {}
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+
+    return deny_outside
+
+
+def plan_options(lockdown: Lockdown, **overrides: Any) -> ClaudeAgentOptions:
+    if locked := sorted(overrides.keys() & LOCKED_OPTIONS):
+        raise TypeError(f"the lockdown sets {locked}; a probe cannot override them")
+    from claude_agent_sdk import ClaudeAgentOptions, HookMatcher  # noqa: PLC0415
+
+    CHAT_CWD.mkdir(parents=True, exist_ok=True)
+    hooks: dict[str, list[HookMatcher]] = dict(overrides.pop("hooks", {}))
+    hooks["PreToolUse"] = [HookMatcher(hooks=[guard(lockdown)]), *hooks.get("PreToolUse", [])]
     kwargs: dict[str, Any] = {
         "env": home_env(),
         "setting_sources": [],
         "settings": json.dumps(FORCE_LOGIN),
         "strict_mcp_config": True,
         "model": PROBE_MODEL,
-        "cwd": str(SCRATCH),
+        "cwd": str(CHAT_CWD),
+        "tools": lockdown.builtins,
+        "hooks": hooks,
         "permission_mode": "bypassPermissions",
         "max_turns": 4,
     }
@@ -272,12 +343,19 @@ def describe(message: Message) -> str:
 
 
 def _blocks(blocks: list[ContentBlock]) -> list[str]:
-    from claude_agent_sdk import TextBlock, ToolResultBlock, ToolUseBlock  # noqa: PLC0415
+    from claude_agent_sdk import (  # noqa: PLC0415
+        TextBlock,
+        ThinkingBlock,
+        ToolResultBlock,
+        ToolUseBlock,
+    )
 
     def one(block: ContentBlock) -> str:
         match block:
             case TextBlock():
                 return f"Text({block.text!r:.200})"
+            case ThinkingBlock():
+                return f"Thinking(signed={bool(block.signature)})"
             case ToolUseBlock():
                 return f"ToolUse({block.name} {json.dumps(block.input)[:200]})"
             case ToolResultBlock():

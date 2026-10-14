@@ -9,6 +9,7 @@ from p_echo import (
     CANARY,
     FAKE_KEY,
     Request,
+    ToolCall,
     canary_home,
     serve,
     with_token_verdict,
@@ -83,3 +84,31 @@ def test_canary_home_holds_only_the_canary_login(tmp_path: Path) -> None:
     assert sorted(p.name for p in root.iterdir()) == [".credentials.json"]
     login = json.loads((root / ".credentials.json").read_text(encoding="utf-8"))
     assert login["claudeAiOauth"]["accessToken"] == "sk-ant-oat01-QMXCANARY"
+
+
+def test_echo_answers_its_scripted_tool_calls_to_requests_that_offer_tools_then_ok() -> None:
+    call = ToolCall("Bash", {"command": "echo hp1"})
+    with serve([call]) as (url, echo):
+        side = post(url, {}, {"model": "m1", "stream": True})
+        first = post(url, {}, {"model": "m1", "stream": True, "tools": [{"name": "Bash"}]})
+        second = post(url, {}, {"model": "m1", "stream": True, "tools": [{"name": "Bash"}]})
+    assert [deltas(reply) for reply in (side, first, second)] == [
+        ["text_delta ok"],
+        ['input_json_delta {"command": "echo hp1"}'],
+        ["text_delta ok"],
+    ]
+    assert len(echo.bodies) == 3
+
+
+def deltas(reply: bytes) -> list[str]:
+    events = [
+        json.loads(line.removeprefix(b"data: "))
+        for line in reply.splitlines()
+        if line.startswith(b"data: ")
+    ]
+    return [
+        f"{d['type']} {d.get('text', d.get('partial_json'))}"
+        for e in events
+        if e["type"] == "content_block_delta"
+        for d in [e["delta"]]
+    ]

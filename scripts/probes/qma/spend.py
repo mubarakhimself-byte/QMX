@@ -1,11 +1,14 @@
-"""The HP1 OpenRouter spend guard. Every OpenRouter turn goes through `Ledger.spend`.
+"""The OpenRouter spend guard. Every OpenRouter turn goes through `Ledger.spend`.
 
 The CLI makes the HTTP calls, so a turn is the unit the guard can stop. Before a turn it
-prices the worst case, `calls` requests each at `INPUT_TOKENS_PER_CALL` in and the output
-cap out, and refuses the turn when the spend so far plus that estimate passes the limit.
-The spend so far is the key's OpenRouter usage now minus its usage at the ledger's first
-row, so a charge that lands late still counts. When usage cannot be read, each turn is
-charged its estimate instead.
+prices the worst case, `calls` requests each at the input allowance in and the output cap
+out. OpenRouter's usage figure lags by minutes, so a turn's usage growth can read zero
+while its charge is still on the way. Each turn is therefore charged the larger of its
+estimate and its usage growth, and the spend so far is the larger of those charges' sum
+and the usage growth since the ledger's first row. A figure that catches up past the
+charges takes over. The guard refuses a turn when the spend so far plus its estimate
+passes the limit. An OS lock beside the ledger is held from that check until the charge
+is written, so two runs on one ledger cannot both pass it.
 """
 
 from __future__ import annotations
@@ -18,15 +21,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, TypeVar
 
-from common import HP1_EVIDENCE, Log, run_turns
+from common import Log, run_turns
+from plants import exclusive
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions, Message
 
-BUDGET_USD: Final = 0.40
-LEDGER: Final = HP1_EVIDENCE / "openrouter-spend.tsv"
-INPUT_TOKENS_PER_CALL: Final = 40_000
-"""Above the CLI's system prompt and tool list, which every request resends."""
 SIDE_CALLS_PER_PROMPT: Final = 1
 MAX_OUTPUT_VAR: Final = "CLAUDE_CODE_MAX_OUTPUT_TOKENS"
 KEY_URL: Final = "https://openrouter.ai/api/v1/key"
@@ -42,10 +42,11 @@ class Prices:
     model: str
     usd_per_input_token: float
     usd_per_output_token: float
+    input_tokens_per_call: int
 
     def estimate(self, calls: int, max_output: int) -> float:
         return calls * (
-            INPUT_TOKENS_PER_CALL * self.usd_per_input_token
+            self.input_tokens_per_call * self.usd_per_input_token
             + max_output * self.usd_per_output_token
         )
 
@@ -59,7 +60,7 @@ class Ledger:
     path: Path
     prices: Prices
     usage: Callable[[], float | None]
-    limit: float = BUDGET_USD
+    limit: float
 
     def _rows(self) -> list[list[str]]:
         if not self.path.exists():
@@ -78,26 +79,31 @@ class Ledger:
     async def spend(
         self, label: str, calls: int, max_output: int, run: Callable[[], Awaitable[T]]
     ) -> T:
-        rows = self._rows()
-        charged_sum = sum(float(r[7]) for r in rows)
-        before = self.usage()
-        baseline = next((float(r[5]) for r in rows if r[5]), before)
+        with exclusive(self.path.with_suffix(".lock")):
+            rows = self._rows()
+            charges = sum(float(r[7]) for r in rows)
+            before = self.usage()
+            baseline = next((float(r[5]) for r in rows if r[5]), before)
 
-        def spent(reading: float | None, fallback: float) -> float:
-            return fallback if reading is None or baseline is None else reading - baseline
+            def spent(reading: float | None, charged: float) -> float:
+                if reading is None or baseline is None:
+                    return charged
+                return max(reading - baseline, charged)
 
-        estimate = self.prices.estimate(calls, max_output)
-        total = spent(before, charged_sum)
-        cells = (label, calls, max_output, f"{estimate:.6f}", _usd(before))
-        if total + estimate > self.limit:
-            self._write(*cells, "", f"{0:.6f}", f"{total:.6f}", "REFUSED")
-            raise OverBudget(f"{label}: {total:.6f} spent + {estimate:.6f} > {self.limit}")
-        result = await run()
-        after = self.usage()
-        charged = after - before if before is not None and after is not None else estimate
-        total = spent(after, charged_sum + charged)
-        self._write(*cells, _usd(after), f"{charged:.6f}", f"{total:.6f}", "SPENT")
-        return result
+            estimate = self.prices.estimate(calls, max_output)
+            total = spent(before, charges)
+            cells = (label, calls, max_output, f"{estimate:.6f}", _usd(before))
+            if total + estimate > self.limit:
+                self._write(*cells, "", f"{0:.6f}", f"{total:.6f}", "REFUSED")
+                raise OverBudget(f"{label}: {total:.6f} spent + {estimate:.6f} > {self.limit}")
+            try:
+                return await run()
+            finally:
+                after = self.usage()
+                growth = after - before if before is not None and after is not None else 0.0
+                charge = max(estimate, growth)
+                total = spent(after, charges + charge)
+                self._write(*cells, _usd(after), f"{charge:.6f}", f"{total:.6f}", "SPENT")
 
 
 def _usd(value: float | None) -> str:
@@ -125,9 +131,15 @@ def max_output(options: ClaudeAgentOptions) -> int:
 
 
 async def guarded_turns(
-    ledger: Ledger, log: Log, label: str, options: ClaudeAgentOptions, prompts: list[str]
+    ledger: Ledger,
+    log: Log,
+    label: str,
+    options: ClaudeAgentOptions,
+    prompts: list[str],
+    extra_calls: int = 0,
 ) -> list[Message]:
-    calls = len(prompts) * ((options.max_turns or 1) + SIDE_CALLS_PER_PROMPT)
+    """`extra_calls` covers requests a tool makes on its own, such as WebSearch's."""
+    calls = len(prompts) * ((options.max_turns or 1) + SIDE_CALLS_PER_PROMPT) + extra_calls
     return await ledger.spend(
         label, calls, max_output(options), lambda: run_turns(log, options, prompts)
     )

@@ -11,6 +11,7 @@ import asyncio
 import os
 
 from common import (
+    Lockdown,
     Log,
     Memory,
     bundled_cli,
@@ -22,7 +23,8 @@ from common import (
     scrub_process_env,
 )
 
-BUSY_PROMPT = "Run this exact Bash command and reply done: sleep 8"
+BUSY_COMMAND = "sleep 8"
+BUSY_PROMPT = f"Run this exact Bash command and reply done: {BUSY_COMMAND}"
 
 
 async def main() -> int:
@@ -31,7 +33,7 @@ async def main() -> int:
     log = Log("hp0-ram")
     require_plan_login(log, bundled_cli())
     scrub_process_env(os.environ)
-    async with ClaudeSDKClient(options=plan_options()) as client:
+    async with ClaudeSDKClient(options=plan_options(Lockdown(frozenset({BUSY_COMMAND})))) as client:
         pid = cli_pid(client)
         log(f"CLI pid {pid}, after connect: {memory_mb(pid)} MB")
         for prompt in ("say ok", BUSY_PROMPT):
