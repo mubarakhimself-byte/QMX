@@ -313,7 +313,7 @@ class Relay:
                 "egress stop: the request carries a Claude credential, so the relay did not "
                 "send it. Rewind or fork the chat to before the turn that carried it."
             )
-            await self.alert(held.session_id, reason)
+            await self._alert(held.session_id, reason)
             return _error(400, "invalid_request_error", reason)
         try:
             requested = cast("dict[str, Any]", json.loads(body))["model"]
@@ -322,7 +322,7 @@ class Relay:
         refusal = guard_model(held.profile, str(requested))
         if refusal:
             self.counters.family += 1
-            await self.alert(held.session_id, f"family guard: {refusal}")
+            await self._alert(held.session_id, f"family guard: {refusal}")
             return _error(400, "invalid_request_error", f"family guard: {refusal}")
         return await self._forward(held, path, query, headers, body, str(requested))
 
@@ -370,7 +370,7 @@ class Relay:
         refusal = guard_served_model(profile, served) if response.status_code < 400 else None
         if refusal:
             self.counters.family += 1
-            await self.alert(held.session_id, f"family guard: {refusal}")
+            await self._alert(held.session_id, f"family guard: {refusal}")
             return _error(400, "invalid_request_error", f"family guard: {refusal}")
 
         async def once() -> AsyncGenerator[bytes]:
@@ -397,7 +397,7 @@ class Relay:
                         refusal = guard_served_model(held.profile, served)
                         if refusal:
                             self.counters.family += 1
-                            await self.alert(held.session_id, f"family guard: {refusal}")
+                            await self._alert(held.session_id, f"family guard: {refusal}")
                             yield _error_event(f"family guard: {refusal}")
                             return
                     elif data.get("type") == "message_delta":
@@ -412,6 +412,12 @@ class Relay:
         finally:
             await response.aclose()
             await self._tee(held, path, response.status_code, served, usage)
+
+    async def _alert(self, session_id: SessionId, reason: str) -> None:
+        """Best effort: the refusal reply is the stop, so a chat that cannot take the block
+        never turns it into a server error."""
+        with contextlib.suppress(Exception):
+            await self.alert(session_id, reason)
 
     async def _tee(
         self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]

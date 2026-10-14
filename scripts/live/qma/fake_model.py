@@ -3,8 +3,8 @@
 Live checks point a key profile at it with `TestMode(loopback_http_provider=True)`, so a chat
 makes real tool calls through the real CLI and relay without spending a plan turn or a provider
 credit. Each request whose body offers tools takes the next scripted `Turn`; other requests,
-such as the CLI's own side calls, get `SIDE_REPLY`. When the script runs out, every request
-gets `DONE`.
+such as the CLI's own side calls, get `SIDE_REPLY` unless `every_request` is set. When the
+script runs out, every request gets `DONE`.
 
     fake = FakeModel([Turn([tool_use("Bash", {"command": "env"})]), Turn([text("done")])])
     fake.start()   # fake.url is http://127.0.0.1:<port>
@@ -123,9 +123,13 @@ def sse(turn: Turn, model: str, ids: itertools.count[int]) -> bytes:
 
 
 class FakeModel:
-    def __init__(self, script: list[Turn]) -> None:
+    def __init__(self, script: list[Turn], *, every_request: bool = False) -> None:
         self.script = list(script)
+        self.every_request = every_request
+        """Script every `/v1/messages` request, for checks that call the relay directly."""
         self.requests: list[Seen] = []
+        self.served_usage: list[dict[str, int]] = []
+        """The usage each answered POST reported, in order."""
         self.lock = threading.Lock()
         self.ids = itertools.count(1)
         self.server: ThreadingHTTPServer | None = None
@@ -167,12 +171,18 @@ class FakeModel:
                 body = self.rfile.read(int(self.headers.get("content-length", "0")))
                 request: dict[str, Any] = json.loads(body or b"{}")
                 path = self.path.partition("?")[0]
-                scripted = path == "/v1/messages" and bool(request.get("tools"))
+                scripted = path == "/v1/messages" and (
+                    fake.every_request or bool(request.get("tools"))
+                )
                 self.record(body, scripted)
                 if path.endswith("/count_tokens"):
+                    with fake.lock:
+                        fake.served_usage.append({})
                     self.reply(200, "application/json", b'{"input_tokens": 10}')
                     return
                 turn = fake.next_turn(scripted)
+                with fake.lock:
+                    fake.served_usage.append(dict(turn.usage))
                 model = str(request.get("model") or MODEL)
                 if request.get("stream"):
                     self.reply(200, "text/event-stream", sse(turn, model, fake.ids))

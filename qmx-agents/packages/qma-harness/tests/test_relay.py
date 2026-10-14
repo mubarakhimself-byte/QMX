@@ -393,3 +393,16 @@ def test_the_relay_listens_on_loopback_only() -> None:
         assert rig.relay.base_url.startswith("http://127.0.0.1:")
 
     run(check)
+
+
+def test_a_failing_alert_never_turns_a_refusal_into_a_server_error() -> None:
+    async def check(rig: Rig) -> None:
+        async def broken(_chat: SessionId, _reason: str) -> None:
+            raise RuntimeError("no such session")
+
+        rig.relay.alert = broken
+        grant = rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", body("kimi-k2.7-code"), bearer=grant.secret)
+        assert answer.status_code == 400
+
+    run(check)
