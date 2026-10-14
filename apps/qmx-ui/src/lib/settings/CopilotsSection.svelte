@@ -1,21 +1,20 @@
 <script lang="ts">
   /**
    * One card per copilot (main, Lab, Portfolio, each mini app): its model,
-   * standing instructions, how much it may do by default, what it may
-   * touch, and its skills. The copilot gear icons on each screen open here.
+   * standing instructions, what it may touch, and its skills. No modes:
+   * planning and the like are skills, called with "/". The copilot gear icons on each screen open here.
    */
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { cn } from "$lib/utils";
   import { MODELS, workbench } from "$lib/workbench/workbench.svelte";
-  import { MODES, REACH } from "$lib/copilot/aim.svelte";
+  import { REACH } from "$lib/copilot/aim.svelte";
 
   type Copilot = {
     id: string;
     name: string;
     note: string;
     model: string;
-    mode: string;
     reach: string[];
     skills: string[];
     instructions: string;
@@ -26,7 +25,6 @@
       name: "Main copilot",
       note: "Reaches everything you allow; runs errands for days",
       model: MODELS[0].id,
-      mode: "do",
       reach: ["lab", "portfolio", "library", "servers"],
       skills: [
         "Build a pod",
@@ -42,17 +40,16 @@
       name: "Lab copilot",
       note: "Lab tools only",
       model: MODELS[0].id,
-      mode: "do",
       reach: ["lab", "library", "servers"],
       skills: ["Sweep", "Walk-forward", "Stress scenario", "Train a model"],
-      instructions: "Use spot crypto data. Never run on the trading servers.",
+      instructions:
+        "Test on CFDs and crypto. Never run on the trading servers.",
     },
     {
       id: "portfolio",
       name: "Portfolio copilot",
       note: "Paper sides and layouts; live money only proposes",
       model: MODELS[0].id,
-      mode: "plan",
       reach: ["portfolio", "library"],
       skills: ["Explain a refusal", "Draft a paper wiring"],
       instructions: "Live changes are always proposals for my signature.",
@@ -62,7 +59,6 @@
       name: "News & sentiment (mini app)",
       note: "That mini app's operations only",
       model: MODELS[MODELS.length - 1].id,
-      mode: "ask",
       reach: ["apps"],
       skills: ["Score sentiment"],
       instructions: "",
@@ -85,9 +81,7 @@
           <span class="text-muted-foreground">{c.note}</span>
         </span>
         <span class="text-muted-foreground"
-          >{MODELS.find((m) => m.id === c.model)?.label} · {MODES.find(
-            (m) => m.id === c.mode,
-          )?.label}</span
+          >{MODELS.find((m) => m.id === c.model)?.label}</span
         >
       </button>
       {#if openId === c.id}
@@ -105,26 +99,6 @@
                       : "hover:bg-muted",
                   )}
                   onclick={() => (copilots[i].model = m.id)}>{m.label}</button
-                >
-              {/each}
-            </div>
-          </div>
-          <div>
-            <p class="mb-2 font-medium">By default it may</p>
-            <div class="flex flex-wrap gap-2">
-              {#each MODES as m (m.id)}
-                <button
-                  type="button"
-                  class={cn(
-                    "rounded-lg border px-3 py-2 text-left",
-                    c.mode === m.id
-                      ? "border-primary bg-primary/12"
-                      : "hover:bg-muted",
-                  )}
-                  onclick={() => (copilots[i].mode = m.id)}
-                  ><span class="block font-medium">{m.label}</span><span
-                    class="text-muted-foreground text-sm">{m.note}</span
-                  ></button
                 >
               {/each}
             </div>

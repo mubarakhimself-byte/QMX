@@ -1,25 +1,10 @@
 /**
- * "Aim this message at", rethought (operator, 2026-10-03): three plain
- * questions instead of a target list. How much may it do (Ask, Plan, Do)?
- * Which parts of QMX may it touch (its reach)? And who answers (the main
- * copilot, a screen's copilot, a mini app, or one of its running agents)?
+ * "Aim this message at": which parts of QMX the copilot may touch (its
+ * reach) and who answers (the main copilot, a screen's copilot, a mini app,
+ * or one of its running agents). There are no modes: planning and the like
+ * are skills, called with "/" in the composer (operator, 2026-10-09).
  * Real money is never in reach: it always needs your signature.
  */
-export type Mode = "ask" | "plan" | "do";
-export const MODES: { id: Mode; label: string; note: string }[] = [
-  { id: "ask", label: "Ask", note: "Answers and explains; changes nothing" },
-  {
-    id: "plan",
-    label: "Plan",
-    note: "Writes a plan; you approve it before anything changes",
-  },
-  {
-    id: "do",
-    label: "Do",
-    note: "Acts inside its reach; asks before anything it can't undo",
-  },
-];
-
 export const REACH = [
   { id: "lab", label: "Lab", note: "Build, test, train, pods" },
   { id: "portfolio", label: "Portfolio (paper)", note: "Paper sides, layouts" },
@@ -42,7 +27,6 @@ export const ANSWERERS = [
 ] as const;
 
 class Aim {
-  mode = $state<Mode>("do");
   reach = $state<string[]>(["lab", "portfolio", "library", "servers"]);
   answerer = $state<string>("main");
 
