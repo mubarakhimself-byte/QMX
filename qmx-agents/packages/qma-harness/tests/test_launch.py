@@ -11,12 +11,14 @@ from claude_agent_sdk.types import ToolPermissionContext
 
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
+    CONSTANT_ENV,
     Background,
     ChatConfig,
     Child,
     Interactive,
     LaunchRefused,
     PlanLaunch,
+    RelayedLaunch,
     assert_argv_fits,
     assert_scrubbed,
     build_options,
@@ -25,7 +27,17 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
-from qma.harness.profiles import PLAN
+from qma.harness.profiles import (
+    PLAN,
+    BaseUrl,
+    KeyProvider,
+    ModelId,
+    ProfileName,
+    Quirks,
+    SecretRef,
+    TierMap,
+)
+from qma.harness.relay import GrantSecret, RelayGrant
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
 
@@ -184,3 +196,29 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
             can_use_tool=refuse,
         )
     )
+
+
+def test_a_relayed_launch_carries_the_relay_and_its_grant_never_a_key(home: QmxHome) -> None:
+    profile = KeyProvider(
+        name=ProfileName("openrouter"),
+        base_url=BaseUrl("https://openrouter.ai/api"),
+        credential=SecretRef("qmx/openrouter"),
+        tiers=TierMap(ModelId("a/o"), ModelId("a/s"), ModelId("a/h"), ModelId("a/f")),
+        quirks=Quirks(env={"ENABLE_TOOL_SEARCH": "true"}),
+    )
+    grant = RelayGrant("http://127.0.0.1:5123", GrantSecret("grant-secret"), CHAT, profile)
+    assert launch_env(RelayedLaunch(grant), home=home, session_id=CHAT, cap="c") == {
+        **CONSTANT_ENV,
+        "ENABLE_TOOL_SEARCH": "true",
+        "CLAUDE_CONFIG_DIR": str(home.root / "claude-relayed"),
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:5123",
+        "ANTHROPIC_AUTH_TOKEN": "grant-secret",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "a/o",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "a/s",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "a/h",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL": "a/f",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "QMA_CHAT_ID": CHAT,
+        "QMA_PROC_DIR": str(home.root / "procs"),
+        "QMA_CAP": "c",
+    }

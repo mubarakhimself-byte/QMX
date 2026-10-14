@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+import httpx
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
@@ -25,12 +27,17 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import TaskUpdatedMessage, ToolPermissionContext
 from fastapi.testclient import TestClient
+from qmx_control.models import Document
 from qmx_control.server import create_app
 
 import qma.harness.chat
+import qma.harness.harness
 from qma.harness import Harness, LaunchRefused, NewChat, OperatorText, QmxHome, SessionId
+from qma.harness.harness import journal_usage
 from qma.harness.home import PlanAuth, read_record, write_record
+from qma.harness.profiles import ProfileName
 from qma.harness.project import REDACTED
+from qma.harness.relay import RelayUsage
 from qma.harness.routes import chat_router, control_service
 
 SIGNED_IN = PlanAuth(logged_in=True, method="claude.ai", provider="firstParty", subscription="max")
@@ -679,3 +686,101 @@ def test_the_live_door_answers_404_for_an_unknown_chat_before_streaming(home: Qm
     asyncio.run(harness.close())
     assert (answer.status_code, answer.headers["content-type"]) == (404, "application/json")
     assert answer.json()["error"]["message"] == f"No chat has the session id {unknown}."
+
+
+ROUTER_ROW: Document = {
+    "base_url": "https://openrouter.ai/api",
+    "credential_ref": "qmx/openrouter",
+    "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "deepseek/deepseek-v4.1-flash"),
+}
+
+
+def no_plan_login(*_: object) -> PlanAuth:
+    raise AssertionError("a relayed launch read the plan login")
+
+
+def test_a_key_chat_launches_through_a_relay_grant_revoked_when_its_cli_ends(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qma.harness.chat, "plan_auth_method", no_plan_login)
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _ref: "key")  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    control_service(home).settings_put("providers", {"openrouter": ROUTER_ROW})
+    statuses: list[int] = []
+
+    async def probe(env: dict[str, str]) -> int:
+        async with httpx.AsyncClient(trust_env=False) as client:
+            answer = await client.post(
+                f"{env['ANTHROPIC_BASE_URL']}/v1/other",
+                headers={"authorization": f"Bearer {env['ANTHROPIC_AUTH_TOKEN']}"},
+            )
+        return answer.status_code
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="k", model="opus", profile="openrouter"))
+        await harness.send(chat, OperatorText("hi"))
+        env = dict(FakeClient.made[0].options.env)
+        assert env["CLAUDE_CONFIG_DIR"] == str(home.relayed_dir)
+        assert env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "deepseek/deepseek-v4.1-flash"
+        assert env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
+        assert "key" not in env.values()
+        statuses.append(await probe(env))
+        FakeClient.made[0].go.set()
+        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        FakeClient.made[0].inbox.put_nowait(None)
+        await settle(lambda: FakeClient.made[0].disconnected)
+        statuses.append(await probe(env))
+
+    run(body, home)
+    assert statuses == [404, 401]
+
+
+@pytest.mark.parametrize(
+    ("profile", "model", "message"),
+    [
+        ("kimi", "opus", "no provider is named 'kimi'"),
+        ("openrouter", "claude-opus-5-5", "openrouter cannot run the model 'claude-opus-5-5'"),
+        ("claude", "deepseek/deepseek-v4.1-flash", "claude cannot run the model"),
+    ],
+)
+def test_a_chat_on_an_unknown_profile_or_a_refused_model_never_starts(
+    home: QmxHome, profile: str, model: str, message: str
+) -> None:
+    control_service(home).settings_put("providers", {"openrouter": ROUTER_ROW})
+
+    async def body(harness: Harness) -> None:
+        with pytest.raises(LaunchRefused, match=re.escape(message)):
+            await harness.start_chat(NewChat(title="x", model=model, profile=profile))
+
+    run(body, home)
+
+
+def test_relay_usage_lands_as_one_model_call_row_that_the_run_index_reads(home: QmxHome) -> None:
+    chat = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
+    usage = RelayUsage(chat, ProfileName("openrouter"), "/v1/messages", 200, "m", 5, 6, 7, 8)
+
+    async def write() -> None:
+        sink = journal_usage(home)
+        await asyncio.gather(sink(usage), sink(usage))
+
+    asyncio.run(write())
+    lines = (home.root / "runs" / chat / "journal.jsonl").read_text(encoding="utf-8").splitlines()
+    payloads = [json.loads(line)["payload"] for line in lines]
+    assert (
+        payloads
+        == [
+            {
+                "agent": "primary",
+                "model": "m",
+                "profile": "openrouter",
+                "path": "/v1/messages",
+                "status": 200,
+                "input_tokens": 5,
+                "output_tokens": 6,
+                "cache_read_tokens": 7,
+                "cache_write_tokens": 8,
+            }
+        ]
+        * 2
+    )
+    indexed = control_service(home).run_index.refresh()
+    assert [(run["id"], run["model"]) for run in indexed] == [(chat, {"primary": "m"})]

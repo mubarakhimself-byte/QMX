@@ -44,14 +44,17 @@ from qma.harness.home import (
     write_record,
 )
 from qma.harness.launch import (
+    Launch,
     LaunchRefused,
     PlanLaunch,
+    RelayedLaunch,
     TestMode,
     assert_argv_fits,
     assert_scrubbed,
     build_options,
     launch_env,
 )
+from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
     Compacted,
@@ -69,6 +72,7 @@ from qma.harness.project import (
     redact,
     redacted,
 )
+from qma.harness.relay import GrantRefused
 
 if TYPE_CHECKING:
     from claude_agent_sdk.types import (
@@ -79,6 +83,7 @@ if TYPE_CHECKING:
     from qmx_control.service import ControlService
 
     from qma.harness.procs import AgentProcessCap
+    from qma.harness.relay import Relay
 
 FLOOR_REASON: Final = "approvals are not wired yet"
 PLUGIN: Final = "qmx"
@@ -103,6 +108,7 @@ class ChatDeps:
     control: ControlService
     procs: AgentProcessCap
     launcher: Path
+    relay: Relay
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
 
@@ -242,7 +248,7 @@ class Chat:
             self._stream.listeners.discard(queue)
 
     async def close(self) -> None:
-        """Disconnect and stop this chat's launcher tree. Idempotent."""
+        """Disconnect, stop this chat's launcher tree and revoke its relay grant. Idempotent."""
         async with self._lock:
             live, self._live = self._live, None
             if live is None:
@@ -254,6 +260,7 @@ class Chat:
                 self._closing = False
 
     async def _end(self, live: _Live) -> None:
+        self._deps.relay.revoke(self.session_id)
         with contextlib.suppress(Exception):
             await asyncio.wait_for(live.client.disconnect(), CLOSE_WAIT_S)
         if live.reader is not None and live.reader is not asyncio.current_task():
@@ -292,9 +299,8 @@ class Chat:
             memory_dir=deps.home.memory_dir(config.workspace),
         )
         assert_scrubbed(os.environ)
-        auth = await asyncio.to_thread(plan_auth_method, deps.home, settings)
-        auth.require()
-        env = launch_env(PlanLaunch(), home=deps.home, session_id=chat, cap=deps.procs.handle_name)
+        launch = await self._routing(settings)
+        env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
         exists = transcript(deps.home, chat) is not None
         if self.record.started and not exists:
             raise LaunchRefused(
@@ -312,7 +318,11 @@ class Chat:
         )
         assert_argv_fits(options)
         live = _Live(ClaudeSDKClient(options))
-        await live.client.connect()
+        try:
+            await live.client.connect()
+        except BaseException:
+            deps.relay.revoke(chat)
+            raise
         try:
             found = unexpected_extensions(
                 await live.client.get_server_info(), await live.client.get_mcp_status()
@@ -324,6 +334,19 @@ class Chat:
             raise
         live.reader = asyncio.create_task(self._read(live))
         return live
+
+    async def _routing(self, settings: str) -> Launch:
+        """The plan only after its login reports the subscription method. Any other profile
+        through a fresh relay grant, which revokes the chat's earlier one."""
+        deps, config = self._deps, self.record.config
+        if config.profile == PLAN:
+            auth = await asyncio.to_thread(plan_auth_method, deps.home, settings)
+            auth.require()
+            return PlanLaunch()
+        try:
+            return RelayedLaunch(deps.relay.grant(self.session_id, config.profile))
+        except GrantRefused as refused:
+            raise LaunchRefused(str(refused)) from None
 
     async def _read(self, live: _Live) -> None:
         try:
