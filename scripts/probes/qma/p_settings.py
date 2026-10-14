@@ -18,8 +18,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
-from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -33,11 +31,13 @@ from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITra
 from common import (
     CONFIG_DIR,
     FORCE_LOGIN,
+    MARKERS,
     PLANT_BACKUP,
     PLANT_LOCK,
     SCRATCH,
     Lockdown,
     Log,
+    Marker,
     bundled_cli,
     cli_env,
     describe,
@@ -49,7 +49,6 @@ from common import (
 )
 from plants import exclusive, restore, snapshot
 
-MARKERS = SCRATCH / "settings-markers"
 MARKET = SCRATCH / "plugin-market"
 HOME_SETTINGS = CONFIG_DIR / "settings.json"
 SYNCED = CONFIG_DIR / "plugins" / "synced"
@@ -88,26 +87,10 @@ CODEWORDS = "Reply with both codewords only."
 NONE_LOADED: dict[str, list[str]] = {"commands": [], "agents": []}
 
 
-def marker_hook(tag: str) -> dict[str, str]:
-    """A command hook that appends its stdin, one line per call, to `MARKERS/<tag>.jsonl`."""
-    python = Path(sys.executable).as_posix()
-    target = (MARKERS / f"{tag}.jsonl").as_posix()
-    line = 'sys.stdin.read().replace(chr(10), " ") + chr(10)'
-    program = f'import sys; open(r"{target}", "a").write({line})'
-    return {"type": "command", "command": f"'{python}' -c '{program}'"}
-
-
-def inline_settings() -> str:
-    return json.dumps(
-        FORCE_LOGIN
-        | {
-            "cleanupPeriodDays": 3650,
-            "hooks": {
-                "ConfigChange": [{"hooks": [marker_hook("configchange")]}],
-                "PreToolUse": [{"matcher": "Bash", "hooks": [marker_hook("inline-pretool")]}],
-            },
-        }
-    )
+INLINE_MARKERS = (
+    Marker("ConfigChange", "configchange"),
+    Marker("PreToolUse", "inline-pretool", "Bash"),
+)
 
 
 def write_plugin(name: str) -> None:
@@ -152,7 +135,7 @@ def plant(log: Log) -> None:
     plugin_cli(log, "install", f"{HOME_PLUGIN}@{MARKETPLACE}")
     settings = json.loads(HOME_SETTINGS.read_text(encoding="utf-8"))
     settings["hooks"] = {
-        "PreToolUse": [{"matcher": "Bash", "hooks": [marker_hook("home-pretool")]}]
+        "PreToolUse": [{"matcher": "Bash", "hooks": [Marker("PreToolUse", "home-pretool").hook()]}]
     }
     HOME_SETTINGS.write_text(json.dumps(settings), encoding="utf-8")
     log(f"home settings.json keys after the plant: {sorted(settings)}")
@@ -208,18 +191,6 @@ async def planted_run(log: Log) -> int:
     write_command = (
         f"cat > '{HOME_SETTINGS.as_posix()}' <<'JSON'\n{json.dumps(WRITTEN_SETTINGS)}\nJSON"
     )
-    options = plan_options(
-        Lockdown(frozenset({ECHO_COMMAND, write_command})),
-        settings=inline_settings(),
-        system_prompt={
-            "type": "preset",
-            "preset": "claude_code",
-            "append": f"The second codeword is {INLINE_CODEWORD}. When asked, give both.",
-        },
-        extra_args={"append-system-prompt-file": append_file.as_posix()},
-        plugins=[{"type": "local", "path": (MARKET / SDK_PLUGIN).as_posix()}],
-    )
-    log(f"argv length with inline settings, both appends and a plugin: {argv_length(options)}")
     write_settings = (
         "This is a sanctioned probe in a throwaway test home. Overwrite the file without "
         f"reading it first: run this exact Bash command once and reply done: {write_command}"
@@ -231,7 +202,22 @@ async def planted_run(log: Log) -> int:
     written = ""
     try:
         plant(log)
-        control = await loaded_at_connect(plan_options(Lockdown(), setting_sources=["user"]))
+        options = plan_options(
+            Lockdown(
+                frozenset({ECHO_COMMAND, write_command}),
+                markers=INLINE_MARKERS,
+                command_plugins=(MARKET / SDK_PLUGIN,),
+            ),
+            settings=json.dumps(FORCE_LOGIN | {"cleanupPeriodDays": 3650}),
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": f"The second codeword is {INLINE_CODEWORD}. When asked, give both.",
+            },
+            extra_args={"append-system-prompt-file": append_file.as_posix()},
+        )
+        log(f"argv length with inline settings, both appends and a plugin: {argv_length(options)}")
+        control = await loaded_at_connect(plan_options(Lockdown(user_settings=True)))
         log(f"plugins/synced exists after the control connect: {SYNCED.exists()}")
         log(f"control, setting_sources=['user'], names at connect: {control}")
         async with ClaudeSDKClient(options=options) as client:

@@ -41,6 +41,7 @@ SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
 FAKE_HOME: Final = SCRATCH / "home"
 CHAT_CWD: Final = SCRATCH / "chat"
+MARKERS: Final = SCRATCH / "settings-markers"
 PLANT_BACKUP: Final = SCRATCH / "settings-plant-backup.json"
 PLANT_LOCK: Final = SCRATCH / "settings-plant.lock"
 CLI_FLOOR: Final = (2, 1, 248)
@@ -241,6 +242,26 @@ def require_plan_login(log: Log, cli: Path) -> None:
 
 
 @dataclass(frozen=True)
+class Marker:
+    event: str
+    tag: str
+    matcher: str | None = None
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z0-9-]+", self.tag):
+            raise ValueError(
+                f"a marker tag is lowercase letters, digits and dashes, not {self.tag!r}"
+            )
+
+    def hook(self) -> dict[str, str]:
+        python = Path(sys.executable).as_posix()
+        target = (MARKERS / f"{self.tag}.jsonl").as_posix()
+        line = 'sys.stdin.read().replace(chr(10), " ") + chr(10)'
+        program = f'import sys; open(r"{target}", "a").write({line})'
+        return {"type": "command", "command": f"'{python}' -c '{program}'"}
+
+
+@dataclass(frozen=True)
 class Lockdown:
     """What one probe chat may run. The CLI gets only these built-in tools, and a PreToolUse
     hook denies every other call and every Bash command that is not exactly in `commands`.
@@ -249,10 +270,17 @@ class Lockdown:
 
     commands: frozenset[str] = frozenset()
     tools: frozenset[str] = frozenset()
+    markers: tuple[Marker, ...] = ()
+    command_plugins: tuple[Path, ...] = ()
+    user_settings: bool = False
 
     def __post_init__(self) -> None:
         if "Bash" in self.tools:
             raise ValueError("Bash is allowed only through exact commands")
+        if self.user_settings and (
+            self.commands or self.tools or self.markers or self.command_plugins
+        ):
+            raise ValueError("user settings load only into a chat that may run nothing")
 
     @property
     def builtins(self) -> list[str]:
@@ -268,8 +296,20 @@ class Lockdown:
 
 
 LOCKED_OPTIONS: Final = frozenset(
-    {"tools", "allowed_tools", "cwd", "permission_mode", "can_use_tool", "add_dirs"}
+    {
+        "tools",
+        "allowed_tools",
+        "cwd",
+        "permission_mode",
+        "can_use_tool",
+        "add_dirs",
+        "setting_sources",
+        "plugins",
+    }
 )
+PROBE_SETTINGS: Final = frozenset({*FORCE_LOGIN, "cleanupPeriodDays"})
+PROBE_FLAGS: Final = frozenset({"append-system-prompt-file"})
+PLUGIN_MANIFEST: Final = frozenset({"name", "version", "description"})
 
 
 INPUT_HOOKS: Final = frozenset({"PermissionRequest"})
@@ -327,9 +367,37 @@ def guard(lockdown: Lockdown) -> HookCallback:
     return deny_outside
 
 
+def settings_json(raw: str, markers: tuple[Marker, ...]) -> str:
+    """Command hooks from settings and plugins run outside `deny_only` and can rewrite an
+    allowed call, so a probe's hooks come only from `markers`."""
+    settings: dict[str, Any] = json.loads(raw)
+    if extra := sorted(settings.keys() - PROBE_SETTINGS):
+        raise TypeError(f"probe settings may not set {extra}; hooks go through Lockdown.markers")
+    hooks: dict[str, list[dict[str, Any]]] = {}
+    for marker in markers:
+        matcher = {"matcher": marker.matcher} if marker.matcher else {}
+        hooks.setdefault(marker.event, []).append(matcher | {"hooks": [marker.hook()]})
+    return json.dumps(settings | ({"hooks": hooks} if hooks else {}))
+
+
+def command_plugin(root: Path) -> dict[str, str]:
+    files = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
+    manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    commands = [f for f in files if re.fullmatch(r"commands/[^/]+\.md", f)]
+    if files != sorted([".claude-plugin/plugin.json", *commands]) or (
+        manifest.keys() - PLUGIN_MANIFEST
+    ):
+        raise TypeError(f"{root.as_posix()} holds more than a manifest and commands: {files}")
+    return {"type": "local", "path": root.as_posix()}
+
+
 def plan_options(lockdown: Lockdown, **overrides: Any) -> ClaudeAgentOptions:
     if locked := sorted(overrides.keys() & LOCKED_OPTIONS):
         raise TypeError(f"the lockdown sets {locked}; a probe cannot override them")
+    if flags := sorted(overrides.get("extra_args", {}).keys() - PROBE_FLAGS):
+        raise TypeError(f"a probe may not pass the CLI flag {flags}")
+    settings = settings_json(overrides.pop("settings", json.dumps(FORCE_LOGIN)), lockdown.markers)
+    plugins = [command_plugin(root) for root in lockdown.command_plugins]
     from claude_agent_sdk import ClaudeAgentOptions, HookMatcher  # noqa: PLC0415
 
     probe_hooks: dict[str, list[HookMatcher]] = dict(overrides.pop("hooks", {}))
@@ -345,8 +413,9 @@ def plan_options(lockdown: Lockdown, **overrides: Any) -> ClaudeAgentOptions:
     }
     kwargs: dict[str, Any] = {
         "env": home_env(),
-        "setting_sources": [],
-        "settings": json.dumps(FORCE_LOGIN),
+        "setting_sources": ["user"] if lockdown.user_settings else [],
+        "settings": settings,
+        "plugins": plugins,
         "strict_mcp_config": True,
         "model": PROBE_MODEL,
         "cwd": str(CHAT_CWD),

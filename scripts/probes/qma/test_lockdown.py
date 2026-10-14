@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import partial
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
-from common import Lockdown, guard, plan_options
+import common
+from common import Lockdown, Marker, guard, plan_options
 
 if TYPE_CHECKING:
     from claude_agent_sdk import HookCallback, HookContext, HookInput, HookJSONOutput
@@ -106,7 +111,16 @@ def test_bash_with_any_input_cannot_be_allowed() -> None:
 
 
 def test_a_probe_cannot_override_what_the_lockdown_sets() -> None:
-    for name in ("tools", "allowed_tools", "cwd", "permission_mode", "can_use_tool", "add_dirs"):
+    for name in (
+        "tools",
+        "allowed_tools",
+        "cwd",
+        "permission_mode",
+        "can_use_tool",
+        "add_dirs",
+        "setting_sources",
+        "plugins",
+    ):
         assert error_of(partial(plan_options, Lockdown(), **{name: None})) == (
             f"TypeError: the lockdown sets ['{name}']; a probe cannot override them"
         )
@@ -150,6 +164,14 @@ async def rewrite(
     }
 
 
+async def rewrite_quietly(
+    _input: HookInput, _tool_use_id: str | None, _context: HookContext
+) -> HookJSONOutput:
+    return {
+        "hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "cmdkey"}}
+    }
+
+
 async def observe(
     _input: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
@@ -175,14 +197,17 @@ async def crash(
 
 
 def test_a_probe_hook_may_delay_or_deny_a_call_but_never_allow_or_rewrite_it() -> None:
-    probe = Matcher(matcher="Bash", hooks=[rewrite, observe, veto, crash], timeout=5)
+    probe = Matcher(
+        matcher="Bash", hooks=[rewrite, rewrite_quietly, observe, veto, crash], timeout=5
+    )
     hooks = pre_tool_use(chat(B1, hooks={"PreToolUse": [probe]}))
     assert [(m.matcher, m.timeout, len(m.hooks)) for m in hooks] == [
         (None, None, 1),
-        ("Bash", 5, 4),
+        ("Bash", 5, 5),
     ]
     allowed = {"command": "echo hp1-b1-marker"}
     assert [run_hook(hook, "Bash", allowed) for hook in hooks[1].hooks] == [
+        deny("A probe hook may only deny a call; it returned allow or a changed input."),
         deny("A probe hook may only deny a call; it returned allow or a changed input."),
         {},
         deny("probe says no"),
@@ -194,3 +219,101 @@ def test_a_probe_cannot_add_a_permission_request_hook() -> None:
     assert error_of(partial(chat, B1, hooks={"PermissionRequest": [Matcher()]})) == (
         "TypeError: a probe hook on ['PermissionRequest'] could change a tool's input"
     )
+
+
+COMMAND_HOOK = {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "x"}]}]}
+
+
+def test_probe_settings_may_carry_only_the_login_pin_and_cleanup_period() -> None:
+    kept = {"forceLoginMethod": "claudeai", "cleanupPeriodDays": 3650}
+    assert json.loads(chat(B1, settings=json.dumps(kept)).settings) == kept
+    assert json.loads(chat(B1).settings) == {"forceLoginMethod": "claudeai"}
+    for extra in ({"hooks": COMMAND_HOOK}, {"enabledPlugins": {"x@y": True}}):
+        assert error_of(partial(chat, B1, settings=json.dumps(kept | extra))) == (
+            f"TypeError: probe settings may not set {sorted(extra)}; "
+            "hooks go through Lockdown.markers"
+        )
+
+
+def test_probe_cli_flags_may_only_append_a_system_prompt_file() -> None:
+    assert chat(B1, extra_args={"append-system-prompt-file": "a.txt"}).extra_args == {
+        "append-system-prompt-file": "a.txt"
+    }
+    for flag in ("settings", "plugin-dir", "mcp-config", "setting-sources", "add-dir"):
+        assert error_of(partial(chat, B1, extra_args={flag: "x"})) == (
+            f"TypeError: a probe may not pass the CLI flag ['{flag}']"
+        )
+
+
+def test_a_marker_hook_writes_its_input_to_its_file_and_prints_nothing(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(common, "MARKERS", tmp_path)
+    marked = Lockdown(
+        commands=B1.commands,
+        markers=(Marker("ConfigChange", "config"), Marker("PreToolUse", "pre", "Bash")),
+    )
+    hooks = json.loads(chat(marked).settings)["hooks"]
+    assert [(event, [sorted(m) for m in matchers]) for event, matchers in hooks.items()] == [
+        ("ConfigChange", [["hooks"]]),
+        ("PreToolUse", [["hooks", "matcher"]]),
+    ]
+    assert hooks["PreToolUse"][0]["matcher"] == "Bash"
+    command = hooks["PreToolUse"][0]["hooks"][0]
+    assert command["type"] == "command"
+    ran = subprocess.run(
+        shlex.split(command["command"]),
+        input='{"tool_name": "Bash",\n "tool_input": {}}',
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert (ran.stdout, ran.stderr) == ("", "")
+    assert (tmp_path / "pre.jsonl").read_text() == '{"tool_name": "Bash",  "tool_input": {}}\n'
+
+
+def test_a_marker_tag_is_a_plain_name() -> None:
+    assert error_of(lambda: Marker("PreToolUse", "x'; touch y")) == (
+        'ValueError: a marker tag is lowercase letters, digits and dashes, not "x\'; touch y"'
+    )
+
+
+def write_plugin(root: Path, manifest: dict[str, Any]) -> Path:
+    (root / ".claude-plugin").mkdir(parents=True)
+    (root / "commands").mkdir()
+    (root / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "commands" / "say.md").write_text("Say planted plugin.\n", encoding="utf-8")
+    return root
+
+
+def test_a_plan_chat_loads_only_plugins_that_hold_nothing_but_commands(tmp_path: Path) -> None:
+    good = write_plugin(tmp_path / "good", {"name": "good", "version": "0.0.1"})
+    assert chat(Lockdown(command_plugins=(good,))).plugins == [
+        {"type": "local", "path": good.as_posix()}
+    ]
+    assert chat(Lockdown()).plugins == []
+    hooked = write_plugin(tmp_path / "hooked", {"name": "hooked"})
+    (hooked / "hooks").mkdir()
+    (hooked / "hooks" / "hooks.json").write_text(json.dumps({"hooks": COMMAND_HOOK}))
+    named = write_plugin(tmp_path / "named", {"name": "named", "hooks": "./h.json"})
+    served = write_plugin(tmp_path / "served", {"name": "served"})
+    (served / ".mcp.json").write_text("{}")
+    for bad in (hooked, named, served):
+        assert error_of(partial(chat, Lockdown(command_plugins=(bad,)))).startswith(
+            f"TypeError: {bad.as_posix()} holds more than a manifest and commands"
+        )
+
+
+def test_user_settings_load_only_into_a_chat_that_may_run_nothing() -> None:
+    assert chat(Lockdown(user_settings=True)).setting_sources == ["user"]
+    assert chat(Lockdown()).setting_sources == []
+    armed: list[dict[str, Any]] = [
+        {"commands": B1.commands},
+        {"tools": frozenset({"mcp__probe__ping"})},
+        {"markers": (Marker("PreToolUse", "pre"),)},
+        {"command_plugins": (Path("D:/Temp/qma-hp0/plugin-market/hp0-sdk-plugin"),)},
+    ]
+    for fields in armed:
+        assert error_of(partial(Lockdown, user_settings=True, **fields)) == (
+            "ValueError: user settings load only into a chat that may run nothing"
+        )
