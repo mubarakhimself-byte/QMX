@@ -17,7 +17,13 @@ import httpx
 from common import Log, boot, put_providers, throwaway_home, use_fake_home, use_fake_key
 from fake_model import FAKE_REF, FakeModel
 
-IDS = (("kimi-k2.7-code", False), ("kimi-k3[1m]", True), ("opus", True))
+IDS = (
+    ("kimi-k2.7-code", False),
+    ("kimi-k3[1m]", True),
+    ("opus", True),
+    ("KIMI-K3", True),
+    ("k\u0456mi-k3", False),
+)
 
 
 async def run(log: Log) -> None:
@@ -37,7 +43,7 @@ async def run(log: Log) -> None:
     )
     relay = harness._deps.relay
     try:
-        grant = relay.grant("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f", ProfileName("kimi"))
+        grant = await relay.grant("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f", ProfileName("kimi"))
         async with httpx.AsyncClient(base_url=relay.base_url, trust_env=False) as client:
             for model, allowed in IDS:
                 try:
@@ -50,13 +56,16 @@ async def run(log: Log) -> None:
                     json={"model": model, "max_tokens": 8, "messages": [], "stream": True},
                     headers={"authorization": f"Bearer {grant.secret}"},
                 )
-                log(f"{model}: start_chat {started}; relay {answer.status_code}")
+                sent = fake.requests[-1].json.get("model") if fake.requests else None
+                log(f"{model}: start_chat {started}; relay {answer.status_code}; sent {sent}")
                 expected = ("started", 200) if allowed else ("refused", 400)
                 log.check(
                     f"{model} is {'accepted' if allowed else 'refused'} by both",
                     (started.split(":")[0], answer.status_code) == expected,
                     (started, answer.status_code),
                 )
+                if allowed:
+                    log.check(f"{model} reaches the provider as kimi-k3", sent == "kimi-k3", sent)
     finally:
         await harness.close()
         fake.stop()

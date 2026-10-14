@@ -32,7 +32,9 @@ from typing import Any, Final
 
 from common import (
     SCRATCH,
+    USAGE_EVENTS,
     Log,
+    NoJournal,
     Session,
     boot,
     capture_grants,
@@ -252,7 +254,7 @@ async def check2(log: Log, args: argparse.Namespace) -> None:
         tools = started_tools(found)
         log.check("the reads arrived", bool(tools) and not failed(found), (tools, failed(found)))
         log.check("the text arrived", "tide" in replies(found).lower(), replies(found)[:200])
-        rows = [r for r in session.journal() if r["event"] == "model_call"]
+        rows = [r for r in session.journal() if r["event"] in USAGE_EVENTS]
         upstream = session.relay.counters.upstream
         log.check(
             "each upstream request has one model_call row",
@@ -322,7 +324,7 @@ async def perf(log: Log, args: argparse.Namespace) -> None:
 
     relay = await Relay(
         secrets=keyring_secret,
-        usage=ignore,
+        journal=lambda _session: NoJournal(),
         alert=ignore,
         profiles=lambda: parse_profiles({"openrouter": row("openrouter")}),
     ).start()
@@ -359,7 +361,7 @@ async def perf(log: Log, args: argparse.Namespace) -> None:
                 lambda: first_event(options(ROWS["openrouter"][0], secret)),
             )
             direct.append(ms)
-            grant = relay.grant(
+            grant = await relay.grant(
                 SessionId(f"0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e{index:02d}"),
                 ProfileName("openrouter"),
             )

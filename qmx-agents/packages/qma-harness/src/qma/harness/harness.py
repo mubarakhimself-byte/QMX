@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
@@ -51,7 +52,7 @@ from qma.harness.profiles import (
     parse_profiles,
     resolve_model,
 )
-from qma.harness.relay import Relay, RelayUsage, UsageSink, keyring_secret
+from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
@@ -94,8 +95,8 @@ class Harness:
         2. Read the agent memory limit from settings.toml [budgets].
         3. Create the homes, then kill every CLI tree a crash left behind. A refused home
            does not stop `open`, so `/api/doctor` can name the reason; every launch re-checks.
-        4. A record left "running" gets a `needs_you` block and turns "idle"; running this
-           twice changes nothing.
+        4. A record left "running" gets a `needs_you` block and turns "idle", and the lock
+           file a crash left on its run journal goes; running this twice changes nothing.
         5. Start the relay on 127.0.0.1:0 with no grants."""
         assert_scrubbed(os.environ)
         limit = control.settings_get("budgets").get("agent_memory_mb")
@@ -106,6 +107,7 @@ class Harness:
         )
         procs.kill_orphans()
         for record in list_records(home):
+            Path(f"{journal_path(home, record.session_id)}.lock").unlink(missing_ok=True)
             if record.turn == "running":
                 control.sessions_append(
                     record.session_id,
@@ -124,7 +126,7 @@ class Harness:
         try:
             relay = await Relay(
                 secrets=keyring_secret,
-                usage=journal_usage(home),
+                journal=functools.partial(UsageRows.open, home),
                 alert=alert,
                 profiles=profiles,
                 test=test,
@@ -145,7 +147,9 @@ class Harness:
             raise LaunchRefused(f"the workspace {workspace} is not a folder")
         try:
             profile = (
-                ClaudePlan() if spec.profile == PLAN else self._deps.relay.profiles().get(spec.profile)
+                ClaudePlan()
+                if spec.profile == PLAN
+                else self._deps.relay.profiles().get(spec.profile)
             )
         except ProfileError as error:
             raise LaunchRefused(str(error)) from None
@@ -195,32 +199,38 @@ class Harness:
         return found
 
 
-def journal_usage(home: QmxHome) -> UsageSink:
-    """One `model_call` event per upstream request in `<home>/runs/<session>/journal.jsonl`,
-    the run journal `RunIndex` reads. One writer at a time, because a journal holds an
-    exclusive lock file while it is open."""
-    lock = asyncio.Lock()
+def journal_path(home: QmxHome, session: SessionId) -> Path:
+    """The run journal `RunIndex` reads for this chat."""
+    return home.root / "runs" / session / "journal.jsonl"
 
-    def append(usage: RelayUsage) -> None:
-        path = home.root / "runs" / usage.session_id / "journal.jsonl"
-        with RunJournal(path, usage.session_id) as journal:
-            journal.append(
-                "model_call",
-                {
-                    "agent": "primary",
-                    "model": usage.model,
-                    "profile": usage.profile,
-                    "path": usage.path,
-                    "status": usage.status,
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                    "cache_read_tokens": usage.cache_read_tokens,
-                    "cache_write_tokens": usage.cache_write_tokens,
-                },
-            )
 
-    async def sink(usage: RelayUsage) -> None:
-        async with lock:
-            await asyncio.to_thread(append, usage)
+@dataclass(frozen=True)
+class UsageRows:
+    """A relayed chat's usage in its run journal. A `/v1/messages` request is a `model_call`
+    row and a count_tokens request a `token_count` row, so a count never reads as a model
+    call. The journal's lock file stays held until `close`."""
 
-    return sink
+    journal: RunJournal
+
+    @classmethod
+    def open(cls, home: QmxHome, session: SessionId) -> UsageRows:
+        return cls(RunJournal(journal_path(home, session), session))
+
+    def append(self, usage: RelayUsage) -> None:
+        self.journal.append(
+            "model_call" if usage.path == MESSAGES else "token_count",
+            {
+                "agent": "primary",
+                "model": usage.model,
+                "profile": usage.profile,
+                "path": usage.path,
+                "status": usage.status,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cache_read_tokens": usage.cache_read_tokens,
+                "cache_write_tokens": usage.cache_write_tokens,
+            },
+        )
+
+    def close(self) -> None:
+        self.journal.close()

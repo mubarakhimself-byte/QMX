@@ -15,6 +15,7 @@ import asyncio
 import sys
 
 from common import (
+    USAGE_EVENTS,
     Log,
     Session,
     boot,
@@ -71,7 +72,7 @@ async def run(log: Log) -> None:
         await session.turn(log, "Run the command.")
         await session.turn(log, "And again in words.")
         await asyncio.sleep(0.5)
-        rows = [r for r in session.journal() if r["event"] == "model_call"]
+        rows = [r for r in session.journal() if r["event"] in USAGE_EVENTS]
         answered = [s for s in fake.requests if s.method == "POST"]
         log(f"fake model POSTs: {[(s.path, s.scripted) for s in answered]}")
         log(f"journal rows: {[(r['payload']['path'], r['payload']['status']) for r in rows]}")

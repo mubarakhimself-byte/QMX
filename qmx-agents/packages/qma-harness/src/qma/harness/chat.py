@@ -83,7 +83,7 @@ if TYPE_CHECKING:
     from qmx_control.service import ControlService
 
     from qma.harness.procs import AgentProcessCap
-    from qma.harness.relay import Relay
+    from qma.harness.relay import Relay, RelayGrant
 
 FLOOR_REASON: Final = "approvals are not wired yet"
 PLUGIN: Final = "qmx"
@@ -178,6 +178,8 @@ def _loaded(found: list[str]) -> str:
 @dataclass
 class _Live:
     client: ClaudeSDKClient
+    grant: RelayGrant | None
+    """The relay grant this CLI runs on, revoked exactly when this CLI goes."""
     reader: asyncio.Task[None] | None = None
 
 
@@ -260,7 +262,8 @@ class Chat:
                 self._closing = False
 
     async def _end(self, live: _Live) -> None:
-        self._deps.relay.revoke(self.session_id)
+        if live.grant is not None:
+            await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
             await asyncio.wait_for(live.client.disconnect(), CLOSE_WAIT_S)
         if live.reader is not None and live.reader is not asyncio.current_task():
@@ -299,29 +302,31 @@ class Chat:
             memory_dir=deps.home.memory_dir(config.workspace),
         )
         assert_scrubbed(os.environ)
-        launch = await self._routing(settings)
-        env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
         exists = transcript(deps.home, chat) is not None
         if self.record.started and not exists:
             raise LaunchRefused(
                 "this chat's transcript is gone from the plan home; start a new chat"
             )
-        options = build_options(
-            config,
-            session_id=chat,
-            transcript_exists=exists,
-            env=env,
-            home=deps.home,
-            settings_json=settings,
-            launcher=deps.launcher,
-            can_use_tool=self._can_use_tool,
-        )
-        assert_argv_fits(options)
-        live = _Live(ClaudeSDKClient(options))
+        launch = await self._routing(settings)
+        grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
+            env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
+            options = build_options(
+                config,
+                session_id=chat,
+                transcript_exists=exists,
+                env=env,
+                home=deps.home,
+                settings_json=settings,
+                launcher=deps.launcher,
+                can_use_tool=self._can_use_tool,
+            )
+            assert_argv_fits(options)
+            live = _Live(ClaudeSDKClient(options), grant)
             await live.client.connect()
         except BaseException:
-            deps.relay.revoke(chat)
+            if grant is not None:
+                await deps.relay.revoke(grant)
             raise
         try:
             found = unexpected_extensions(
@@ -337,14 +342,15 @@ class Chat:
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile
-        through a fresh relay grant, which revokes the chat's earlier one."""
+        through a fresh relay grant, minted after every other launch check so a refused
+        launch leaves no live grant behind."""
         deps, config = self._deps, self.record.config
         if config.profile == PLAN:
             auth = await asyncio.to_thread(plan_auth_method, deps.home, settings)
             auth.require()
             return PlanLaunch()
         try:
-            return RelayedLaunch(deps.relay.grant(self.session_id, config.profile))
+            return RelayedLaunch(await deps.relay.grant(self.session_id, config.profile))
         except GrantRefused as refused:
             raise LaunchRefused(str(refused)) from None
 
@@ -365,16 +371,19 @@ class Chat:
                 await self._lost(live)
 
     async def _lost(self, live: _Live) -> None:
-        if self._live is live:
-            self._live = None
-        self._stream.close_all()
-        if self.record.turn == "running":
-            await self._note(
-                "needs_you",
-                {"reason": "the agent process ended during a turn; its outcome is unknown"},
-            )
-            self._write(turn="idle")
-        await self._end(live)
+        """The CLI went on its own. Holds the chat lock, so the next CLI starts only after
+        this one's grant is revoked and its tree is stopped."""
+        async with self._lock:
+            if self._live is live:
+                self._live = None
+            self._stream.close_all()
+            if self.record.turn == "running":
+                await self._note(
+                    "needs_you",
+                    {"reason": "the agent process ended during a turn; its outcome is unknown"},
+                )
+                self._write(turn="idle")
+            await self._end(live)
 
     async def _route(
         self, fact: Block | Delta | StreamEnded | TurnUsage | Limits | TurnEnded | Compacted

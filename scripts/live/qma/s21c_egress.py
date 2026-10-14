@@ -65,7 +65,7 @@ async def rewound_turn(session: Session, workspace: Path, at: str) -> Any:
     from qma.harness.launch import RelayedLaunch, launch_env  # noqa: PLC0415
     from qma.harness.profiles import ProfileName  # noqa: PLC0415
 
-    grant = session.relay.grant(session.chat, ProfileName("fake"))
+    grant = await session.relay.grant(session.chat, ProfileName("fake"))
     env = launch_env(RelayedLaunch(grant), home=session.home, session_id=session.chat, cap="none")
     options = ClaudeAgentOptions(
         env={k: v for k, v in env.items() if not k.startswith("QMA_")},
@@ -83,7 +83,7 @@ async def rewound_turn(session: Session, workspace: Path, at: str) -> Any:
         await client.query("After the rewind: say something.")
         async for message in client.receive_response():
             if isinstance(message, ResultMessage):
-                session.relay.revoke(session.chat)
+                await session.relay.revoke(grant)
                 return message
     return None
 

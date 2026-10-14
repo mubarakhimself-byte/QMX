@@ -322,6 +322,20 @@ def use_fake_key() -> None:
     harness_module.keyring_secret = lookup
 
 
+class NoJournal:
+    """A usage journal that keeps nothing, for checks that read the relay's counters only."""
+
+    def append(self, usage: Any) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+USAGE_EVENTS = ("model_call", "token_count")
+"""The journal rows the relay writes, one per upstream request."""
+
+
 def capture_grants() -> list[Any]:
     """Every grant the relay mints from now on, so a check can grep for its secret."""
     from qma.harness.relay import Relay  # noqa: PLC0415
@@ -329,8 +343,8 @@ def capture_grants() -> list[Any]:
     minted: list[Any] = []
     original = Relay.grant
 
-    def grant(self: Relay, *args: Any, **kwargs: Any) -> Any:
-        found = original(self, *args, **kwargs)
+    async def grant(self: Relay, *args: Any, **kwargs: Any) -> Any:
+        found = await original(self, *args, **kwargs)
         minted.append(found)
         return found
 

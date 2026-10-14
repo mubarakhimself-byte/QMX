@@ -21,7 +21,7 @@ import sys
 from typing import Any
 
 import httpx
-from common import Log, boot
+from common import Log, NoJournal, boot
 from fake_model import FAKE_KEY, FakeModel, Turn, text
 
 CHAT = "0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f"
@@ -80,7 +80,7 @@ async def run(log: Log) -> None:
 
     relay = await Relay(
         secrets=lambda _ref: FAKE_KEY,
-        usage=ignore,
+        journal=lambda _session: NoJournal(),
         alert=ignore,
         profiles=lambda: parse_profiles(rows, allow_loopback_http=True),
         test=TestMode(loopback_http_provider=True),
@@ -94,14 +94,14 @@ async def run(log: Log) -> None:
                 return await client.post(path, json=body, headers=headers)
 
             statuses.append(str((await post("/v1/messages", None, message("kimi-k3"))).status_code))
-            revoked = relay.grant(OTHER, ProfileName("kimi"))
-            relay.revoke(OTHER)
+            revoked = await relay.grant(OTHER, ProfileName("kimi"))
+            await relay.revoke(revoked)
             answer = await post("/v1/messages", revoked.secret, message("kimi-k3"))
             statuses.append(str(answer.status_code))
-            kimi = relay.grant(CHAT, ProfileName("kimi"))
+            kimi = await relay.grant(CHAT, ProfileName("kimi"))
             answer = await post("/v1/messages", kimi.secret, message("claude-opus-5-5"))
             statuses.append(str(answer.status_code))
-            router = relay.grant(OTHER, ProfileName("openrouter"))
+            router = await relay.grant(OTHER, ProfileName("openrouter"))
             for model in ("openai/gpt-5", "openrouter/auto", "@preset/x"):
                 answer = await post("/v1/messages", router.secret, message(model))
                 statuses.append(str(answer.status_code))
