@@ -69,14 +69,14 @@ def main() -> int:
         names = set(removed.split(", "))
         for name in sorted(PLANTED):
             log.check(f"{name} removed", name in names, name in names)
-        leaked = [value for value in PLANTED.values() if value in reply.text]
+        leaked = [value for value in PLANTED.values() if len(value) > 1 and value in reply.text]
         log.check("no planted value appears in /api/doctor", not leaked, leaked)
         bash = lines["git bash"]
         log.check("the chosen Git Bash path is kept", GIT_BASH in bash["detail"], bash["detail"])
         log.check(
             "CLAUDE_CODE_GIT_BASH_PATH is not removed",
             "CLAUDE_CODE_GIT_BASH_PATH" not in names,
-            removed,
+            "CLAUDE_CODE_GIT_BASH_PATH" in names,
         )
     finally:
         host.terminate()

@@ -621,12 +621,14 @@ def _git_bash() -> DoctorLine:
             "git bash", Path(chosen).is_file(), f"{chosen} (kept from CLAUDE_CODE_GIT_BASH_PATH)"
         )
     git = shutil.which("git")
-    found = (
-        Path(git).parents[1] / "bin" / "bash.exe"
-        if git
-        else Path("C:/Program Files/Git/bin/bash.exe")
+    roots = Path(git).parents if git else (Path("C:/Program Files/Git"),)
+    found = next(
+        (root / "bin" / "bash.exe" for root in roots if (root / "bin" / "bash.exe").is_file()),
+        None,
     )
-    return DoctorLine("git bash", found.is_file(), f"{found} (default)")
+    if found is None:
+        return DoctorLine("git bash", False, "no Git Bash found; set CLAUDE_CODE_GIT_BASH_PATH")
+    return DoctorLine("git bash", True, f"{found} (found from git on PATH)")
 
 
 def _home_lines(home: QmxHome) -> list[DoctorLine]:
