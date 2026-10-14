@@ -4,11 +4,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import socket
 import threading
+import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 
 import p_gpt
 import pytest
@@ -402,14 +405,12 @@ def test_secret_scan_names_only_files_holding_a_value(tmp_path: Path) -> None:
     clean.write_text("http_status: 200\n", encoding="utf-8")
     leaky.write_text("Authorization: Bearer at-secret\n", encoding="utf-8")
 
-    assert p_gpt.scan_for_secrets([clean, leaky, tmp_path / "missing.md"], {"at-secret", ""}) == [
-        leaky
-    ]
+    assert p_gpt.scan_for_secrets([clean, leaky], {"at-secret", ""}) == [leaky]
 
 
 def test_stop_rule_row_names_the_step() -> None:
     verdict = p_gpt.Verdict(
-        viable=False,
+        outcome="not viable",
         model="gpt-6.1-sol",
         tools_shape=None,
         reasoning_replay=None,
@@ -440,9 +441,15 @@ class StubRoute(BaseHTTPRequestHandler):
             error = {"error": {"code": "subscription_sharing_user_not_eligible"}}
             self._send(403, "application/json", json.dumps(error).encode())
             return
-        barred = self.barred_keys & body.keys()
-        if barred or any(item.get("role") == "system" for item in body["input"]):
-            error = {"error": {"code": "subscription_sharing_unsupported_capability"}}
+        barred = sorted(self.barred_keys & body.keys())
+        system = any(item.get("role") == "system" for item in body["input"])
+        if barred or system:
+            message = (
+                f"Unsupported parameter: {barred[0]}"
+                if barred
+                else "System messages are not allowed"
+            )
+            error = {"error": {"message": message, "type": "invalid_request_error", "code": None}}
             self._send(400, "application/json", json.dumps(error).encode())
             return
         assert body["store"] is False and body["stream"] is True
@@ -488,10 +495,14 @@ class StubRoute(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 
-def _stub_session(monkeypatch: pytest.MonkeyPatch, handler: type[StubRoute]) -> p_gpt.Session:
+def _serve(handler: type[BaseHTTPRequestHandler]) -> str:
     server = HTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    monkeypatch.setattr(p_gpt, "API", f"http://127.0.0.1:{server.server_address[1]}/v1")
+    return f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def _stub_session(monkeypatch: pytest.MonkeyPatch, handler: type[StubRoute]) -> p_gpt.Session:
+    monkeypatch.setattr(p_gpt, "API", f"{_serve(handler)}/v1")
     session = p_gpt.Session(
         p_gpt.Registration("oaiapp_1", "urn:uuid:1", "rt-stub", ()), FakeVault()
     )
@@ -517,8 +528,8 @@ def test_chain_against_a_stub_route_reads_viable_and_leaves_no_token(
         ("P5", True),
         ("perf", True),
     ]
-    assert (verdict.viable, verdict.model, verdict.tools_shape, verdict.reasoning_replay) == (
-        True,
+    assert (verdict.outcome, verdict.model, verdict.tools_shape, verdict.reasoning_replay) == (
+        "viable",
         "gpt-stub",
         "namespace",
         True,
@@ -549,11 +560,52 @@ def test_a_barred_field_the_route_accepts_is_recorded_and_the_chain_runs_on(
         session, p_gpt.Evidence(tmp_path), model=None, perf_runs=1, perf_spacing_s=0
     )
 
-    assert [(s.step, s.passed) for s in verdict.steps][-2:] == [("P5", False), ("perf", True)]
+    assert [(s.step, s.passed) for s in verdict.steps][-2:] == [("P5", True), ("perf", True)]
     assert verdict.steps[-2].detail == (
-        "400 for ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']"
+        "refused ['temperature', 'metadata', 'system_role_item']; "
+        "accepted ['max_output_tokens']; unclassified []"
     )
-    assert (verdict.viable, verdict.tools_shape, verdict.stopped_at) == (True, "namespace", None)
+    assert verdict.row().split(" | ")[2:4] == ["viable", "model `gpt-stub`"]
+    log = (tmp_path / "hp2-p5.log").read_text(encoding="utf-8")
+    assert "max_output_tokens: http_status=200 outcome=accepted message=None" in log
+    assert (
+        "temperature: http_status=400 outcome=refused message='Unsupported parameter: temperature'"
+        in log
+    )
+    assert (
+        "system_role_item: http_status=400 outcome=refused "
+        "message='System messages are not allowed'" in log
+    )
+
+
+class UnrelatedFourHundredRoute(StubRoute):
+    barred_keys = frozenset()
+
+    def do_POST(self) -> None:
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        extra = set(body) - {"model", "input", "store", "stream", "instructions"}
+        if extra or any(item.get("role") == "system" for item in body["input"]):
+            error = {"error": {"message": "Rate of requests too high", "code": None}}
+            self._send(400, "application/json", json.dumps(error).encode())
+            return
+        self._send(200, "text/event-stream", self._stream(body))
+
+
+def test_p5_does_not_count_a_400_that_names_another_cause_as_the_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, UnrelatedFourHundredRoute)
+    result = p_gpt.probe_barred(session, p_gpt.Evidence(tmp_path), "gpt-stub")
+
+    assert (result.passed, result.detail) == (
+        False,
+        "refused []; accepted []; unclassified "
+        "['max_output_tokens', 'temperature', 'metadata', 'system_role_item']",
+    )
+    log = (tmp_path / "hp2-p5.log").read_text(encoding="utf-8")
+    assert (
+        "metadata: http_status=400 outcome=unclassified message='Rate of requests too high'" in log
+    )
 
 
 class NotEligibleRoute(StubRoute):
@@ -568,7 +620,7 @@ def test_chain_stops_at_p2_when_the_plan_is_not_eligible(
         session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
     )
 
-    assert not verdict.viable
+    assert verdict.outcome == "not viable"
     assert verdict.stopped_at == "P2 (stop rule: subscription_sharing_user_not_eligible)"
     assert [s.step for s in verdict.steps] == ["P1", "P2"]
 
@@ -579,6 +631,7 @@ class StubOpenAIAuth(BaseHTTPRequestHandler):
     invalid_client, and a code, verifier, redirect or client mismatch is invalid_grant."""
 
     issued = "oaiapp_stub"
+    nonce: str | None = None
     rejected_exchanges = 0
     authorizations: list[dict[str, str]]
     exchanges: list[dict[str, str]]
@@ -626,7 +679,8 @@ class StubOpenAIAuth(BaseHTTPRequestHandler):
         ):
             self._reply(400, {"error": "invalid_grant"})
             return
-        claims = {"iss": p_gpt.ISSUER, "aud": self.issued, "nonce": granted["nonce"]}
+        nonce = self.nonce or granted["nonce"]
+        claims = {"iss": p_gpt.ISSUER, "aud": self.issued, "nonce": nonce}
         payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
         self._reply(
             200,
@@ -649,11 +703,14 @@ class StubOpenAIAuth(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def _stub_auth(monkeypatch: pytest.MonkeyPatch, *, rejected: int) -> type[StubOpenAIAuth]:
+def _stub_auth(
+    monkeypatch: pytest.MonkeyPatch, *, rejected: int, nonce: str | None = None
+) -> type[StubOpenAIAuth]:
     handler = type(
         "Auth",
         (StubOpenAIAuth,),
         {
+            "nonce": nonce,
             "rejected_exchanges": rejected,
             "authorizations": [],
             "exchanges": [],
@@ -734,3 +791,251 @@ def test_token_error_names_the_code_request_id_and_its_meaning() -> None:
     assert p_gpt.token_error(reply).startswith(
         "http 400 invalid_request request_id=req-9: request bug"
     )
+
+
+class NoNamespaceRoute(StubRoute):
+    def _stream(self, body: p_gpt.Json) -> bytes:
+        return super()._stream(body).decode().replace('"namespace": "qma", ', "").encode()
+
+
+def test_namespace_shape_fails_when_the_call_names_no_namespace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, NoNamespaceRoute)
+    ev = p_gpt.Evidence(tmp_path)
+
+    namespace = p_gpt.probe_tools(session, ev, "gpt-stub", "namespace")
+    plain = p_gpt.probe_tools(session, ev, "gpt-stub", "plain")
+
+    assert (namespace.passed, namespace.detail) == (
+        False,
+        "call echo_word namespace=None (expected qma), turn2 response.completed",
+    )
+    assert (plain.passed, plain.detail) == (
+        True,
+        "call echo_word namespace=None, turn2 response.completed",
+    )
+
+
+class NoToolCallRoute(StubRoute):
+    def _stream(self, body: p_gpt.Json) -> bytes:
+        return super()._stream({**body, "tools": []})
+
+
+def test_chain_stops_as_not_viable_when_both_tool_shapes_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, NoToolCallRoute)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert [(s.step, s.passed) for s in verdict.steps] == [
+        ("P1", True),
+        ("P2", True),
+        ("P3-namespace", False),
+        ("P3-plain", False),
+    ]
+    assert verdict.row().split(" | ")[2:4] == [
+        "not viable",
+        "stop rule at P3 (both tool shapes failed)",
+    ]
+
+
+class TurnTwoFailsRoute(StubRoute):
+    def _stream(self, body: p_gpt.Json) -> bytes:
+        if any(item.get("type") == "function_call_output" for item in body["input"]):
+            event = {"type": "response.failed", "response": {"error": {"code": "server_error"}}}
+            return f"data: {json.dumps(event)}\n\n".encode()
+        return super()._stream(body)
+
+
+def test_p3_fails_when_turn_two_does_not_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, TurnTwoFailsRoute)
+    result = p_gpt.probe_tools(session, p_gpt.Evidence(tmp_path), "gpt-stub", "plain")
+
+    assert (result.passed, result.detail) == (
+        False,
+        "call echo_word namespace=qma, turn2 response.failed",
+    )
+
+
+class NoTerminalRoute(StubRoute):
+    def _stream(self, body: p_gpt.Json) -> bytes:
+        event = {"type": "response.output_text.delta", "delta": "hello from QMA"}
+        return f"data: {json.dumps(event)}\n\n".encode()
+
+
+class RateLimitedRoute(StubRoute):
+    def do_POST(self) -> None:
+        self.rfile.read(int(self.headers["Content-Length"]))
+        error = {"error": {"code": "subscription_sharing_usage_limit_exceeded"}}
+        self._send(429, "application/json", json.dumps(error).encode())
+
+
+class ModelsDownRoute(StubRoute):
+    def do_GET(self) -> None:
+        self._send(503, "application/json", b'{"detail": "busy"}')
+
+
+@pytest.mark.parametrize(
+    ("route", "stopped"),
+    [
+        (NoTerminalRoute, "P2 (no response.completed (status 200, code None))"),
+        (
+            RateLimitedRoute,
+            "P2 (no response.completed (status 429, code "
+            "subscription_sharing_usage_limit_exceeded))",
+        ),
+        (ModelsDownRoute, "P1 (/v1/models returned 503)"),
+    ],
+)
+def test_a_failure_outside_the_stop_rule_is_inconclusive_not_unviable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: type[StubRoute], stopped: str
+) -> None:
+    session = _stub_session(monkeypatch, route)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=0, perf_spacing_s=0
+    )
+
+    assert verdict.row().split(" | ")[2:4] == ["inconclusive", f"rerun: {stopped}"]
+
+
+def test_perf_fails_when_the_median_exceeds_the_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, StubRoute)
+    ev = p_gpt.Evidence(tmp_path)
+    assert p_gpt.perf_series(session, ev, "gpt-stub", 2, 0).passed
+
+    monkeypatch.setattr(p_gpt, "PERF_LIMIT_S", 0.0)
+    assert not p_gpt.perf_series(session, ev, "gpt-stub", 2, 0).passed
+
+
+def test_an_id_token_with_another_nonce_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_auth(monkeypatch, rejected=0, nonce="replayed")
+
+    with pytest.raises(p_gpt.SignInError, match="nonce"):
+        p_gpt.sign_in(FakeVault(), timeout_s=10, log=lambda _: None)
+
+
+def test_secrets_scan_reads_subfolders_and_lists_only_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, StubRoute)
+    (tmp_path / "run1").mkdir()
+    old = tmp_path / "run1" / "old.log"
+    old.write_text("Bearer at-stub\n", encoding="utf-8")
+    findings = tmp_path / "FINDINGS.md"
+    findings.write_text("clean", encoding="utf-8")
+
+    result = p_gpt.secrets_scan(session, p_gpt.Evidence(tmp_path), findings)
+
+    assert (result.passed, result.detail) == (False, "1 files hold a token value")
+    log = (tmp_path / "hp2-secrets.log").read_text(encoding="utf-8")
+    assert [line for line in log.splitlines() if line.startswith("scanned:")] == [
+        f"scanned: {findings}",
+        f"scanned: {old}",
+    ]
+
+
+class StubRefresh(BaseHTTPRequestHandler):
+    scope = "openid chatgpt.tokens.use.direct"
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def do_POST(self) -> None:
+        raw = self.rfile.read(int(self.headers["Content-Length"])).decode()
+        assert dict(urllib.parse.parse_qsl(raw))["grant_type"] == "refresh_token"
+        tokens = {
+            "access_token": "at-stub",
+            "refresh_token": "rt-stub-3",
+            "expires_in": 3600,
+            "scope": self.scope,
+        }
+        body = json.dumps(tokens).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _reuse_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, scope: str = StubRefresh.scope
+) -> list[str]:
+    monkeypatch.setattr(p_gpt, "API", f"{_serve(StubRoute)}/v1")
+    refresh = type("Refresh", (StubRefresh,), {"scope": scope})
+    monkeypatch.setattr(p_gpt, "TOKEN_URL", f"{_serve(refresh)}/api/accounts/oauth/token")
+    vault = FakeVault()
+    vault.set(
+        p_gpt.Registration("oaiapp_1", "urn:uuid:1", "rt-stub", (p_gpt.DIRECT_SCOPE,)).dumps()
+    )
+    monkeypatch.setattr(p_gpt, "KeyringVault", lambda: vault)
+    findings = tmp_path / "FINDINGS.md"
+    findings.write_text("clean", encoding="utf-8")
+    evidence = tmp_path / "ev"
+    return [
+        "run",
+        "--reuse",
+        "--evidence",
+        str(evidence),
+        "--findings",
+        str(findings),
+        "--perf-runs",
+        "3",
+        "--perf-spacing",
+        "0",
+    ]
+
+
+def test_reuse_stops_when_the_refreshed_grant_lacks_the_direct_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path, scope="openid offline_access")
+
+    assert p_gpt.main(args) == 1
+    log = (tmp_path / "ev" / "hp2-reuse.log").read_text(encoding="utf-8")
+    assert "result: FAIL chatgpt.tokens.use.direct granted=False (scopes from refresh reply)" in log
+    assert not (tmp_path / "ev" / "hp2-p1.log").exists()
+
+
+def test_reuse_with_the_direct_scope_runs_the_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path)
+
+    assert p_gpt.main(args) == 0
+    log = (tmp_path / "ev" / "hp2-reuse.log").read_text(encoding="utf-8")
+    assert "result: PASS chatgpt.tokens.use.direct granted=True (scopes from refresh reply)" in log
+    verdict = json.loads((tmp_path / "ev" / "hp2-verdict.json").read_text(encoding="utf-8"))
+    assert verdict["outcome"] == "viable"
+
+
+def test_a_network_error_mid_chain_still_writes_the_verdict_and_scans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _reuse_args(monkeypatch, tmp_path)
+    real = urllib.request.urlopen
+    responses: list[str] = []
+
+    def flaky(request: urllib.request.Request, *rest: Any, **kw: Any) -> Any:
+        if request.full_url.endswith("/responses"):
+            responses.append(request.full_url)
+            if len(responses) == 13:
+                raise urllib.error.URLError(socket.gaierror(11001, "getaddrinfo failed"))
+        return real(request, *rest, **kw)
+
+    monkeypatch.setattr(p_gpt.urllib.request, "urlopen", flaky)
+
+    assert p_gpt.main(args) == 1
+    evidence = tmp_path / "ev"
+    verdict = json.loads((evidence / "hp2-verdict.json").read_text(encoding="utf-8"))
+    assert (verdict["outcome"], verdict["steps"][-1]["detail"]) == ("viable", "2 of 3 completed")
+    perf = (evidence / "hp2-perf.log").read_text(encoding="utf-8")
+    assert "run 2: first_byte_s=None terminal=None error=" in perf
+    assert "getaddrinfo failed" in perf
+    assert (evidence / "hp2-secrets.log").read_text(encoding="utf-8").endswith("result: PASS\n")
