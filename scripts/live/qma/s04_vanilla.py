@@ -16,10 +16,10 @@ import os
 import subprocess
 import sys
 import time
-import tomllib
 from pathlib import Path
 from typing import Any
 
+import tomllib
 from common import FAKE_HOME, Log, boot, chat_args, require_login, use_fake_home
 
 CHECK2 = "What is in this folder? Summarise the README."
