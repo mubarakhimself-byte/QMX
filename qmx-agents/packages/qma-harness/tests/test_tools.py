@@ -89,9 +89,6 @@ def test_asks_table() -> None:
     ]
 
 
-# --- S28: three build refusals ---
-
-
 def test_s28_a_tool_with_no_effect_does_not_construct() -> None:
     with pytest.raises(TypeError, match="missing 1 required positional argument: 'call'"):
         ToolDef("read_x", "read", {}, nothing)  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue, reportArgumentType]

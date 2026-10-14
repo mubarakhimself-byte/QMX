@@ -216,8 +216,6 @@ BROKER_HOSTS: Final[frozenset[str]] = frozenset({"ctraderapi.com", "ctrader.com"
 """The cTrader Open API hosts (`qmx_broker.ctrader_transport`) and Spotware's sign-in host."""
 
 
-# --- approvals bound to arguments (03 CO-6) ---
-
 ArgsDigest = NewType("ArgsDigest", str)
 """sha256 over the tool name and the canonical JSON of its input (sorted keys, no
 whitespace, UTF-8)."""
@@ -254,9 +252,6 @@ class Grants:
             self._open.remove(grant)
             return True
         return False
-
-
-# --- the tool list ---
 
 
 def _text(result: Any) -> dict[str, Any]:
@@ -468,8 +463,6 @@ def gate_rules(
         case_insensitive=sys.platform in ("win32", "darwin"),
     )
 
-
-# --- external MCP servers ---
 
 VET_TIMEOUT_S: Final = 30.0
 

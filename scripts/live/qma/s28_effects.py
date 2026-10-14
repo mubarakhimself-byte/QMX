@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import shutil
 import subprocess
 import sys
-import types
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -100,8 +101,13 @@ def base_check(base: str) -> Any:
         text=True,
         encoding="utf-8",
     ).stdout
-    module = types.ModuleType("base_descriptors")
-    exec(compile(source, f"{base}:{DESCRIPTORS}", "exec"), module.__dict__)  # noqa: S102
+    copy = Path(tempfile.mkdtemp()) / "base_descriptors.py"
+    copy.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("base_descriptors", copy)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load {base}:{DESCRIPTORS}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     return module.check_descriptor
 
 

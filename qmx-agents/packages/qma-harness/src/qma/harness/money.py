@@ -441,9 +441,6 @@ def check_tool_surface(
             raise MoneySurfaceError(str(refused)) from None
 
 
-# --- posture ---
-
-
 @dataclass(frozen=True)
 class ExposureTarget:
     kind: Literal["keyring_entry", "read_path", "write_path", "loopback"]
