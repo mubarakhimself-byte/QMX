@@ -15,8 +15,14 @@ while a tool runs is folded into the running turn and gets no turn of its own (m
 the outcome is unknown: the chat shows a `needs_you` block and continues only when the operator
 sends the next message.
 
-Asks. Until approvals are wired, `can_use_tool` rejects every call that would ask, so no chat
-writes a file or runs a command the CLI would have asked about.
+Asks. `can_use_tool` (tool approvals and AskUserQuestion) writes a `permission` or `question`
+block and parks a future in this chat's own table under that block's seq, so an `AskId` is
+unique across restarts and the answer route needs no index. The answer resolves it. AllowOnce
+on an asking QMX tool records a `Grant` for the exact final input, which the tool handler
+consumes. AllowAlways on any other tool saves the CLI's suggested allow rules for this
+workspace and hands them back to the CLI for this process. An Interactive chat waits like
+Claude Code; an unattended one waits at most `[budgets] unattended_ask_seconds`, then rejects.
+The money gate runs before any of this, so no answer or remembered rule reaches a call it denied.
 """
 
 from __future__ import annotations
@@ -29,9 +35,16 @@ import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
-from claude_agent_sdk import ClaudeSDKClient, PermissionResultDeny, SystemMessage
+from claude_agent_sdk import (
+    ClaudeSDKClient,
+    PermissionResultAllow,
+    PermissionResultDeny,
+    PermissionUpdate,
+    SystemMessage,
+)
+from claude_agent_sdk.types import PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 
 from qma.harness.home import (
@@ -43,6 +56,8 @@ from qma.harness.home import (
     parse_claude_settings,
     plan_auth_method,
     plugin_refusal,
+    remember_rule,
+    session_id,
     write_record,
 )
 from qma.harness.launch import (
@@ -79,9 +94,11 @@ from qma.harness.project import (
 from qma.harness.relay import GrantRefused
 from qma.harness.tools import (
     SERVER,
+    Grant,
     Grants,
     ToolSurfaceError,
     VetCache,
+    args_digest,
     build_server,
     domain_write_policy,
     gate_rules,
@@ -93,11 +110,7 @@ from qma.harness.tools import (
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig
-    from claude_agent_sdk.types import (
-        McpStatusResponse,
-        PermissionResultAllow,
-        ToolPermissionContext,
-    )
+    from claude_agent_sdk.types import McpStatusResponse, ToolPermissionContext
     from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
     from qmx_tools.service import DomainContext
@@ -106,7 +119,6 @@ if TYPE_CHECKING:
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
 
-FLOOR_REASON: Final = "approvals are not wired yet"
 PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
 MCP_SETTLE_S: Final = 30.0
@@ -126,6 +138,104 @@ class OperatorText:
 
 
 type Prompt = OperatorText
+
+
+@dataclass(frozen=True)
+class AskId:
+    """`<session_id>.<n>`, where n is the seq of the ask's block in the chat's block log."""
+
+    session_id: SessionId
+    n: int
+
+    @classmethod
+    def parse(cls, raw: str) -> AskId:
+        chat, _, n = raw.rpartition(".")
+        if not (n.isascii() and n.isdigit()):
+            raise ValueError(f"{raw!r} is not an ask id")
+        return cls(session_id(chat), int(n))
+
+    def __str__(self) -> str:
+        return f"{self.session_id}.{self.n}"
+
+
+@dataclass(frozen=True)
+class AllowOnce:
+    edited_input: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class AllowAlways:
+    """Allow, and save the CLI's suggested allow rules to
+    `settings.toml [claude.remembered."<workspace>"]`. Not offered for asking QMX tools."""
+
+
+@dataclass(frozen=True)
+class Reject:
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class Answers:
+    """Answers to an AskUserQuestion call, by question text."""
+
+    answers: dict[str, str]
+
+
+type Answer = AllowOnce | AllowAlways | Reject | Answers
+
+type AnswerStatus = Literal["resolved", "already_answered", "expired", "invalid", "unknown"]
+"""A second answer to the same ask is `already_answered`. An ask whose process ended or whose
+unattended wait ran out is `expired`. `invalid` is an answer that does not fit the ask:
+AllowAlways on an asking QMX tool or with no rule to save, Answers to a tool ask, or a tool
+answer to a question. `unknown` is an id that names no chat."""
+
+QUESTION_TOOL: Final = "AskUserQuestion"
+UNATTENDED_ASK_S: Final = 300.0
+"""`[budgets] unattended_ask_seconds` when the operator has not set it."""
+REJECTED: Final = "the operator rejected this call"
+NOT_IN_TIME: Final = "the operator did not answer in time"
+ENDED: Final = "the agent process ended before the operator answered"
+
+
+@dataclass(frozen=True)
+class _Expired:
+    reason: str
+
+
+@dataclass(frozen=True)
+class _Ask:
+    tool: str
+    input: dict[str, Any]
+    asking_qmx: bool
+    """One-shot approvals bound to the exact arguments, and no "always"."""
+    rules: tuple[PermissionRuleValue, ...]
+    """The allow rules the CLI suggested, offered as "always"."""
+    reply: asyncio.Future[Answer | _Expired]
+
+    def fits(self, answer: Answer) -> bool:
+        question = self.tool == QUESTION_TOOL
+        match answer:
+            case Answers():
+                return question
+            case Reject():
+                return True
+            case AllowOnce():
+                return not question
+            case AllowAlways():
+                return not question and not self.asking_qmx and bool(self.rules)
+
+
+def rule_text(rule: PermissionRuleValue) -> str:
+    return f"{rule.tool_name}({rule.rule_content})" if rule.rule_content else rule.tool_name
+
+
+def allow_rules(suggestions: list[PermissionUpdate]) -> tuple[PermissionRuleValue, ...]:
+    return tuple(
+        rule
+        for update in suggestions
+        if update.type == "addRules" and update.behavior == "allow"
+        for rule in update.rules or []
+    )
 
 
 @dataclass(frozen=True)
@@ -305,6 +415,9 @@ class Chat:
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._grants = Grants()
+        self._asking: frozenset[str] = frozenset()
+        self._asks: dict[int, _Ask] = {}
+        self._settled: dict[int, AnswerStatus] = {}
 
     @property
     def session_id(self) -> SessionId:
@@ -335,8 +448,26 @@ class Chat:
         finally:
             self._stream.listeners.discard(queue)
 
+    def answer(self, n: int, answer: Answer) -> AnswerStatus:
+        """On the harness's event loop only. An n this process never asked belongs to an
+        earlier process, so it is `expired`."""
+        ask = self._asks.get(n)
+        if ask is None:
+            return self._settled.get(n, "expired")
+        if not ask.fits(answer):
+            return "invalid"
+        self._settle(n, "already_answered", answer)
+        return "resolved"
+
+    def _settle(self, n: int, status: AnswerStatus, reply: Answer | _Expired) -> None:
+        ask = self._asks.pop(n)
+        self._settled[n] = status
+        if not ask.reply.done():
+            ask.reply.set_result(reply)
+
     async def close(self) -> None:
-        """Disconnect, stop this chat's launcher tree and revoke its relay grant. Idempotent."""
+        """Disconnect, stop this chat's launcher tree and revoke its relay grant. Pending asks
+        become `expired`. Idempotent."""
         async with self._lock:
             live, self._live = self._live, None
             if live is None:
@@ -348,6 +479,8 @@ class Chat:
                 self._closing = False
 
     async def _end(self, live: _Live) -> None:
+        for n in list(self._asks):
+            self._settle(n, "expired", _Expired(ENDED))
         if live.grant is not None:
             await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
@@ -498,6 +631,7 @@ class Chat:
             unattended=unattended(self.record.config.kind),
             external_unattended=external_unattended,
         )
+        self._asking = gate.mandatory_asks
         return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 
     async def _routing(self, settings: str) -> Launch:
@@ -601,8 +735,70 @@ class Chat:
     async def _can_use_tool(
         self, tool_name: str, tool_input: dict[str, Any], context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
-        await self._note(
-            "permission",
-            {"tool": tool_name, "input": tool_input, "state": "rejected", "reason": FLOOR_REASON},
+        asking_qmx = tool_name in self._asking
+        rules = () if asking_qmx else allow_rules(context.suggestions)
+        kind = "question" if tool_name == QUESTION_TOOL else "permission"
+        content: dict[str, Any] = {"tool": tool_name, "input": tool_input, "state": "asking"}
+        if context.decision_reason:
+            content["reason"] = context.decision_reason
+        if rules:
+            content["always"] = [rule_text(rule) for rule in rules]
+            content["workspace"] = str(self.record.config.workspace)
+        if self._deps.redaction:
+            content = redacted(content)
+        # Appended on the loop, not in a thread, so the ask is in the table before any client
+        # can read its seq and answer it.
+        written = self._deps.control.sessions_append(
+            self.session_id, SessionBlock.model_validate({"type": kind, "content": content})
         )
-        return PermissionResultDeny(message=FLOOR_REASON)
+        n = int(cast("int", written["seq"]))
+        reply: asyncio.Future[Answer | _Expired] = asyncio.get_running_loop().create_future()
+        ask = self._asks[n] = _Ask(tool_name, tool_input, asking_qmx, rules, reply)
+        try:
+            resolved = await self._wait(n, ask)
+        except asyncio.CancelledError:
+            if n in self._asks:
+                self._settle(n, "expired", _Expired(ENDED))
+            raise
+        return await self._resolve(n, ask, kind, resolved)
+
+    async def _wait(self, n: int, ask: _Ask) -> Answer | _Expired:
+        if not unattended(self.record.config.kind):
+            return await ask.reply
+        budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
+        seconds = budgets.get("unattended_ask_seconds", UNATTENDED_ASK_S)
+        await asyncio.wait({ask.reply}, timeout=float(cast("float", seconds)))
+        if n in self._asks:
+            self._settle(n, "expired", _Expired(NOT_IN_TIME))
+        return ask.reply.result()
+
+    async def _resolve(
+        self, n: int, ask: _Ask, kind: str, reply: Answer | _Expired
+    ) -> PermissionResultAllow | PermissionResultDeny:
+        result: PermissionResultAllow | PermissionResultDeny
+        match reply:
+            case _Expired(reason=reason):
+                state, result = "expired", PermissionResultDeny(message=reason)
+            case Reject(message=message):
+                state, result = "rejected", PermissionResultDeny(message=message or REJECTED)
+            case Answers(answers=answers):
+                state = "answered"
+                result = PermissionResultAllow(updated_input={**ask.input, "answers": answers})
+            case AllowOnce(edited_input=edited):
+                final = ask.input if edited is None else edited
+                if ask.asking_qmx and (self._deps.test is None or self._deps.test.grants):
+                    self._grants.record(Grant(ask.tool, args_digest(ask.tool, final)))
+                state, result = "allowed", PermissionResultAllow(updated_input=edited)
+            case AllowAlways():
+                workspace = self.record.config.workspace
+                for rule in ask.rules:
+                    await asyncio.to_thread(
+                        remember_rule, self._deps.control, rule_text(rule), workspace
+                    )
+                state = "allowed_always"
+                session = PermissionUpdate(
+                    "addRules", rules=list(ask.rules), behavior="allow", destination="session"
+                )
+                result = PermissionResultAllow(updated_permissions=[session])
+        await self._note(kind, {"ask": n, "state": state})
+        return result

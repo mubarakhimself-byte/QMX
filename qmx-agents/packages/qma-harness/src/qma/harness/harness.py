@@ -24,7 +24,7 @@ from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 from qmx_tools.service import DomainContext
 
-from qma.harness.chat import Chat, ChatDeps, Prompt
+from qma.harness.chat import Answer, AnswerStatus, AskId, Chat, ChatDeps, Prompt
 from qma.harness.home import (
     ChatRecord,
     QmxHome,
@@ -192,6 +192,15 @@ class Harness:
 
     def live(self, chat: SessionId) -> AsyncIterator[Delta]:
         return self._chat(chat).live()
+
+    def answer(self, ask: AskId, answer: Answer) -> AnswerStatus:
+        """Routes by `ask.session_id`. Call it on the harness's event loop only: it resolves an
+        asyncio future and records a grant. A chat with no live object in this process lost
+        its asks when its process ended, so they are `expired`."""
+        chat = self._chats.get(ask.session_id)
+        if chat is not None:
+            return chat.answer(ask.n, answer)
+        return "unknown" if read_record(self._deps.home, ask.session_id) is None else "expired"
 
     async def close(self) -> None:
         """Close every chat, then the relay, then release the process cap so the home can be

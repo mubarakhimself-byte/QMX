@@ -11,6 +11,8 @@ Routes:
     POST /api/sessions/{sid}/interrupt           -> 202
     GET  /api/sessions/{sid}/live                SSE of deltas, never stored; 404 first for an
                                                  unknown chat
+    POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
+                                                 `<sid>.<seq of the permission or question block>`
     GET  /api/doctor                             DoctorLine list
     GET  /api/claude-settings                    settings.toml [claude]
     PUT  /api/claude-settings                    `home.parse_claude_settings`, then
@@ -24,7 +26,7 @@ import asyncio
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import cast
+from typing import Annotated, Any, Literal, cast
 
 import uvicorn
 from fastapi import APIRouter, Depends
@@ -35,7 +37,15 @@ from qmx_control.server import create_app, local_token
 from qmx_control.service import ControlService
 
 from qma.boot import KeepListRefused, parse_keep_names
-from qma.harness.chat import OperatorText
+from qma.harness.chat import (
+    AllowAlways,
+    AllowOnce,
+    Answer,
+    Answers,
+    AskId,
+    OperatorText,
+    Reject,
+)
 from qma.harness.harness import Harness, NewChat, UnknownChat
 from qma.harness.home import QmxHome, SessionId, claude_section, doctor, session_id
 from qma.harness.launch import LAUNCHER, Effort, LaunchRefused, PermissionMode
@@ -85,6 +95,46 @@ class NewChatIn(BaseModel):
 class TurnIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1)
+
+
+class AllowOnceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["allow_once"]
+    edited_input: dict[str, JsonValue] | None = None
+
+
+class AllowAlwaysIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["allow_always"]
+
+
+class RejectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["reject"]
+    message: str = ""
+
+
+class AnswersIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["answers"]
+    answers: dict[str, str]
+
+
+type AnswerIn = Annotated[
+    AllowOnceIn | AllowAlwaysIn | RejectIn | AnswersIn, Field(discriminator="decision")
+]
+
+
+def to_answer(body: AllowOnceIn | AllowAlwaysIn | RejectIn | AnswersIn) -> Answer:
+    match body:
+        case AllowOnceIn(edited_input=edited):
+            return AllowOnce(None if edited is None else cast("dict[str, Any]", edited))
+        case AllowAlwaysIn():
+            return AllowAlways()
+        case RejectIn(message=message):
+            return Reject(message)
+        case AnswersIn(answers=answers):
+            return Answers(answers)
 
 
 def chat_id(text: str) -> SessionId:
@@ -138,7 +188,15 @@ def chat_router(harness: Harness) -> APIRouter:
             data = {"kind": delta.kind, "text": delta.text, "tool_use_id": child}
             yield ServerSentEvent(data=data, event="delta")
 
-    _ = new_chat, turn, interrupt, live
+    @api.post("/api/approvals/{ask_id}")
+    async def approve(ask_id: str, body: AnswerIn) -> dict[str, str]:
+        try:
+            ask = AskId.parse(ask_id)
+        except ValueError:
+            return {"status": "unknown"}
+        return {"status": harness.answer(ask, to_answer(body))}
+
+    _ = new_chat, turn, interrupt, live, approve
     return api
 
 
