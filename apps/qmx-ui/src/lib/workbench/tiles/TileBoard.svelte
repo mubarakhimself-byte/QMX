@@ -17,6 +17,7 @@
   import * as Resizable from "$lib/components/ui/resizable";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { cn } from "$lib/utils";
+  import PanelBody from "./PanelBody.svelte";
   import {
     LINK_GROUPS,
     panes,
@@ -248,7 +249,7 @@
         {/if}
       </div>
     </header>
-    <div class="@container relative min-h-0 flex-1">
+    <PanelBody maximised={isExpanded}>
       {#if catalog[p.panel]}
         {@render panel(p)}
       {:else}
@@ -259,7 +260,7 @@
           <p class="max-w-xs">{i.note}</p>
         </div>
       {/if}
-    </div>
+    </PanelBody>
   </section>
 {/snippet}
 

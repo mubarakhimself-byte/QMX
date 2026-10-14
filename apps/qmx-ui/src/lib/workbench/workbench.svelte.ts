@@ -235,6 +235,11 @@ class Workbench {
       : 17,
   );
 
+  /** The root font size in force: the custom theme's when it is on. */
+  get remPx(): number {
+    return this.custom.on ? this.custom.text : this.textSize;
+  }
+
   setTextSize(px: number) {
     this.textSize = px;
     store("qmx.textSize", px);
