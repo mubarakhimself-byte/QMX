@@ -144,24 +144,59 @@ def _sse(*events: dict[str, object]) -> list[str]:
 
 
 def test_stream_with_response_completed_is_a_success() -> None:
-    call = {"type": "function_call", "id": "fc_1", "call_id": "c1", "name": "echo_word"}
     lines = _sse(
         {"type": "response.created", "response": {}},
         {"type": "response.output_text.delta", "delta": "hello "},
         {"type": "response.output_text.delta", "delta": "from QMA"},
-        {"type": "response.completed", "response": {"output": [call]}},
+        {"type": "response.completed", "response": {"output": []}},
     )
     result = p_gpt.fold_events(200, "req_1", 0.5, p_gpt.parse_sse(lines))
 
     assert result.completed
     assert result.text == "hello from QMA"
-    assert result.function_calls() == [call]
     assert result.event_types == (
         "response.created",
         "response.output_text.delta",
         "response.output_text.delta",
         "response.completed",
     )
+
+
+def test_items_come_from_output_item_done_when_completed_output_is_empty() -> None:
+    added = {
+        "type": "function_call",
+        "id": "fc_1",
+        "status": "in_progress",
+        "call_id": "call_1",
+        "name": "echo_word",
+        "arguments": "",
+    }
+    done = {**added, "status": "completed", "arguments": '{"word":"pineapple"}'}
+    lines = _sse(
+        {"type": "response.created", "response": {}},
+        {"type": "response.in_progress", "response": {}},
+        {"type": "response.output_item.added", "output_index": 0, "item": added},
+        {"type": "response.function_call_arguments.delta", "output_index": 0, "delta": "{"},
+        {
+            "type": "response.function_call_arguments.done",
+            "output_index": 0,
+            "arguments": '{"word":"pineapple"}',
+        },
+        {"type": "response.output_item.done", "output_index": 0, "item": done},
+        {"type": "response.completed", "response": {"output": []}},
+    )
+    result = p_gpt.fold_events(200, None, 3.2, p_gpt.parse_sse(lines))
+
+    assert result.completed
+    assert result.function_calls() == [done]
+    assert p_gpt.replay_items(result.output, keep_reasoning=False) == [
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "echo_word",
+            "arguments": '{"word":"pineapple"}',
+        }
+    ]
 
 
 def test_usage_limit_mid_stream_is_not_a_success() -> None:
@@ -439,7 +474,11 @@ class StubRoute(BaseHTTPRequestHandler):
         events: list[p_gpt.Json] = [
             {"type": "response.created", "response": {}},
             {"type": "response.output_text.delta", "delta": "hello from QMA"},
-            {"type": "response.completed", "response": {"output": output}},
+            *(
+                {"type": "response.output_item.done", "output_index": index, "item": item}
+                for index, item in enumerate(output)
+            ),
+            {"type": "response.completed", "response": {"output": []}},
         ]
         return "".join(f"data: {json.dumps(e)}\n\n" for e in events).encode()
 
