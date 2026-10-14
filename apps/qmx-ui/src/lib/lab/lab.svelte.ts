@@ -210,6 +210,8 @@ class LabState {
     voltarget: 40,
   });
   together = $state(false);
+  /** The pot "Run together" splits, in USD. */
+  pot = $state(20000);
   /** Text dropped into the Lab copilot's composer (e.g. "build a stress scenario"). */
   copilotSeed = $state("");
   /** The last layout open on each bench, so switching back lands there. */

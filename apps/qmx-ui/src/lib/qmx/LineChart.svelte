@@ -12,9 +12,12 @@
     series,
     height = 180,
     band,
+    legend = true,
   }: {
     series: Series[];
     height?: number;
+    /** Off when a table beside the chart already names each line. */
+    legend?: boolean;
     /** Optional shaded band path already in chart coordinates. */
     band?: { path: string; color: string };
   } = $props();
@@ -55,12 +58,14 @@
       />
     {/each}
   </svg>
-  <div class="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-    {#each series as s (s.label)}
-      <span class="flex items-center gap-1.5">
-        <span class="h-0.5 w-4 rounded" style="background: {s.color}"
-        ></span>{s.label}
-      </span>
-    {/each}
-  </div>
+  {#if legend}
+    <div class="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      {#each series as s (s.label)}
+        <span class="flex items-center gap-1.5">
+          <span class="h-0.5 w-4 rounded" style="background: {s.color}"
+          ></span>{s.label}
+        </span>
+      {/each}
+    </div>
+  {/if}
 </div>

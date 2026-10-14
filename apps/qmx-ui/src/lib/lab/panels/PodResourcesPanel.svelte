@@ -18,6 +18,7 @@
   import { resolve } from "$app/paths";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { cn } from "$lib/utils";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
   import { usd } from "$lib/portfolio/bits";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import {
@@ -33,6 +34,16 @@
   } from "../pods";
   import { lab } from "../lab.svelte";
 
+  const EXPLAIN: Record<string, string> = {
+    pods: "Tick the pods a test should run. The highlighted one is the pod you are working on.",
+    bots: "Every pod in a test sizes the same trades from these bots, so the difference you see is the pod.",
+    blocks:
+      "A green dot means the block is in the pod you are working on. Click a block to read and tune it; add it with the + in its slot.",
+    stress:
+      "Tick the crises a test replays. Yours sit beside the built-in ones.",
+    money:
+      "Pods soak on paper money first. Real money is only wired in Portfolio, after you sign the promotion.",
+  };
   const TABS = [
     { id: "pods", label: "Pods", icon: Layers2 },
     { id: "bots", label: "Bots", icon: Bot },
@@ -77,7 +88,7 @@
         role="tab"
         aria-selected={tab === t.id}
         class={cn(
-          "flex h-7 items-center gap-1.5 rounded-md px-2 text-xs",
+          "flex h-7 items-center gap-1.5 rounded-md px-1.5 text-xs @[20rem]:px-2",
           tab === t.id
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:text-foreground",
@@ -89,10 +100,15 @@
         ></button
       >
     {/each}
+    <InfoTip
+      class="ml-auto"
+      label="Explain this list"
+      text={EXPLAIN[tab] ?? ""}
+    />
     <!-- eslint-disable svelte/no-navigation-without-resolve -->
     <a
       href={`${resolve("/library")}?shelf=pods`}
-      class="text-muted-foreground hover:text-foreground hover:bg-muted ml-auto flex size-7 items-center justify-center rounded-md"
+      class="text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 items-center justify-center rounded-md"
       aria-label="Open the Library"
       title="Open the Library"><LibraryBig class="size-3.5" /></a
     >
@@ -177,10 +193,6 @@
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-        <p class="text-muted-foreground mt-2 text-xs">
-          Tick the pods a test should run. The highlighted one is the pod you
-          are working on.
-        </p>
       </div>
     {:else if tab === "bots"}
       <ul class="p-1.5">
@@ -199,8 +211,6 @@
         {/each}
       </ul>
       <p class="text-muted-foreground px-3 pb-3 text-xs">
-        Every pod in a test sizes the same trades from these bots, so the
-        difference you see is the pod.
         <!-- eslint-disable svelte/no-navigation-without-resolve -->
         <a
           href={`${resolve("/library")}?shelf=bots`}
@@ -234,10 +244,6 @@
             </div>
           </div>
         {/each}
-        <p class="text-muted-foreground text-xs">
-          <span class="text-success">●</span> in {pod?.name}. Click a block to
-          read and tune it; add it with the + in its slot.
-        </p>
       </div>
     {:else if tab === "stress"}
       <ul class="p-1.5">
@@ -299,10 +305,6 @@
           </li>
         {/each}
       </ul>
-      <p class="text-muted-foreground px-3 pb-3 text-xs">
-        Pods soak on paper money first. Real money is only wired in Portfolio,
-        after you sign the promotion.
-      </p>
     {/if}
   </div>
 </div>
