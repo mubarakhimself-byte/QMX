@@ -448,7 +448,6 @@ def epoch_seconds(value: object) -> float | None:
 
 
 TRANSPORT_FAILED = 0
-"""Status recorded when no HTTP reply arrived (DNS, connect, reset or timeout)."""
 
 
 @dataclass(frozen=True)
@@ -922,8 +921,6 @@ def barred_outcome(name: str, result: StreamResult) -> BarredOutcome:
 
 
 def probe_barred(session: Session, ev: Evidence, model: str) -> StepResult:
-    """Pass when every barred field's outcome is a refusal that names it or a completed 200,
-    so each is recorded with the route's own message. A 400 for another cause fails."""
     log = ev.writer("hp2-p5")
     outcomes: dict[BarredOutcome, list[str]] = {"refused": [], "accepted": [], "unclassified": []}
     for name, mutate in BARRED.items():
@@ -991,10 +988,6 @@ def secrets_scan(session: Session, ev: Evidence, findings: Path) -> StepResult:
 
 @dataclass(frozen=True)
 class Verdict:
-    """`not viable` only when 02b section D's stop rule fires: P2 returns
-    subscription_sharing_user_not_eligible, or P3 fails in both tool shapes. Any other P1 or
-    P2 failure, such as a 429 usage limit, is `inconclusive` and the run should be repeated."""
-
     outcome: Outcome
     model: str | None
     tools_shape: ToolsShape | None
