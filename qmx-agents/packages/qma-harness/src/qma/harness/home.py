@@ -1,0 +1,707 @@
+"""QMX's own Claude homes, the Claude settings QMA passes in code, and on-disk chat state.
+
+Layout under the QMX home, never under the operator's `~/.claude`:
+
+    claude/                  Plan home. CLAUDE_CONFIG_DIR for plan chats; the CLI keeps the
+                             plan login and the transcripts here.
+    claude-relayed/          Relayed home for key and GPT chats. It never holds a login. Its
+                             `projects/` links to `claude/projects/`, so a provider switch
+                             still resumes the same transcript.
+    chats/<session>.json     One `ChatRecord` per chat. Each chat writes only its own.
+    procs/<session>.json     Pid file, written only by that chat's launcher.
+    state/                   Correctness records such as the exposure report.
+    workspaces/              Default working folders, outside any dev repo.
+    agent-memory/<ws>/       Auto memory per workspace (`autoMemoryDirectory`).
+
+Settings in code. QMA writes no settings file the CLI loads, and `setting_sources=[]` loads
+none from either home. Every Claude setting reaches the CLI as one inline JSON string
+(`code_settings`), so nothing an agent edits during a session changes it. The operator's part
+lives in `settings.toml [claude]`, written only through `ControlService` after
+`parse_claude_settings` accepts it, and parsed again at every launch. The fixed values win.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import functools
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from importlib.metadata import version
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
+
+from qma.boot import banned_fragment
+from qma.harness.launch import (
+    ARGV_BUDGET,
+    Background,
+    ChatConfig,
+    ChatKind,
+    Child,
+    Interactive,
+    LaunchRefused,
+    ProfileName,
+)
+from qma.launcher import BLOCK_CONFIG_CHANGE, CHAT_ID, bundled_cli
+
+if TYPE_CHECKING:
+    from qmx_control.service import ControlService
+
+SessionId = NewType("SessionId", str)
+"""The qmx-control session UUID, also the SDK session id and the launcher's chat id."""
+
+PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
+"""`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""
+
+
+def session_id(text: str) -> SessionId:
+    if not CHAT_ID.fullmatch(text):
+        raise ValueError(f"{text!r} is not a session id")
+    return SessionId(text)
+
+
+@dataclass(frozen=True)
+class QmxHome:
+    root: Path
+    plugin_dir: Path = PLUGIN_DIR
+
+    @property
+    def plan_dir(self) -> Path:
+        return self.root / "claude"
+
+    @property
+    def relayed_dir(self) -> Path:
+        return self.root / "claude-relayed"
+
+    @property
+    def chats_dir(self) -> Path:
+        return self.root / "chats"
+
+    @property
+    def procs_dir(self) -> Path:
+        return self.root / "procs"
+
+    @property
+    def state_dir(self) -> Path:
+        return self.root / "state"
+
+    @property
+    def workspaces_dir(self) -> Path:
+        return self.root / "workspaces"
+
+    def memory_dir(self, workspace: Path) -> Path:
+        """Auto memory for launches in `workspace`. Not a protected path, so agents read and
+        write it as in vanilla."""
+        key = workspace_key(workspace)
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", Path(key).name).strip("-.") or "root"
+        return (
+            self.root / "agent-memory" / f"{slug}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+        )
+
+
+def workspace_key(workspace: Path) -> str:
+    """One spelling per folder: resolved, forward slashes, casefolded where paths are."""
+    key = workspace.resolve().as_posix()
+    return key.casefold() if sys.platform in ("win32", "darwin") else key
+
+
+LOGIN_FILES: Final = (".credentials.json",)
+
+
+def relayed_logins(home: QmxHome) -> list[Path]:
+    return [path for path in (home.relayed_dir / name for name in LOGIN_FILES) if path.exists()]
+
+
+def ensure_homes(home: QmxHome) -> None:
+    """Create both homes, the state folders and the relayed `projects/` link. Idempotent.
+    Refuses a home that is the operator's `~/.claude` and a login file in the relayed home."""
+    personal = (Path.home() / ".claude").resolve()
+    for claude_home in (home.plan_dir, home.relayed_dir):
+        if claude_home.resolve() == personal:
+            raise LaunchRefused(f"{claude_home} is the operator's own ~/.claude")
+    for folder in (
+        home.plan_dir / "projects",
+        home.relayed_dir,
+        home.chats_dir,
+        home.procs_dir,
+        home.state_dir,
+        home.workspaces_dir,
+    ):
+        folder.mkdir(parents=True, exist_ok=True)
+    _link_projects(home.relayed_dir / "projects", home.plan_dir / "projects")
+    found = relayed_logins(home)
+    if found:
+        raise LaunchRefused(f"the relayed home holds a login file: {found[0]}")
+
+
+def _link_projects(link: Path, target: Path) -> None:
+    if link.is_junction() or link.is_symlink():
+        if link.resolve() == target.resolve():
+            return
+        raise LaunchRefused(f"{link} links to {link.resolve()}, not {target}")
+    if link.exists():
+        try:
+            link.rmdir()
+        except OSError as error:
+            raise LaunchRefused(f"{link} is a folder with content, not a link") from error
+    if sys.platform == "win32":
+        import _winapi  # noqa: PLC0415
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+# --- Claude settings, passed in code ---
+
+CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "permissions", "env", "hooks",
+        "outputStyle", "attribution", "includeCoAuthoredBy", "alwaysThinkingEnabled",
+        "language", "respectGitignore",
+        "remembered",
+    }
+)  # fmt: skip
+"""Top-level keys allowed in `settings.toml [claude]`. Everything else refuses, including
+`apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins`, marketplaces and
+`model`. `remembered` is QMX's, never passed through as is: per-workspace "always allow"
+rules merged into `permissions.allow` only for launches in that workspace."""
+
+PERMISSION_KEYS: Final = frozenset({"allow", "ask", "deny", "additionalDirectories"})
+
+CLAUDE_ENV_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH",
+        "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS",
+        "BASH_DEFAULT_TIMEOUT_MS",
+        "BASH_MAX_TIMEOUT_MS",
+        "MCP_TOOL_TIMEOUT",
+        "CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS",
+    }
+)
+"""The only names allowed under `[claude] env`. No routing, proxy, CA or wrapper name."""
+
+HOOK_TYPES: Final = frozenset({"command", "http", "prompt", "agent"})
+TEXT_KEYS: Final = frozenset({"outputStyle", "language"})
+FLAG_KEYS: Final = frozenset({"includeCoAuthoredBy", "alwaysThinkingEnabled", "respectGitignore"})
+
+CLEANUP_PERIOD_DAYS: Final = 3650
+"""Transcripts outlive the CLI's 30-day sweep. The settings reference rejects `0`."""
+SPAWN_DEPTH_DEFAULT: Final = "1"
+
+_RULE = re.compile(r"[A-Za-z][\w-]*(?:\(.+\))?", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class ClaudeSettings:
+    """The validated `settings.toml [claude]` section."""
+
+    raw: Mapping[str, object] = field(default_factory=dict[str, object])
+
+    def remembered(self, workspace: Path) -> list[str]:
+        table = cast("Mapping[str, Mapping[str, list[str]]]", self.raw.get("remembered", {}))
+        return list(table.get(workspace_key(workspace), {}).get("allow", []))
+
+
+def _refuse(key: str, why: str) -> LaunchRefused:
+    return LaunchRefused(f"[claude] {key} {why}")
+
+
+def _strings(value: object, key: str, check: re.Pattern[str] | None = None) -> list[str]:
+    if not isinstance(value, list):
+        raise _refuse(key, "must be a list of strings")
+    items: list[str] = []
+    for item in cast("list[object]", value):
+        if not isinstance(item, str) or (check is not None and not check.fullmatch(item)):
+            raise _refuse(key, f"holds {item!r}, which is not a permission rule")
+        items.append(item)
+    return items
+
+
+def _table(value: object, key: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise _refuse(key, "must be a table")
+    return cast("dict[str, object]", value)
+
+
+def _hooks(value: object) -> dict[str, object]:
+    for event, groups in _table(value, "hooks").items():
+        if not isinstance(groups, list):
+            raise _refuse(f"hooks.{event}", "must be a list of matcher groups")
+        for group in cast("list[object]", groups):
+            entry = _table(group, f"hooks.{event}")
+            if set(entry) - {"matcher", "hooks"} or not isinstance(entry.get("hooks"), list):
+                raise _refuse(f"hooks.{event}", "needs a hooks list and an optional matcher")
+            for hook in cast("list[object]", entry["hooks"]):
+                if _table(hook, f"hooks.{event}").get("type") not in HOOK_TYPES:
+                    raise _refuse(f"hooks.{event}", f"hook types are {sorted(HOOK_TYPES)}")
+    return cast("dict[str, object]", value)
+
+
+def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
+    """Allow-list validation. Raises `LaunchRefused` naming the first key that is not allowed."""
+    parsed: dict[str, object] = {}
+    for key, value in raw.items():
+        if key not in CLAUDE_SETTING_KEYS:
+            raise _refuse(key, "is not allowed")
+        if key == "permissions":
+            table = _table(value, key)
+            for name, rules in table.items():
+                if name not in PERMISSION_KEYS:
+                    raise _refuse(f"permissions.{name}", "is not allowed")
+                check = None if name == "additionalDirectories" else _RULE
+                _strings(rules, f"permissions.{name}", check)
+        elif key == "env":
+            for name, setting in _table(value, key).items():
+                if name not in CLAUDE_ENV_NAMES:
+                    raise _refuse(f"env.{name}", "is not allowed")
+                if not isinstance(setting, str):
+                    raise _refuse(f"env.{name}", "must be a string")
+        elif key == "hooks":
+            _hooks(value)
+        elif key == "remembered":
+            for workspace, rules in _table(value, key).items():
+                entry = _table(rules, f"remembered.{workspace}")
+                if set(entry) != {"allow"}:
+                    raise _refuse(f"remembered.{workspace}", "holds only an allow list")
+                _strings(entry["allow"], f"remembered.{workspace}.allow", _RULE)
+        elif key == "attribution":
+            if not all(isinstance(text, str) for text in _table(value, key).values()):
+                raise _refuse(key, "values must be strings")
+        elif key in TEXT_KEYS and not isinstance(value, str):
+            raise _refuse(key, "must be a string")
+        elif key in FLAG_KEYS and not isinstance(value, bool):
+            raise _refuse(key, "must be true or false")
+        parsed[key] = value
+    return ClaudeSettings(json.loads(json.dumps(parsed)))
+
+
+def config_change_hook(launcher: Path) -> dict[str, object]:
+    """Blocks every settings change the CLI lets a hook block. No matcher, so every source."""
+    return {
+        "hooks": [
+            {
+                "type": "command",
+                "command": f"'{launcher.as_posix()}' {BLOCK_CONFIG_CHANGE}",
+                "timeout": 10,
+            }
+        ]
+    }
+
+
+def code_settings(
+    user: ClaudeSettings, *, launcher: Path, workspace: Path, memory_dir: Path
+) -> str:
+    """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
+    The operator's keys, the workspace's remembered rules, then the fixed values, which win."""
+    document: dict[str, Any] = {
+        key: value for key, value in json.loads(json.dumps(user.raw)).items() if key != "remembered"
+    }
+    remembered = user.remembered(workspace)
+    if remembered:
+        permissions: dict[str, Any] = document.setdefault("permissions", {})
+        allow: list[str] = permissions.setdefault("allow", [])
+        allow.extend(rule for rule in remembered if rule not in allow)
+    document["env"] = {
+        "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": SPAWN_DEPTH_DEFAULT,
+        **document.get("env", {}),
+    }
+    document["hooks"] = {
+        **document.get("hooks", {}),
+        "ConfigChange": [config_change_hook(launcher)],
+    }
+    document |= {
+        "forceLoginMethod": "claudeai",
+        "cleanupPeriodDays": CLEANUP_PERIOD_DAYS,
+        "autoMemoryDirectory": memory_dir.as_posix(),
+    }
+    return json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+
+def claude_section(raw: Mapping[str, object]) -> dict[str, object]:
+    return dict(parse_claude_settings(raw).raw)
+
+
+def remember_rule(control: ControlService, rule: str, workspace: Path) -> None:
+    """Append an allow rule to `[claude.remembered."<workspace>"]` through `ControlService`, the
+    one writer. Idempotent. Chats in that workspace pick it up at their next launch."""
+    current = cast("dict[str, Any]", control.settings_get("claude"))
+    remembered: dict[str, Any] = current.setdefault("remembered", {})
+    allow: list[str] = remembered.setdefault(workspace_key(workspace), {}).setdefault("allow", [])
+    if rule in allow:
+        return
+    allow.append(rule)
+    control.settings_put("claude", current)
+
+
+# --- the plan login ---
+
+PLAN_AUTH_METHOD: Final = "claude.ai"
+"""What `claude auth status` reports for a Max login (HP0 S2), with `firstParty`."""
+PLAN_API_PROVIDER: Final = "firstParty"
+
+
+@dataclass(frozen=True)
+class PlanAuth:
+    """The login fields of `claude auth status`. Never the token, email or organisation."""
+
+    logged_in: bool
+    method: str | None
+    provider: str | None
+    subscription: str | None
+
+    @property
+    def is_subscription(self) -> bool:
+        return (
+            self.logged_in
+            and self.method == PLAN_AUTH_METHOD
+            and self.provider == PLAN_API_PROVIDER
+        )
+
+    def require(self) -> None:
+        if not self.is_subscription:
+            raise LaunchRefused(
+                f"the plan home is not signed in to a claude.ai plan "
+                f"(method {self.method}, provider {self.provider}); run /login in the console"
+            )
+
+
+def cli_env(config_dir: Path) -> dict[str, str]:
+    """This process's env without any banned name, plus the home. No inherited token, key,
+    base URL or proxy ever reaches a CLI QMA starts."""
+    clean = {name: value for name, value in os.environ.items() if not banned_fragment(name)}
+    return clean | {"CLAUDE_CONFIG_DIR": str(config_dir)}
+
+
+def plan_auth_method(home: QmxHome, settings_json: str) -> PlanAuth:
+    """Run the bundled CLI's `auth status` in the plan home with the same inline settings."""
+    cli = bundled_cli()
+    if cli is None:
+        return PlanAuth(logged_in=False, method=None, provider=None, subscription=None)
+    done = subprocess.run(
+        [cli, "--settings", settings_json, "auth", "status"],
+        env=cli_env(home.plan_dir),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        check=False,
+    )
+    try:
+        status = cast("dict[str, object]", json.loads(done.stdout))
+    except ValueError:
+        status = {}
+
+    def text(key: str) -> str | None:
+        value = status.get(key)
+        return value if isinstance(value, str) else None
+
+    return PlanAuth(
+        logged_in=status.get("loggedIn") is True,
+        method=text("authMethod"),
+        provider=text("apiProvider"),
+        subscription=text("subscriptionType"),
+    )
+
+
+@functools.cache
+def cli_version() -> str | None:
+    cli = bundled_cli()
+    if cli is None:
+        return None
+    done = subprocess.run([cli, "-v"], capture_output=True, text=True, timeout=60, check=False)
+    found = re.search(r"\d+\.\d+\.\d+", done.stdout)
+    return found.group() if found else None
+
+
+# --- chat records ---
+
+type TurnState = Literal["idle", "running"]
+
+
+@dataclass(frozen=True)
+class ChatRecord:
+    """What QMA must remember about a chat across restarts. The transcript is the SDK's JSONL.
+
+    `started` is False until the chat's first `ResultMessage`. It is a hint; resume is decided
+    by whether the JSONL exists, and a started chat with no JSONL is refused.
+    `turn` is "running" from before a prompt is sent until its `ResultMessage`; "running" at
+    boot means the outcome is unknown."""
+
+    session_id: SessionId
+    config: ChatConfig
+    started: bool
+    turn: TurnState
+
+
+def _kind_document(kind: ChatKind) -> dict[str, object]:
+    match kind:
+        case Interactive():
+            return {"type": "interactive"}
+        case Background():
+            return {"type": "background"}
+        case Child(parent=parent, unattended=flag):
+            return {"type": "child", "parent": parent, "unattended": flag}
+
+
+def _kind(document: Mapping[str, Any]) -> ChatKind:
+    match document["type"]:
+        case "interactive":
+            return Interactive()
+        case "background":
+            return Background()
+        case "child":
+            return Child(session_id(document["parent"]), bool(document["unattended"]))
+        case other:
+            raise ValueError(f"unknown chat kind {other!r}")
+
+
+def _record_document(record: ChatRecord) -> dict[str, object]:
+    config = record.config
+    return {
+        "session_id": record.session_id,
+        "config": {
+            "profile": config.profile,
+            "model": config.model,
+            "effort": config.effort,
+            "mode": config.mode,
+            "workspace": str(config.workspace),
+            "kind": _kind_document(config.kind),
+        },
+        "started": record.started,
+        "turn": record.turn,
+    }
+
+
+def _record(document: Mapping[str, Any]) -> ChatRecord:
+    config = document["config"]
+    if document["turn"] not in ("idle", "running"):
+        raise ValueError(f"unknown turn state {document['turn']!r}")
+    return ChatRecord(
+        session_id=session_id(document["session_id"]),
+        config=ChatConfig(
+            profile=ProfileName(config["profile"]),
+            model=str(config["model"]),
+            effort=config["effort"],
+            mode=config["mode"],
+            workspace=Path(config["workspace"]),
+            kind=_kind(config["kind"]),
+        ),
+        started=bool(document["started"]),
+        turn=document["turn"],
+    )
+
+
+def record_path(home: QmxHome, chat: SessionId) -> Path:
+    return home.chats_dir / f"{chat}.json"
+
+
+def read_record(home: QmxHome, chat: SessionId) -> ChatRecord | None:
+    try:
+        text = record_path(home, chat).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    return _record(json.loads(text))
+
+
+def write_record(home: QmxHome, record: ChatRecord) -> None:
+    """Atomic replace of one chat's file. Writing the same record twice changes nothing."""
+    path = record_path(home, record.session_id)
+    encoded = json.dumps(_record_document(record), indent=2, sort_keys=True)
+    with contextlib.suppress(FileNotFoundError):
+        if path.read_text(encoding="utf-8") == encoded:
+            return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staged = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    staged.write_text(encoded, encoding="utf-8")
+    staged.replace(path)
+
+
+def list_records(home: QmxHome) -> list[ChatRecord]:
+    return [
+        _record(json.loads(path.read_text(encoding="utf-8")))
+        for path in sorted(home.chats_dir.glob("*.json"))
+    ]
+
+
+# --- doctor ---
+
+
+@dataclass(frozen=True)
+class DoctorLine:
+    name: str
+    ok: bool
+    detail: str
+
+
+CLI_FLOOR: Final = (2, 1, 248)
+
+DEPARTURES: Final[tuple[str, ...]] = (
+    "Only the workspace root's CLAUDE.md and AGENTS.md are read, once, into the system prompt "
+    "append; parent and subfolder CLAUDE.md files are not loaded.",
+    ".claude/rules/ and CLAUDE.local.md are not loaded; @import lines stay raw text.",
+    "/memory, # quick memory and /init edit files that apply only at the next launch, and only "
+    "at the workspace root.",
+    "Project settings, project hooks and .mcp.json are off.",
+    "Project skills, commands and agents are off; only the QMX plugin's load.",
+    "Auto memory lives in <qmx_home>/agent-memory/<workspace>/, one per workspace, shared by "
+    "every provider.",
+    "Plan mode may fail to write its plan file, which defaults to a protected Claude home.",
+    'Always allow is saved to [claude.remembered."<workspace>"], not the project\'s local '
+    "settings file.",
+    "User settings: only permissions, six env names, hooks, outputStyle, attribution, "
+    "includeCoAuthoredBy, alwaysThinkingEnabled, language and respectGitignore can be set.",
+    "Settings edits apply at the next launch, never mid-session.",
+    "Skills and plugins do not hot-reload; the ConfigChange guard blocks reloads.",
+    "His personal ~/.claude, plugins, mods and claude.ai connectors never load.",
+    "Agent Bash sees an allow-listed environment; other names need the UI keep list and a restart.",
+    "No proxy and no corporate CA for plan traffic.",
+    "Background and Child chats are verbatim: no slash commands, no @file reads.",
+    "Nonessential traffic is off, TodoWrite is on, Workflow is off.",
+    "/rewind file checkpoints do not cross a provider switch (inferred).",
+    "In the QMX repo, edits under qmx-agents/plugin/ and Bash naming that folder are denied.",
+    "Asking QMX tools have no always allow.",
+)
+
+
+def managed_policy_paths() -> tuple[Path, ...]:
+    """Where Claude Code reads managed policy on this OS. Policy beats every other layer."""
+    if sys.platform == "win32":
+        roots = (Path("C:/Program Files/ClaudeCode"), Path("C:/ProgramData/ClaudeCode"))
+        names = ("managed-settings.json", "managed-settings.d", "managed-mcp.json")
+        return tuple(root / name for root in roots for name in names)
+    root = (
+        Path("/Library/Application Support/ClaudeCode")
+        if sys.platform == "darwin"
+        else Path("/etc/claude-code")
+    )
+    return tuple(
+        root / name for name in ("managed-settings.json", "managed-settings.d", "managed-mcp.json")
+    )
+
+
+def _policy_lines() -> list[DoctorLine]:
+    lines = [
+        DoctorLine(
+            f"managed policy {path.as_posix()}",
+            not path.exists(),
+            "present" if path.exists() else "absent",
+        )
+        for path in managed_policy_paths()
+    ]
+    if sys.platform == "win32":
+        import winreg  # noqa: PLC0415
+
+        for hive, label in (
+            (winreg.HKEY_LOCAL_MACHINE, "HKLM"),
+            (winreg.HKEY_CURRENT_USER, "HKCU"),
+        ):
+            try:
+                winreg.OpenKey(hive, r"SOFTWARE\Policies\ClaudeCode").Close()
+                present = True
+            except FileNotFoundError:
+                present = False
+            name = f"managed policy {label}\\SOFTWARE\\Policies\\ClaudeCode"
+            lines.append(DoctorLine(name, not present, "present" if present else "absent"))
+    return lines
+
+
+def _git_bash() -> DoctorLine:
+    if sys.platform != "win32":
+        return DoctorLine("git bash", True, "not needed on this OS")
+    chosen = os.environ.get("CLAUDE_CODE_GIT_BASH_PATH")
+    if chosen:
+        return DoctorLine(
+            "git bash", Path(chosen).is_file(), f"{chosen} (kept from CLAUDE_CODE_GIT_BASH_PATH)"
+        )
+    git = shutil.which("git")
+    found = (
+        Path(git).parents[1] / "bin" / "bash.exe"
+        if git
+        else Path("C:/Program Files/Git/bin/bash.exe")
+    )
+    return DoctorLine("git bash", found.is_file(), f"{found} (default)")
+
+
+def _home_lines(home: QmxHome) -> list[DoctorLine]:
+    personal = (Path.home() / ".claude").resolve()
+    lines = [
+        DoctorLine(
+            name,
+            path.is_dir() and path.resolve() != personal,
+            f"{path} {'exists' if path.is_dir() else 'missing'}; "
+            f"{'is' if path.resolve() == personal else 'is not'} ~/.claude",
+        )
+        for name, path in (("plan home", home.plan_dir), ("relayed home", home.relayed_dir))
+    ]
+    link, target = home.relayed_dir / "projects", home.plan_dir / "projects"
+    linked = link.exists() and link.resolve() == target.resolve()
+    lines.append(DoctorLine("relayed projects link", linked, f"{link} -> {link.resolve()}"))
+    found = relayed_logins(home)
+    detail = f"login file found: {found[0]}; launches are refused" if found else "no login file"
+    lines.append(DoctorLine("relayed home login", not found, detail))
+    return lines
+
+
+def doctor(
+    home: QmxHome,
+    control: ControlService,
+    *,
+    scrubbed: Sequence[str],
+    keep: Sequence[str],
+    launcher: Path,
+) -> list[DoctorLine]:
+    """One read-only page of facts. Runs `claude auth status`, so call it off the event loop."""
+    sdk = version("claude-agent-sdk")
+    cli = cli_version()
+    cli_ok = cli is not None and tuple(int(part) for part in cli.split(".")) >= CLI_FLOOR
+    lines = [
+        DoctorLine("sdk", True, f"claude-agent-sdk {sdk}"),
+        DoctorLine("cli", cli_ok, f"bundled CLI {cli}, floor {'.'.join(map(str, CLI_FLOOR))}"),
+        *_home_lines(home),
+    ]
+    try:
+        user = parse_claude_settings(control.settings_get("claude"))
+        lines.append(DoctorLine("[claude] settings", True, "parsed"))
+    except LaunchRefused as error:
+        user = ClaudeSettings()
+        lines.append(DoctorLine("[claude] settings", False, str(error)))
+    workspace = home.workspaces_dir
+    settings = code_settings(
+        user, launcher=launcher, workspace=workspace, memory_dir=home.memory_dir(workspace)
+    )
+    lines.append(
+        DoctorLine(
+            "inline settings",
+            len(settings) < ARGV_BUDGET,
+            f"{len(settings)} characters for {workspace}: {settings}",
+        )
+    )
+    auth = plan_auth_method(home, settings)
+    lines.append(
+        DoctorLine(
+            "plan auth method",
+            auth.is_subscription,
+            f"logged in {auth.logged_in}, method {auth.method}, provider {auth.provider}, "
+            f"subscription {auth.subscription}",
+        )
+    )
+    lines += _policy_lines()
+    lines += [
+        DoctorLine("boot scrub removed", True, ", ".join(scrubbed) or "nothing"),
+        _git_bash(),
+        DoctorLine(
+            "keep list", True, f"{', '.join(keep) or 'empty'}; an edit applies at the next start"
+        ),
+        *(
+            DoctorLine(f"departure {number}", True, text)
+            for number, text in enumerate(DEPARTURES, start=1)
+        ),
+    ]
+    return lines
