@@ -15,6 +15,7 @@ from p_providers import (
     collect_toolsearch,
     perf_verdict,
     tool_search_state,
+    tool_search_verdict,
     websearch_verdict,
 )
 
@@ -55,6 +56,14 @@ def test_tool_search_state_reads_the_init_tool_list() -> None:
     assert tool_search_state(["Bash", "ToolSearch", "mcp__probe__ping"]) == "ToolSearch=on"
     assert tool_search_state(["Bash", "mcp__probe__ping"]) == "ToolSearch=off"
     assert tool_search_state([]) == "no init"
+
+
+def test_tool_search_passes_only_when_it_is_listed_and_the_turn_is_accepted() -> None:
+    assert tool_search_verdict("ToolSearch=on", []) == "PASS"
+    assert tool_search_verdict("ToolSearch=on", ["status=400 Deferred custom tools"]) == (
+        "LISTED, REJECTED"
+    )
+    assert tool_search_verdict("ToolSearch=off", []) == "FAIL"
 
 
 def test_probe_verdicts_need_the_signal_02b_names() -> None:

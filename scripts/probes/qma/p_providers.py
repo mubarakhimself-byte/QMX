@@ -18,6 +18,7 @@ import shutil
 import statistics
 import sys
 import time
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -60,21 +61,20 @@ PROVIDERS: Final = {
         Provider("deepseek", "https://api.deepseek.com/anthropic", "deepseek-v4-pro"),
         Provider("minimax", "https://api.minimax.io/anthropic", "MiniMax-M3"),
         Provider("meta", "https://api.meta.ai", "muse-wonder-1.0"),
-        Provider("openrouter", "https://openrouter.ai/api", "deepseek/deepseek-v4-flash-0731"),
+        Provider("openrouter", "https://openrouter.ai/api", "deepseek/deepseek-v4.1-flash"),
     )
 }
 PRICES: Final = {
-    "openrouter": Prices(PROVIDERS["openrouter"].model, prompt=1.6e-8, completion=6.4e-7),
+    "openrouter": Prices(
+        PROVIDERS["openrouter"].model, usd_per_input_token=2.016e-8, usd_per_output_token=8.91e-7
+    ),
 }
-"""USD per token from the public OpenRouter model list. A keyed row with no entry here
-does not run, so no provider spends past the guard."""
 
 PROBES: Final = ("B1", "B3", "B4", "WebSearch", "tool search")
 TOOL_SEARCH_ON: Final = {"ENABLE_TOOL_SEARCH": "true"}
 BETAS_OFF: Final = {"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1"}
 THINKING: Final = {"type": "enabled", "budget_tokens": 1024}
-OUTPUT_CAP: Final = {MAX_OUTPUT_VAR: "512"}
-THINKING_OUTPUT_CAP: Final = {MAX_OUTPUT_VAR: "1536"}
+OUTPUT_CAP: Final = {MAX_OUTPUT_VAR: "2048"}
 PERF_RUNS: Final = 3
 SLOW_FACTOR: Final = 3
 
@@ -157,6 +157,12 @@ def b4_verdict(ok: bool, bash_calls: int, errors: list[str]) -> str:
     return "PASS" if ok and bash_calls >= 2 and not thinking_error else "FAIL"
 
 
+def tool_search_verdict(state: str, errors: list[str]) -> str:
+    if state != "ToolSearch=on":
+        return "FAIL"
+    return "LISTED, REJECTED" if errors else "PASS"
+
+
 def websearch_verdict(calls: int, results: list[str], ok: bool) -> str:
     if not calls:
         return "NOT CALLED"
@@ -189,9 +195,13 @@ def no_key_rows(log: Log, provider: Provider) -> None:
 
 
 def row_options(env: dict[str, str], **overrides: Any) -> ClaudeAgentOptions:
-    return plan_options(
-        env=env, model="sonnet", mcp_servers={"probe": ping_server()}, max_turns=6, **overrides
-    )
+    row: dict[str, Any] = {
+        "env": env,
+        "model": "sonnet",
+        "mcp_servers": {"probe": ping_server()},
+        "max_turns": 6,
+    }
+    return plan_options(**(row | overrides))
 
 
 async def b1(log: Log, spend: Ledger, env: dict[str, str]) -> tuple[str, list[Message]]:
@@ -223,7 +233,22 @@ async def probe_row(log: Log, provider: Provider, secret: str, spend: Ledger) ->
         betas = "off needed" if verdict == "PASS" else "off did not help"
     log.row(f"B1 {name}", f"betas {betas}; errors {api_errors(seen)}", verdict)
 
-    env |= TOOL_SEARCH_ON
+    seen = await guarded_turns(
+        spend,
+        log,
+        "tool search",
+        row_options(env | TOOL_SEARCH_ON, max_turns=1),
+        ["Reply with the single word one."],
+    )
+    log(f"init tools, ENABLE_TOOL_SEARCH=true: {init_tools(seen)}")
+    on_state = tool_search_state(init_tools(seen))
+    errors = api_errors(seen)
+    log.row(
+        f"tool search {name}",
+        f"default: {default_state}; ENABLE_TOOL_SEARCH=true: {on_state}; errors {errors}",
+        tool_search_verdict(on_state, errors),
+    )
+
     seen = await guarded_turns(
         spend,
         log,
@@ -236,20 +261,17 @@ async def probe_row(log: Log, provider: Provider, secret: str, spend: Ledger) ->
         ],
     )
     reads = cache_reads(seen)
-    log(f"init tools, ENABLE_TOOL_SEARCH=true: {init_tools(seen)}")
-    on_state = tool_search_state(init_tools(seen))
-    log.row(f"B3 {name}", f"cache_read_input_tokens per turn {reads}", b3_verdict(reads))
     log.row(
-        f"tool search {name}",
-        f"default: {default_state}; ENABLE_TOOL_SEARCH=true: {on_state}",
-        "PASS" if "ToolSearch=on" in on_state else "FAIL",
+        f"B3 {name}",
+        f"cache_read_input_tokens per turn {reads}; errors {api_errors(seen)}",
+        b3_verdict(reads),
     )
 
     seen = await guarded_turns(
         spend,
         log,
         "B4",
-        row_options(env | THINKING_OUTPUT_CAP, thinking=THINKING),
+        row_options(env, thinking=THINKING),
         [
             "Think it through, then run the Bash command `echo hp1-b4-a` and tell me its output.",
             "Now run the Bash command `echo hp1-b4-b` and tell me its output.",
@@ -327,14 +349,12 @@ async def perf(log: Log) -> int:
                 secret, spend = keyed[name]
                 log.redact(secret)
                 env = capped_env(PROVIDERS[name], secret, fresh_home(name))
-                options = row_options(
-                    env | TOOL_SEARCH_ON, include_partial_messages=True, max_turns=1
-                )
+                options = row_options(env, include_partial_messages=True, max_turns=1)
                 ms, seen = await spend.spend(
                     f"perf {name} run {run}",
                     2,
                     max_output(options),
-                    lambda: first_event_ms(log, options),  # noqa: B023
+                    partial(first_event_ms, log, options),
                 )
             if run == 0 and name == "plan":
                 log(f"plan init tools {init_tools(seen)}")
