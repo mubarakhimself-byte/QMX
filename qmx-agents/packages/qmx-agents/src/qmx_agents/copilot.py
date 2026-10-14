@@ -16,10 +16,10 @@ from langgraph.types import Command, interrupt
 from qmx_control.models import Document
 from qmx_control.server import create_mcp
 from qmx_control.service import ControlService, SessionBlock, SessionInput
+from qmx_ledger.journal import RunJournal
 from qmx_tools import DomainContext
 from qmx_tools.servers import create_server
 
-from qmx_agents.guards import RunJournal
 from qmx_agents.memory import MemoryRecord, Scope
 from qmx_agents.router import RunContext
 from qmx_agents.spec import BuildContext, build_agent, load_spec

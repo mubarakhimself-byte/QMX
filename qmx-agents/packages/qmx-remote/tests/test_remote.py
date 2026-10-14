@@ -15,8 +15,8 @@ from unittest.mock import Mock
 
 import psutil
 import pytest
-from qmx_agents.guards.journal import fingerprint
 from qmx_agents.workflows import WorkflowSpec
+from qmx_ledger.journal import fingerprint
 
 from qmx_remote.code import publish
 from qmx_remote.models import (

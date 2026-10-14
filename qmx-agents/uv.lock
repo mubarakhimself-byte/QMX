@@ -11,6 +11,7 @@ members = [
     "qmx-apps",
     "qmx-broker",
     "qmx-control",
+    "qmx-ledger",
     "qmx-remote",
     "qmx-tools",
     "qmx-workspace",
@@ -2579,6 +2580,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "qmx-broker" },
+    { name = "qmx-ledger" },
     { name = "qmx-tools" },
     { name = "wcmatch" },
 ]
@@ -2609,6 +2611,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "qmx-broker", editable = "packages/qmx-broker" },
+    { name = "qmx-ledger", editable = "packages/qmx-ledger" },
     { name = "qmx-tools", editable = "packages/qmx-tools" },
     { name = "wcmatch", specifier = "==11.0.1" },
 ]
@@ -2637,6 +2640,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "qmx-agents" },
+    { name = "qmx-ledger" },
 ]
 
 [package.dev-dependencies]
@@ -2666,6 +2670,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
     { name = "qmx-agents", editable = "packages/qmx-agents" },
+    { name = "qmx-ledger", editable = "packages/qmx-ledger" },
 ]
 
 [package.metadata.requires-dev]
@@ -2794,6 +2799,37 @@ dev = [
 ]
 
 [[package]]
+name = "qmx-ledger"
+version = "0.1.0"
+source = { editable = "packages/qmx-ledger" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2,<3" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "ruff", specifier = "==0.16.5" },
+]
+
+[[package]]
 name = "qmx-remote"
 version = "0.1.0"
 source = { editable = "packages/qmx-remote" }
@@ -2802,6 +2838,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "qmx-agents" },
     { name = "qmx-apps" },
+    { name = "qmx-ledger" },
 ]
 
 [package.optional-dependencies]
@@ -2834,6 +2871,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "qmx-agents", editable = "packages/qmx-agents" },
     { name = "qmx-apps", editable = "packages/qmx-apps" },
+    { name = "qmx-ledger", editable = "packages/qmx-ledger" },
 ]
 provides-extras = ["amp", "modal", "e2b"]
 

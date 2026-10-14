@@ -8,7 +8,7 @@ import sys
 import time
 from typing import TYPE_CHECKING, cast
 
-from qmx_agents.guards.journal import encoded, fingerprint
+from qmx_ledger.journal import encoded, fingerprint
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust

@@ -13,8 +13,8 @@ from langchain_core.tools.base import ArgsSchema
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from qmx_broker.models import OrderProposal
 from qmx_broker.service import BrokerService
+from qmx_ledger.journal import RunJournal, encoded
 
-from qmx_agents.guards.journal import RunJournal, encoded
 from qmx_agents.guards.parent_surfaces import is_parent_surface_permitted
 
 

@@ -8,7 +8,7 @@ from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
-from qmx_agents.guards.journal import fingerprint
+from qmx_ledger.journal import fingerprint
 
 type Document = dict[str, JsonValue]
 type Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]

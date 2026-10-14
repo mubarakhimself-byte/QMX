@@ -13,6 +13,7 @@ dependencies = [
     "duckdb==1.5.5",
     "cachetools==7.2.1",
     "qmx-agents",
+    "qmx-ledger",
 ]
 
 [build-system]
@@ -21,6 +22,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 qmx-agents = { workspace = true }
+qmx-ledger = { workspace = true }
 
 [dependency-groups]
 dev = [

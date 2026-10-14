@@ -14,7 +14,7 @@ dependencies = []
 default-groups = ["dev", "qma-runtime"]
 
 [tool.uv.workspace]
-members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
+members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger"]
 
 [tool.uv.sources]
 qmx-agents = { workspace = true }
@@ -23,6 +23,7 @@ qmx-broker = { workspace = true }
 qmx-remote = { workspace = true }
 qmx-apps = { workspace = true }
 qmx-control = { workspace = true }
+qmx-ledger = { workspace = true }
 qma-core = { workspace = true }
 qma-wire = { workspace = true }
 qma-daemon = { workspace = true }
@@ -64,7 +65,7 @@ dev = [
 qma-runtime = ["qma-daemon", "qmx-control"]
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control"
+addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger"
 markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages", "tests"]
 pythonpath = [
@@ -83,7 +84,7 @@ pythonpath = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
+extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
@@ -108,7 +109,7 @@ ignore = [
 
 [tool.pyright]
 include = ["packages", "tests", "examples", "plugins"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger"]
 extraPaths = [
     "packages/qma-core/src",
     "packages/qma-wire/src",
