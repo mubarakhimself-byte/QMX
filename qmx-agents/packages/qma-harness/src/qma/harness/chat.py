@@ -54,6 +54,7 @@ from qma.harness.launch import (
     build_options,
     launch_env,
 )
+from qma.harness.money import MoneySurfaceError
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
@@ -73,15 +74,30 @@ from qma.harness.project import (
     redacted,
 )
 from qma.harness.relay import GrantRefused
+from qma.harness.tools import (
+    SERVER,
+    Grants,
+    ToolSurfaceError,
+    build_server,
+    domain_write_policy,
+    gate_rules,
+    keyring_refs,
+    tool_defs,
+    vet_mcp_servers,
+)
 
 if TYPE_CHECKING:
+    from claude_agent_sdk import McpServerConfig
     from claude_agent_sdk.types import (
         McpStatusResponse,
         PermissionResultAllow,
         ToolPermissionContext,
     )
+    from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
+    from qmx_tools.service import DomainContext
 
+    from qma.harness.money import GateRules
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
 
@@ -109,6 +125,9 @@ class ChatDeps:
     procs: AgentProcessCap
     launcher: Path
     relay: Relay
+    broker: BrokerService
+    domain: DomainContext
+    """The domain tools' context. It shares `control`, so no second writer runs."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
 
@@ -122,9 +141,12 @@ def transcript(home: QmxHome, chat: SessionId) -> Path | None:
     return next((home.plan_dir / "projects").glob(f"*/{chat}.jsonl"), None)
 
 
-def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusResponse) -> list[str]:
-    """What the CLI loaded besides its built-ins and the QMX plugin. The server info lists no
-    plugins, so a plugin shows as its `<plugin>:` commands and agents."""
+def unexpected_extensions(
+    info: Mapping[str, Any] | None, status: McpStatusResponse, servers: frozenset[str]
+) -> list[str]:
+    """What the CLI loaded besides its built-ins, the QMX plugin and the MCP `servers` QMA
+    passed. The server info lists no plugins, so a plugin shows as its `<plugin>:` commands
+    and agents."""
     commands = cast("list[dict[str, Any]]", (info or {}).get("commands", []))
     agents = cast("list[dict[str, Any]]", (info or {}).get("agents", []))
     found = [
@@ -137,7 +159,11 @@ def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusRespo
         for agent in agents
         if ":" in str(agent["name"]) and not str(agent["name"]).startswith(f"{PLUGIN}:")
     ]
-    found += [f"MCP server {server['name']}" for server in status["mcpServers"]]
+    found += [
+        f"MCP server {server['name']}"
+        for server in status["mcpServers"]
+        if server["name"] not in servers
+    ]
     return found
 
 
@@ -218,6 +244,7 @@ class Chat:
         self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
+        self._grants = Grants()
 
     @property
     def session_id(self) -> SessionId:
@@ -309,6 +336,7 @@ class Chat:
         launch = await self._routing(settings)
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
+            servers, gate = await self._tools(launch)
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
@@ -319,6 +347,9 @@ class Chat:
                 settings_json=settings,
                 launcher=deps.launcher,
                 can_use_tool=self._can_use_tool,
+                mcp_servers=servers,
+                gate=gate,
+                test=deps.test,
             )
             assert_argv_fits(options)
             live = _Live(ClaudeSDKClient(options), grant)
@@ -329,7 +360,9 @@ class Chat:
             raise
         try:
             found = unexpected_extensions(
-                await live.client.get_server_info(), await live.client.get_mcp_status()
+                await live.client.get_server_info(),
+                await live.client.get_mcp_status(),
+                frozenset(servers),
             )
             if found:
                 raise LaunchRefused(_loaded(found))
@@ -338,6 +371,38 @@ class Chat:
             raise
         live.reader = asyncio.create_task(self._read(live))
         return live
+
+    async def _tools(self, launch: Launch) -> tuple[dict[str, McpServerConfig], GateRules]:
+        """The `qmx` server, the vetted external servers and the gate's rules. A refused
+        external server gets a `needs_you` block and is left out; the chat still starts."""
+        deps = self._deps
+        control = deps.control
+        defs = await tool_defs(control=control, broker=deps.broker, domain=deps.domain)
+        policy = domain_write_policy(await asyncio.to_thread(control.settings_get, "agents"))
+        try:
+            qmx = build_server(
+                defs,
+                grants=self._grants,
+                domain_write=policy,
+                enforce_grants=deps.test is None or deps.test.grants,
+            )
+        except (MoneySurfaceError, ToolSurfaceError) as refused:
+            raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
+        vetted = await vet_mcp_servers(await asyncio.to_thread(control.settings_get, "mcp_servers"))
+        for name, reason in vetted.refused.items():
+            await self._note(
+                "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
+            )
+        gate = gate_rules(
+            defs,
+            domain_write=policy,
+            home=deps.home,
+            config_dir=deps.home.plan_dir
+            if isinstance(launch, PlanLaunch)
+            else deps.home.relayed_dir,
+            keyring_names=await asyncio.to_thread(keyring_refs, control),
+        )
+        return {SERVER: qmx, **vetted.configs}, gate
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile

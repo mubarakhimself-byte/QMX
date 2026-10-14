@@ -9,9 +9,11 @@ import pytest
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
 
+from qma.harness import money
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
     CONSTANT_ENV,
+    GATE_TIMEOUT_S,
     Background,
     ChatConfig,
     Child,
@@ -19,6 +21,7 @@ from qma.harness.launch import (
     LaunchRefused,
     PlanLaunch,
     RelayedLaunch,
+    TestMode,
     assert_argv_fits,
     assert_scrubbed,
     build_options,
@@ -38,6 +41,18 @@ from qma.harness.profiles import (
     TierMap,
 )
 from qma.harness.relay import GrantSecret, RelayGrant
+
+GATE = money.GateRules(
+    proposal_tools=frozenset(),
+    mandatory_asks=frozenset(),
+    protected_paths=("/d/qmx/settings.toml",),
+    secret_paths=(),
+    personal_home="/c/Users/Op/.claude",
+    keyring_names=frozenset(),
+    broker_hosts=frozenset(),
+    variables={},
+    case_insensitive=True,
+)
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
 
@@ -127,7 +142,11 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         settings_json='{"forceLoginMethod":"claudeai"}',
         launcher=launcher,
         can_use_tool=refuse,
+        mcp_servers={},
+        gate=GATE,
     )
+    [matcher] = options.hooks["PreToolUse"] if options.hooks else []
+    assert (matcher.matcher, matcher.timeout, len(matcher.hooks)) == (None, GATE_TIMEOUT_S, 1)
     assert options == ClaudeAgentOptions(
         cli_path=launcher,
         tools={"type": "preset", "preset": "claude_code"},
@@ -145,6 +164,9 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         settings='{"forceLoginMethod":"claudeai"}',
         plugins=[{"type": "local", "path": str(home.plugin_dir)}],
         strict_mcp_config=True,
+        mcp_servers={},
+        hooks=options.hooks,
+        disallowed_tools=money.deny_rules(GATE),
         can_use_tool=refuse,
         session_id=CHAT,
         resume=None,
@@ -162,7 +184,11 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         settings_json="{}",
         launcher=launcher,
         can_use_tool=refuse,
+        mcp_servers={},
+        gate=GATE,
+        test=TestMode(gate_hook=False, deny_rules=False),
     )
+    assert (resumed.hooks, resumed.disallowed_tools) == (None, [])
     seen = (resumed.session_id, resumed.resume, resumed.verbatim_prompts, resumed.effort)
     assert seen == (None, CHAT, True, "high")
 
@@ -180,6 +206,8 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
         settings_json="{}",
         launcher=Path(sys.executable),
         can_use_tool=refuse,
+        mcp_servers={},
+        gate=GATE,
     )
     with pytest.raises(LaunchRefused, match=r"largest part is QMX\.md and the workspace CLAUDE"):
         assert_argv_fits(options)
@@ -194,6 +222,8 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
             settings_json="{}",
             launcher=Path(sys.executable),
             can_use_tool=refuse,
+            mcp_servers={},
+            gate=GATE,
         )
     )
 
