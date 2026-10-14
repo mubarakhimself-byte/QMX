@@ -1,159 +1,193 @@
 <script lang="ts">
   /**
-   * One card per copilot (main, Lab, Portfolio, each mini app): its model,
-   * standing instructions, what it may touch, and its skills. No modes:
-   * planning and the like are skills, called with "/". The copilot gear icons on each screen open here.
+   * Every copilot in one list (main, Lab, Portfolio, Library, each mini
+   * app's) and, for the one selected: its model, standing instructions,
+   * the MCP servers it may use, what it may touch and where it must ask
+   * first. No modes (R2). Skills are being designed elsewhere.
    */
-  import { Button } from "$lib/components/ui/button";
+  import Lock from "@lucide/svelte/icons/lock";
+  import { Switch } from "$lib/components/ui/switch";
   import { Textarea } from "$lib/components/ui/textarea";
   import { cn } from "$lib/utils";
-  import { MODELS, workbench } from "$lib/workbench/workbench.svelte";
   import { REACH } from "$lib/copilot/aim.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import Choice from "./Choice.svelte";
+  import Group from "./Group.svelte";
+  import Row from "./Row.svelte";
+  import { settings } from "./settings.svelte";
 
-  type Copilot = {
-    id: string;
-    name: string;
-    note: string;
-    model: string;
-    reach: string[];
-    skills: string[];
-    instructions: string;
-  };
-  let copilots = $state<Copilot[]>([
-    {
-      id: "main",
-      name: "Main copilot",
-      note: "Reaches everything you allow; runs errands for days",
-      model: MODELS[0].id,
-      reach: ["lab", "portfolio", "library", "servers"],
-      skills: [
-        "Build a pod",
-        "Build a panel",
-        "Explain an article",
-        "Watch while I'm away",
-      ],
-      instructions:
-        "Answer in plain words. Ask before anything that costs money or can't be undone.",
-    },
-    {
-      id: "lab",
-      name: "Lab copilot",
-      note: "Lab tools only",
-      model: MODELS[0].id,
-      reach: ["lab", "library", "servers"],
-      skills: ["Sweep", "Walk-forward", "Stress scenario", "Train a model"],
-      instructions:
-        "Test on CFDs and crypto. Never run on the trading servers.",
-    },
-    {
-      id: "portfolio",
-      name: "Portfolio copilot",
-      note: "Paper sides and layouts; live money only proposes",
-      model: MODELS[0].id,
-      reach: ["portfolio", "library"],
-      skills: ["Explain a refusal", "Draft a paper wiring"],
-      instructions: "Live changes are always proposals for my signature.",
-    },
-    {
-      id: "news",
-      name: "News & sentiment (mini app)",
-      note: "That mini app's operations only",
-      model: MODELS[MODELS.length - 1].id,
-      reach: ["apps"],
-      skills: ["Score sentiment"],
-      instructions: "",
-    },
-  ]);
-  let openId = $state("main");
+  let selected = $state("main");
+  const entry = $derived(
+    settings.copilots.find((c) => c.id === selected) ?? settings.copilots[0],
+  );
+  const cfg = $derived(settings.copilot(entry.id));
+  const models = $derived(settings.modelsFor(entry.id));
+
+  function toggleIn<T extends string>(list: T[], id: T, on: boolean): T[] {
+    const rest = list.filter((x) => x !== id);
+    return on ? [...rest, id] : rest;
+  }
 </script>
 
-<div class="flex flex-col gap-4">
-  {#each copilots as c, i (c.id)}
-    <section class="solid-backing rounded-2xl border">
+<div class="grid items-start gap-group lg:grid-cols-[18rem_1fr]">
+  <nav
+    aria-label="Copilots"
+    class="solid-backing flex flex-col rounded-2xl border p-tile"
+  >
+    {#each settings.copilots as c, i (c.id)}
+      {#if i === 4}
+        <p class="text-muted-foreground px-3 pt-group pb-row text-sm">
+          Mini apps
+        </p>
+      {/if}
       <button
         type="button"
-        class="flex w-full items-center gap-3 px-5 py-4 text-left"
-        aria-expanded={openId === c.id}
-        onclick={() => (openId = openId === c.id ? "" : c.id)}
+        class={cn(
+          "flex items-center justify-between gap-2 rounded-lg px-3 py-row text-left",
+          c.id === entry.id ? "bg-muted font-medium" : "hover:bg-muted/60",
+        )}
+        aria-current={c.id === entry.id ? "true" : undefined}
+        onclick={() => (selected = c.id)}
       >
-        <span class="min-w-0 flex-1">
-          <span class="block text-lg font-semibold">{c.name}</span>
-          <span class="text-muted-foreground">{c.note}</span>
-        </span>
-        <span class="text-muted-foreground"
-          >{MODELS.find((m) => m.id === c.model)?.label}</span
+        <span class="truncate">{c.name}</span>
+        <span class="text-muted-foreground shrink-0 text-sm"
+          >{settings.copilot(c.id).model.split("/")[1]}</span
         >
       </button>
-      {#if openId === c.id}
-        <div class="flex flex-col gap-5 border-t px-5 py-5">
-          <div>
-            <p class="mb-2 font-medium">Model</p>
-            <div class="flex flex-wrap gap-2">
-              {#each MODELS as m (m.id)}
-                <button
-                  type="button"
-                  class={cn(
-                    "rounded-lg border px-3 py-2",
-                    c.model === m.id
-                      ? "border-primary bg-primary/12"
-                      : "hover:bg-muted",
-                  )}
-                  onclick={() => (copilots[i].model = m.id)}>{m.label}</button
-                >
-              {/each}
-            </div>
-          </div>
-          <div>
-            <p class="mb-2 font-medium">It may touch</p>
-            <div class="flex flex-wrap gap-2">
-              {#each REACH as r (r.id)}
-                <button
-                  type="button"
-                  aria-pressed={c.reach.includes(r.id)}
-                  class={cn(
-                    "rounded-full border px-3 py-1.5",
-                    c.reach.includes(r.id)
-                      ? "border-primary bg-primary/12"
-                      : "text-muted-foreground hover:bg-muted",
-                  )}
-                  onclick={() =>
-                    (copilots[i].reach = c.reach.includes(r.id)
-                      ? c.reach.filter((x) => x !== r.id)
-                      : [...c.reach, r.id])}>{r.label}</button
-                >
-              {/each}
-              <span class="text-muted-foreground px-1 py-1.5"
-                >Real money: never, always your signature</span
-              >
-            </div>
-          </div>
-          <div>
-            <p class="mb-2 font-medium">Standing instructions</p>
-            <Textarea
-              rows={3}
-              bind:value={copilots[i].instructions}
-              placeholder="How it should work for you…"
-              aria-label={`${c.name} instructions`}
-            />
-          </div>
-          <div>
-            <p class="mb-2 font-medium">Skills</p>
-            <div class="flex flex-wrap gap-2">
-              {#each c.skills as s (s)}<span
-                  class="bg-muted rounded-full px-3 py-1.5">{s}</span
-                >{/each}
-              <Button
-                size="sm"
-                variant="outline"
-                onclick={() =>
-                  workbench.notify(
-                    "Skills are added from the Library or written with the copilot (needs the daemon).",
-                  )}>Add a skill</Button
-              >
-            </div>
-          </div>
+    {/each}
+  </nav>
+
+  <div class="grid items-start gap-group 2xl:grid-cols-2">
+    <Group title={`${entry.name} copilot`}>
+      <div class="flex flex-col gap-row py-row">
+        <span class="flex items-center gap-1"
+          >Model<InfoTip
+            label="About the model"
+            text="From the providers this copilot may use, under Models and tools."
+          /></span
+        >
+        {#if models.length}
+          <Choice
+            label={`${entry.name} copilot model`}
+            value={cfg.model}
+            options={models}
+            onchange={(v) => settings.editCopilot(entry.id, { model: v })}
+            class="w-fit min-w-64"
+          />
+        {:else}
+          <span class="text-warning text-sm">No provider allowed</span>
+        {/if}
+      </div>
+      <div class="flex flex-col gap-row border-t py-row">
+        <span>Standing instructions</span>
+        <Textarea
+          rows={4}
+          value={cfg.instructions}
+          oninput={(e) =>
+            settings.editCopilot(entry.id, {
+              instructions: e.currentTarget.value,
+            })}
+          placeholder="How it should work for you"
+          aria-label={`${entry.name} instructions`}
+        />
+      </div>
+      <div class="flex flex-col gap-row border-t py-row">
+        <span>Tools it may use</span>
+        <div class="flex flex-wrap gap-2">
+          {#each settings.mcp as m (m.id)}
+            {@const on = cfg.uses.includes(m.id) && m.on}
+            <button
+              type="button"
+              aria-pressed={on}
+              disabled={!m.on}
+              title={m.on ? m.note : `${m.name} is off under Models and tools`}
+              class={cn(
+                "rounded-full border px-3 py-1 text-sm disabled:opacity-45",
+                on
+                  ? "border-primary bg-primary/12"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+              onclick={() => settings.setUse(entry.id, m.id, !on)}
+              >{m.name}</button
+            >
+          {/each}
         </div>
-      {/if}
-    </section>
-  {/each}
+      </div>
+      <Row
+        label="Skills"
+        tip="Skills are being designed now. They will be listed and switched here."
+      >
+        <span class="text-muted-foreground text-sm">Coming later</span>
+      </Row>
+    </Group>
+
+    <Group
+      title="What it may touch"
+      tip="Touch lets it act in that area. Ask first makes it stop for your yes before each action there."
+    >
+      <table class="w-full text-left">
+        <thead class="text-muted-foreground text-sm">
+          <tr>
+            <th class="py-row font-normal">Area</th>
+            <th class="py-row text-right font-normal">Touch</th>
+            <th class="py-row text-right font-normal">Ask first</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each REACH as r (r.id)}
+            {@const on = cfg.reach.includes(r.id)}
+            <tr class="border-t">
+              <td class="py-row">
+                <span class="flex items-center gap-1"
+                  >{r.label}<InfoTip
+                    label={`About ${r.label}`}
+                    text={r.note}
+                  /></span
+                >
+              </td>
+              <td class="py-row text-right">
+                <Switch
+                  checked={on}
+                  onCheckedChange={(v) =>
+                    settings.editCopilot(entry.id, {
+                      reach: toggleIn(cfg.reach, r.id, v),
+                      approve: v
+                        ? cfg.approve
+                        : toggleIn(cfg.approve, r.id, false),
+                    })}
+                  aria-label={`${entry.name} may touch ${r.label}`}
+                />
+              </td>
+              <td class="py-row text-right">
+                <Switch
+                  checked={cfg.approve.includes(r.id)}
+                  disabled={!on}
+                  onCheckedChange={(v) =>
+                    settings.editCopilot(entry.id, {
+                      approve: toggleIn(cfg.approve, r.id, v),
+                    })}
+                  aria-label={`${entry.name} asks before acting in ${r.label}`}
+                />
+              </td>
+            </tr>
+          {/each}
+          <tr class="border-t">
+            <td class="py-row">
+              <span class="flex items-center gap-1"
+                >Real money<InfoTip
+                  label="About real money"
+                  text="No copilot can place, size or approve a live order. It can only propose; you sign in Portfolio."
+                /></span
+              >
+            </td>
+            <td class="text-muted-foreground py-row text-right" colspan="2">
+              <span class="inline-flex items-center gap-1.5 text-sm"
+                ><Lock class="size-3.5" />Never. You sign.</span
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </Group>
+  </div>
 </div>
