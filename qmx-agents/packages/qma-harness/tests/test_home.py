@@ -30,7 +30,8 @@ from qma.harness.home import (
     workspace_key,
     write_record,
 )
-from qma.harness.launch import PLAN, ChatConfig, Child, Interactive, LaunchRefused
+from qma.harness.launch import ChatConfig, Child, Interactive, LaunchRefused
+from qma.harness.profiles import PLAN
 from qma.harness.routes import control_service, router
 
 BEARER = "test-token"

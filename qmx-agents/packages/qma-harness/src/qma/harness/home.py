@@ -43,7 +43,6 @@ from claude_agent_sdk import PermissionResultDeny
 from qma.boot import banned_fragment
 from qma.harness.launch import (
     ARGV_BUDGET,
-    PLAN,
     Background,
     ChatConfig,
     ChatKind,
@@ -51,11 +50,11 @@ from qma.harness.launch import (
     Interactive,
     LaunchRefused,
     PlanLaunch,
-    ProfileName,
     argv_length,
     build_options,
     launch_env,
 )
+from qma.harness.profiles import PLAN, ProfileName
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:

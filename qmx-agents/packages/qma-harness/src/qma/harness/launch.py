@@ -26,20 +26,18 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Literal, NewType
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from claude_agent_sdk import ClaudeAgentOptions
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from qma.boot import banned_fragment
+from qma.harness.profiles import ProfileName
 
 if TYPE_CHECKING:
     from claude_agent_sdk.types import CanUseTool
 
     from qma.harness.home import QmxHome, SessionId
-
-ProfileName = NewType("ProfileName", str)
-PLAN: Final = ProfileName("claude")
 
 type PermissionMode = Literal[
     "default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"

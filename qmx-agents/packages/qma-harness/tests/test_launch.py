@@ -11,7 +11,6 @@ from claude_agent_sdk.types import ToolPermissionContext
 
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
-    PLAN,
     Background,
     ChatConfig,
     Child,
@@ -26,6 +25,7 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
+from qma.harness.profiles import PLAN
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
 

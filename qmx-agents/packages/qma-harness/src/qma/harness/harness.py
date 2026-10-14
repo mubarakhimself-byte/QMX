@@ -31,7 +31,6 @@ from qma.harness.home import (
 )
 from qma.harness.launch import (
     LAUNCHER,
-    PLAN,
     ChatConfig,
     Effort,
     Interactive,
@@ -41,6 +40,7 @@ from qma.harness.launch import (
     assert_scrubbed,
 )
 from qma.harness.procs import AgentProcessCap
+from qma.harness.profiles import PLAN
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
