@@ -13,8 +13,11 @@ a fully denied tool is the operator's choice. MCP tools are left out too; HP6 ha
 server yet. Each difference is attributed: a tool that vanilla + env shares with QMA moved
 because of QMA's environment.
 
-PASS when the QMA list differs from vanilla by DESIGN S3's named entries only (Workflow and
-TodoWrite). The PowerShell line records each side's raw list, before deny rules.
+PASS when the QMA list differs from vanilla by exactly the entries in `EXPECTED`, each on its
+named side, less the tools left out as denied. DESIGN S3 named Workflow and TodoWrite; on CLI
+2.1.299 TodoWrite is the four Task tools, and nonessential traffic off also turns off the
+flag-gated Monitor, DesignSync and PushNotification. The PowerShell line records each side's raw
+list, before deny rules.
 
     s03_tools.py [--home D:/QMX-worktrees/qma-ship/home]
 """
@@ -37,7 +40,16 @@ from claude_agent_sdk import (
 from common import Log, Session, boot, chat_args, require_login, use_fake_home
 from s04_vanilla import deny_rules
 
-NAMED = frozenset({"Workflow", "TodoWrite"})
+EXPECTED: dict[str, str] = {
+    "Workflow": "only in vanilla",
+    "Monitor": "only in vanilla",
+    "DesignSync": "only in vanilla",
+    "PushNotification": "only in vanilla",
+    "TaskCreate": "only in QMA",
+    "TaskGet": "only in QMA",
+    "TaskList": "only in QMA",
+    "TaskUpdate": "only in QMA",
+}
 NO_MODEL = "qmx-no-such-model"
 
 
@@ -123,18 +135,21 @@ def main() -> int:
         log(f"{name} tools ({len(lists[name])}), output tokens {spent}: {sorted(lists[name])}")
         log(f"PowerShell tool in {name}: {'PowerShell' in tools}")
     plain, with_env, harness = lists["vanilla"], lists["vanilla + env"], lists["QMA"]
+    sides: dict[str, str] = {}
     for tool in sorted(harness ^ plain):
-        side = "only in QMA" if tool in harness else "only in vanilla"
+        sides[tool] = "only in QMA" if tool in harness else "only in vanilla"
         cause = "QMA's constant env" if (tool in with_env) == (tool in harness) else "the harness"
-        log(f"{side}: {tool}, moved by {cause}")
+        log(f"{sides[tool]}: {tool}, moved by {cause}")
     log.check(
         "every side answered with no output tokens",
         all(spent == 0 for _, spent in raw.values()),
         [spent for _, spent in raw.values()],
     )
     log.check("the lists are not empty", all(lists.values()), [len(t) for t in lists.values()])
-    differs = harness ^ plain
-    log.check("the difference is only DESIGN S3's named entries", differs <= NAMED, sorted(differs))
+    expected = {tool: side for tool, side in EXPECTED.items() if tool not in denied}
+    log.check(
+        "the difference is exactly the expected entries, each on its side", sides == expected, sides
+    )
     return log.verdict()
 
 

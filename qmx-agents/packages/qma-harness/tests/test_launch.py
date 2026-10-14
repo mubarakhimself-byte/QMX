@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,6 @@ from claude_agent_sdk.types import ToolPermissionContext
 
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
-    CONSTANT_ENV,
     PLAN,
     Background,
     ChatConfig,
@@ -72,8 +72,14 @@ def test_assert_scrubbed_refuses_a_banned_name_and_keeps_git_bash() -> None:
 
 
 def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: QmxHome) -> None:
+    windows = {"CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"} if os.name == "nt" else {}
     assert launch_env(PlanLaunch(), home=home, session_id=CHAT, cap="Local\\qma-cap") == {
-        **CONSTANT_ENV,
+        "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
+        "CLAUDE_CODE_DISABLE_WORKFLOWS": "1",
+        "CLAUDE_AGENT_SDK_CLIENT_APP": "QMA",
+        **windows,
         "CLAUDE_CONFIG_DIR": str(home.root / "claude"),
         "QMA_CHAT_ID": CHAT,
         "QMA_PROC_DIR": str(home.root / "procs"),
