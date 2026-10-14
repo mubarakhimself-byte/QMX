@@ -54,6 +54,13 @@
   ];
   let mcp = $state([
     {
+      name: "cTrader",
+      note: "Prices, positions and history from your IC Markets accounts; orders only through your pods",
+      paid: false,
+      on: true,
+      copilots: "All copilots, on by default",
+    },
+    {
       name: "Firecrawl",
       note: "Web search and scraping; Alexandria data providers",
       paid: true,
@@ -62,7 +69,7 @@
     },
     {
       name: "Exchange data",
-      note: "Prices, order books and funding from your exchanges",
+      note: "Prices, order books and funding from your crypto exchanges (CCXT)",
       paid: false,
       on: true,
       copilots: "All",
@@ -126,8 +133,9 @@
 {:else}
   <div class="flex flex-col gap-4">
     <p class="text-muted-foreground max-w-2xl">
-      Outside tools the copilots can call. Paid ones stay off until you switch
-      them on, and you choose which copilots may use each.
+      Outside tools the copilots can call. Each connects through the daemon.
+      Paid ones stay off until you switch them on, and you choose which copilots
+      may use each.
     </p>
     {#each mcp as m, i (m.name)}
       <section
@@ -150,7 +158,7 @@
             mcp[i].on = v;
             if (v && m.paid)
               workbench.notify(
-                `${m.name} is a paid service: calls cost money once the daemon connects it.`,
+                `${m.name} is a paid service: the copilot asks you before every call once the daemon connects it.`,
               );
           }}
           aria-label={`Use ${m.name}`}

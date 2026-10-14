@@ -7,7 +7,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { workbench, type Theme } from "$lib/workbench/workbench.svelte";
   import { cn } from "$lib/utils";
-  import ExchangesSection from "$lib/settings/ExchangesSection.svelte";
+  import BrokersSection from "$lib/settings/BrokersSection.svelte";
   import ServersSection from "$lib/settings/ServersSection.svelte";
   import ConnectionsSection from "$lib/settings/ConnectionsSection.svelte";
   import CopilotsSection from "$lib/settings/CopilotsSection.svelte";
@@ -44,7 +44,7 @@
     {
       label: "Connections",
       items: [
-        { id: "exchanges", label: "Exchanges and accounts" },
+        { id: "brokers", label: "Brokers and accounts" },
         { id: "servers", label: "Servers" },
         { id: "providers", label: "Model providers" },
         { id: "mcp", label: "MCP servers" },
@@ -72,6 +72,7 @@
     models: "copilots",
     nodes: "servers",
     compute: "servers",
+    exchanges: "brokers",
   };
   const asked = page.url.searchParams.get("tab") ?? "";
   const fromUrl = OLD[asked] ?? asked;
@@ -166,8 +167,14 @@
       kind: "Articles",
       note: "Local catalog, 3,057 articles",
     },
-    { name: "Economic calendar", kind: "Calendar", note: "Free feed" },
-    { name: "Market news", kind: "News", note: "Free feeds only" },
+    { name: "Economic calendar", kind: "Calendar", note: "Forex Factory" },
+    { name: "Market news", kind: "News", note: "Headline feeds" },
+    {
+      name: "Firecrawl",
+      kind: "Web",
+      note: "Paid · search, scraping and Alexandria data · asks you before every use",
+      paid: true,
+    },
   ];
   const card = "solid-backing surface flex flex-col gap-3 rounded-xl p-5";
 </script>
@@ -269,8 +276,8 @@
             </p>
           </section>
         </div>
-      {:else if tab === "exchanges"}
-        <ExchangesSection />
+      {:else if tab === "brokers"}
+        <BrokersSection />
       {:else if tab === "servers"}
         <ServersSection />
       {:else if tab === "providers"}
@@ -288,8 +295,8 @@
           <div>
             <h2 id="s-src" class="text-lg font-semibold">Sources</h2>
             <p class="text-muted-foreground text-sm">
-              Feeds the Library, widgets and workflows can read. Free sources
-              only.
+              Feeds the Library, widgets and workflows can read. Paid sources
+              stay off, and ask you before every use.
             </p>
           </div>
           <ul class="grid gap-x-6 md:grid-cols-2">
@@ -302,9 +309,9 @@
                   ></span
                 >
                 <Switch
-                  checked
+                  checked={!s.paid}
                   disabled
-                  aria-label={`${s.name} enabled (needs daemon)`}
+                  aria-label={`${s.name} ${s.paid ? "off until you approve it" : "enabled"} (needs daemon)`}
                 />
               </li>
             {/each}
