@@ -13,6 +13,13 @@
 
   let { children } = $props();
 
+  // `?demo=off` / `?demo=on` on any URL switches demo mode and remembers it.
+  $effect(() => {
+    const asked = page.url.searchParams.get("demo");
+    if (asked === "off" || asked === "on")
+      untrack(() => workbench.setDemo(asked === "on"));
+  });
+
   // Theme classes live on <html> so popovers and portals inherit them.
   $effect(() => {
     const root = document.documentElement;

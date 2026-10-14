@@ -287,9 +287,19 @@ class Workbench {
   openedApps = $state<OpenedApp[]>([]);
   /**
    * Demo mode shows labelled sample apps and data for design review.
-   * Off means the rail shows only daemon instances.
+   * Off is day one: every screen shows what a fresh install has. Remembered
+   * per browser; `?demo=off` or `?demo=on` in any URL sets it.
    */
-  demoMode = $state(true);
+  demoMode = $state(storedFlag("qmx.demo", true));
+
+  setDemo(on: boolean) {
+    this.demoMode = on;
+    try {
+      localStorage.setItem("qmx.demo", on ? "1" : "0");
+    } catch {
+      /* storage unavailable: lasts for this window only */
+    }
+  }
   /**
    * Message-only context chips a widget added to a copilot composer
    * (UI CHAT §8): not durable refs, not a send, cleared on use.

@@ -468,7 +468,7 @@
           >
             <Switch
               checked={workbench.demoMode}
-              onCheckedChange={(v) => (workbench.demoMode = v)}
+              onCheckedChange={(v) => workbench.setDemo(v)}
               aria-label="Show demo content"
             />
           </Row>

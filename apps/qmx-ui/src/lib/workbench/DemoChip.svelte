@@ -5,6 +5,7 @@
    * data. Hidden when demo mode is off in Settings.
    */
   import * as Popover from "$lib/components/ui/popover";
+  import { resolve } from "$app/paths";
   import { workbench } from "./workbench.svelte";
 
   let {
@@ -22,7 +23,13 @@
       Demo
     </Popover.Trigger>
     <Popover.Content align="start" class="text-sm leading-relaxed">
-      {note}
+      <p>{note}</p>
+      <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
+      <a
+        class="text-primary mt-2 inline-block text-xs underline-offset-2 hover:underline"
+        href={`${resolve("/settings")}?tab=developer`}>Turn demo off</a
+      >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
     </Popover.Content>
   </Popover.Root>
 {/if}
