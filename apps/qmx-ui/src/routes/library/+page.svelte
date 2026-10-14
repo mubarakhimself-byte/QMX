@@ -10,7 +10,7 @@
    * Deep links: ?shelf=<id>&item=<id>; old ?tab= links still land.
    */
   import DemoChip from "$lib/workbench/DemoChip.svelte";
-  import { onMount, type Component } from "svelte";
+  import { untrack, type Component } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -45,6 +45,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import EmptyState from "$lib/workbench/EmptyState.svelte";
+  import FirstStep from "$lib/workbench/FirstStep.svelte";
+  import { DAY_ONE, FIRST } from "$lib/workbench/day-one";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import EntityCard from "$lib/qmx/EntityCard.svelte";
   import { loadArticleText, type ArticleText } from "$lib/qmx/article";
@@ -117,7 +119,12 @@
     ["list", Rows3, "List"],
   ] as const;
 
-  const demo = workbench.demoMode;
+  /** Day one (demo off): only what ships with QMX, templates and sources. */
+  const LIB = $derived(
+    workbench.demoMode
+      ? LIBRARY
+      : LIBRARY.filter((i) => i.shelf === "templates" || i.shelf === "sources"),
+  );
   let query = $state("");
   const q = $derived(query.trim().toLowerCase());
   const match = (i: LibraryItem) =>
@@ -139,7 +146,7 @@
         : "items",
   );
   const items = $derived(
-    LIBRARY.filter(
+    LIB.filter(
       (i) =>
         (collection
           ? collection.items.includes(i.id)
@@ -156,7 +163,7 @@
   const selected = $derived(
     selectedId ? itemById(selectedId) : (items[0] ?? null),
   );
-  const countOf = (id: string) => LIBRARY.filter((i) => i.shelf === id).length;
+  const countOf = (id: string) => LIB.filter((i) => i.shelf === id).length;
 
   // Pick several: hand them to the copilot together or keep them as a collection.
   let selecting = $state(false);
@@ -204,8 +211,11 @@
   let text = $state<ArticleText | null>(null);
   let textFor = $state<number | null>(null);
   let reading = $state(false);
-  onMount(async () => {
-    if (!demo) return;
+  const others = $derived(workbench.demoMode ? OTHER_ARTICLES : []);
+  $effect(() => {
+    if (workbench.demoMode && loadState === "idle") loadArticles();
+  });
+  async function loadArticles() {
     loadState = "loading";
     try {
       const res = await fetch(resolve("/demo/mql5-articles.json" as "/"));
@@ -216,7 +226,7 @@
     } catch {
       loadState = "failed";
     }
-  });
+  }
   $effect(() => {
     const id = openId;
     if (id === null || id === textFor || id < 0) return;
@@ -229,7 +239,7 @@
   const pool = $derived(
     articleSource === "mql5"
       ? articles
-      : OTHER_ARTICLES.filter((a) => a.source === articleSource),
+      : others.filter((a) => a.source === articleSource),
   );
   const sections = $derived.by(() => {
     const counts: Record<string, number> = {};
@@ -245,13 +255,11 @@
           a.summary.toLowerCase().includes(q)),
     ),
   );
-  const open = $derived(
-    [...articles, ...OTHER_ARTICLES].find((a) => a.id === openId),
-  );
+  const open = $derived([...articles, ...others].find((a) => a.id === openId));
   const countFor = (src: string) =>
     src === "mql5"
       ? articles.length
-      : OTHER_ARTICLES.filter((a) => a.source === src).length;
+      : others.filter((a) => a.source === src).length;
   /** Open the main copilot with a message drafted (and the open article attached when reading). */
   function explain(ask: string) {
     if (open && mode === "articles") workbench.addRef(open.title, true);
@@ -261,7 +269,7 @@
 
   // Sources: open inside QMX.
   const sources = $derived(
-    LIBRARY.filter((i) => i.shelf === "sources" && match(i)),
+    LIB.filter((i) => i.shelf === "sources" && match(i)),
   );
   let sourceId = $state("src-arxiv");
   const source = $derived(itemById(sourceId));
@@ -276,6 +284,19 @@
     reading = false;
   }
   const showNav = $derived(navOpen && !reading);
+  // A link to another shelf while the Library is open (an empty shelf's
+  // action, say) changes the URL without remounting; follow it.
+  let lastAsked = asked;
+  $effect(() => {
+    const next = page.url.searchParams.get("shelf");
+    if (
+      next &&
+      next !== lastAsked &&
+      (next === "everything" || shelfById(next))
+    )
+      untrack(() => pick(next));
+    lastAsked = next ?? lastAsked;
+  });
 </script>
 
 {#snippet tick(on: boolean)}
@@ -401,7 +422,7 @@
   >
     <Icon class="text-muted-foreground size-4 shrink-0" />
     <span class="min-w-0 flex-1 truncate">{label}</span>
-    <span class="num text-muted-foreground text-xs">{n}</span>
+    <span class="num text-muted-foreground text-xs">{n || ""}</span>
   </button>
 {/snippet}
 
@@ -492,194 +513,190 @@
     </div>
   </header>
 
-  {#if !demo}
-    <EmptyState
-      class="flex-1"
-      icon={BookOpen}
-      title="Nothing here yet"
-      description="Items appear here once QMX is connected to its daemon."
-    />
-  {:else}
-    {#key `${mode}-${showNav}`}
-      <Resizable.PaneGroup direction="horizontal" class="scrim min-h-0 flex-1">
-        {#if showNav}
-          <Resizable.Pane defaultSize={15} minSize={11} maxSize={24}>
-            <nav
-              aria-label="Shelves"
-              class="bg-panel flex h-full flex-col gap-2 overflow-auto p-2"
-            >
-              {@render navButton(
-                "everything",
-                "Everything",
-                Library,
-                LIBRARY.filter((i) => i.shelf !== "sources").length,
-              )}
-              {#each SHELF_GROUPS as g (g.label)}
-                {@const shut = folded.includes(g.label)}
-                <div class="bg-muted/25 rounded-lg border border-transparent">
-                  <button
-                    type="button"
-                    class="hover:text-foreground text-muted-foreground flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold"
-                    aria-expanded={!shut}
-                    onclick={() =>
-                      (folded = shut
-                        ? folded.filter((x) => x !== g.label)
-                        : [...folded, g.label])}
-                  >
-                    <g.icon class="size-3.5" />
-                    <span class="flex-1">{g.label}</span>
-                    <ChevronRight
-                      class={cn(
-                        "size-3.5 transition-transform",
-                        !shut && "rotate-90",
-                      )}
-                    />
-                  </button>
-                  {#if !shut}
-                    <div class="px-1 pb-1">
-                      {#each g.shelves as s (s.id)}
-                        {@render navButton(
-                          s.id,
-                          s.label,
-                          s.icon,
-                          s.id === "articles"
-                            ? articles.length + OTHER_ARTICLES.length || ""
-                            : countOf(s.id),
-                          s.note,
-                        )}
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              {/each}
-              {#if collections.length}
-                <div class="bg-muted/25 rounded-lg px-1 pb-1">
-                  <p
-                    class="text-muted-foreground flex items-center gap-2 px-1 py-2 text-xs font-semibold"
-                  >
-                    <FolderHeart class="size-3.5" />Your collections
-                  </p>
-                  {#each collections as c (c.id)}
-                    {@render navButton(
-                      `col:${c.id}`,
-                      c.name,
-                      FolderHeart,
-                      c.items.length,
+  {#key `${mode}-${showNav}`}
+    <Resizable.PaneGroup direction="horizontal" class="scrim min-h-0 flex-1">
+      {#if showNav}
+        <Resizable.Pane defaultSize={15} minSize={11} maxSize={24}>
+          <nav
+            aria-label="Shelves"
+            class="bg-panel flex h-full flex-col gap-2 overflow-auto p-2"
+          >
+            {@render navButton(
+              "everything",
+              "Everything",
+              Library,
+              LIB.filter((i) => i.shelf !== "sources").length,
+            )}
+            {#each SHELF_GROUPS as g (g.label)}
+              {@const shut = folded.includes(g.label)}
+              <div class="bg-muted/25 rounded-lg border border-transparent">
+                <button
+                  type="button"
+                  class="hover:text-foreground text-muted-foreground flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold"
+                  aria-expanded={!shut}
+                  onclick={() =>
+                    (folded = shut
+                      ? folded.filter((x) => x !== g.label)
+                      : [...folded, g.label])}
+                >
+                  <g.icon class="size-3.5" />
+                  <span class="flex-1">{g.label}</span>
+                  <ChevronRight
+                    class={cn(
+                      "size-3.5 transition-transform",
+                      !shut && "rotate-90",
                     )}
-                  {/each}
-                </div>
-              {/if}
-            </nav>
-          </Resizable.Pane>
-          <Resizable.Handle />
-        {/if}
-
-        {#if mode === "items"}
-          <Resizable.Pane defaultSize={showNav ? 47 : 58} minSize={28}>
-            <section aria-label="Items" class="@container flex h-full flex-col">
-              <div
-                class="text-muted-foreground flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs"
-              >
-                <span class="truncate"
-                  >{collection
-                    ? `${items.length} in ${collection.name}`
-                    : shelf === "everything"
-                      ? `${items.length} items on every shelf`
-                      : `${items.length} · ${shelfById(shelf)?.note}`}</span
-                >
-                {#if collection}
-                  <button
-                    type="button"
-                    class="hover:text-destructive ml-auto flex items-center gap-1"
-                    onclick={() => {
-                      collections = collections.filter(
-                        (c) => c.id !== collection.id,
-                      );
-                      pick("everything");
-                    }}><Trash2 class="size-3.5" />Delete collection</button
-                  >
-                {/if}
-              </div>
-              <div class="min-h-0 flex-1 overflow-auto p-3">
-                {#if !items.length}
-                  <EmptyState
-                    icon={Search}
-                    title="Nothing matches"
-                    description="Try another word, or look on Everything."
                   />
-                {:else if shelf === "everything"}
-                  {#each grouped as { s, list } (s.id)}
-                    <h2
-                      class="text-muted-foreground mt-1 mb-2 flex items-center gap-1.5 text-xs font-medium"
-                    >
-                      <s.icon class="size-3.5" />{s.label}
-                      <button
-                        type="button"
-                        class="text-primary ml-auto font-normal"
-                        onclick={() => pick(s.id)}>Open shelf</button
-                      >
-                    </h2>
-                    <div class="mb-4">
-                      {@render itemList(
-                        list.slice(0, view === "cards" ? 4 : 6),
+                </button>
+                {#if !shut}
+                  <div class="px-1 pb-1">
+                    {#each g.shelves as s (s.id)}
+                      {@render navButton(
+                        s.id,
+                        s.label,
+                        s.icon,
+                        s.id === "articles"
+                          ? articles.length + others.length || ""
+                          : countOf(s.id),
+                        s.note,
                       )}
-                    </div>
-                  {/each}
-                {:else}
-                  {@render itemList(items)}
+                    {/each}
+                  </div>
                 {/if}
               </div>
-              {#if selecting}
-                <div
-                  class="bg-panel flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+            {/each}
+            {#if collections.length}
+              <div class="bg-muted/25 rounded-lg px-1 pb-1">
+                <p
+                  class="text-muted-foreground flex items-center gap-2 px-1 py-2 text-xs font-semibold"
                 >
-                  <span class="text-sm font-medium">{picked.length} picked</span
-                  >
-                  <Button
-                    size="sm"
-                    disabled={!picked.length}
-                    onclick={addPicked}
-                    ><MessageSquarePlus />Add to copilot</Button
-                  >
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!picked.length}
-                    onclick={() => {
-                      collectionName = "";
-                      naming = true;
-                    }}><FolderHeart />Save as a collection</Button
-                  >
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="ml-auto"
-                    onclick={() => (picked = items.map((i) => i.id))}
-                    >Pick all {items.length}</Button
-                  >
-                </div>
+                  <FolderHeart class="size-3.5" />Your collections
+                </p>
+                {#each collections as c (c.id)}
+                  {@render navButton(
+                    `col:${c.id}`,
+                    c.name,
+                    FolderHeart,
+                    c.items.length,
+                  )}
+                {/each}
+              </div>
+            {/if}
+          </nav>
+        </Resizable.Pane>
+        <Resizable.Handle />
+      {/if}
+
+      {#if mode === "items"}
+        <Resizable.Pane defaultSize={showNav ? 47 : 58} minSize={28}>
+          <section aria-label="Items" class="@container flex h-full flex-col">
+            <div
+              class="text-muted-foreground flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs"
+            >
+              <span class="truncate"
+                >{collection
+                  ? `${items.length} in ${collection.name}`
+                  : shelf === "everything"
+                    ? `${items.length} items on every shelf`
+                    : items.length
+                      ? `${items.length} · ${shelfById(shelf)?.note}`
+                      : shelfById(shelf)?.note}</span
+              >
+              {#if collection}
+                <button
+                  type="button"
+                  class="hover:text-destructive ml-auto flex items-center gap-1"
+                  onclick={() => {
+                    collections = collections.filter(
+                      (c) => c.id !== collection.id,
+                    );
+                    pick("everything");
+                  }}><Trash2 class="size-3.5" />Delete collection</button
+                >
               {/if}
-            </section>
-          </Resizable.Pane>
-          <Resizable.Handle />
-          <Resizable.Pane defaultSize={showNav ? 38 : 42} minSize={26}>
-            <aside class="bg-panel h-full" aria-label="Selected item">
-              {#if selected}
-                <ItemInspector item={selected} />
-              {:else}
-                <EmptyState
-                  class="h-full"
-                  icon={Library}
-                  title="Pick something"
-                  description="Its settings and everywhere it is used show here."
+            </div>
+            <div class="min-h-0 flex-1 overflow-auto p-3">
+              {#if !items.length && !q && !collection}
+                <FirstStep
+                  line="Nothing on this shelf yet"
+                  action={shelf === "datasets" || shelf === "files"
+                    ? FIRST.source
+                    : FIRST.template}
                 />
+              {:else if !items.length}
+                <EmptyState
+                  icon={Search}
+                  title="Nothing matches"
+                  description="Try another word, or look on Everything."
+                />
+              {:else if shelf === "everything"}
+                {#each grouped as { s, list } (s.id)}
+                  <h2
+                    class="text-muted-foreground mt-1 mb-2 flex items-center gap-1.5 text-xs font-medium"
+                  >
+                    <s.icon class="size-3.5" />{s.label}
+                    <button
+                      type="button"
+                      class="text-primary ml-auto font-normal"
+                      onclick={() => pick(s.id)}>Open shelf</button
+                    >
+                  </h2>
+                  <div class="mb-4">
+                    {@render itemList(list.slice(0, view === "cards" ? 4 : 6))}
+                  </div>
+                {/each}
+              {:else}
+                {@render itemList(items)}
               {/if}
-            </aside>
-          </Resizable.Pane>
-        {:else if mode === "articles"}
-          {#if !reading}
-            <Resizable.Pane defaultSize={showNav ? 26 : 30} minSize={18}>
-              <section aria-label="Articles" class="flex h-full flex-col">
+            </div>
+            {#if selecting}
+              <div
+                class="bg-panel flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2"
+              >
+                <span class="text-sm font-medium">{picked.length} picked</span>
+                <Button size="sm" disabled={!picked.length} onclick={addPicked}
+                  ><MessageSquarePlus />Add to copilot</Button
+                >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!picked.length}
+                  onclick={() => {
+                    collectionName = "";
+                    naming = true;
+                  }}><FolderHeart />Save as a collection</Button
+                >
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="ml-auto"
+                  onclick={() => (picked = items.map((i) => i.id))}
+                  >Pick all {items.length}</Button
+                >
+              </div>
+            {/if}
+          </section>
+        </Resizable.Pane>
+        <Resizable.Handle />
+        <Resizable.Pane defaultSize={showNav ? 38 : 42} minSize={26}>
+          <aside class="bg-panel h-full" aria-label="Selected item">
+            {#if selected}
+              <ItemInspector item={selected} />
+            {:else if items.length}
+              <EmptyState
+                class="h-full"
+                icon={Library}
+                title="Pick something"
+                description="Its settings and everywhere it is used show here."
+              />
+            {/if}
+          </aside>
+        </Resizable.Pane>
+      {:else if mode === "articles"}
+        {#if !reading}
+          <Resizable.Pane defaultSize={showNav ? 26 : 30} minSize={18}>
+            <section aria-label="Articles" class="flex h-full flex-col">
+              {#if workbench.demoMode}
                 <div class="flex shrink-0 flex-col gap-1.5 border-b p-2">
                   <select
                     class="h-7 w-full rounded-md border px-2 text-xs"
@@ -712,316 +729,319 @@
                     >
                   </div>
                 </div>
-                {#if !hits.length && articleSource !== "mql5"}
-                  <EmptyState
-                    class="flex-1"
-                    icon={BookOpen}
-                    title="Nothing from this source yet"
-                    description={ARTICLE_SOURCES.find(
-                      (s) => s.id === articleSource,
-                    )?.note}
-                  />
-                {/if}
-                <ul class="min-h-0 flex-1 overflow-auto">
-                  {#each hits.slice(0, 200) as a (a.id)}
-                    <li>
-                      <button
-                        type="button"
-                        class={cn(
-                          "hover:bg-muted/60 flex w-full flex-col border-b px-3 py-2.5 text-left",
-                          openId === a.id && "bg-muted",
-                        )}
-                        aria-current={openId === a.id ? "true" : undefined}
-                        onclick={() => (openId = a.id)}
-                      >
-                        <span
-                          class="line-clamp-2 text-sm leading-snug font-medium"
-                          >{a.title}</span
-                        >
-                        <span class="text-muted-foreground mt-0.5 text-xs"
-                          ><span class="num">{a.published}</span> · {a.section}{#if a.part}
-                            · Part {a.part}{/if}</span
-                        >
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              </section>
-            </Resizable.Pane>
-            <Resizable.Handle />
-          {/if}
-          <Resizable.Pane
-            defaultSize={reading ? 100 : showNav ? 59 : 70}
-            minSize={34}
-          >
-            {#if open}
-              <article class="bg-panel @container flex h-full flex-col">
-                <header
-                  class={cn(
-                    "flex flex-col gap-2 border-b px-6 py-4",
-                    reading && "mx-auto w-full max-w-6xl",
-                  )}
-                >
-                  <p class="text-muted-foreground text-xs">
-                    {open.section}{open.series ? ` · ${open.series}` : ""} ·
-                    <span class="num">{open.published}</span>
-                  </p>
-                  <h2
-                    class={cn(
-                      "leading-snug font-semibold",
-                      reading ? "text-3xl" : "text-xl",
-                    )}
-                  >
-                    {open.title}
-                  </h2>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      onclick={() => workbench.addRef(open.title)}
-                      ><MessageSquarePlus /> Add to copilot</Button
-                    >
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onclick={() =>
-                        explain(
-                          "Use the Article to hypothesis workflow on this article: pull the testable claims and draft a hypothesis that cites it.",
-                        )}><Lightbulb /> Turn into hypothesis</Button
-                    >
-                    <Button
-                      size="sm"
-                      variant={reading ? "secondary" : "ghost"}
-                      aria-pressed={reading}
-                      onclick={() => (reading = !reading)}
-                      >{#if reading}<Minimize2 /> Leave reading mode{:else}<BookOpenText
-                        /> Reading mode{/if}</Button
-                    >
-                    {#if open.id > 0}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        href={resolve("/library/article/[id]", {
-                          id: String(open.id),
-                        })}><Maximize2 /> Full page</Button
-                      >
-                    {/if}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      href={open.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      ><ExternalLink /> Original</Button
-                    >
-                  </div>
-                </header>
-                <div class="min-h-0 flex-1 overflow-auto">
-                  <div
-                    class={cn(
-                      "grid grid-cols-1 @[56rem]:grid-cols-[minmax(0,1fr)_17rem]",
-                      reading && "mx-auto max-w-6xl",
-                    )}
-                  >
-                    <div class="min-w-0 px-6 py-5">
-                      {#if open.id < 0}
-                        <p class="text-base leading-relaxed">{open.summary}</p>
-                        <p class="text-muted-foreground mt-3 text-sm">
-                          Full text arrives through the daemon from {ARTICLE_SOURCES.find(
-                            (s) => s.id === open.source,
-                          )?.name}.
-                        </p>
-                      {:else if text === null}
-                        <div class="flex flex-col gap-2">
-                          <Skeleton class="h-4 w-full" /><Skeleton
-                            class="h-4 w-11/12"
-                          /><Skeleton class="h-32 w-full" />
-                        </div>
-                      {:else if text.status === "no-text"}
-                        <p class="text-muted-foreground text-sm">
-                          Full text comes from the daemon's Library. For this
-                          demo, start the preview with QMX_DEMO_MQL5_DIR set.
-                        </p>
-                      {:else}
-                        <div
-                          class={cn(
-                            "prose-qmx max-w-[78ch]",
-                            reading && "text-base",
-                          )}
-                        >
-                          <!-- Sanitised with DOMPurify in loadArticleText. -->
-                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                          {@html text.html}
-                        </div>
-                      {/if}
-                    </div>
-                    <aside
-                      class="flex flex-col gap-4 border-t px-5 py-5 @[56rem]:border-t-0 @[56rem]:border-l"
-                    >
-                      <section>
-                        <h3
-                          class="mb-1 flex items-center gap-1.5 text-sm font-medium"
-                        >
-                          <Sparkles class="size-3.5" /> Key points
-                        </h3>
-                        <p class="text-muted-foreground text-sm">
-                          {open.summary}
-                        </p>
-                      </section>
-                      <section>
-                        <h3 class="mb-1.5 text-sm font-medium">
-                          Explain it as
-                        </h3>
-                        <div class="grid grid-cols-2 gap-1.5">
-                          {#each EXPLAIN_AS as x (x.id)}
-                            <button
-                              type="button"
-                              class="hover:border-ring/60 hover:bg-muted/50 rounded-md border px-2 py-2 text-left text-sm"
-                              onclick={() => explain(x.ask)}>{x.label}</button
-                            >
-                          {/each}
-                        </div>
-                        <p class="text-muted-foreground mt-1.5 text-xs">
-                          The copilot makes it and saves it beside the article.
-                        </p>
-                      </section>
-                      {#if open.id > 0 && text && text.status !== "no-text" && text.figures.length}
-                        <section>
-                          <h3 class="mb-1 text-sm font-medium">Figures</h3>
-                          <div class="grid grid-cols-2 gap-1.5">
-                            {#each text.figures.slice(0, 6) as src (src)}<img
-                                {src}
-                                alt=""
-                                loading="lazy"
-                                class="h-20 w-full rounded-md bg-white object-contain"
-                              />{/each}
-                          </div>
-                        </section>
-                      {/if}
-                    </aside>
-                  </div>
-                </div>
-              </article>
-            {:else}
-              <EmptyState
-                class="bg-panel h-full"
-                icon={BookOpen}
-                title="Select an article"
-              />
-            {/if}
-          </Resizable.Pane>
-        {:else}
-          <Resizable.Pane defaultSize={showNav ? 27 : 32} minSize={18}>
-            <section aria-label="Sources" class="flex h-full flex-col">
-              <ul class="shrink-0 border-b p-1.5">
-                {#each sources as s (s.id)}
+              {/if}
+              {#if !workbench.demoMode}
+                <FirstStep {...DAY_ONE.events} line="No articles yet" />
+              {:else if !hits.length && articleSource !== "mql5"}
+                <EmptyState
+                  class="flex-1"
+                  icon={BookOpen}
+                  title="Nothing from this source yet"
+                  description={ARTICLE_SOURCES.find(
+                    (s) => s.id === articleSource,
+                  )?.note}
+                />
+              {/if}
+              <ul class="min-h-0 flex-1 overflow-auto">
+                {#each hits.slice(0, 200) as a (a.id)}
                   <li>
                     <button
                       type="button"
                       class={cn(
-                        "hover:bg-muted flex w-full flex-col rounded-md px-2.5 py-2 text-left",
-                        sourceId === s.id && "bg-muted",
+                        "hover:bg-muted/60 flex w-full flex-col border-b px-3 py-2.5 text-left",
+                        openId === a.id && "bg-muted",
                       )}
-                      onclick={() => (sourceId = s.id)}
+                      aria-current={openId === a.id ? "true" : undefined}
+                      onclick={() => (openId = a.id)}
                     >
-                      <span class="flex items-center gap-2 text-sm font-medium"
-                        >{s.name}<span
-                          class="bg-background/50 ml-auto rounded-sm px-1.5 text-xs"
-                          >{s.family}</span
-                        ></span
+                      <span
+                        class="line-clamp-2 text-sm leading-snug font-medium"
+                        >{a.title}</span
                       >
-                      <span class="text-muted-foreground text-xs"
-                        >{s.summary}</span
+                      <span class="text-muted-foreground mt-0.5 text-xs"
+                        ><span class="num">{a.published}</span> · {a.section}{#if a.part}
+                          · Part {a.part}{/if}</span
                       >
                     </button>
                   </li>
                 {/each}
               </ul>
-              <p class="text-muted-foreground px-3 pt-2 text-xs">
-                Latest from your sources · sample items
-              </p>
-              <ul class="min-h-0 flex-1 overflow-auto">
-                {#each FEED as f (f.id)}
-                  <li class="flex items-start gap-2 border-b px-3 py-2">
-                    <span class="min-w-0 flex-1">
-                      <span class="text-muted-foreground block text-xs"
-                        >{f.source} · {f.age}</span
-                      >
-                      <span class="block text-sm">{f.title}</span>
-                    </span>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Add to copilot"
-                      onclick={() => workbench.addRef(f.title)}
-                      ><MessageSquarePlus /></Button
-                    >
-                  </li>
-                {/each}
-              </ul>
-              <div class="border-t p-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="w-full"
-                  onclick={() =>
-                    workbench.notify(
-                      "Add a feed, a site, a video channel or your clippings folder; the daemon fetches it and files new items here.",
-                    )}><Plus />Add a source</Button
-                >
-              </div>
             </section>
           </Resizable.Pane>
           <Resizable.Handle />
-          <Resizable.Pane defaultSize={showNav ? 58 : 68} minSize={30}>
-            <section aria-label="Browser" class="bg-panel flex h-full flex-col">
-              <div class="flex items-center gap-2 border-b px-2 py-1.5">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Reload"
-                  onclick={() => frameKey++}><RotateCw /></Button
-                >
-                <div
-                  class="well flex-1 truncate rounded-md px-3 py-1 font-mono text-xs"
-                >
-                  {sourceUrl}
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() =>
-                    workbench.notify(
-                      `${source?.name} becomes a web app on the rail, in its own window with QMX's look (needs the desktop app).`,
-                    )}><AppWindow /> Make it an app</Button
-                >
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"><ExternalLink /> Outside QMX</Button
-                >
-              </div>
-              {#key frameKey + sourceId}
-                <iframe
-                  title={source?.name}
-                  src={sourceUrl}
-                  class="bg-background min-h-0 w-full flex-1"
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                  referrerpolicy="no-referrer"
-                ></iframe>
-              {/key}
-              <p class="text-muted-foreground border-t px-3 py-1.5 text-xs">
-                Some sites refuse to be shown inside other apps and stay blank
-                here. For those, the daemon fetches a clean reader copy instead
-                (planned).
-              </p>
-            </section>
-          </Resizable.Pane>
         {/if}
-      </Resizable.PaneGroup>
-    {/key}
-  {/if}
+        <Resizable.Pane
+          defaultSize={reading ? 100 : showNav ? 59 : 70}
+          minSize={34}
+        >
+          {#if open}
+            <article class="bg-panel @container flex h-full flex-col">
+              <header
+                class={cn(
+                  "flex flex-col gap-2 border-b px-6 py-4",
+                  reading && "mx-auto w-full max-w-6xl",
+                )}
+              >
+                <p class="text-muted-foreground text-xs">
+                  {open.section}{open.series ? ` · ${open.series}` : ""} ·
+                  <span class="num">{open.published}</span>
+                </p>
+                <h2
+                  class={cn(
+                    "leading-snug font-semibold",
+                    reading ? "text-3xl" : "text-xl",
+                  )}
+                >
+                  {open.title}
+                </h2>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onclick={() => workbench.addRef(open.title)}
+                    ><MessageSquarePlus /> Add to copilot</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() =>
+                      explain(
+                        "Use the Article to hypothesis workflow on this article: pull the testable claims and draft a hypothesis that cites it.",
+                      )}><Lightbulb /> Turn into hypothesis</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant={reading ? "secondary" : "ghost"}
+                    aria-pressed={reading}
+                    onclick={() => (reading = !reading)}
+                    >{#if reading}<Minimize2 /> Leave reading mode{:else}<BookOpenText
+                      /> Reading mode{/if}</Button
+                  >
+                  {#if open.id > 0}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      href={resolve("/library/article/[id]", {
+                        id: String(open.id),
+                      })}><Maximize2 /> Full page</Button
+                    >
+                  {/if}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    href={open.url}
+                    target="_blank"
+                    rel="noopener noreferrer"><ExternalLink /> Original</Button
+                  >
+                </div>
+              </header>
+              <div class="min-h-0 flex-1 overflow-auto">
+                <div
+                  class={cn(
+                    "grid grid-cols-1 @[56rem]:grid-cols-[minmax(0,1fr)_17rem]",
+                    reading && "mx-auto max-w-6xl",
+                  )}
+                >
+                  <div class="min-w-0 px-6 py-5">
+                    {#if open.id < 0}
+                      <p class="text-base leading-relaxed">{open.summary}</p>
+                      <p class="text-muted-foreground mt-3 text-sm">
+                        Full text arrives through the daemon from {ARTICLE_SOURCES.find(
+                          (s) => s.id === open.source,
+                        )?.name}.
+                      </p>
+                    {:else if text === null}
+                      <div class="flex flex-col gap-2">
+                        <Skeleton class="h-4 w-full" /><Skeleton
+                          class="h-4 w-11/12"
+                        /><Skeleton class="h-32 w-full" />
+                      </div>
+                    {:else if text.status === "no-text"}
+                      <p class="text-muted-foreground text-sm">
+                        Full text comes from the daemon's Library. For this
+                        demo, start the preview with QMX_DEMO_MQL5_DIR set.
+                      </p>
+                    {:else}
+                      <div
+                        class={cn(
+                          "prose-qmx max-w-[78ch]",
+                          reading && "text-base",
+                        )}
+                      >
+                        <!-- Sanitised with DOMPurify in loadArticleText. -->
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html text.html}
+                      </div>
+                    {/if}
+                  </div>
+                  <aside
+                    class="flex flex-col gap-4 border-t px-5 py-5 @[56rem]:border-t-0 @[56rem]:border-l"
+                  >
+                    <section>
+                      <h3
+                        class="mb-1 flex items-center gap-1.5 text-sm font-medium"
+                      >
+                        <Sparkles class="size-3.5" /> Key points
+                      </h3>
+                      <p class="text-muted-foreground text-sm">
+                        {open.summary}
+                      </p>
+                    </section>
+                    <section>
+                      <h3 class="mb-1.5 text-sm font-medium">Explain it as</h3>
+                      <div class="grid grid-cols-2 gap-1.5">
+                        {#each EXPLAIN_AS as x (x.id)}
+                          <button
+                            type="button"
+                            class="hover:border-ring/60 hover:bg-muted/50 rounded-md border px-2 py-2 text-left text-sm"
+                            onclick={() => explain(x.ask)}>{x.label}</button
+                          >
+                        {/each}
+                      </div>
+                      <p class="text-muted-foreground mt-1.5 text-xs">
+                        The copilot makes it and saves it beside the article.
+                      </p>
+                    </section>
+                    {#if open.id > 0 && text && text.status !== "no-text" && text.figures.length}
+                      <section>
+                        <h3 class="mb-1 text-sm font-medium">Figures</h3>
+                        <div class="grid grid-cols-2 gap-1.5">
+                          {#each text.figures.slice(0, 6) as src (src)}<img
+                              {src}
+                              alt=""
+                              loading="lazy"
+                              class="h-20 w-full rounded-md bg-white object-contain"
+                            />{/each}
+                        </div>
+                      </section>
+                    {/if}
+                  </aside>
+                </div>
+              </div>
+            </article>
+          {:else}
+            <EmptyState
+              class="bg-panel h-full"
+              icon={BookOpen}
+              title="Select an article"
+            />
+          {/if}
+        </Resizable.Pane>
+      {:else}
+        <Resizable.Pane defaultSize={showNav ? 27 : 32} minSize={18}>
+          <section aria-label="Sources" class="flex h-full flex-col">
+            <ul class="shrink-0 border-b p-1.5">
+              {#each sources as s (s.id)}
+                <li>
+                  <button
+                    type="button"
+                    class={cn(
+                      "hover:bg-muted flex w-full flex-col rounded-md px-2.5 py-2 text-left",
+                      sourceId === s.id && "bg-muted",
+                    )}
+                    onclick={() => (sourceId = s.id)}
+                  >
+                    <span class="flex items-center gap-2 text-sm font-medium"
+                      >{s.name}<span
+                        class="bg-background/50 ml-auto rounded-sm px-1.5 text-xs"
+                        >{s.family}</span
+                      ></span
+                    >
+                    <span class="text-muted-foreground text-xs"
+                      >{s.summary}</span
+                    >
+                  </button>
+                </li>
+              {/each}
+            </ul>
+            {#if workbench.demoMode}
+              <p class="text-muted-foreground px-3 pt-2 text-xs">
+                Latest from your sources · sample items
+              </p>
+            {:else}
+              <p class="text-muted-foreground flex-1 px-3 pt-3 text-sm">
+                No news until a source is added
+              </p>
+            {/if}
+            <ul class="min-h-0 overflow-auto" class:flex-1={workbench.demoMode}>
+              {#each workbench.demoMode ? FEED : [] as f (f.id)}
+                <li class="flex items-start gap-2 border-b px-3 py-2">
+                  <span class="min-w-0 flex-1">
+                    <span class="text-muted-foreground block text-xs"
+                      >{f.source} · {f.age}</span
+                    >
+                    <span class="block text-sm">{f.title}</span>
+                  </span>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Add to copilot"
+                    onclick={() => workbench.addRef(f.title)}
+                    ><MessageSquarePlus /></Button
+                  >
+                </li>
+              {/each}
+            </ul>
+            <div class="border-t p-2">
+              <Button
+                size="sm"
+                variant="outline"
+                class="w-full"
+                onclick={() =>
+                  workbench.notify(
+                    "Add a feed, a site, a video channel or your clippings folder; the daemon fetches it and files new items here.",
+                  )}><Plus />Add a source</Button
+              >
+            </div>
+          </section>
+        </Resizable.Pane>
+        <Resizable.Handle />
+        <Resizable.Pane defaultSize={showNav ? 58 : 68} minSize={30}>
+          <section aria-label="Browser" class="bg-panel flex h-full flex-col">
+            <div class="flex items-center gap-2 border-b px-2 py-1.5">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Reload"
+                onclick={() => frameKey++}><RotateCw /></Button
+              >
+              <div
+                class="well flex-1 truncate rounded-md px-3 py-1 font-mono text-xs"
+              >
+                {sourceUrl}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() =>
+                  workbench.notify(
+                    `${source?.name} becomes a web app on the rail, in its own window with QMX's look (needs the desktop app).`,
+                  )}><AppWindow /> Make it an app</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"><ExternalLink /> Outside QMX</Button
+              >
+            </div>
+            {#key frameKey + sourceId}
+              <iframe
+                title={source?.name}
+                src={sourceUrl}
+                class="bg-background min-h-0 w-full flex-1"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                referrerpolicy="no-referrer"
+              ></iframe>
+            {/key}
+            <p class="text-muted-foreground border-t px-3 py-1.5 text-xs">
+              Some sites refuse to be shown inside other apps and stay blank
+              here. For those, the daemon fetches a clean reader copy instead
+              (planned).
+            </p>
+          </section>
+        </Resizable.Pane>
+      {/if}
+    </Resizable.PaneGroup>
+  {/key}
 </div>
 
 <Dialog.Root bind:open={naming}>

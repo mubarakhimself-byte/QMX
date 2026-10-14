@@ -18,6 +18,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { cn } from "$lib/utils";
   import DemoChip from "$lib/workbench/DemoChip.svelte";
+  import { workbench } from "$lib/workbench/workbench.svelte";
   import InfoTip from "$lib/workbench/InfoTip.svelte";
   import AboutSheet from "$lib/apps/AboutSheet.svelte";
   import AppTile from "$lib/apps/AppTile.svelte";
@@ -100,10 +101,10 @@
         <DemoChip note="Sample apps and previews. Nothing here ran." />
       </div>
       <p class="text-muted-foreground mt-1 text-lg">
-        {ready.length} ready
-        {#if stopped}· <span class="text-destructive">{stopped} stopped</span
-          >{/if}
-        · {inProgress.length} in progress
+        {#if apps.all.length}{ready.length} ready
+          {#if stopped}· <span class="text-destructive">{stopped} stopped</span
+            >{/if}
+          · {inProgress.length} in progress{/if}
       </p>
     </div>
     <nav class="bg-muted flex rounded-xl p-1" aria-label="Apps view">
@@ -130,7 +131,14 @@
   </header>
 
   <div class="min-h-0 flex-1 overflow-auto px-page pb-page">
-    {#if !discover}
+    {#if !discover && !apps.all.length}
+      <div class="mt-group flex flex-col items-start gap-3">
+        <p class="text-muted-foreground text-lg">No apps yet</p>
+        <!-- eslint-disable svelte/no-navigation-without-resolve -->
+        <Button href={view("discover")}>Start from a template</Button>
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
+      </div>
+    {:else if !discover}
       <ul class="tiles mt-5">
         {#each sections as sec (sec.key)}
           {#each sec.list as a, i (a.id)}
@@ -248,11 +256,15 @@
                   >
                 </span>
               </div>
-              <div
-                class="border-border/70 flex-1 rounded-2xl border border-dashed p-4 opacity-80"
-              >
-                <Preview preview={t.preview} />
-              </div>
+              {#if workbench.demoMode}
+                <div
+                  class="border-border/70 flex-1 rounded-2xl border border-dashed p-4 opacity-80"
+                >
+                  <Preview preview={t.preview} />
+                </div>
+              {:else}
+                <span class="flex-1"></span>
+              {/if}
               <div class="flex items-center gap-2">
                 <Button
                   variant="outline"

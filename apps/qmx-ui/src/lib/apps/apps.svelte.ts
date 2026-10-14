@@ -9,6 +9,7 @@
 import type { Component } from "svelte";
 import { HOME_PANELS } from "$lib/home/catalog";
 import { PORTFOLIO_PANELS } from "$lib/portfolio/catalog";
+import { workbench } from "$lib/workbench/workbench.svelte";
 import {
   pane,
   split,
@@ -773,7 +774,7 @@ class Apps {
   selected = $state<string | null>(null);
 
   get all(): MiniApp[] {
-    return [...this.mine, ...DEMO];
+    return workbench.demoMode ? [...this.mine, ...DEMO] : this.mine;
   }
 
   byId(id: string | null) {

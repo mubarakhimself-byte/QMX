@@ -151,7 +151,7 @@
       </DropdownMenu.Root>
     </nav>
     <div class="ml-auto flex items-center gap-1.5">
-      <ServersStrip />
+      {#if workbench.demoMode}<ServersStrip />{/if}
       <span class="bg-border mx-1 h-5 w-px"></span>
       <Button
         variant="ghost"

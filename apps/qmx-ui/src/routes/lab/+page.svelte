@@ -8,6 +8,7 @@
    */
   import DemoChip from "$lib/workbench/DemoChip.svelte";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import Layers2 from "@lucide/svelte/icons/layers-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -39,6 +40,7 @@
   import LabStrips from "$lib/lab/LabStrips.svelte";
   import { GUIDES } from "$lib/lab/guides";
   import { LAB_PODS, POD_TEMPLATES, STAGE_LABEL } from "$lib/lab/pods";
+  import { FIRST } from "$lib/workbench/day-one";
 
   // Old links to the four pod tabs land on the Pods bench's three.
   const OLD: Record<string, string> = {
@@ -130,7 +132,18 @@
         >
       {/each}
     </div>
-    {#if lab.bench === "pods"}
+    {#if !workbench.demoMode}
+      {@const first = lab.bench === "pods" ? FIRST.pod : FIRST.template}
+      {@const [path, query] = first.href.split("?")}
+      <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
+      <Button
+        variant="ghost"
+        size="sm"
+        href={`${resolve(path as "/")}${query ? `?${query}` : ""}`}
+        ><Plus />{first.label}</Button
+      >
+      <!-- eslint-enable svelte/no-navigation-without-resolve -->
+    {:else if lab.bench === "pods"}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -233,7 +246,10 @@
           >{l.name}{#if lab.isEdited(l.id)}<span
               class="text-muted-foreground"
               title="Changed from the default">*</span
-            >{/if}{#if lab.machine}{@const n = activity(lab.machine, l.id)}<span
+            >{/if}{#if lab.machine && workbench.demoMode}{@const n = activity(
+              lab.machine,
+              l.id,
+            )}<span
               class="num ml-1.5 rounded px-1 text-xs {n
                 ? 'bg-info/15 text-info'
                 : 'text-muted-foreground/60'}"
@@ -313,7 +329,11 @@
       </DropdownMenu.Root>
       <span class="bg-border mx-1 h-5 w-px"></span>
       <MachinePicker />
-      <Button size="sm" onclick={run}
+      <Button
+        size="sm"
+        onclick={run}
+        disabled={!workbench.demoMode}
+        title={workbench.demoMode ? undefined : "Nothing to run yet"}
         ><Play />{lab.bench === "pods" ? "Run test" : "Run"}</Button
       >
       <Button
@@ -330,7 +350,7 @@
 
   <Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
     <Resizable.Pane defaultSize={lab.copilotOpen ? 76 : 100} minSize={50}>
-      {#if lab.machine && activity(lab.machine, lab.activeId) === 0}
+      {#if workbench.demoMode && lab.machine && activity(lab.machine, lab.activeId) === 0}
         <MachineEmpty machine={lab.machine} onstart={() => (starting = true)} />
       {:else}
         <TileBoard

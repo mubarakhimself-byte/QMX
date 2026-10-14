@@ -10,6 +10,7 @@
  * engine streams the same block shapes once wired.
  */
 import { SAMPLE_PANEL } from "$lib/sdk/spec";
+import { workbench } from "$lib/workbench/workbench.svelte";
 import {
   SESSIONS,
   THREADS,
@@ -21,8 +22,22 @@ import {
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const DEMO_IDS = new Set(SESSIONS.map((s) => s.id));
+
 class CopilotStore {
-  sessions = $state<Session[]>(clone(SESSIONS));
+  #sessions = $state<Session[]>(clone(SESSIONS));
+  /** Sample errands are hidden, not lost, while demo mode is off. */
+  get sessions(): Session[] {
+    return workbench.demoMode
+      ? this.#sessions
+      : this.#sessions.filter((s) => !DEMO_IDS.has(s.id));
+  }
+  set sessions(next: Session[]) {
+    const hidden = workbench.demoMode
+      ? []
+      : this.#sessions.filter((s) => DEMO_IDS.has(s.id));
+    this.#sessions = [...next, ...hidden];
+  }
   threads = $state<Record<string, Block[]>>(clone(THREADS));
   /** Answers by session and block index. */
   answers = $state<Record<string, Record<number, string>>>({});
