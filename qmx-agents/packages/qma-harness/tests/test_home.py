@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
-from qmx_control.models import Document
+from qmx_control.models import ControlError, Document
 from qmx_control.server import create_app
 
 from qma.harness.home import (
@@ -409,7 +409,10 @@ def test_parse_claude_settings_accepts_every_documented_hook_key() -> None:
         "Bearer sk-1 $X",
         "abc $QMX_HOOK_TOKEN",
         "$QMX_HOOK_TOKEN abc",
-        "Bearer ${QMX_HOOK_TOKEN}",
+        "Bearer ${QMX_HOOK_TOKEN",
+        "$QMX_HOOK_TOKEN}",
+        "${}",
+        "${QMX_HOOK_TOKEN}X",
         "Token $QMX_HOOK_TOKEN",
         "$qmx_hook_token",
         "literal",
@@ -421,14 +424,53 @@ def test_parse_claude_settings_refuses_a_hook_header_that_is_not_one_reference(
     with pytest.raises(LaunchRefused) as refused:
         parse_claude_settings(_http_hook({name: value}))
     assert str(refused.value) == (
-        f"[claude] hooks.Stop header {name} must be $NAME, Bearer $NAME or Basic $NAME"
+        f"[claude] hooks.Stop header {name} must be $NAME or ${{NAME}}, "
+        "optionally after Bearer or Basic"
     )
 
 
-@pytest.mark.parametrize("value", ["$QMX_HOOK_TOKEN", "Bearer $QMX_HOOK_TOKEN", "Basic $B64"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "$QMX_HOOK_TOKEN",
+        "Bearer $QMX_HOOK_TOKEN",
+        "Basic $B64",
+        "${QMX_HOOK_TOKEN}",
+        "Bearer ${QMX_HOOK_TOKEN}",
+        "Basic ${B64}",
+    ],
+)
 def test_parse_claude_settings_accepts_a_hook_header_that_is_one_reference(value: str) -> None:
     accepted = _http_hook({"X-Auth": value})
     assert parse_claude_settings(accepted).raw == accepted
+
+
+@pytest.mark.parametrize(
+    "url", ["https://user:pw1@h/x", "https://user@h/x", "http://:pw1@h/x", "https://u:p@h:8/x?a=b"]
+)
+def test_parse_claude_settings_refuses_a_hook_url_with_userinfo(url: str) -> None:
+    with pytest.raises(LaunchRefused) as refused:
+        parse_claude_settings(_hook({"type": "http", "url": url}))
+    assert str(refused.value) == (
+        "[claude] hooks.Stop http hook url carries a user or password; "
+        "put the credential in a $NAME header"
+    )
+
+
+def test_parse_claude_settings_accepts_a_hook_url_whose_at_sign_is_not_userinfo() -> None:
+    accepted = _hook({"type": "http", "url": "https://h/x/@team?to=a@b"})
+    assert parse_claude_settings(accepted).raw == accepted
+
+
+def test_redact_settings_hides_url_userinfo() -> None:
+    shown = redact_settings(
+        {"url": "https://user:pw1@h/x?token=t", "plain": "https://h/x", "other": "https://u:p@h/"}
+    )
+    assert shown == {
+        "url": "https://<redacted>@h/x?<redacted>",
+        "plain": "https://h/x",
+        "other": "https://u:p@h/",
+    }
 
 
 def test_doctor_redacts_hook_headers_url_queries_and_command_secrets(
@@ -481,18 +523,29 @@ def test_doctor_redacts_hook_headers_url_queries_and_command_secrets(
     )
 
 
-def test_doctor_hides_a_secret_named_key_wherever_it_sits(
-    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("attribution", "why"),
+    [
+        ({"commit": "c", "apiToken": "asecret1"}, "attribution.apiToken is not allowed"),
+        ({"Commit": "c"}, "attribution.Commit is not allowed"),
+        ({"commit": True}, "attribution.commit must be a string"),
+        ({"pr": 1}, "attribution.pr must be a string"),
+        ({"sessionUrl": "false"}, "attribution.sessionUrl must be true or false"),
+    ],
+)
+def test_settings_put_refuses_an_attribution_key_or_type_the_docs_do_not_list(
+    home: QmxHome, attribution: dict[str, object], why: str
 ) -> None:
-    _throwaway_home(monkeypatch, tmp_path)
-    ensure_homes(home)
     control = control_service(home)
-    control.settings_put("claude", {"attribution": {"commit": "c", "apiToken": "asecret1"}})
-    lines = doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
-    assert [line.name for line in lines if "asecret1" in line.detail] == []
-    inline = {line.name: line for line in lines}["inline settings"]
-    settings = json.loads(inline.detail.split(": ", 1)[1])
-    assert settings["attribution"] == {"commit": "c", "apiToken": "<redacted>"}
+    with pytest.raises(ControlError) as refused:
+        control.settings_put("claude", cast("Document", {"attribution": attribution}))
+    assert str(refused.value) == f"[claude] {why}"
+    assert control.settings_get("claude") == {}
+
+
+def test_parse_claude_settings_accepts_every_documented_attribution_key() -> None:
+    document = cast("Document", {"attribution": {"commit": "c", "pr": "", "sessionUrl": False}})
+    assert parse_claude_settings(document).raw == document
 
 
 def test_redact_settings_hides_secret_names_and_env_names_outside_the_allow_list() -> None:

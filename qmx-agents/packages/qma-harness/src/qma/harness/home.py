@@ -206,7 +206,10 @@ HOOK_KEYS: Final[Mapping[str, frozenset[str]]] = {
     "agent": _HOOK_COMMON | {"prompt", "model"},
 }
 """Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them."""
-HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$[A-Z_][A-Z0-9_]*")
+HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$(\{[A-Z_][A-Z0-9_]*\}|[A-Z_][A-Z0-9_]*)")
+URL_USERINFO: Final = re.compile(r"([A-Za-z][\w+.-]*://)[^/?#]*@")
+ATTRIBUTION_KEYS: Final[Mapping[str, type]] = {"commit": str, "pr": str, "sessionUrl": bool}
+"""`attribution` sub-keys, as https://code.claude.com/docs/en/settings-reference documents them."""
 SECRET_NAME: Final = re.compile(
     r"api[-_]?key|token|secret|passw|authorization|cookie|credential", re.IGNORECASE
 )
@@ -277,12 +280,20 @@ def _hooks(value: object) -> None:
                     raise _refuse(f"hooks.{event} {kind} hook key {unknown[0]}", "is not allowed")
                 if "headers" in table:
                     _headers(table["headers"], f"hooks.{event}")
+                url = table.get("url")
+                if isinstance(url, str) and URL_USERINFO.match(url):
+                    raise _refuse(
+                        f"hooks.{event} {kind} hook url",
+                        "carries a user or password; put the credential in a $NAME header",
+                    )
 
 
 def _headers(value: object, key: str) -> None:
     for name, text in _table(value, f"{key} headers").items():
         if not isinstance(text, str) or not HEADER_VALUE.fullmatch(text):
-            raise _refuse(f"{key} header {name}", "must be $NAME, Bearer $NAME or Basic $NAME")
+            raise _refuse(
+                f"{key} header {name}", "must be $NAME or ${NAME}, optionally after Bearer or Basic"
+            )
 
 
 def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
@@ -313,8 +324,13 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
                     raise _refuse(f"remembered.{workspace}", "holds only an allow list")
                 _strings(entry["allow"], f"remembered.{workspace}.allow", _RULE)
         elif key == "attribution":
-            if not all(isinstance(text, str) for text in _table(value, key).values()):
-                raise _refuse(key, "values must be strings")
+            for name, setting in _table(value, key).items():
+                kind = ATTRIBUTION_KEYS.get(name)
+                if kind is None:
+                    raise _refuse(f"attribution.{name}", "is not allowed")
+                if not isinstance(setting, kind):
+                    why = "must be a string" if kind is str else "must be true or false"
+                    raise _refuse(f"attribution.{name}", why)
         elif key in TEXT_KEYS and not isinstance(value, str):
             raise _refuse(key, "must be a string")
         elif key in FLAG_KEYS and not isinstance(value, bool):
@@ -700,7 +716,8 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
 
 def redact_settings(value: Any, key: str = "") -> Any:
     """Hide what doctor must not show: header values, env names outside the allow-list,
-    secret-named keys, URL query strings and secret-looking words in hook commands."""
+    secret-named keys, URL user info and query strings, and secret-looking words in hook
+    commands."""
     if isinstance(value, dict):
         return {
             name: REDACTED
@@ -712,8 +729,9 @@ def redact_settings(value: Any, key: str = "") -> Any:
         }
     if isinstance(value, list):
         return [redact_settings(item, key) for item in cast("list[Any]", value)]
-    if isinstance(value, str) and key == "url" and "?" in value:
-        return f"{value.split('?', 1)[0]}?{REDACTED}"
+    if isinstance(value, str) and key == "url":
+        shown = URL_USERINFO.sub(lambda found: f"{found[1]}{REDACTED}@", value, count=1)
+        return f"{shown.split('?', 1)[0]}?{REDACTED}" if "?" in shown else shown
     if isinstance(value, str) and key in {"command", "args"}:
         return SECRET_IN_TEXT.sub(_redact_match, value)
     return value
