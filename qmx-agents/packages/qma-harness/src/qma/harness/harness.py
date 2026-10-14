@@ -134,9 +134,11 @@ class Harness:
         return self._chat(chat).live()
 
     async def close(self) -> None:
-        """Close every chat. Idempotent."""
+        """Close every chat, then release the process cap so the home can be opened again.
+        Idempotent."""
         for chat in list(self._chats.values()):
             await chat.close()
+        self._deps.procs.close()
 
     def _chat(self, chat: SessionId) -> Chat:
         found = self._chats.get(chat)
