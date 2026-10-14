@@ -29,12 +29,12 @@ from common import (
     bundled_cli,
     describe,
     home_env,
+    memory_mb,
     plan_options,
     reduced_env,
     require_plan_login,
     scrub_process_env,
     uv_env,
-    working_set_mb,
 )
 
 STARTS = SCRATCH / "shim-starts"
@@ -191,7 +191,7 @@ def shim_main() -> int:
         "args": args[:3] + ([f"... {len(args)} args"] if len(args) > 3 else []),
         "qma_names": sorted(name for name in os.environ if name.upper().startswith("QMA_")),
         "in_job_at_start": in_job(),
-        "python_working_set_mb": working_set_mb(os.getpid()),
+        "python_working_set_mb": memory_mb(os.getpid()).working_set,
     }
     job_name = os.environ.get("QMA_JOB_NAME")
     breakaway = os.environ.get("QMA_JOB_MODE") == "breakaway"

@@ -11,8 +11,19 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
+from typing import Any
 
-from common import CLI_FLOOR, PROBE_VENV, SCRATCH, Log, home_env, parse_version, reduced_env, uv_env
+from common import (
+    CLI_FLOOR,
+    PROBE_VENV,
+    SCRATCH,
+    Log,
+    home_env,
+    is_final_release,
+    parse_version,
+    reduced_env,
+    uv_env,
+)
 
 PYPI = "https://pypi.org/pypi/claude-agent-sdk/json"
 WHEEL_TAG = "win_amd64"
@@ -20,12 +31,14 @@ WHEEL_TAG = "win_amd64"
 
 def windows_releases() -> list[tuple[str, str]]:
     with urllib.request.urlopen(PYPI, timeout=60) as response:
-        releases: dict[str, list[dict[str, str]]] = json.load(response)["releases"]
+        releases: dict[str, list[dict[str, Any]]] = json.load(response)["releases"]
     found = [
         (version, file["filename"])
         for version, files in releases.items()
         for file in files
-        if file["filename"].endswith(f"{WHEEL_TAG}.whl")
+        if is_final_release(version)
+        and not file.get("yanked")
+        and file["filename"].endswith(f"{WHEEL_TAG}.whl")
     ]
     return sorted(found, key=lambda pair: parse_version(pair[0]), reverse=True)
 

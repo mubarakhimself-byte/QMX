@@ -1,8 +1,9 @@
 """S19 prototype. A plan turn with a Bash call under `reduced_env()`, then with a fake key.
 
-The fake `ANTHROPIC_API_KEY` is not a credential. Were it to reach the CLI, the request
-would fail with an auth error and bill nothing. The control run proves that: it skips
-the scrub, so the CLI sees the fake key.
+Run 1 plants DESIGN S19's routing names in the parent env, all with fake or dead values,
+so the scrub has something to remove. The fake `ANTHROPIC_API_KEY` is not a credential.
+Were it to reach the CLI, the request would fail with an auth error and bill nothing. The
+control run proves that: it skips the scrub, so the CLI sees the fake key.
 """
 
 from __future__ import annotations
@@ -20,12 +21,24 @@ from common import (
     reduced_env,
     require_plan_login,
     run_turns,
+    s19_scrub_verdict,
     scrub_process_env,
+    tool_results,
+    tool_uses,
 )
 
 FAKE_KEY = "sk-ant-api03-hp0-probe-fake-key-not-a-credential"
 BASH_PROMPT = "Run this exact Bash command and reply with its output only: env | cut -d= -f1 | sort"
-BANNED = ("ANTHROPIC_API_KEY", "HTTPS_PROXY", "NODE_EXTRA_CA_CERTS", "CLAUDE_CODE_USE_BEDROCK")
+PLANTED = {
+    "ANTHROPIC_API_KEY": FAKE_KEY,
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "OPENAI_API_KEY": "sk-hp0-probe-fake-openai-key-not-a-credential",
+    "HTTPS_PROXY": "http://127.0.0.1:9",
+    "HTTP_PROXY": "http://127.0.0.1:9",
+    "NODE_EXTRA_CA_CERTS": "D:/hp0-missing.pem",
+    "CLAUDE_CODE_PROCESS_WRAPPER": "D:/hp0-missing-wrapper.exe",
+}
 
 
 def saw_rate_limit(messages: list[Message]) -> bool:
@@ -37,16 +50,18 @@ async def main() -> int:
     require_plan_login(log, bundled_cli())
     original = dict(os.environ)
 
+    os.environ.update(PLANTED)
     removed = scrub_process_env(os.environ)
+    log(f"run 1 planted names: {sorted(PLANTED)}")
     log(f"run 1 removed names: {removed}")
     run1 = await run_turns(log, plan_options(), [BASH_PROMPT])
-    seen = " ".join(map(str, run1))
-    leaked = [name for name in BANNED if name in seen]
-    ok1 = is_ok(run1)
+    listing = {line.strip() for text in tool_results(run1) for line in text.splitlines()}
+    bash_calls, ok1 = tool_uses(run1, "Bash"), is_ok(run1)
+    leaked, verdict = s19_scrub_verdict(PLANTED, removed, bash_calls, ok1, listing)
     log.row(
-        "S19 Bash runs under reduced env",
-        f"ok={ok1} banned names seen={leaked}",
-        "PASS" if ok1 and not leaked else "FAIL",
+        "S19 Bash runs under reduced env with the S19 names planted",
+        f"bash calls={bash_calls} ok={ok1} listed names={len(listing)} planted names seen={leaked}",
+        verdict,
     )
 
     os.environ.clear()

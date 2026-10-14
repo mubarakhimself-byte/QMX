@@ -8,20 +8,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
-from collections.abc import Generator, Mapping, MutableMapping
+from collections.abc import Generator, Iterable, Mapping, MutableMapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, TextIO
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ContentBlock, Message
 
 SHIP: Final = Path("D:/QMX-worktrees/qma-ship")
 CONFIG_DIR: Final = SHIP / "home" / "claude"
-EVIDENCE: Final = SHIP / "evidence" / "hp0"
+EVIDENCE: Final = SHIP / "evidence" / "hp0" / os.environ.get("HP0_EVIDENCE_SUBDIR", "")
 PROBE_VENV: Final = SHIP / "probe-venv"
 SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
@@ -65,8 +66,14 @@ def scrub_process_env(environ: MutableMapping[str, str]) -> tuple[str, ...]:
 
 
 def parse_version(text: str) -> tuple[int, ...]:
-    head = text.strip().split()[0]
-    return tuple(int(part) for part in head.split("."))
+    match = re.match(r"\d+(?:\.\d+)*", text.strip())
+    if match is None:
+        raise ValueError(f"no version in {text!r}")
+    return tuple(int(part) for part in match[0].split("."))
+
+
+def is_final_release(version: str) -> bool:
+    return re.fullmatch(r"\d+(?:\.\d+)*", version) is not None
 
 
 class Log:
@@ -212,6 +219,34 @@ def _blocks(blocks: list[ContentBlock]) -> list[str]:
     return [one(block) for block in blocks]
 
 
+def tool_uses(messages: list[Message], name: str) -> int:
+    from claude_agent_sdk import AssistantMessage, ToolUseBlock  # noqa: PLC0415
+
+    return sum(
+        isinstance(block, ToolUseBlock) and block.name == name
+        for m in messages
+        if isinstance(m, AssistantMessage)
+        for block in m.content
+    )
+
+
+def tool_results(messages: list[Message]) -> list[str]:
+    from claude_agent_sdk import ToolResultBlock, UserMessage  # noqa: PLC0415
+
+    def text(content: str | list[dict[str, Any]] | None) -> str:
+        if isinstance(content, list):
+            return "\n".join(str(part.get("text", "")) for part in content)
+        return content or ""
+
+    return [
+        text(block.content)
+        for m in messages
+        if isinstance(m, UserMessage) and isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, ToolResultBlock)
+    ]
+
+
 def is_ok(messages: list[Message]) -> bool:
     from claude_agent_sdk import ResultMessage  # noqa: PLC0415
 
@@ -256,7 +291,13 @@ def cli_pid(client: ClaudeSDKClient) -> int:
     return int(transport._process.pid)
 
 
-def working_set_mb(pid: int) -> float:
+class Memory(NamedTuple):
+    working_set: float
+    commit: float
+    """Private committed memory (`PagefileUsage`), what a job memory limit counts."""
+
+
+def memory_mb(pid: int) -> Memory:
     import ctypes  # noqa: PLC0415
     from ctypes import wintypes  # noqa: PLC0415
 
@@ -285,6 +326,24 @@ def working_set_mb(pid: int) -> float:
         counters.cb = ctypes.sizeof(Counters)
         if not kernel32.K32GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
             raise OSError(ctypes.get_last_error(), f"K32GetProcessMemoryInfo {pid}")
-        return round(counters.WorkingSetSize / 2**20, 1)
+        return Memory(
+            round(counters.WorkingSetSize / 2**20, 1), round(counters.PagefileUsage / 2**20, 1)
+        )
     finally:
         kernel32.CloseHandle(handle)
+
+
+def s19_scrub_verdict(
+    planted: Iterable[str], removed: Iterable[str], bash_calls: int, ok: bool, listing: set[str]
+) -> tuple[list[str], str]:
+    leaked = [name for name in planted if name in listing]
+    scrubbed = set(planted) <= set(removed)
+    return leaked, "PASS" if bash_calls and ok and scrubbed and not leaked else "FAIL"
+
+
+def s38_verdict(bash_calls: int, timeout_texts: int, ran: bool) -> str:
+    return "PASS" if bash_calls and timeout_texts and not ran else "FAIL"
+
+
+def s25_verdict(control: bool, compact_answered: bool, boundary: bool) -> str:
+    return "PASS" if control and compact_answered and not boundary else "FAIL"

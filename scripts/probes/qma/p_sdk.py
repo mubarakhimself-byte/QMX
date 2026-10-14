@@ -22,11 +22,16 @@ from common import (
     SCRATCH,
     Log,
     bundled_cli,
+    describe,
     plan_options,
     require_plan_login,
     run_turns,
+    s25_verdict,
+    s38_verdict,
     scrub_process_env,
     tap_raw,
+    tool_results,
+    tool_uses,
 )
 
 HOOK_TIMEOUT_S = 2.0
@@ -96,16 +101,13 @@ async def timeout() -> None:
     prompt = f"Run this exact Bash command once and reply done: echo ran > '{marker.as_posix()}'"
     messages = await run_turns(log, options, [prompt])
     ran = marker.exists()
-    errors = [
-        line
-        for line in map(str, messages)
-        if "timeout" in line.lower() or "timed out" in line.lower()
-    ]
-    log(f"tool results naming a timeout: {[e[:300] for e in errors]}")
+    bash_calls = tool_uses(messages, "Bash")
+    blocked = [text for text in tool_results(messages) if "before its timeout" in text]
+    log(f"tool results naming the hook timeout: {[text[:300] for text in blocked]}")
     log.row(
         "S38 sleeping PreToolUse callback blocks Bash in bypass mode",
-        f"bash ran={ran}",
-        "FAIL" if ran else "PASS",
+        f"bash calls={bash_calls} timeout results={len(blocked)} bash ran={ran}",
+        s38_verdict(bash_calls, len(blocked), ran),
     )
 
 
@@ -116,10 +118,16 @@ async def verbatim() -> None:
     guarded = await run_turns(log, plan_options(verbatim_prompts=True), ["say ok", "/compact"])
     log(f"system subtypes with verbatim_prompts=True: {subtypes(guarded)}")
     control = "compact_boundary" in subtypes(plain)
-    stopped = "compact_boundary" not in subtypes(guarded)
+    boundary = "compact_boundary" in subtypes(guarded)
+    replies = [m for m in guarded if isinstance(m, ResultMessage)]
+    compact_reply = replies[1] if len(replies) == 2 else None
+    answered = compact_reply is not None and not compact_reply.is_error
+    log(f"verbatim /compact reply: {describe(compact_reply) if compact_reply else None}")
     log.row("S25 control /compact compacts without verbatim", control, "RECORDED")
     log.row(
-        "S25 verbatim /compact produces no compact_boundary", stopped, "PASS" if stopped else "FAIL"
+        "S25 verbatim /compact reaches the CLI and produces no compact_boundary",
+        f"control={control} answered={answered} compact_boundary={boundary}",
+        s25_verdict(control, answered, boundary),
     )
 
 
