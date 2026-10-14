@@ -158,8 +158,6 @@ def _link_projects(link: Path, target: Path) -> None:
         link.symlink_to(target, target_is_directory=True)
 
 
-# --- Claude settings, passed in code ---
-
 CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
     {
         "permissions", "env", "hooks",
@@ -213,15 +211,14 @@ def _refuse(key: str, why: str) -> LaunchRefused:
     return LaunchRefused(f"[claude] {key} {why}")
 
 
-def _strings(value: object, key: str, check: re.Pattern[str] | None = None) -> list[str]:
+def _strings(value: object, key: str, check: re.Pattern[str] | None = None) -> None:
     if not isinstance(value, list):
         raise _refuse(key, "must be a list of strings")
-    items: list[str] = []
     for item in cast("list[object]", value):
-        if not isinstance(item, str) or (check is not None and not check.fullmatch(item)):
+        if not isinstance(item, str):
+            raise _refuse(key, f"holds {item!r}, which is not a string")
+        if check is not None and not check.fullmatch(item):
             raise _refuse(key, f"holds {item!r}, which is not a permission rule")
-        items.append(item)
-    return items
 
 
 def _table(value: object, key: str) -> dict[str, object]:
@@ -230,7 +227,7 @@ def _table(value: object, key: str) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
-def _hooks(value: object) -> dict[str, object]:
+def _hooks(value: object) -> None:
     for event, groups in _table(value, "hooks").items():
         if not isinstance(groups, list):
             raise _refuse(f"hooks.{event}", "must be a list of matcher groups")
@@ -241,7 +238,6 @@ def _hooks(value: object) -> dict[str, object]:
             for hook in cast("list[object]", entry["hooks"]):
                 if _table(hook, f"hooks.{event}").get("type") not in HOOK_TYPES:
                     raise _refuse(f"hooks.{event}", f"hook types are {sorted(HOOK_TYPES)}")
-    return cast("dict[str, object]", value)
 
 
 def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
@@ -279,7 +275,10 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
         elif key in FLAG_KEYS and not isinstance(value, bool):
             raise _refuse(key, "must be true or false")
         parsed[key] = value
-    return ClaudeSettings(json.loads(json.dumps(parsed)))
+    try:
+        return ClaudeSettings(json.loads(json.dumps(parsed)))
+    except TypeError as error:
+        raise LaunchRefused(f"[claude] holds a value JSON cannot carry: {error}") from error
 
 
 def config_change_hook(launcher: Path) -> dict[str, object]:
@@ -339,8 +338,6 @@ def remember_rule(control: ControlService, rule: str, workspace: Path) -> None:
     allow.append(rule)
     control.settings_put("claude", current)
 
-
-# --- the plan login ---
 
 PLAN_AUTH_METHOD: Final = "claude.ai"
 """What `claude auth status` reports for a Max login (HP0 S2), with `firstParty`."""
@@ -419,8 +416,6 @@ def cli_version() -> str | None:
     found = re.search(r"\d+\.\d+\.\d+", done.stdout)
     return found.group() if found else None
 
-
-# --- chat records ---
 
 type TurnState = Literal["idle", "running"]
 
@@ -528,9 +523,6 @@ def list_records(home: QmxHome) -> list[ChatRecord]:
         _record(json.loads(path.read_text(encoding="utf-8")))
         for path in sorted(home.chats_dir.glob("*.json"))
     ]
-
-
-# --- doctor ---
 
 
 @dataclass(frozen=True)
