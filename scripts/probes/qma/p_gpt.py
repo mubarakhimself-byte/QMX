@@ -385,8 +385,6 @@ def wait_for_callback(server: _CallbackServer, timeout_s: float) -> dict[str, st
 
 @dataclass
 class Registration:
-    """What the keyring holds under `qmx/chatgpt`. Only `refresh_token` is secret."""
-
     client_id: str
     host_id: str
     refresh_token: str
@@ -408,8 +406,6 @@ class Vault(Protocol):
 
 
 class KeyringVault:
-    """`keyring` loads on use: the root environment that runs the tests lacks it."""
-
     def get(self) -> str | None:
         keyring: Any = importlib.import_module("keyring")
         return keyring.get_password(KEYRING_SERVICE, KEYRING_USER)
@@ -474,8 +470,6 @@ class Session:
         self.secrets_seen.add(self.registration.refresh_token)
 
     def accept(self, tokens: Mapping[str, Any]) -> None:
-        """Take a token response: keep the access token in memory, store the rotated
-        refresh token in the keyring before anything else can fail."""
         self._access = tokens["access_token"]
         self._expires_at = time.time() + float(tokens.get("expires_in", 3600))
         self.secrets_seen.add(tokens["access_token"])

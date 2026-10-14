@@ -384,9 +384,6 @@ BARRED_KEYS = {"max_output_tokens", "temperature", "metadata"}
 
 
 class StubRoute(BaseHTTPRequestHandler):
-    """Speaks the documented route rules: 400 on barred fields and system items, namespaced
-    function calls, reasoning blobs when `include` asks for them."""
-
     not_eligible = False
 
     def log_message(self, format: str, *args: object) -> None:
