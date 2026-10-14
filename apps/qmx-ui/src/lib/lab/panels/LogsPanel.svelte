@@ -51,7 +51,7 @@
   </div>
 {:else if size.mode === "compact"}
   <div
-    class="px-panel gap-row flex h-full flex-col justify-center font-mono text-xs"
+    class="p-panel flex h-full flex-col gap-0.5 overflow-hidden font-mono text-xs"
   >
     <p class="flex items-center gap-2">
       <span
@@ -67,7 +67,9 @@
       <span class="truncate">{run.id}</span>
       <span class="text-muted-foreground ml-auto uppercase">{status}</span>
     </p>
-    <p class="text-muted-foreground truncate">{lines.at(-1)}</p>
+    {#each lines.slice(-3) as l (l)}<p class="text-muted-foreground truncate">
+        {l}
+      </p>{/each}
   </div>
 {:else}
   <div class="h-full p-2">
