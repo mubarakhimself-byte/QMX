@@ -44,7 +44,7 @@ def isolated_home(
     changed = sorted(
         name for name in before.keys() | after.keys() if before.get(name) != after.get(name)
     )
-    assert not changed, f"test wrote under the user's real {QMX_HOME}: {changed}"
+    assert not changed, f"the user's real {QMX_HOME} changed during this test: {changed}"
 
 
 class BoundFakeChatModel(GenericFakeChatModel):
