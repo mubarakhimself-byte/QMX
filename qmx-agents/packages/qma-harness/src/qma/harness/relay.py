@@ -298,8 +298,6 @@ class Relay:
         headers: Mapping[str, str],
         read_body: Callable[[], Awaitable[bytes]],
     ) -> Reply:
-        """bearer -> grant (401, body unread) -> path (404) -> egress stop (400) -> requested
-        model (400) -> key swap, wire quirks, forward, served-model check, usage tee."""
         held = self._grants.get(_bearer(headers))
         if held is None:
             self.counters.bearer += 1

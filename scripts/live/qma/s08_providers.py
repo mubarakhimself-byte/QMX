@@ -170,19 +170,25 @@ async def rows_check(log: Log, args: argparse.Namespace) -> None:
     )
     try:
         found = await guarded_turn(
-            book, session, log, "s08-b1",
+            book,
+            session,
+            log,
+            "s08-b1",
             "Use the Read tool to read marker.txt in this folder, then reply with its exact "
             "contents.",
-        )  # fmt: skip
+        )
         log.check(
             "B1: a Read returned the marker",
             "Read" in started_tools(found) and MARKER in replies(found) and not failed(found),
             (started_tools(found), failed(found)),
         )
         found = await guarded_turn(
-            book, session, log, "s08-b4",
+            book,
+            session,
+            log,
+            "s08-b4",
             "Read a.txt. Think about the word you found. Then read b.txt and tell me both words.",
-        )  # fmt: skip
+        )
         thinking = sum(
             1
             for message in launched[-1].seen
@@ -201,10 +207,13 @@ async def rows_check(log: Log, args: argparse.Namespace) -> None:
         reads_cached = [r["payload"]["cache_read_tokens"] for r in third]
         log.check("B3: cache reads on turn three", any(reads_cached), reads_cached)
         found = await guarded_turn(
-            book, session, log, "s08-websearch",
+            book,
+            session,
+            log,
+            "s08-websearch",
             "Use the WebSearch tool once to search for 'Claude Code documentation' and reply "
             "with the title of the first result.",
-        )  # fmt: skip
+        )
         searched = "WebSearch" in started_tools(found)
         log(f"WebSearch: {'CALLED' if searched else 'NOT CALLED'}; reply: {replies(found)[:200]}")
         log.check("WebSearch ran", searched and not failed(found), failed(found))

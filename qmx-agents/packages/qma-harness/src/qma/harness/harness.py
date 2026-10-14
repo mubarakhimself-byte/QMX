@@ -114,13 +114,17 @@ class Harness:
             block = SessionBlock(type="needs_you", content={"reason": reason})
             await asyncio.to_thread(control.sessions_append, chat, block)
 
-        relay = await Relay(
-            secrets=keyring_secret,
-            usage=journal_usage(home),
-            alert=alert,
-            profiles=profiles,
-            test=test,
-        ).start()
+        try:
+            relay = await Relay(
+                secrets=keyring_secret,
+                usage=journal_usage(home),
+                alert=alert,
+                profiles=profiles,
+                test=test,
+            ).start()
+        except BaseException:
+            procs.close()
+            raise
         deps = ChatDeps(
             home=home, control=control, procs=procs, launcher=LAUNCHER, relay=relay, test=test
         )

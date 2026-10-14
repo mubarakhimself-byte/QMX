@@ -40,7 +40,7 @@ def tool_results(body: dict[str, object]) -> str:
     return json.dumps(
         [
             block
-            for message in body.get("messages", [])  # type: ignore[union-attr]
+            for message in body.get("messages", [])
             for block in (
                 message.get("content") if isinstance(message.get("content"), list) else []
             )

@@ -325,7 +325,7 @@ def capture_grants() -> list[Any]:
         minted.append(found)
         return found
 
-    Relay.grant = grant  # type: ignore[method-assign]
+    Relay.grant = grant
     return minted
 
 
@@ -336,7 +336,7 @@ def capture_launches() -> list[Any]:
     launched: list[Any] = []
     base = chat_module.ClaudeSDKClient
 
-    class Tap(base):  # type: ignore[valid-type, misc]
+    class Tap(base):
         def __init__(self, options: Any) -> None:
             super().__init__(options)
             self.seen: list[Any] = []
