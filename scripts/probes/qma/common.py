@@ -14,7 +14,7 @@ import sys
 import time
 from collections.abc import Generator, Iterable, Mapping, MutableMapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO, cast
 
@@ -272,21 +272,57 @@ LOCKED_OPTIONS: Final = frozenset(
 )
 
 
+INPUT_HOOKS: Final = frozenset({"PermissionRequest"})
+
+
+def deny(reason: str) -> HookJSONOutput:
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def fail_closed(hook: HookCallback) -> HookCallback:
+    """The CLI runs a tool whose PreToolUse hook raised, so a raise must become a deny."""
+
+    async def run(
+        hook_input: HookInput, tool_use_id: str | None, context: HookContext
+    ) -> HookJSONOutput:
+        try:
+            return await hook(hook_input, tool_use_id, context)
+        except Exception as error:
+            return deny(
+                f"A PreToolUse hook failed ({type(error).__name__}), so this call is denied."
+            )
+
+    return run
+
+
+def deny_only(hook: HookCallback) -> HookCallback:
+    async def run(
+        hook_input: HookInput, tool_use_id: str | None, context: HookContext
+    ) -> HookJSONOutput:
+        output = cast("Mapping[str, Any]", await hook(hook_input, tool_use_id, context))
+        if not output:
+            return {}
+        decision = cast("Mapping[str, Any]", output.get("hookSpecificOutput") or {})
+        if decision.get("permissionDecision") == "deny":
+            return deny(str(decision.get("permissionDecisionReason", "")))
+        return deny("A probe hook may only deny a call; it returned allow or a changed input.")
+
+    return fail_closed(run)
+
+
 def guard(lockdown: Lockdown) -> HookCallback:
     async def deny_outside(
         hook_input: HookInput, _tool_use_id: str | None, _context: HookContext
     ) -> HookJSONOutput:
         call: Mapping[str, Any] = cast("Mapping[str, Any]", hook_input)
         reason = lockdown.refusal(str(call.get("tool_name", "")), call.get("tool_input") or {})
-        if reason is None:
-            return {}
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
+        return {} if reason is None else deny(reason)
 
     return deny_outside
 
@@ -296,9 +332,17 @@ def plan_options(lockdown: Lockdown, **overrides: Any) -> ClaudeAgentOptions:
         raise TypeError(f"the lockdown sets {locked}; a probe cannot override them")
     from claude_agent_sdk import ClaudeAgentOptions, HookMatcher  # noqa: PLC0415
 
+    probe_hooks: dict[str, list[HookMatcher]] = dict(overrides.pop("hooks", {}))
+    if rewriting := sorted(probe_hooks.keys() & INPUT_HOOKS):
+        raise TypeError(f"a probe hook on {rewriting} could change a tool's input")
     CHAT_CWD.mkdir(parents=True, exist_ok=True)
-    hooks: dict[str, list[HookMatcher]] = dict(overrides.pop("hooks", {}))
-    hooks["PreToolUse"] = [HookMatcher(hooks=[guard(lockdown)]), *hooks.get("PreToolUse", [])]
+    probe_pre = [
+        replace(matcher, hooks=[deny_only(hook) for hook in matcher.hooks])
+        for matcher in probe_hooks.get("PreToolUse", [])
+    ]
+    hooks = probe_hooks | {
+        "PreToolUse": [HookMatcher(hooks=[fail_closed(guard(lockdown))]), *probe_pre]
+    }
     kwargs: dict[str, Any] = {
         "env": home_env(),
         "setting_sources": [],
