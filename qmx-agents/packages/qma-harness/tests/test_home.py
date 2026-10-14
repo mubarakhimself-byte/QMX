@@ -26,7 +26,6 @@ from qma.harness.home import (
     parse_claude_settings,
     plan_auth_method,
     read_record,
-    redact_settings,
     remember_rule,
     workspace_key,
     write_record,
@@ -462,65 +461,71 @@ def test_parse_claude_settings_accepts_a_hook_url_whose_at_sign_is_not_userinfo(
     assert parse_claude_settings(accepted).raw == accepted
 
 
-def test_redact_settings_hides_url_userinfo() -> None:
-    shown = redact_settings(
-        {"url": "https://user:pw1@h/x?token=t", "plain": "https://h/x", "other": "https://u:p@h/"}
-    )
-    assert shown == {
-        "url": "https://<redacted>@h/x?<redacted>",
-        "plain": "https://h/x",
-        "other": "https://u:p@h/",
-    }
-
-
-def test_doctor_redacts_hook_headers_url_queries_and_command_secrets(
+def test_doctor_shows_hooks_as_structure_and_hides_every_operator_value(
     home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _throwaway_home(monkeypatch, tmp_path)
     ensure_homes(home)
     control = control_service(home)
-    http: dict[str, object] = {
-        "type": "http",
-        "url": "https://hooks.example/stop?token=qsecret1&team=qsecret2",
-        "headers": {"Authorization": "Bearer $QMX_HOOK_TOKEN", "X-Trace": "$QMX_TRACE"},
-    }
-    commands = [
-        "notify --token=csecret1 --channel ops",
-        "notify --api-key csecret2",
-        'curl -H "Authorization: Bearer csecret3" https://h/x',
-        "API_KEY=csecret4 notify",
-        "deploy sk-ant-api03-csecret5abcdef",
-        "notify ghp_csecret6abcdefgh",
+    hooks: list[dict[str, object]] = [
+        {
+            "type": "http",
+            "url": "https://hooks.example/stop?token=qsecret1",
+            "headers": {"Authorization": "Bearer $QMX_HOOK_TOKEN"},
+            "allowedEnvVars": ["QMX_HOOK_TOKEN"],
+            "statusMessage": "posting with ssecret2",
+        },
+        {
+            "type": "command",
+            "command": "notify --secret='csecret3'",
+            "args": ["--token", "asecret4"],
+        },
+        {
+            "type": "command",
+            "command": "curl -u ops:csecret5 https://h/x",
+            "if": "Bash(isecret6 *)",
+        },
+        {"type": "prompt", "prompt": "the password is psecret7", "timeout": 5},
     ]
-    hooks = [http, *({"type": "command", "command": command} for command in commands)]
-    control.settings_put("claude", cast("Document", {"hooks": {"Stop": [{"hooks": hooks}]}}))
+    document = {"hooks": {"Stop": [{"matcher": "Bash", "hooks": hooks}]}}
+    control.settings_put("claude", cast("Document", document))
     lines = doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
-    leaked = ["qsecret1", "qsecret2", "QMX_HOOK_TOKEN", "QMX_TRACE"] + [
-        f"csecret{number}" for number in range(1, 7)
-    ]
+    leaked = ["qsecret1", "QMX_HOOK_TOKEN", "ssecret2", "csecret3", "asecret4", "csecret5"]
+    leaked += ["isecret6", "psecret7", "hooks.example", "notify", "curl"]
     assert [(line.name, word) for line in lines for word in leaked if word in line.detail] == []
     inline = {line.name: line for line in lines}["inline settings"]
     settings = json.loads(inline.detail.split(": ", 1)[1])
-    assert settings["hooks"]["Stop"] == [
-        {
-            "hooks": [
-                {
-                    "type": "http",
-                    "url": "https://hooks.example/stop?<redacted>",
-                    "headers": {"Authorization": "<redacted>", "X-Trace": "<redacted>"},
-                },
-                {"type": "command", "command": "notify --token=<redacted> --channel ops"},
-                {"type": "command", "command": "notify --api-key <redacted>"},
-                {"type": "command", "command": 'curl -H "Authorization: <redacted>" https://h/x'},
-                {"type": "command", "command": "API_KEY=<redacted> notify"},
-                {"type": "command", "command": "deploy <redacted>"},
-                {"type": "command", "command": "notify <redacted>"},
-            ]
-        }
-    ]
-    assert settings["hooks"]["ConfigChange"][0]["hooks"][0]["command"] == (
-        "'D:/venv/Scripts/qma-cli-launcher.exe' --qma-block-config-change"
-    )
+    assert settings["hooks"] == {
+        "Stop": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "http",
+                        "url": "<set>",
+                        "headers": "<set>",
+                        "allowedEnvVars": "<set>",
+                        "statusMessage": "<set>",
+                    },
+                    {"type": "command", "command": "<set>", "args": "<set>"},
+                    {"type": "command", "command": "<set>", "if": "<set>"},
+                    {"type": "prompt", "prompt": "<set>", "timeout": "<set>"},
+                ],
+            }
+        ],
+        "ConfigChange": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "'D:/venv/Scripts/qma-cli-launcher.exe' "
+                        "--qma-block-config-change",
+                        "timeout": 10,
+                    }
+                ]
+            }
+        ],
+    }
 
 
 @pytest.mark.parametrize(
@@ -546,21 +551,6 @@ def test_settings_put_refuses_an_attribution_key_or_type_the_docs_do_not_list(
 def test_parse_claude_settings_accepts_every_documented_attribution_key() -> None:
     document = cast("Document", {"attribution": {"commit": "c", "pr": "", "sessionUrl": False}})
     assert parse_claude_settings(document).raw == document
-
-
-def test_redact_settings_hides_secret_names_and_env_names_outside_the_allow_list() -> None:
-    shown = redact_settings(
-        {
-            "env": {"BASH_MAX_TIMEOUT_MS": "9", "HTTPS_PROXY": "http://proxy"},
-            "outer": {"inner": {"ApiKey": "k1", "kept": "v"}},
-            "list": [{"session_cookie": "k2"}],
-        }
-    )
-    assert shown == {
-        "env": {"BASH_MAX_TIMEOUT_MS": "9", "HTTPS_PROXY": "<redacted>"},
-        "outer": {"inner": {"ApiKey": "<redacted>", "kept": "v"}},
-        "list": [{"session_cookie": "<redacted>"}],
-    }
 
 
 def test_a_whole_section_put_racing_remember_rule_keeps_the_rule(home: QmxHome) -> None:

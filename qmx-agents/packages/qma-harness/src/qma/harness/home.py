@@ -210,17 +210,7 @@ HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$(\{[A-Z_][A-Z0-9_]*\}|[A-Z
 URL_USERINFO: Final = re.compile(r"([A-Za-z][\w+.-]*://)[^/?#]*@")
 ATTRIBUTION_KEYS: Final[Mapping[str, type]] = {"commit": str, "pr": str, "sessionUrl": bool}
 """`attribution` sub-keys, as https://code.claude.com/docs/en/settings-reference documents them."""
-SECRET_NAME: Final = re.compile(
-    r"api[-_]?key|token|secret|passw|authorization|cookie|credential", re.IGNORECASE
-)
-SECRET_IN_TEXT: Final = re.compile(
-    rf"(?i)(--?[\w-]*(?:{SECRET_NAME.pattern})[\w-]*[= ]"
-    rf"|\b\w*(?:{SECRET_NAME.pattern})\w*\s*[=:]\s*)"
-    r"(?:(?:bearer|basic)\s+)?[^\s'\"]+"
-    r"|\b(?:bearer|basic)\s+[^\s'\"]+"
-    r"|\b(?:sk-|ghp_|gho_|ghs_|ghu_|github_pat_|xox[abprs]-|AKIA)[\w-]{8,}"
-)
-REDACTED: Final = "<redacted>"
+SET: Final = "<set>"
 TEXT_KEYS: Final = frozenset({"outputStyle", "language"})
 FLAG_KEYS: Final = frozenset({"includeCoAuthoredBy", "alwaysThinkingEnabled", "respectGitignore"})
 
@@ -714,31 +704,26 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
     return lines
 
 
-def redact_settings(value: Any, key: str = "") -> Any:
-    """Hide what doctor must not show: header values, env names outside the allow-list,
-    secret-named keys, URL user info and query strings, and secret-looking words in hook
-    commands."""
-    if isinstance(value, dict):
-        return {
-            name: REDACTED
-            if key == "headers"
-            or (key == "env" and name not in CLAUDE_ENV_NAMES)
-            or SECRET_NAME.search(name)
-            else redact_settings(item, name)
-            for name, item in cast("dict[str, Any]", value).items()
-        }
-    if isinstance(value, list):
-        return [redact_settings(item, key) for item in cast("list[Any]", value)]
-    if isinstance(value, str) and key == "url":
-        shown = URL_USERINFO.sub(lambda found: f"{found[1]}{REDACTED}@", value, count=1)
-        return f"{shown.split('?', 1)[0]}?{REDACTED}" if "?" in shown else shown
-    if isinstance(value, str) and key in {"command", "args"}:
-        return SECRET_IN_TEXT.sub(_redact_match, value)
-    return value
-
-
-def _redact_match(found: re.Match[str]) -> str:
-    return f"{found[1] or ''}{REDACTED}"
+def _hooks_outline(hooks: dict[str, list[dict[str, Any]]], launcher: Path) -> dict[str, Any]:
+    """Doctor's view of `hooks`: events, matchers, types and key names. Every other value is
+    operator free text, so it shows as `<set>`. The launcher's own ConfigChange hook shows in
+    full."""
+    fixed = config_change_hook(launcher)
+    return {
+        event: [
+            group
+            if group == fixed
+            else {
+                **({"matcher": group["matcher"]} if "matcher" in group else {}),
+                "hooks": [
+                    {name: value if name == "type" else SET for name, value in hook.items()}
+                    for hook in group["hooks"]
+                ],
+            }
+            for group in groups
+        ]
+        for event, groups in hooks.items()
+    }
 
 
 async def _no_tools(
@@ -798,7 +783,9 @@ def doctor(
     settings = code_settings(
         user, launcher=launcher, workspace=workspace, memory_dir=home.memory_dir(workspace)
     )
-    shown = json.dumps(redact_settings(json.loads(settings)), sort_keys=True, separators=(",", ":"))
+    document = json.loads(settings)
+    document["hooks"] = _hooks_outline(document["hooks"], launcher)
+    shown = json.dumps(document, sort_keys=True, separators=(",", ":"))
     lines.append(
         DoctorLine(
             "inline settings",
