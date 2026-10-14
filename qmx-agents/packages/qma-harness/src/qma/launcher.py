@@ -7,7 +7,7 @@ runs the real CLI with the same args, the same stdio and the same exit code.
 Inputs come from the chat's launch environment and are removed before the CLI starts:
     QMA_REAL_CLI   the CLI path; the SDK's bundled CLI when empty
     QMA_CHAT_ID    the chat's session id
-    QMA_PROC_DIR   where the pid file goes
+    QMA_PROC_DIR   where the pid file goes, as an absolute path
     QMA_CAP        the Windows parent job name or the Linux slice name; empty for no cap
 
 No-input mode. The SDK's version probe runs `[cli_path, "-v"]` with the process environment
@@ -276,6 +276,9 @@ def main(argv: list[str] | None = None) -> int:
         return subprocess.run([cli, *args], check=False).returncode
     if not (proc_dir and is_chat_id(chat)):
         print("qma-cli-launcher: QMA_CHAT_ID and QMA_PROC_DIR must both be set", file=sys.stderr)
+        return EXIT_REFUSED
+    if not os.path.isabs(proc_dir):
+        print("qma-cli-launcher: QMA_PROC_DIR must be an absolute path", file=sys.stderr)
         return EXIT_REFUSED
     from pathlib import Path
 

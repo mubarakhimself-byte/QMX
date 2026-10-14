@@ -85,3 +85,11 @@ def test_a_cli_that_cannot_join_the_cap_is_killed_before_it_runs(
     assert process_started(int(pid.group(1))) is None
     assert not (tmp_path / "chat-e.seen.json").exists()
     assert list(procs_dir.glob("*")) == []
+
+
+def test_a_relative_pid_directory_is_refused(launch: Launch, tmp_path: Path) -> None:
+    chat = launch("chat-f", QMA_PROC_DIR="qma-relative-procs")
+    _, err = chat.communicate(timeout=60)
+    assert chat.returncode == EXIT_REFUSED
+    assert "QMA_PROC_DIR must be an absolute path" in err
+    assert not (tmp_path / "chat-f.seen.json").exists()

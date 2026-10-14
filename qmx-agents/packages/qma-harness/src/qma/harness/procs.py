@@ -98,7 +98,10 @@ class AgentProcessCap:
         """Create the parent job (Windows) or adopt the slice (Linux); none on macOS. `None`
         means no memory limit; the Windows job still exists for kill-on-close. On Windows a
         second holder for a home whose holder still runs raises OSError: only one process can
-        watch a job's memory-limit messages."""
+        watch a job's memory-limit messages. `procs_dir` must be absolute: the launcher
+        refuses a relative `QMA_PROC_DIR`, and both sides name the home by this path."""
+        if not procs_dir.is_absolute():
+            raise ValueError(f"procs_dir must be absolute, got {procs_dir}")
         procs_dir.mkdir(parents=True, exist_ok=True)
         cap = cls(procs_dir, _NoParent(), limit_mb)
         if sys.platform == "win32":

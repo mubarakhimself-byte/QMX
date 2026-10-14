@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import subprocess
@@ -12,7 +13,13 @@ import pytest
 from conftest import Launch, wait_for
 
 from qma.harness.procs import AgentProcessCap, cli_kill
-from qma.launcher import CREATE_SUSPENDED, process_started
+from qma.launcher import (
+    CREATE_SUSPENDED,
+    EXIT_REFUSED,
+    JOB_OBJECT_QUERY,
+    kernel32,
+    process_started,
+)
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="the job cap is Windows only")
 
@@ -33,6 +40,28 @@ def hold_the_gil(seconds: float) -> None:
             pass
     finally:
         sys.setswitchinterval(switch)
+
+
+class _JobAccounting(ctypes.Structure):
+    _fields_ = (
+        ("Times", ctypes.c_int64 * 4),
+        ("TotalPageFaultCount", ctypes.c_uint32),
+        ("TotalProcesses", ctypes.c_uint32),
+        ("ActiveProcesses", ctypes.c_uint32),
+        ("TotalTerminatedProcesses", ctypes.c_uint32),
+    )
+
+
+def processes_ever_in(job_name: str) -> int:
+    k = kernel32()
+    job = k.OpenJobObjectW(JOB_OBJECT_QUERY, False, job_name)
+    assert job, job_name
+    try:
+        info = _JobAccounting()
+        assert k.QueryInformationJobObject(job, 1, ctypes.byref(info), ctypes.sizeof(info), None)
+        return info.TotalProcesses
+    finally:
+        k.CloseHandle(job)
 
 
 def write_record(procs_dir: Path, chat: str, started: str | None) -> None:
@@ -206,3 +235,24 @@ def test_two_homes_with_one_chat_id_neither_refuse_nor_kill_each_other(
         assert theirs.returncode == 0
     finally:
         other.close()
+
+
+@windows_only
+def test_a_cli_joins_the_cap_only_after_its_pid_file_exists(
+    cap: AgentProcessCap, launch: Launch, procs_dir: Path
+) -> None:
+    (procs_dir / "unrecorded.tmp").mkdir()
+    unrecorded = launch("unrecorded", cap=cap.handle_name)
+    _, err = unrecorded.communicate(timeout=30)
+    assert unrecorded.returncode == EXIT_REFUSED, err
+    assert "not started" in err
+    assert processes_ever_in(cap.handle_name) == 0
+    recorded = launch("recorded", cap=cap.handle_name)
+    out, _ = recorded.communicate("ping\n", timeout=30)
+    assert out.strip() == "pong"
+    assert processes_ever_in(cap.handle_name) >= 1
+
+
+def test_a_relative_procs_dir_is_refused() -> None:
+    with pytest.raises(ValueError, match="procs_dir must be absolute"):
+        AgentProcessCap.for_platform(Path("qma-relative-procs"), None)
