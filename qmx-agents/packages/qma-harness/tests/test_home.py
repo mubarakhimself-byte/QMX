@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sys
+import threading
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
+from qmx_control.models import Document
 from qmx_control.server import create_app
 
 from qma.harness.home import (
     ChatRecord,
     ClaudeSettings,
+    PlanAuth,
     QmxHome,
     SessionId,
     code_settings,
@@ -18,6 +24,7 @@ from qma.harness.home import (
     ensure_homes,
     list_records,
     parse_claude_settings,
+    plan_auth_method,
     read_record,
     remember_rule,
     workspace_key,
@@ -45,6 +52,10 @@ def home(tmp_path: Path) -> QmxHome:
         ({"enabledPlugins": {"x@y": True}}, "[claude] enabledPlugins is not allowed"),
         ({"env": {"HTTPS_PROXY": "http://p"}}, "[claude] env.HTTPS_PROXY is not allowed"),
         ({"permissions": {"defaultMode": "auto"}}, "[claude] permissions.defaultMode"),
+        (
+            {"permissions": {"defaultMode": ["bypassPermissions"]}},
+            "[claude] permissions.defaultMode is not allowed",
+        ),
         ({"permissions": {"allow": ["Bash(git *"]}}, "is not a permission rule"),
         ({"hooks": {"Stop": [{"hooks": [{"type": "exec"}]}]}}, "[claude] hooks.Stop"),
     ],
@@ -208,3 +219,206 @@ def test_doctor_names_the_homes_scrubbed_names_and_a_relayed_login(
     assert sum(name.startswith("departure ") for name in lines) == 19
     if os.name == "nt":
         assert "managed policy C:/Program Files/ClaudeCode/managed-settings.json" in lines
+
+
+def _throwaway_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    personal = tmp_path / "throwaway" / ".claude"
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(personal.parent))
+    personal.mkdir(parents=True)
+    return personal
+
+
+def _junction(link: Path, target: Path) -> None:
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+@pytest.mark.parametrize("inside", ["", "nested/qmx"])
+def test_ensure_homes_refuses_a_home_inside_the_operators_claude_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inside: str
+) -> None:
+    personal = _throwaway_home(monkeypatch, tmp_path)
+    with pytest.raises(LaunchRefused, match=r"inside the operator's own ~/\.claude"):
+        ensure_homes(QmxHome(personal / inside))
+    assert list(personal.iterdir()) == []
+
+
+def test_ensure_homes_refuses_a_plan_home_linked_to_the_operators_claude_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    personal = _throwaway_home(monkeypatch, tmp_path)
+    home = QmxHome(tmp_path / "qmx")
+    _junction(home.plan_dir, personal)
+    with pytest.raises(LaunchRefused, match=r"inside the operator's own ~/\.claude"):
+        ensure_homes(home)
+    assert list(personal.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("logged_in", "method", "provider", "subscription"),
+    [
+        (True, "claude.ai", "firstParty", True),
+        (False, "claude.ai", "firstParty", False),
+        (True, "api_key_helper", "firstParty", False),
+        (True, "claude.ai", "bedrock", False),
+    ],
+)
+def test_plan_auth_accepts_only_a_signed_in_claude_ai_first_party_login(
+    logged_in: bool, method: str, provider: str, subscription: bool
+) -> None:
+    auth = PlanAuth(logged_in=logged_in, method=method, provider=provider, subscription="max")
+    assert auth.is_subscription is subscription
+    if subscription:
+        auth.require()
+        return
+    with pytest.raises(LaunchRefused) as refused:
+        auth.require()
+    assert str(refused.value) == (
+        f"the plan home is not signed in to a claude.ai plan "
+        f"(method {method}, provider {provider}); run /login in the console"
+    )
+
+
+def test_plan_auth_reads_no_settings_file_from_the_plan_home(
+    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _throwaway_home(monkeypatch, tmp_path)
+    ensure_homes(home)
+    ran = tmp_path / "helper-ran"
+    python = Path(sys.executable).as_posix()
+    helper = f"'{python}' -c \"open('{ran.as_posix()}', 'w').close()\""
+    (home.plan_dir / "settings.json").write_text(
+        json.dumps({"apiKeyHelper": helper}), encoding="utf-8"
+    )
+    settings = code_settings(
+        ClaudeSettings(), launcher=LAUNCHER, workspace=tmp_path, memory_dir=tmp_path / "memory"
+    )
+    assert plan_auth_method(home, settings) == PlanAuth(
+        logged_in=False, method="none", provider="firstParty", subscription=None
+    )
+    assert not ran.exists()
+
+
+def test_concurrent_remembers_all_land(home: QmxHome) -> None:
+    control = control_service(home)
+    rules = [f"Bash(job {number})" for number in range(16)]
+    start = threading.Barrier(len(rules))
+
+    def remember(rule: str) -> None:
+        start.wait()
+        remember_rule(control, rule, home.root / "ws")
+
+    threads = [threading.Thread(target=remember, args=(rule,)) for rule in rules]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    remembered = control.settings_get("claude")["remembered"]
+    assert isinstance(remembered, dict)
+    allow = remembered[workspace_key(home.root / "ws")]
+    assert isinstance(allow, dict)
+    assert sorted(allow["allow"]) == sorted(rules)  # type: ignore[arg-type]
+
+
+def test_a_whole_section_put_keeps_remembered_rules_unless_it_names_them(
+    home: QmxHome,
+) -> None:
+    control = control_service(home)
+    remember_rule(control, "Bash(npm test)", home.root / "ws")
+    remembered = {workspace_key(home.root / "ws"): {"allow": ["Bash(npm test)"]}}
+    extra = router(home, control, scrubbed=(), keep=())
+    with TestClient(create_app(control, TOKEN, extra_routers=[extra])) as rest:
+        allowed = {"permissions": {"allow": ["Read"]}}
+        rest.put("/api/claude-settings", json=allowed, headers=HEADERS)
+        assert rest.get("/api/claude-settings", headers=HEADERS).json() == {
+            **allowed,
+            "remembered": remembered,
+        }
+        rest.put("/api/settings/claude", json={"remembered": {}}, headers=HEADERS)
+        assert rest.get("/api/claude-settings", headers=HEADERS).json() == {"remembered": {}}
+
+
+def _http_hook(headers: dict[str, str]) -> Document:
+    hook = {"type": "http", "url": "http://127.0.0.1:9/hook", "headers": headers}
+    return cast("Document", {"hooks": {"Stop": [{"hooks": [hook]}]}})
+
+
+@pytest.mark.parametrize(
+    "name", ["Authorization", "Proxy-Authorization", "X-Api-Key", "Cookie", "X-Auth-Token"]
+)
+def test_parse_claude_settings_refuses_a_literal_secret_in_a_hook_header(name: str) -> None:
+    with pytest.raises(LaunchRefused) as refused:
+        parse_claude_settings(_http_hook({name: "Bearer abc123"}))
+    assert str(refused.value) == (
+        f"[claude] hooks.Stop header {name} holds a literal value; "
+        "reference an environment variable such as $NAME"
+    )
+    accepted = _http_hook({name: "Bearer ${QMX_HOOK_TOKEN}"})
+    assert parse_claude_settings(accepted).raw == accepted
+
+
+def test_doctor_redacts_hook_header_values(
+    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _throwaway_home(monkeypatch, tmp_path)
+    ensure_homes(home)
+    control = control_service(home)
+    control.settings_put(
+        "claude",
+        _http_hook({"Authorization": "Bearer $QMX_HOOK_TOKEN", "X-Trace": "trace-value-123"}),
+    )
+    lines = doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
+    assert [line.name for line in lines if "trace-value-123" in line.detail] == []
+    assert [line.name for line in lines if "QMX_HOOK_TOKEN" in line.detail] == []
+    inline = {line.name: line for line in lines}["inline settings"]
+    settings = json.loads(inline.detail.split(": ", 1)[1])
+    assert settings["hooks"]["Stop"] == [
+        {
+            "hooks": [
+                {
+                    "type": "http",
+                    "url": "http://127.0.0.1:9/hook",
+                    "headers": {"Authorization": "<redacted>", "X-Trace": "<redacted>"},
+                }
+            ]
+        }
+    ]
+
+
+ARGV_LINE = re.compile(
+    r"(\d+) characters of 30000 for a plan launch in .+; largest part: (.+) at (\d+)"
+)
+
+
+def test_doctor_reports_the_whole_plan_launch_command_line(
+    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _throwaway_home(monkeypatch, tmp_path)
+    ensure_homes(home)
+    control = control_service(home)
+
+    def read() -> tuple[int, bool, int, str]:
+        lines = {
+            line.name: line
+            for line in doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
+        }
+        inline = int(lines["inline settings"].detail.split(" ", 1)[0])
+        line = lines["plan launch command line"]
+        found = ARGV_LINE.fullmatch(line.detail)
+        assert found is not None, line.detail
+        return inline, line.ok, int(found[1]), found[2]
+
+    inline, ok, total, _ = read()
+    assert ok
+    assert total > inline + 200
+    (home.workspaces_dir / "CLAUDE.md").write_text("x" * 31_000, encoding="utf-8")
+    _, ok, total, largest = read()
+    assert not ok
+    assert total > 31_000
+    assert largest == "QMX.md and the workspace CLAUDE.md and AGENTS.md"
