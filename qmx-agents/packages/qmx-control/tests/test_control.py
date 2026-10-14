@@ -402,7 +402,7 @@ def test_host_sections_are_written_only_through_a_registered_parser(tmp_path: Pa
 
     hosted = ControlService(
         tmp_path / "hosted",
-        settings_parsers={"environment": lambda values: {"keep": ["JAVA_HOME"]}},
+        settings_parsers={"environment": lambda values, current: {"keep": ["JAVA_HOME"]}},
     )
     assert hosted.settings_put("environment", {"keep": ["java_home"]}) == {"keep": ["JAVA_HOME"]}
     assert hosted.settings_get("environment") == {"keep": ["JAVA_HOME"]}

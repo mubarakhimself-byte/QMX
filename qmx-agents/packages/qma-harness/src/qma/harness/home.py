@@ -23,6 +23,7 @@ lives in `settings.toml [claude]`, written only through `ControlService` after
 from __future__ import annotations
 
 import contextlib
+import copy
 import functools
 import hashlib
 import json
@@ -37,20 +38,29 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
+from claude_agent_sdk import PermissionResultDeny
+
 from qma.boot import banned_fragment
 from qma.harness.launch import (
     ARGV_BUDGET,
+    PLAN,
     Background,
     ChatConfig,
     ChatKind,
     Child,
     Interactive,
     LaunchRefused,
+    PlanLaunch,
     ProfileName,
+    argv_length,
+    build_options,
+    launch_env,
 )
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
+    from claude_agent_sdk.types import PermissionResult, ToolPermissionContext
+    from qmx_control.models import Document
     from qmx_control.service import ControlService
 
 SessionId = NewType("SessionId", str)
@@ -118,13 +128,17 @@ def relayed_logins(home: QmxHome) -> list[Path]:
     return [path for path in (home.relayed_dir / name for name in LOGIN_FILES) if path.exists()]
 
 
+def _inside_personal_claude(path: Path) -> bool:
+    """True when `path`, links followed, is the operator's `~/.claude` or anywhere inside it."""
+    return path.resolve().is_relative_to((Path.home() / ".claude").resolve())
+
+
 def ensure_homes(home: QmxHome) -> None:
     """Create both homes, the state folders and the relayed `projects/` link. Idempotent.
-    Refuses a home that is the operator's `~/.claude` and a login file in the relayed home."""
-    personal = (Path.home() / ".claude").resolve()
+    Refuses a home inside the operator's `~/.claude` and a login file in the relayed home."""
     for claude_home in (home.plan_dir, home.relayed_dir):
-        if claude_home.resolve() == personal:
-            raise LaunchRefused(f"{claude_home} is the operator's own ~/.claude")
+        if _inside_personal_claude(claude_home):
+            raise LaunchRefused(f"{claude_home} is inside the operator's own ~/.claude")
     for folder in (
         home.plan_dir / "projects",
         home.relayed_dir,
@@ -186,6 +200,12 @@ CLAUDE_ENV_NAMES: Final[frozenset[str]] = frozenset(
 """The only names allowed under `[claude] env`. No routing, proxy, CA or wrapper name."""
 
 HOOK_TYPES: Final = frozenset({"command", "http", "prompt", "agent"})
+SECRET_NAME: Final = re.compile(
+    r"api[-_]?key|token|secret|passw|authorization|cookie|credential", re.IGNORECASE
+)
+"""A header or settings key whose value is a credential."""
+ENV_REFERENCE: Final = re.compile(r"\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)")
+REDACTED: Final = "<redacted>"
 TEXT_KEYS: Final = frozenset({"outputStyle", "language"})
 FLAG_KEYS: Final = frozenset({"includeCoAuthoredBy", "alwaysThinkingEnabled", "respectGitignore"})
 
@@ -236,8 +256,22 @@ def _hooks(value: object) -> None:
             if set(entry) - {"matcher", "hooks"} or not isinstance(entry.get("hooks"), list):
                 raise _refuse(f"hooks.{event}", "needs a hooks list and an optional matcher")
             for hook in cast("list[object]", entry["hooks"]):
-                if _table(hook, f"hooks.{event}").get("type") not in HOOK_TYPES:
+                table = _table(hook, f"hooks.{event}")
+                if table.get("type") not in HOOK_TYPES:
                     raise _refuse(f"hooks.{event}", f"hook types are {sorted(HOOK_TYPES)}")
+                if "headers" in table:
+                    _headers(table["headers"], f"hooks.{event}")
+
+
+def _headers(value: object, key: str) -> None:
+    for name, text in _table(value, f"{key} headers").items():
+        if not isinstance(text, str):
+            raise _refuse(f"{key} header {name}", "must be a string")
+        if SECRET_NAME.search(name) and not ENV_REFERENCE.search(text):
+            raise _refuse(
+                f"{key} header {name}",
+                "holds a literal value; reference an environment variable such as $NAME",
+            )
 
 
 def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
@@ -323,20 +357,30 @@ def code_settings(
     return json.dumps(document, sort_keys=True, separators=(",", ":"))
 
 
-def claude_section(raw: Mapping[str, object]) -> dict[str, object]:
+def claude_section(raw: Mapping[str, object], current: Mapping[str, object]) -> dict[str, object]:
+    """Parse a whole-section write. A write that does not name `remembered` keeps the stored
+    rules, so saving permissions never drops an "always allow"."""
+    if "remembered" not in raw and "remembered" in current:
+        raw = {**raw, "remembered": current["remembered"]}
     return dict(parse_claude_settings(raw).raw)
 
 
 def remember_rule(control: ControlService, rule: str, workspace: Path) -> None:
     """Append an allow rule to `[claude.remembered."<workspace>"]` through `ControlService`, the
-    one writer. Idempotent. Chats in that workspace pick it up at their next launch."""
-    current = cast("dict[str, Any]", control.settings_get("claude"))
-    remembered: dict[str, Any] = current.setdefault("remembered", {})
-    allow: list[str] = remembered.setdefault(workspace_key(workspace), {}).setdefault("allow", [])
-    if rule in allow:
-        return
-    allow.append(rule)
-    control.settings_put("claude", current)
+    one writer, as one read-modify-write under its lock. Idempotent. Chats in that workspace pick
+    it up at their next launch."""
+
+    def add(current: Document) -> Document:
+        section = cast("dict[str, Any]", copy.deepcopy(current))
+        remembered: dict[str, Any] = section.setdefault("remembered", {})
+        allow: list[str] = remembered.setdefault(workspace_key(workspace), {}).setdefault(
+            "allow", []
+        )
+        if rule not in allow:
+            allow.append(rule)
+        return section
+
+    control.settings_update("claude", add)
 
 
 PLAN_AUTH_METHOD: Final = "claude.ai"
@@ -377,12 +421,13 @@ def cli_env(config_dir: Path) -> dict[str, str]:
 
 
 def plan_auth_method(home: QmxHome, settings_json: str) -> PlanAuth:
-    """Run the bundled CLI's `auth status` in the plan home with the same inline settings."""
+    """Run the bundled CLI's `auth status` in the plan home with the settings stack a launch
+    uses: no settings file from any source, then the same inline settings."""
     cli = bundled_cli()
     if cli is None:
         return PlanAuth(logged_in=False, method=None, provider=None, subscription=None)
     done = subprocess.run(
-        [cli, "--settings", settings_json, "auth", "status"],
+        [cli, "--setting-sources=", "--settings", settings_json, "auth", "status"],
         env=cli_env(home.plan_dir),
         capture_output=True,
         text=True,
@@ -624,13 +669,12 @@ def _git_bash() -> DoctorLine:
 
 
 def _home_lines(home: QmxHome) -> list[DoctorLine]:
-    personal = (Path.home() / ".claude").resolve()
     lines = [
         DoctorLine(
             name,
-            path.is_dir() and path.resolve() != personal,
+            path.is_dir() and not _inside_personal_claude(path),
             f"{path} {'exists' if path.is_dir() else 'missing'}; "
-            f"{'is' if path.resolve() == personal else 'is not'} ~/.claude",
+            f"{'is' if _inside_personal_claude(path) else 'is not'} inside ~/.claude",
         )
         for name, path in (("plan home", home.plan_dir), ("relayed home", home.relayed_dir))
     ]
@@ -641,6 +685,55 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
     detail = f"login file found: {found[0]}; launches are refused" if found else "no login file"
     lines.append(DoctorLine("relayed home login", not found, detail))
     return lines
+
+
+def _redact(value: Any, key: str = "") -> Any:
+    """`value` with every header value, every env value outside `CLAUDE_ENV_NAMES` and every
+    credential-named key's value replaced, for display."""
+    if isinstance(value, dict):
+        return {
+            name: REDACTED
+            if key == "headers"
+            or (key == "env" and name not in CLAUDE_ENV_NAMES)
+            or SECRET_NAME.search(name)
+            else _redact(item, name)
+            for name, item in cast("dict[str, Any]", value).items()
+        }
+    if isinstance(value, list):
+        return [_redact(item, key) for item in cast("list[Any]", value)]
+    return value
+
+
+async def _no_tools(
+    name: str, _input: dict[str, Any], _context: ToolPermissionContext
+) -> PermissionResult:
+    return PermissionResultDeny(message=f"{name}: doctor never runs a chat")
+
+
+DOCTOR_CHAT: Final = session_id("00000000-0000-4000-8000-000000000000")
+
+
+def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) -> DoctorLine:
+    """The whole command line of a plan launch in `workspace`, measured as
+    `launch.assert_argv_fits` measures it."""
+    options = build_options(
+        ChatConfig(PLAN, "opus", None, "default", workspace, Interactive()),
+        session_id=DOCTOR_CHAT,
+        transcript_exists=False,
+        env=launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
+        home=home,
+        settings_json=settings,
+        launcher=launcher,
+        can_use_tool=_no_tools,
+    )
+    total, parts = argv_length(options)
+    name, size = max(parts.items(), key=lambda part: part[1])
+    return DoctorLine(
+        "plan launch command line",
+        total <= ARGV_BUDGET,
+        f"{total} characters of {ARGV_BUDGET} for a plan launch in {workspace}; "
+        f"largest part: {name} at {size}",
+    )
 
 
 def doctor(
@@ -670,13 +763,15 @@ def doctor(
     settings = code_settings(
         user, launcher=launcher, workspace=workspace, memory_dir=home.memory_dir(workspace)
     )
+    shown = json.dumps(_redact(json.loads(settings)), sort_keys=True, separators=(",", ":"))
     lines.append(
         DoctorLine(
             "inline settings",
             len(settings) < ARGV_BUDGET,
-            f"{len(settings)} characters for {workspace}: {settings}",
+            f"{len(settings)} characters for {workspace}: {shown}",
         )
     )
+    lines.append(_argv_line(home, workspace, settings, launcher))
     auth = plan_auth_method(home, settings)
     lines.append(
         DoctorLine(

@@ -31,14 +31,14 @@ from qma.harness.home import QmxHome, claude_section, doctor, ensure_homes
 from qma.harness.launch import LAUNCHER, LaunchRefused
 
 
-def parse_claude_document(values: Document) -> Document:
+def parse_claude_document(values: Document, current: Document) -> Document:
     try:
-        return cast("Document", claude_section(values))
+        return cast("Document", claude_section(values, current))
     except LaunchRefused as error:
         raise ControlError("invalid_settings", str(error)) from error
 
 
-def parse_environment_document(values: Document) -> Document:
+def parse_environment_document(values: Document, _current: Document) -> Document:
     keep = values.get("keep", [])
     if set(values) - {"keep"} or not isinstance(keep, list):
         raise ControlError("invalid_settings", "[environment] holds only a keep list of names.")

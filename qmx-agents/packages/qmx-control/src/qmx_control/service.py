@@ -48,7 +48,8 @@ type SettingsSection = Literal[
     "claude",
     "environment",
 ]
-type SettingsParser = Callable[[Document], Document]
+type SettingsParser = Callable[[Document, Document], Document]
+"""(values written, section stored now) -> the section to store."""
 HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
 """Sections only a host that registers a parser for them can write."""
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
@@ -230,8 +231,22 @@ class ControlService:
                 }
             return values
 
+    def settings_update(
+        self, section: SettingsSection, change: Callable[[Document], Document]
+    ) -> Document:
+        """Read, change and write one section under the settings lock, so concurrent updates
+        all land. Writes nothing when the change returns the section as it was."""
+        with self._lock:
+            current = self.settings_get(section)
+            values = change(current)
+            return values if values == current else self.settings_put(section, values)
+
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
+        with self._lock:
+            return self._settings_put(section, values)
+
+    def _settings_put(self, section: SettingsSection, values: Document) -> Document:
         _no_secrets(values)
         if section in HOST_SECTIONS:
             parser = self.settings_parsers.get(section)
@@ -239,7 +254,7 @@ class ControlService:
                 raise ControlError(
                     "invalid_settings", f"The {section} section is written only by the QMA host."
                 )
-            values = parser(values)
+            values = parser(values, self.settings_get(section))
         if section == "remote":
             try:
                 RemoteSettings.model_validate(values)
