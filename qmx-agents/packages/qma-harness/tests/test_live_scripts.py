@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import sys
 from collections.abc import Iterator
@@ -7,6 +8,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from claude_agent_sdk import ClaudeAgentOptions
+
+import qma.harness.chat as chat_module
 
 LIVE = Path(__file__).resolve().parents[4] / "scripts" / "live" / "qma"
 SCRIPTS = ("common", "s30_os_cap", "s30b_orphans")
@@ -76,3 +80,30 @@ def test_the_evidence_folder_survives_the_boot_scrub(
         sys.modules.pop("common", None)
     assert log.path == tmp_path / "evidence" / "after-boot.log"
     assert log.path.read_text(encoding="utf-8").endswith(" written\n")
+
+
+def test_a_bypassed_harness_chat_without_a_tools_list_is_refused_before_the_harness_opens(
+    live: dict[str, ModuleType], tmp_path: Path
+) -> None:
+    start = live["common"].Session.start(
+        tmp_path / "home",
+        model="opus",
+        workspace=tmp_path / "ws",
+        title="t",
+        mode="bypassPermissions",
+    )
+    with pytest.raises(ValueError, match="bypassPermissions needs an explicit tools list"):
+        asyncio.run(start)
+    assert not (tmp_path / "home").exists()
+    assert not (tmp_path / "ws").exists()
+
+
+def test_a_harness_launch_runs_with_only_the_tools_the_script_named(
+    live: dict[str, ModuleType], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chat_module, "ClaudeSDKClient", chat_module.ClaudeSDKClient)
+    live["common"].only_tools(["Bash"])
+    preset = ClaudeAgentOptions(tools={"type": "preset", "preset": "claude_code"}, model="opus")
+    client = chat_module.ClaudeSDKClient(preset)
+    assert client.options.tools == ["Bash"]
+    assert client.options.model == "opus"

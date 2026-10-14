@@ -40,6 +40,7 @@ from fake_model import FakeModel, Turn, text, tool_use
 FAKE = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
 HARNESS = Path(__file__).resolve().parents[3] / "qmx-agents/packages/qma-harness/src/qma/harness"
 TOKEN_PROMPT = "Print the test string now."  # noqa: S105
+TOOLS = ["Read"]
 
 
 def read(path: Path) -> Turn:
@@ -70,6 +71,7 @@ async def rewound_turn(session: Session, workspace: Path, at: str) -> Any:
         env={k: v for k, v in env.items() if not k.startswith("QMA_")},
         setting_sources=[],
         permission_mode="bypassPermissions",
+        tools=TOOLS,
         model="opus",
         cwd=str(workspace),
         resume=session.chat,
@@ -121,6 +123,7 @@ async def run(log: Log) -> None:
         ),
         profile="fake",
         mode="bypassPermissions",
+        tools=TOOLS,
     )
     relay = session.relay
     try:

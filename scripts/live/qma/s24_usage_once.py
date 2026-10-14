@@ -65,6 +65,7 @@ async def run(log: Log) -> None:
         test=TestMode(loopback_http_provider=True),
         profile="fake",
         mode="bypassPermissions",
+        tools=["Bash"],
     )
     try:
         await session.turn(log, "Run the command.")

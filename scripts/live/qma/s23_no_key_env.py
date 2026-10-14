@@ -62,6 +62,7 @@ async def run(log: Log) -> None:
         test=TestMode(loopback_http_provider=True),
         profile="fake",
         mode="bypassPermissions",
+        tools=["Bash"],
     )
     try:
         _, found = await session.turn(log, "Show the environment.")

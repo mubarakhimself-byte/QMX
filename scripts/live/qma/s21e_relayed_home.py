@@ -67,6 +67,7 @@ async def run(log: Log) -> None:
         test=TestMode(gate_hook=False, deny_rules=False, loopback_http_provider=True),
         profile="fake",
         mode="bypassPermissions",
+        tools=["Bash"],
     )
     try:
         await session.turn(log, "List the Claude home.")

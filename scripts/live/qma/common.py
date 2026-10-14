@@ -99,12 +99,15 @@ def require_login(log: Log) -> None:
         raise SystemExit(3)
 
 
+def require_tools(mode: str, tools: list[str] | None) -> None:
+    if mode == "bypassPermissions" and tools is None:
+        raise ValueError("bypassPermissions needs an explicit tools list")
+
+
 def chat_options(
     env: Mapping[str, str], cwd: Path, *, tools: list[str] | None, **overrides: Any
 ) -> ClaudeAgentOptions:
-    mode = overrides.get("permission_mode", "bypassPermissions")
-    if mode == "bypassPermissions" and tools is None:
-        raise ValueError("bypassPermissions needs an explicit tools list")
+    require_tools(overrides.get("permission_mode", "bypassPermissions"), tools)
     cwd.mkdir(parents=True, exist_ok=True)
     kwargs: dict[str, Any] = {
         "cli_path": str(LAUNCHER),
@@ -204,7 +207,13 @@ class Session:
         test: Any = None,
         profile: str = "claude",
         mode: str = "default",
+        tools: list[str] | None = None,
     ) -> Session:
+        """`tools` replaces the harness's `claude_code` preset for every launch in this process,
+        and bypass mode needs it."""
+        require_tools(mode, tools)
+        if tools is not None:
+            only_tools(tools)
         from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
         from qma.harness.routes import control_service  # noqa: PLC0415
 
@@ -327,6 +336,21 @@ def capture_grants() -> list[Any]:
 
     Relay.grant = grant
     return minted
+
+
+def only_tools(tools: list[str]) -> None:
+    """Every chat launch from now on runs with only `tools`."""
+    import dataclasses  # noqa: PLC0415
+
+    import qma.harness.chat as chat_module  # noqa: PLC0415
+
+    base = chat_module.ClaudeSDKClient
+
+    class Narrowed(base):
+        def __init__(self, options: Any) -> None:
+            super().__init__(dataclasses.replace(options, tools=list(tools)))
+
+    chat_module.ClaudeSDKClient = Narrowed
 
 
 def capture_launches() -> list[Any]:
