@@ -10,6 +10,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import { Button } from "$lib/components/ui/button";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { ACCOUNTS, NODES, VENUES, type Venue } from "$lib/portfolio/demo";
@@ -24,7 +25,7 @@
     {
       via: "cTrader",
       title: "CFD brokers (cTrader)",
-      note: "FX, indices, metals and energy, traded on margin.",
+      note: "FX, indices, metals and energy on margin.",
       more: ["Pepperstone", "FxPro", "Fusion Markets"],
     },
     {
@@ -53,17 +54,15 @@
     );
 </script>
 
-<div class="flex flex-col gap-8">
-  <p class="text-muted-foreground max-w-2xl">
-    Add as many accounts as you like with each broker or exchange. Keys are
-    never stored by QMX itself: they go to this computer's credential store, and
-    trading keys must have withdrawals switched off.
-  </p>
+<div class="grid items-start gap-group min-[120rem]:grid-cols-2">
   {#each GROUPS as g (g.via)}
     <div class="flex flex-col gap-4">
-      <div>
+      <div class="flex items-center gap-2">
         <h3 class="text-xl font-semibold">{g.title}</h3>
-        <p class="text-muted-foreground">{g.note}</p>
+        <InfoTip
+          label={`About ${g.title}`}
+          text={`${g.note} Add as many accounts as you like. Keys go to this computer's credential store, never QMX's files; trading keys must have withdrawals off.`}
+        />
       </div>
       {#each VENUES.filter((v) => v.via === g.via) as v (v.id)}
         {@const accounts = ACCOUNTS.filter((a) => a.venue === v.id)}
@@ -99,15 +98,20 @@
                     · up to 1:{a.margin.leverage}</span
                   >
                 {/if}
-                <span class="text-muted-foreground flex items-center gap-1.5"
-                  ><KeyRound class="size-4" />Key in the credential store</span
+                <span
+                  class="text-muted-foreground"
+                  title="Key in the credential store"
+                  ><KeyRound
+                    class="size-4"
+                    aria-label="Key in the credential store"
+                  /></span
                 >
                 <Button
                   size="sm"
                   variant="ghost"
                   class="ml-auto"
-                  onclick={() => need(`Testing ${a.name}`)}
-                  >Test connection</Button
+                  aria-label={`Test ${a.name}`}
+                  onclick={() => need(`Testing ${a.name}`)}>Test</Button
                 >
               </li>
             {/each}

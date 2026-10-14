@@ -10,6 +10,7 @@
   import { Slider } from "$lib/components/ui/slider";
   import { Switch } from "$lib/components/ui/switch";
   import { cn } from "$lib/utils";
+  import InfoTip from "./InfoTip.svelte";
   import { DEFAULT_CUSTOM, SURFACES, type CustomTheme } from "./look";
   import { workbench } from "./workbench.svelte";
 
@@ -45,11 +46,12 @@
 </script>
 
 <section class={cn(card, "mt-4")} aria-labelledby="s-text">
-  <div>
+  <div class="flex items-center gap-1">
     <h2 id="s-text" class="text-lg font-semibold">Text size</h2>
-    <p class="text-muted-foreground text-sm">
-      Everything grows with it: text, spacing and panels.
-    </p>
+    <InfoTip
+      label="About text size"
+      text="Everything grows with it: text, spacing and panels."
+    />
   </div>
   <div class="mt-3 flex gap-2" role="radiogroup" aria-label="Text size">
     {#each [[15, "Standard"], [17, "Large"], [19, "Larger"]] as const as [px, label] (px)}
@@ -73,12 +75,12 @@
 </section>
 
 <section class={cn(card, "mt-4")} aria-labelledby="s-surface">
-  <div>
+  <div class="flex items-center gap-1">
     <h2 id="s-surface" class="text-lg font-semibold">Surface style</h2>
-    <p class="text-muted-foreground text-sm">
-      How panels sit over the art. Charts and data tiles stay solid in every
-      style.
-    </p>
+    <InfoTip
+      label="About surface style"
+      text="How panels sit over the art. Charts and data tiles stay solid in every style."
+    />
   </div>
   <div
     class="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4"
@@ -101,10 +103,7 @@
         >
           <span class={cn("absolute inset-3", PREVIEW[s.id])}></span>
         </span>
-        <span>
-          <span class="block text-sm font-medium">{s.label}</span>
-          <span class="text-muted-foreground block text-xs">{s.note}</span>
-        </span>
+        <span class="text-sm font-medium" title={s.note}>{s.label}</span>
       </button>
     {/each}
   </div>
@@ -112,12 +111,12 @@
 
 <section class={cn(card, "mt-4")} aria-labelledby="s-custom">
   <div class="flex items-start justify-between gap-3">
-    <div>
+    <div class="flex items-center gap-1">
       <h2 id="s-custom" class="text-lg font-semibold">Your theme</h2>
-      <p class="text-muted-foreground text-sm">
-        Change any of these on top of the theme above, like a VS Code theme.
-        Saved on this machine.
-      </p>
+      <InfoTip
+        label="About your theme"
+        text="Change any of these on top of the theme above, like a VS Code theme. Saved on this machine."
+      />
     </div>
     <Switch
       checked={workbench.custom.on}
