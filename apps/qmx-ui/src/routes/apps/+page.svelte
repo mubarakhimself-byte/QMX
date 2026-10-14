@@ -1,273 +1,287 @@
 <script lang="ts">
   /**
-   * Apps (mini apps pass 1, 2026-10-04). Every app sits on its road to
-   * live, the way a pod does: what's live and working for you, what's
-   * still proving itself, and what's being built (often by the copilot
-   * overnight). Pick one to see what it proved, what it gives you and the
-   * box it runs in. New apps come from a description, from widgets you
-   * already have, or from a template. DEMO data.
+   * Apps (pass 2, 2026-10-14). Apps are things you open and use, so each tile
+   * leads with a glimpse of its own output, grouped by what it is for, pinned
+   * ones first. Apps still on their road to live sit in one slim row. Health,
+   * the road to live and the box an app runs in live in its About sheet.
+   * Discover is the gallery for making a new one. DEMO data.
    */
-  import DemoChip from "$lib/workbench/DemoChip.svelte";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import LayoutGrid from "@lucide/svelte/icons/layout-grid";
   import Plus from "@lucide/svelte/icons/plus";
   import ShieldOff from "@lucide/svelte/icons/shield-off";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Switch } from "$lib/components/ui/switch";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { cn } from "$lib/utils";
-  import { workbench } from "$lib/workbench/workbench.svelte";
-  import AppDetail from "$lib/apps/AppDetail.svelte";
+  import DemoChip from "$lib/workbench/DemoChip.svelte";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import AboutSheet from "$lib/apps/AboutSheet.svelte";
+  import AppTile from "$lib/apps/AppTile.svelte";
   import FromWidgets from "$lib/apps/FromWidgets.svelte";
+  import Preview from "$lib/apps/Preview.svelte";
   import {
+    GROUPS,
     RISK,
+    STATUS,
     STEPS,
     TEMPLATES,
     apps,
-    type MiniApp,
+    type Group,
   } from "$lib/apps/apps.svelte";
+  import { ICONS } from "$lib/apps/icons";
+  import { GROUP_TINT } from "$lib/apps/tint";
 
+  const discover = $derived(page.url.searchParams.get("view") === "discover");
   let widgetsOpen = $state(false);
-  const selected = $derived(apps.byId(apps.selected));
+  let idea = $state("");
+  let only = $state<Group | "all">("all");
 
-  const BANDS = [
-    {
-      id: "live",
-      title: "Live",
-      note: "Working for you, each inside its own box",
-      test: (a: MiniApp) => a.stage === 4,
-    },
-    {
-      id: "proving",
-      title: "Proving itself",
-      note: "Tests, then a sandbox on recorded data, then a shadow run on live data that nothing uses yet",
-      test: (a: MiniApp) => a.stage > 0 && a.stage < 4,
-    },
-    {
-      id: "building",
-      title: "Being built",
-      note: "By you or the copilot; nothing runs for real yet",
-      test: (a: MiniApp) => a.stage === 0,
-    },
-  ];
-  const order = (a: MiniApp) => (a.health === "tripped" ? 0 : 1);
-  const HEALTH: Record<string, string> = {
-    ok: "bg-success",
-    warn: "bg-warning",
-    tripped: "bg-destructive",
-    idle: "bg-muted-foreground",
-  };
+  const ready = $derived(apps.all.filter((a) => a.stage === 4));
+  /** Pinned first, then one section per group; empty ones are left out. */
+  const sections = $derived(
+    [
+      {
+        key: "pinned",
+        title: "Pinned",
+        list: ready.filter((a) => apps.pinned(a.id)),
+      },
+      ...(Object.keys(GROUPS) as Group[]).map((g) => ({
+        key: g,
+        title: GROUPS[g],
+        list: ready.filter((a) => a.group === g && !apps.pinned(a.id)),
+      })),
+    ].filter((x) => x.list.length),
+  );
+  const inProgress = $derived(apps.all.filter((a) => a.stage < 4));
+  const stopped = $derived(
+    apps.all.filter((a) => apps.status(a) === "stopped").length,
+  );
+  const templates = $derived(
+    TEMPLATES.filter((t) => only === "all" || t.group === only),
+  );
+  const FILTERS = [["all", "All"], ...Object.entries(GROUPS)] as [
+    Group | "all",
+    string,
+  ][];
 
   /* eslint-disable svelte/no-navigation-without-resolve */
   const ask = (q: string) =>
     goto(resolve("/copilot") + "?ask=" + encodeURIComponent(q));
+  const view = (v: "discover" | "mine") =>
+    resolve("/apps") + (v === "discover" ? "?view=discover" : "");
   /* eslint-enable svelte/no-navigation-without-resolve */
 </script>
 
+{#snippet viewLink(v: "mine" | "discover", label: string)}
+  {@const on = (v === "discover") === discover}
+  <!-- eslint-disable svelte/no-navigation-without-resolve -->
+  <a
+    href={view(v)}
+    aria-current={on ? "page" : undefined}
+    class={cn(
+      "rounded-lg px-4 py-1.5 font-medium transition-colors",
+      on
+        ? "bg-background text-foreground shadow-sm"
+        : "text-muted-foreground hover:text-foreground",
+    )}>{label}</a
+  >
+  <!-- eslint-enable svelte/no-navigation-without-resolve -->
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col">
-  <header class="flex flex-wrap items-center gap-4 border-b px-8 py-5">
-    <div class="min-w-0 flex-1">
+  <header class="flex flex-wrap items-center gap-x-6 gap-y-3 px-page pt-7 pb-2">
+    <div class="mr-auto min-w-0">
       <div class="flex items-center gap-3">
-        <h1 class="text-3xl font-semibold tracking-tight">Apps</h1>
-        <DemoChip
-          note="Sample apps. Stages, evidence and logs come from the backend once it is wired."
-        />
+        <h1 class="text-4xl font-semibold tracking-tight">Apps</h1>
+        <DemoChip note="Sample apps and previews. Nothing here ran." />
       </div>
       <p class="text-muted-foreground mt-1 text-lg">
-        {apps.all.filter((a) => a.stage === 4).length} live ·
-        {apps.all.filter((a) => a.stage > 0 && a.stage < 4).length} proving ·
-        {apps.all.filter((a) => a.stage === 0).length} being built
+        {ready.length} ready
+        {#if stopped}· <span class="text-destructive">{stopped} stopped</span
+          >{/if}
+        · {inProgress.length} in progress
       </p>
     </div>
-    <label
+    <nav class="bg-muted flex rounded-xl p-1" aria-label="Apps view">
+      {@render viewLink("mine", "Your apps")}
+      {@render viewLink("discover", "Discover")}
+    </nav>
+    <div
       class={cn(
-        "flex items-center gap-3 rounded-xl border px-4 py-2",
-        apps.safe && "border-warning/60",
+        "flex items-center gap-2 rounded-xl py-1.5 pr-1 pl-3",
+        apps.safe && "bg-warning/10 text-warning",
       )}
     >
-      <ShieldOff class="text-muted-foreground size-5" />
-      <span>
-        <span class="block font-medium">Safe mode</span>
-        <span class="text-muted-foreground block text-sm"
-          >Turns every app off at once</span
-        >
-      </span>
-      <Switch bind:checked={apps.safe} aria-label="Safe mode" />
-    </label>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} size="lg"><Plus />New app</Button>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="w-80">
-        <DropdownMenu.Item
-          class="flex-col items-start gap-0.5 py-2"
-          onclick={() => ask("Build me an app that ")}
-          ><span class="font-medium">Describe it to the copilot</span><span
-            class="text-muted-foreground text-sm"
-            >It builds it, overnight if needed</span
-          ></DropdownMenu.Item
-        >
-        <DropdownMenu.Item
-          class="flex-col items-start gap-0.5 py-2"
-          onclick={() => (widgetsOpen = true)}
-          ><span class="font-medium">Make it from widgets</span><span
-            class="text-muted-foreground text-sm"
-            >Pick from Home and Portfolio</span
-          ></DropdownMenu.Item
-        >
-        <DropdownMenu.Item
-          class="flex-col items-start gap-0.5 py-2"
-          onclick={() =>
-            document
-              .getElementById("templates")
-              ?.scrollIntoView({ behavior: "smooth" })}
-          ><span class="font-medium">Start from a template</span><span
-            class="text-muted-foreground text-sm">Below the list</span
-          ></DropdownMenu.Item
-        >
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+      <ShieldOff class="size-4.5" />
+      <label for="apps-safe" class="font-medium">Safe mode</label>
+      <Switch id="apps-safe" bind:checked={apps.safe} aria-label="Safe mode" />
+      <InfoTip
+        label="What safe mode does"
+        text="Turns every app off at once. The same switch as in Settings, Safety."
+      />
+    </div>
+    <!-- eslint-disable svelte/no-navigation-without-resolve -->
+    <Button size="lg" href={view("discover")}><Plus />New app</Button>
+    <!-- eslint-enable svelte/no-navigation-without-resolve -->
   </header>
 
-  <div class="flex min-h-0 flex-1">
-    <div class="@container min-w-0 flex-1 overflow-auto px-8 py-6">
-      {#each BANDS as b (b.id)}
-        {@const list = apps.all
-          .filter(b.test)
-          .sort((x, y) => order(x) - order(y))}
-        <section class="mb-9">
-          <div class="mb-3 flex flex-wrap items-baseline gap-x-3">
-            <h2 class="text-xl font-semibold">{b.title}</h2>
-            <span class="text-muted-foreground">{b.note}</span>
-          </div>
-          {#if list.length}
-            <ul
-              class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(19rem,1fr))]"
-            >
-              {#each list as a (a.id)}
-                <li>
-                  <button
-                    type="button"
-                    aria-pressed={apps.selected === a.id}
-                    class={cn(
-                      "solid-backing flex h-full w-full flex-col gap-2 rounded-2xl border-2 p-5 text-left transition-colors",
-                      apps.selected === a.id
-                        ? "border-primary"
-                        : "hover:border-ring/60 border-transparent ring-1 ring-border",
-                      a.health === "tripped" && "border-destructive/70",
-                      (!a.on || apps.safe) && "opacity-55",
-                    )}
-                    onclick={() => (apps.selected = a.id)}
-                  >
-                    <span class="flex items-center gap-2">
-                      <span
-                        class={cn(
-                          "size-2.5 shrink-0 rounded-full",
-                          HEALTH[a.health],
-                        )}
-                      ></span>
-                      <span class="truncate text-lg font-semibold"
-                        >{a.name}</span
-                      >
-                      <span
-                        class={cn(
-                          "ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-sm",
-                          a.risk === "money"
-                            ? "bg-warning/15 text-warning"
-                            : "bg-muted",
-                        )}>{RISK[a.risk].label}</span
-                      >
-                    </span>
-                    <span class="text-muted-foreground line-clamp-2"
-                      >{a.summary}</span
-                    >
-                    <span class="mt-auto flex gap-1 pt-2" aria-hidden="true">
-                      {#each STEPS as s, k (s)}
-                        <span
-                          class={cn(
-                            "h-1.5 flex-1 rounded-full",
-                            k < a.stage || a.stage === 4
-                              ? "bg-success"
-                              : k === a.stage
-                                ? "bg-info"
-                                : "bg-muted",
-                          )}
-                        ></span>
-                      {/each}
-                    </span>
-                    <span
-                      class={cn(
-                        "text-sm",
-                        a.health === "tripped"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}>{a.stageNote}</span
-                    >
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p
-              class="text-muted-foreground rounded-2xl border border-dashed p-5"
-            >
-              Nothing here yet.
-            </p>
-          {/if}
-        </section>
-      {/each}
-
-      <section id="templates" class="mb-6">
-        <div class="mb-3 flex flex-wrap items-baseline gap-x-3">
-          <h2 class="text-xl font-semibold">Start from a template</h2>
-          <span class="text-muted-foreground"
-            >The copilot fills it in with you, then it starts at Build</span
-          >
-        </div>
-        <ul
-          class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]"
-        >
-          {#each TEMPLATES as t (t.name)}
-            <li>
-              <button
-                type="button"
-                class="hover:border-ring/60 flex h-full w-full flex-col gap-1 rounded-2xl border border-dashed p-4 text-left"
-                onclick={() =>
-                  ask(`Build me a "${t.name}" app from the template: `)}
-              >
-                <span class="font-medium">{t.name}</span>
-                <span class="text-muted-foreground">{t.note}</span>
-                <span
-                  class={cn(
-                    "mt-1 text-sm",
-                    t.risk === "money"
-                      ? "text-warning"
-                      : "text-muted-foreground",
-                  )}>{RISK[t.risk].label}</span
-                >
-              </button>
-            </li>
+  <div class="min-h-0 flex-1 overflow-auto px-page pb-page">
+    {#if !discover}
+      <ul class="tiles mt-5">
+        {#each sections as sec (sec.key)}
+          {#each sec.list as a, i (a.id)}
+            <AppTile app={a} heading={i === 0 ? sec.title : undefined} />
           {/each}
-          <li>
+        {/each}
+      </ul>
+
+      {#if inProgress.length}
+        <section class="mt-group pt-4">
+          <div class="mb-3 flex items-center gap-1">
+            <h2 class="text-xl font-semibold">In progress</h2>
+            <InfoTip
+              label="The road to live"
+              text="Every app goes Build, Tests, Sandbox on recorded data, Shadow run on live data nothing uses, then Live."
+            />
+          </div>
+          <ul class="flex flex-wrap gap-3">
+            {#each inProgress as a (a.id)}
+              {@const Icon = ICONS[a.icon]}
+              {@const s = apps.status(a)}
+              <li>
+                <button
+                  type="button"
+                  class="solid-backing hover:ring-ring/50 flex items-center gap-3 rounded-2xl py-2 pr-4 pl-2 ring-1 ring-border"
+                  aria-label={`About ${a.name}`}
+                  onclick={() => (apps.selected = a.id)}
+                >
+                  <span
+                    class={cn(
+                      "flex size-9 items-center justify-center rounded-xl",
+                      GROUP_TINT[a.group],
+                    )}><Icon class="size-4.5" /></span
+                  >
+                  <span class="font-medium">{a.name}</span>
+                  <span
+                    class="text-muted-foreground flex items-center gap-1.5 text-sm"
+                    ><span class={cn("size-2 rounded-full", STATUS[s].dot)}
+                    ></span>{s === "attention"
+                      ? STATUS[s].label
+                      : STEPS[a.stage]}</span
+                  >
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+    {:else}
+      <section class="mt-group">
+        <form
+          class="solid-backing flex items-center gap-3 rounded-3xl p-3 pl-6 ring-1 ring-border"
+          onsubmit={(e) => {
+            e.preventDefault();
+            ask(`Build me an app that ${idea.trim()}`);
+          }}
+        >
+          <Input
+            bind:value={idea}
+            aria-label="Describe a new app"
+            placeholder="Describe an app and the copilot builds it…"
+            class="h-12 flex-1 border-0 bg-transparent text-lg shadow-none md:text-lg focus-visible:ring-0 dark:bg-transparent"
+          />
+          <Button
+            type="submit"
+            size="lg"
+            disabled={!idea.trim()}
+            aria-label="Build it"><ArrowUp /></Button
+          >
+        </form>
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="outline" onclick={() => (widgetsOpen = true)}
+            ><LayoutGrid />From widgets</Button
+          >
+          <span class="text-muted-foreground">or pick a template</span>
+        </div>
+      </section>
+
+      <section class="mt-group">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <h2 class="mr-4 text-2xl font-semibold">Templates</h2>
+          {#each FILTERS as [g, label] (g)}
             <button
               type="button"
-              class="hover:border-ring/60 text-muted-foreground flex h-full w-full items-center justify-center gap-2 rounded-2xl border border-dashed p-4"
-              onclick={() => (widgetsOpen = true)}
-              ><Plus class="size-5" />From widgets you have</button
+              aria-pressed={only === g}
+              class={cn(
+                "rounded-full px-3.5 py-1 ring-1 ring-border",
+                only === g
+                  ? "bg-foreground text-background ring-foreground"
+                  : "hover:bg-muted",
+              )}
+              onclick={() => (only = g)}>{label}</button
             >
-          </li>
+          {/each}
+        </div>
+        <ul class="tiles">
+          {#each templates as t (t.id)}
+            {@const Icon = ICONS[t.icon]}
+            <li
+              class="solid-backing flex flex-col gap-4 rounded-3xl p-panel ring-1 ring-border"
+            >
+              <div class="flex items-center gap-3">
+                <span
+                  class={cn(
+                    "flex size-11 shrink-0 items-center justify-center rounded-2xl",
+                    GROUP_TINT[t.group],
+                  )}><Icon class="size-5.5" /></span
+                >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-lg font-semibold"
+                    >{t.name}</span
+                  >
+                  <span class="text-muted-foreground line-clamp-2 text-sm"
+                    >{t.note}</span
+                  >
+                </span>
+              </div>
+              <div
+                class="border-border/70 flex-1 rounded-2xl border border-dashed p-4 opacity-80"
+              >
+                <Preview preview={t.preview} />
+              </div>
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onclick={() =>
+                    ask(`Build me a "${t.name}" app from the template: `)}
+                  aria-label={`Use the ${t.name} template`}><Plus />Use</Button
+                >
+                {#if t.risk === "money"}
+                  <span class="text-warning ml-auto text-sm"
+                    >{RISK.money.label}</span
+                  >
+                  <InfoTip label="Money apps" text={RISK.money.rule} />
+                {/if}
+              </div>
+            </li>
+          {/each}
         </ul>
       </section>
-    </div>
-
-    {#if selected}
-      <aside class="w-[min(34rem,45%)] shrink-0 border-l">
-        <AppDetail app={selected} onclose={() => (apps.selected = null)} />
-      </aside>
     {/if}
   </div>
 </div>
 
+<AboutSheet />
 <FromWidgets bind:open={widgetsOpen} />
+
+<style>
+  .tiles {
+    display: grid;
+    gap: 1.5rem 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
+  }
+</style>

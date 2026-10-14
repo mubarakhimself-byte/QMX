@@ -1,10 +1,10 @@
 /**
- * Mini apps (pass 1, 2026-10-04). An app is judged the way a pod is: by
- * what it can touch and how far it has got on its road to live (Build,
- * Tests, Sandbox, Shadow run, Live), not by how it was made. Each runs in
- * its own box with a budget, a network allow-list and a circuit breaker.
- * DEMO data; the real list, stages, evidence and logs come from the
- * backend (handoff/MINI-APPS-AND-COPILOT-CONTRACT.md sections 4-6).
+ * Mini apps (pass 2, 2026-10-14). An app is something you open and use, so
+ * each one carries a preview of its own output and a group saying what it is
+ * for. Its road to live (Build, Tests, Sandbox, Shadow run, Live), its box
+ * and its log sit one level down, in About. DEMO data; the real list, stages,
+ * evidence and logs come from the backend
+ * (handoff/MINI-APPS-AND-COPILOT-CONTRACT.md sections 4-6).
  */
 import type { Component } from "svelte";
 import { HOME_PANELS } from "$lib/home/catalog";
@@ -50,10 +50,70 @@ export type Kind = keyof typeof KIND;
 
 export type Health = "ok" | "warn" | "tripped" | "idle";
 
+/** What an app is for. Apps are grouped by this, never by stage. */
+export const GROUPS = {
+  markets: "Markets",
+  watching: "Watching",
+  research: "Research",
+  helpers: "Trading helpers",
+} as const;
+export type Group = keyof typeof GROUPS;
+
+/** Icon names, resolved to components in icons.ts (drafts are saved as JSON). */
+export type IconName =
+  | "newspaper"
+  | "scan-search"
+  | "binoculars"
+  | "server-cog"
+  | "gauge"
+  | "calendar-clock"
+  | "activity"
+  | "piggy-bank"
+  | "network"
+  | "percent"
+  | "telescope"
+  | "calculator"
+  | "layout-grid"
+  | "trending-up"
+  | "coins"
+  | "file-text";
+
+type Tone = "up" | "down";
+/** A glimpse of what the app gives you, drawn on its tile. */
+export type Preview =
+  | { kind: "figure"; value: string; label: string; spark?: number[] }
+  | { kind: "headline"; text: string; meta: string }
+  | { kind: "rows"; rows: { label: string; value: string; tone?: Tone }[] }
+  | { kind: "alert"; text: string; when: string };
+
+/** Where an app stands, in the order a tile shows it. */
+export const STATUS = {
+  live: { label: "Live", dot: "bg-success" },
+  attention: { label: "Needs a look", dot: "bg-warning" },
+  stopped: { label: "Stopped", dot: "bg-destructive" },
+  off: { label: "Off", dot: "bg-muted-foreground" },
+  proving: { label: "Proving", dot: "bg-info" },
+  building: { label: "Being built", dot: "bg-muted-foreground" },
+} as const;
+export type Status = keyof typeof STATUS;
+
+export function statusOf(a: MiniApp, safe: boolean): Status {
+  if (!a.on || safe) return "off";
+  if (a.health === "tripped") return "stopped";
+  if (a.health === "warn") return "attention";
+  if (a.stage === 0) return "building";
+  return a.stage < 4 ? "proving" : "live";
+}
+
 export type MiniApp = {
   id: string;
   name: string;
   summary: string;
+  icon: IconName;
+  group: Group;
+  preview?: Preview;
+  /** Headless apps: when it runs next. */
+  next?: string;
   kind: Kind;
   risk: Risk;
   /** Index into STEPS. */
@@ -90,6 +150,13 @@ const DEMO: MiniApp[] = $state([
     name: "News & sentiment",
     summary:
       "Reads market, crypto and macro news, scores the mood of each story.",
+    icon: "newspaper",
+    group: "research",
+    preview: {
+      kind: "headline",
+      text: "Spot BTC ETFs took in $412M yesterday",
+      meta: "Mood +0.7 · 12 stories this hour",
+    },
     kind: "both",
     risk: "show",
     stage: 4,
@@ -127,6 +194,16 @@ const DEMO: MiniApp[] = $state([
     id: "screener",
     name: "Coin screener",
     summary: "Ranks the top coins by trend, volume and funding.",
+    icon: "scan-search",
+    group: "markets",
+    preview: {
+      kind: "rows",
+      rows: [
+        { label: "SOL", value: "+6.2%", tone: "up" },
+        { label: "ETH", value: "+3.1%", tone: "up" },
+        { label: "BTC", value: "−0.4%", tone: "down" },
+      ],
+    },
     kind: "screens",
     risk: "show",
     stage: 4,
@@ -151,10 +228,128 @@ const DEMO: MiniApp[] = $state([
     on: true,
   },
   {
+    id: "funding",
+    name: "Funding rates",
+    summary: "Perpetual funding and open interest for the coins you trade.",
+    icon: "percent",
+    group: "markets",
+    preview: {
+      kind: "figure",
+      value: "+0.012%",
+      label: "BTC funding, next 8h",
+      spark: [8, 9, 11, 10, 12, 13, 12],
+    },
+    kind: "screens",
+    risk: "show",
+    stage: 4,
+    stageNote: "Live for 15 days",
+    evidence: [
+      "Built from the Funding watcher template",
+      "10 of 10 tests passed",
+      "2 days on recorded funding",
+      "5 days shadow run, no errors",
+    ],
+    health: "ok",
+    builtBy: "you, from a template",
+    runsOn: "This laptop",
+    budget: "Light; runs when open",
+    budgetUsed: 0.04,
+    network: "Your exchanges only",
+    breaker: "Stops itself if rates are older than 10 minutes",
+    provides: ["Funding panel on Home → Markets"],
+    ops: ["crypto.funding", "crypto.open_interest"],
+    log: [
+      "14:00 funding BTC +0.012%, ETH +0.009%",
+      "06:00 funding BTC +0.010%",
+    ],
+    panels: ["markets", "screener"],
+    on: true,
+  },
+  {
+    id: "brief",
+    name: "Morning brief",
+    summary: "One page at 07:00: overnight moves, today's news, your pods.",
+    icon: "file-text",
+    group: "research",
+    preview: {
+      kind: "headline",
+      text: "Gold held 2,640; dollar firmer into CPI",
+      meta: "Today 07:00 · 3 min read",
+    },
+    next: "Next brief tomorrow 07:00",
+    kind: "both",
+    risk: "show",
+    stage: 4,
+    stageNote: "Live for 30 days",
+    evidence: [
+      "Built by the copilot from your description",
+      "8 of 8 tests passed",
+      "5 recorded mornings",
+      "7 days shadow run; you kept 6 of 7 briefs",
+    ],
+    health: "ok",
+    builtBy: "the copilot",
+    runsOn: "Its own box on Frankfurt",
+    budget: "20 CPU minutes a day",
+    budgetUsed: 0.5,
+    network: "News sites and your brokers",
+    breaker: "Stops itself if the brief is not ready by 07:30",
+    provides: ["A brief in Library each morning", "Recent items on Home"],
+    ops: ["news.windows", "pods.read", "library.save"],
+    schedule: "Every day at 07:00",
+    log: ["07:00 brief written, 640 words", "07:00 yesterday: brief written"],
+    panels: ["recent", "events"],
+    on: true,
+  },
+  {
+    id: "sizer",
+    name: "Position sizer",
+    summary: "Lot size from your risk, stop and account, for any market.",
+    icon: "calculator",
+    group: "helpers",
+    preview: {
+      kind: "rows",
+      rows: [
+        { label: "XAUUSD · 0.5% risk", value: "0.42 lots" },
+        { label: "EURUSD · 0.5% risk", value: "1.10 lots" },
+      ],
+    },
+    kind: "screens",
+    risk: "show",
+    stage: 4,
+    stageNote: "Live for 12 days",
+    evidence: [
+      "Made by you from widgets",
+      "6 of 6 tests passed",
+      "1 day on recorded prices",
+      "3 days shadow run",
+    ],
+    health: "ok",
+    builtBy: "you, from widgets",
+    runsOn: "This laptop",
+    budget: "Light; runs when open",
+    budgetUsed: 0.01,
+    network: "Your brokers only",
+    breaker: "Stops itself if prices are older than 1 minute",
+    provides: ["Its own screen"],
+    ops: ["accounts.read", "cfd.quote"],
+    log: ["13:58 sized XAUUSD 0.42 lots at 0.5% risk"],
+    panels: ["accounts", "positions"],
+    on: true,
+  },
+  {
     id: "watcher",
     name: "Weekend watcher",
     summary:
       "Watches the paper pods while you're away and messages you if one drifts.",
+    icon: "binoculars",
+    group: "watching",
+    preview: {
+      kind: "alert",
+      text: "4 pods inside their lines",
+      when: "3 min ago",
+    },
+    next: "Next check 14:18",
     kind: "headless",
     risk: "work",
     stage: 4,
@@ -184,9 +379,17 @@ const DEMO: MiniApp[] = $state([
   },
   {
     id: "exchange-status",
-    name: "Broker and exchange status",
+    name: "Broker status",
     summary:
       "Checks IC Markets' cTrader servers and each exchange's status page.",
+    icon: "server-cog",
+    group: "watching",
+    preview: {
+      kind: "alert",
+      text: "Kraken status page down",
+      when: "40 min ago",
+    },
+    next: "Every minute, once restarted",
     kind: "headless",
     risk: "work",
     stage: 4,
@@ -220,6 +423,14 @@ const DEMO: MiniApp[] = $state([
     id: "mood",
     name: "Market mood",
     summary: "One crowd-mood number per market, from news and social posts.",
+    icon: "gauge",
+    group: "markets",
+    preview: {
+      kind: "figure",
+      value: "62",
+      label: "BTC crowd mood",
+      spark: [54, 57, 55, 58, 60, 59, 62],
+    },
     kind: "screens",
     risk: "show",
     stage: 3,
@@ -250,6 +461,13 @@ const DEMO: MiniApp[] = $state([
     name: "Economic calendar watcher",
     summary:
       "Pauses new CFD trades 15 minutes either side of high-impact news.",
+    icon: "calendar-clock",
+    group: "helpers",
+    preview: {
+      kind: "headline",
+      text: "US CPI at 14:30",
+      meta: "Would pause Gold & indices 14:15 to 14:45",
+    },
     kind: "both",
     risk: "work",
     stage: 3,
@@ -285,6 +503,13 @@ const DEMO: MiniApp[] = $state([
     name: "Spread watcher",
     summary:
       "Watches IC Markets spreads on gold, indices and FX, and warns when they widen.",
+    icon: "activity",
+    group: "watching",
+    preview: {
+      kind: "alert",
+      text: "Gold spread over 40¢ twice",
+      when: "replay of Sep 12",
+    },
     kind: "headless",
     risk: "work",
     stage: 2,
@@ -312,6 +537,8 @@ const DEMO: MiniApp[] = $state([
     id: "dca",
     name: "Weekly DCA proposer",
     summary: "Proposes a weekly buy of BTC and ETH when they dip.",
+    icon: "piggy-bank",
+    group: "helpers",
     kind: "headless",
     risk: "money",
     stage: 1,
@@ -337,6 +564,8 @@ const DEMO: MiniApp[] = $state([
     id: "correlation",
     name: "Correlation map",
     summary: "How the markets in your pods move together, week by week.",
+    icon: "network",
+    group: "research",
     kind: "screens",
     risk: "show",
     stage: 0,
@@ -357,46 +586,116 @@ const DEMO: MiniApp[] = $state([
   },
 ]);
 
-export const TEMPLATES: { name: string; note: string; risk: Risk }[] = [
+export type Template = {
+  id: string;
+  name: string;
+  note: string;
+  risk: Risk;
+  icon: IconName;
+  group: Group;
+  /** A sample of what it will show once it runs. */
+  preview: Preview;
+};
+
+export const TEMPLATES: Template[] = [
   {
+    id: "news-digest",
     name: "News digest",
     note: "Sources you pick, scored and summed up",
     risk: "show",
+    icon: "newspaper",
+    group: "research",
+    preview: {
+      kind: "headline",
+      text: "Oil slips as stocks build",
+      meta: "Mood −0.3 · 8 stories",
+    },
   },
   {
+    id: "price-alerts",
     name: "Price alerts",
     note: "Message me when a market crosses a line",
     risk: "work",
+    icon: "trending-up",
+    group: "watching",
+    preview: { kind: "alert", text: "XAUUSD crossed 2,650", when: "just now" },
   },
   {
+    id: "funding-watcher",
     name: "Funding watcher",
     note: "Funding rates and open interest",
     risk: "show",
+    icon: "percent",
+    group: "markets",
+    preview: {
+      kind: "figure",
+      value: "+0.010%",
+      label: "ETH funding",
+      spark: [5, 6, 8, 7, 9, 10],
+    },
   },
   {
+    id: "spread-alerts",
     name: "Spread alerts",
     note: "Warn me when a broker's spreads widen",
     risk: "work",
+    icon: "activity",
+    group: "watching",
+    preview: {
+      kind: "alert",
+      text: "NAS100 spread 3.1 pts",
+      when: "at the open",
+    },
   },
   {
+    id: "on-chain",
     name: "On-chain flows",
     note: "Big moves to and from exchanges",
     risk: "work",
+    icon: "coins",
+    group: "markets",
+    preview: {
+      kind: "rows",
+      rows: [
+        { label: "BTC into exchanges", value: "+2,140", tone: "down" },
+        { label: "ETH out of exchanges", value: "−18,300", tone: "up" },
+      ],
+    },
   },
   {
+    id: "weekly-report",
     name: "Weekly report",
     note: "A PDF of every pod, every Monday",
     risk: "work",
+    icon: "file-text",
+    group: "research",
+    preview: {
+      kind: "headline",
+      text: "Week 41: +1.8%, two pods ahead",
+      meta: "Monday 08:00 · PDF",
+    },
   },
   {
+    id: "econ-calendar",
     name: "Economic calendar",
     note: "Pause pods around high-impact news",
     risk: "work",
+    icon: "calendar-clock",
+    group: "helpers",
+    preview: {
+      kind: "headline",
+      text: "FOMC minutes at 19:00",
+      meta: "Would pause FX majors",
+    },
   },
   {
+    id: "dca",
     name: "DCA proposer",
     note: "Proposes buys; you sign each one",
     risk: "money",
+    icon: "piggy-bank",
+    group: "helpers",
+    preview: { kind: "figure", value: "$250", label: "Proposed BTC buy" },
   },
 ];
 
@@ -448,20 +747,30 @@ export function layoutFor(app: MiniApp): TileLayout {
 }
 
 const KEY = "qmx.apps.v1";
+const PINS = "qmx.apps.pins.v1";
+
+function load<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function save(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage unavailable: the change lasts for this window */
+  }
+}
 
 class Apps {
-  mine = $state<MiniApp[]>([]);
+  mine = $state<MiniApp[]>(load(KEY, []));
+  pins = $state<string[]>(load(PINS, ["news", "watcher"]));
   safe = $state(false);
-  selected = $state<string | null>("news");
-
-  constructor() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      this.mine = raw ? (JSON.parse(raw) as MiniApp[]) : [];
-    } catch {
-      this.mine = [];
-    }
-  }
+  /** The app whose About sheet is open. */
+  selected = $state<string | null>(null);
 
   get all(): MiniApp[] {
     return [...this.mine, ...DEMO];
@@ -471,12 +780,19 @@ class Apps {
     return this.all.find((a) => a.id === id);
   }
 
-  private persist() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(this.mine));
-    } catch {
-      /* storage unavailable: the draft lasts for this window */
-    }
+  status(a: MiniApp): Status {
+    return statusOf(a, this.safe);
+  }
+
+  pinned(id: string) {
+    return this.pins.includes(id);
+  }
+
+  pin(id: string, on = !this.pinned(id)) {
+    this.pins = on
+      ? [...this.pins.filter((p) => p !== id), id]
+      : this.pins.filter((p) => p !== id);
+    save(PINS, this.pins);
   }
 
   /** A new app made from widgets you picked; it starts at Build. */
@@ -487,6 +803,8 @@ class Apps {
         id,
         name,
         summary: `Made from ${panels.length} widget${panels.length === 1 ? "" : "s"} you picked.`,
+        icon: "layout-grid",
+        group: "helpers",
         kind: "screens",
         risk: "show",
         stage: 0,
@@ -507,26 +825,38 @@ class Apps {
       },
       ...this.mine,
     ];
-    this.selected = id;
-    this.persist();
+    save(KEY, this.mine);
     return id;
   }
 
   remove(id: string) {
     this.mine = this.mine.filter((a) => a.id !== id);
+    this.pin(id, false);
     if (this.selected === id) this.selected = null;
-    this.persist();
+    save(KEY, this.mine);
   }
 
   toggle(id: string, on: boolean) {
-    const mine = this.mine.find((a) => a.id === id);
-    if (mine) {
-      mine.on = on;
-      this.persist();
-    } else {
-      const d = DEMO.find((a) => a.id === id);
-      if (d) d.on = on;
-    }
+    const a = this.byId(id);
+    if (!a) return;
+    a.on = on;
+    if (this.mine.includes(a)) save(KEY, this.mine);
+  }
+
+  /** Demo restart: clears the trip here; the real one goes through the daemon. */
+  restart(id: string) {
+    const a = this.byId(id);
+    if (!a || a.health !== "tripped") return;
+    a.health = "ok";
+    a.stopped = undefined;
+    a.stageNote = "Live · restarted just now";
+    a.log = ["now restarted by you", ...a.log];
+    if (a.preview?.kind === "alert")
+      a.preview = {
+        kind: "alert",
+        text: "Restarted, checking again",
+        when: "just now",
+      };
   }
 }
 

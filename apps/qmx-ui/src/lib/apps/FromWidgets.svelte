@@ -41,8 +41,7 @@
     <Dialog.Header>
       <Dialog.Title class="text-2xl">Make an app from widgets</Dialog.Title>
       <Dialog.Description class="text-base">
-        Pick what it should show. You can rearrange it as soon as it opens, and
-        ask the copilot to add anything the widgets don't do.
+        Pick what it shows. Rearrange it once it opens.
       </Dialog.Description>
     </Dialog.Header>
     <label class="mt-2 flex flex-col gap-1.5">
@@ -82,9 +81,7 @@
       </section>
     {/each}
     <Dialog.Footer class="mt-4 items-center gap-3">
-      <span class="text-muted-foreground mr-auto"
-        >{picked.length} picked · it starts at Build, shows things only</span
-      >
+      <span class="text-muted-foreground mr-auto">{picked.length} picked</span>
       <Button disabled={!picked.length} onclick={create}>Make it</Button>
     </Dialog.Footer>
   </Dialog.Content>
