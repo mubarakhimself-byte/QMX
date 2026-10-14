@@ -46,7 +46,7 @@ class Log:
 
     def __call__(self, line: str) -> None:
         stamped = f"{time.strftime('%H:%M:%S')} {line}"
-        print(stamped, flush=True)
+        print(stamped.encode("ascii", "backslashreplace").decode(), flush=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(stamped + "\n")
 

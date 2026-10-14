@@ -51,12 +51,13 @@ async def run(log: Log) -> None:
                     started = "started"
                 except LaunchRefused as refused:
                     started = f"refused: {refused}"
+                before = len(fake.requests)
                 answer = await client.post(
                     "/v1/messages?beta=true",
                     json={"model": model, "max_tokens": 8, "messages": [], "stream": True},
                     headers={"authorization": f"Bearer {grant.secret}"},
                 )
-                sent = fake.requests[-1].json.get("model") if fake.requests else None
+                sent = fake.requests[-1].json.get("model") if fake.requests[before:] else None
                 log(f"{model}: start_chat {started}; relay {answer.status_code}; sent {sent}")
                 expected = ("started", 200) if allowed else ("refused", 400)
                 log.check(
