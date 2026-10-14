@@ -14,8 +14,9 @@ from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
 from qmx_control.models import MemoKey
 
-from qmx_tools import DomainContext, default_tool_registry
-from qmx_tools.registry import domain_functions
+from qmx_tools import DomainContext
+from qmx_tools.functions import domain_functions
+from qmx_tools.registry import default_tool_registry
 from qmx_tools.servers import create_server
 from qmx_tools.service import Artifact, Dataset, OrderProposal, unwrap
 

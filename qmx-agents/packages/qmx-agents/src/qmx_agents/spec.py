@@ -34,7 +34,7 @@ from qmx_broker.server import create_server as create_broker_server
 from qmx_broker.service import BrokerService
 from qmx_control.service import ControlService
 from qmx_ledger.journal import RunJournal
-from qmx_tools import default_tool_registry
+from qmx_tools.registry import default_tool_registry
 
 from qmx_agents.guards import AdmissionBackend, AdmissionGate, check_tool
 from qmx_agents.guards.admission import AdmissionSandboxBackend
