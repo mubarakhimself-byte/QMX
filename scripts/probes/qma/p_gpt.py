@@ -826,7 +826,10 @@ def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -
 
 def probe_reasoning(session: Session, ev: Evidence, model: str, shape: ToolsShape) -> StepResult:
     log = ev.writer("hp2-p4")
-    body = responses_body(tool_request(model), tools_shape=shape, include_reasoning=True)
+    body = {
+        **responses_body(tool_request(model), tools_shape=shape, include_reasoning=True),
+        "reasoning": {"effort": "medium"},
+    }
     _log_body(log, "turn1", body)
     first = post_responses(session.access_token(), body)
     _log_result(log, "turn1", first)
