@@ -11,15 +11,20 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Generator, Mapping, MutableMapping
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Final, TextIO
+from typing import TYPE_CHECKING, Any, Final, TextIO
+
+if TYPE_CHECKING:
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ContentBlock, Message
 
 SHIP: Final = Path("D:/QMX-worktrees/qma-ship")
 CONFIG_DIR: Final = SHIP / "home" / "claude"
 EVIDENCE: Final = SHIP / "evidence" / "hp0"
 PROBE_VENV: Final = SHIP / "probe-venv"
 SCRATCH: Final = Path("D:/Temp/qma-hp0")
+UV_CACHE: Final = Path("D:/Caches/uv")
 FAKE_HOME: Final = SCRATCH / "home"
 """HOME and USERPROFILE for every CLI a probe starts, so nothing reads or writes his `~/.claude`."""
 CLI_FLOOR: Final = (2, 1, 248)
@@ -99,6 +104,16 @@ def sdk_version() -> str:
     return __version__
 
 
+def uv_env() -> dict[str, str]:
+    """The process environment with TMP, TEMP and the uv cache on D:."""
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    return (
+        {"UV_CACHE_DIR": str(UV_CACHE)}
+        | dict(os.environ)
+        | {"TMP": str(SCRATCH), "TEMP": str(SCRATCH)}
+    )
+
+
 def home_env() -> dict[str, str]:
     """The ship's `CLAUDE_CONFIG_DIR` and the throwaway HOME and USERPROFILE."""
     FAKE_HOME.mkdir(parents=True, exist_ok=True)
@@ -142,7 +157,7 @@ def require_plan_login(log: Log, cli: Path) -> None:
         raise SystemExit(3)
 
 
-def plan_options(**overrides: Any) -> Any:
+def plan_options(**overrides: Any) -> ClaudeAgentOptions:
     """`ClaudeAgentOptions` for one plan turn in the ship home, isolated from his setup."""
     from claude_agent_sdk import ClaudeAgentOptions  # noqa: PLC0415
 
@@ -156,24 +171,132 @@ def plan_options(**overrides: Any) -> Any:
         "permission_mode": "bypassPermissions",
         "max_turns": 4,
     }
-    kwargs.update(overrides)
-    return ClaudeAgentOptions(**kwargs)
+    return ClaudeAgentOptions(**(kwargs | overrides))
 
 
-def describe(message: Any) -> str:
+def describe(message: Message) -> str:
     """One line per SDK message: its type plus the fields a probe reads."""
-    kind = type(message).__name__
-    if kind == "RateLimitEvent":
-        info = message.rate_limit_info
-        return f"RateLimitEvent status={info.status} type={info.rate_limit_type}"
-    if kind == "ResultMessage":
-        return (
-            f"ResultMessage subtype={message.subtype} is_error={message.is_error} "
-            f"turns={message.num_turns} ms={message.duration_ms} result={message.result!r:.200}"
+    from claude_agent_sdk import (  # noqa: PLC0415
+        AssistantMessage,
+        RateLimitEvent,
+        ResultMessage,
+        SystemMessage,
+        UserMessage,
+    )
+
+    match message:
+        case RateLimitEvent(rate_limit_info=info):
+            return f"RateLimitEvent status={info.status} type={info.rate_limit_type}"
+        case ResultMessage():
+            return (
+                f"ResultMessage subtype={message.subtype} is_error={message.is_error} "
+                f"turns={message.num_turns} ms={message.duration_ms} "
+                f"result={message.result!r:.200}"
+            )
+        case SystemMessage():
+            return f"SystemMessage subtype={message.subtype}"
+        case AssistantMessage():
+            return f"AssistantMessage model={message.model} blocks={_blocks(message.content)}"
+        case UserMessage(content=list() as content):
+            return f"UserMessage blocks={_blocks(content)}"
+        case _:
+            return type(message).__name__
+
+
+def _blocks(blocks: list[ContentBlock]) -> list[str]:
+    from claude_agent_sdk import TextBlock, ToolResultBlock, ToolUseBlock  # noqa: PLC0415
+
+    def one(block: ContentBlock) -> str:
+        match block:
+            case TextBlock():
+                return f"Text({block.text!r:.200})"
+            case ToolUseBlock():
+                return f"ToolUse({block.name} {json.dumps(block.input)[:200]})"
+            case ToolResultBlock():
+                return f"ToolResult(error={block.is_error} {str(block.content)[:300]!r})"
+            case _:
+                return type(block).__name__
+
+    return [one(block) for block in blocks]
+
+
+def is_ok(messages: list[Message]) -> bool:
+    """The last `ResultMessage` ended without error."""
+    from claude_agent_sdk import ResultMessage  # noqa: PLC0415
+
+    results = [m for m in messages if isinstance(m, ResultMessage)]
+    return bool(results) and not results[-1].is_error
+
+
+@contextmanager
+def tap_raw(log: Log) -> Generator[None]:
+    """Log every frame the CLI sends, cut to 800 characters, before the SDK parses or drops it."""
+    from claude_agent_sdk._internal import message_parser  # noqa: PLC0415
+
+    parse = message_parser.parse_message
+
+    def logged(data: dict[str, Any]) -> Message | None:
+        log(f"raw {json.dumps(data)[:800]}")
+        return parse(data)
+
+    message_parser.parse_message = logged
+    try:
+        yield
+    finally:
+        message_parser.parse_message = parse
+
+
+async def run_turns(log: Log, options: ClaudeAgentOptions, prompts: list[str]) -> list[Message]:
+    """Send each prompt in one session and log every message. Returns all messages."""
+    from claude_agent_sdk import ClaudeSDKClient  # noqa: PLC0415
+
+    seen: list[Message] = []
+    async with ClaudeSDKClient(options=options) as client:
+        for prompt in prompts:
+            log(f"> {prompt}")
+            await client.query(prompt)
+            async for message in client.receive_response():
+                log(describe(message))
+                seen.append(message)
+    return seen
+
+
+def cli_pid(client: ClaudeSDKClient) -> int:
+    """The pid of the CLI a connected `ClaudeSDKClient` started."""
+    transport: Any = client._transport  # pyright: ignore[reportPrivateUsage]
+    return int(transport._process.pid)
+
+
+def working_set_mb(pid: int) -> float:
+    """Current working set of a Windows process, in MB."""
+    import ctypes  # noqa: PLC0415
+    from ctypes import wintypes  # noqa: PLC0415
+
+    class Counters(ctypes.Structure):
+        _fields_ = (
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
         )
-    if kind == "SystemMessage":
-        return f"SystemMessage subtype={message.subtype}"
-    if kind == "AssistantMessage":
-        parts = [type(block).__name__ for block in message.content]
-        return f"AssistantMessage model={message.model} blocks={parts}"
-    return kind
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    query_limited_and_vm_read = 0x1000 | 0x0010
+    handle = kernel32.OpenProcess(query_limited_and_vm_read, False, pid)
+    if not handle:
+        raise OSError(ctypes.get_last_error(), f"OpenProcess {pid}")
+    try:
+        counters = Counters()
+        counters.cb = ctypes.sizeof(Counters)
+        if not kernel32.K32GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+            raise OSError(ctypes.get_last_error(), f"K32GetProcessMemoryInfo {pid}")
+        return round(counters.WorkingSetSize / 2**20, 1)
+    finally:
+        kernel32.CloseHandle(handle)

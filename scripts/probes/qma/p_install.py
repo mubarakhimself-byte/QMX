@@ -12,7 +12,7 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-from common import CLI_FLOOR, PROBE_VENV, SCRATCH, Log, home_env, parse_version, reduced_env
+from common import CLI_FLOOR, PROBE_VENV, SCRATCH, Log, home_env, parse_version, reduced_env, uv_env
 
 PYPI = "https://pypi.org/pypi/claude-agent-sdk/json"
 WHEEL_TAG = "win_amd64"
@@ -36,7 +36,7 @@ def venv_python() -> Path:
 
 
 def install(uv: str, version: str) -> None:
-    env = os.environ | {"TMP": str(SCRATCH), "TEMP": str(SCRATCH)}
+    env = uv_env()
     if not venv_python().exists():
         subprocess.run([uv, "venv", str(PROBE_VENV), "--python", "3.14"], env=env, check=True)
     subprocess.run(
