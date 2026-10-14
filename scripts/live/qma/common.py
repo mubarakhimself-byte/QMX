@@ -123,17 +123,12 @@ TURN_TIMEOUT_S: Final = 300.0
 
 
 def use_fake_home() -> None:
-    """Point HOME, USERPROFILE and the app data folders at the throwaway folder, so a CLI the
+    """Point HOME, USERPROFILE, the app data folders and TMP at the throwaway folders, so a CLI the
     harness starts in this process never reads the operator's own `~/.claude` or profile."""
-    roaming, local = FAKE_HOME / "AppData" / "Roaming", FAKE_HOME / "AppData" / "Local"
-    for folder in (roaming, local):
-        folder.mkdir(parents=True, exist_ok=True)
-    os.environ |= {
-        "HOME": str(FAKE_HOME),
-        "USERPROFILE": str(FAKE_HOME),
-        "APPDATA": str(roaming),
-        "LOCALAPPDATA": str(local),
-    }
+    env = throwaway_env()
+    for folder in env.values():
+        Path(folder).mkdir(parents=True, exist_ok=True)
+    os.environ |= env
 
 
 def session_blocks(control: Any, chat: str, after: int = 0) -> list[dict[str, Any]]:
