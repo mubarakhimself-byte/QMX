@@ -52,6 +52,9 @@ _OPEN_TOKEN: Final = re.compile(r"sk-ant-[A-Za-z0-9_-]*\Z")
 
 PLAN_TOOLS: Final = frozenset({"TodoWrite", "TaskCreate", "TaskUpdate"})
 AGENT_TOOLS: Final = frozenset({"Agent", "Task"})
+INTERRUPTED: Final = frozenset({"aborted_streaming", "aborted_tools"})
+"""`ResultMessage.terminal_reason` values the SDK documents as a cancelled turn. The CLI also sets
+`is_error` on them (measured, 2.1.299), but the operator asked for the stop."""
 
 
 def redact(text: str) -> str:
@@ -331,7 +334,7 @@ def _result(message: ResultMessage) -> list[Fact]:
             num_turns=message.num_turns,
         )
     ]
-    if message.is_error:
+    if message.is_error and message.terminal_reason not in INTERRUPTED:
         reason = message.result or "; ".join(message.errors or []) or message.subtype
         facts.append(_block(Here(), "needs_you", {"reason": f"the turn failed: {reason}"}))
     origin = message.origin or {}

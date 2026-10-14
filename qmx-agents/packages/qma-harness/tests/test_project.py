@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from claude_agent_sdk import (
     AssistantMessage,
     Message,
@@ -247,6 +248,22 @@ def test_a_failed_turn_and_a_model_error_each_ask_for_the_operator() -> None:
     errored = AssistantMessage(content=[], model="haiku", error="rate_limit")
     assert blocks(failed) == [("needs_you", {"reason": "the turn failed: boom"})]
     assert blocks(project(errored)) == [("needs_you", {"reason": "model error: rate_limit"})]
+
+
+@pytest.mark.parametrize("reason", ["aborted_tools", "aborted_streaming"])
+def test_an_interrupted_turn_ends_quietly(reason: str) -> None:
+    interrupted = project(
+        result(
+            subtype="error_during_execution",
+            is_error=True,
+            errors=["[ede_diagnostic] result_type=user last_content_type=n/a"],
+            terminal_reason=reason,
+        )
+    )
+    assert blocks(interrupted) == []
+    assert [fact for fact in interrupted if isinstance(fact, TurnEnded)] == [
+        TurnEnded(ok=False, terminal_reason=reason, deferred_tool_use=False)
+    ]
 
 
 def test_a_server_tool_result_finishes_its_tool_block() -> None:
