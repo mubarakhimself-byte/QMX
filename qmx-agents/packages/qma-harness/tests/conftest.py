@@ -24,11 +24,23 @@ seen = {
 }
 Path(report).write_text(json.dumps(seen))
 heavy = "chunks = []\\nwhile True: chunks.append(bytearray(64 * 2**20))"
+children = []
 for line in sys.stdin:
     if line.strip() == "ping":
         print("pong", flush=True)
     elif line.strip() == "heavy":
         subprocess.run([sys.executable, "-c", heavy])
+    elif line.strip() == "heavy-self":
+        chunks = []
+        try:
+            while True:
+                chunks.append(bytearray(64 * 2**20))
+        except MemoryError:
+            os._exit(9)
+    elif line.strip() == "child":
+        sleeper = [sys.executable, "-c", "import time; time.sleep(600)"]
+        children.append(subprocess.Popen(sleeper))
+        print(children[-1].pid, flush=True)
 sys.exit(code)
 """
 
@@ -43,7 +55,9 @@ def procs_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def launch(tmp_path: Path, procs_dir: Path) -> Launch:
     """Starts `qma-cli-launcher` over a fake CLI that reports what it saw to
-    `<tmp>/<chat>.seen.json`, answers `ping` and runs a memory-heavy child on `heavy`."""
+    `<tmp>/<chat>.seen.json`, answers `ping`, runs a memory-heavy child on `heavy`, allocates
+    in its own process until refused on `heavy-self`, and on `child` starts a sleeping child
+    and prints its pid."""
     script = tmp_path / "fake_cli.py"
     script.write_text(FAKE_CLI, encoding="utf-8")
 

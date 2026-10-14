@@ -43,6 +43,7 @@ dev = [
     "pytest>=9,<10",
     "pytest-xdist>=3.8,<4",
     "pytest-cov>=7,<8",
+    "psutil>=7,<9",
     "poethepoet==0.48.0",
     "types-pywin32==312.0.0.20261006",
 ]
@@ -58,6 +59,7 @@ extend-exclude = []
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
+"src/qma/launcher.py" = ["PLC0415"]
 
 [tool.pyright]
 include = ["src", "tests"]

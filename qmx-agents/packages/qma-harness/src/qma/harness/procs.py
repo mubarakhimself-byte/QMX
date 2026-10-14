@@ -18,7 +18,6 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import functools
-import hashlib
 import os
 import shutil
 import signal
@@ -29,24 +28,25 @@ import time
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Protocol
+from typing import Any, Final, Literal, Protocol
 
 from qma.launcher import (
-    EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_JOB_MEMORY,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOB_OBJECT_QUERY,
     JOB_OBJECT_TERMINATE,
     PROCESS_QUERY_LIMITED_INFORMATION,
     SYSTEMD_RUN,
-    ExtendedLimits,
     PidRecord,
     chat_job_name,
+    chat_unit_prefix,
+    home_scope,
     kernel32,
     open_process,
     pid_path,
     process_started,
     read_pid_record,
+    set_job_limits,
     win_check,
 )
 
@@ -95,15 +95,16 @@ class AgentProcessCap:
 
     @classmethod
     def for_platform(cls, procs_dir: Path, limit_mb: int | None) -> AgentProcessCap:
-        """Create or adopt the parent job (Windows) or slice (Linux); none on macOS. `None`
-        means no memory limit; the Windows job still exists for kill-on-close."""
+        """Create the parent job (Windows) or adopt the slice (Linux); none on macOS. `None`
+        means no memory limit; the Windows job still exists for kill-on-close. On Windows a
+        second holder for a home whose holder still runs raises OSError: only one process can
+        watch a job's memory-limit messages."""
         procs_dir.mkdir(parents=True, exist_ok=True)
         cap = cls(procs_dir, _NoParent(), limit_mb)
         if sys.platform == "win32":
-            digest = hashlib.sha256(str(procs_dir.resolve()).lower().encode()).hexdigest()[:16]
-            cap._parent = _JobParent(f"Local\\qma-agents-{digest}", cap)
+            cap._parent = _JobParent(f"Local\\qma-agents-{home_scope(procs_dir)}", cap)
         elif sys.platform == "linux" and _user_systemd():
-            cap._parent = _SliceParent()
+            cap._parent = _SliceParent(procs_dir)
         cap._parent.set_limit(limit_mb)
         return cap
 
@@ -119,12 +120,12 @@ class AgentProcessCap:
         return record is not None and _running(record)
 
     def stop_chat(self, chat: str) -> None:
-        """Kill this chat's whole tree and wait for its CLI to go. Idempotent."""
+        """Kill this chat's whole tree: its per-chat job, its scope, or its process group. Waits
+        for its CLI to go. Idempotent."""
         self._parent.stop(chat)
         record = read_pid_record(pid_path(self.procs_dir, chat))
         if record is not None and _running(record):
-            with contextlib.suppress(OSError):
-                os.kill(record.cli_pid, signal.SIGTERM)
+            _kill_cli(record.cli_pid)
         deadline = time.monotonic() + STOP_WAIT_S
         while self.alive(chat) and time.monotonic() < deadline:
             time.sleep(0.05)
@@ -167,6 +168,20 @@ class AgentProcessCap:
 
 def _running(record: PidRecord) -> bool:
     return process_started(record.cli_pid) == record.cli_started
+
+
+def cli_kill(cli_pid: int, pgid: int | None) -> Literal["killpg", "kill"]:
+    return "killpg" if pgid == cli_pid else "kill"
+
+
+def _kill_cli(pid: int) -> None:
+    with contextlib.suppress(OSError):
+        if sys.platform == "win32":
+            os.kill(pid, signal.SIGTERM)
+        elif cli_kill(pid, os.getpgid(pid)) == "killpg":
+            os.killpg(pid, signal.SIGKILL)
+        else:
+            os.kill(pid, signal.SIGKILL)
 
 
 class _NoParent:
@@ -231,31 +246,30 @@ class _JobParent:
         self._port: int = k.CreateIoCompletionPort(wintypes.HANDLE(-1), None, 0, 1)
         win_check(self._port, "CreateIoCompletionPort")
         link = _CompletionPort(None, self._port)
-        if k.SetInformationJobObject(
+        if not k.SetInformationJobObject(
             self._job, _ASSOCIATE_COMPLETION_PORT, ctypes.byref(link), ctypes.sizeof(link)
         ):
-            threading.Thread(target=self._watch, name="qma-cap-watch", daemon=True).start()
+            error = ctypes.WinError(
+                ctypes.get_last_error(), "watch the parent job; is another holder live?"
+            )
+            k.CloseHandle(self._port)
+            k.CloseHandle(self._job)
+            raise error
+        threading.Thread(target=self._watch, name="qma-cap-watch", daemon=True).start()
 
     def set_limit(self, limit_mb: int | None) -> None:
-        limits = ExtendedLimits()
-        flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if limit_mb is not None:
-            flags |= JOB_OBJECT_LIMIT_JOB_MEMORY
-            limits.JobMemoryLimit = limit_mb * MB
-        limits.BasicLimitInformation.LimitFlags = flags
-        win_check(
-            _kernel32().SetInformationJobObject(
-                self._job, EXTENDED_LIMIT_INFORMATION, ctypes.byref(limits), ctypes.sizeof(limits)
-            ),
-            "SetInformationJobObject",
-        )
+        if limit_mb is None:
+            set_job_limits(self._job, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        else:
+            flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_MEMORY
+            set_job_limits(self._job, flags, limit_mb * MB)
 
     def used_mb(self) -> int | None:
         return _commit(self._job) // MB
 
     def stop(self, chat: str) -> None:
         k = _kernel32()
-        job = k.OpenJobObjectW(JOB_OBJECT_TERMINATE, False, chat_job_name(chat))
+        job = k.OpenJobObjectW(JOB_OBJECT_TERMINATE, False, chat_job_name(self.cap.procs_dir, chat))
         if job:
             k.TerminateJobObject(job, 1)
             k.CloseHandle(job)
@@ -309,7 +323,9 @@ class _JobParent:
         k = _kernel32()
         try:
             for chat in chats:
-                job = k.OpenJobObjectW(JOB_OBJECT_QUERY, False, chat_job_name(chat))
+                job = k.OpenJobObjectW(
+                    JOB_OBJECT_QUERY, False, chat_job_name(self.cap.procs_dir, chat)
+                )
                 if not job:
                     continue
                 held = wintypes.BOOL()
@@ -392,10 +408,14 @@ def _user_systemd() -> bool:
 
 class _SliceParent:
     """`qma-agents.slice` under user systemd. Each launcher runs its CLI in a scope named
-    `qma-chat-<chat>-<launcher pid>` under it."""
+    `<chat_unit_prefix>-<launcher pid>.scope` under it."""
 
     name = SLICE
     os_cap = True
+
+    def __init__(self, procs_dir: Path) -> None:
+        self._procs_dir = procs_dir
+        self._home_units = f"qma-chat-{home_scope(procs_dir)}-"
 
     def set_limit(self, limit_mb: int | None) -> None:
         limit = "infinity" if limit_mb is None else f"{limit_mb}M"
@@ -411,15 +431,17 @@ class _SliceParent:
         return int(shown) // MB if shown.isdigit() else None
 
     def stop(self, chat: str) -> None:
-        _systemctl("stop", f"qma-chat-{chat}-*.scope")
+        _systemctl("stop", f"{chat_unit_prefix(self._procs_dir, chat)}-*.scope")
 
     def last_killed(self) -> str | None:
-        listed = _systemctl("list-units", "--failed", "--plain", "--no-legend", "qma-chat-*")
+        pattern = f"{self._home_units}*"
+        listed = _systemctl("list-units", "--failed", "--plain", "--no-legend", pattern)
         for line in listed.stdout.splitlines():
             unit = line.split(maxsplit=1)[0] if line.strip() else ""
             if _systemctl("show", "-P", "Result", unit).stdout.strip() == "oom-kill":
-                return unit.removeprefix("qma-chat-").removesuffix(".scope").rpartition("-")[0]
+                chat_and_pid = unit.removeprefix(self._home_units).removesuffix(".scope")
+                return chat_and_pid.rpartition("-")[0]
         return None
 
     def close(self) -> None:
-        _systemctl("stop", "qma-chat-*.scope")
+        _systemctl("stop", f"{self._home_units}*.scope")
