@@ -1,12 +1,9 @@
 """`python -m qma.serve`: the QMA process entry point.
 
-Not `python -m qma.harness`. That form imports `qma.harness.__init__` (and through it the
-SDK) before any code of ours runs, so the scrub could not come first. The QMB host's spawn
-target is `qma.serve`.
-
-Order is the invariant:
-1. `qma.boot.scrub_process_env(os.environ)`, stdlib only;
-2. only then import `qma.harness.routes` and call `serve(scrubbed=...)`.
+Order is the invariant: `qma.boot.scrub_process_env(os.environ)` first, then import
+`qma.harness.routes` and call `serve(scrubbed=...)`. What must hold is "scrubbed before the
+first `connect()`", because the SDK reads `os.environ` there, not at import. Importing late
+costs nothing and keeps the rule obvious. The QMB host's spawn target is `qma.serve`.
 """
 
 from __future__ import annotations
@@ -20,7 +17,7 @@ def main() -> None:
     """Scrub, then import the harness and serve:
 
         removed = scrub_process_env(os.environ)
-        from qma.harness.routes import serve      # deliberately after the scrub
+        from qma.harness.routes import serve
         serve(scrubbed=removed)
     """
     raise NotImplementedError

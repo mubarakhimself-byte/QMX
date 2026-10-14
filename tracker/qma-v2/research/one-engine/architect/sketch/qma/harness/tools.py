@@ -22,11 +22,11 @@ from enum import Enum
 from typing import TYPE_CHECKING, Final, Literal, NewType
 
 if TYPE_CHECKING:
-    from claude_agent_sdk import McpSdkServerConfig
+    from claude_agent_sdk import McpSdkServerConfig, McpServerConfig
     from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
 
-    from qma.harness.home import SessionId
+    from qma.harness.home import QmxHome, SessionId
     from qma.harness.money import GateRules
     from qma.harness.profiles import ProfileName, Profiles
 
@@ -39,7 +39,8 @@ class Effect(Enum):
     DOMAIN_WRITE   writes QMX research state (library, backtests, notes). Asks or not per
                    `settings.toml [agents] domain_write` ("allow" | "ask"), UI-editable.
                    `delegate` is DOMAIN_WRITE: it starts a child chat whose own acts face
-                   their own gates, and spend is bounded by the delegate allow-list.
+                   their own gates, and spend is bounded by the delegate allow-list and the
+                   child's [budgets] limits. The gate denies it inside native sub-agents (R33).
     MANAGE         publish, install, schedule, change settings, destructive control-plane
                    ops. Always asks (R35).
     PROPOSE_MONEY  writes an unsigned order proposal. Always asks. Accepted on
@@ -103,7 +104,7 @@ class Grants:
     A grant is created only when the operator answers AllowOnce on that exact call, and is
     consumed by the first handler run that matches it. So an approval never outlives the
     arguments the operator saw: a replay, a changed field, an "allow" rule someone wrote
-    into settings.json, or bypass mode all reach the handler with no grant and are refused.
+    into settings.toml [claude], or bypass mode all reach the handler with no grant and are refused.
     Grants live in memory; a qmx-control restart drops them, matching how asks expire.
     """
 
@@ -139,14 +140,15 @@ def tool_defs(
     raise NotImplementedError
 
 
-def build_server(defs: list[ToolDef], *, grants: Grants, domain_write: DomainWritePolicy) -> McpSdkServerConfig:
+def build_server(defs: list[ToolDef], *, grants: Grants, domain_write: DomainWritePolicy, enforce_grants: bool = True) -> McpSdkServerConfig:
     """`create_sdk_mcp_server(name="qmx", tools=[...])`.
 
     Refuses to build on: a duplicate name; a name or metadata `money.check_tool_surface`
     flags; PROPOSE_MONEY on anything but the broker's `propose_order` (identity, not name).
     Wraps every tool for which `asks(effect, domain_write)` is True so its handler first
     calls `grants.consume(name, args_digest(name, input))` and returns an error result
-    naming the rule when that is False.
+    naming the rule when that is False. `enforce_grants=False` exists for one live check
+    only (`TestMode.grants`).
     """
     raise NotImplementedError
 
@@ -155,12 +157,33 @@ def gate_rules(
     defs: list[ToolDef],
     *,
     domain_write: DomainWritePolicy,
-    protected: tuple,
+    home: QmxHome,
+    keyring_names: frozenset[str],
     broker_hosts: frozenset[str],
 ) -> GateRules:
     """Derive `GateRules` from the same defs: proposal_tools = names with PROPOSE_MONEY;
     mandatory_asks = names where `asks(effect, domain_write)`. Tool names are prefixed
-    `mcp__qmx__`."""
+    `mcp__qmx__`. Protected, secret and personal-home paths come from `home` and the OS
+    user's home, normalized once with `money.normalize_path`."""
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class VettedServers:
+    """External MCP servers that passed `vet_mcp_servers`, as SDK configs, plus the config
+    hash each was vetted under. Only these reach `mcp_servers`; `strict_mcp_config=True`
+    makes the CLI ignore every other MCP config (02a section 7)."""
+
+    configs: Mapping[str, McpServerConfig]
+    vetted_hash: Mapping[str, str]
+
+
+async def vet_mcp_servers(declared: Mapping[str, McpServerConfig], *, previous: VettedServers | None) -> VettedServers:
+    """Before any launch uses them: start each declared server (settings.toml [mcp_servers])
+    with the Python MCP client, list its tools, and run `money.check_tool_surface` on names
+    and metadata. A server that exposes a money act is refused with a `needs_you` block and
+    never launched (A8, B10). Re-vetted when its config hash changes. A tool that a server
+    adds later is still denied by name in the gate."""
     raise NotImplementedError
 
 

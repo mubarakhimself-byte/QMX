@@ -1,34 +1,50 @@
-"""QMX's own Claude home and the harness's on-disk state.
+"""QMX's own Claude homes, the Claude settings QMA passes in code, and on-disk chat state.
 
 Layout under the QMX home (never under the operator's `~/.claude`):
 
-    <qmx_home>/claude/            CLAUDE_CONFIG_DIR for every chat. The CLI keeps the plan
-                                  login, sessions (JSONL), auto memory and its user tier here.
-    <qmx_home>/claude/settings.json   Native Claude settings: permission rules, settings hooks,
-                                  env such as CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, cleanupPeriodDays.
-                                  QMA is its only writer (UI edits and remembered "always" answers).
-    <qmx_home>/claude/CLAUDE.md   QMX-wide rules, re-injected on every request by the CLI.
-    <qmx_home>/chats/<session_id>.json   One `ChatRecord` per chat. Each chat writes only its own file.
-    <qmx_home>/workspaces/        Default working folders, outside any dev repo.
-    <repo>/qmx-agents/plugin/     QMX's shipped skills, agents, commands (read-only, versioned).
+    <qmx_home>/claude/              Plan home. CLAUDE_CONFIG_DIR for plan chats. The CLI keeps
+                                    the plan login here (`.credentials.json`, or a Keychain
+                                    item keyed to this folder on macOS), and the transcripts.
+    <qmx_home>/claude-relayed/      Relayed home. CLAUDE_CONFIG_DIR for key and GPT chats.
+                                    It never holds a login. Its `projects/` is a directory link
+                                    (a junction on Windows) to `claude/projects/`, so the
+                                    transcript folder is the only thing the two homes share and
+                                    a provider switch still resumes the same session.
+    <qmx_home>/chats/<session_id>.json   One `ChatRecord` per chat. Each chat writes only its own.
+    <qmx_home>/procs/<session_id>.json   Pid file, written only by that chat's launcher.
+    <qmx_home>/state/               Exposure report, GPT probe result. Correctness records,
+                                    under the protected paths; not security gates.
+    <qmx_home>/workspaces/          Default working folders, outside any dev repo.
+    <repo>/qmx-agents/plugin/       QMX's shipped skills, agents, commands (read-only, versioned).
 
-Single source of truth per setting:
-- Claude-native behaviour (rules, hooks, CLI env knobs) lives in `settings.json`.
-- QMX-only values (provider rows, background cap, live-chat cap, agent memory cap,
-  domain-write ask policy, delegate allow-list)
-  live in `settings.toml` through `ControlService`.
-The two key sets are disjoint, so nothing is hand-synced.
+Settings in code (interrogate verdict, premise change). QMA writes no `settings.json` that
+the CLI loads, and `setting_sources=[]` means the CLI loads none from either home. Every
+Claude setting reaches the CLI as one inline JSON string through the SDK `settings` option
+(the `--settings` "flag settings" layer, above user, project and local files; SDK types.py
+and the Claude Code settings page, read 2026-10-14). An inline string lives only in the CLI's
+arguments, so nothing an agent edits during a session can change it. A ConfigChange command
+hook in the same JSON blocks every settings change during a session as a second guard.
+
+Single source per setting:
+- Operator-editable Claude settings (permission rules, operator hooks, a few CLI env knobs)
+  live in `settings.toml [claude]`, written only through `ControlService`, validated by
+  `parse_claude_settings` on write and again at every launch.
+- Fixed Claude settings (`forceLoginMethod`, `cleanupPeriodDays`, the ConfigChange guard)
+  live in `code_settings` and cannot be edited.
+- QMX-only values (providers, budgets, caps, policies) live in other `settings.toml` sections.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from qma.harness.launch import ChatConfig  # noqa: F401  (type only in the sketch)
+
+if TYPE_CHECKING:
+    from qmx_control.service import ControlService
 
 SessionId = str  # the qmx-control session UUID; also the SDK session_id (see chat.py)
 
@@ -38,11 +54,25 @@ class QmxHome:
     root: Path
 
     @property
-    def claude_dir(self) -> Path:
+    def plan_dir(self) -> Path:
+        """`<root>/claude`. Holds the plan login."""
+        raise NotImplementedError
+
+    @property
+    def relayed_dir(self) -> Path:
+        """`<root>/claude-relayed`. Never holds a login."""
         raise NotImplementedError
 
     @property
     def chats_dir(self) -> Path:
+        raise NotImplementedError
+
+    @property
+    def procs_dir(self) -> Path:
+        raise NotImplementedError
+
+    @property
+    def state_dir(self) -> Path:
         raise NotImplementedError
 
     @property
@@ -51,86 +81,87 @@ class QmxHome:
 
     @property
     def plugin_dir(self) -> Path:
-        """QMX's shipped plugin folder (skills, agents, commands, settings hooks)."""
+        """QMX's shipped plugin folder (skills, agents, commands)."""
         raise NotImplementedError
 
 
-# --- settings.json: an external file the agent could touch, so it is parsed at every launch ---
+def ensure_homes(home: QmxHome) -> None:
+    """Create both homes and the `projects/` link from the relayed home to the plan home.
+    Idempotent. Raises `LaunchRefused` if a login file is found in the relayed home."""
+    raise NotImplementedError
 
-FORBIDDEN_SETTINGS: Final[frozenset[str]] = frozenset(
+
+# --- Claude settings, passed in code ---
+
+CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset({"permissions", "env", "hooks"})
+"""Top-level keys allowed in `settings.toml [claude]`. Everything else refuses, including
+`apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins` and marketplaces.
+`permissions` may hold only `allow`, `ask`, `deny` and `additionalDirectories`."""
+
+CLAUDE_ENV_NAMES: Final[frozenset[str]] = frozenset(
     {
-        "apiKeyHelper",  # would switch billing to an API key
-        "awsAuthRefresh",
-        "awsCredentialExport",
-        "forceLoginMethod",
-        "disableAllHooks",  # refused regardless; check S20 records whether it would silence SDK callback hooks
+        "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH",
+        "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS",
+        "BASH_DEFAULT_TIMEOUT_MS",
+        "BASH_MAX_TIMEOUT_MS",
+        "MCP_TOOL_TIMEOUT",
+        "CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS",
     }
 )
-"""Top-level keys QMA refuses in `settings.json`. Paired with `launch.ROUTING_KEYS`,
-which may not appear under `env`."""
+"""The only names allowed under `[claude] env`. No routing, proxy, CA or wrapper name can
+be written there, because none is listed."""
+
+CLEANUP_PERIOD_DAYS: Final = 3650
+"""Transcripts outlive the CLI's 30-day default sweep. The settings reference says `0`
+fails validation and suggests a large value such as 3650."""
 
 
 @dataclass(frozen=True)
-class UserSettings:
-    """The parsed `settings.json`. Unknown keys are preserved untouched (forward compatible)."""
+class ClaudeSettings:
+    """The validated `settings.toml [claude]` section."""
 
     raw: Mapping[str, object]
 
-    @property
-    def permission_rules(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """(allow, deny) rule strings. Read by `build_options` only when the user tier
-        leaks and the rules must be passed in code."""
-        raise NotImplementedError
-
 
 class LaunchRefused(RuntimeError):
-    """The QMX Claude home is in a state that could leak billing, credentials or money.
+    """A state that could leak billing, credentials or money. Raised before any CLI starts.
+    The chat shows a `needs_you` block with the reason."""
 
-    Raised before any CLI process starts. The chat shows a `needs_you` block with the reason.
+
+def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
+    """Allow-list validation: keys in `CLAUDE_SETTING_KEYS`, `env` names in
+    `CLAUDE_ENV_NAMES`, rule strings that parse. Anything else raises `LaunchRefused`."""
+    raise NotImplementedError
+
+
+def code_settings(user: ClaudeSettings, *, launcher: Path) -> str:
+    """The one inline JSON string for the SDK `settings` option. Pure.
+
+    The operator's validated keys, then these fixed values, which win:
+        forceLoginMethod   "claudeai" (no Console login, so no API billing through /login)
+        cleanupPeriodDays  CLEANUP_PERIOD_DAYS
+        env                CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH "1" unless the operator set it
+        hooks.ConfigChange [{"hooks": [{"type": "command", "command": <launcher>,
+                             "args": ["--qma-block-config-change"], "timeout": 10}]}]
+    The ConfigChange entry has no matcher, so it blocks every source the CLI lets a hook
+    block (`policy_settings` cannot be blocked, by design of the CLI).
     """
-
-
-def load_user_settings(home: QmxHome) -> UserSettings:
-    """Parse `settings.json`. Raise `LaunchRefused` on any `FORBIDDEN_SETTINGS` key or any
-    `launch.ROUTING_KEYS` entry under `env`. Called on every launch, so an edit made by an
-    agent's Bash between chats is caught before it takes effect."""
     raise NotImplementedError
 
 
-def write_user_settings(home: QmxHome, patch: Mapping[str, object]) -> UserSettings:
-    """The only writer of `settings.json`. Used by the UI route and by remembered "always"
-    answers. Validates with the same rules as `load_user_settings`, then writes atomically
-    (temp file plus `os.replace`). Running chats pick it up at their next launch.
-    An allow rule naming a QMX tool whose effect asks is accepted but has no power: the
-    tool handler still needs a digest grant (`tools.Grants`)."""
+def remember_rule(control: ControlService, rule: str) -> None:
+    """Append an allow rule to `settings.toml [claude] permissions.allow` through
+    `ControlService` (the one writer), after `parse_claude_settings` accepts the result.
+    Running chats pick it up at their next launch; `chat.py` also hands the rule back to
+    the live CLI with destination "session"."""
     raise NotImplementedError
 
 
-# --- user-tier proof (02a section 6: settings follow CLAUDE_CONFIG_DIR; skills, agents and
-# commands are UNCONFIRMED) ---
-
-
-class UserTier(StrEnum):
-    ISOLATED = "isolated"
-    """S7 passed for this CLI version: a marker skill in `claude_dir` appears in the init
-    message and none of the skill names in his `~/.claude/skills` do."""
-    LEAKS = "leaks"
-    """S7 saw one of his names. `build_options` then uses `setting_sources=[]` and passes
-    the `settings.json` rules in code."""
-
-
-def user_tier(home: QmxHome, cli_version: str) -> UserTier | None:
-    """The stored S7 result for this CLI version, or None when it has not run yet.
-    `Harness.open` runs `probe_user_tier` when this is None, before any chat launches."""
-    raise NotImplementedError
-
-
-async def probe_user_tier(home: QmxHome, cli_version: str) -> UserTier:
-    """Check S7, read-only on his side. Writes a marker skill under `claude_dir`, starts
-    one bare CLI with the plan `launch_env` and `setting_sources=["user"]`, reads the init
-    message's skill list, and compares it with a directory listing (names only) of his
-    `~/.claude/skills`. Never writes, opens or modifies anything under `~/.claude`.
-    Stores and returns the result. Idempotent per CLI version."""
+def plan_auth_method(home: QmxHome, settings_json: str) -> str:
+    """Run the bundled CLI's `auth status` with CLAUDE_CONFIG_DIR = `plan_dir` and the same
+    inline settings. Parse and return the auth method only, never the token. `chat._connect`
+    refuses a plan launch unless it is the claude.ai subscription method (the exact string
+    is recorded by S2)."""
     raise NotImplementedError
 
 
@@ -144,14 +175,16 @@ type TurnState = Literal["idle", "running"]
 class ChatRecord:
     """What QMA must remember about a chat across restarts. Nothing else.
 
-    The transcript is the SDK's own JSONL under `claude_dir` (no QMX copy). The session
-    id is shared with qmx-control and the SDK, so there is no id mapping to keep in sync.
+    The transcript is the SDK's own JSONL under the shared `projects/` folder (no QMX copy).
+    The session id is shared with qmx-control and the SDK, so there is no id mapping.
     """
 
     session_id: SessionId
     config: ChatConfig
     started: bool
-    """False until the first CLI launch succeeds. Decides `session_id=` versus `resume=`."""
+    """False until the first `ResultMessage` of this chat. Decides `session_id=` versus
+    `resume=`. A connect, crash or relaunch before the first result leaves it False, so the
+    next send starts the session fresh instead of resuming a transcript that never existed."""
     turn: TurnState
     """Written "running" before a prompt is sent and "idle" on its ResultMessage.
     "running" found at boot means the outcome is unknown."""
@@ -183,13 +216,13 @@ class DoctorLine:
 def doctor(home: QmxHome, *, scrubbed: tuple[str, ...]) -> list[DoctorLine]:
     """One read-only page of facts the operator or a check script can read.
 
-    Lines: SDK and bundled CLI versions (pinned build has a win_amd64 wheel, CLI at least
-    2.1.248 for `verbatim_prompts`); claude_dir location and that it is not `~/.claude`;
-    plan login present (via `claude auth status` run with CLAUDE_CONFIG_DIR, output parsed
-    for authMethod only, never the token); settings.json parse result; user tier for this
-    CLI version; managed-policy files on Windows, macOS and Linux (HOW gotcha 7);
-    the names the boot scrub removed, never values; each profile's last provider probe;
-    the GPT probe result. The exposure report and money posture lines are added by
-    `Harness.doctor`, which runs the probe (money.py).
+    Lines: SDK and bundled CLI versions (win_amd64 wheel, CLI at least 2.1.248); both homes
+    and that neither is `~/.claude`; no login file in the relayed home; plan auth method
+    (subscription or not); `[claude]` parse result; the plugins and MCP servers the last
+    connect reported; managed-policy files on Windows, macOS and Linux (HOW gotcha 7); the
+    names the boot scrub removed, never values; whether Git Bash resolves on Windows
+    (`CLAUDE_CODE_GIT_BASH_PATH` or the default); the launcher cap per OS; each profile's
+    last provider probe; the GPT probe result; each departure from vanilla Claude Code.
+    The stored exposure report and money posture are added by `Harness.doctor`.
     """
     raise NotImplementedError

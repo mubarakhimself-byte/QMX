@@ -7,6 +7,8 @@ Flow: `client_id=dynamic_agent_client`, `agent_name_hint="QMA"`, a persisted
 Storage: the refresh token and host id go in the OS secret store under `qmx/chatgpt`
 (local and under the user's control). The access token stays in memory only.
 Background use needs express consent (SIWC terms), stored as a flag the console asks for.
+It is enforced at grant time: `Relay.grant(..., unattended=True)` refuses a GPT grant unless
+`background_consent` is True (B17).
 """
 
 from __future__ import annotations

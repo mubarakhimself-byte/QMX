@@ -30,7 +30,7 @@ B and C reached the same structural gain from opposite directions: no provider k
 
 ## Judge corrections applied to A
 
-1. Settings hooks claim against `setting_sources=[]`. Now `["user"]` from the start, since settings move with `CLAUDE_CONFIG_DIR` (02a section 6). S7 tests only the unconfirmed part (skills, agents, commands), read-only, and on `LEAKS` the rules from `settings.json` are passed in code so UI edits still hold. `home.UserTier`, `launch.build_options`.
+1. Settings hooks claim against `setting_sources=[]`. Now `["user"]` from the start, since settings move with `CLAUDE_CONFIG_DIR` (02a section 6). S7 tests only the unconfirmed part (skills, agents, commands), read-only, and on `LEAKS` the rules from `settings.json` are passed in code so UI edits still hold. `home.UserTier`, `launch.build_options`. Superseded by the interrogate premise change below: settings now pass in code with `setting_sources=[]`, and `UserTier` is gone.
 2. Broker scope stated as fact. `money.py` layer 1 is now conditional on S27 (was M1), and says the scope names come from the runner's own knowledge.
 3. "Unrepresentable" overclaim. `ProbePassed` now has a module-private mint guard plus the CI grep, and both DESIGN and `probe.py` say "guarded, not unrepresentable".
 4. Background cap staleness. `usage.BackgroundCap.allows` and DESIGN now say the cap acts on the last `RateLimitEvent`, which fires only on transitions, so it is best effort and can overshoot (03 GB-9).
@@ -51,3 +51,46 @@ B and C reached the same structural gain from opposite directions: no provider k
 ## Accepted tradeoff, not a question
 
 In month one the trading node runs on this same PC (R25). A trading-capable credential is then reachable from agent Bash, so the measured posture is SPEED_BUMP. The operator accepted the speed bump on 10-13 (R21). The usage page states it from the probe result. The U10 zone, or moving the trading credential to the node, is what turns it STRUCTURAL.
+
+## Interrogate changes
+
+2026-10-14. The verdict is `../interrogate/VERDICT.md`. One premise failed four times (A2, A3, A5, B3): QMA wrote a `settings.json` the agent can write, the CLI reloads it mid-session, and QMA trusted its launch-time check. That premise is gone. Settings pass in code through the SDK `settings` option with `setting_sources=[]`, plugins through `plugins`, MCP through `mcp_servers` with `strict_mcp_config`. A ConfigChange command hook blocks settings changes as a second guard.
+
+Removed by the premise change: `home.UserTier`, `home.user_tier`, `home.probe_user_tier`, the `LEAKS` branch of `build_options`, `home.FORBIDDEN_SETTINGS`, `home.UserSettings`, `home.load_user_settings`, `home.write_user_settings`, `launch.ROUTING_KEYS`, `boot.SCRUB_PREFIXES`, `money.money_servers` and the init-message toggle, `project.SessionReady`, `procs.adopt_tree`, `procs.new_child_pid`, `ChatDeps.connect_lock`, `ChatDeps.tier`, `profiles.is_first_party`. The open questions on `UserTier`, on "" as unset, on `disableAllHooks` and on pid adoption went with them.
+
+Each act-on item, with the file and symbol that changed. All paths are under `sketch/qma/`. Check ids are in DESIGN section 5.
+
+| # | Finding | What changed |
+|---|---|---|
+| 1 | Plan token readable (A1, B1) | `harness/money.py` `GateRules.secret_paths`, `personal_home`, `gate` steps 4 and 6, `deny_rules` (Read, Edit, Write on login files). `harness/relay.py` `SECRET_PREFIX` and the egress stop in `Relay.handle`. `harness/project.py` `redact`, `TOKEN_PATTERN`. `harness/home.py` `QmxHome.relayed_dir`, `ensure_homes` (credential-free home, only `projects/` shared). `harness/launch.py` `RelayedLaunch`, `launch_env`. Checks S21, S21a to S21e. |
+| 2 | Live agent-writable `settings.json` (A2, B3, A5) | `harness/home.py` `ClaudeSettings`, `parse_claude_settings`, `code_settings`, `remember_rule`. `harness/launch.py` `build_options` (`setting_sources=[]`, `settings=`, `plugins=`). `launcher.py` `BLOCK_CONFIG_CHANGE`. `harness/chat.py` `Chat._connect` step 7 (plugins check). Checks S5, S6, S20, S33. |
+| 3 | Proxy, CA and wrapper variables (A3) | `boot.py` `KEEP_NAMES` (allow-list). `harness/launch.py` `assert_scrubbed` (same list), `launch_env` (`NO_PROXY`). `harness/home.py` `CLAUDE_SETTING_KEYS`, `CLAUDE_ENV_NAMES`. Checks S19, S20. |
+| 4 | `forceLoginMethod` (A4) | `harness/home.py` `code_settings` (`"claudeai"`), `plan_auth_method`. `harness/chat.py` `Chat._connect` step 4. `harness/usage.py` `UsageLedger.hard_stop`. `harness/project.py` `Limits.credits_required`. `console.py` `/login`. Checks S2, S10. |
+| 5 | Writes to his `~/.claude` (A6, B8) | `harness/money.py` `GateRules.personal_home`, `gate` steps 4 and 6, `deny_rules`. DESIGN "Isolation, both directions" states the speed bump. Checks S7, S21. |
+| 6 | Leak check for skills only (A7) | DESIGN S7 rewritten: a throwaway home with every marker kind, read through `get_server_info()` and echo-server bodies. `home.probe_user_tier` deleted. S3 reads `get_server_info()`. |
+| 7 | Money MCP off only after init (A8, B10) | `harness/tools.py` `vet_mcp_servers`, `VettedServers`. `harness/launch.py` `build_options` (`external_mcp`, `strict_mcp_config=True`). `harness/chat.py` `Chat._connect` step 7. `harness/money.py` `check_tool_surface` covers external servers. Check S35. |
+| 8 | Hook timeout and busy loop (A9) | `harness/launch.py` `GATE_TIMEOUT_S`, `HookMatcher(timeout=...)` in `build_options`. `harness/money.py` `gate` (pure, no I/O), `pre_tool_use`. Check S38. |
+| 9 | Windows path matching (A10, B7) | `harness/money.py` `normalize_path`, `GateRules.case_insensitive`, `keyring_names` (exact names), `deny_rules` (`//c/...`). Checks S6 (on Windows, negative case), S6b. |
+| 10 | Futures resolved off-loop (A11) | `harness/routes.py` docstring (every handler `async def`). `harness/harness.py` `Harness.answer` docstring. DESIGN call site 2. Check S15. |
+| 11 | Usage counted twice (A12) | `harness/chat.py` `Chat._read` (`TurnUsage` journaled for plan chats only). `harness/relay.py` `RelayUsage` (both lanes). `harness/project.py` `TurnUsage` docstring. `harness/usage.py` module docstring. Check S24. |
+| 12 | GPT probe cannot reach P6 and P7 (A13) | `harness/relay.py` `Relay.probe_grant`. `gpt/probe.py` `ProbeRun`, `run_probe(session, relay)`, stored result under `state/`. `harness/home.py` `QmxHome.state_dir`. Check S16. |
+| 13 | Pid race and Linux cgroups (A14, B11) | `launcher.py` (new: `main`, per-OS join before the CLI starts). `harness/procs.py` `AgentProcessCap` (`handle_name`, `stop_chat`, `report().last_killed`). `harness/launch.py` `build_options` (`cli_path=launcher`), `launch_env` (`QMA_*` inputs). Check S30. |
+| 14 | Orphan CLIs after a crash (A15) | `launcher.py` kill-on-close per OS and the pid file. `harness/procs.py` `alive`, `kill_orphans`. `harness/home.py` `QmxHome.procs_dir`. `harness/harness.py` `Harness.open` step 3. `harness/chat.py` `Chat._connect` step 1. Check S30b. |
+| 15 | Background asks and a full table (A16, B2) | `harness/launch.py` `unattended`, `Child.unattended`. `harness/chat.py` bounded ask wait (`unattended_ask_seconds`). `harness/harness.py` `ChatTableFull`, `Harness.send`, `_delegate` (refuse at once). `harness/__init__.py` exports `ChatTableFull`. Checks S31, S39. |
+| 16 | Tool search and quirks on GPT (A17, B21) | `harness/profiles.py` `QUIRK_ENV_KEYS` (`ENABLE_TOOL_SEARCH`), `GPT_QUIRKS`, `GptPlan.quirks`, `Quirks.env` default for key rows. `harness/launch.py` `launch_env`. Checks S8, S16. |
+| 17 | Family guard and router slugs (A18, B15) | `harness/profiles.py` `resolve_model`, `ROUTER_SLUGS`, `OPENAI_REASONING_SEGMENT`, `FORBIDDEN_ON_KEY`. `harness/relay.py` served-model check in `Relay.handle`, `guard_model`. Checks S22, S41. |
+| 18 | Exposure probe fails open (A19, B6) | `harness/money.py` `keyring_inventory`, `NON_BROKER_REFS`, `money_posture` (reachability removed), `ExposureFinding.reachable` may be None. Check S26. |
+| 19 | Scrub breaks Git Bash (A20, B12) | `boot.py` `KEEP_NAMES` keeps `CLAUDE_CODE_GIT_BASH_PATH` and drops proxy names. `harness/home.py` `doctor` (Git Bash line). Check S19. |
+| 20 | Relay path and query string (A22, B20) | `harness/relay.py` module docstring (parsed path, query forwarded), `Relay.handle(path, query, ...)`, `swap_auth(style)`. `harness/profiles.py` `WireQuirks.auth_header`. Check S22. |
+| 21 | Honest layering (A25, B14) | `harness/money.py` module docstring, `SHELL_TOOLS` (Monitor added). `harness/relay.py` module docstring (value restated). DESIGN "The money-safety mechanism, honestly layered" and tradeoffs. `harness/usage.py` `UsagePage.exposure` lists provider keys. |
+| 22 | Relaunch kills background work (A26) | `harness/chat.py` `Quote.background_tasks`, `Chat.quote`, `Chat.apply`. `console.py` `/provider`. Check S40. |
+| 23 | Model id parsing (A28) | `harness/profiles.py` `resolve_model`. `harness/launch.py` `ChatConfig.model`. `harness/chat.py` `Chat.quote`. `harness/relay.py` `guard_model`. Check S41. |
+| 24 | Sub-agents can call `delegate` (B4) | `harness/money.py` `gate` step 1 (`agent_id`). `harness/tools.py` `Effect` docstring. DESIGN deletion step 2 (plugin agents omit it). Check S11. |
+| 25 | 50% cap and overage (B5) | `harness/usage.py` `BackgroundCap.allows` docstring, `UsageLedger.hard_stop`, `UsagePage.background_cap_note` and `hard_stop`. `harness/chat.py` `Chat.send`, `ChatDeps.on_plan_limits`. Check S10. |
+| 26 | Per-layer checks (B9) | `harness/launch.py` `TestMode`. `harness/harness.py` `Harness.open(test=...)`. `harness/tools.py` `build_server(enforce_grants=...)`. `harness/project.py` `project(redact_tokens=...)`. `harness/__init__.py` exports `TestMode`. Checks S6a, S6b, S21a to S21d, S29a. |
+| 27 | `started=True` bricks a chat; 30-day pruning (B13) | `harness/home.py` `ChatRecord.started` (first `ResultMessage`), `CLEANUP_PERIOD_DAYS`, `code_settings`. `harness/chat.py` `Chat._read`. Check S14. |
+| 28 | Probe prompts on macOS (B16) | `harness/money.py` `run_exposure_probe` (no Keychain call; boot and on demand), `keyring_inventory`. `harness/harness.py` `Harness.doctor(probe=...)`. `harness/routes.py` `POST /api/doctor/probe`. Check S26. |
+| 29 | SIWC background consent (B17) | `harness/relay.py` `Relay.grant(..., unattended=...)`, `GrantRefused`. `gpt/siwc.py` module docstring. `harness/launch.py` `unattended`. Check S16. |
+| 30 | S9 and S21 cannot run (B22) | `harness/launch.py` `TestMode.loopback_http_provider`. `harness/profiles.py` `parse_profiles(allow_loopback_http=...)`, `BaseUrl`. Checks S9, S21. |
+
+Consider items A23, A24, B18 and B23 are one line each in DESIGN "Open questions". Noted items A21, A27 and B19 are recorded in the `serve.py`, `relay.GrantSecret` and `chat.py` docstrings.

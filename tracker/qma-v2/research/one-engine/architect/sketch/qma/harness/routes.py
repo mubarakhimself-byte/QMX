@@ -9,20 +9,27 @@ could read it from the keyring; `money.gate` denies Bash text naming `qmx/` or t
 home as a tripwire, not a proof. Money does not depend on this principal (money.py), which
 is why thin native accepts it.
 
+Every handler is `async def`, so it runs on the harness's event loop. A plain `def` handler
+would run in FastAPI's threadpool and resolve asyncio futures from another thread (A11).
+
 Routes:
     POST /api/chats                         NewChat           -> {session_id}
-    POST /api/sessions/{sid}/turns          {text}            -> 202   (always OperatorText)
+    POST /api/sessions/{sid}/turns          {text}            -> 202 | 409 ChatTableFull
+                                                                 (always OperatorText)
     POST /api/sessions/{sid}/interrupt                        -> 202
     POST /api/sessions/{sid}/quote          ConfigChange      -> Quote (warning shown first)
     POST /api/sessions/{sid}/apply          {quote_id}        -> 200 | 409 stale
     POST /api/approvals/{ask_id}            Answer            -> {status}
     GET  /api/sessions/{sid}/live           SSE of Delta (not stored)
     GET  /api/usage                         UsagePage: windows, RunIndex sums, cap, money posture, exposure
-    GET  /api/doctor                        DoctorLine list (runs the exposure probe)
-    GET/PUT /api/claude-settings            settings.json through home.write_user_settings
+    GET  /api/doctor                        DoctorLine list from stored results (no probe)
+    POST /api/doctor/probe                  runs the exposure probe, then returns the list
+    GET/PUT /api/claude-settings            settings.toml [claude]: `home.parse_claude_settings`,
+                                            then `ControlService.settings_put`
 Durable blocks keep using the existing `GET /api/events/sessions?subject=<sid>` SSE.
 
-The turn route is the only producer of `OperatorText`. Scheduled jobs and other QMA code
+The turn route is the only producer of `OperatorText`. That is route provenance, not author
+provenance: any holder of the bearer can call it (B19, noted). Scheduled jobs and other QMA code
 call `Harness.send` with `InjectedText` directly, never through this route.
 The relay is not mounted here. It has its own loopback listener (relay.py).
 """

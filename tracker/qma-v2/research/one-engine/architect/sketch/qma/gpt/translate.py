@@ -83,7 +83,7 @@ type AnthropicErrorType = Literal["invalid_request_error", "rate_limit_error", "
 
 
 def map_error(openai_error: Mapping[str, object]) -> tuple[int, AnthropicErrorType, str]:
-    """`subscription_sharing_usage_limit_exceeded` -> 429 rate_limit_error (the GPT profile
+    """`subscription_sharing_usage_limit_exceeded` -> 429 rate_limit_error (`profiles.GPT_QUIRKS`
     sets a low CLAUDE_CODE_MAX_RETRIES so the CLI does not hammer a plan limit);
     `..._unsupported_capability` -> 400 naming `error.param`; `..._user_not_eligible` and
     `..._route_not_supported` -> 403 permission_error. Never retried onto another billing

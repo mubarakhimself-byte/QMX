@@ -1,9 +1,9 @@
 """One chat: one `ClaudeSDKClient`, one CLI process while live, one reader task.
 
-Identity. The chat's qmx-control session id is passed to the SDK as `session_id` on the
-first launch and as `resume` afterwards. The SDK transcript, the qmx-control block log and
-the chat record share one key, so there is no mapping table and no way to resume into a
-silently new session: a missing transcript is an error, not a fresh start.
+Identity. The chat's qmx-control session id is passed to the SDK as `session_id` until the
+chat's first `ResultMessage`, and as `resume` afterwards. The SDK transcript, the qmx-control
+block log and the chat record share one key, so there is no mapping table. Once a chat has
+started, a missing transcript is an error, not a fresh start.
 
 Lifecycle (a small state machine, one owner):
 
@@ -21,36 +21,41 @@ is per chat, so chats never share ask state. For a QMX tool whose `Effect` asks,
 AllowOnce answer also records a `tools.Grant` for the digest of the exact final input in
 this chat's own `Grants`; the tool handler consumes it.
 
+An Interactive chat waits for the answer with no timeout, as Claude Code does. An unattended
+chat (`launch.unattended`) waits at most `unattended_ask_seconds` (settings.toml [budgets],
+UI-editable), then rejects with "the operator did not answer in time" and marks the block
+expired. So an unattended ask can never pin a CLI and its chat slot forever (A16, B2).
+
 Prompts. Who wrote the text is in its type. `OperatorText` is what the operator typed;
 slash commands and `@path` work, as in Claude Code. `InjectedText` is anything QMA built
 from news, files or tool output. A non-Interactive chat launches with
 `verbatim_prompts=True` (launch.verbatim), so neither kind can dispatch a slash command,
 a `/skill` or an `@path` read there. An Interactive chat is never verbatim, so it refuses
-`InjectedText` outright.
+`InjectedText` outright. `OperatorText` means "came through the turn route", which any
+holder of the bearer can call (B19, noted).
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from qma.harness.launch import ChatConfig, ConfigChange
 
 if TYPE_CHECKING:
-    import asyncio
-
     from claude_agent_sdk import ClaudeSDKClient
     from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny, ToolPermissionContext
     from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
 
-    from qma.harness.home import ChatRecord, QmxHome, SessionId, UserTier
+    from qma.harness.home import ChatRecord, QmxHome, SessionId
+    from qma.harness.launch import TestMode
     from qma.harness.procs import AgentProcessCap
     from qma.harness.profiles import Profiles
     from qma.harness.project import Delta
     from qma.harness.relay import Relay
-    from qma.harness.tools import Delegate, DomainWritePolicy
+    from qma.harness.tools import Delegate, DomainWritePolicy, VettedServers
     from qma.harness.usage import BackgroundCap, UsageLedger
 
 
@@ -99,9 +104,10 @@ class AllowOnce:
 
 @dataclass(frozen=True)
 class AllowAlways:
-    """Allow and remember, for built-in tools and QMX tools that do not ask. QMA writes the
-    CLI's suggested rule into settings.json itself (one writer) and returns it to the CLI
-    with destination "session" for this process. Not offered for asking QMX tools."""
+    """Allow and remember, for built-in tools and QMX tools that do not ask. QMA appends the
+    CLI's suggested rule to `settings.toml [claude]` (`home.remember_rule`, one writer) and
+    returns it to the CLI with destination "session" for this process. Not offered for
+    asking QMX tools."""
 
 
 @dataclass(frozen=True)
@@ -121,18 +127,20 @@ type Answer = AllowOnce | AllowAlways | Reject | Answers
 
 type AnswerStatus = Literal["resolved", "already_answered", "expired", "invalid", "unknown"]
 """Idempotent: a second answer to the same ask is `already_answered`, not an error.
-An ask whose process ended (restart, reap) is `expired`, shown with "re-run from here".
-`invalid` means the answer does not fit the ask: AllowAlways on a QMX tool whose effect
-asks (those approvals are one-shot and bound to arguments), or Answers to a tool ask."""
+An ask whose process ended (restart, reap) or whose unattended wait ran out is `expired`,
+shown with "re-run from here". `invalid` means the answer does not fit the ask: AllowAlways
+on a QMX tool whose effect asks (those approvals are one-shot and bound to arguments), or
+Answers to a tool ask."""
 
 
 @dataclass(frozen=True)
 class Quote:
-    """The cost warning that must come before a cache-resetting change (01 req 6).
+    """The warning that must come before a cache-resetting or work-stopping change (01 req 6).
 
     `apply` accepts only the id of a quote this chat issued, so no code path can switch
-    provider or model without the warning having been produced first. `epoch` is the chat's turn counter when quoted; a quote from an older
-    epoch is refused, so a warning cannot be reused after the context grew.
+    provider or model without the warning having been produced first. `epoch` is the chat's
+    turn counter when quoted; a quote from an older epoch is refused, so a warning cannot be
+    reused after the context grew.
     """
 
     id: str
@@ -141,8 +149,11 @@ class Quote:
     new: ChatConfig
     recomputed_tokens: int
     """Context tokens the next request sends uncached, from the last turn's usage."""
+    background_tasks: int
+    """Background Bash and sub-agent tasks running when quoted. A relaunch stops them, so
+    the warning names them, and `apply` refuses if more are running than were quoted."""
     warning: str | None
-    """None when the change keeps the cache (a permission-mode change)."""
+    """None when the change keeps the cache and stops nothing (a permission-mode change)."""
     epoch: int
 
 
@@ -161,9 +172,10 @@ class Chat:
 
     async def send(self, prompt: Prompt) -> None:
         """Refuse `InjectedText` with `UntrustedPrompt` unless `launch.verbatim(kind)`.
+        A plan chat refuses while `UsageLedger.hard_stop()` gives a reason (overage or
+        `credits_required`). A Background chat refuses when `BackgroundCap.allows` is False.
         Connect if Cold, write turn "running", then `client.query(prompt.text)`. While a
-        turn runs, the SDK queues the message (streaming input), like typing into Claude
-        Code. A Background chat refuses here when `BackgroundCap.allows` is False."""
+        turn runs, the SDK queues the message (streaming input), like typing into Claude Code."""
         raise NotImplementedError
 
     async def interrupt(self) -> None:
@@ -175,16 +187,17 @@ class Chat:
         raise NotImplementedError
 
     def quote(self, change: ConfigChange) -> Quote:
-        """Every change goes through a quote, so there is one path. `warning` is None when
-        `launch.resets_cache` is False (a mode change); the caller may then apply at once."""
+        """Every change goes through a quote, so there is one path. The new model is checked
+        with `profiles.resolve_model` here, so a change the relay would refuse never gets a
+        quote. `warning` names the uncached tokens and any running background tasks."""
         raise NotImplementedError
 
     async def apply(self, quote_id: str) -> None:
-        """Look the quote up in this chat's own table; refuse an unknown id or a stale epoch
-        (`QuoteStale`). Run `launch.classify_change` steps: SET_MODE
-        and SET_MODEL use the native client setters; RELAUNCH disconnects and connects with
-        the new options and `resume=session_id` at a turn boundary. Write the new config to
-        the chat record, then a block that names the change."""
+        """Look the quote up in this chat's own table; refuse an unknown id, a stale epoch, or
+        more running background tasks than quoted (`QuoteStale`). Run
+        `launch.classify_change` steps: SET_MODE and SET_MODEL use the native client setters;
+        RELAUNCH closes and connects with the new options and `resume=session_id` at a turn
+        boundary. Write the new config to the chat record, then a block that names the change."""
         raise NotImplementedError
 
     def live(self) -> AsyncIterator[Delta]:
@@ -192,8 +205,8 @@ class Chat:
         raise NotImplementedError
 
     async def close(self) -> None:
-        """Disconnect, revoke this chat's relay grant, drop its grants. Pending asks become
-        `expired`. Idempotent."""
+        """Disconnect, stop this chat's launcher tree (`procs.stop_chat`), revoke its relay
+        grant, drop its grants. Pending asks become `expired`. Idempotent."""
         raise NotImplementedError
 
     @property
@@ -205,21 +218,34 @@ class Chat:
     # --- private, sketched for the reader ---
 
     async def _connect(self) -> ClaudeSDKClient:
-        """Under the harness's connect lock:
-        load_user_settings (refuse) -> assert_scrubbed -> Launch (PlanLaunch, or
-        RelayedLaunch with `relay.grant(session_id, profile)`) -> launch_env ->
-        tool_defs/build_server(grants)/gate_rules -> build_options ->
-        ClaudeSDKClient(options).connect() -> procs.adopt_tree(new CLI pid), before any
-        prompt. On the init message: switch off money MCP servers, record `started=True`.
+        """In order, each step able to refuse before any prompt goes out:
+        1. `procs.alive(session_id)`: an old CLI for this chat is still running -> refuse.
+        2. `home.parse_claude_settings` -> `home.code_settings` (LaunchRefused on a bad key).
+        3. `launch.assert_scrubbed(os.environ)`.
+        4. Launch: PlanLaunch after `home.plan_auth_method` reports the subscription method
+           (LaunchRefused otherwise), or RelayedLaunch with
+           `relay.grant(session_id, profile, unattended=launch.unattended(kind))`.
+        5. `launch_env` -> `tool_defs` / `build_server(grants)` / `gate_rules` ->
+           `build_options(cli_path=launcher, settings=..., setting_sources=[], ...)`.
+        6. `ClaudeSDKClient(options).connect()`. The launcher has already put the CLI under
+           the OS limits.
+        7. `get_server_info()` and `get_mcp_status()`: the plugins must be exactly the QMX
+           plugin and the MCP servers exactly `qmx` plus the vetted ones. Anything else
+           (a plugin or mod someone installed into a home, a server that appeared) closes the
+           chat with a `needs_you` block, before the first prompt.
         A relaunch revokes the old grant first."""
         raise NotImplementedError
 
     async def _read(self, client: ClaudeSDKClient) -> None:
         """for message in client.receive_messages(): for fact in project(message): route it.
-        Block -> control.sessions_append (InChild -> child session, created once);
-        Delta -> live queues; TurnUsage -> run journal model_call; Limits -> UsageLedger
-        and, for the plan crossing the cap, interrupt Background chats via the harness;
-        TurnEnded -> record turn "idle"; SessionReady -> money.money_servers check."""
+        Block -> control.sessions_append (InChild -> child session, created once); `project`
+        has already redacted `sk-ant-` tokens.
+        Delta -> live queues.
+        TurnUsage -> run journal `model_call`, for plan chats only; relayed chats are counted
+        once, at the relay (A12).
+        Limits -> UsageLedger; if the ledger now gives a hard stop or the plan crosses the
+        background cap, call `on_plan_limits`.
+        TurnEnded -> record turn "idle", and `started=True` on the first one."""
         raise NotImplementedError
 
     async def _can_use_tool(
@@ -227,9 +253,9 @@ class Chat:
     ) -> PermissionResultAllow | PermissionResultDeny:
         """Park a future under a new AskId, write the `permission` block (tool, input, the
         rule that matched, and `context.suggestions` as the "always" choices unless the tool
-        is an asking QMX tool), await the answer, write the resolution block. AllowOnce on an
-        asking QMX tool records `Grant(tool, args_digest(tool, final_input))`. The wait has
-        no timeout, as in Claude Code."""
+        is an asking QMX tool), await the answer (bounded only for unattended chats), write
+        the resolution block. AllowOnce on an asking QMX tool records
+        `Grant(tool, args_digest(tool, final_input))` unless `TestMode.grants` is off."""
         raise NotImplementedError
 
 
@@ -242,14 +268,16 @@ class ChatDeps:
     broker: BrokerService
     profiles: Profiles
     relay: Relay
-    tier: UserTier
+    mcp: VettedServers
     domain_write: DomainWritePolicy
+    budgets: Mapping[str, float]
+    """settings.toml [budgets]: unattended_ask_seconds, max_turns, max_budget_usd."""
     ledger: UsageLedger
     cap: BackgroundCap
     procs: AgentProcessCap
-    connect_lock: asyncio.Lock
-    """One connect at a time, so `procs.new_child_pid` sees exactly one new child."""
     delegate: Delegate
+    test: TestMode
     on_plan_limits: Callable[[], Awaitable[None]]
-    """Called when the plan's five-hour use crosses the cap. The harness interrupts its
-    Background chats. A chat never reaches into other chats itself."""
+    """Called when the plan crosses the background cap or hits a hard stop. The harness
+    interrupts its Background chats, or every plan chat on a hard stop. A chat never reaches
+    into other chats itself."""

@@ -1,7 +1,7 @@
 """Provider profiles: which model host a chat's CLI process talks to.
 
 Every profile runs the same engine (the Claude Code CLI through the Agent SDK).
-A profile only decides the routing environment of that one process.
+A profile only decides the routing environment and the Claude home of that one process.
 
 Invariants encoded here, not checked later:
 - A third-party base URL cannot exist without its own credential. `KeyProvider`
@@ -9,8 +9,9 @@ Invariants encoded here, not checked later:
   sends the operator's Claude token to a third-party host (02a trap 7).
 - The plan profile carries no secret and no URL. QMA never reads or stores the
   Claude token (hard rule 1). The CLI's own /login owns it.
-- No Claude or GPT model behind a key (old V4.1 family guard, rule R4). Enforced
-  in `parse_profiles`, the only constructor reachable from settings.
+- No Claude or GPT model behind a key (old V4.1 family guard, rule R4), and no router
+  slug that could pick one. Enforced in `parse_profiles` and, per request, by the relay
+  through `resolve_model`, the one parse function.
 - Every tier is pinned on a key provider. Kimi warns that partial tier maps fail
   silently (02b B), and Claude Code sends background work to the haiku tier.
 - A key provider's credential is a keyring reference that only the relay reads
@@ -28,8 +29,9 @@ from typing import Final, Literal, NewType
 
 ProfileName = NewType("ProfileName", str)
 ModelId = NewType("ModelId", str)
-HttpsUrl = NewType("HttpsUrl", str)
-"""An https URL, parsed once in `parse_profiles`."""
+BaseUrl = NewType("BaseUrl", str)
+"""An https URL, parsed once in `parse_profiles`. Plain http only for a loopback host and
+only when `TestMode.loopback_http_provider` is set (S9, S21)."""
 SecretRef = NewType("SecretRef", str)
 """A `qmx/<name>` OS-keyring reference. Never the secret itself."""
 
@@ -69,6 +71,8 @@ class WireQuirks:
     cache_markers: Literal["as_sent", "top_level_only"] = "as_sent"
     """Kimi ignores block-level `cache_control`; `top_level_only` moves one marker to the
     top level (02b B, Kimi caching quirk). Whether that restores cache reads is check S8."""
+    auth_header: Literal["bearer", "x-api-key"] = "bearer"
+    """How the vendor wants its key. Every current vendor accepts Bearer (02b table)."""
 
 
 @dataclass(frozen=True)
@@ -77,7 +81,9 @@ class Quirks:
 
     env: Mapping[str, str] = field(default_factory=dict)
     """CLI knobs for this provider's processes. Keys limited to `QUIRK_ENV_KEYS`;
-    routing keys can never appear here."""
+    routing keys can never appear here. `parse_profiles` adds ENABLE_TOOL_SEARCH="true"
+    to a key row that does not set it (tool search is off by default behind a base URL,
+    02a section 7)."""
     wire: WireQuirks = field(default_factory=WireQuirks)
 
 
@@ -90,15 +96,24 @@ class KeyProvider:
     """
 
     name: ProfileName
-    base_url: HttpsUrl
+    base_url: BaseUrl
     credential: SecretRef
     tiers: TierMap
     quirks: Quirks = field(default_factory=Quirks)
 
 
+GPT_QUIRKS: Final = Quirks(
+    env={
+        "ENABLE_TOOL_SEARCH": "false",  # tool_search is unsupported on the SIWC route (02b)
+        "CLAUDE_CODE_MAX_RETRIES": "2",  # do not hammer a plan limit (translate.map_error)
+        "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",  # 02b D P6
+    }
+)
+
+
 @dataclass(frozen=True)
 class GptPlan:
-    """GPT through the operator's ChatGPT sign-in, via QMA's loopback translator.
+    """GPT through the operator's ChatGPT sign-in, via the relay's GPT lane.
 
     No URL or secret lives on the row. The CLI's base URL and bearer come from a relay
     grant, and `Relay.grant` refuses a GPT grant until the GPT lane is open, which needs
@@ -107,12 +122,14 @@ class GptPlan:
 
     tiers: TierMap
     name: ProfileName = GPT
+    quirks: Quirks = GPT_QUIRKS
 
 
 type Profile = ClaudePlan | KeyProvider | GptPlan
 
 QUIRK_ENV_KEYS: Final[frozenset[str]] = frozenset(
     {
+        "ENABLE_TOOL_SEARCH",
         "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",  # Meta rejects unknown fields
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW",  # vendor context caps
         "API_TIMEOUT_MS",
@@ -120,10 +137,30 @@ QUIRK_ENV_KEYS: Final[frozenset[str]] = frozenset(
     }
 )
 
-FORBIDDEN_ON_KEY: Final[tuple[str, ...]] = ("claude", "anthropic", "gpt", "openai", "chatgpt", "codex", "o1", "o3", "o4")
-"""Model-id fragments refused on a `KeyProvider`. Matched case-insensitively on
-every path segment, so OpenRouter slugs such as `~anthropic/claude-opus-latest`
-and `openai/gpt-5` are refused too."""
+FORBIDDEN_ON_KEY: Final[tuple[str, ...]] = ("claude", "anthropic", "gpt", "openai", "chatgpt", "codex")
+"""Fragments refused in any segment of a model id behind a key."""
+
+OPENAI_REASONING_SEGMENT: Final = r"^o\d+($|-)"
+"""A segment that is an OpenAI reasoning family name (`o3`, `o4-mini`). A regex on the whole
+segment, not a substring, so a future vendor id that merely contains `o3` passes."""
+
+ROUTER_SLUGS: Final[tuple[str, ...]] = ("openrouter/", "@preset/")
+"""Prefixes of ids that let the vendor choose the model. Refused, as is any segment equal to
+`auto`, because the vendor could route them to Claude or GPT (A18, B15)."""
+
+
+def resolve_model(profile: Profile, requested: str) -> ModelId | str | None:
+    """Pure. The one model-id parser, used by `quote` for `ChatConfig.model` and by the
+    relay for every requested and served model (A28). None means refused.
+
+    Normalise first: strip a trailing `[1m]`-style suffix and lowercase. Split on `/` and
+    `:` into segments. ClaudePlan: tier aliases and `claude-*` ids pass through for the CLI
+    to resolve. KeyProvider: a tier alias maps through `tiers`; an id must equal a tier
+    model after the same normalisation; refused if any segment contains a
+    `FORBIDDEN_ON_KEY` fragment, matches `OPENAI_REASONING_SEGMENT`, equals `auto`, or the
+    id starts with a `ROUTER_SLUGS` prefix. GptPlan: alias or tier model only.
+    """
+    raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -142,18 +179,14 @@ class ProfileError(ValueError):
     """A settings row that cannot become a profile. Raised at the boundary only."""
 
 
-def parse_profiles(rows: Mapping[str, object]) -> Profiles:
+def parse_profiles(rows: Mapping[str, object], *, allow_loopback_http: bool = False) -> Profiles:
     """Parse `settings.toml [providers]` into typed profiles.
 
-    Refuses: a non-https base URL; a credential that is not `qmx/*`; any tier
-    model matching `FORBIDDEN_ON_KEY`; a `quirks.env` key outside
-    `QUIRK_ENV_KEYS`; a row named `claude` or `gpt` that is not the built-in kind;
-    a GPT row whose tiers are not GPT models.
+    Refuses: a base URL that is not https (plain http to 127.0.0.1 only when
+    `allow_loopback_http`, which only `TestMode` sets); a credential that is not `qmx/*`;
+    any tier model `resolve_model` would refuse; a `quirks.env` key outside
+    `QUIRK_ENV_KEYS`; a row named `claude` or `gpt` that is not the built-in kind; a GPT row
+    whose tiers are not GPT models.
     Always adds `ClaudePlan()`. Adds `GptPlan` only when a `gpt` row exists.
     """
-    raise NotImplementedError
-
-
-def is_first_party(profile: Profile) -> bool:
-    """True only for `ClaudePlan`. Drives `ENABLE_TOOL_SEARCH=true` elsewhere (02a section 7)."""
     raise NotImplementedError
