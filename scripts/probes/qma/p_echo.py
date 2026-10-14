@@ -15,12 +15,12 @@ import os
 import shutil
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from common import (
     HP1_EVIDENCE,
@@ -67,7 +67,7 @@ class Echo:
 
 
 def sse_reply(model: str) -> bytes:
-    events = [
+    events: list[dict[str, Any]] = [
         {
             "type": "message_start",
             "message": {
@@ -151,7 +151,7 @@ def handler(echo: Echo) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:
             body = self._record()
             try:
-                request = json.loads(body or b"{}")
+                request: dict[str, Any] = json.loads(body or b"{}")
             except json.JSONDecodeError:
                 request = {}
             model = str(request.get("model", "echo"))
@@ -166,7 +166,7 @@ def handler(echo: Echo) -> type[BaseHTTPRequestHandler]:
 
 
 @contextmanager
-def serve() -> Iterator[tuple[str, Echo]]:
+def serve() -> Generator[tuple[str, Echo]]:
     echo = Echo()
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler(echo))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
