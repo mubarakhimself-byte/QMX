@@ -17,6 +17,7 @@
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { ACCOUNTS, NODES } from "$lib/portfolio/demo";
   import { ENVIRONMENTS, STORAGE } from "$lib/lab/demo";
+  import { thisLaptop } from "$lib/lab/this-laptop";
   import Choice from "./Choice.svelte";
   import Group from "./Group.svelte";
   import {
@@ -77,7 +78,7 @@
     };
   });
   // Day one (demo off): this laptop only, and only the sources you added.
-  const local = ENVIRONMENTS.find((e) => e.kind === "local")!;
+  const local = thisLaptop();
   const machines = $derived(
     workbench.demoMode
       ? MACHINES
@@ -87,7 +88,7 @@
             name: local.name,
             role: "Lab, Storage",
             status: "ready",
-            where: local.where,
+            where: "Here",
             runs: "Nothing yet",
             load: local.hardware,
           },

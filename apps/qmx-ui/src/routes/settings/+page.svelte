@@ -79,6 +79,15 @@
   let tab = $state<string>(
     TABS.some((t) => t.id === fromUrl) ? fromUrl : "general",
   );
+  // A link to another page of Settings while it is open (Copilots' "Pick a
+  // provider", say) changes the URL without remounting; follow it.
+  let lastAsked = asked;
+  $effect(() => {
+    const next = page.url.searchParams.get("tab") ?? "";
+    const id = OLD[next] ?? next;
+    if (next !== lastAsked && TABS.some((t) => t.id === id)) tab = id;
+    lastAsked = next;
+  });
   let presetName = $state("");
 
   const setArt = (patch: Partial<ArtConfig>) =>

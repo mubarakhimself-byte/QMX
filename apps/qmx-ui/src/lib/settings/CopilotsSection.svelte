@@ -12,6 +12,7 @@
   import { REACH } from "$lib/copilot/aim.svelte";
   import InfoTip from "$lib/workbench/InfoTip.svelte";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import Choice from "./Choice.svelte";
   import Group from "./Group.svelte";
   import Row from "./Row.svelte";
@@ -24,7 +25,9 @@
     settings.copilots.find((c) => c.id === selected) ?? settings.copilots[0],
   );
   const cfg = $derived(settings.copilot(entry.id));
-  const models = $derived(settings.modelsFor(entry.id));
+  // Day one (demo off): no provider is signed in, so no copilot has a model.
+  const signedIn = $derived(workbench.demoMode);
+  const models = $derived(signedIn ? settings.modelsFor(entry.id) : []);
 
   function toggleIn<T extends string>(list: T[], id: T, on: boolean): T[] {
     const rest = list.filter((x) => x !== id);
@@ -54,7 +57,9 @@
       >
         <span class="truncate">{c.name}</span>
         <span class="text-muted-foreground shrink-0 text-sm"
-          >{settings.copilot(c.id).model.split("/")[1]}</span
+          >{signedIn
+            ? settings.copilot(c.id).model.split("/")[1]
+            : "No model yet"}</span
         >
       </button>
     {/each}
@@ -77,6 +82,15 @@
             onchange={(v) => settings.editCopilot(entry.id, { model: v })}
             class="w-fit min-w-64"
           />
+        {:else if !signedIn}
+          <span class="text-sm"
+            ><span class="text-muted-foreground">No model yet ·</span>
+            <!-- eslint-disable svelte/no-navigation-without-resolve -- resolved path plus a query string -->
+            <a
+              class="text-primary hover:underline"
+              href={`${resolve("/settings")}?tab=tools`}>Pick a provider</a
+            ><!-- eslint-enable svelte/no-navigation-without-resolve --></span
+          >
         {:else}
           <span class="text-warning text-sm">No provider allowed</span>
         {/if}

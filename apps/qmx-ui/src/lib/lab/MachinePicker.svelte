@@ -18,14 +18,11 @@
   import EnvChip from "./EnvChip.svelte";
   import { ENVIRONMENTS, RUNS } from "./demo";
   import { lab } from "./lab.svelte";
+  import { thisLaptop } from "./this-laptop";
   import { workbench } from "$lib/workbench/workbench.svelte";
 
   // Day one (demo off): only this laptop, with nothing running on it.
-  const machines = $derived(
-    workbench.demoMode
-      ? ENVIRONMENTS
-      : ENVIRONMENTS.filter((e) => e.kind === "local"),
-  );
+  const machines = $derived(workbench.demoMode ? ENVIRONMENTS : [thisLaptop()]);
   const jobs = (env: string) =>
     (workbench.demoMode ? RUNS : []).filter(
       (r) => r.env === env && (r.status === "running" || r.status === "queued"),
@@ -77,9 +74,9 @@
             {#if lab.machine === e.id}<Check class="size-4" />{/if}
           </span>
           <span class="text-muted-foreground text-xs"
-            >{e.where} · {e.hardware}{e.evidence
-              ? ""
-              : " · exploration only"}</span
+            >{[e.where, e.hardware, !e.evidence && "exploration only"]
+              .filter(Boolean)
+              .join(" · ")}</span
           >
         </span>
       </DropdownMenu.Item>
