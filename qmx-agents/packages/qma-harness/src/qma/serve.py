@@ -35,9 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     scrubbed = scrub_process_env(os.environ, keep)
     home.mkdir(parents=True, exist_ok=True)
     if args.command == "serve":
-        from qma.harness import serve  # noqa: PLC0415
+        from qma import harness  # noqa: PLC0415
 
-        serve(
+        harness.serve(
             root=home,
             port=args.port,
             ui_origin=args.ui_origin,

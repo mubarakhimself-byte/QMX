@@ -48,7 +48,7 @@ from qma.harness.launch import (
     LaunchRefused,
     ProfileName,
 )
-from qma.launcher import BLOCK_CONFIG_CHANGE, CHAT_ID, bundled_cli
+from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
@@ -61,7 +61,7 @@ PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 
 
 def session_id(text: str) -> SessionId:
-    if not CHAT_ID.fullmatch(text):
+    if not is_chat_id(text):
         raise ValueError(f"{text!r} is not a session id")
     return SessionId(text)
 
