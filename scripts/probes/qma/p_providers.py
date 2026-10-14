@@ -39,6 +39,7 @@ from common import (
     tool_results,
     tool_uses,
 )
+from p_echo import FAKE_KEY, serve
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions, McpSdkServerConfig, Message
@@ -54,7 +55,6 @@ PROVIDERS: Final = {
         Provider("openrouter", "https://openrouter.ai/api", "moonshotai/kimi-k3"),
     )
 }
-"""OpenRouter pins a non-Claude, non-GPT id, never a `~` router slug (R4)."""
 
 PROBES: Final = ("B1", "B3", "B4", "WebSearch", "tool search")
 TOOL_SEARCH_ON: Final = {"ENABLE_TOOL_SEARCH": "true"}
@@ -325,8 +325,6 @@ def collect_toolsearch(log: Log) -> int:
 
 
 async def stub(log: Log) -> int:
-    from p_echo import FAKE_KEY, serve  # noqa: PLC0415
-
     log(f"scrubbed from this process: {scrub_process_env(os.environ)}")
     with serve() as (url, echo):
         await probe_row(log, Provider("stub", url, "echo-model"), FAKE_KEY)

@@ -38,8 +38,6 @@ RESUME_HOME: Final = SCRATCH / "hp1" / "resume" / "claude"
 
 
 def linked_home(root: Path, projects: Path) -> Path:
-    """A fresh home whose `projects/` is a junction to `projects`. The old junction is
-    unlinked before the tree is removed, so the plan home's transcripts are never touched."""
     link = root / "projects"
     if link.is_junction():
         link.rmdir()

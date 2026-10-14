@@ -98,7 +98,6 @@ class Log:
         self(f"=== {slug} {time.strftime('%Y-%m-%dT%H:%M:%S%z')} python {sys.version.split()[0]}")
 
     def redact(self, secret: str) -> None:
-        """Every later line has `secret` cut out, in case a provider echoes its key back."""
         self._secrets.append(secret)
 
     def __call__(self, line: str) -> None:
@@ -149,8 +148,6 @@ def cli_env() -> dict[str, str]:
 
 @dataclass(frozen=True)
 class Provider:
-    """An Anthropic-compatible host the bundled CLI reaches by base URL and its own key."""
-
     name: str
     base_url: str
     model: str
@@ -182,7 +179,6 @@ def provider_env(
 
 
 def read_key(provider: Provider) -> str | None:
-    """By keyring name only. Callers pass the value to the CLI env and never print it."""
     import keyring  # noqa: PLC0415
 
     return keyring.get_password(provider.keyring_service, provider.name)

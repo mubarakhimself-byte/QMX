@@ -44,7 +44,6 @@ def windows_releases() -> list[tuple[str, str]]:
 
 
 KEYRING_PIN: Final = "keyring==25.7.0"
-"""Same pin as qmx-control. HP1 reads provider keys by keyring name only."""
 
 
 def venv_python() -> Path:

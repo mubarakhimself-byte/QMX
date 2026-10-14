@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -40,6 +41,14 @@ def test_a_row_without_a_keyring_entry_prints_no_key_for_every_probe(tmp_path: P
         "FINDING\tWebSearch glm\tkeyring qmx/glm empty\tNO KEY",
         "FINDING\ttool search glm\tkeyring qmx/glm empty\tNO KEY",
     ]
+
+
+def test_no_provider_row_pins_a_claude_or_gpt_model_or_a_router_slug() -> None:
+    assert [
+        p.name
+        for p in p_providers.PROVIDERS.values()
+        if re.search(r"claude|gpt|opus|sonnet|haiku|fable", p.model, re.I) or "~" in p.model
+    ] == []
 
 
 def test_tool_search_state_reads_the_init_tool_list() -> None:

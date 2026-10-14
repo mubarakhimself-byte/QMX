@@ -42,7 +42,6 @@ Seen = Literal["fake-key", "canary", "other"]
 
 
 def classify(value: str) -> Seen:
-    """Never returns the value itself, so an unexpected credential is never logged."""
     if CANARY in value:
         return "canary"
     return "fake-key" if FAKE_KEY in value else "other"
@@ -179,7 +178,6 @@ def serve() -> Generator[tuple[str, Echo]]:
 
 
 def canary_home(root: Path) -> Path:
-    """A fresh home whose only login is the canary. Expiry is far off, so no refresh starts."""
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
     login = {
@@ -202,8 +200,6 @@ def with_token_verdict(requests: list[Request]) -> str:
 
 
 def without_token_verdict(requests: list[Request]) -> str:
-    """NO LEAK needs a model request that came without the canary. When the CLI sends no
-    model request at all, nothing about trap 7 was observed."""
     if any(r.canary_anywhere for r in requests):
         return "LEAK"
     model_requests = [r for r in requests if r.path.split("?")[0].endswith("/v1/messages")]
