@@ -116,3 +116,109 @@ def chat_options(
         "max_turns": 3,
     }
     return ClaudeAgentOptions(**(kwargs | overrides))
+
+
+SHIP_HOME: Final = SHIP / "home"
+TURN_TIMEOUT_S: Final = 300.0
+
+
+def use_fake_home() -> None:
+    """Point HOME, USERPROFILE and the app data folders at the throwaway folder, so a CLI the
+    harness starts in this process never reads the operator's own `~/.claude` or profile."""
+    roaming, local = FAKE_HOME / "AppData" / "Roaming", FAKE_HOME / "AppData" / "Local"
+    for folder in (roaming, local):
+        folder.mkdir(parents=True, exist_ok=True)
+    os.environ |= {
+        "HOME": str(FAKE_HOME),
+        "USERPROFILE": str(FAKE_HOME),
+        "APPDATA": str(roaming),
+        "LOCALAPPDATA": str(local),
+    }
+
+
+def session_blocks(control: Any, chat: str, after: int = 0) -> list[dict[str, Any]]:
+    """Every block of a session after event id `after`, oldest first, with its event id."""
+    found: list[dict[str, Any]] = []
+    while True:
+        page = control.events("sessions", after, chat, 1000)
+        for event in page:
+            data = event["data"]
+            if data.get("type") == "block":
+                found.append({"event": event["id"], **data["block"]})
+        if len(page) < 1000:
+            return found
+        after = page[-1]["id"]
+
+
+def last_event(control: Any, chat: str) -> int:
+    events = control.events("sessions", 0, chat, 1000)
+    while len(events) == 1000:
+        events = control.events("sessions", events[-1]["id"], chat, 1000)
+    return events[-1]["id"] if events else 0
+
+
+def show(log: Log, block: dict[str, Any]) -> None:
+    content = dict(block["content"])
+    for key in ("result", "text"):
+        if isinstance(content.get(key), str) and len(content[key]) > 300:
+            content[key] = content[key][:300] + "..."
+    log(f"  [{block['type']}] {json.dumps(content, ensure_ascii=False)}")
+
+
+async def wait_turn(home: Any, chat: str, seconds: float = TURN_TIMEOUT_S) -> Any:
+    """The chat record once its turn is "idle" again, or the running record at the timeout."""
+    import asyncio  # noqa: PLC0415
+
+    from qma.harness.home import read_record, session_id  # noqa: PLC0415
+
+    deadline = time.monotonic() + seconds
+    while True:
+        record = read_record(home, session_id(chat))
+        if record is None or record.turn == "idle" or time.monotonic() > deadline:
+            return record
+        await asyncio.sleep(0.2)
+
+
+def chat_args(doc: str | None) -> Any:
+    import argparse  # noqa: PLC0415
+
+    parser = argparse.ArgumentParser(description=doc)
+    parser.add_argument("--home", type=Path, default=SHIP_HOME, help="the QMX home")
+    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--workspace", type=Path, default=SCRATCH / "workspace")
+    return parser
+
+
+class Session:
+    """One harness opened in this process and one chat in it."""
+
+    def __init__(self, harness: Any, home: Any, control: Any, chat: str) -> None:
+        self.harness, self.home, self.control, self.chat = harness, home, control, chat
+
+    @classmethod
+    async def start(
+        cls, root: Path, *, model: str, workspace: Path, title: str, test: Any = None
+    ) -> Session:
+        from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
+        from qma.harness.routes import control_service  # noqa: PLC0415
+
+        home = QmxHome(root)
+        control = control_service(home)
+        harness = await Harness.open(home, control=control, test=test)
+        workspace.mkdir(parents=True, exist_ok=True)
+        chat = await harness.start_chat(NewChat(title=title, model=model, workspace=workspace))
+        return cls(harness, home, control, chat)
+
+    async def turn(self, log: Log, text: str) -> tuple[Any, list[dict[str, Any]]]:
+        """Send operator text, wait for the turn to end, and log the blocks it wrote."""
+        from qma.harness import OperatorText  # noqa: PLC0415
+
+        mark = last_event(self.control, self.chat)
+        log(f"turn: {text}")
+        await self.harness.send(self.chat, OperatorText(text))
+        record = await wait_turn(self.home, self.chat)
+        found = session_blocks(self.control, self.chat, mark)
+        for block in found:
+            show(log, block)
+        log(f"record turn={record.turn} started={record.started}")
+        return record, found

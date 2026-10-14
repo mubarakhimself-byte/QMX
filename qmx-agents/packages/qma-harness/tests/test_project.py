@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import AssistantMessage, Message, SystemMessage, TextBlock
+from claude_agent_sdk import AssistantMessage, Message, TextBlock
 from claude_agent_sdk._internal.message_parser import parse_message
 
 from qma.harness.project import (
@@ -175,12 +175,8 @@ def test_a_rate_limit_event_keeps_every_overage_field() -> None:
     ]
 
 
-def test_a_compact_boundary_is_a_compacted_fact() -> None:
-    message = SystemMessage(
-        subtype="compact_boundary",
-        data={"compact_metadata": {"trigger": "manual", "pre_tokens": 1200}},
-    )
-    assert project(message) == [Compacted("manual")]
+def test_a_recorded_compact_boundary_is_a_manual_compaction() -> None:
+    assert facts("compact_boundary.jsonl") == [Compacted("manual")]
 
 
 def test_a_printed_token_is_redacted_unless_the_check_turns_redaction_off() -> None:
