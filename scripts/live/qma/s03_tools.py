@@ -16,8 +16,9 @@ because of QMA's environment.
 PASS when the QMA list differs from vanilla by exactly the entries in `EXPECTED`, each on its
 named side, less the tools left out as denied. DESIGN S3 named Workflow and TodoWrite; on CLI
 2.1.299 TodoWrite is the four Task tools, and nonessential traffic off also turns off the
-flag-gated Monitor, DesignSync and PushNotification. The PowerShell line records each side's raw
-list, before deny rules.
+flag-gated Monitor, DesignSync and PushNotification. The PowerShell line reads each side's raw
+list, or says "denied by [claude]" when the home denies the tool, since the CLI then leaves it
+out of the QMA list.
 
     s03_tools.py [--home D:/QMX-worktrees/qma-ship/home]
 """
@@ -133,7 +134,8 @@ def main() -> int:
     lists = {name: built_in(tools, denied) for name, (tools, _) in raw.items()}
     for name, (tools, spent) in raw.items():
         log(f"{name} tools ({len(lists[name])}), output tokens {spent}: {sorted(lists[name])}")
-        log(f"PowerShell tool in {name}: {'PowerShell' in tools}")
+        powershell = "denied by [claude]" if "PowerShell" in denied else "PowerShell" in tools
+        log(f"PowerShell tool in {name}: {powershell}")
     plain, with_env, harness = lists["vanilla"], lists["vanilla + env"], lists["QMA"]
     sides: dict[str, str] = {}
     for tool in sorted(harness ^ plain):

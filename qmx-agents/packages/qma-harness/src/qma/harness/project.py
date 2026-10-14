@@ -5,10 +5,10 @@ today, served by the existing SSE route. New meaning goes inside `content`, neve
 type.
 
 Every Block passes through `redact`, so a Claude token an agent printed or read never reaches
-`sessions_append`. Deltas leave here raw: a streamed token can arrive split over several deltas,
-and a per-delta `redact` would hide the prefix and let the rest through. `chat.py` feeds them to
-a `TokenGate`, the only redactor on the live channel, which holds back text that could still
-grow into a token.
+`sessions_append`. Deltas leave here raw. A streamed token can arrive split over several deltas,
+and a per-delta `redact` would hide the prefix and let the rest through, so `chat.py` feeds text
+and thinking to a `TokenGate`, which holds back text that could still grow into a token. Tool
+progress is a whole description per message, and `chat.py` redacts it whole.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ import json
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from itertools import groupby
+from operator import itemgetter
 from typing import Any, Final, Literal, cast
 
 from claude_agent_sdk import (
@@ -71,22 +73,47 @@ def redacted(value: Any) -> Any:
     return value
 
 
+type StreamKind = Literal["text", "thinking"]
+type Piece = tuple[StreamKind, str]
+
+
 class TokenGate:
-    """Streamed text in, redacted text out. Holds back a tail that is, or could still become,
-    a token, until the next piece settles it or `flush` ends the stream."""
+    """One target's streamed text and thinking in, redacted pieces out. Holds back a tail that
+    is, or could still become, a token across kinds and across any block landing between two
+    deltas, until a later delta settles it or `close` ends the turn. A token redacted across a
+    kind change shows under the kind it started in."""
 
     def __init__(self) -> None:
-        self._held = ""
+        self._held: list[Piece] = []
 
-    def feed(self, text: str) -> str:
-        pending = self._held + text
-        cut = _settled_length(pending)
-        self._held = pending[cut:]
-        return redact(pending[:cut])
+    def feed(self, kind: StreamKind, text: str) -> list[Piece]:
+        self._held.append((kind, text))
+        return self._release(_settled_length("".join(text for _, text in self._held)))
 
-    def flush(self) -> str:
-        held, self._held = self._held, ""
-        return redact(held)
+    def close(self) -> list[Piece]:
+        return self._release(sum(len(text) for _, text in self._held))
+
+    def _release(self, cut: int) -> list[Piece]:
+        text = "".join(text for _, text in self._held)
+        kinds = [kind for kind, piece in self._held for _ in piece]
+        out: list[Piece] = []
+        start = 0
+        for token in TOKEN_PATTERN.finditer(text[:cut]):
+            out += _runs(text[start : token.start()], kinds[start : token.start()])
+            out.append((kinds[token.start()], REDACTED))
+            start = token.end()
+        out += _runs(text[start:cut], kinds[start:cut])
+        self._held = _runs(text[cut:], kinds[cut:])
+        return [
+            (kind, "".join(text for _, text in run)) for kind, run in groupby(out, itemgetter(0))
+        ]
+
+
+def _runs(text: str, kinds: list[StreamKind]) -> list[Piece]:
+    return [
+        (kind, "".join(char for char, _ in run))
+        for kind, run in groupby(zip(text, kinds, strict=True), itemgetter(1))
+    ]
 
 
 def _settled_length(text: str) -> int:
@@ -127,7 +154,7 @@ class Delta:
     """Live only (token text, tool progress). Never stored."""
 
     target: Target
-    kind: Literal["text", "thinking", "tool_progress"]
+    kind: StreamKind | Literal["tool_progress"]
     text: str
 
 
@@ -168,8 +195,8 @@ class Limits:
 
 @dataclass(frozen=True)
 class TurnEnded:
-    """The `ResultMessage` of the operator's own prompt. Results of injected turns, such as a
-    background task's notification, carry a non-human origin and end no turn."""
+    """Any `ResultMessage`. The CLI opens every turn, the operator's or an injected one such as
+    a background task's notification, with an `init` and ends it with one result."""
 
     ok: bool
     terminal_reason: str | None
@@ -337,15 +364,13 @@ def _result(message: ResultMessage) -> list[Fact]:
     if message.is_error and message.terminal_reason not in INTERRUPTED:
         reason = message.result or "; ".join(message.errors or []) or message.subtype
         facts.append(_block(Here(), "needs_you", {"reason": f"the turn failed: {reason}"}))
-    origin = message.origin or {}
-    if origin.get("kind", "human") == "human":
-        facts.append(
-            TurnEnded(
-                ok=not message.is_error,
-                terminal_reason=message.terminal_reason,
-                deferred_tool_use=message.deferred_tool_use is not None,
-            )
+    facts.append(
+        TurnEnded(
+            ok=not message.is_error,
+            terminal_reason=message.terminal_reason,
+            deferred_tool_use=message.deferred_tool_use is not None,
         )
+    )
     return facts
 
 

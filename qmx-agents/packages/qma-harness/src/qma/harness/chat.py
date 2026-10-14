@@ -9,10 +9,11 @@ Lifecycle, one owner:
     Cold --connect--> Live --close, or the CLI ends--> Cold
 
 While Live, the reader task drains `receive_messages()` and routes each `project()` fact.
-The record's turn is "running" from before a prompt goes out until every prompt sent has its
-own `ResultMessage`. A record still "running" when the harness opens, or when the CLI ends
-mid-turn, means the outcome is unknown: the chat shows a `needs_you` block and continues only
-when the operator sends the next message.
+The CLI opens every turn with an `init` and ends it with one `ResultMessage`. A prompt typed
+while a tool runs is folded into the running turn and gets no turn of its own (measured, CLI
+2.1.299). A record still "running" when the harness opens, or when the CLI ends mid-turn, means
+the outcome is unknown: the chat shows a `needs_you` block and continues only when the operator
+sends the next message.
 
 Asks. Until approvals are wired, `can_use_tool` rejects every call that would ask, so no chat
 writes a file or runs a command the CLI would have asked about.
@@ -58,11 +59,13 @@ from qma.harness.project import (
     Here,
     InChild,
     Limits,
+    Piece,
     Target,
     TokenGate,
     TurnEnded,
     TurnUsage,
     project,
+    redact,
     redacted,
 )
 
@@ -173,16 +176,23 @@ class _Live:
 
 @dataclass
 class _Stream:
-    """Live deltas: one token gate per target and kind, and the open subscriptions."""
-
-    gates: dict[tuple[Target, str], TokenGate] = field(
-        default_factory=dict[tuple[Target, str], TokenGate]
-    )
+    gates: dict[Target, TokenGate] = field(default_factory=dict[Target, TokenGate])
     listeners: set[asyncio.Queue[Delta]] = field(default_factory=set[asyncio.Queue[Delta]])
 
     def publish(self, delta: Delta) -> None:
+        if not delta.text:
+            return
         for queue in self.listeners:
             queue.put_nowait(delta)
+
+    def release(self, target: Target, pieces: list[Piece]) -> None:
+        for kind, text in pieces:
+            self.publish(Delta(target, kind, text))
+
+    def close(self) -> None:
+        for target, gate in self.gates.items():
+            self.release(target, gate.close())
+        self.gates.clear()
 
 
 class Chat:
@@ -196,9 +206,6 @@ class Chat:
         self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
-        self._unanswered = 0
-        """The CLI answers a prompt queued during a turn with a turn and `ResultMessage` of
-        its own."""
 
     @property
     def session_id(self) -> SessionId:
@@ -211,7 +218,6 @@ class Chat:
             live = self._live or await self._connect()
             self._live = live
             await self._note("user", {"text": prompt.text})
-            self._unanswered += 1
             self._write(turn="running")
             await live.client.query(prompt.text)
 
@@ -321,9 +327,9 @@ class Chat:
                     found = unexpected_plugins(message.data)
                     if found:
                         await self._note("needs_you", {"reason": _loaded(found)})
-                        self._unanswered = 0
                         self._write(turn="idle")
                         return
+                    self._write(turn="running")
                 for fact in project(message, redact_tokens=self._deps.redaction):
                     await self._route(fact)
         finally:
@@ -333,8 +339,7 @@ class Chat:
     async def _lost(self, live: _Live) -> None:
         if self._live is live:
             self._live = None
-        self._flush()
-        self._unanswered = 0
+        self._stream.close()
         if self.record.turn == "running":
             await self._note(
                 "needs_you",
@@ -348,27 +353,23 @@ class Chat:
     ) -> None:
         match fact:
             case Block(target=target, block=block):
-                self._flush(target)
                 await self._append(target, block)
-            case Delta(target=target, kind=kind, text=text):
-                if self._deps.redaction:
-                    text = self._stream.gates.setdefault((target, kind), TokenGate()).feed(text)
-                if text:
-                    self._stream.publish(Delta(target, kind, text))
+            case Delta(kind="tool_progress") if self._deps.redaction:
+                self._stream.publish(replace(fact, text=redact(fact.text)))
+            case Delta(target=target, kind="text" | "thinking" as kind, text=text) if (
+                self._deps.redaction
+            ):
+                gate = self._stream.gates.setdefault(target, TokenGate())
+                self._stream.release(target, gate.feed(kind, text))
+            case Delta():
+                self._stream.publish(fact)
             case TurnEnded():
-                self._flush()
-                self._unanswered = max(self._unanswered - 1, 0)
-                self._write(turn="running" if self._unanswered else "idle", started=True)
+                self._stream.close()
+                self._write(turn="idle", started=True)
             case Compacted(trigger=trigger):
                 await self._note("changed", {"kind": "compacted", "trigger": trigger})
             case TurnUsage() | Limits():
                 pass
-
-    def _flush(self, target: Target | None = None) -> None:
-        for key in [key for key in self._stream.gates if target is None or key[0] == target]:
-            text = self._stream.gates.pop(key).flush()
-            if text:
-                self._stream.publish(Delta(key[0], cast("Any", key[1]), text))
 
     async def _note(self, kind: str, content: dict[str, Any]) -> None:
         if self._deps.redaction:
