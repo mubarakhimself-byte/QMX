@@ -343,6 +343,10 @@ def parse_callback(query: Mapping[str, str], expected_state: str) -> Callback:
 
 
 class _CallbackServer(HTTPServer):
+    """HTTPServer's SO_REUSEADDR lets a second listener bind a busy port on Windows, which
+    splits callbacks between them; a busy port must move this probe to the next one."""
+
+    allow_reuse_address = False
     query: dict[str, str] | None = None
 
 
@@ -450,12 +454,45 @@ def post_form(url: str, form: Mapping[str, str]) -> HttpReply:
     return _send(request)
 
 
-def token_error(reply: HttpReply) -> str:
+TOKEN_ERRORS = {
+    "invalid_request": "request bug: a parameter is missing or the body is not form-encoded",
+    "invalid_client": "request bug: this client_id cannot use the token endpoint",
+    "unsupported_grant_type": "request bug: grant_type is wrong",
+    "invalid_grant": (
+        "the code, verifier, redirect_uri or client_id was rejected, or the code was used or"
+        " expired. OpenAI's sign-in docs say to discard the code and reauthorize with the"
+        " issued client_id. Per those docs an ineligible plan shows instead as a missing"
+        f" {DIRECT_SCOPE} scope or a 403 {NOT_ELIGIBLE} at inference"
+    ),
+}
+"""Meanings of the token endpoint's `error` codes. Its error bodies carry only `error`, no
+`error_description` (measured 2026-10-14). An unknown client_id also returns invalid_grant."""
+
+
+def _token_error_body(reply: HttpReply) -> Json | None:
     try:
-        payload = json.loads(reply.body)
+        payload: Any = json.loads(reply.body)
     except ValueError:
-        return f"http {reply.status}"
-    return f"http {reply.status} {payload.get('error')} {payload.get('error_description', '')}"
+        return None
+    return cast("Json", payload) if isinstance(payload, dict) else None
+
+
+def token_error_code(reply: HttpReply) -> str | None:
+    body = _token_error_body(reply)
+    return None if body is None else str(body.get("error"))
+
+
+def token_error(reply: HttpReply) -> str:
+    body = _token_error_body(reply)
+    if body is None:
+        return f"http {reply.status} request_id={reply.request_id}: body is not a JSON object"
+    code = str(body.get("error"))
+    text = f"http {reply.status} {code} request_id={reply.request_id}: "
+    text += TOKEN_ERRORS.get(code, "not in the documented set")
+    for key in ("error_description", "error_uri"):
+        if body.get(key):
+            text += f"; {key}={str(body[key])[:300]}"
+    return text
 
 
 @dataclass
@@ -514,16 +551,27 @@ def load_session(vault: Vault) -> Session:
     raw = vault.get()
     if raw is None:
         raise SignInError(f"no registration under keyring {KEYRING_SERVICE}; run without --reuse")
-    return Session(Registration.loads(raw), vault)
+    registration = Registration.loads(raw)
+    if not registration.refresh_token:
+        raise SignInError("the saved registration has no refresh token; run without --reuse")
+    return Session(registration, vault)
 
 
-def sign_in(vault: Vault, *, timeout_s: float, log: Callable[[str], None]) -> Session:
-    """P0. Opens OpenAI's page; the operator approves "QMA". A saved registration is reused
-    (issued client id, same host id) so a second run does not register a second client."""
-    raw = vault.get()
-    saved = Registration.loads(raw) if raw else None
-    client_id = saved.client_id if saved else REGISTRATION_CLIENT
-    host_id = saved.host_id if saved else f"urn:uuid:{uuid.uuid4()}"
+@dataclass(frozen=True)
+class Grant:
+    client_id: str
+    code: str
+    verifier: str
+    redirect_uri: str
+    nonce: str
+
+
+def authorize(
+    client_id: str, host_id: str, *, timeout_s: float, log: Callable[[str], None]
+) -> Grant:
+    """One browser authorization. Returns the code with the values its exchange must repeat.
+    A new registration's callback names the issued client id; a reauthorization keeps the
+    one it asked with."""
     verifier, challenge = pkce_pair()
     state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
     server = open_callback_server()
@@ -536,41 +584,68 @@ def sign_in(vault: Vault, *, timeout_s: float, log: Callable[[str], None]) -> Se
         nonce=nonce,
         challenge=challenge,
     )
-    log(f"flow: {'reauthorization' if saved else 'new registration'}")
+    new = client_id == REGISTRATION_CLIENT
+    log(f"flow: {'new registration' if new else 'reauthorization'}")
     log(f"authorize_endpoint: {AUTHORIZE_URL}")
     log(f"redirect_uri: {redirect_uri}")
-    log(f"agent_name_hint: {AGENT_NAME if not saved else '(omitted on reauthorization)'}")
+    log(f"agent_name_hint: {AGENT_NAME if new else '(omitted on reauthorization)'}")
     print(f"Opening OpenAI's sign-in page. Approve 'QMA' there.\n{url}")
     webbrowser.open(url)
     with server:
-        callback = parse_callback(wait_for_callback(server, timeout_s), state)
-    issued = callback.client_id or (saved.client_id if saved else None)
+        query = wait_for_callback(server, timeout_s)
+    log(f"callback_keys: {sorted(query)}")
+    callback = parse_callback(query, state)
+    issued = callback.client_id or (None if new else client_id)
     if issued is None or issued == REGISTRATION_CLIENT:
         raise SignInError("new registration returned no issued client_id")
-    if saved and issued != saved.client_id:
+    if not new and issued != client_id:
         raise SignInError("callback client_id differs from the saved registration")
     log(f"issued_client_id_prefix: {issued.split('_')[0]}_")
-    reply = post_form(
+    return Grant(issued, callback.code, verifier, redirect_uri, nonce)
+
+
+def exchange(grant: Grant) -> HttpReply:
+    return post_form(
         TOKEN_URL,
         {
             "grant_type": "authorization_code",
-            "client_id": issued,
-            "code": callback.code,
-            "code_verifier": verifier,
-            "redirect_uri": redirect_uri,
+            "client_id": grant.client_id,
+            "code": grant.code,
+            "code_verifier": grant.verifier,
+            "redirect_uri": grant.redirect_uri,
             "resource": RESOURCE,
         },
     )
+
+
+def sign_in(vault: Vault, *, timeout_s: float, log: Callable[[str], None]) -> Session:
+    """P0. Opens OpenAI's page; the operator approves "QMA". A saved registration is reused
+    (issued client id, same host id) so a second run does not register a second client.
+    The issued client id is saved before the code exchange, and an invalid_grant gets one
+    fresh reauthorization with it, as OpenAI's sign-in docs prescribe."""
+    raw = vault.get()
+    saved = Registration.loads(raw) if raw else None
+    client_id = saved.client_id if saved else REGISTRATION_CLIENT
+    host_id = saved.host_id if saved else f"urn:uuid:{uuid.uuid4()}"
+    grant = authorize(client_id, host_id, timeout_s=timeout_s, log=log)
+    if saved is None:
+        vault.set(Registration(grant.client_id, host_id, "", ()).dumps())
+    client_id = grant.client_id
+    reply = exchange(grant)
+    if token_error_code(reply) == "invalid_grant":
+        log(f"exchange_1: {token_error(reply)}")
+        grant = authorize(client_id, host_id, timeout_s=timeout_s, log=log)
+        reply = exchange(grant)
     if reply.status != 200:
         raise SignInError(f"code exchange failed: {token_error(reply)}")
     tokens = json.loads(reply.body)
     claims = jwt_claims(tokens["id_token"])
-    if claims.get("nonce") != nonce or claims.get("iss") != ISSUER:
+    if claims.get("nonce") != grant.nonce or claims.get("iss") != ISSUER:
         raise SignInError("id_token nonce or issuer does not match")
     audience = claims.get("aud")
-    if issued not in (audience if isinstance(audience, list) else [audience]):
+    if client_id not in (audience if isinstance(audience, list) else [audience]):
         raise SignInError("id_token audience is not the issued client id")
-    session = Session(Registration(issued, host_id, tokens.get("refresh_token", ""), ()), vault)
+    session = Session(Registration(client_id, host_id, tokens.get("refresh_token", ""), ()), vault)
     session.accept(tokens)
     log(f"granted_scopes: {' '.join(session.registration.scopes)}")
     log(f"expires_in: {tokens.get('expires_in')}")

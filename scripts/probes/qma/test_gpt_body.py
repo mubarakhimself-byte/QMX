@@ -312,6 +312,13 @@ def test_loopback_listener_hands_back_the_callback_query() -> None:
     assert p_gpt.parse_callback(server.query or {}, "st") == p_gpt.Callback("abc", "oaiapp_1", None)
 
 
+def test_a_busy_callback_port_moves_the_listener_to_the_next_port() -> None:
+    with p_gpt.open_callback_server(ports=(0,)) as first:
+        port = first.server_address[1]
+        with p_gpt.open_callback_server(ports=(port, 0)) as second:
+            assert second.server_address[1] != port
+
+
 class FakeVault:
     def __init__(self) -> None:
         self.value: str | None = None
@@ -508,3 +515,166 @@ def test_chain_stops_at_p2_when_the_plan_is_not_eligible(
     assert not verdict.viable
     assert verdict.stopped_at == "P2 (stop rule: subscription_sharing_user_not_eligible)"
     assert [s.step for s in verdict.steps] == ["P1", "P2"]
+
+
+class StubOpenAIAuth(BaseHTTPRequestHandler):
+    """OpenAI's authorize and token endpoints, with the token endpoint's measured error
+    codes: a missing parameter or a JSON body is invalid_request, dynamic_agent_client is
+    invalid_client, and a code, verifier, redirect or client mismatch is invalid_grant."""
+
+    issued = "oaiapp_stub"
+    rejected_exchanges = 0
+    authorizations: list[dict[str, str]]
+    exchanges: list[dict[str, str]]
+    codes: dict[str, dict[str, str]]
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def do_GET(self) -> None:
+        params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.path).query))
+        self.authorizations.append(params)
+        code = f"code-{len(self.authorizations)}"
+        self.codes[code] = params
+        callback = {"code": code, "state": params["state"]}
+        if params["client_id"] == p_gpt.REGISTRATION_CLIENT:
+            callback["client_id"] = self.issued
+        self.send_response(302)
+        self.send_header("Location", f"{params['redirect_uri']}?{urllib.parse.urlencode(callback)}")
+        self.end_headers()
+
+    def do_POST(self) -> None:
+        raw = self.rfile.read(int(self.headers["Content-Length"])).decode()
+        if self.headers["Content-Type"] != "application/x-www-form-urlencoded":
+            self._reply(400, {"error": "invalid_request"})
+            return
+        form = dict(urllib.parse.parse_qsl(raw))
+        self.exchanges.append(form)
+        if "client_id" not in form or "redirect_uri" not in form:
+            self._reply(400, {"error": "invalid_request"})
+            return
+        if form["client_id"] == p_gpt.REGISTRATION_CLIENT:
+            self._reply(400, {"error": "invalid_client"})
+            return
+        granted = self.codes.pop(form.get("code", ""), None)
+        challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(form.get("code_verifier", "").encode()).digest()
+        ).rstrip(b"=")
+        if (
+            granted is None
+            or len(self.exchanges) <= self.rejected_exchanges
+            or granted["redirect_uri"] != form["redirect_uri"]
+            or granted["code_challenge"] != challenge.decode()
+            or granted["resource"] != form.get("resource")
+            or form["client_id"] != self.issued
+        ):
+            self._reply(400, {"error": "invalid_grant"})
+            return
+        claims = {"iss": p_gpt.ISSUER, "aud": self.issued, "nonce": granted["nonce"]}
+        payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+        self._reply(
+            200,
+            {
+                "access_token": "at-signin",
+                "refresh_token": "rt-signin",
+                "id_token": f"h.{payload}.s",
+                "expires_in": 3600,
+                "scope": "openid chatgpt.tokens.use.direct",
+            },
+        )
+
+    def _reply(self, status: int, payload: p_gpt.Json) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("x-request-id", f"req-{len(self.exchanges)}")
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _stub_auth(monkeypatch: pytest.MonkeyPatch, *, rejected: int) -> type[StubOpenAIAuth]:
+    handler = type(
+        "Auth",
+        (StubOpenAIAuth,),
+        {
+            "rejected_exchanges": rejected,
+            "authorizations": [],
+            "exchanges": [],
+            "codes": {},
+        },
+    )
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    monkeypatch.setattr(p_gpt, "AUTHORIZE_URL", f"{base}/api/accounts/authorize")
+    monkeypatch.setattr(p_gpt, "TOKEN_URL", f"{base}/api/accounts/oauth/token")
+
+    def visit(url: str) -> None:
+        with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310
+            response.read()
+
+    def browser(url: str) -> bool:
+        threading.Thread(target=visit, args=(url,)).start()
+        return True
+
+    monkeypatch.setattr(p_gpt.webbrowser, "open", browser)
+    return handler
+
+
+def test_new_registration_exchanges_the_code_with_the_issued_client_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _stub_auth(monkeypatch, rejected=0)
+    vault = FakeVault()
+    lines: list[str] = []
+    session = p_gpt.sign_in(vault, timeout_s=10, log=lines.append)
+
+    assert [a["client_id"] for a in auth.authorizations] == ["dynamic_agent_client"]
+    assert [e["client_id"] for e in auth.exchanges] == ["oaiapp_stub"]
+    assert session.registration.scopes == ("chatgpt.tokens.use.direct", "openid")
+    assert json.loads(vault.value or "{}")["refresh_token"] == "rt-signin"  # noqa: S105
+
+
+def test_invalid_grant_on_first_exchange_reauthorizes_with_the_issued_client_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _stub_auth(monkeypatch, rejected=1)
+    vault = FakeVault()
+    lines: list[str] = []
+    session = p_gpt.sign_in(vault, timeout_s=10, log=lines.append)
+
+    assert [a["client_id"] for a in auth.authorizations] == [
+        "dynamic_agent_client",
+        "oaiapp_stub",
+    ]
+    assert "agent_name_hint" not in auth.authorizations[1]
+    assert (
+        auth.authorizations[0]["ext_agent_host_id"] == auth.authorizations[1]["ext_agent_host_id"]
+    )
+    assert [e["code"] for e in auth.exchanges] == ["code-1", "code-2"]
+    assert session.registration.client_id == "oaiapp_stub"
+    assert "exchange_1: http 400 invalid_grant request_id=req-1" in "\n".join(lines)
+    assert not any("code-" in line or "rt-signin" in line for line in lines)
+
+
+def test_two_rejected_codes_keep_the_issued_client_id_for_the_next_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_auth(monkeypatch, rejected=2)
+    vault = FakeVault()
+
+    with pytest.raises(p_gpt.SignInError, match="invalid_grant"):
+        p_gpt.sign_in(vault, timeout_s=10, log=lambda _: None)
+
+    assert json.loads(vault.value or "{}")["client_id"] == "oaiapp_stub"
+    with pytest.raises(p_gpt.SignInError, match="no refresh token"):
+        p_gpt.load_session(vault)
+
+
+def test_token_error_names_the_code_request_id_and_its_meaning() -> None:
+    reply = p_gpt.HttpReply(400, b'{"error": "invalid_request"}', "req-9")
+
+    assert p_gpt.token_error(reply).startswith(
+        "http 400 invalid_request request_id=req-9: request bug"
+    )

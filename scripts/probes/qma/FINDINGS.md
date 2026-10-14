@@ -32,4 +32,4 @@ Trunk has no GPT route on the plan, so there is no trunk baseline. The head medi
 
 | Route | Date | Verdict | Model | tools_shape | reasoning_replay | Steps |
 |---|---|---|---|---|---|---|
-| GPT on ChatGPT plan | pending | pending: P0 needs the operator to approve "QMA" on OpenAI's page | | | | |
+| GPT on ChatGPT plan | pending | pending: 2026-10-14 first P0 attempt got an issued client id, then the code exchange returned 400 invalid_grant; rerun needs the operator | | | | |
