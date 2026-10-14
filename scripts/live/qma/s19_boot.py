@@ -2,7 +2,7 @@
 `/api/doctor`. PASS when every planted name is listed as removed with no value anywhere in the
 reply, and the Git Bash path the parent chose is kept.
 
-    s19_boot.py [--home D:/QMX-worktrees/qma-ship/home] [--port 8877]
+    s19_boot.py [--home D:/QMX-worktrees/qma-ship/home] [--port 8876]
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def wait_for_health(port: int, headers: dict[str, str]) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--home", type=Path, default=SHIP / "home")
-    parser.add_argument("--port", type=int, default=8877)
+    parser.add_argument("--port", type=int, default=8876)
     args = parser.parse_args()
     log = Log("hp5-s19")
     FAKE_HOME.mkdir(parents=True, exist_ok=True)
