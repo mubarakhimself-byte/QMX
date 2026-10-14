@@ -198,11 +198,25 @@ CLAUDE_ENV_NAMES: Final[frozenset[str]] = frozenset(
 )
 """The only names allowed under `[claude] env`. No routing, proxy, CA or wrapper name."""
 
-HOOK_TYPES: Final = frozenset({"command", "http", "prompt", "agent"})
+_HOOK_COMMON: Final = frozenset({"type", "if", "timeout", "statusMessage", "once"})
+HOOK_KEYS: Final[Mapping[str, frozenset[str]]] = {
+    "command": _HOOK_COMMON | {"command", "args", "async", "asyncRewake", "shell", "onFailure"},
+    "http": _HOOK_COMMON | {"url", "headers", "allowedEnvVars", "onFailure"},
+    "prompt": _HOOK_COMMON | {"prompt", "model"},
+    "agent": _HOOK_COMMON | {"prompt", "model"},
+}
+"""Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them."""
+HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$[A-Z_][A-Z0-9_]*")
 SECRET_NAME: Final = re.compile(
     r"api[-_]?key|token|secret|passw|authorization|cookie|credential", re.IGNORECASE
 )
-ENV_REFERENCE: Final = re.compile(r"\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)")
+SECRET_IN_TEXT: Final = re.compile(
+    rf"(?i)(--?[\w-]*(?:{SECRET_NAME.pattern})[\w-]*[= ]"
+    rf"|\b\w*(?:{SECRET_NAME.pattern})\w*\s*[=:]\s*)"
+    r"(?:(?:bearer|basic)\s+)?[^\s'\"]+"
+    r"|\b(?:bearer|basic)\s+[^\s'\"]+"
+    r"|\b(?:sk-|ghp_|gho_|ghs_|ghu_|github_pat_|xox[abprs]-|AKIA)[\w-]{8,}"
+)
 REDACTED: Final = "<redacted>"
 TEXT_KEYS: Final = frozenset({"outputStyle", "language"})
 FLAG_KEYS: Final = frozenset({"includeCoAuthoredBy", "alwaysThinkingEnabled", "respectGitignore"})
@@ -255,21 +269,20 @@ def _hooks(value: object) -> None:
                 raise _refuse(f"hooks.{event}", "needs a hooks list and an optional matcher")
             for hook in cast("list[object]", entry["hooks"]):
                 table = _table(hook, f"hooks.{event}")
-                if table.get("type") not in HOOK_TYPES:
-                    raise _refuse(f"hooks.{event}", f"hook types are {sorted(HOOK_TYPES)}")
+                kind = table.get("type")
+                if not isinstance(kind, str) or kind not in HOOK_KEYS:
+                    raise _refuse(f"hooks.{event}", f"hook types are {sorted(HOOK_KEYS)}")
+                unknown = sorted(table.keys() - HOOK_KEYS[kind])
+                if unknown:
+                    raise _refuse(f"hooks.{event} {kind} hook key {unknown[0]}", "is not allowed")
                 if "headers" in table:
                     _headers(table["headers"], f"hooks.{event}")
 
 
 def _headers(value: object, key: str) -> None:
     for name, text in _table(value, f"{key} headers").items():
-        if not isinstance(text, str):
-            raise _refuse(f"{key} header {name}", "must be a string")
-        if SECRET_NAME.search(name) and not ENV_REFERENCE.search(text):
-            raise _refuse(
-                f"{key} header {name}",
-                "holds a literal value; reference an environment variable such as $NAME",
-            )
+        if not isinstance(text, str) or not HEADER_VALUE.fullmatch(text):
+            raise _refuse(f"{key} header {name}", "must be $NAME, Bearer $NAME or Basic $NAME")
 
 
 def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
@@ -685,19 +698,29 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
     return lines
 
 
-def _redact(value: Any, key: str = "") -> Any:
+def redact_settings(value: Any, key: str = "") -> Any:
+    """Hide what doctor must not show: header values, env names outside the allow-list,
+    secret-named keys, URL query strings and secret-looking words in hook commands."""
     if isinstance(value, dict):
         return {
             name: REDACTED
             if key == "headers"
             or (key == "env" and name not in CLAUDE_ENV_NAMES)
             or SECRET_NAME.search(name)
-            else _redact(item, name)
+            else redact_settings(item, name)
             for name, item in cast("dict[str, Any]", value).items()
         }
     if isinstance(value, list):
-        return [_redact(item, key) for item in cast("list[Any]", value)]
+        return [redact_settings(item, key) for item in cast("list[Any]", value)]
+    if isinstance(value, str) and key == "url" and "?" in value:
+        return f"{value.split('?', 1)[0]}?{REDACTED}"
+    if isinstance(value, str) and key in {"command", "args"}:
+        return SECRET_IN_TEXT.sub(_redact_match, value)
     return value
+
+
+def _redact_match(found: re.Match[str]) -> str:
+    return f"{found[1] or ''}{REDACTED}"
 
 
 async def _no_tools(
@@ -757,7 +780,7 @@ def doctor(
     settings = code_settings(
         user, launcher=launcher, workspace=workspace, memory_dir=home.memory_dir(workspace)
     )
-    shown = json.dumps(_redact(json.loads(settings)), sort_keys=True, separators=(",", ":"))
+    shown = json.dumps(redact_settings(json.loads(settings)), sort_keys=True, separators=(",", ":"))
     lines.append(
         DoctorLine(
             "inline settings",

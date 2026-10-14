@@ -26,6 +26,7 @@ from qma.harness.home import (
     parse_claude_settings,
     plan_auth_method,
     read_record,
+    redact_settings,
     remember_rule,
     workspace_key,
     write_record,
@@ -344,37 +345,118 @@ def test_a_whole_section_put_keeps_remembered_rules_unless_it_names_them(
 
 
 def _http_hook(headers: dict[str, str]) -> Document:
-    hook = {"type": "http", "url": "http://127.0.0.1:9/hook", "headers": headers}
+    hook: dict[str, object] = {"type": "http", "url": "http://127.0.0.1:9/hook", "headers": headers}
+    return _hook(hook)
+
+
+def _hook(hook: dict[str, object]) -> Document:
     return cast("Document", {"hooks": {"Stop": [{"hooks": [hook]}]}})
 
 
 @pytest.mark.parametrize(
-    "name", ["Authorization", "Proxy-Authorization", "X-Api-Key", "Cookie", "X-Auth-Token"]
+    ("hook", "key"),
+    [
+        ({"type": "http", "url": "http://h/x", "Headers": {"X-Auth": "abc"}}, "Headers"),
+        ({"type": "http", "url": "http://h/x", "inner": {"ApiKey": "abc"}}, "inner"),
+        ({"type": "command", "command": "x", "url": "http://h/x"}, "url"),
+        ({"type": "http", "url": "http://h/x", "command": "x"}, "command"),
+        ({"type": "command", "command": "x", "headers": {}}, "headers"),
+        ({"type": "prompt", "prompt": "x", "args": ["a"]}, "args"),
+        ({"type": "agent", "prompt": "x", "shell": "bash"}, "shell"),
+    ],
 )
-def test_parse_claude_settings_refuses_a_literal_secret_in_a_hook_header(name: str) -> None:
+def test_parse_claude_settings_refuses_a_hook_key_its_type_does_not_document(
+    hook: dict[str, object], key: str
+) -> None:
     with pytest.raises(LaunchRefused) as refused:
-        parse_claude_settings(_http_hook({name: "Bearer abc123"}))
+        parse_claude_settings(_hook(hook))
+    assert str(refused.value) == f"[claude] hooks.Stop {hook['type']} hook key {key} is not allowed"
+
+
+def test_parse_claude_settings_accepts_every_documented_hook_key() -> None:
+    common = {"if": "Bash(git *)", "timeout": 5, "statusMessage": "s", "once": False}
+    hooks: list[dict[str, object]] = [
+        {
+            "type": "command",
+            "command": "notify",
+            "args": ["a"],
+            "async": True,
+            "asyncRewake": False,
+            "shell": "bash",
+            "onFailure": "continue",
+            **common,
+        },
+        {
+            "type": "http",
+            "url": "http://127.0.0.1:9/hook",
+            "headers": {"Authorization": "Bearer $QMX_HOOK_TOKEN"},
+            "allowedEnvVars": ["QMX_HOOK_TOKEN"],
+            "onFailure": "block",
+            **common,
+        },
+        {"type": "prompt", "prompt": "p", "model": "haiku", **common},
+        {"type": "agent", "prompt": "p", "model": "haiku", **common},
+    ]
+    document = cast("Document", {"hooks": {"Stop": [{"hooks": hooks}]}})
+    assert parse_claude_settings(document).raw == document
+
+
+@pytest.mark.parametrize("name", ["Authorization", "X-Auth", "X-Trace", "Cookie"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Bearer abc123",
+        "Bearer sk-1 $X",
+        "abc $QMX_HOOK_TOKEN",
+        "$QMX_HOOK_TOKEN abc",
+        "Bearer ${QMX_HOOK_TOKEN}",
+        "Token $QMX_HOOK_TOKEN",
+        "$qmx_hook_token",
+        "literal",
+    ],
+)
+def test_parse_claude_settings_refuses_a_hook_header_that_is_not_one_reference(
+    name: str, value: str
+) -> None:
+    with pytest.raises(LaunchRefused) as refused:
+        parse_claude_settings(_http_hook({name: value}))
     assert str(refused.value) == (
-        f"[claude] hooks.Stop header {name} holds a literal value; "
-        "reference an environment variable such as $NAME"
+        f"[claude] hooks.Stop header {name} must be $NAME, Bearer $NAME or Basic $NAME"
     )
-    accepted = _http_hook({name: "Bearer ${QMX_HOOK_TOKEN}"})
+
+
+@pytest.mark.parametrize("value", ["$QMX_HOOK_TOKEN", "Bearer $QMX_HOOK_TOKEN", "Basic $B64"])
+def test_parse_claude_settings_accepts_a_hook_header_that_is_one_reference(value: str) -> None:
+    accepted = _http_hook({"X-Auth": value})
     assert parse_claude_settings(accepted).raw == accepted
 
 
-def test_doctor_redacts_hook_header_values(
+def test_doctor_redacts_hook_headers_url_queries_and_command_secrets(
     home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _throwaway_home(monkeypatch, tmp_path)
     ensure_homes(home)
     control = control_service(home)
-    control.settings_put(
-        "claude",
-        _http_hook({"Authorization": "Bearer $QMX_HOOK_TOKEN", "X-Trace": "trace-value-123"}),
-    )
+    http: dict[str, object] = {
+        "type": "http",
+        "url": "https://hooks.example/stop?token=qsecret1&team=qsecret2",
+        "headers": {"Authorization": "Bearer $QMX_HOOK_TOKEN", "X-Trace": "$QMX_TRACE"},
+    }
+    commands = [
+        "notify --token=csecret1 --channel ops",
+        "notify --api-key csecret2",
+        'curl -H "Authorization: Bearer csecret3" https://h/x',
+        "API_KEY=csecret4 notify",
+        "deploy sk-ant-api03-csecret5abcdef",
+        "notify ghp_csecret6abcdefgh",
+    ]
+    hooks = [http, *({"type": "command", "command": command} for command in commands)]
+    control.settings_put("claude", cast("Document", {"hooks": {"Stop": [{"hooks": hooks}]}}))
     lines = doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
-    assert [line.name for line in lines if "trace-value-123" in line.detail] == []
-    assert [line.name for line in lines if "QMX_HOOK_TOKEN" in line.detail] == []
+    leaked = ["qsecret1", "qsecret2", "QMX_HOOK_TOKEN", "QMX_TRACE"] + [
+        f"csecret{number}" for number in range(1, 7)
+    ]
+    assert [(line.name, word) for line in lines for word in leaked if word in line.detail] == []
     inline = {line.name: line for line in lines}["inline settings"]
     settings = json.loads(inline.detail.split(": ", 1)[1])
     assert settings["hooks"]["Stop"] == [
@@ -382,12 +464,81 @@ def test_doctor_redacts_hook_header_values(
             "hooks": [
                 {
                     "type": "http",
-                    "url": "http://127.0.0.1:9/hook",
+                    "url": "https://hooks.example/stop?<redacted>",
                     "headers": {"Authorization": "<redacted>", "X-Trace": "<redacted>"},
-                }
+                },
+                {"type": "command", "command": "notify --token=<redacted> --channel ops"},
+                {"type": "command", "command": "notify --api-key <redacted>"},
+                {"type": "command", "command": 'curl -H "Authorization: <redacted>" https://h/x'},
+                {"type": "command", "command": "API_KEY=<redacted> notify"},
+                {"type": "command", "command": "deploy <redacted>"},
+                {"type": "command", "command": "notify <redacted>"},
             ]
         }
     ]
+    assert settings["hooks"]["ConfigChange"][0]["hooks"][0]["command"] == (
+        "'D:/venv/Scripts/qma-cli-launcher.exe' --qma-block-config-change"
+    )
+
+
+def test_doctor_hides_a_secret_named_key_wherever_it_sits(
+    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _throwaway_home(monkeypatch, tmp_path)
+    ensure_homes(home)
+    control = control_service(home)
+    control.settings_put("claude", {"attribution": {"commit": "c", "apiToken": "asecret1"}})
+    lines = doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
+    assert [line.name for line in lines if "asecret1" in line.detail] == []
+    inline = {line.name: line for line in lines}["inline settings"]
+    settings = json.loads(inline.detail.split(": ", 1)[1])
+    assert settings["attribution"] == {"commit": "c", "apiToken": "<redacted>"}
+
+
+def test_redact_settings_hides_secret_names_and_env_names_outside_the_allow_list() -> None:
+    shown = redact_settings(
+        {
+            "env": {"BASH_MAX_TIMEOUT_MS": "9", "HTTPS_PROXY": "http://proxy"},
+            "outer": {"inner": {"ApiKey": "k1", "kept": "v"}},
+            "list": [{"session_cookie": "k2"}],
+        }
+    )
+    assert shown == {
+        "env": {"BASH_MAX_TIMEOUT_MS": "9", "HTTPS_PROXY": "<redacted>"},
+        "outer": {"inner": {"ApiKey": "<redacted>", "kept": "v"}},
+        "list": [{"session_cookie": "<redacted>"}],
+    }
+
+
+def test_a_whole_section_put_racing_remember_rule_keeps_the_rule(home: QmxHome) -> None:
+    control = control_service(home)
+    parse = control.settings_parsers["claude"]
+    put_read_current = threading.Event()
+    remembered = threading.Event()
+    putter = threading.current_thread()
+
+    def slow_parse(values: Document, current: Document) -> Document:
+        parsed = parse(values, current)
+        if threading.current_thread() is putter:
+            put_read_current.set()
+            remembered.wait(timeout=1)
+        return parsed
+
+    control.settings_parsers["claude"] = slow_parse
+
+    def remember() -> None:
+        put_read_current.wait(timeout=5)
+        remember_rule(control, "Bash(npm test)", home.root / "ws")
+        remembered.set()
+
+    thread = threading.Thread(target=remember)
+    thread.start()
+    control.settings_put("claude", {"permissions": {"allow": ["Read"]}})
+    thread.join(timeout=10)
+    assert control.settings_get("claude") == {
+        "permissions": {"allow": ["Read"]},
+        "remembered": {workspace_key(home.root / "ws"): {"allow": ["Bash(npm test)"]}},
+    }
 
 
 ARGV_LINE = re.compile(
