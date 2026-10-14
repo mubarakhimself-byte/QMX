@@ -227,7 +227,7 @@ export type Source = {
   approved: boolean;
 };
 
-const SOURCES: Source[] = [
+export const SOURCES: Source[] = [
   {
     id: "arxiv",
     name: "arXiv q-fin",

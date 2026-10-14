@@ -21,6 +21,7 @@
   import Group from "./Group.svelte";
   import {
     SCHEDULES,
+    SOURCES,
     SOURCE_KINDS,
     settings,
     type SourceKind,
@@ -75,6 +76,29 @@
       runs: parts.map((m) => m.runs).join(" · "),
     };
   });
+  // Day one (demo off): this laptop only, and only the sources you added.
+  const local = ENVIRONMENTS.find((e) => e.kind === "local")!;
+  const machines = $derived(
+    workbench.demoMode
+      ? MACHINES
+      : [
+          {
+            id: local.id,
+            name: local.name,
+            role: "Lab, Storage",
+            status: "ready",
+            where: local.where,
+            runs: "Nothing yet",
+            load: local.hardware,
+          },
+        ],
+  );
+  const BUILT_IN = new Set(SOURCES.map((s) => s.id));
+  const sources = $derived(
+    workbench.demoMode
+      ? settings.sources
+      : settings.sources.filter((s) => !BUILT_IN.has(s.id)),
+  );
   const need = (what: string) => workbench.notify(`${what} needs the daemon.`);
 
   // Add a source
@@ -144,7 +168,7 @@
   <Group
     title="Machines"
     tip="Trading servers keep trading when this laptop is off. Lab machines run tests, sweeps and training."
-    meta={`${MACHINES.length} machines`}
+    meta={machines.length === 1 ? "1 machine" : `${machines.length} machines`}
   >
     {#snippet actions()}
       <DropdownMenu.Root>
@@ -183,7 +207,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each MACHINES as m (m.name)}
+        {#each machines as m (m.name)}
           <tr class="border-t">
             <td class="py-row pr-4">
               <span class="flex items-center gap-2 font-medium">
@@ -221,76 +245,82 @@
   <Group
     title="Data sources"
     tip="What the Library, widgets and workflows can read. Paid sources stay off until you approve them, and ask before every use."
-    meta={`${settings.sources.filter((s) => s.on).length} of ${settings.sources.length} on`}
+    meta={sources.length
+      ? `${sources.filter((s) => s.on).length} of ${sources.length} on`
+      : "None added"}
   >
     {#snippet actions()}
       <Button size="sm" variant="outline" onclick={() => (open = true)}
         ><Plus />Add source</Button
       >
     {/snippet}
-    <table class="w-full text-left">
-      <thead class="text-muted-foreground text-sm">
-        <tr>
-          <th class="py-row font-normal">Source</th>
-          <th class="py-row font-normal">Type</th>
-          <th class="hidden py-row font-normal xl:table-cell">What</th>
-          <th class="py-row font-normal">Schedule</th>
-          <th class="py-row font-normal">On</th>
-          <th class="py-row"><span class="sr-only">Remove</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each settings.sources as s (s.id)}
-          <tr class="border-t">
-            <td class="py-row pr-4 font-medium">
-              {s.name}{#if s.paid}<span
-                  class="text-warning ml-2 text-sm font-normal">Paid</span
-                >{/if}
-            </td>
-            <td class="text-muted-foreground py-row pr-4"
-              >{SOURCE_KINDS[s.kind]}</td
-            >
-            <td class="text-muted-foreground hidden py-row pr-4 xl:table-cell"
-              >{s.detail}</td
-            >
-            <td class="py-row pr-4">
-              <Choice
-                label={`${s.name} schedule`}
-                bind:value={s.schedule}
-                options={SCHEDULES}
-                class="h-8"
-              />
-            </td>
-            <td class="py-row pr-4">
-              {#if s.paid && !s.approved}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="text-warning"
-                  onclick={() => {
-                    s.approved = true;
-                    workbench.notify(
-                      `${s.name} approved. It stays off until you switch it on, and asks before every call.`,
-                    );
-                  }}><Lock class="size-3.5" />Approve</Button
-                >
-              {:else}
-                <Switch bind:checked={s.on} aria-label={`Use ${s.name}`} />
-              {/if}
-            </td>
-            <td class="py-row text-right">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={`Remove ${s.name}`}
-                onclick={() => removeSource(s.id)}
-                ><Trash2 class="size-4" /></Button
-              >
-            </td>
+    {#if !sources.length}
+      <p class="text-muted-foreground">No sources yet</p>
+    {:else}
+      <table class="w-full text-left">
+        <thead class="text-muted-foreground text-sm">
+          <tr>
+            <th class="py-row font-normal">Source</th>
+            <th class="py-row font-normal">Type</th>
+            <th class="hidden py-row font-normal xl:table-cell">What</th>
+            <th class="py-row font-normal">Schedule</th>
+            <th class="py-row font-normal">On</th>
+            <th class="py-row"><span class="sr-only">Remove</span></th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each sources as s (s.id)}
+            <tr class="border-t">
+              <td class="py-row pr-4 font-medium">
+                {s.name}{#if s.paid}<span
+                    class="text-warning ml-2 text-sm font-normal">Paid</span
+                  >{/if}
+              </td>
+              <td class="text-muted-foreground py-row pr-4"
+                >{SOURCE_KINDS[s.kind]}</td
+              >
+              <td class="text-muted-foreground hidden py-row pr-4 xl:table-cell"
+                >{s.detail}</td
+              >
+              <td class="py-row pr-4">
+                <Choice
+                  label={`${s.name} schedule`}
+                  bind:value={s.schedule}
+                  options={SCHEDULES}
+                  class="h-8"
+                />
+              </td>
+              <td class="py-row pr-4">
+                {#if s.paid && !s.approved}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    class="text-warning"
+                    onclick={() => {
+                      s.approved = true;
+                      workbench.notify(
+                        `${s.name} approved. It stays off until you switch it on, and asks before every call.`,
+                      );
+                    }}><Lock class="size-3.5" />Approve</Button
+                  >
+                {:else}
+                  <Switch bind:checked={s.on} aria-label={`Use ${s.name}`} />
+                {/if}
+              </td>
+              <td class="py-row text-right">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={`Remove ${s.name}`}
+                  onclick={() => removeSource(s.id)}
+                  ><Trash2 class="size-4" /></Button
+                >
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
   </Group>
 </div>
 

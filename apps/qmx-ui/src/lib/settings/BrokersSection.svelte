@@ -48,6 +48,15 @@
         : via === "cTrader"
           ? "Demo (paper)"
           : "Paper (testnet)";
+  // Day one (demo off): nothing connected; every venue is one to connect.
+  const venues = $derived(workbench.demoMode ? VENUES : []);
+  const choices = (g: (typeof GROUPS)[number]) =>
+    workbench.demoMode
+      ? g.more
+      : [
+          ...VENUES.filter((v) => v.via === g.via).map((v) => v.name),
+          ...g.more,
+        ];
   const need = (what: string) =>
     workbench.notify(
       `${what} needs the daemon; keys go straight to the system credential store.`,
@@ -64,7 +73,7 @@
           text={`${g.note} Add as many accounts as you like. Keys go to this computer's credential store, never QMX's files; trading keys must have withdrawals off.`}
         />
       </div>
-      {#each VENUES.filter((v) => v.via === g.via) as v (v.id)}
+      {#each venues.filter((v) => v.via === g.via) as v (v.id)}
         {@const accounts = ACCOUNTS.filter((a) => a.venue === v.id)}
         <section class="solid-backing rounded-2xl border p-5">
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -117,19 +126,29 @@
             {/each}
           </ul>
         </section>
+      {:else}
+        <p class="text-muted-foreground">
+          {g.via === "cTrader"
+            ? "No broker connected"
+            : "No exchange connected"}
+        </p>
       {/each}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button {...props} variant="outline" class="w-fit"
               ><Plus />{g.via === "cTrader"
-                ? "Connect another broker"
-                : "Connect another exchange"}</Button
+                ? workbench.demoMode
+                  ? "Connect another broker"
+                  : "Connect a broker"
+                : workbench.demoMode
+                  ? "Connect another exchange"
+                  : "Connect an exchange"}</Button
             >
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content class="w-56">
-          {#each g.more as m (m)}
+          {#each choices(g) as m (m)}
             <DropdownMenu.Item onclick={() => need(`Connecting ${m}`)}
               >{m}</DropdownMenu.Item
             >

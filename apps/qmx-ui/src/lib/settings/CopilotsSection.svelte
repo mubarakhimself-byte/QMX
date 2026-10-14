@@ -16,6 +16,7 @@
   import Group from "./Group.svelte";
   import Row from "./Row.svelte";
   import { settings } from "./settings.svelte";
+  import { workbench } from "$lib/workbench/workbench.svelte";
 
   // Each copilot's gear opens this page with ?copilot=<its id>.
   let selected = $state(page.url.searchParams.get("copilot") ?? "main");
@@ -97,12 +98,13 @@
         <span>Tools it may use</span>
         <div class="flex flex-wrap gap-2">
           {#each settings.mcp as m (m.id)}
-            {@const on = cfg.uses.includes(m.id) && m.on}
+            {@const added = m.on && workbench.demoMode}
+            {@const on = cfg.uses.includes(m.id) && added}
             <button
               type="button"
               aria-pressed={on}
-              disabled={!m.on}
-              title={m.on ? m.note : `${m.name} is off under Models and tools`}
+              disabled={!added}
+              title={added ? m.note : `${m.name} is off under Models and tools`}
               class={cn(
                 "rounded-full border px-3 py-1 text-sm disabled:opacity-45",
                 on

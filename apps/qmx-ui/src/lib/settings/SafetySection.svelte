@@ -75,7 +75,10 @@
 
 <div class="grid items-start gap-group 2xl:grid-cols-2">
   <div class="flex flex-col gap-group">
-    <Group title="Kill switch" meta={`Now: ${KILL_LABEL[now]}`}>
+    <Group
+      title="Kill switch"
+      meta={workbench.demoMode ? `Now: ${KILL_LABEL[now]}` : "Nothing to stop"}
+    >
       {#snippet actions()}
         <a
           href={resolve("/portfolio")}
@@ -91,7 +94,7 @@
               ? "destructive"
               : "outline"}
             class={cn("min-w-56", armed === st.to && "ring-destructive ring-2")}
-            disabled={now === st.to || now === "halted"}
+            disabled={!workbench.demoMode || now === st.to || now === "halted"}
             onclick={() => press(st.to, st.label)}
             >{armed === st.to ? st.confirm : st.button}</Button
           >
@@ -189,9 +192,9 @@
     <Group
       title="Always allowed"
       tip="Actions you told a copilot it may repeat without asking. Revoke to make it ask again."
-      meta={`${s.sticky.length}`}
+      meta={`${workbench.demoMode ? s.sticky.length : 0}`}
     >
-      {#each s.sticky as a (a.id)}
+      {#each workbench.demoMode ? s.sticky : [] as a (a.id)}
         <div
           class="flex min-h-11 items-center gap-3 border-t py-row first:border-t-0"
         >

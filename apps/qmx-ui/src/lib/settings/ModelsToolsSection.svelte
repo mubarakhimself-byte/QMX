@@ -29,14 +29,28 @@
     sub: string;
     tip: string;
   };
+  // Day one (demo off): every provider and server is available, none set up.
+  const fresh = $derived(!workbench.demoMode);
   const rows = $derived<Record<Kind, Item[]>>({
     providers: settings.providers.map((p) => ({
       ...p,
+      on: p.on && !fresh,
       sub: p.models.join(", "),
       tip: p.how,
     })),
-    mcp: settings.mcp.map((m) => ({ ...m, sub: "", tip: m.note })),
+    mcp: settings.mcp.map((m) => ({
+      ...m,
+      on: m.on && !fresh,
+      sub: "",
+      tip: m.note,
+    })),
   });
+  const setUp = (kind: Kind, name: string) =>
+    workbench.notify(
+      kind === "providers"
+        ? `Signing in to ${name} needs the daemon; the key goes to the credential store.`
+        : `Adding ${name} needs the daemon.`,
+    );
 
   function setOn(kind: Kind, id: string, on: boolean) {
     const item = settings[kind].find((x) => x.id === id);
@@ -105,7 +119,11 @@
     <Group
       title={grp.title}
       tip={grp.tip}
-      meta={`${list.filter((x) => x.on).length} of ${list.length} on`}
+      meta={fresh
+        ? grp.kind === "providers"
+          ? "None signed in"
+          : "None added"
+        : `${list.filter((x) => x.on).length} of ${list.length} on`}
     >
       {#snippet actions()}
         <Button
@@ -166,51 +184,62 @@
                   >{it.sub}</span
                 >{/if}
             </span>
-            <Popover.Root>
-              <Popover.Trigger
-                class="hover:bg-muted flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm"
-                aria-label={`Copilots that may use ${it.name}`}
+            {#if fresh}
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => setUp(grp.kind, it.name)}
+                >{grp.kind === "providers" ? "Sign in" : "Add"}</Button
               >
-                <Users class="text-muted-foreground size-4" />
-                <span class="num">{users.length}</span>
-                <span class="text-muted-foreground hidden xl:inline"
-                  >{users.length === 1 ? "copilot" : "copilots"}</span
+            {:else}
+              <Popover.Root>
+                <Popover.Trigger
+                  class="hover:bg-muted flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm"
+                  aria-label={`Copilots that may use ${it.name}`}
                 >
-              </Popover.Trigger>
-              <Popover.Content align="end" class="w-64">
-                <p class="mb-2 text-sm font-medium">May use {it.name}</p>
-                <ul class="flex max-h-72 flex-col overflow-auto">
-                  {#each settings.copilots as c (c.id)}
-                    <li>
-                      <label
-                        class="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-row text-sm"
-                      >
-                        <span class="truncate">{c.name}</span>
-                        <Switch
-                          size="sm"
-                          checked={settings.copilot(c.id).uses.includes(it.id)}
-                          onCheckedChange={(v) =>
-                            settings.setUse(c.id, it.id, v)}
-                          aria-label={`${c.name} may use ${it.name}`}
-                        />
-                      </label>
-                    </li>
-                  {/each}
-                </ul>
-              </Popover.Content>
-            </Popover.Root>
-            <Switch
-              checked={it.on}
-              onCheckedChange={(v) => setOn(grp.kind, it.id, v)}
-              aria-label={`Use ${it.name}`}
-            />
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={`Remove ${it.name}`}
-              onclick={() => remove(grp.kind, it.id)}
-              ><Trash2 class="size-4" /></Button
-            >
+                  <Users class="text-muted-foreground size-4" />
+                  <span class="num">{users.length}</span>
+                  <span class="text-muted-foreground hidden xl:inline"
+                    >{users.length === 1 ? "copilot" : "copilots"}</span
+                  >
+                </Popover.Trigger>
+                <Popover.Content align="end" class="w-64">
+                  <p class="mb-2 text-sm font-medium">May use {it.name}</p>
+                  <ul class="flex max-h-72 flex-col overflow-auto">
+                    {#each settings.copilots as c (c.id)}
+                      <li>
+                        <label
+                          class="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-row text-sm"
+                        >
+                          <span class="truncate">{c.name}</span>
+                          <Switch
+                            size="sm"
+                            checked={settings
+                              .copilot(c.id)
+                              .uses.includes(it.id)}
+                            onCheckedChange={(v) =>
+                              settings.setUse(c.id, it.id, v)}
+                            aria-label={`${c.name} may use ${it.name}`}
+                          />
+                        </label>
+                      </li>
+                    {/each}
+                  </ul>
+                </Popover.Content>
+              </Popover.Root>
+              <Switch
+                checked={it.on}
+                onCheckedChange={(v) => setOn(grp.kind, it.id, v)}
+                aria-label={`Use ${it.name}`}
+              />
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Remove ${it.name}`}
+                onclick={() => remove(grp.kind, it.id)}
+                ><Trash2 class="size-4" /></Button
+              >
+            {/if}
           </li>
         {/each}
       </ul>
