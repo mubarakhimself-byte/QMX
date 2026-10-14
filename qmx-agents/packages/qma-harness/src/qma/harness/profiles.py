@@ -109,6 +109,7 @@ QUIRK_ENV_KEYS: Final = frozenset(
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
         "API_TIMEOUT_MS",
         "CLAUDE_CODE_MAX_RETRIES",
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
     }
 )
 
