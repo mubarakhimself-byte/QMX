@@ -24,6 +24,8 @@ def main() -> int:
     subprocess.run(argv, env=cli_env(), cwd=SCRATCH, check=False)
     status = auth_method(cli)
     log(f"auth status fields: {status}")
+    stored = (CONFIG_DIR / ".credentials.json").exists()
+    log(f"credentials file in the ship home (existence only, the gate every probe uses): {stored}")
     verdict = "PASS" if status.get("loggedIn") else "FAIL"
     log.row("S2 auth method", status.get("authMethod"), verdict)
     log.row("S2 api provider", status.get("apiProvider"), verdict)

@@ -139,7 +139,11 @@ def auth_method(cli: Path) -> dict[str, Any]:
 
 
 def require_plan_login(log: Log, cli: Path) -> None:
-    status = auth_method(cli)
+    """Checks only that the credentials file exists, never its content, before any CLI start,
+    so a probe run without the login leaves the ship home untouched."""
+    status: dict[str, Any] = {"credentials_file": (CONFIG_DIR / ".credentials.json").exists()}
+    if status["credentials_file"]:
+        status = auth_method(cli)
     log(f"auth status fields: {status}")
     if not status.get("loggedIn") or status.get("apiProvider") not in (None, "firstParty"):
         log.row("plan login present", status, "BLOCKED")
