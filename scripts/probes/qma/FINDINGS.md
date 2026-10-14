@@ -32,4 +32,14 @@ Trunk has no GPT route on the plan, so there is no trunk baseline. The head medi
 
 | Route | Date | Verdict | Model | tools_shape | reasoning_replay | Steps |
 |---|---|---|---|---|---|---|
-| GPT on ChatGPT plan | pending | pending: 2026-10-14 first P0 attempt got an issued client id, then the code exchange returned 400 invalid_grant; rerun needs the operator | | | | |
+| GPT on ChatGPT plan | 2026-10-14 | viable | model `gpt-6.1-sol` | tools_shape `namespace` | reasoning_replay `false` | P1 PASS: 7 models, gpt slugs ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']; P2 PASS: completed, first byte 3.87 s; P3-namespace PASS: call echo_word namespace=qma, turn2 response.completed; P3-plain PASS: call echo_word namespace=None, turn2 response.completed; P4 FAIL: turn1 response.completed, code None, param None, encrypted 0; P5 FAIL: 400 for ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']; perf PASS: median first byte 2.45 s over 5 runs |
+
+P0 passed on the operator's sign-in with `chatgpt.tokens.use.direct` granted (`hp2-p0.png`). The row above is the third `run --reuse`; runs one and two are kept under `run1-fold-bug/` and `run2-p5-stop/` in the evidence folder.
+
+What the row means for the HP16 translator:
+
+- Tools. Both shapes return a function call and complete turn two. The namespace shape is kept because the route's rules ask for it.
+- Stream. The route sends an empty `output` on `response.completed`. Output items arrive only in `response.output_item.done`, which is where OpenAI's streaming reference says to take an item for replay.
+- Reasoning. `include: ["reasoning.encrypted_content"]` with `reasoning.effort` medium is accepted, but no reasoning item comes back, so there is nothing to replay. Carry-over is off.
+- Field strip. `temperature`, `metadata` and a `system` role item return 400. `max_output_tokens` returned 200, against the preview-limitations page. The translator drops it anyway.
+- Perf. Median first byte 2.45 s over five P2 runs one minute apart, under the 10 s rule.
