@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 from qma.core.barriers.money_path import MoneyPathDenyError, is_money_path_act_denied
@@ -36,9 +37,9 @@ def check_descriptor(name: str, metadata: dict[str, Any]) -> None:
                 tokens.append(value)
             elif isinstance(value, (list, tuple, set)):
                 tokens.extend(str(item) for item in cast("list[Any]", value))
-    for token in list(tokens):
-        for separator in ("_", ".", ":", "/"):
-            parts = token.split(separator)
-            tokens.extend(separator.join(parts[index:]) for index in range(1, len(parts)))
-    if any(is_money_path_act_denied(token) for token in tokens):
+    suffixes: list[str] = []
+    for token in tokens:
+        words = [word for word in re.split(r"[\W_]+", token.casefold()) if word]
+        suffixes.extend("_".join(words[index:]) for index in range(len(words)))
+    if any(is_money_path_act_denied(suffix) for suffix in suffixes):
         raise MoneyPathDenyError(f"Money-path act refused: {name}")
