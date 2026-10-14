@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * News and events in two streams: crypto, and FX/macro as an influence on
-   * crypto. Each item shows sentiment, which markets it touches, and the
+   * News and events in two streams: CFD markets with macro (FX, indices,
+   * gold, oil), and crypto. Each item shows sentiment, which markets it touches, and the
    * source it comes from (every item must have a backend source).
    */
   import Plus from "@lucide/svelte/icons/plus";
@@ -10,11 +10,11 @@
   import { NEWS } from "../demo";
 
   const TABS = [
-    { id: "crypto", label: "Crypto" },
-    { id: "fx", label: "FX and macro" },
     { id: "all", label: "All" },
+    { id: "fx", label: "CFDs and macro" },
+    { id: "crypto", label: "Crypto" },
   ] as const;
-  let tab = $state<"crypto" | "fx" | "all">("crypto");
+  let tab = $state<"crypto" | "fx" | "all">("all");
   type SortKey = "time" | "impact" | "mood";
   let sort = $state<SortKey>("time");
   const RANK = { high: 3, medium: 2, low: 1 };

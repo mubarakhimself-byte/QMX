@@ -20,10 +20,12 @@
       )}
       {#if accts.length}
         <section class="pb-1">
-          <p class="flex items-baseline gap-1.5 px-3 pt-2 pb-1 text-xs">
+          <p
+            class="flex items-baseline gap-1.5 px-3 pt-2 pb-1 text-xs whitespace-nowrap"
+            title={v.market}
+          >
             <span class="font-medium">{v.name}</span><span
-              class="text-muted-foreground truncate"
-              title={`${v.via} · ${v.market}`}>{v.via} · {v.market}</span
+              class="text-muted-foreground">{v.via}</span
             >
           </p>
           {#each accts as a (a.id)}
@@ -42,20 +44,24 @@
                 class="text-muted-foreground flex items-center gap-2 pl-4 text-xs"
               >
                 <span class="num text-foreground">{usd(a.equity)}</span>
-                {#if a.margin}<span
-                    class="num"
-                    title={`Margin in use, leverage up to 1:${a.margin.leverage}`}
-                    >margin {usd(a.margin.used)}</span
-                  >{/if}
                 <span
                   class={cn(
                     "num",
                     a.today >= 0 ? "text-success" : "text-destructive",
                   )}>{pct(a.today)}</span
                 >
-                <span class="ml-auto">{a.quote} · {nodeById(a.node)?.name}</span
+                <span class="ml-auto truncate" title={a.quote}
+                  >{nodeById(a.node)?.name}</span
                 >
               </div>
+              {#if a.margin}
+                <p class="text-muted-foreground pl-4 text-xs">
+                  Margin <span class="num text-foreground"
+                    >{usd(a.margin.used)}</span
+                  >
+                  · up to 1:{a.margin.leverage}
+                </p>
+              {/if}
               <ul class="mt-1 pl-3">
                 {#each PODS.filter((p) => p.account === a.id) as p (p.id)}
                   <li>
