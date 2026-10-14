@@ -8,7 +8,7 @@ Step 3 of the one-engine runbook. The research lives in two files, written on 20
 ## Facts that shape the design
 
 1. **Max-plan use is allowed, on conditions.** The unmodified Claude Code CLI must own sign-in, and QMA never reads or stores the token. Heavy unattended use is gray. (02b A)
-2. **There is a no-gray fallback.** Max 5x includes $100 a month in API credits. With a Console key, they cover the Agent SDK. (02b A, item 14)
+2. **The $100 Max API credit is not a fallback.** Max 5x includes $100 a month in API credits that cover the Agent SDK with a Console key (02b A, item 14). The operator ruled out all API spend, this credit included: "I don't want to pay for API ever" (10-12 17:11; BACKLOG.md rejected-ideas table). 02b's "zero-gray fallback" is withdrawn.
 3. **The Consumer Terms have a trading clause.** They bar relying on the Services "to buy or sell securities". Money stays read-only for agents. The operator should still read the clause himself. (02b A, item 9)
 4. **Isolation from his personal Claude Code takes four settings.** If `setting_sources` is left out, the SDK loads all of `~/.claude`. Isolation needs `CLAUDE_CONFIG_DIR`, `strict_mcp_config`, an explicit `plugins` list and a working folder outside the dev repo. (02a)
 5. **Money guards must be deny rules or PreToolUse hooks.** If no permission mode is passed, a session can start in `auto`, and `can_use_tool` is skipped for anything already approved. (02a)
