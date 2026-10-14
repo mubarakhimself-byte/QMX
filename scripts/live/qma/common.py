@@ -30,7 +30,6 @@ LAUNCHER: Final = Path(sys.executable).parent / (
 
 
 EVIDENCE: Final = os.environ.get("QMA_EVIDENCE_DIR")
-"""Read at import, because `boot` scrubs the variable like `qma.serve` does."""
 
 
 class Log:

@@ -10,10 +10,9 @@ Lifecycle, one owner:
 
 While Live, the reader task drains `receive_messages()` and routes each `project()` fact.
 The record's turn is "running" from before a prompt goes out until every prompt sent has its
-own `ResultMessage`. A
-record still "running" when the harness opens, or when the CLI ends mid-turn, means the
-outcome is unknown: the chat shows a `needs_you` block and continues only when the operator
-sends the next message.
+own `ResultMessage`. A record still "running" when the harness opens, or when the CLI ends
+mid-turn, means the outcome is unknown: the chat shows a `needs_you` block and continues only
+when the operator sends the next message.
 
 Asks. Until approvals are wired, `can_use_tool` rejects every call that would ask, so no chat
 writes a file or runs a command the CLI would have asked about.
@@ -157,7 +156,7 @@ def installed_plugins(claude_home: Path) -> list[str]:
 def _json(path: Path) -> dict[str, Any]:
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     return cast("dict[str, Any]", loaded) if isinstance(loaded, dict) else {}
 

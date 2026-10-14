@@ -387,7 +387,6 @@ def test_a_queued_prompt_keeps_the_turn_running_until_its_own_result(home: QmxHo
 
 
 def split_deliveries(text: str) -> list[list[str]]:
-    """Every way to cut `text` in two and in three, one delta per character, and fixed chunks."""
     size = len(text)
     two = [[text[:i], text[i:]] for i in range(1, size)]
     three = [

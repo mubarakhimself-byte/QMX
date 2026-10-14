@@ -121,7 +121,7 @@ class Block:
 
 @dataclass(frozen=True)
 class Delta:
-    """Live only (token text, tool progress). Never stored. Unredacted until `TokenGate`."""
+    """Live only (token text, tool progress). Never stored."""
 
     target: Target
     kind: Literal["text", "thinking", "tool_progress"]
