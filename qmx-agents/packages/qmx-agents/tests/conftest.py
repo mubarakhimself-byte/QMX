@@ -30,8 +30,15 @@ def snapshot() -> dict[str, tuple[int, int]]:
 
 
 @pytest.fixture(autouse=True)
-def untouched_user_home() -> Iterator[None]:
+def isolated_home(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
     before = snapshot()
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    for name in ("QMX_HOME", "QMX_TOOLS_ROOT", "QMX_TOOLS_FACTORY"):
+        monkeypatch.delenv(name, raising=False)
     yield
     after = snapshot()
     changed = sorted(
