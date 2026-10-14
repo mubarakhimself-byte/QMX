@@ -445,19 +445,39 @@ def test_parse_claude_settings_accepts_a_hook_header_that_is_one_reference(value
 
 
 @pytest.mark.parametrize(
-    "url", ["https://user:pw1@h/x", "https://user@h/x", "http://:pw1@h/x", "https://u:p@h:8/x?a=b"]
+    "url",
+    [
+        "https://user:pw1@h/x",
+        "https://user@h/x",
+        "http://:pw1@h/x",
+        "https://u:p@h:8/x?a=b",
+        "https:\\\\u:p@h/x",
+        "https:u:p@h/x",
+        "https:/u:p@h/x",
+        " https://h/x",
+        "\thttps://h/x",
+        "https://h/x ",
+        "https://h/x\n",
+        "https://h\\x",
+        "ftp://h/x",
+        "//h/x",
+        "h/x",
+    ],
 )
-def test_parse_claude_settings_refuses_a_hook_url_with_userinfo(url: str) -> None:
+def test_parse_claude_settings_refuses_a_hook_url_that_is_not_plain_http(url: str) -> None:
     with pytest.raises(LaunchRefused) as refused:
         parse_claude_settings(_hook({"type": "http", "url": url}))
     assert str(refused.value) == (
-        "[claude] hooks.Stop http hook url carries a user or password; "
-        "put the credential in a $NAME header"
+        "[claude] hooks.Stop http hook url must be http(s)://host[/path] with no user, "
+        "password, backslash or whitespace; put a credential in a $NAME header"
     )
 
 
-def test_parse_claude_settings_accepts_a_hook_url_whose_at_sign_is_not_userinfo() -> None:
-    accepted = _hook({"type": "http", "url": "https://h/x/@team?to=a@b"})
+@pytest.mark.parametrize(
+    "url", ["https://h/x/@team?to=a@b", "http://127.0.0.1:9/hook", "https://h:8", "https://h#f"]
+)
+def test_parse_claude_settings_accepts_a_plain_http_hook_url(url: str) -> None:
+    accepted = _hook({"type": "http", "url": url})
     assert parse_claude_settings(accepted).raw == accepted
 
 

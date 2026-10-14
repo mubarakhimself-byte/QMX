@@ -207,7 +207,9 @@ HOOK_KEYS: Final[Mapping[str, frozenset[str]]] = {
 }
 """Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them."""
 HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$(\{[A-Z_][A-Z0-9_]*\}|[A-Z_][A-Z0-9_]*)")
-URL_USERINFO: Final = re.compile(r"([A-Za-z][\w+.-]*://)[^/?#]*@")
+HOOK_URL: Final = re.compile(r"https?://[^\s\\/?#@]+(?:[/?#]\S*)?")
+"""An http hook url. No user info, backslash or whitespace, so no URL parser can read a
+credential out of it."""
 ATTRIBUTION_KEYS: Final[Mapping[str, type]] = {"commit": str, "pr": str, "sessionUrl": bool}
 """`attribution` sub-keys, as https://code.claude.com/docs/en/settings-reference documents them."""
 SET: Final = "<set>"
@@ -271,10 +273,11 @@ def _hooks(value: object) -> None:
                 if "headers" in table:
                     _headers(table["headers"], f"hooks.{event}")
                 url = table.get("url")
-                if isinstance(url, str) and URL_USERINFO.match(url):
+                if "url" in table and not (isinstance(url, str) and HOOK_URL.fullmatch(url)):
                     raise _refuse(
                         f"hooks.{event} {kind} hook url",
-                        "carries a user or password; put the credential in a $NAME header",
+                        "must be http(s)://host[/path] with no user, password, backslash or "
+                        "whitespace; put a credential in a $NAME header",
                     )
 
 
