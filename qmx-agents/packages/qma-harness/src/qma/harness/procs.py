@@ -218,9 +218,6 @@ class _ProcessIds(ctypes.Structure):
 
 @dataclass
 class _JobParent:
-    """The named parent job. A watcher thread reads the job's completion port and kills the
-    chat whose process hit the memory limit."""
-
     name: str
     cap: AgentProcessCap
     os_cap: bool = True
@@ -301,7 +298,6 @@ class _JobParent:
         k.CloseHandle(self._port)
 
     def _chat_of(self, pid: int) -> str | None:
-        """The live chat whose CLI is `pid` or whose job holds `pid`."""
         chats = self.cap.live_chats()
         for chat in chats:
             record = read_pid_record(pid_path(self.cap.procs_dir, chat))

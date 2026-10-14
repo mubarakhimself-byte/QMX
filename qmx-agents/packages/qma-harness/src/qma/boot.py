@@ -23,7 +23,6 @@ BANNED_FRAGMENTS: Final[tuple[str, ...]] = (
     "SSL_",
     "CLAUDE",
 )
-"""No kept name may contain one of these, except `GIT_BASH_NAME`."""
 
 GIT_BASH_NAME: Final = "CLAUDE_CODE_GIT_BASH_PATH"
 """How the CLI finds a non-default Git Bash. Not a routing key."""
