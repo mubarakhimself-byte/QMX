@@ -1,13 +1,17 @@
 """Probe GPT on the ChatGPT plan through Sign in with ChatGPT (HARNESS-PLAN HP2, 02b section D).
 
-A throwaway client registered as "QMA" runs probes P0 to P5 in order and stops at the first
-failure, except P4. The refresh token lives in the OS keyring under `qmx/chatgpt`. Access
-tokens live in this process only. No log line, file or stdout line carries a token.
+A throwaway client registered as "QMA" runs probes P0 to P5 in order. 02b's stop rule (P2
+not eligible, or P3 failing in both tool shapes) ends the run as not viable; any other P1 or
+P2 failure ends it as inconclusive. The refresh token lives in the OS keyring under
+`qmx/chatgpt`. Access tokens live in this process only. No log line, file or stdout line
+carries a token.
 
     run      P0 sign-in (the operator approves "QMA" in the browser), P1 to P5, the P2 perf
-             series, then the secrets scan. `--reuse` skips P0 and refreshes the stored token.
+             series, then the secrets scan. `--reuse` skips P0, refreshes the stored token and
+             re-checks that the direct scope is still granted.
     refresh  Force one refresh, check the rotated refresh token is stored, then scan.
-    scan     Search the evidence folder and FINDINGS.md for the current token values.
+    scan     Search the evidence folder, its subfolders and FINDINGS.md for the current
+             token values.
 
 Needs `keyring`, which the qmx-agents environment has:
     uv run --project qmx-agents --no-sync python scripts/probes/qma/p_gpt.py run
@@ -18,6 +22,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import http.client
 import importlib
 import itertools
 import json
@@ -54,13 +59,14 @@ NAMESPACE = "qma"
 USER_AGENT = "QMA-probe/0.1"
 NOT_ELIGIBLE = "subscription_sharing_user_not_eligible"
 REFRESH_MARGIN_S = 300
-MAX_REFRESH_WAIT_S = 1800
+MAX_REFRESH_WAIT_S = 3600
 PERF_LIMIT_S = 10.0
 DEFAULT_EVIDENCE = Path("D:/QMX-worktrees/qma-ship/evidence/hp2")
 FINDINGS = Path(__file__).with_name("FINDINGS.md")
 
 Json = dict[str, Any]
 ToolsShape = Literal["namespace", "plain"]
+Outcome = Literal["viable", "not viable", "inconclusive"]
 
 
 def responses_body(
@@ -441,6 +447,10 @@ def epoch_seconds(value: object) -> float | None:
     return None
 
 
+TRANSPORT_FAILED = 0
+"""Status recorded when no HTTP reply arrived (DNS, connect, reset or timeout)."""
+
+
 @dataclass(frozen=True)
 class HttpReply:
     status: int
@@ -455,6 +465,8 @@ def _send(request: urllib.request.Request, timeout_s: float = 60) -> HttpReply:
             return HttpReply(response.status, response.read(), response.headers.get("x-request-id"))
     except urllib.error.HTTPError as err:
         return HttpReply(err.code, err.read(), err.headers.get("x-request-id"))
+    except (OSError, http.client.HTTPException) as err:
+        return HttpReply(TRANSPORT_FAILED, f"transport: {err}".encode(), None)
 
 
 def post_form(url: str, form: Mapping[str, str]) -> HttpReply:
@@ -493,6 +505,8 @@ def token_error_code(reply: HttpReply) -> str | None:
 
 
 def token_error(reply: HttpReply) -> str:
+    if reply.status == TRANSPORT_FAILED:
+        return reply.body.decode(errors="replace")
     body = _token_error_body(reply)
     if body is None:
         return f"http {reply.status} request_id={reply.request_id}: body is not a JSON object"
@@ -510,6 +524,7 @@ class Session:
     registration: Registration
     vault: Vault
     secrets_seen: set[str] = field(default_factory=set[str])
+    scopes_from_reply: bool = False
     _access: str | None = None
     _expires_at: float = 0.0
 
@@ -523,7 +538,8 @@ class Session:
         if "refresh_token" in tokens:
             self.registration.refresh_token = tokens["refresh_token"]
             self.secrets_seen.add(tokens["refresh_token"])
-        if "scope" in tokens:
+        self.scopes_from_reply = "scope" in tokens
+        if self.scopes_from_reply:
             self.registration.scopes = tuple(sorted(str(tokens["scope"]).split()))
         self.registration.earliest_refresh_at = epoch_seconds(tokens.get("earliest_refresh_at"))
         self.vault.set(self.registration.dumps())
@@ -657,7 +673,6 @@ def sign_in(vault: Vault, *, timeout_s: float, log: Callable[[str], None]) -> Se
         raise SignInError("id_token audience is not the issued client id")
     session = Session(Registration(client_id, host_id, tokens.get("refresh_token", ""), ()), vault)
     session.accept(tokens)
-    log(f"granted_scopes: {' '.join(session.registration.scopes)}")
     log(f"expires_in: {tokens.get('expires_in')}")
     log(f"earliest_refresh_at: {tokens.get('earliest_refresh_at')}")
     log(f"refresh_token_stored_under: keyring {KEYRING_SERVICE} / {KEYRING_USER}")
@@ -683,15 +698,21 @@ def post_responses(token: str, body: Mapping[str, Any]) -> StreamResult:
     )
     started = time.perf_counter()
     try:
-        response = urllib.request.urlopen(request, timeout=180)  # noqa: S310
+        with urllib.request.urlopen(request, timeout=180) as response:  # noqa: S310
+            first = response.readline()
+            first_byte_s = time.perf_counter() - started
+            lines = (raw.decode() for raw in itertools.chain([first], response))
+            return fold_events(
+                response.status,
+                response.headers.get("x-request-id"),
+                first_byte_s,
+                parse_sse(lines),
+            )
     except urllib.error.HTTPError as err:
         return error_result(err.code, err.headers.get("x-request-id"), err.read())
-    with response:
-        first = response.readline()
-        first_byte_s = time.perf_counter() - started
-        lines = (raw.decode() for raw in itertools.chain([first], response))
-        return fold_events(
-            response.status, response.headers.get("x-request-id"), first_byte_s, parse_sse(lines)
+    except (OSError, http.client.HTTPException) as err:
+        return error_result(
+            TRANSPORT_FAILED, None, json.dumps({"detail": f"transport: {err}"}).encode()
         )
 
 
@@ -700,6 +721,7 @@ class StepResult:
     step: str
     passed: bool
     detail: str
+    stop_rule: bool = False
 
 
 class Evidence:
@@ -789,7 +811,7 @@ def probe_hello(session: Session, ev: Evidence, model: str, slug: str = "hp2-p2"
     else:
         detail = f"no response.completed (status {result.status}, code {result.error_code})"
     log(f"result: {'PASS' if result.completed else 'FAIL'} {detail}")
-    return StepResult("P2", result.completed, detail)
+    return StepResult("P2", result.completed, detail, stop_rule=result.error_code == NOT_ELIGIBLE)
 
 
 def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -> StepResult:
@@ -807,7 +829,9 @@ def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -
         log(f"result: FAIL {detail}")
         return StepResult(f"P3-{shape}", False, detail)
     call = calls[0]
-    log(f"function_call: name={call.get('name')} namespace={call.get('namespace')}")
+    namespace = call.get("namespace")
+    log(f"function_call: name={call.get('name')} namespace={namespace}")
+    named = shape == "plain" or namespace == NAMESPACE
     follow = {
         **body,
         "input": [
@@ -819,9 +843,11 @@ def probe_tools(session: Session, ev: Evidence, model: str, shape: ToolsShape) -
     _log_body(log, "turn2", follow)
     second = post_responses(session.access_token(), follow)
     _log_result(log, "turn2", second)
-    detail = f"call {call.get('name')} namespace={call.get('namespace')}, turn2 {second.terminal}"
-    log(f"result: {'PASS' if second.completed else 'FAIL'} {detail}")
-    return StepResult(f"P3-{shape}", second.completed, detail)
+    expected = "" if named else f" (expected {NAMESPACE})"
+    detail = f"call {call.get('name')} namespace={namespace}{expected}, turn2 {second.terminal}"
+    passed = named and second.completed
+    log(f"result: {'PASS' if passed else 'FAIL'} {detail}")
+    return StepResult(f"P3-{shape}", passed, detail)
 
 
 def probe_reasoning(session: Session, ev: Evidence, model: str, shape: ToolsShape) -> StepResult:
@@ -874,21 +900,45 @@ BARRED: dict[str, Callable[[Json], Json]] = {
 }
 
 
+REFUSAL_NAMES = {
+    "max_output_tokens": "max_output_tokens",
+    "temperature": "temperature",
+    "metadata": "metadata",
+    "system_role_item": "system",
+}
+"""The word a 400 must name to count as refusing that field. The route answers with
+`error.message` only, code and param null (measured 2026-10-14): `Unsupported parameter:
+temperature`, `Unsupported parameter: metadata`, `System messages are not allowed`."""
+
+BarredOutcome = Literal["refused", "accepted", "unclassified"]
+
+
+def barred_outcome(name: str, result: StreamResult) -> BarredOutcome:
+    if result.completed:
+        return "accepted"
+    word = REFUSAL_NAMES[name]
+    named = result.error_param == word or word in (result.error_message or "").lower()
+    return "refused" if result.status == 400 and named else "unclassified"
+
+
 def probe_barred(session: Session, ev: Evidence, model: str) -> StepResult:
+    """Pass when every barred field's outcome is a refusal that names it or a completed 200,
+    so each is recorded with the route's own message. A 400 for another cause fails."""
     log = ev.writer("hp2-p5")
-    refused: list[str] = []
+    outcomes: dict[BarredOutcome, list[str]] = {"refused": [], "accepted": [], "unclassified": []}
     for name, mutate in BARRED.items():
         result = post_responses(session.access_token(), mutate(hello_body(model)))
+        outcome = barred_outcome(name, result)
+        outcomes[outcome].append(name)
         log(
-            f"{name}: http_status={result.status} code={result.error_code} "
+            f"{name}: http_status={result.status} outcome={outcome} "
+            f"message={result.error_message!r} code={result.error_code} "
             f"param={result.error_param} terminal={result.terminal}"
         )
-        if result.status == 400:
-            refused.append(name)
-    accepted = [name for name in BARRED if name not in refused]
-    detail = f"400 for {refused}; accepted {accepted}"
-    log(f"result: {'PASS' if not accepted else 'FAIL'} {detail}")
-    return StepResult("P5", not accepted, detail)
+    detail = "; ".join(f"{kind} {names}" for kind, names in outcomes.items())
+    passed = not outcomes["unclassified"]
+    log(f"result: {'PASS' if passed else 'FAIL'} {detail}")
+    return StepResult("P5", passed, detail)
 
 
 def perf_series(
@@ -900,7 +950,10 @@ def perf_series(
         if index:
             time.sleep(spacing_s)
         result = post_responses(session.access_token(), hello_body(model))
-        log(f"run {index + 1}: first_byte_s={result.first_byte_s} terminal={result.terminal}")
+        error = "" if result.completed else f" error={result.error_message!r}"
+        log(
+            f"run {index + 1}: first_byte_s={result.first_byte_s} terminal={result.terminal}{error}"
+        )
         if result.completed and result.first_byte_s is not None:
             samples.append(result.first_byte_s)
     if len(samples) < runs:
@@ -919,15 +972,14 @@ def scan_for_secrets(paths: Iterable[Path], values: Iterable[str]) -> list[Path]
     return [
         path
         for path in paths
-        if path.is_file()
-        and any(n in path.read_text(encoding="utf-8", errors="replace") for n in needles)
+        if any(n in path.read_text(encoding="utf-8", errors="replace") for n in needles)
     ]
 
 
 def secrets_scan(session: Session, ev: Evidence, findings: Path) -> StepResult:
     log = ev.writer("hp2-secrets")
-    paths = sorted(p for p in ev.folder.iterdir() if p.name != "hp2-secrets.log")
-    paths.append(findings)
+    own = ev.folder / "hp2-secrets.log"
+    paths = sorted({p for p in [*ev.folder.rglob("*"), findings] if p.is_file() and p != own})
     log(f"token_values_checked: {len(session.secrets_seen)} (access and refresh, this process)")
     for path in paths:
         log(f"scanned: {path}")
@@ -939,7 +991,11 @@ def secrets_scan(session: Session, ev: Evidence, findings: Path) -> StepResult:
 
 @dataclass(frozen=True)
 class Verdict:
-    viable: bool
+    """`not viable` only when 02b section D's stop rule fires: P2 returns
+    subscription_sharing_user_not_eligible, or P3 fails in both tool shapes. Any other P1 or
+    P2 failure, such as a 429 usage limit, is `inconclusive` and the run should be repeated."""
+
+    outcome: Outcome
     model: str | None
     tools_shape: ToolsShape | None
     reasoning_replay: bool | None
@@ -947,13 +1003,16 @@ class Verdict:
     steps: tuple[StepResult, ...]
 
     def row(self) -> str:
-        if self.viable:
-            outcome = (
-                f"viable | model `{self.model}` | tools_shape `{self.tools_shape}` "
-                f"| reasoning_replay `{str(self.reasoning_replay).lower()}`"
-            )
-        else:
-            outcome = f"not viable | stop rule at {self.stopped_at} | |"
+        match self.outcome:
+            case "viable":
+                outcome = (
+                    f"viable | model `{self.model}` | tools_shape `{self.tools_shape}` "
+                    f"| reasoning_replay `{str(self.reasoning_replay).lower()}`"
+                )
+            case "not viable":
+                outcome = f"not viable | stop rule at {self.stopped_at} | |"
+            case "inconclusive":
+                outcome = f"inconclusive | rerun: {self.stopped_at} | |"
         steps = "; ".join(
             f"{s.step} {'PASS' if s.passed else 'FAIL'}: {s.detail}" for s in self.steps
         )
@@ -965,34 +1024,35 @@ def run_chain(
 ) -> Verdict:
     steps: list[StepResult] = []
 
-    def stop(at: str) -> Verdict:
-        return Verdict(False, model, None, None, at, tuple(steps))
+    def stop(outcome: Outcome, at: str) -> Verdict:
+        return Verdict(outcome, model, None, None, at, tuple(steps))
 
     p1, gpt = probe_models(session, ev)
     steps.append(p1)
     if not p1.passed:
-        return stop("P1")
+        return stop("inconclusive", f"P1 ({p1.detail})")
     model = model or gpt[0]
-    steps.append(probe_hello(session, ev, model))
-    if not steps[-1].passed:
-        return stop(f"P2 ({steps[-1].detail})")
+    p2 = probe_hello(session, ev, model)
+    steps.append(p2)
+    if not p2.passed:
+        return stop("not viable" if p2.stop_rule else "inconclusive", f"P2 ({p2.detail})")
     namespace = probe_tools(session, ev, model, "namespace")
     plain = probe_tools(session, ev, model, "plain")
     steps += [namespace, plain]
     if not namespace.passed and not plain.passed:
-        return stop("P3 (both tool shapes failed)")
+        return stop("not viable", "P3 (both tool shapes failed)")
     shape: ToolsShape = "namespace" if namespace.passed else "plain"
     p4 = probe_reasoning(session, ev, model, shape)
     steps.append(p4)
     steps.append(probe_barred(session, ev, model))
     if perf_runs:
         steps.append(perf_series(session, ev, model, perf_runs, perf_spacing_s))
-    return Verdict(True, model, shape, p4.passed, None, tuple(steps))
+    return Verdict("viable", model, shape, p4.passed, None, tuple(steps))
 
 
 def _write_verdict(ev: Evidence, verdict: Verdict) -> None:
     payload = {
-        "viable": verdict.viable,
+        "outcome": verdict.outcome,
         "model": verdict.model,
         "tools_shape": verdict.tools_shape,
         "reasoning_replay": verdict.reasoning_replay,
@@ -1006,26 +1066,31 @@ def _write_verdict(ev: Evidence, verdict: Verdict) -> None:
 def cmd_run(args: argparse.Namespace) -> int:
     ev = Evidence(args.evidence)
     vault = KeyringVault()
-    if args.reuse:
-        session = load_session(vault)
-    else:
-        log = ev.writer("hp2-p0")
-        try:
+    log = ev.writer("hp2-reuse" if args.reuse else "hp2-p0")
+    try:
+        if args.reuse:
+            session = load_session(vault)
+            session.access_token()
+        else:
             session = sign_in(vault, timeout_s=args.signin_timeout, log=log)
-        except SignInError as err:
-            log(f"result: FAIL {err}")
-            return 1
-        granted = DIRECT_SCOPE in session.registration.scopes
-        log(f"result: {'PASS' if granted else 'FAIL'} {DIRECT_SCOPE} granted={granted}")
-        if not granted:
-            return 1
+    except SignInError as err:
+        log(f"result: FAIL {err}")
+        return 1
+    granted = DIRECT_SCOPE in session.registration.scopes
+    source = "refresh reply" if session.scopes_from_reply else "stored record"
+    log(f"granted_scopes: {' '.join(session.registration.scopes)}")
+    mark = "PASS" if granted else "FAIL"
+    log(f"result: {mark} {DIRECT_SCOPE} granted={granted} (scopes from {source})")
+    if not granted:
+        return 1
     verdict = run_chain(
         session, ev, model=args.model, perf_runs=args.perf_runs, perf_spacing_s=args.perf_spacing
     )
     _write_verdict(ev, verdict)
     print(verdict.row())
     scan = secrets_scan(session, ev, args.findings)
-    return 0 if verdict.viable and scan.passed else 1
+    steps_passed = all(step.passed for step in verdict.steps if step.step != "P4")
+    return 0 if verdict.outcome == "viable" and steps_passed and scan.passed else 1
 
 
 def cmd_refresh(args: argparse.Namespace) -> int:

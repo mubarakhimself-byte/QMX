@@ -579,7 +579,7 @@ def test_a_barred_field_the_route_accepts_is_recorded_and_the_chain_runs_on(
 
 
 class UnrelatedFourHundredRoute(StubRoute):
-    barred_keys = frozenset()
+    barred_keys = frozenset[str]()
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
