@@ -13,8 +13,12 @@
   import X from "@lucide/svelte/icons/x";
   import { RUNS, envById, type Run } from "../demo";
   import { lab } from "../lab.svelte";
+  import PanelSummary from "$lib/workbench/PanelSummary.svelte";
+  import Segmented from "$lib/workbench/Segmented.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
 
   let { link }: { link?: LinkGroup } = $props();
+  const size = panelSize();
 
   const FILTERS = ["All", "Running", "Done", "Failed"] as const;
   let filter = $state<(typeof FILTERS)[number]>("All");
@@ -55,6 +59,12 @@
   }
   const fmt = (v: number | null, suffix = "") =>
     v === null ? "—" : `${v > 0 && suffix === "%" ? "+" : ""}${v}${suffix}`;
+  /** Columns that give way first in a narrow tile, so it never scrolls sideways. */
+  const HIDE: Partial<Record<SortKey, string>> = {
+    maxDd: "hidden @md:table-cell",
+    sharpe: "hidden @md:table-cell",
+    trades: "hidden @lg:table-cell",
+  };
   const COLS: { key: SortKey; label: string }[] = [
     { key: "net", label: "Net" },
     { key: "maxDd", label: "Max DD" },
@@ -63,21 +73,24 @@
   ];
 </script>
 
+{#if size.mode === "compact"}
+  {@const best = RUNS.filter((r) => r.net !== null).sort(
+    (a, b) => (b.net ?? 0) - (a.net ?? 0),
+  )[0]}
+  <PanelSummary
+    label={`${RUNS.length} runs · best ${best.symbol} ${best.timeframe}`}
+    value={fmt(best.net, "%")}
+    status={`${counts.running} running · ${counts.queued} queued`}
+    values={best.equity.length > 1 ? best.equity : undefined}
+  />
+{:else}
 <div class="flex h-full flex-col">
-  <div class="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-    {#each FILTERS as f (f)}
-      <button
-        type="button"
-        class={cn(
-          "h-6 rounded-md px-2 text-xs",
-          filter === f
-            ? "bg-muted text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        aria-pressed={filter === f}
-        onclick={() => (filter = f)}>{f}</button
-      >
-    {/each}
+  <div class="px-panel flex h-11 shrink-0 items-center gap-2">
+    <Segmented
+      label="Show runs"
+      options={FILTERS.map((f) => ({ value: f, label: f }))}
+      bind:value={filter}
+    />
     {#if lab.machine}
       <button
         type="button"
@@ -87,9 +100,9 @@
         >On {envById(lab.machine)?.name}<X class="size-3" /></button
       >
     {/if}
-    <span class="text-muted-foreground ml-auto text-xs tabular-nums"
-      >{rows.length} runs · {counts.running} running · {counts.queued} queued ·
-      {lab.ticked.length} ticked</span
+    <span
+      class="text-muted-foreground ml-auto hidden text-xs tabular-nums @md:inline"
+      >{rows.length} runs · {lab.ticked.length} ticked</span
     >
   </div>
   <div class="min-h-0 flex-1 overflow-auto">
@@ -106,11 +119,11 @@
               onclick={() => sortBy("id")}>Run</button
             >
           </th>
-          <th class="py-1.5 font-normal">Procedure</th>
+          <th class="hidden py-1.5 font-normal @2xl:table-cell">Procedure</th>
           <th class="py-1.5 font-normal">Market</th>
-          <th class="py-1.5 font-normal">Role</th>
+          <th class="hidden py-1.5 font-normal @3xl:table-cell">Role</th>
           {#each COLS as c (c.key)}
-            <th class="py-1.5 pr-3 text-right font-normal">
+            <th class={cn("py-1.5 pr-3 text-right font-normal", HIDE[c.key])}>
               <button
                 type="button"
                 class="hover:text-foreground inline-flex items-center gap-0.5"
@@ -121,8 +134,8 @@
               >
             </th>
           {/each}
-          <th class="py-1.5 pr-2 font-normal">Where</th>
-          <th class="py-1.5 pr-2 font-normal">State</th>
+          <th class="hidden py-1.5 pr-2 font-normal @4xl:table-cell">Where</th>
+          <th class="hidden py-1.5 pr-2 font-normal @xl:table-cell">State</th>
         </tr>
       </thead>
       <tbody>
@@ -145,13 +158,16 @@
               />
             </td>
             <td class="num py-1 pr-3 text-xs">{r.id}</td>
-            <td class="py-1 pr-3">{r.procedure}</td>
+            <td class="hidden py-1 pr-3 @2xl:table-cell">{r.procedure}</td>
             <td class="py-1 pr-3"
               >{r.symbol}
               <span class="text-muted-foreground text-xs">{r.timeframe}</span
               ></td
             >
-            <td class="text-muted-foreground py-1 pr-3 text-xs">{r.role}</td>
+            <td
+              class="text-muted-foreground hidden py-1 pr-3 text-xs @3xl:table-cell"
+              >{r.role}</td
+            >
             <td
               class={cn(
                 "num py-1 pr-3 text-right",
@@ -159,15 +175,25 @@
                 (r.net ?? 0) < 0 && "text-destructive",
               )}>{fmt(r.net, "%")}</td
             >
-            <td class="num text-muted-foreground py-1 pr-3 text-right"
-              >{fmt(r.maxDd, "%")}</td
+            <td
+              class={cn(
+                "num text-muted-foreground py-1 pr-3 text-right",
+                HIDE.maxDd,
+              )}>{fmt(r.maxDd, "%")}</td
             >
-            <td class="num py-1 pr-3 text-right">{fmt(r.sharpe)}</td>
-            <td class="num text-muted-foreground py-1 pr-3 text-right"
-              >{r.trades || "—"}</td
+            <td class={cn("num py-1 pr-3 text-right", HIDE.sharpe)}
+              >{fmt(r.sharpe)}</td
             >
-            <td class="py-1 pr-2"><EnvChip env={r.env} status={r.status} /></td>
-            <td class="py-1 pr-2">
+            <td
+              class={cn(
+                "num text-muted-foreground py-1 pr-3 text-right",
+                HIDE.trades,
+              )}>{r.trades || "—"}</td
+            >
+            <td class="hidden py-1 pr-2 @4xl:table-cell"
+              ><EnvChip env={r.env} status={r.status} /></td
+            >
+            <td class="hidden py-1 pr-2 @xl:table-cell">
               {#if r.progress !== undefined}
                 <span class="flex items-center gap-1.5">
                   <span class="bg-muted h-1 w-12 overflow-hidden rounded-full"
@@ -187,3 +213,4 @@
     </table>
   </div>
 </div>
+{/if}

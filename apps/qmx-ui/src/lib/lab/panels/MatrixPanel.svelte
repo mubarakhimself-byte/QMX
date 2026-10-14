@@ -18,8 +18,13 @@
   import { lab } from "../lab.svelte";
   import ScenarioDialog from "../ScenarioDialog.svelte";
   import Sparkle from "@lucide/svelte/icons/sparkle";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import PanelSummary from "$lib/workbench/PanelSummary.svelte";
+  import Segmented from "$lib/workbench/Segmented.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
 
   let { link }: { link?: LinkGroup } = $props();
+  const size = panelSize();
 
   const METRICS = [
     { id: "net", label: "Net %" },
@@ -66,51 +71,44 @@
   let building = $state(false);
 </script>
 
+{#if size.mode === "compact"}
+  <PanelSummary
+    label="BTC breakout v7 sweep"
+    value={`${passing}/${done}`}
+    status="finished runs made money"
+    tone={passing > done / 2 ? "good" : "warn"}
+  />
+{:else}
 <div class="flex h-full flex-col">
-  <div class="flex h-9 shrink-0 items-center gap-2 border-b px-2">
-    <span class="text-xs"
+  <div class="px-panel flex h-11 shrink-0 items-center gap-2">
+    <span class="truncate text-xs"
       ><span class="font-medium">BTC breakout v7</span>
-      <span class="text-muted-foreground"
-        >· {SYMBOLS.length} markets × {TIMEFRAMES.length} timeframes = {sweep.length}
-        runs</span
-      ></span
+      <span class="text-muted-foreground">· {sweep.length} runs</span></span
     >
     <Button
       variant="outline"
       size="sm"
       class="ml-auto h-7"
-      onclick={() => (building = true)}><Sparkle />New scenario</Button
+      aria-label="New scenario"
+      onclick={() => (building = true)}
+      ><Sparkle /><span class="hidden @2xl:inline">New scenario</span></Button
     >
-    <div
-      class="flex items-center gap-0.5"
-      role="radiogroup"
-      aria-label="Measure"
-    >
-      {#each METRICS as m (m.id)}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={metric === m.id}
-          class={cn(
-            "h-6 rounded-md px-2 text-xs",
-            metric === m.id
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onclick={() => (metric = m.id)}>{m.label}</button
-        >
-      {/each}
-    </div>
+    <Segmented
+      label="Measure"
+      options={METRICS.map((m) => ({ value: m.id, label: m.label }))}
+      bind:value={metric}
+    />
   </div>
-  <div class="min-h-0 flex-1 overflow-auto p-3">
+  <div class="px-panel pb-panel min-h-0 flex-1 overflow-auto">
     <div
-      class="grid h-full min-h-[14rem] gap-1.5"
-      style="grid-template-columns: 3.5rem repeat({SYMBOLS.length}, minmax(4.5rem, 1fr)) 2.5rem; grid-template-rows: 1.5rem repeat({TIMEFRAMES.length}, minmax(3rem, 1fr)) 2.25rem"
+      class="grid h-full min-h-[14rem] gap-1"
+      style="grid-template-columns: 2.5rem repeat({SYMBOLS.length}, minmax(0, 1fr)) 2rem; grid-template-rows: 1.5rem repeat({TIMEFRAMES.length}, minmax(2.75rem, 1fr)) 2.25rem"
     >
       <span></span>
       {#each SYMBOLS as s (s)}
-        <span class="text-muted-foreground self-end text-center text-xs"
-          >{s}</span
+        <span
+          class="text-muted-foreground min-w-0 self-end truncate text-center text-xs"
+          title={s}>{s}</span
         >
       {/each}
       <DropdownMenu.Root>
@@ -144,7 +142,7 @@
             <button
               type="button"
               class={cn(
-                "flex flex-col items-center justify-center rounded-md border text-xs transition-colors",
+                "flex min-w-0 flex-col items-center justify-center rounded-md border text-xs transition-colors",
                 selected === r.id
                   ? "border-ring ring-ring ring-1"
                   : "border-border/60 hover:border-ring/60",
@@ -167,17 +165,21 @@
                 <span class="num text-muted-foreground">{r.progress}%</span>
               {:else if r.status === "queued"}
                 <Clock class="text-muted-foreground size-4" />
-                <span class="text-muted-foreground">queued</span>
+                <span class="text-muted-foreground hidden @2xl:inline"
+                  >queued</span
+                >
               {:else if r.status === "failed"}
                 <X class="text-destructive size-4" />
-                <span class="text-destructive">failed</span>
+                <span class="text-destructive hidden @2xl:inline">failed</span>
               {:else}
                 <span class="num text-sm font-medium"
                   >{metric === "net" && (value(r) ?? 0) > 0 ? "+" : ""}{value(
                     r,
                   )}</span
                 >
-                <span class="num text-muted-foreground">{r.trades} trades</span>
+                <span class="num text-muted-foreground hidden @3xl:inline"
+                  >{r.trades} trades</span
+                >
               {/if}
             </button>
           {/if}
@@ -203,13 +205,18 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
       <span
-        class="text-muted-foreground self-center text-xs"
+        class="text-muted-foreground flex items-center gap-1 self-center text-xs"
         style="grid-column: 2 / -1"
-        >{passing} of {done} finished runs made money. A grid is a search, not proof:
-        confirm winners with walk-forward before trusting them.</span
+        >{passing} of {done} finished runs made money
+        <InfoTip
+          label="Explain the sweep grid"
+          text="Markets across, timeframes down, one isolated run per cell. A grid is a search, not proof: confirm winners with walk-forward before trusting them. Click a cell to select that run; linked tiles follow."
+        /></span
       >
     </div>
   </div>
 </div>
+
+{/if}
 
 <ScenarioDialog bind:open={building} />

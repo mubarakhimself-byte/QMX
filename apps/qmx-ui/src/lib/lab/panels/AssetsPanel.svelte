@@ -4,6 +4,7 @@
    * tests, presets and reports. Every group has an "add your own" path.
    * Groups the docs don't define yet are marked new scope.
    */
+  import type { Snippet } from "svelte";
   import Search from "@lucide/svelte/icons/search";
   import Plus from "@lucide/svelte/icons/plus";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -12,7 +13,12 @@
   import { cn } from "$lib/utils";
   import { workbench } from "$lib/workbench/workbench.svelte";
   import EnvChip from "../EnvChip.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import { ASSETS, ASSET_GROUPS } from "../demo";
+
+  /** More groups after the toolbox's own (Resources adds machines). */
+  let { after }: { after?: Snippet } = $props();
+  const size = panelSize();
 
   let q = $state("");
   let closed = $state<string[]>(["report", "preset"]);
@@ -25,7 +31,7 @@
 </script>
 
 <div class="flex h-full flex-col">
-  <div class="relative shrink-0 border-b p-2">
+  <div class="p-tile relative shrink-0">
     <Search
       class="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-3.5 -translate-y-1/2"
     />
@@ -58,7 +64,7 @@
               <span class="text-muted-foreground tabular-nums"
                 >{items.length}</span
               >
-              {#if g.scope === "new"}<span
+              {#if g.scope === "new" && size.mode !== "compact"}<span
                   class="text-muted-foreground ml-1 rounded border px-1 text-xs"
                   >new scope</span
                 >{/if}
@@ -77,13 +83,15 @@
             <ul>
               {#each items as a (a.id)}
                 <li
-                  class="group/i hover:bg-muted/50 flex items-center gap-2 py-1.5 pr-1 pl-7"
+                  class="group/i hover:bg-muted/50 py-row flex items-center gap-2 pr-1 pl-7"
+                  title={a.meta}
                 >
                   <span class="min-w-0 flex-1">
                     <span class="block truncate text-sm">{a.name}</span>
-                    <span class="text-muted-foreground block truncate text-xs"
-                      >{a.meta}</span
-                    >
+                    {#if size.mode !== "compact"}<span
+                        class="text-muted-foreground block truncate text-xs"
+                        >{a.meta}</span
+                      >{/if}
                   </span>
                   {#if a.env}<EnvChip env={a.env} compact />{/if}
                   <button
@@ -100,5 +108,6 @@
         </section>
       {/if}
     {/each}
+    {@render after?.()}
   </div>
 </div>

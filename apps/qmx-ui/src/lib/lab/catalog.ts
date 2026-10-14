@@ -71,7 +71,7 @@ export const LAB_PANELS: Record<string, LabPanel> = {
   resources: {
     title: "Resources",
     icon: Layers,
-    note: "Items, data, machines and slots",
+    note: "Toolbox and machines",
     view: ResourcesPanel,
   },
   assets: {

@@ -28,8 +28,12 @@
   import { workbench } from "$lib/workbench/workbench.svelte";
   import { lab } from "../lab.svelte";
   import FitOnResize from "../FitOnResize.svelte";
+  import PanelSummary from "$lib/workbench/PanelSummary.svelte";
+  import Segmented from "$lib/workbench/Segmented.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
 
   let { link }: { link?: LinkGroup } = $props();
+  const size = panelSize();
 
   const MODES = ["Graph", "Code", "Import"] as const;
   let mode = $state<(typeof MODES)[number]>("Graph");
@@ -66,29 +70,21 @@
   ];
 </script>
 
+{#if size.mode === "compact"}
+  <PanelSummary
+    label="Breakout research"
+    value="Draft v7"
+    status={`${DEMO_STEPS.length} steps · published v6`}
+  />
+{:else}
 <div class="flex h-full flex-col">
-  <div class="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-    <div
-      class="flex items-center gap-0.5"
-      role="radiogroup"
-      aria-label="Build mode"
-    >
-      {#each MODES as m (m)}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={mode === m}
-          class={cn(
-            "h-6 rounded-md px-2.5 text-xs",
-            mode === m
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onclick={() => (mode = m)}>{m}</button
-        >
-      {/each}
-    </div>
-    <span class="text-muted-foreground ml-2 text-xs"
+  <div class="px-panel flex h-11 shrink-0 items-center gap-2">
+    <Segmented
+      label="Build mode"
+      options={MODES.map((m) => ({ value: m, label: m }))}
+      bind:value={mode}
+    />
+    <span class="text-muted-foreground hidden truncate text-xs @xl:inline"
       >Breakout research · draft v7 · published v6</span
     >
     {#if mode === "Graph"}
@@ -143,7 +139,8 @@
         {#each IMPORTS as im (im.title)}
           <button
             type="button"
-            class="hover:border-ring flex flex-col gap-2 rounded-lg border border-dashed p-4 text-left"
+            class="hover:border-ring p-panel flex flex-col gap-2 rounded-lg border border-dashed text-left"
+            title={im.note}
             onclick={() =>
               workbench.notify(
                 `${im.title}: choose a file. Upload needs the daemon.`,
@@ -151,13 +148,14 @@
           >
             <im.icon class="text-muted-foreground size-5" />
             <span class="text-sm font-medium">{im.title}</span>
-            <span class="text-muted-foreground text-xs">{im.note}</span>
           </button>
         {/each}
       </div>
     {/if}
   </div>
 </div>
+
+{/if}
 
 <style>
   :global(.svelte-flow) {
