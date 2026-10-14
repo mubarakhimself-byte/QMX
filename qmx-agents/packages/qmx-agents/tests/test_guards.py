@@ -90,6 +90,14 @@ def test_existing_money_vocabulary_and_aliases_are_retained() -> None:
     assert not is_parent_surface_permitted("qmf-registry", "zone_transition")
 
 
+@pytest.mark.parametrize(
+    "name", ["create_order", "create-order", "Create Order", "CREATE-ORDER", "paper-place order"]
+)
+def test_spelled_money_names_are_refused(name: str) -> None:
+    with pytest.raises(MoneyPathDenyError, match=f"Money-path act refused: {name}"):
+        check_tool(lookup.model_copy(update={"name": name}))
+
+
 def test_proposal_only_writes_unsigned_evidence(tmp_path: Path) -> None:
     with RunJournal(tmp_path / "run.jsonl", "proposal") as journal:
         proposal_tool = propose_order(journal)

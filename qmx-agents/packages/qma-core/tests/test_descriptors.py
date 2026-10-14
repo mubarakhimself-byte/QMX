@@ -37,6 +37,29 @@ def test_every_denied_act_and_alias_is_refused_behind_a_role_prefix() -> None:
 
 
 @pytest.mark.parametrize(
+    "name",
+    ["create_order", "create-order", "Create Order", "CREATE-ORDER", "create--order"],
+)
+def test_create_order_is_refused_in_every_spelling(name: str) -> None:
+    with pytest.raises(MoneyPathDenyError, match=f"Money-path act refused: {name}"):
+        check_descriptor(name, {})
+    with pytest.raises(MoneyPathDenyError, match="Money-path act refused: read_bars"):
+        check_descriptor("read_bars", {"acts": [name]})
+    with pytest.raises(MoneyPathDenyError, match="Money-path act refused: read_bars"):
+        check_descriptor("read_bars", {"mcp": {"tool_name": name}})
+
+
+@pytest.mark.parametrize("separator", ["-", " ", "--", "."])
+@pytest.mark.parametrize("upper", [False, True])
+def test_every_denied_act_and_alias_is_refused_in_any_spelling(separator: str, upper: bool) -> None:
+    for name in [*(act.value for act in MONEY_PATH_DENIED_ACTS), *MONEY_PATH_ACT_ALIASES]:
+        for prefixed in (name, "paper_" + name, "mcp__broker__" + name):
+            spelled = prefixed.replace("_", separator)
+            with pytest.raises(MoneyPathDenyError):
+                check_descriptor(spelled.upper() if upper else spelled, {})
+
+
+@pytest.mark.parametrize(
     ("metadata", "message"),
     [
         ({"money_path": True}, "Money-path tool refused"),
