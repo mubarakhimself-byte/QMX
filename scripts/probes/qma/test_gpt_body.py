@@ -422,11 +422,9 @@ def test_stop_rule_row_names_the_step() -> None:
     assert "P1 PASS: 3 models" in row
 
 
-BARRED_KEYS = {"max_output_tokens", "temperature", "metadata"}
-
-
 class StubRoute(BaseHTTPRequestHandler):
     not_eligible = False
+    barred_keys = frozenset({"max_output_tokens", "temperature", "metadata"})
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -442,7 +440,7 @@ class StubRoute(BaseHTTPRequestHandler):
             error = {"error": {"code": "subscription_sharing_user_not_eligible"}}
             self._send(403, "application/json", json.dumps(error).encode())
             return
-        barred = BARRED_KEYS & body.keys()
+        barred = self.barred_keys & body.keys()
         if barred or any(item.get("role") == "system" for item in body["input"]):
             error = {"error": {"code": "subscription_sharing_unsupported_capability"}}
             self._send(400, "application/json", json.dumps(error).encode())
@@ -537,6 +535,25 @@ def test_chain_against_a_stub_route_reads_viable_and_leaves_no_token(
         "hp2-perf.log",
         "hp2-secrets.log",
     ]
+
+
+class LenientRoute(StubRoute):
+    barred_keys = frozenset({"temperature", "metadata"})
+
+
+def test_a_barred_field_the_route_accepts_is_recorded_and_the_chain_runs_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _stub_session(monkeypatch, LenientRoute)
+    verdict = p_gpt.run_chain(
+        session, p_gpt.Evidence(tmp_path), model=None, perf_runs=1, perf_spacing_s=0
+    )
+
+    assert [(s.step, s.passed) for s in verdict.steps][-2:] == [("P5", False), ("perf", True)]
+    assert verdict.steps[-2].detail == (
+        "400 for ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']"
+    )
+    assert (verdict.viable, verdict.tools_shape, verdict.stopped_at) == (True, "namespace", None)
 
 
 class NotEligibleRoute(StubRoute):
