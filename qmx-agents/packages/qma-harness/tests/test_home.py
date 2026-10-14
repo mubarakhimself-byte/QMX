@@ -362,6 +362,7 @@ def _hook(hook: dict[str, object]) -> Document:
         ({"type": "command", "command": "x", "headers": {}}, "headers"),
         ({"type": "prompt", "prompt": "x", "args": ["a"]}, "args"),
         ({"type": "agent", "prompt": "x", "shell": "bash"}, "shell"),
+        ({"type": "agent", "prompt": "x", "continueOnBlock": True}, "continueOnBlock"),
     ],
 )
 def test_parse_claude_settings_refuses_a_hook_key_its_type_does_not_document(
@@ -393,7 +394,7 @@ def test_parse_claude_settings_accepts_every_documented_hook_key() -> None:
             "onFailure": "block",
             **common,
         },
-        {"type": "prompt", "prompt": "p", "model": "haiku", **common},
+        {"type": "prompt", "prompt": "p", "model": "haiku", "continueOnBlock": True, **common},
         {"type": "agent", "prompt": "p", "model": "haiku", **common},
     ]
     document = cast("Document", {"hooks": {"Stop": [{"hooks": hooks}]}})
@@ -556,10 +557,11 @@ def test_doctor_shows_hooks_as_structure_and_hides_every_operator_value(
         ({"commit": True}, "attribution.commit must be a string"),
         ({"pr": 1}, "attribution.pr must be a string"),
         ({"sessionUrl": "false"}, "attribution.sessionUrl must be true or false"),
+        (True, "attribution must be a table or false"),
     ],
 )
 def test_settings_put_refuses_an_attribution_key_or_type_the_docs_do_not_list(
-    home: QmxHome, attribution: dict[str, object], why: str
+    home: QmxHome, attribution: object, why: str
 ) -> None:
     control = control_service(home)
     with pytest.raises(ControlError) as refused:
@@ -568,8 +570,11 @@ def test_settings_put_refuses_an_attribution_key_or_type_the_docs_do_not_list(
     assert control.settings_get("claude") == {}
 
 
-def test_parse_claude_settings_accepts_every_documented_attribution_key() -> None:
-    document = cast("Document", {"attribution": {"commit": "c", "pr": "", "sessionUrl": False}})
+@pytest.mark.parametrize("attribution", [{"commit": "c", "pr": "", "sessionUrl": False}, False])
+def test_parse_claude_settings_accepts_every_documented_attribution_form(
+    attribution: object,
+) -> None:
+    document = cast("Document", {"attribution": attribution})
     assert parse_claude_settings(document).raw == document
 
 

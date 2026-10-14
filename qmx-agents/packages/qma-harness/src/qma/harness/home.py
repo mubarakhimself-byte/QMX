@@ -202,10 +202,11 @@ _HOOK_COMMON: Final = frozenset({"type", "if", "timeout", "statusMessage", "once
 HOOK_KEYS: Final[Mapping[str, frozenset[str]]] = {
     "command": _HOOK_COMMON | {"command", "args", "async", "asyncRewake", "shell", "onFailure"},
     "http": _HOOK_COMMON | {"url", "headers", "allowedEnvVars", "onFailure"},
-    "prompt": _HOOK_COMMON | {"prompt", "model"},
+    "prompt": _HOOK_COMMON | {"prompt", "model", "continueOnBlock"},
     "agent": _HOOK_COMMON | {"prompt", "model"},
 }
-"""Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them."""
+"""Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them.
+`mcp_tool` hooks stay refused."""
 HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$(\{[A-Z_][A-Z0-9_]*\}|[A-Z_][A-Z0-9_]*)")
 HOOK_URL: Final = re.compile(r"https?://[^\s\\/?#@]+(?:[/?#]\S*)?")
 """An http hook url. No user info, backslash or whitespace, so no URL parser can read a
@@ -316,8 +317,10 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
                 if set(entry) != {"allow"}:
                     raise _refuse(f"remembered.{workspace}", "holds only an allow list")
                 _strings(entry["allow"], f"remembered.{workspace}.allow", _RULE)
-        elif key == "attribution":
-            for name, setting in _table(value, key).items():
+        elif key == "attribution" and value is not False:
+            if not isinstance(value, dict):
+                raise _refuse(key, "must be a table or false")
+            for name, setting in cast("dict[str, object]", value).items():
                 kind = ATTRIBUTION_KEYS.get(name)
                 if kind is None:
                     raise _refuse(f"attribution.{name}", "is not allowed")
