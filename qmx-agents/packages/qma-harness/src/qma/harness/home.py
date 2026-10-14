@@ -205,8 +205,7 @@ HOOK_KEYS: Final[Mapping[str, frozenset[str]]] = {
     "prompt": _HOOK_COMMON | {"prompt", "model", "continueOnBlock"},
     "agent": _HOOK_COMMON | {"prompt", "model"},
 }
-"""Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them.
-`mcp_tool` hooks stay refused."""
+"""Hook handler keys per type, as https://code.claude.com/docs/en/hooks documents them."""
 HEADER_VALUE: Final = re.compile(r"(Bearer |Basic )?\$(\{[A-Z_][A-Z0-9_]*\}|[A-Z_][A-Z0-9_]*)")
 HOOK_URL: Final = re.compile(r"https?://[^\s\\/?#@]+(?:[/?#]\S*)?")
 """An http hook url. No user info, backslash or whitespace, so no URL parser can read a
@@ -711,9 +710,6 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
 
 
 def _hooks_outline(hooks: dict[str, list[dict[str, Any]]], launcher: Path) -> dict[str, Any]:
-    """Doctor's view of `hooks`: events, matchers, types and key names. Every other value is
-    operator free text, so it shows as `<set>`. The launcher's own ConfigChange hook shows in
-    full."""
     fixed = config_change_hook(launcher)
     return {
         event: [
