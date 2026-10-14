@@ -25,8 +25,8 @@ Size: S = under half a day, M = about a day, L = several days.
 
 ### App-wide
 1. **More personality and a few purposeful animations** (panel expand, a run finishing, connecting). L17, L416, L511. The only motion today is spinners, pulses and the ticker scroll (`themes.css:341`, `TickerTape.svelte:40`). **M**
-2. **Demo data becomes CFDs plus crypto** (R1) on Home, the ticker, Library, Apps, Lab and Portfolio. L23, L387, L427, L461. Almost all demo data is crypto only (`portfolio/demo.ts:2,13-16`, `lab/pods.ts`, `apps/apps.svelte.ts`). Do Home, the ticker, Library and Apps first. Lab pods and Portfolio may change after the R5 design. **L**
-3. **Fix stale wording**: Books, node, spot only, LangGraph. Section 4 lists each place. L158, L255, L427. **S**
+2. **[DONE] Demo data becomes CFDs plus crypto** (R1) on Home, the ticker, Library, Apps, Lab and Portfolio. L23, L387, L427, L461. Almost all demo data is crypto only (`portfolio/demo.ts:2,13-16`, `lab/pods.ts`, `apps/apps.svelte.ts`). Do Home, the ticker, Library and Apps first. Lab pods and Portfolio may change after the R5 design. **L** DONE 2026-10-14 (c2cebd0e, 0040e7a6, fa57571d): Home, ticker, Markets, Library, Apps, Lab sweeps and datasets, Portfolio. Lab pods (`lab/pods.ts`) stay mostly crypto until R5.
+3. **[DONE] Fix stale wording**: Books, node, spot only, LangGraph. Section 4 lists each place. L158, L255, L427. **S** DONE 2026-10-14 (7abbe89a, fa57571d). "Classic Book" and "Book + BMS" kept as sizing names; "Needs the daemon" kept.
 4. **Screen sizes**: headers and panels fit at 1280 wide and smaller on every screen, and the Text size setting works at every width. L132, L61. Only the Portfolio, Lab and Library headers were fixed (ledger, Library pass 2). **M**
 5. **Space at full screen (1920, 2560)**: no big empty areas. L420, L534, L591. For example, Settings is a centred `max-w-6xl` column (`routes/settings/+page.svelte:203`). **M**
 6. **Pop out any screen, kept in sync** (for example, the Lab on a second monitor). L419, L655, L204 (pop-out part), L224. Only the copilot pops out, and that copy is not synced (`routes/copilot/+page.svelte:41-47`). The Lab and Portfolio have no pop-out. **L**
@@ -43,7 +43,7 @@ Size: S = under half a day, M = about a day, L = several days.
 15. **Templates on Home** (start a tab from a template). L252, L424. Home has "Save as a new tab" (`routes/home/+page.svelte:137`) but no templates. **S**
 
 ### Copilot desk (UI-only parts)
-16. **Remove Ask / Plan / Do** (R2). Skills are offered through "/" instead. L26. The mode chip is still in the main composer (`workbench/Composer.svelte:208`, `copilot/AimMenu.svelte`, `copilot/aim.svelte.ts:8-18`), and Settings still has "By default it may" (`settings/CopilotsSection.svelte:29-65,113-125`). The skill list itself is parked. **S**
+16. **[DONE] Remove Ask / Plan / Do** (R2). Skills are offered through "/" instead. L26. The mode chip is still in the main composer (`workbench/Composer.svelte:208`, `copilot/AimMenu.svelte`, `copilot/aim.svelte.ts:8-18`), and Settings still has "By default it may" (`settings/CopilotsSection.svelte:29-65,113-125`). The skill list itself is parked. **S** DONE 2026-10-14 (d40b1135). The chip keeps reach and who answers.
 17. **"Save to Library" from a chat result**. L218, L143, L463. There is no button. The artifact preview only says "the copilot saves it to the Library" (`copilot/WorkArea.svelte:276-277`). **S**
 
 ### Library
@@ -67,9 +67,9 @@ Size: S = under half a day, M = about a day, L = several days.
 - None. The Apps redesign is parked under R3 (see section 3).
 
 ### Settings
-29. **Brokers and accounts** (R1): cTrader / IC Markets plus CCXT exchanges, several accounts each. L23, L126. The section still says "Spot crypto only" and lists crypto exchanges only (`settings/ExchangesSection.svelte:3,35`, `portfolio/demo.ts:13-16`). **M**
-30. **A cTrader MCP listed by default** under MCP servers (R1). L22. There is no cTrader entry (`settings/ConnectionsSection.svelte`). **S**
-31. **Data and sources: an add-a-source flow** (CSV or Excel upload, API provider, scrape, schedule), plus dropping "Free sources only" (R10). L280, L584, L650. It shows six disabled switches (`routes/settings/+page.svelte:291-307`). Real fetching is a backend job; the screen and flow are UI work. **M**
+29. **[DONE] Brokers and accounts** (R1): cTrader / IC Markets plus CCXT exchanges, several accounts each. L23, L126. The section still says "Spot crypto only" and lists crypto exchanges only (`settings/ExchangesSection.svelte:3,35`, `portfolio/demo.ts:13-16`). **M** DONE 2026-10-14 (2ad4f3fd). Settings tab id is now `brokers`; old `?tab=exchanges` links still land.
+30. **[DONE] A cTrader MCP listed by default** under MCP servers (R1). L22. There is no cTrader entry (`settings/ConnectionsSection.svelte`). **S** DONE 2026-10-14 (2ad4f3fd).
+31. **[PARTLY] Data and sources: an add-a-source flow** (CSV or Excel upload, API provider, scrape, schedule), plus dropping "Free sources only" (R10). L280, L584, L650. It shows six disabled switches (`routes/settings/+page.svelte:291-307`). Real fetching is a backend job; the screen and flow are UI work. **M** PARTLY 2026-10-14 (2ad4f3fd): "Free sources only" dropped and Firecrawl listed as paid, off until approved. The add-a-source flow is still open.
 32. **Themes editable like VS Code** (a fuller token editor). L289. "Your theme" covers only accent, background, opacity, radius and text size (`workbench/LookSettings.svelte`). **M**
 
 ### Start-up and day one
@@ -206,6 +206,8 @@ Size: S = under half a day, M = about a day, L = several days.
 - Working-method rules (one screen per pass, drive in the browser, design skills). L531-533. Process.
 
 ## 4. Stale demo data and text (contradicts R1, R2, R4, R5)
+
+**Status 2026-10-14:** fixed in d40b1135, c2cebd0e, 2ad4f3fd, 7abbe89a, fc6e9f84, 0040e7a6, fa57571d. Left on purpose: "Classic Book" and "Book + BMS" (sizing methods, wait on R5); "Needs the daemon" (reword when wiring starts); `lab/pods.ts` bots and stress scenarios (wait on R5). `MiniAppShell.svelte` deleted.
 
 **Spot crypto only (R1: CFDs and FX are back)**
 - `lib/settings/ExchangesSection.svelte:3`: comment says "spot crypto only".

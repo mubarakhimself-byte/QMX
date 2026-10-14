@@ -234,3 +234,13 @@ Design intent (our own): judge an app the way you judge a pod, by what it can to
 - [x] Checked by click-through at 1600 and 1280 (select, tripped app, money app, make from widgets, open app, Settings): no overflow, no console errors.
 - [ ] Not done: Lab panels as widgets; opened apps on the rail; extensions (in-app code) as a third kind; real runs, logs and evidence (backend, contract sections 4-6).
 
+
+### 2026-10-14: stale fixes after the pause (R1, R2, R4, R10)
+
+- [x] No copilot modes (d40b1135). Ask / Plan / Do is gone from the desk composer and from Settings, Copilots. The composer chip now says what the copilot may touch and who answers. Skills stay on "/".
+- [x] CFDs plus crypto in the demo data (c2cebd0e). One list of markets (EURUSD, GBPUSD, USDJPY, XAUUSD, US500, NAS100, USOIL, BTC, ETH, SOL) feeds the Home ticker, Markets, Portfolio prices and Library bot summaries. Portfolio adds an IC Markets live and demo account with margin, a London server, and two pods: Gold & indices (live) and FX majors (paper). Library has a full Gold scalper page. Lab sweeps and datasets cover CFDs. Apps: Whale alerts became a Spread watcher, plus a new Economic calendar watcher.
+- [x] Settings (2ad4f3fd). Exchanges is now Brokers and accounts: cTrader at IC Markets beside the CCXT exchanges, several accounts each, keys still in the credential store. A cTrader MCP is on for every copilot. Data and sources lists Firecrawl as paid and off until he approves; "Free sources only" is gone.
+- [x] Wording (7abbe89a, fa57571d). Pods, not Books (sizing names "Classic Book" and "Book + BMS" kept). Trading servers, not the node. "The agent engine", not LangGraph. MiniAppShell deleted (fc6e9f84).
+- [x] Portfolio header (0040e7a6). With four servers the header spilled at 1280 and 1600, so the server chips fold into one "Servers" chip below 1800 wide. News opens on All.
+- [x] Checked by a scripted click-through at 1600 and 1280: desk send, Settings (brokers, MCP, data, copilots), Portfolio, Home, Apps, the Gold scalper page. No overflow. One console 404 on the Library list: the dev-only MQL5 article route, which the preview server does not have. Screenshots: `workroom/ui-review-2026-10-01/2026-10-14-stale-fixes/`.
+- [ ] Not done: Lab pods (`lab/pods.ts`) stay crypto until the risk redesign (R5). The Markets panel has no broker or account filter yet (triage item 13).
