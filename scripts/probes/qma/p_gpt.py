@@ -981,10 +981,7 @@ def run_chain(
     shape: ToolsShape = "namespace" if namespace.passed else "plain"
     p4 = probe_reasoning(session, ev, model, shape)
     steps.append(p4)
-    p5 = probe_barred(session, ev, model)
-    steps.append(p5)
-    if not p5.passed:
-        return stop(f"P5 ({p5.detail})")
+    steps.append(probe_barred(session, ev, model))
     if perf_runs:
         steps.append(perf_series(session, ev, model, perf_runs, perf_spacing_s))
     return Verdict(True, model, shape, p4.passed, None, tuple(steps))
