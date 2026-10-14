@@ -142,20 +142,20 @@ export const BUILTIN_LAYOUTS: TileLayout[] = [
     name: "Paper",
     group: "pods",
     root: split("row", [
-      [pane("pp-res", "podres"), 18],
+      [pane("pp-res", "podres"), 16],
       [
         split("col", [
           [pane("pp-run", "paperrun", "amber"), 55],
           [pane("pp-feed", "paperfeed", "amber"), 45],
         ]),
-        54,
+        48,
       ],
       [
         split("col", [
-          [pane("pp-grad", "graduate", "amber"), 55],
-          [pane("pp-int", "interventions", "amber"), 45],
+          [pane("pp-grad", "graduate", "amber"), 50],
+          [pane("pp-int", "interventions", "amber"), 50],
         ]),
-        28,
+        36,
       ],
     ]),
     docked: [],

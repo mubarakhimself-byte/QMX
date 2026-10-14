@@ -9,70 +9,95 @@
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import Rocket from "@lucide/svelte/icons/rocket";
   import { Button } from "$lib/components/ui/button";
+  import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import PanelSummary from "$lib/workbench/PanelSummary.svelte";
+  import { panelSize } from "$lib/workbench/tiles/panel-size";
   import { workbench } from "$lib/workbench/workbench.svelte";
-  import { LAB_PODS, PAPER_RUNS } from "../pods";
+  import { LAB_PODS } from "../pods";
+  import { podModel } from "../pod-model.svelte";
   import { lab } from "../lab.svelte";
 
-  const run = $derived(
-    PAPER_RUNS.find((r) => r.pod === lab.labPod) ?? PAPER_RUNS[0],
-  );
+  const size = panelSize();
+  const run = $derived(podModel.paper(lab.labPod));
   const pod = $derived(LAB_PODS.find((p) => p.id === run.pod)!);
   const done = $derived(run.checks.filter((c) => c.done).length);
-  const ready = $derived(done === run.checks.length);
+  let stopArmed = $state(false);
 </script>
 
-<div class="flex h-full flex-col">
-  <div class="shrink-0 px-3 pt-3">
-    <p class="text-lg font-semibold">
-      {ready ? "Ready for live" : "Not yet"}
-    </p>
-    <p class="text-muted-foreground text-xs">
-      {done} of {run.checks.length} checks passed for {pod.name}
-      {run.version}
-    </p>
-  </div>
-  <ul class="min-h-0 flex-1 overflow-auto px-3 py-2">
-    {#each run.checks as c (c.label)}
-      <li class="flex items-start gap-2 py-1.5">
-        {#if c.done}<CircleCheck
-            class="text-success mt-0.5 size-4 shrink-0"
-          />{:else}<CircleDashed
-            class="text-muted-foreground mt-0.5 size-4 shrink-0"
-          />{/if}
-        <span class="text-sm"
-          >{c.label}<span class="text-muted-foreground block text-xs"
+{#if size.mode === "compact"}
+  <PanelSummary
+    label={`Ready for live? · ${pod.name}`}
+    value={`${done} of ${run.checks.length}`}
+    status={run.stopped ? "Stopped" : run.ready ? "Ready" : "Not yet"}
+    tone={run.ready ? "good" : run.stopped ? "muted" : "warn"}
+  />
+{:else}
+  <div class="flex h-full flex-col">
+    <div class="px-panel flex h-11 shrink-0 items-center gap-2">
+      <p class="text-base font-semibold">
+        {run.stopped ? "Stopped" : run.ready ? "Ready for live" : "Not yet"}
+      </p>
+      <span class="text-muted-foreground num text-xs"
+        >{done}/{run.checks.length}</span
+      >
+      <InfoTip
+        class="ml-auto"
+        label="Explain promotion"
+        text="Promote builds the promotion card from the Lab's tests and this paper run. You sign it in Portfolio; activation is a separate click that takes effect at the next 00:00 UTC."
+      />
+    </div>
+    <ul class="px-panel min-h-0 flex-1 overflow-auto">
+      {#each run.checks as c (c.label)}
+        <li class="py-row flex items-center gap-2 text-sm" title={c.note}>
+          {#if c.done}<CircleCheck
+              class="text-success size-4 shrink-0"
+            />{:else}<CircleDashed
+              class="text-muted-foreground size-4 shrink-0"
+            />{/if}
+          <span class="min-w-0 flex-1 truncate">{c.label}</span>
+          <span
+            class="text-muted-foreground num hidden shrink-0 text-xs @md:inline"
             >{c.note}</span
-          ></span
+          >
+        </li>
+      {/each}
+    </ul>
+    <div
+      class="px-panel py-row flex shrink-0 flex-wrap items-center gap-2 border-t"
+    >
+      <Button
+        size="sm"
+        disabled={!run.ready}
+        onclick={() =>
+          workbench.notify(
+            `Promotion card for ${pod.name} ${run.version} is waiting in Portfolio, Road to live.`,
+          )}><Rocket />Promote</Button
+      >
+      {#if run.stopped}
+        <Button
+          size="sm"
+          variant="ghost"
+          class="ml-auto"
+          onclick={() => (podModel.paperStopped[run.pod] = false)}
+          >Restart paper run</Button
         >
-      </li>
-    {/each}
-  </ul>
-  <div class="flex shrink-0 flex-wrap items-center gap-2 border-t px-3 py-2">
-    <Button
-      size="sm"
-      disabled={!ready}
-      title={ready ? undefined : "Finish the soak first"}
-      onclick={() =>
-        workbench.notify(
-          `The promotion card for ${pod.name} ${run.version} is built from its Lab tests and this paper run. You sign it in Portfolio; activation is a separate click that takes effect at the next 00:00 UTC.`,
-        )}><Rocket />Promote to live</Button
-    >
-    <Button
-      size="sm"
-      variant="ghost"
-      onclick={() =>
-        workbench.notify(
-          `${pod.name} would soak 7 more days on ${run.money}. Needs the trading server.`,
-        )}>Extend soak</Button
-    >
-    <Button
-      size="sm"
-      variant="ghost"
-      class="text-destructive ml-auto"
-      onclick={() =>
-        workbench.notify(
-          `Stopping the paper run closes ${pod.name}'s paper positions and keeps the record. Needs the trading server.`,
-        )}>Stop paper run</Button
-    >
+      {:else}
+        <Button
+          size="sm"
+          variant="ghost"
+          class="text-destructive ml-auto"
+          onclick={() => {
+            if (!stopArmed) {
+              stopArmed = true;
+              setTimeout(() => (stopArmed = false), 4000);
+              return;
+            }
+            stopArmed = false;
+            podModel.paperStopped[run.pod] = true;
+            workbench.notify(`${pod.name}'s paper run stopped. Record kept.`);
+          }}>{stopArmed ? "Click again to stop" : "Stop paper run"}</Button
+        >
+      {/if}
+    </div>
   </div>
-</div>
+{/if}
