@@ -123,9 +123,18 @@ def sse(turn: Turn, model: str, ids: itertools.count[int]) -> bytes:
 
 
 class FakeModel:
-    def __init__(self, script: list[Turn], *, every_request: bool = False) -> None:
+    def __init__(
+        self,
+        script: list[Turn],
+        *,
+        every_request: bool = False,
+        routes: dict[str, list[Turn]] | None = None,
+    ) -> None:
         self.script = list(script)
         self.every_request = every_request
+        self.routes = {marker: list(turns) for marker, turns in (routes or {}).items()}
+        """Separate scripts for conversations whose first message holds the marker, such as
+        a native sub-agent's, so a parent that keeps running never takes their turns."""
         """Script every `/v1/messages` request, for checks that call the relay directly."""
         self.requests: list[Seen] = []
         self.served_usage: list[dict[str, int]] = []
@@ -135,10 +144,15 @@ class FakeModel:
         self.server: ThreadingHTTPServer | None = None
         self.url = ""
 
-    def next_turn(self, scripted: bool) -> Turn:
+    def next_turn(self, scripted: bool, request: dict[str, Any] | None = None) -> Turn:
         with self.lock:
             if not scripted:
                 return SIDE_REPLY
+            messages = (request or {}).get("messages") or [{}]
+            first = json.dumps(messages[0])
+            for marker, turns in self.routes.items():
+                if marker in first:
+                    return turns.pop(0) if turns else DONE
             return self.script.pop(0) if self.script else DONE
 
     def start(self) -> FakeModel:
@@ -180,7 +194,7 @@ class FakeModel:
                         fake.served_usage.append({})
                     self.reply(200, "application/json", b'{"input_tokens": 10}')
                     return
-                turn = fake.next_turn(scripted)
+                turn = fake.next_turn(scripted, request)
                 with fake.lock:
                     fake.served_usage.append(dict(turn.usage))
                 model = str(request.get("model") or MODEL)
