@@ -11,12 +11,14 @@
   import { cn } from "$lib/utils";
   import { REACH } from "$lib/copilot/aim.svelte";
   import InfoTip from "$lib/workbench/InfoTip.svelte";
+  import { page } from "$app/state";
   import Choice from "./Choice.svelte";
   import Group from "./Group.svelte";
   import Row from "./Row.svelte";
   import { settings } from "./settings.svelte";
 
-  let selected = $state("main");
+  // Each copilot's gear opens this page with ?copilot=<its id>.
+  let selected = $state(page.url.searchParams.get("copilot") ?? "main");
   const entry = $derived(
     settings.copilots.find((c) => c.id === selected) ?? settings.copilots[0],
   );

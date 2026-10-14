@@ -139,9 +139,8 @@
         >
       </DropdownMenu.Content>
     </DropdownMenu.Root>
-    {#if profile}<Badge
-        variant="outline"
-        class="h-4 shrink-0 px-1.5 text-xs">{profile}</Badge
+    {#if profile}<Badge variant="outline" class="h-4 shrink-0 px-1.5 text-xs"
+        >{profile}</Badge
       >{/if}
     <div class="ml-auto flex shrink-0 items-center">
       <Button
@@ -155,7 +154,8 @@
         size="icon-xs"
         aria-label={`${title} settings`}
         title="Model, tools and instructions for this copilot"
-        href={`${resolve("/settings")}?tab=copilots`}><Settings2 /></Button
+        href={`${resolve("/settings")}?tab=copilots&copilot=${encodeURIComponent(profile ?? "main")}`}
+        ><Settings2 /></Button
       >
       {#if onclose}
         <Button
