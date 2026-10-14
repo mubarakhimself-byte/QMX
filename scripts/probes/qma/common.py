@@ -17,6 +17,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO
 
+from plants import Locked, heal
+
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ContentBlock, Message
 
@@ -28,6 +30,8 @@ SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
 FAKE_HOME: Final = SCRATCH / "home"
 """HOME and USERPROFILE for every CLI a probe starts, so nothing reads or writes his `~/.claude`."""
+PLANT_BACKUP: Final = SCRATCH / "settings-plant-backup.json"
+PLANT_LOCK: Final = SCRATCH / "settings-plant.lock"
 CLI_FLOOR: Final = (2, 1, 248)
 PROBE_MODEL: Final = "haiku"
 FORCE_LOGIN: Final = {"forceLoginMethod": "claudeai"}
@@ -148,6 +152,14 @@ def auth_method(cli: Path) -> dict[str, Any]:
 def require_plan_login(log: Log, cli: Path) -> None:
     """Checks only that the credentials file exists, never its content, before any CLI start,
     so a probe run without the login leaves the ship home untouched."""
+    try:
+        failures = heal(PLANT_BACKUP, PLANT_LOCK)
+    except Locked as error:
+        failures = [str(error)]
+    log(f"leftover plant restore failures before any CLI start: {failures}")
+    if failures:
+        log.row("ship home free of plants", failures, "BLOCKED")
+        raise SystemExit(3)
     status: dict[str, Any] = {"credentials_file": (CONFIG_DIR / ".credentials.json").exists()}
     if status["credentials_file"]:
         status = auth_method(cli)
@@ -345,5 +357,11 @@ def s38_verdict(bash_calls: int, timeout_texts: int, ran: bool) -> str:
     return "PASS" if bash_calls and timeout_texts and not ran else "FAIL"
 
 
-def s25_verdict(control: bool, compact_answered: bool, boundary: bool) -> str:
-    return "PASS" if control and compact_answered and not boundary else "FAIL"
+def s25_verdict(control: bool, answered: bool, turns: int, boundary: bool) -> str:
+    return "PASS" if control and answered and turns >= 1 and not boundary else "FAIL"
+
+
+def oq5_plugin_verdict(control: bool, probe: bool) -> str:
+    if probe:
+        return "FAIL"
+    return "PASS" if control else "UNMEASURED"

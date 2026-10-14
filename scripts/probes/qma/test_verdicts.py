@@ -1,7 +1,14 @@
 # ruff: noqa: S101
 from __future__ import annotations
 
-from common import is_final_release, parse_version, s19_scrub_verdict, s25_verdict, s38_verdict
+from common import (
+    is_final_release,
+    oq5_plugin_verdict,
+    parse_version,
+    s19_scrub_verdict,
+    s25_verdict,
+    s38_verdict,
+)
 
 PLANTED = ("HTTPS_PROXY", "OPENAI_API_KEY")
 
@@ -34,8 +41,16 @@ def test_s38_passes_only_on_an_attempted_bash_call_blocked_by_the_timeout() -> N
     assert s38_verdict(bash_calls=1, timeout_texts=1, ran=True) == "FAIL"
 
 
-def test_s25_passes_only_when_the_control_compacts_and_the_verbatim_compact_was_answered() -> None:
-    assert s25_verdict(control=True, compact_answered=True, boundary=False) == "PASS"
-    assert s25_verdict(control=False, compact_answered=True, boundary=False) == "FAIL"
-    assert s25_verdict(control=True, compact_answered=False, boundary=False) == "FAIL"
-    assert s25_verdict(control=True, compact_answered=True, boundary=True) == "FAIL"
+def test_s25_passes_only_when_the_control_compacts_and_the_model_answered_verbatim() -> None:
+    assert s25_verdict(control=True, answered=True, turns=1, boundary=False) == "PASS"
+    assert s25_verdict(control=False, answered=True, turns=1, boundary=False) == "FAIL"
+    assert s25_verdict(control=True, answered=False, turns=1, boundary=False) == "FAIL"
+    assert s25_verdict(control=True, answered=True, turns=0, boundary=False) == "FAIL"
+    assert s25_verdict(control=True, answered=True, turns=1, boundary=True) == "FAIL"
+
+
+def test_oq5_home_plugin_passes_only_when_the_control_loads_it_and_the_probe_does_not() -> None:
+    assert oq5_plugin_verdict(control=True, probe=False) == "PASS"
+    assert oq5_plugin_verdict(control=True, probe=True) == "FAIL"
+    assert oq5_plugin_verdict(control=False, probe=True) == "FAIL"
+    assert oq5_plugin_verdict(control=False, probe=False) == "UNMEASURED"

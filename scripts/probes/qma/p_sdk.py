@@ -122,12 +122,13 @@ async def verbatim() -> None:
     replies = [m for m in guarded if isinstance(m, ResultMessage)]
     compact_reply = replies[1] if len(replies) == 2 else None
     answered = compact_reply is not None and not compact_reply.is_error
+    turns = compact_reply.num_turns if compact_reply else 0
     log(f"verbatim /compact reply: {describe(compact_reply) if compact_reply else None}")
     log.row("S25 control /compact compacts without verbatim", control, "RECORDED")
     log.row(
         "S25 verbatim /compact reaches the CLI and produces no compact_boundary",
-        f"control={control} answered={answered} compact_boundary={boundary}",
-        s25_verdict(control, answered, boundary),
+        f"control={control} answered={answered} turns={turns} compact_boundary={boundary}",
+        s25_verdict(control, answered, turns, boundary),
     )
 
 

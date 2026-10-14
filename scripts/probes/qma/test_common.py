@@ -1,7 +1,13 @@
 # ruff: noqa: S101
 from __future__ import annotations
 
-from common import reduced_env, scrub_process_env
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch
+
+import common
+from common import Log, reduced_env, require_plan_login, scrub_process_env
+from plants import snapshot
 
 PARENT = {
     "Path": "C:/Windows",
@@ -34,3 +40,35 @@ def test_scrub_removes_names_in_place_and_is_idempotent() -> None:
     )
     assert environ == reduced_env(PARENT)
     assert scrub_process_env(environ) == ()
+
+
+def test_every_probe_heals_a_hard_killed_plant_before_any_cli_start_and_keeps_the_login(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "claude"
+    root.mkdir()
+    settings = root / "settings.json"
+    settings.write_text('{"theme": "dark"}', encoding="utf-8")
+    credentials = root / ".credentials.json"
+    credentials.write_text("fake-login-not-a-credential", encoding="utf-8")
+    backup = tmp_path / "backup.json"
+    snapshot(backup, root, [settings], [])
+    settings.write_text('{"apiKeyHelper": "echo fake", "permissions": {"allow": ["Bash(*)"]}}')
+    cli_started_with: list[str] = []
+
+    def auth(_cli: Path) -> dict[str, Any]:
+        cli_started_with.append(settings.read_text(encoding="utf-8"))
+        return {"loggedIn": True, "apiProvider": "firstParty"}
+
+    with (
+        patch.object(common, "CONFIG_DIR", root),
+        patch.object(common, "EVIDENCE", tmp_path / "evidence"),
+        patch.object(common, "PLANT_BACKUP", backup),
+        patch.object(common, "PLANT_LOCK", tmp_path / "plant.lock"),
+        patch.object(common, "auth_method", auth),
+    ):
+        require_plan_login(Log("heal"), Path("claude.exe"))
+        require_plan_login(Log("heal"), Path("claude.exe"))
+    assert cli_started_with == ['{"theme": "dark"}', '{"theme": "dark"}']
+    assert credentials.read_text(encoding="utf-8") == "fake-login-not-a-credential"
+    assert not backup.exists()

@@ -7,7 +7,8 @@ then connects with `setting_sources=[]`, a second plugin passed through `plugins
 inline settings that carry `forceLoginMethod`, `cleanupPeriodDays`, a ConfigChange command
 hook and a PreToolUse command hook. A fixed Bash turn fires the PreToolUse hooks. The agent
 then writes `settings.json` mid-session, or the probe writes it when the model refuses.
-`plants.restore` undoes everything, on exit and again on the next start after a crash.
+`plants.restore` undoes everything on exit, and every probe heals a crashed run's plant at its
+next start. A pid lock keeps two runs from sharing one backup.
 """
 
 from __future__ import annotations
@@ -32,20 +33,22 @@ from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITra
 from common import (
     CONFIG_DIR,
     FORCE_LOGIN,
+    PLANT_BACKUP,
+    PLANT_LOCK,
     SCRATCH,
     Log,
     bundled_cli,
     cli_env,
     describe,
+    oq5_plugin_verdict,
     plan_options,
     require_plan_login,
     scrub_process_env,
     tool_uses,
 )
-from plants import restore, snapshot
+from plants import exclusive, restore, snapshot
 
 MARKERS = SCRATCH / "settings-markers"
-BACKUP = SCRATCH / "settings-plant-backup.json"
 MARKET = SCRATCH / "plugin-market"
 HOME_SETTINGS = CONFIG_DIR / "settings.json"
 SYNCED = CONFIG_DIR / "plugins" / "synced"
@@ -128,7 +131,7 @@ def plugin_cli(log: Log, *args: str) -> None:
 def plant(log: Log) -> None:
     shutil.rmtree(MARKERS, ignore_errors=True)
     MARKERS.mkdir(parents=True)
-    snapshot(BACKUP, CONFIG_DIR, [HOME_SETTINGS, *PLUGIN_FILES, *PLANTS], PLUGIN_FOLDERS)
+    snapshot(PLANT_BACKUP, CONFIG_DIR, [HOME_SETTINGS, *PLUGIN_FILES, *PLANTS], PLUGIN_FOLDERS)
     for path, text in PLANTS.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -190,13 +193,12 @@ def markers(tag: str) -> list[str]:
 
 async def main() -> int:
     log = Log("hp0-settings")
-    leftover = BACKUP.exists()
-    failures = restore(BACKUP)
-    log(f"leftover plant restored on start: {leftover}, failures: {failures}")
-    if failures:
-        log.row("S20 ship home restored before the run", failures, "FAIL")
-        return 1
     require_plan_login(log, bundled_cli())
+    with exclusive(PLANT_LOCK):
+        return await planted_run(log)
+
+
+async def planted_run(log: Log) -> int:
     scrub_process_env(os.environ)
     append_file = SCRATCH / "append-system-prompt.txt"
     append_file.write_text(f"The first codeword is {FILE_CODEWORD}.\n")
@@ -255,7 +257,7 @@ async def main() -> int:
         log.row("S20 CLI accepts inline settings and the file flag", repr(error)[:300], "FAIL")
         return 1
     finally:
-        failures = restore(BACKUP)
+        failures = restore(PLANT_BACKUP)
         log(f"ship home restored after the run, failures: {failures}")
 
     def result(prompt: str) -> ResultMessage | None:
@@ -306,7 +308,9 @@ async def main() -> int:
         "OQ5 home plugin, skill, command and agent at connect",
         f"control setting_sources=['user']: {control}; setting_sources=[] with plugins set: "
         f"{at_connect}",
-        "RECORDED" if plugin_loaded(control, HOME_PLUGIN) else "UNMEASURED",
+        oq5_plugin_verdict(
+            plugin_loaded(control, HOME_PLUGIN), plugin_loaded(at_connect, HOME_PLUGIN)
+        ),
     )
     log.row(
         "OQ5 plugin passed through the plugins option loads",
