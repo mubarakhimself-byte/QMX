@@ -459,7 +459,7 @@ export const THREADS: Record<string, Block[]> = {
           recommended: true,
         },
         {
-          label: "Node paper ledger",
+          label: "Server paper ledger",
           note: "Any exchange; fills simulated on live prices.",
         },
         { label: "Bybit testnet", note: "Real exchange rules, test money." },
@@ -651,12 +651,12 @@ export const TASKS = [
   },
   {
     id: "t-sweep",
-    name: "Sweep: BTC breakout, 6 coins × 4 timeframes",
+    name: "Sweep: BTC breakout, 6 markets × 4 timeframes",
     session: "breakout",
     where: "This laptop",
     state: "running" as const,
     progress: 75,
-    log: ["18 / 24 cells done", "LINK 15m failed: not enough data"],
+    log: ["18 / 24 cells done", "USOIL 15m failed: not enough data"],
   },
   {
     id: "t-watch",

@@ -375,8 +375,8 @@
                 "Split $20,000 across the ticked pods to keep dips under 8%",
               ]
             : [
-                `Sweep ${subject.name} across the top coins on 1h and 4h`,
-                "Why did the LINK M15 run fail?",
+                `Sweep ${subject.name} across six markets on 1h and 4h`,
+                "Why did the USOIL M15 run fail?",
                 "Compare the three ticked runs and say what changed",
                 "Build a panel showing drawdown by session",
               ]}

@@ -562,6 +562,12 @@ export const TEST_BOTS = [
 /** Paper money a pod can soak on before it touches real money. */
 export const PAPER_MONEY = [
   {
+    id: "icm-demo",
+    name: "IC Markets demo",
+    note: "The broker's own demo account (CFDs)",
+    balance: 50000,
+  },
+  {
     id: "bn-test",
     name: "Binance testnet",
     note: "The exchange's own test market",
@@ -575,8 +581,8 @@ export const PAPER_MONEY = [
   },
   {
     id: "ledger",
-    name: "Node paper ledger",
-    note: "Any exchange; fills simulated on live prices",
+    name: "Server paper ledger",
+    note: "Any broker or exchange; fills simulated on live prices",
     balance: 20000,
   },
 ];

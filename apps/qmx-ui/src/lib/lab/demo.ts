@@ -530,7 +530,7 @@ export const SLOTS: Slot[] = [
     id: "regime",
     label: "Regime",
     model: "Market regime HMM",
-    owner: "Node labeler today",
+    owner: "Server labeler today",
     scope: "new",
   },
   {

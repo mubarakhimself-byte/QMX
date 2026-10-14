@@ -74,7 +74,7 @@ export function needs(): Need[] {
   out.push({
     id: "run-link",
     kind: "Run",
-    title: "LINK 15m sweep cell failed",
+    title: "USOIL 15m sweep cell failed",
     why: "Not enough data before 2021",
     path: "/lab",
     query: "layout=test",
