@@ -41,6 +41,14 @@
   import { GUIDES } from "$lib/lab/guides";
   import { LAB_PODS, POD_TEMPLATES, STAGE_LABEL } from "$lib/lab/pods";
   import { FIRST } from "$lib/workbench/day-one";
+  import BoardWelcome from "$lib/workbench/BoardWelcome.svelte";
+  import TemplateGallery from "$lib/library/TemplateGallery.svelte";
+
+  const DAY_ONE_STARTERS = [
+    "Start me from a template I can test on paper",
+    "Explain how pods work",
+    "What can the Lab run on this laptop?",
+  ];
 
   // Old links to the four pod tabs land on the Pods bench's three.
   const OLD: Record<string, string> = {
@@ -359,6 +367,7 @@
           {catalog}
           editing={lab.editing}
           onchange={(next) => lab.update(next)}
+          welcome={labWelcome}
         >
           {#snippet panel(p)}
             {@const View = LAB_PANELS[p.panel].view}
@@ -373,36 +382,62 @@
         <CopilotColumn
           title="Lab copilot"
           profile="lab"
-          hint={lab.bench === "pods"
-            ? `Knows ${pod.name}, its blocks, every pod test and paper run. Ask it to build a block, a stress scenario or a mix.`
-            : `Knows ${subject.name}, the open layout and every run. Ask it to build a step, a panel, a test or a sweep.`}
-          placeholder={lab.bench === "pods"
-            ? "Make a stress scenario where…"
-            : "Sweep this across the top coins on 1h and 4h…"}
+          hint={!workbench.demoMode
+            ? "Ask it to start from a template, build a step or explain how pods work."
+            : lab.bench === "pods"
+              ? `Knows ${pod.name}, its blocks, every pod test and paper run. Ask it to build a block, a stress scenario or a mix.`
+              : `Knows ${subject.name}, the open layout and every run. Ask it to build a step, a panel, a test or a sweep.`}
+          placeholder={!workbench.demoMode
+            ? "Start me from a template that…"
+            : lab.bench === "pods"
+              ? "Make a stress scenario where…"
+              : "Sweep this across the top coins on 1h and 4h…"}
           seed={lab.copilotSeed}
           onclose={() => (lab.copilotOpen = false)}
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={LAB_CONTEXT}
           origin="Lab"
-          starters={lab.bench === "pods"
-            ? [
-                `Why did ${pod.name} refuse the AVAX entry this morning?`,
-                "Build a stress scenario from the March 2020 crash",
-                "Make a block that halves size after three losses in a row",
-                "Split $20,000 across the ticked pods to keep dips under 8%",
-              ]
-            : [
-                `Sweep ${subject.name} across six markets on 1h and 4h`,
-                "Why did the USOIL M15 run fail?",
-                "Compare the three ticked runs and say what changed",
-                "Build a panel showing drawdown by session",
-              ]}
+          starters={!workbench.demoMode
+            ? DAY_ONE_STARTERS
+            : lab.bench === "pods"
+              ? [
+                  `Why did ${pod.name} refuse the AVAX entry this morning?`,
+                  "Build a stress scenario from the March 2020 crash",
+                  "Make a block that halves size after three losses in a row",
+                  "Split $20,000 across the ticked pods to keep dips under 8%",
+                ]
+              : [
+                  `Sweep ${subject.name} across six markets on 1h and 4h`,
+                  "Why did the USOIL M15 run fail?",
+                  "Compare the three ticked runs and say what changed",
+                  "Build a panel showing drawdown by session",
+                ]}
         />
       </Resizable.Pane>
     {/if}
   </Resizable.PaneGroup>
 </div>
+
+{#snippet labWelcome()}
+  {#if lab.bench === "pods"}
+    <BoardWelcome
+      title="Build a pod"
+      line="A pod sizes and guards your bots' trades"
+      actions={[FIRST.pod, FIRST.template, FIRST.copilot]}
+    >
+      <TemplateGallery families={["Pod"]} title="Pod templates" />
+    </BoardWelcome>
+  {:else}
+    <BoardWelcome
+      title="Build and test a strategy"
+      line="Start from a template or ask the copilot"
+      actions={[FIRST.template, FIRST.pod, FIRST.copilot]}
+    >
+      <TemplateGallery families={["Workflow", "Lab layout"]} />
+    </BoardWelcome>
+  {/if}
+{/snippet}
 
 <Dialog.Root bind:open={saving}>
   <Dialog.Content class="sm:max-w-md">

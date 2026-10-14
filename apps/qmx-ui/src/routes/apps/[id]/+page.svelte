@@ -29,6 +29,9 @@
     apps,
     layoutFor,
   } from "$lib/apps/apps.svelte";
+  import BoardWelcome from "$lib/workbench/BoardWelcome.svelte";
+  import { FIRST } from "$lib/workbench/day-one";
+  import { workbench } from "$lib/workbench/workbench.svelte";
 
   const app = apps.byId(page.params.id ?? "");
   const L = app
@@ -117,12 +120,13 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </header>
-    <div class="min-h-0 flex-1 p-2">
+    <div class={cn("min-h-0 flex-1 p-2", !workbench.demoMode && "scrim")}>
       <TileBoard
         layout={L.active}
         {catalog}
         editing={L.editing}
         onchange={(next) => L.update(next)}
+        welcome={appWelcome}
       >
         {#snippet panel(p)}
           {@const View = WIDGETS[p.panel].view}
@@ -132,5 +136,13 @@
     </div>
   {/if}
 </div>
+
+{#snippet appWelcome()}
+  <BoardWelcome
+    title="Nothing to show yet"
+    line="Its widgets appear here once they have data"
+    actions={[FIRST.broker, FIRST.source]}
+  />
+{/snippet}
 
 <AboutSheet opened />

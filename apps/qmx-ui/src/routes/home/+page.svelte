@@ -30,7 +30,8 @@
   import { HOME_PANELS } from "$lib/home/catalog";
   import { needs } from "$lib/home/needs";
   import GetStarted from "$lib/home/GetStarted.svelte";
-  import { FIRST } from "$lib/workbench/day-one";
+  import BoardWelcome from "$lib/workbench/BoardWelcome.svelte";
+  import { FIRST, GET_STARTED } from "$lib/workbench/day-one";
 
   const L = home.layouts;
   const hour = new Date().getHours();
@@ -42,6 +43,11 @@
     month: "long",
   });
   const waiting = $derived(needs());
+  // Day one: the Get started steps stand in for the empty board until done.
+  const starting = $derived(
+    !workbench.demoMode &&
+      GET_STARTED.some((s) => !home.started.includes(s.id)),
+  );
   const ticker = $derived(
     home.ticker
       .map((s) => MARKETS.find((c) => c.sym === s))
@@ -227,8 +233,6 @@
     </div>
   </header>
 
-  {#if !workbench.demoMode}<GetStarted />{/if}
-
   <div class="flex shrink-0 items-center">
     <div class="min-w-0 flex-1">
       {#if workbench.demoMode}
@@ -281,6 +285,7 @@
       {catalog}
       editing={L.editing}
       onchange={(next) => L.update(next)}
+      welcome={starting ? getStarted : undefined}
     >
       {#snippet panel(p)}
         {@const View = HOME_PANELS[p.panel].view}
@@ -289,6 +294,15 @@
     </TileBoard>
   </div>
 </div>
+
+{#snippet getStarted()}
+  <BoardWelcome
+    title="Get started"
+    line="Four steps to your first test on paper"
+  >
+    <GetStarted />
+  </BoardWelcome>
+{/snippet}
 
 <Dialog.Root bind:open={naming}>
   <Dialog.Content class="sm:max-w-md">

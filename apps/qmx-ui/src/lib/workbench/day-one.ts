@@ -88,13 +88,39 @@ export const DAY_ONE: Record<string, DayOne> = {
   mis: { line: "No market labelers", action: FIRST.copilot },
 };
 
-/** The first-run steps on Home, in order. */
+/**
+ * A board panel with nothing to show yet. With demo off every known panel is
+ * empty until the backend fills it; the board hides empty panels and shows
+ * its welcome instead (TileBoard `welcome`).
+ */
+export const isEmptyPanel = (panel: string, demo: boolean) =>
+  !demo && panel in DAY_ONE;
+
+/** The first-run steps on Home, in order, each with why it comes first. */
 export const GET_STARTED = [
-  { id: "broker", ...FIRST.broker },
-  { id: "model", ...FIRST.model },
-  { id: "source", label: "Add a data source", href: FIRST.source.href },
+  {
+    id: "broker",
+    title: "Your broker",
+    why: "QMX reads prices and balances through your broker, and places a trade only when you sign it.",
+    ...FIRST.broker,
+  },
+  {
+    id: "model",
+    title: "A model for the copilots",
+    why: "The copilots think with a model from a provider you sign in to, such as a plan you already pay for.",
+    ...FIRST.model,
+  },
+  {
+    id: "source",
+    title: "Data to test on",
+    why: "Price history, news and the calendar feed every test, the Lab and this Home screen.",
+    label: "Add a data source",
+    href: FIRST.source.href,
+  },
   {
     id: "start",
+    title: "A first strategy or pod",
+    why: "A template gives you something that already works to test on paper before any real money.",
     label: "Start a strategy or pod",
     href: FIRST.template.href,
   },

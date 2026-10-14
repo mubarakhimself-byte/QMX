@@ -6,8 +6,11 @@
    * mode. The parent owns the layout and the catalog; panels render through
    * the `panel` snippet. Unknown panels show a reason, never an error.
    * With demo mode off, known panels show their day-one line (day-one.ts).
+   * Given a `welcome`, the board hides panels with nothing to show and, when
+   * none is left, shows the welcome instead. The saved layout is untouched;
+   * editing the layout or adding a panel shows every tile again.
    */
-  import type { Component, Snippet } from "svelte";
+  import { untrack, type Component, type Snippet } from "svelte";
   import Minus from "@lucide/svelte/icons/minus";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
@@ -20,7 +23,7 @@
   import { cn } from "$lib/utils";
   import PanelBody from "./PanelBody.svelte";
   import FirstStep from "../FirstStep.svelte";
-  import { DAY_ONE } from "../day-one";
+  import { DAY_ONE, isEmptyPanel } from "../day-one";
   import { workbench } from "../workbench.svelte";
   import {
     LINK_GROUPS,
@@ -45,6 +48,7 @@
     panel,
     tools,
     borderFor,
+    welcome,
     class: className,
   }: {
     layout: TileLayout;
@@ -56,6 +60,8 @@
     tools?: Snippet<[TilePane]>;
     /** Border colour for a tile (e.g. paper or live); overrides the link colour. */
     borderFor?: (p: TilePane) => string | undefined;
+    /** What the board shows while every panel is empty (day one). */
+    welcome?: Snippet;
     class?: string;
   } = $props();
 
@@ -63,8 +69,30 @@
   let dragging = $state<string | null>(null);
   let dropTarget = $state<string | null>(null);
 
-  const visible = $derived(visibleTree(layout.root, layout.docked));
   const all = $derived(panes(layout.root));
+  // Adding a panel to a collapsed board shows the whole board, so the new
+  // tile is where the user expects it. Switching layouts collapses again.
+  let revealed = $state(false);
+  let seen = untrack(() => ({ id: layout.id, count: all.length }));
+  $effect(() => {
+    const now = { id: layout.id, count: all.length };
+    if (now.id !== seen.id) revealed = false;
+    else if (now.count > seen.count) revealed = true;
+    seen = now;
+  });
+  const empty = $derived(
+    welcome && !editing && !revealed
+      ? all
+          .filter(
+            (p) =>
+              catalog[p.panel] && isEmptyPanel(p.panel, workbench.demoMode),
+          )
+          .map((p) => p.id)
+      : [],
+  );
+  const hidden = $derived([...layout.docked, ...empty]);
+  const visible = $derived(visibleTree(layout.root, hidden));
+  const dock = $derived(layout.docked.filter((id) => !empty.includes(id)));
   const expandedPane = $derived(all.find((p) => p.id === expanded));
 
   const LINK_CLASS: Record<LinkGroup, string> = {
@@ -142,7 +170,7 @@
       () =>
         onchange({
           ...layout,
-          root: setSizes(layout.root, path, sizes, layout.docked),
+          root: setSizes(layout.root, path, sizes, hidden),
         }),
       250,
     );
@@ -306,6 +334,8 @@
       {@render tile(expandedPane, true)}
     {:else if visible}
       {@render node(visible, [])}
+    {:else if empty.length && welcome}
+      {@render welcome()}
     {:else}
       <div
         class="text-muted-foreground flex h-full items-center justify-center text-sm"
@@ -314,13 +344,13 @@
       </div>
     {/if}
   </div>
-  {#if layout.docked.length}
+  {#if dock.length}
     <div
       class="tile flex h-9 shrink-0 items-center gap-1 overflow-x-auto rounded-lg px-1.5"
       aria-label="Minimised tiles"
     >
       <span class="text-muted-foreground px-1.5 text-xs">Minimised</span>
-      {#each layout.docked as id (id)}
+      {#each dock as id (id)}
         {@const p = all.find((x) => x.id === id)}
         {#if p}
           {@const i = info(p)}

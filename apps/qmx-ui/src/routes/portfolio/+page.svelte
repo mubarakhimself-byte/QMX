@@ -32,6 +32,9 @@
   import TemplatesDialog from "$lib/portfolio/TemplatesDialog.svelte";
   import ServersStrip from "$lib/portfolio/ServersStrip.svelte";
   import KillSwitchChip from "$lib/portfolio/KillSwitchChip.svelte";
+  import BoardWelcome from "$lib/workbench/BoardWelcome.svelte";
+  import TemplateGallery from "$lib/library/TemplateGallery.svelte";
+  import { FIRST } from "$lib/workbench/day-one";
 
   const L = portfolio.layouts;
   const fromUrl = page.url.searchParams.get("layout");
@@ -223,6 +226,7 @@
         editing={L.editing}
         onchange={(next) => L.update(next)}
         {borderFor}
+        welcome={portfolioWelcome}
       >
         {#snippet panel(p)}
           {@const View = PORTFOLIO_PANELS[p.panel].view}
@@ -236,24 +240,44 @@
         <CopilotColumn
           title="Portfolio copilot"
           profile="portfolio"
-          hint="Knows every account, pod and bot on the road to live. It explains, watches and brings tested pods in from the Lab; you sign anything that touches money."
-          placeholder="Bring the vol-target pod from the Lab onto Bybit…"
+          hint={workbench.demoMode
+            ? "Knows every account, pod and bot on the road to live. It explains, watches and brings tested pods in from the Lab; you sign anything that touches money."
+            : "Ask it to connect a broker, start a pod from a template or explain how pods work."}
+          placeholder={workbench.demoMode
+            ? "Bring the vol-target pod from the Lab onto Bybit…"
+            : "Help me connect my broker…"}
           onclose={() => (portfolio.copilotOpen = false)}
           refs={workbench.copilotRefs}
           onremoveref={(r) => workbench.removeRef(r)}
           context={PORTFOLIO_CONTEXT}
           origin="Portfolio"
-          starters={[
-            "Let the Bybit account take on Alt momentum and grow faster",
-            "Why is SOL near its cap in Alt momentum?",
-            "Bring the tested vol-target pod from the Lab onto paper",
-            "Summarise ETH mean reversion's journal this week",
-          ]}
+          starters={!workbench.demoMode
+            ? [
+                "Help me connect a broker",
+                "Start me a pod from a template, on paper",
+                "Explain how pods work",
+              ]
+            : [
+                "Let the Bybit account take on Alt momentum and grow faster",
+                "Why is SOL near its cap in Alt momentum?",
+                "Bring the tested vol-target pod from the Lab onto paper",
+                "Summarise ETH mean reversion's journal this week",
+              ]}
         />
       </Resizable.Pane>
     {/if}
   </Resizable.PaneGroup>
 </div>
+
+{#snippet portfolioWelcome()}
+  <BoardWelcome
+    title="Your portfolio"
+    line="Connect a broker to see accounts and trades"
+    actions={[FIRST.broker, FIRST.pod]}
+  >
+    <TemplateGallery families={["Portfolio pod"]} title="Pod templates" />
+  </BoardWelcome>
+{/snippet}
 
 <TemplatesDialog />
 
