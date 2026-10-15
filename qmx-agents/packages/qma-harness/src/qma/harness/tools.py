@@ -409,6 +409,19 @@ def _posix(path: Path) -> str:
     return normalize_path(str(path.resolve()), cwd="/", home=home, case_insensitive=False)
 
 
+def _both(paths: list[Path]) -> tuple[str, ...]:
+    """Each path as written (absolute) and as resolved, so a home behind a junction or link
+    matches either spelling."""
+    home = str(Path.home())
+    return tuple(
+        dict.fromkeys(
+            normalize_path(str(form), cwd="/", home=home, case_insensitive=False)
+            for path in paths
+            for form in (path.absolute(), path.resolve())
+        )
+    )
+
+
 def gate_rules(
     defs: list[ToolDef],
     *,
@@ -448,9 +461,9 @@ def gate_rules(
         mandatory_asks=frozenset(
             PREFIX + tool.name for tool in defs if asks(tool.effect, domain_write)
         ),
-        protected_paths=tuple(map(_posix, protected)),
-        secret_paths=tuple(map(_posix, secrets)),
-        personal_home=_posix(personal),
+        protected_paths=_both(protected),
+        secret_paths=_both(secrets),
+        personal_homes=_both([personal]),
         keyring_names=frozenset(name.casefold() for name in keyring_names),
         broker_hosts=frozenset(host.casefold() for host in broker_hosts),
         variables=MappingProxyType(

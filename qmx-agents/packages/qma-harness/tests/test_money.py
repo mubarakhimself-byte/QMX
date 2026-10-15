@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
+import tempfile
+from dataclasses import replace
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -35,7 +40,7 @@ RULES = GateRules(
         "/c/Users/Op/.claude/.credentials.json",
         "/c/Users/Op/.claude.json",
     ),
-    personal_home="/c/Users/Op/.claude",
+    personal_homes=("/c/Users/Op/.claude",),
     keyring_names=frozenset({"qmx/ctrader", "qmx/openrouter"}),
     broker_hosts=frozenset({"ctraderapi.com"}),
     variables=MappingProxyType(
@@ -120,6 +125,24 @@ VERDICTS: list[tuple[str, dict[str, Any], str, str]] = [
     ("Glob", {"pattern": "**/.credentials.json"}, "deny", "search for login files"),
     ("Glob", {"pattern": "C:/Users/Op/.claude/**"}, "deny", "own Claude home"),
     ("Edit", {"file_path": "src/a.py"}, "pass", ""),
+    ("Read", {"file_path": r"\\?\C:\Users\Op\.claude\settings.json"}, "deny", "network"),
+    ("Read", {"file_path": r"\\.\C:\Users\Op\.claude\a.md"}, "deny", "device or network"),
+    ("Read", {"file_path": r"\\localhost\c$\Users\Op\a.md"}, "deny", "device or network"),
+    ("Read", {"file_path": "//localhost/c$/Users/Op/a.md"}, "deny", "device or network"),
+    ("Read", {"file_path": "C:/Users/Op/.claude/.credentials.json::$DATA"}, "deny", "stream"),
+    ("Read", {"file_path": ".credentials.json:x"}, "deny", "stream"),
+    ("Read", {"file_path": "C:/Users/Op/CLAUDE~1/CREDEN~1.JSO"}, "deny", "8.3 short name"),
+    ("Grep", {"pattern": "x", "path": "C:/Users/Op/CLAUDE~1"}, "deny", "8.3 short name"),
+    ("Glob", {"pattern": "C:/Users/Op/CLAUDE~1/*"}, "deny", "8.3 short name"),
+    ("Read", {"file_path": "C:/Users/Op/.claude./settings.json"}, "deny", "dot or a space"),
+    ("Read", {"file_path": "C:/Users/Op/.claude /settings.json"}, "deny", "dot or a space"),
+    ("Edit", {"file_path": "D:/qmx/home/settings.toml."}, "deny", "dot or a space"),
+    ("Read", {"file_path": "../a/./b.py"}, "pass", ""),
+    ("Bash", {"command": r"cat '\\?\C:\Users\Op\a.md'"}, "deny", "device or network"),
+    ("PowerShell", {"command": r"gc \\localhost\c$\Users\Op\a.md"}, "deny", "device or network"),
+    ("Bash", {"command": "cat C:/Users/Op/a.md:x"}, "deny", "stream"),
+    ("Bash", {"command": "git show HEAD~1:src/a.py"}, "pass", ""),
+    ("Bash", {"command": "git commit -m 'Fix src/a.py.'"}, "pass", ""),
     ("mcp__broker__placeOrder", {}, "deny", "is submit_order"),
     ("mcp__x__close_position2", {}, "deny", "is close_position"),
     ("mcp__broker__cancel_all_orders", {}, "deny", "is cancel_order"),
@@ -283,3 +306,53 @@ def test_the_surface_check_refuses_money_names_and_metadata_but_honours_the_exem
         {"propose_order": {"_meta": {"money_path": True}}},
         frozenset({"propose_order"}),
     )
+
+
+def short_path(path: Path) -> str:
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(1024)
+    ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, 1024)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    return buffer.value
+
+
+def short_names_dir(tmp_path: Path) -> Path:
+    """A folder on a volume that makes 8.3 names. TMP may sit on a volume with them off, so
+    QMA_TEST_SHORT_NAMES_DIR can name one elsewhere."""
+    for base in (tmp_path, os.environ.get("QMA_TEST_SHORT_NAMES_DIR")):
+        if base:
+            folder = Path(tempfile.mkdtemp(dir=base))
+            (folder / "LongDirectoryName").mkdir()
+            if "~" in short_path(folder / "LongDirectoryName"):
+                return folder
+    pytest.skip("no volume here makes 8.3 names; set QMA_TEST_SHORT_NAMES_DIR")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="8.3 names are a Windows form")
+def test_real_short_names_read_as_the_long_path(tmp_path: Path) -> None:
+    base = short_names_dir(tmp_path)
+    login = base / ".claudehome" / ".credentials.json"
+    login.parent.mkdir()
+    login.write_text("{}", encoding="utf-8")
+    state = base / "qmxstate"
+    state.mkdir()
+
+    def posix(path: Path) -> str:
+        return normalize_path(str(path), cwd="/", home="/", case_insensitive=False)
+
+    rules = replace(RULES, secret_paths=(posix(login),), protected_paths=(posix(state),))
+    short_login, short_state = short_path(login), short_path(state)
+    assert "~" in short_login
+    assert "~" in short_state
+    calls: list[tuple[str, dict[str, Any]]] = [
+        ("Bash", {"command": f'cat "{short_login}"'}),
+        ("Bash", {"command": f"cat {short_login.replace(chr(92), '/')}"}),
+        ("Bash", {"command": f'echo x > "{short_state}/new.txt"'}),
+        ("Read", {"file_path": short_login}),
+        ("Write", {"file_path": f"{short_state}/new.txt"}),
+    ]
+    found = [kind(gate(tool, args, rules, cwd=str(base), agent_id=None)) for tool, args in calls]
+    assert [verdict for verdict, _ in found] == ["deny"] * 5
+    assert "login file" in found[0][1]
+    assert "login file" in found[1][1]
+    assert "QMX state" in found[2][1]

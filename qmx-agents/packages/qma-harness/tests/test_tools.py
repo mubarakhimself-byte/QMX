@@ -14,7 +14,7 @@ from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
 from qma.harness.home import QmxHome
-from qma.harness.money import MoneySurfaceError
+from qma.harness.money import Deny, MoneySurfaceError, gate, normalize_path
 from qma.harness.tools import (
     AGENT_OPERATIONS,
     DOMAIN_EFFECTS,
@@ -177,7 +177,7 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
     assert rules.keyring_names == {"qmx/ctrader"}
     assert rules.variables["CLAUDE_CONFIG_DIR"].endswith("/home/claude")
     assert any(path.endswith("/home/settings.toml") for path in rules.protected_paths)
-    assert rules.personal_home.endswith("/.claude")
+    assert all(home.endswith("/.claude") for home in rules.personal_homes)
 
 
 def test_keyring_refs_reads_names_from_three_sections(tmp_path: Path) -> None:
@@ -236,3 +236,29 @@ def test_vetting_starts_the_server_and_checks_its_tools(
             asyncio.run(vet_server("ext", row))
     else:
         assert asyncio.run(vet_server("ext", row))["type"] == "stdio"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows form")
+def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -> None:
+    import _winapi  # pyright: ignore[reportMissingModuleSource]
+
+    real = tmp_path / "real-home"
+    real.mkdir()
+    link = tmp_path / "linked-home"
+    _winapi.CreateJunction(str(real), str(link))  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+    rules = gate_rules(
+        [],
+        domain_write="allow",
+        home=QmxHome(link),
+        config_dir=link / "claude",
+        keyring_names=frozenset(),
+    )
+    for root in (real, link):
+        settings = normalize_path(
+            str(root / "settings.toml"), cwd="/", home="/", case_insensitive=False
+        )
+        assert settings in rules.protected_paths
+        found = gate(
+            "Edit", {"file_path": str(root / "settings.toml")}, rules, cwd="/", agent_id=None
+        )
+        assert found == Deny(f"money rule: agents cannot write QMX state ({settings.casefold()})")

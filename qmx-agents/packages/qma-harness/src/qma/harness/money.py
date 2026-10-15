@@ -20,9 +20,10 @@ The deny-list itself is `qma.core.barriers.money_path`, reached through
 
 from __future__ import annotations
 
+import os
 import posixpath
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -85,7 +86,8 @@ DENY_PREFIX: Final = "money rule: "
 @dataclass(frozen=True)
 class GateRules:
     """Everything the gate needs, fixed at launch. Built by `tools.gate_rules`. Paths are in
-    the POSIX form `normalize_path` gives with `case_insensitive=False`."""
+    the POSIX form `normalize_path` gives with `case_insensitive=False`, each one both as
+    written and as the OS resolves it, so a junction or link to either form matches."""
 
     proposal_tools: frozenset[str]
     """Exact tool names that always ask although their names end in `order`
@@ -98,8 +100,8 @@ class GateRules:
     secret_paths: tuple[str, ...]
     """No reads and no writes: the plan login in both forms, under each QMX Claude home and
     under the operator's `~/.claude`, and his `~/.claude.json`."""
-    personal_home: str
-    """His `~/.claude`. No reads and no writes (R20)."""
+    personal_homes: tuple[str, ...]
+    """His `~/.claude`, as written and as resolved. No reads and no writes (R20)."""
     keyring_names: frozenset[str]
     """Exact `qmx/<name>` entries, casefolded. Whole names, not a `qmx/` prefix, so his repo
     path (`.../Desktop/QMX/...`) never trips."""
@@ -154,6 +156,62 @@ def within(path: str, base: str) -> bool:
     return path == base or path.startswith(base.rstrip("/") + "/")
 
 
+_POSIX_DRIVE = re.compile(r"^/([A-Za-z])(?:/|$)")
+
+
+def canonical(path: str) -> str:
+    """The path the OS opens for `path`, a `normalize_path` result with case kept. The
+    longest existing prefix goes through `os.path.realpath`, which on Windows expands 8.3
+    names, follows links and junctions, and drops trailing dots, spaces and `::$DATA`; the
+    rest is appended as written. Stats the file system, so not pure."""
+    drive = _POSIX_DRIVE.match(path)
+    if os.name == "nt":
+        if drive is None:
+            return path
+        native = f"{drive.group(1)}:/{path[3:]}"
+    else:
+        native = path
+    try:
+        resolved = os.path.realpath(native)
+    except OSError, ValueError:
+        return path
+    return normalize_path(resolved, cwd="/", home="/", case_insensitive=False)
+
+
+_REMOTE = re.compile(r"^//(?:[?.]/|[^/]+/)")
+_DRIVE_STREAM = re.compile(r"^[A-Za-z]:.*:")
+
+
+def remote_form(raw: str) -> str | None:
+    """A device or network prefix (`\\\\?\\`, `\\\\.\\`, `\\\\host\\share`, `//host/share`),
+    or an NTFS stream after a drive. Refused outright: the gate never stats a network path,
+    and a stream is never compared."""
+    text = raw.strip().strip("'\"").replace("\\", "/")
+    if _REMOTE.match(text):
+        return "a device or network path"
+    if _DRIVE_STREAM.match(text):
+        return "an NTFS stream"
+    return None
+
+
+def odd_form(raw: str) -> str | None:
+    """`remote_form`, a stream on any path, an 8.3 short segment (`CLAUDE~1`), or a segment
+    ending in a dot or a space, which Windows drops. File-tool paths only: in shell text
+    `HEAD~1:a.py` and a sentence ending `a.py.` are ordinary, so there `canonical` reads them."""
+    found = remote_form(raw)
+    if found is not None:
+        return found
+    text = raw.strip().strip("'\"").replace("\\", "/")
+    segments = text.split("/")
+    if ":" in re.sub(r"^[A-Za-z]:", "", text):
+        return "an NTFS stream"
+    if any(re.search(r"~\d", segment) for segment in segments):
+        return "an 8.3 short name"
+    if any(s not in {".", ".."} and s.endswith((".", " ")) for s in segments):
+        return "a segment ending in a dot or a space"
+    return None
+
+
 @dataclass(frozen=True)
 class Pass:
     """No opinion. The CLI's own rules, mode and `can_use_tool` decide."""
@@ -180,22 +238,36 @@ class _Folded:
 
     protected: tuple[str, ...]
     secrets: tuple[str, ...]
-    personal: str
+    personal: tuple[str, ...]
     home: str
+    fold: Callable[[str], str]
 
     @classmethod
     def of(cls, rules: GateRules) -> _Folded:
-        fold = str.casefold if rules.case_insensitive else str
+        fold: Callable[[str], str] = str.casefold if rules.case_insensitive else str
         return cls(
             tuple(map(fold, rules.protected_paths)),
             tuple(map(fold, rules.secret_paths)),
-            fold(rules.personal_home),
+            tuple(map(fold, rules.personal_homes)),
             fold(rules.variables.get("HOME", "/")),
+            fold,
         )
 
 
 def _deny(reason: str) -> Deny:
     return Deny(DENY_PREFIX + reason)
+
+
+def _forms(raw: str, *, cwd: str, rules: GateRules, folded: _Folded) -> tuple[str, ...]:
+    """`raw` as written and as the OS resolves it, each in the form the rules compare."""
+    literal = normalize_path(
+        raw,
+        cwd=cwd,
+        home=rules.variables.get("HOME", "/"),
+        case_insensitive=False,
+        variables=rules.variables,
+    )
+    return tuple(dict.fromkeys(map(folded.fold, (literal, canonical(literal)))))
 
 
 def _secret(path: str, folded: _Folded) -> bool:
@@ -205,9 +277,9 @@ def _secret(path: str, folded: _Folded) -> bool:
 def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:
     if _secret(path, folded):
         return _deny(f"agents cannot read or write a login file ({path})")
-    if within(path, folded.personal):
+    if any(within(path, home) for home in folded.personal):
         return _deny(f"agents cannot read or write the operator's own Claude home ({path})")
-    if folder and any(within(target, path) for target in (*folded.secrets, folded.personal)):
+    if folder and any(within(target, path) for target in (*folded.secrets, *folded.personal)):
         return _deny(f"{path} holds a login file or the operator's own Claude home")
     return None
 
@@ -231,18 +303,15 @@ def _file_tool(
             if fixed:
                 paths.append(posixpath.dirname(fixed.replace("\\", "/")) or ".")
     for raw_path in paths:
-        path = normalize_path(
-            raw_path,
-            cwd=cwd,
-            home=rules.variables.get("HOME", "/"),
-            case_insensitive=rules.case_insensitive,
-            variables=rules.variables,
-        )
-        found = _read_target(path, folded, folder=folder)
-        if found is not None:
-            return found
-        if tool_name in WRITE_TOOLS and any(within(path, p) for p in folded.protected):
-            return _deny(f"agents cannot write QMX state ({path})")
+        odd = odd_form(expand(raw_path, rules.variables))
+        if odd is not None:
+            return _deny(f"agents cannot use {odd} ({raw_path})")
+        for path in _forms(raw_path, cwd=cwd, rules=rules, folded=folded):
+            found = _read_target(path, folded, folder=folder)
+            if found is not None:
+                return found
+            if tool_name in WRITE_TOOLS and any(within(path, p) for p in folded.protected):
+                return _deny(f"agents cannot write QMX state ({path})")
     return None
 
 
@@ -292,20 +361,17 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
             return _deny(f"agents cannot search for Claude homes or login files ({word})")
         if not _pathlike(word):
             continue
-        path = normalize_path(
-            word,
-            cwd=cwd,
-            home=rules.variables.get("HOME", "/"),
-            case_insensitive=rules.case_insensitive,
-            variables=rules.variables,
-        )
-        found = _read_target(path, folded, folder=False)
-        if found is not None:
-            return found
-        if any(within(path, p) for p in folded.protected):
-            return _deny(f"agents cannot touch QMX state from a shell ({path})")
-        if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
-            return _deny(f"agents cannot sweep a drive root or a user home ({path})")
+        remote = remote_form(word)
+        if remote is not None:
+            return _deny(f"agents cannot use {remote} ({word})")
+        for path in _forms(word, cwd=cwd, rules=rules, folded=folded):
+            found = _read_target(path, folded, folder=False)
+            if found is not None:
+                return found
+            if any(within(path, p) for p in folded.protected):
+                return _deny(f"agents cannot touch QMX state from a shell ({path})")
+            if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
+                return _deny(f"agents cannot sweep a drive root or a user home ({path})")
     return None
 
 
@@ -321,15 +387,17 @@ def gate(
     cwd: str,
     agent_id: str | None,
 ) -> Verdict:
-    """Pure, fast, no I/O. Total over every tool name, built-in or MCP, main agent or
-    sub-agent. `agent_id` is unused until `delegate` lands (gate step 1, R33).
+    """Fast, no network and no writes; it stats paths only to resolve them (`canonical`).
+    Total over every tool name, built-in or MCP, main agent or sub-agent. `agent_id` is
+    unused until `delegate` lands (gate step 1, R33).
 
     Order:
     2. proposal identity -> Ask.
     3. an MCP tool whose name ends in a money act -> Deny. Built-in names are the CLI's own
        closed set (`ExitPlanMode` would read as a `mode` act).
-    4. READ_TOOLS or WRITE_TOOLS on a login file, inside the personal home, or (Grep, Glob)
-       on a folder holding either -> Deny.
+    4. READ_TOOLS or WRITE_TOOLS on an odd Windows path form (`odd_form`), a login file,
+       inside the personal home, or (Grep, Glob) on a folder holding either -> Deny. Each
+       path is compared as written and as resolved.
     5. WRITE_TOOLS into `protected_paths` -> Deny.
     6. SHELL_TOOLS whose command names a login fragment, a credential-store reader, a
        keyring name, a broker host, a protected or secret path, the personal home, a bare
@@ -411,7 +479,9 @@ def deny_rules(rules: GateRules) -> list[str]:
     for secret in (*rules.secret_paths, f"/**/{LOGIN_NAME}"):
         found += [f"{tool}(/{secret})" for tool in ("Read", "Edit", "Write")]
     found += [
-        f"{tool}(/{rules.personal_home}/**)" for tool in ("Read", "Edit", "Write", "NotebookEdit")
+        f"{tool}(/{home}/**)"
+        for home in rules.personal_homes
+        for tool in ("Read", "Edit", "Write", "NotebookEdit")
     ]
     for path in rules.protected_paths:
         found += [
