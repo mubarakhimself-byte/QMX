@@ -25,7 +25,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
-from qma.core.barriers.descriptors import name_money_act
+from qma.core.barriers.descriptors import description_money_act
 from qmx_broker.service import BrokerService
 
 from qma.harness.money import (
@@ -625,7 +625,7 @@ async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> V
     }
     check_tool_surface(list(metadata), metadata, frozenset())
     for tool in listed:
-        act = name_money_act(tool.description or "")
+        act = description_money_act(tool.description or "")
         if act is not None:
             raise MoneySurfaceError(f"the description of {tool.name} names a money act ({act})")
     tools = frozenset(metadata)

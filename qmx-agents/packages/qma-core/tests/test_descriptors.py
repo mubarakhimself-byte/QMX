@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from qma.core.barriers.descriptors import check_descriptor, name_money_act
+from qma.core.barriers.descriptors import check_descriptor, description_money_act, name_money_act
 from qma.core.barriers.money_path import (
     MONEY_PATH_ACT_ALIASES,
     MONEY_PATH_DENIED_ACTS,
@@ -424,3 +424,27 @@ def test_read_tools_pass(name: str, metadata: dict[str, Any]) -> None:
 def test_a_name_with_no_words_names_no_act(name: str) -> None:
     assert name_money_act(name) is None
     assert check_descriptor("read_bars", {"tool_name": name}) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "act"),
+    [
+        ("Returns the font size.", None),
+        ("Upload a file and transfer it to S3.", None),
+        ("Should I buy an umbrella?", None),
+        ("Get the current book mode.", None),
+        ("Shows the kill switch state and the order history.", None),
+        ("Lists open orders.", None),
+        ("Places a market order for the symbol.", "place_order"),
+        ("Cancels all open orders.", "cancel_order"),
+        ("Set the book mode.", "set_book_mode"),
+        ("Arms the kill switch.", "arm_kill_switch"),
+        ("Moves the stop loss of a position.", "move_stop_loss"),
+        ("Withdraws funds to a bank.", "withdraw_fund"),
+        ("Closes the position.", "close_position"),
+    ],
+)
+def test_a_description_names_an_act_only_by_a_verb_with_its_object(
+    text: str, act: str | None
+) -> None:
+    assert description_money_act(text) == act

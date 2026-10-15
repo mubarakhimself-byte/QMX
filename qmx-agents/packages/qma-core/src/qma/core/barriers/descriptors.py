@@ -27,7 +27,7 @@ from qma.core.barriers.money_path import (
 )
 from qma.core.barriers.parent_surfaces import is_parent_surface_permitted
 
-__all__ = ["check_descriptor", "name_money_act"]
+__all__ = ["check_descriptor", "description_money_act", "name_money_act"]
 
 _BOUNDARY = re.compile(
     r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])"
@@ -215,6 +215,31 @@ def name_money_act(name: str) -> str | None:
         act = _run_act(words) or _word_act(words)
         if act is not None:
             return act
+    return None
+
+
+_REACH: Final = 3
+"""Words a description's verb may stand before its object (`Places a market order`)."""
+
+
+def description_money_act(text: str) -> str | None:
+    """The act a description names as a verb with its object: a mutating or money verb
+    followed, within `_REACH` words, by a family or money noun (`Places a market order`) or by
+    the rest of a multi-word act (`Set the book mode`). A lone word (`size`, `transfer`, `buy`)
+    or a noun without such a verb (`Get the current book mode`) names none."""
+    words = _words(_splits(text)[0])
+    verbs = MONEY_PATH_MUTATING_VERBS | MONEY_PATH_MONEY_VERBS
+    nouns = MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS
+    for index, verb in enumerate(words):
+        if verb not in verbs:
+            continue
+        for start in range(index + 1, min(index + 1 + _REACH, len(words))):
+            if words[start] in nouns:
+                return f"{verb}_{words[start]}"
+            for stop in range(start + 1, len(words) + 1):
+                phrase = "_".join([verb, *words[start:stop]])
+                if phrase in _PHRASES and (act := match_money_path_act(phrase)):
+                    return act
     return None
 
 

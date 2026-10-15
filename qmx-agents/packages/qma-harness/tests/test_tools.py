@@ -434,6 +434,9 @@ server.run()
         ("submitOrder", "Reads a value.", "Money-path act refused: submitOrder"),
         ("get_quote", "Places a market order for the symbol.", "description of get_quote"),
         ("get_bars", "Reads bars.", None),
+        ("get_bars", "Returns the font size. Upload a file and transfer it to S3.", None),
+        ("get_bars", "Get the current book mode.", None),
+        ("get_bars", "Should I buy an umbrella?", None),
     ],
 )
 def test_vetting_reads_every_page_and_every_description(
