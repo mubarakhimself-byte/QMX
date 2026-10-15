@@ -15,6 +15,10 @@ spends two plan turns (haiku, then sonnet) and `perf` none. The rest run on the 
                           secret gets 401 from the relay, the new one does not, and the
                           transcript is the same file with its bytes from before the switch
                           unchanged.
+    hp12_lanes.py deepseek  OpenRouter host default, one short real turn. A throwaway home holds an
+                          OpenRouter row as typed (no quirks) pinned to DeepSeek V4.1 Flash. PASS
+                          when the launch env has `ENABLE_TOOL_SEARCH=false` and the reply is OK,
+                          not a 400.
     hp12_lanes.py perf    five plan<->fake switches of a live chat in the ship home, with no plan
                           turn. PASS when the median time from `apply` to the chat being Live
                           again is under 10 s.
@@ -42,7 +46,15 @@ from common import (
 )
 from fake_model import FakeModel, Turn, text
 from money_lane import direct_row
-from switch_lane import apply, assistant_entries, fake_pair, quote, start
+from switch_lane import (
+    OPENROUTER_ROW,
+    apply,
+    assistant_entries,
+    fake_pair,
+    quote,
+    spend_ledger,
+    start,
+)
 
 PERF_SWITCHES = 5
 PERF_LIMIT_S = 10.0
@@ -253,7 +265,41 @@ async def perf(log: Log) -> None:
     log.check(f"median under {PERF_LIMIT_S:.0f} s", median < PERF_LIMIT_S, f"{median:.2f} s")
 
 
-PARTS = {"s41": s41, "mode": mode, "model": model, "revoke": revoke, "perf": perf}
+async def deepseek(log: Log) -> None:
+    from spend import DEEPSEEK_FLASH  # noqa: PLC0415
+
+    root = throwaway_home("hp12-deepseek")
+    row = {**OPENROUTER_ROW, "tiers": dict.fromkeys(KIMI_TIERS, DEEPSEEK_FLASH.model)}
+    put_providers(root, {"openrouter": row})
+    log(f"row as typed: {row}")
+    launched = capture_launches()
+    session = await start(root, title="hp12 deepseek", profile="openrouter", tools=["Bash"])
+    try:
+        ledger = spend_ledger(DEEPSEEK_FLASH)
+        _, found = await ledger.spend(
+            "deepseek tool search off", 2, 512, lambda: session.turn(log, "Reply with OK.")
+        )
+        flag = launched[0].options.env.get("ENABLE_TOOL_SEARCH")
+        texts = [str(b["content"].get("text")) for b in found if b["type"] == "text"]
+        needs = [b for b in found if b["type"] == "needs_you"]
+        log(f"ENABLE_TOOL_SEARCH in launch env: {flag}")
+        log.check(
+            "DeepSeek on the default OpenRouter row answers with tool search off",
+            flag == "false" and not needs and any("OK" in t for t in texts),
+            (flag, texts, len(needs)),
+        )
+    finally:
+        await session.harness.close()
+
+
+PARTS = {
+    "deepseek": deepseek,
+    "s41": s41,
+    "mode": mode,
+    "model": model,
+    "revoke": revoke,
+    "perf": perf,
+}
 
 
 def main() -> int:

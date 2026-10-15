@@ -4,6 +4,7 @@ Kimi row for the ship home, the OpenRouter spend guard, and quote-then-apply wit
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -27,26 +28,23 @@ from spend import Ledger, Prices, key_usage, openrouter_key
 KIMI_MODEL: Final = "moonshotai/kimi-k2.5"
 KIMI_PRICES: Final = Prices(KIMI_MODEL, 0.5e-6, 2.5e-6)
 """The cheapest Kimi on OpenRouter in HP1's model list (`evidence/hp1/openrouter-models.json`)."""
-BUDGET_USD: Final = 0.15
+LEDGER_NAME: Final = os.environ.get("QMA_SPEND_LEDGER", "openrouter-spend.tsv")
+BUDGET_USD: Final = float(os.environ.get("QMA_SPEND_BUDGET", "0.15"))
+"""Read at import, before `boot` scrubs the environment."""
 OPENROUTER_ROW: Final[dict[str, Any]] = {
     "base_url": "https://openrouter.ai/api",
     "credential_ref": "qmx/openrouter",
     "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), KIMI_MODEL),
-    "quirks": {"env": {"ENABLE_TOOL_SEARCH": "false"}},
 }
-"""Tool search off: with OpenRouter's default `ENABLE_TOOL_SEARCH=true`, Kimi K2.5 answered
-400 "Deferred custom tools are only supported on Anthropic models" (HP12 check 8, first run)."""
 WORKSPACE: Final = SCRATCH / "hp12-ws"
 
 
-def spend_ledger() -> Ledger:
-    """The guard for every OpenRouter turn of this PR, at `<evidence>/openrouter-spend.tsv`."""
+def spend_ledger(prices: Prices = KIMI_PRICES) -> Ledger:
+    """The guard for every OpenRouter turn, at `<evidence>/<LEDGER_NAME>`."""
     secret = openrouter_key()
     if secret is None:
         raise SystemExit("BLOCKED: keyring qmx/openrouter is empty")
-    return Ledger(
-        Path(EVIDENCE or ".") / "openrouter-spend.tsv", BUDGET_USD, KIMI_PRICES, key_usage(secret)
-    )
+    return Ledger(Path(EVIDENCE or ".") / LEDGER_NAME, BUDGET_USD, prices, key_usage(secret))
 
 
 @asynccontextmanager

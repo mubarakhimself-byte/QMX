@@ -41,6 +41,10 @@ from switch_lane import (
 )
 
 MARK = "qma-check8-ok"
+CHECK_8_MEASURED_USD = 0.006
+"""Above the HP12 owner run's charge: its check 8 and S36 turns together moved the key's usage
+by $0.0091 (`evidence/hp12/openrouter-spend.tsv`). The worst case, 3 calls at 40k input
+tokens, is $0.075, which a $0.01 fix-round budget cannot fit."""
 CHECK_9_SKIPPED = (
     "SKIPPED check 9: OpenRouter is the only keyed row; the operator ruled that the other "
     "providers are tested when he adds their keys"
@@ -98,6 +102,7 @@ async def check8(log: Log) -> None:
                 3,
                 2048,
                 lambda: answered_turn(log, host, chat, always(ALLOW_ONCE), prompt),
+                measured=CHECK_8_MEASURED_USD,
             )
             found = session_blocks(session.control, chat, mark)
             for block in found:
