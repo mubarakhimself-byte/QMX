@@ -7,10 +7,11 @@ CLI from this process. With no host answering on `--port`, it starts `qma.serve`
 and stops it again on exit.
 
 Commands, mirroring Claude Code where a twin exists:
-    /login                 runs the bundled CLI's own login in this terminal, with
-                           CLAUDE_CONFIG_DIR set to QMX's plan home and
+    /login                 runs the bundled CLI's own `auth login --claudeai` in this terminal,
+                           with CLAUDE_CONFIG_DIR set to QMX's plan home and
                            `--settings '{"forceLoginMethod": "claudeai"}'`, so the Console
-                           (API billing) choice is not offered. QMA never sees the token.
+                           (API billing) choice is not offered. It signs in and exits, so no
+                           Claude Code session outlives it. QMA never sees the token.
     /model <alias|id>      quote, show the cache warning, ask y/N, apply.
     /provider [name]       same flow for a provider switch; with no name, pick from a list.
     /mode <mode>           permission mode; applies at once.
@@ -55,13 +56,38 @@ FORCE_CLAUDEAI: Final = json.dumps({"forceLoginMethod": "claudeai"})
 
 
 class Terminal(Protocol):
-    def ask(self, prompt: str) -> str: ...
+    def ask(self, prompt: str) -> str:
+        """The next line, typed-ahead text included, as at Claude Code's prompt."""
+        ...
+
+    def decide(self, prompt: str) -> str:
+        """A fresh answer to a question this console just asked: keys typed before the
+        question existed never answer it."""
+        ...
 
     def out(self, text: str = "", *, end: str = "\n") -> None: ...
 
 
+def flush_typed_ahead() -> None:
+    if not sys.stdin.isatty():
+        return
+    if sys.platform == "win32":
+        import ctypes  # noqa: PLC0415
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.FlushConsoleInputBuffer(kernel32.GetStdHandle(-10))
+    else:
+        import termios  # noqa: PLC0415
+
+        termios.tcflush(sys.stdin, termios.TCIFLUSH)
+
+
 class StdTerminal:
     def ask(self, prompt: str) -> str:
+        return input(prompt)
+
+    def decide(self, prompt: str) -> str:
+        flush_typed_ahead()
         return input(prompt)
 
     def out(self, text: str = "", *, end: str = "\n") -> None:
@@ -536,7 +562,7 @@ class Console:
     def permission(self, always: list[str]) -> dict[str, Any]:
         offer = f"  [a] always ({', '.join(always)})" if always else ""
         try:
-            reply = self.term.ask(f"  Allow? [y] yes once{offer}  [N] no > ").strip().lower()
+            reply = self.term.decide(f"  Allow? [y] yes once{offer}  [N] no > ").strip().lower()
         except KeyboardInterrupt:
             reply = "n"
         if reply in {"y", "yes"}:
@@ -553,7 +579,7 @@ class Console:
             self.say(f"? {question}")
             for number, label in enumerate(options, start=1):
                 self.say(f"  {number}. {label}")
-            reply = self.term.ask("  answer > ").strip()
+            reply = self.term.decide("  answer > ").strip()
             pick = int(reply) - 1 if reply.isdigit() else -1
             answers[question] = options[pick] if 0 <= pick < len(options) else reply
         return {"decision": "answers", "answers": answers}
@@ -567,7 +593,7 @@ class Console:
         if quote.get("warning"):
             self.say(self.view.paint(RED, f"  ! {quote['warning']}"))
         if confirm:
-            reply = self.term.ask(f"  Switch {old} -> {new}? [y/N] > ").strip().lower()
+            reply = self.term.decide(f"  Switch {old} -> {new}? [y/N] > ").strip().lower()
             if reply not in {"y", "yes"}:
                 self.say("  Kept the current settings.")
                 return
@@ -586,7 +612,7 @@ class Console:
             names = ["claude", *(name for name, row in rows.items() if isinstance(row, dict))]
             for number, name in enumerate(names, start=1):
                 self.say(f"  {number}. {name}")
-            reply = self.term.ask("  provider > ").strip()
+            reply = self.term.decide("  provider > ").strip()
             arg = (
                 names[int(reply) - 1] if reply.isdigit() and 0 < int(reply) <= len(names) else reply
             )
@@ -647,7 +673,7 @@ class Console:
         if not arg:
             for number, entry in enumerate(chats, start=1):
                 self.say(f"  {number}. {entry['title']}  ({describe(entry)}, {entry['workspace']})")
-            arg = self.term.ask("  resume which? > ").strip()
+            arg = self.term.decide("  resume which? > ").strip()
         pick = next(
             (
                 entry
@@ -686,7 +712,7 @@ class Console:
         shown = points[-10:]
         for number, point in enumerate(shown, start=1):
             self.say(f"  {number}. {one_line(point['text'], 80)}")
-        reply = self.term.ask("  restore files to before which message? > ").strip()
+        reply = self.term.decide("  restore files to before which message? > ").strip()
         if not (reply.isdigit() and 0 < int(reply) <= len(shown)):
             self.say("  Nothing rewound.")
             return
@@ -708,9 +734,10 @@ class Console:
             return
         cli = bundled_cli()
         env = dict(os.environ) | {"CLAUDE_CONFIG_DIR": str(self.home / "claude")}
-        self.say("  Starting Claude Code's own sign-in in QMX's plan home.")
-        self.say("  Finish sign-in on Anthropic's page, then type /exit to come back here.")
-        child = subprocess.Popen([str(cli), "--settings", FORCE_CLAUDEAI, "/login"], env=env)
+        self.say("  Starting Claude Code's own sign-in in QMX's plan home (claude.ai accounts).")
+        self.say("  Finish sign-in on Anthropic's page; this console carries on when it is done.")
+        login = [str(cli), "--settings", FORCE_CLAUDEAI, "auth", "login", "--claudeai"]
+        child = subprocess.Popen(login, env=env)
         while True:
             try:
                 child.wait()

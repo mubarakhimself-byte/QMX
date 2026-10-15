@@ -6,7 +6,8 @@ back, saves it as `<slug>.log` and the window as `<slug>.png` in `QMA_EVIDENCE_D
 the effect on disk or through the routes. Plan chats run on haiku in the ship home; HOME,
 USERPROFILE and the app data folders point at a throwaway folder.
 
-    1         /login in a throwaway home shows the choices (claude.ai only); the ship console
+    1         with --with-login, /login in a throwaway home goes to the claude.ai sign-in only
+              (it opens a sign-in page in the browser); the ship console
               says it is signed in with Max and /usage shows the five-hour window.
     2-4       check 2 (tool steps, then the answer), 3 (asks before each write and command,
               hello.txt holds "goodbye") and 4 (the rejected delete leaves it), recorded as
@@ -21,6 +22,7 @@ USERPROFILE and the app data folders point at a throwaway folder.
               guard, /usage names openrouter, back to the plan. Check 9 SKIPPED.
     12-13     a new console (so a new host): /resume, recall hello.txt without tools, /usage.
     commands  /rewind restores a file, /export, /mode plan, /effort high, /doctor, Ctrl+C.
+    typeahead keys typed before an ask do not answer it (fake model).
     canary    /export in a throwaway home redacts a fake sk-ant token and the provider key.
     perf      five console turns and five drive.py turns, interleaved, first-delta medians.
 
@@ -267,7 +269,9 @@ def fit_video(log: Log, raw: Path, final: Path, longest: float = 58.0) -> None:
     log(f"video {duration:.0f} s recorded, played at {speed:.2f}x into {final}")
 
 
-def lane_1(log: Log) -> None:
+def throwaway_login(log: Log) -> None:
+    """`/login` in a throwaway home, abandoned at the code prompt. It opens a sign-in page in
+    the default browser, so it runs only with `--with-login` while the operator is present."""
     login_home = SCRATCH / "hp15-login-home"
     shutil.rmtree(login_home, ignore_errors=True)
     window = open_console("QMA console login", home=login_home, port=PORT + 1)
@@ -276,28 +280,27 @@ def lane_1(log: Log) -> None:
         window.type("/login")
         deadline = time.monotonic() + 90
         screen = ""
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and "/oauth/authorize" not in screen:
             screen = window.text()
-            if "Paste code here" in screen or "Select login method" in screen:
-                break
-            if "Choose the text style" in screen and "Dark mode" in screen:
-                window.type("", enter=True)
-                time.sleep(2)
             time.sleep(1)
         save_screen(window, "hp15-check1-login")
-        console_lines = turn_lines(window, start)
         log.check(
-            "check 1: the throwaway /login offers claude.ai only",
-            "Login method pre-selected: Subscription Plan" in screen
-            and "Anthropic Console" not in screen,
-            next((line for line in console_lines if "pre-selected" in line), "<no line>"),
+            "check 1: the throwaway /login goes to the claude.ai sign-in only",
+            "claude.com/cai/oauth/authorize" in screen and "Anthropic Console" not in screen,
+            [line for line in turn_lines(window, start) if "oauth" in line or "Login" in line],
         )
-        window.ctrl_c()
         window.ctrl_c()
         window.wait(seconds=60)
     finally:
         window.close()
     log("the login was abandoned at the code prompt; nothing signed in to the throwaway home")
+
+
+def lane_1(log: Log, with_login: bool) -> None:
+    if with_login:
+        throwaway_login(log)
+    else:
+        log("SKIPPED the throwaway /login: it opens a sign-in page; rerun with --with-login")
     window = open_console("QMA console check 1")
     try:
         banner = window.text()
@@ -605,6 +608,7 @@ async def fake_host_lane(
     script: list[Any],
     drive: Callable[[ConsoleWindow, str], None],
     setup: Callable[[Path], None] | None = None,
+    tools: tuple[str, ...] = ("Bash",),
 ) -> Any:
     """A throwaway home whose one chat runs on the fake model, served in this process on a free
     port behind the keyring bearer the console reads, and a console window resumed on it."""
@@ -613,7 +617,7 @@ async def fake_host_lane(
     from qmx_control.server import local_token  # noqa: PLC0415
 
     use_fake_home()
-    root, fake, session = await fake_session(slug, script, tools=["Bash"], workspace=WORKSPACE)
+    root, fake, session = await fake_session(slug, script, tools=list(tools), workspace=WORKSPACE)
     if setup is not None:
         setup(root)
     try:
@@ -695,6 +699,55 @@ def lane_5(log: Log) -> None:
     log.check("check 5: no order proposal row was added", rows(root) == [], len(rows(root)))
     held = broker_connections()
     log.check("check 5: no connection to a broker port", held == [], held)
+
+
+def lane_typeahead(log: Log) -> None:
+    """Keys typed while a turn runs, before its ask exists, must not answer that ask."""
+    from common import use_fake_key  # noqa: PLC0415
+    from fake_model import Turn, text, tool_use  # noqa: PLC0415
+
+    use_fake_key()
+    fresh_workspace()
+    ahead = WORKSPACE / "ahead.txt"
+    script = [
+        Turn([tool_use("Write", {"file_path": str(ahead), "content": "typed ahead"})]),
+        Turn([text("Write finished.")]),
+    ]
+
+    def drive(window: ConsoleWindow, _: str) -> None:
+        start = mark(window)
+        log("type: Write ahead.txt, then y and Enter 0.3 s later")
+        window.type("Write ahead.txt please.")
+        time.sleep(0.3)
+        before = [line for line in turn_lines(window, start) if "Allow?" in line]
+        window.type("y")
+        typed = time.monotonic()
+        log(f"asks on screen when y was typed: {before}")
+        line = window.wait("Allow?", seconds=120)
+        log(f"the ask appeared {time.monotonic() - typed:.1f} s after the typed-ahead y")
+        time.sleep(3)
+        waiting = window.cursor_line()
+        log(f"after 3 s the cursor line is {waiting!r}")
+        log.check(
+            "the y was typed before the ask existed",
+            before == [],
+            before,
+        )
+        log.check(
+            "the ask waits for a fresh answer: the typed-ahead y did not answer it",
+            "Allow?" in waiting and waiting.rstrip().endswith(">") and not ahead.exists(),
+            f"{line.strip()!r}; ahead.txt exists {ahead.exists()}",
+        )
+        window.type("n")
+        window.wait(seconds=120)
+        for row in turn_lines(window, start):
+            log(f"  | {row}")
+        log.check(
+            "ahead.txt was not created after the fresh no", not ahead.exists(), ahead.exists()
+        )
+        save_screen(window, "fix1-hp15-typeahead")
+
+    asyncio.run(fake_host_lane(log, "hp15-typeahead", script, drive, tools=("Write",)))
 
 
 def lane_canary(log: Log) -> None:
@@ -826,17 +879,20 @@ def main() -> int:
             "12-13",
             "commands",
             "canary",
+            "typeahead",
             "perf",
         ],
     )
     parser.add_argument("--video", action="store_true", help="record lane 2-4 for the review")
+    parser.add_argument("--log", default="owner", help="log name prefix, e.g. fix1")
+    parser.add_argument("--with-login", action="store_true", help="lane 1 opens a sign-in page")
     args = parser.parse_args()
     os.environ.setdefault("QMA_REAL_HOME", str(Path.home()))
     boot()
-    log = Log(f"owner-hp15-{args.lane}")
+    log = Log(f"{args.log}-hp15-{args.lane}")
     match args.lane:
         case "1":
-            lane_1(log)
+            lane_1(log, args.with_login)
         case "2-4":
             lane_2_4(log, args.video)
         case "5":
@@ -851,6 +907,8 @@ def main() -> int:
             lane_12_13(log)
         case "commands":
             lane_commands(log)
+        case "typeahead":
+            lane_typeahead(log)
         case "canary":
             lane_canary(log)
         case _:

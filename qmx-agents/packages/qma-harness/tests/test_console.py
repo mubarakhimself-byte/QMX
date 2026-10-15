@@ -63,6 +63,9 @@ class Screen:
         self.partial = ""
 
     def ask(self, prompt: str) -> str:
+        raise AssertionError(f"a question was read with type-ahead kept: {prompt!r}")
+
+    def decide(self, prompt: str) -> str:
         self.lines.append(prompt)
         return self.answers.pop(0)
 
@@ -377,9 +380,10 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
     ]  # fmt: skip
 
 
-def test_login_runs_the_bundled_cli_in_the_plan_home_with_claude_ai_only(
+def test_login_signs_in_with_the_bundled_cli_in_the_plan_home_and_starts_no_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(qma.console.os, "environ", {"PATH": "C:/bin"})
     started: list[tuple[list[str], dict[str, str]]] = []
 
     class Child:
@@ -393,8 +397,14 @@ def test_login_runs_the_bundled_cli_in_the_plan_home_with_claude_ai_only(
     console([], Screen()).handle("/login")
     [(argv, env)] = started
     assert Path(argv[0]).parent.name == "_bundled"
-    assert argv[1:] == ["--settings", '{"forceLoginMethod": "claudeai"}', "/login"]
-    assert env["CLAUDE_CONFIG_DIR"] == str(Path("D:/qmx") / "claude")
+    assert argv[1:] == [
+        "--settings",
+        '{"forceLoginMethod": "claudeai"}',
+        "auth",
+        "login",
+        "--claudeai",
+    ]
+    assert env == {"PATH": "C:/bin", "CLAUDE_CONFIG_DIR": str(Path("D:/qmx") / "claude")}
 
 
 def transcript_lines(*rows: dict[str, Any]) -> str:
