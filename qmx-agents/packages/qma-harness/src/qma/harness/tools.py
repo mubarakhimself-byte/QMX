@@ -175,6 +175,12 @@ OPERATIONS_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
     }
 )
 
+FORCED_ARGUMENTS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
+    {"apps_test": MappingProxyType({"auto_publish": False})}
+)
+"""Arguments an agent's call always runs with, left out of the schema it sees. `apps_test`
+publishes an app that reaches shadow unless told not to, and publishing is MANAGE (R35)."""
+
 DOMAIN_EFFECTS: Final[Mapping[str, Effect]] = MappingProxyType(
     {
         "list_instruments": Effect.READ,
@@ -264,11 +270,20 @@ def _text(result: Any) -> dict[str, Any]:
 
 
 def _from_fastmcp(tool: Tool, effect: Effect) -> ToolDef:
+    forced = FORCED_ARGUMENTS.get(tool.name, {})
+
     async def call(arguments: dict[str, Any]) -> dict[str, Any]:
         try:
-            return _text(await tool.run(arguments))
+            return _text(await tool.run({**arguments, **forced}))
         except Exception as error:
             return {"content": [{"type": "text", "text": str(error)}], "is_error": True}
+
+    schema = dict(tool.parameters)
+    if forced:
+        properties = cast("dict[str, object]", schema.get("properties", {}))
+        schema["properties"] = {k: v for k, v in properties.items() if k not in forced}
+        required = cast("list[str]", schema.get("required", []))
+        schema["required"] = [name for name in required if name not in forced]
 
     metadata: dict[str, object] = {"_meta": dict(tool.meta or {})}
     if tool.annotations is not None:
@@ -276,7 +291,7 @@ def _from_fastmcp(tool: Tool, effect: Effect) -> ToolDef:
     return ToolDef(
         name=tool.name,
         description=tool.description or tool.name,
-        input_schema=tool.parameters,
+        input_schema=schema,
         effect=effect,
         call=call,
         metadata=metadata,

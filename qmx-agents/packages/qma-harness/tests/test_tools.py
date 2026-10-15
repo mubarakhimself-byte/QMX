@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -262,3 +263,88 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
             "Edit", {"file_path": str(root / "settings.toml")}, rules, cwd="/", agent_id=None
         )
         assert found == Deny(f"money rule: agents cannot write QMX state ({settings.casefold()})")
+
+
+class RecordingRoad:
+    def __init__(self) -> None:
+        self.published: list[str] = []
+
+    def advance(
+        self, app_id: str, expected_hash: str, stage: object = None, *, auto_publish: bool = True
+    ) -> dict[str, Any]:
+        if auto_publish:
+            self.publish(app_id, expected_hash)
+        return {"app_id": app_id, "stage": "shadow"}
+
+    def publish(self, app_id: str, *args: object, **kwargs: object) -> dict[str, Any]:
+        self.published.append(app_id)
+        return {"active": app_id}
+
+
+class FakeRuntime:
+    def __init__(self) -> None:
+        self.road = RecordingRoad()
+
+    def get(self, app_id: str) -> dict[str, Any]:
+        return {"id": app_id, "definition_hash": "h1"}
+
+    def __getattr__(self, name: str) -> Callable[..., dict[str, str]]:
+        def called(*args: object, **kwargs: object) -> dict[str, str]:
+            return {"called": name}
+
+        return called
+
+
+class RecordingControl(ControlService):
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.runtime = FakeRuntime()
+
+    def app_runtime(self) -> Any:
+        return self.runtime
+
+    def remote_runtime(self) -> Any:
+        return self.runtime
+
+
+def fill(schema: Mapping[str, Any]) -> dict[str, Any]:
+    samples: dict[str, object] = {
+        "string": "a1",
+        "integer": 1,
+        "number": 1,
+        "boolean": True,
+        "object": {},
+    }
+    found: dict[str, Any] = {}
+    for name in schema.get("required", []):
+        spec = schema["properties"][name]
+        kind = spec.get("type") or next(
+            (option.get("type") for option in spec.get("anyOf", []) if option.get("type")), "string"
+        )
+        found[name] = [] if kind == "array" else samples.get(kind, "a1")
+    return found
+
+
+def test_no_read_or_domain_write_operation_publishes_an_app(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    control = RecordingControl(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    defs = asyncio.run(tool_defs(control=control, broker=BrokerService(home.root), domain=domain))
+    quiet = [
+        tool
+        for tool in defs
+        if tool.name in AGENT_OPERATIONS and tool.effect in {Effect.READ, Effect.DOMAIN_WRITE}
+    ]
+    assert "apps_test" in {tool.name for tool in quiet}
+    for tool in quiet:
+        arguments = fill(tool.input_schema)
+        if tool.name == "apps_test":
+            arguments["auto_publish"] = True
+            assert "auto_publish" not in tool.input_schema["properties"]  # type: ignore[operator]  # pyright: ignore[reportOperatorIssue]
+        result = asyncio.run(tool.call(arguments))
+        if tool.name == "apps_test":
+            assert '"stage":"shadow"' in result["content"][0]["text"].replace(" ", "")
+    assert control.runtime.road.published == []
+    control.apps_test("app-1")
+    assert control.runtime.road.published == ["app-1"]
