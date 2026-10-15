@@ -11,7 +11,8 @@ CLI's status does not list it (measured), so the model's tool list shows it inst
 `get_extra`, and the fake model gets no request. A third home declares `slow`, which
 answers vetting at once and sleeps 15 s before it serves the CLI, with the settle wait cut to
 2 s. PASS when the chat starts, a `needs_you` block says `slow` was left out, the model is
-offered none of its tools, and the CLI still reports it switched off after it woke.
+offered none of its tools, and, watched every 0.1 s for 20 s after the turn, the CLI ends
+with slow switched off and never reports it connected for more than 2 s at a stretch.
 
     s35_external_mcp.py
 """
@@ -230,6 +231,12 @@ server.run()
 """
 
 
+KEEP_WATCH_S = 20.0
+MAX_CONNECTED_S = 2.0
+"""The keeper polls every 0.5 s, so a woken server reads connected for about one poll plus a
+CLI round trip (0.3 to 0.7 s measured); 2 s leaves room for a loaded PC."""
+
+
 async def slow(log: Log) -> None:
     """A server still pending after the settle wait is switched off with a needs_you block,
     and the chat runs without it."""
@@ -282,18 +289,31 @@ async def slow(log: Log) -> None:
             not any("slow" in name for name in offered),
             sorted(name for name in offered if "slow" in name or "tide" in name),
         )
-        await asyncio.sleep(16)
-        status = await launches[-1].get_mcp_status()
-        found = [
-            (server["name"], server["status"], [tool["name"] for tool in server.get("tools", [])])
-            for server in status["mcpServers"]
-            if server["name"] == "slow"
+        client = launches[-1]
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        states: list[tuple[float, str]] = []
+        while loop.time() - start < KEEP_WATCH_S:
+            status = await client.get_mcp_status()
+            for server in status["mcpServers"]:
+                if server["name"] == "slow" and (not states or states[-1][1] != server["status"]):
+                    states.append((round(loop.time() - start, 2), server["status"]))
+            await asyncio.sleep(0.1)
+        log(f"slow states after the turn, seconds from its end: {states}")
+        stretches = [
+            round(end - begin, 2)
+            for (begin, state), (end, _) in zip(
+                states, [*states[1:], (KEEP_WATCH_S, "")], strict=True
+            )
+            if state == "connected"
         ]
-        log(f"slow after it woke: {found}")
         log.check(
-            "the CLI keeps slow switched off after it woke",
-            all(entry[1] != "connected" and not entry[2] for entry in found),
-            found,
+            "the CLI keeps slow switched off after it woke: it ends off, and no connected "
+            f"stretch outlasts {MAX_CONNECTED_S} s",
+            bool(states)
+            and states[-1][1] != "connected"
+            and all(stretch <= MAX_CONNECTED_S for stretch in stretches),
+            (states, stretches),
         )
     finally:
         await session.harness.close()

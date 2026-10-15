@@ -102,11 +102,13 @@ TO_HOME: Final = re.compile(
 """A folder change with no target, which goes to the user home in bash."""
 
 FOLDER_OPTION: Final = re.compile(
-    r"(?<![\w-])(?:-C|--chdir|--directory|(?i:-wo\w*))(?:=|\s+)([^\s;&|)]+)"
+    r"(?<![\w-])(?:(?:-C|--chdir|--directory|--work-tree|(?i:-wo\w*))(?:=|\s+)|-C(?=[~/\\$%.]))"
+    r"([^\s;&|)]+)"
 )
-"""An option that runs a program in another folder (`git -C`, `tar -C`, `env --chdir`, `make
---directory`, PowerShell `-WorkingDirectory`). Its target counts as a folder change. `-C` is
-case-sensitive, so `python -c` is not one."""
+"""An option that runs a program in another folder (`git -C`, `tar -C~`, `env --chdir`, `make
+--directory`, `git --work-tree`, PowerShell `-WorkingDirectory`). Its target counts as a
+folder change. `-C` is case-sensitive, so `python -c` is not one, and joined to its target only
+before a path character, so `grep -C3` is not one."""
 
 DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])")
 """`C:x` or `C:` alone: relative to that drive's own current folder, which the gate cannot
