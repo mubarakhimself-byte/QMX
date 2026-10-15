@@ -551,6 +551,11 @@ class _Live:
     grant: RelayGrant | None
     reader: asyncio.Task[None] | None = None
     keeper: asyncio.Task[None] | None = None
+    ending: bool = False
+    """Set when the chat starts ending this process itself, so the reader does not treat the
+    process going away as lost."""
+    teardown: asyncio.Task[None] | None = None
+    """Set once by `Chat._end`; a second end of the same process waits on it."""
 
 
 @dataclass
@@ -586,7 +591,6 @@ class Chat:
         self._deps = deps
         self._live: _Live | None = None
         self._lock = asyncio.Lock()
-        self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._grants = Grants()
@@ -601,6 +605,7 @@ class Chat:
         """Prompts sent since this object was made. A quote from an older epoch is stale."""
         self._quotes: dict[str, Quote] = {}
         self._ends: list[asyncio.Future[TurnEnded | None]] = []
+        self._teardowns: set[asyncio.Task[None]] = set()
 
     @property
     def session_id(self) -> SessionId:
@@ -751,12 +756,9 @@ class Chat:
             live, self._live = self._live, None
             if live is None:
                 return
-            self._closing = True
-            try:
-                await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
-                await self._end(live)
-            finally:
-                self._closing = False
+            live.ending = True
+            await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
+            await self._end(live)
             self._stream.close_all()
             self._write(turn="idle")
             await self._note("needs_you", {"reason": f"plan use stopped: {reason}"})
@@ -801,22 +803,31 @@ class Chat:
         become `expired`. Idempotent."""
         async with self._lock:
             await self._shut()
+        await asyncio.gather(*self._teardowns, return_exceptions=True)
 
     async def _shut(self) -> None:
         live, self._live = self._live, None
         if live is None:
             return
-        self._closing = True
-        try:
-            await self._end(live)
-        finally:
-            self._closing = False
+        live.ending = True
+        await self._end(live)
 
     async def _end(self, live: _Live) -> None:
-        self._tasks.clear()
-        self._resolve_ends(None)
-        for n in list(self._asks):
-            self._settle(n, "expired", _Expired(ENDED))
+        """Tear `live` down in a task of its own, so the process is stopped even when the caller
+        is cancelled, including by a cancel scope that cancels every later await (the SDK does
+        that to an interrupted tool call). The caller's cancellation still reaches it at once."""
+        live.ending = True
+        if live.teardown is None:
+            self._tasks.clear()
+            self._resolve_ends(None)
+            for n in list(self._asks):
+                self._settle(n, "expired", _Expired(ENDED))
+            live.teardown = asyncio.ensure_future(self._teardown(live, asyncio.current_task()))
+            self._teardowns.add(live.teardown)
+            live.teardown.add_done_callback(self._teardowns.discard)
+        await asyncio.shield(live.teardown)
+
+    async def _teardown(self, live: _Live, caller: asyncio.Task[Any] | None) -> None:
         if live.grant is not None:
             await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
@@ -825,7 +836,7 @@ class Chat:
             live.keeper.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.keeper
-        if live.reader is not None and live.reader is not asyncio.current_task():
+        if live.reader is not None and live.reader is not caller:
             live.reader.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.reader
@@ -1017,7 +1028,7 @@ class Chat:
                     UnreadableLimits(f"a rate-limit event could not be read: {error}")
                 )
         finally:
-            if not self._closing:
+            if not live.ending:
                 await self._lost(live)
 
     async def _lost(self, live: _Live) -> None:

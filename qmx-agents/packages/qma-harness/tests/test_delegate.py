@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import anyio
 import pytest
 import test_chat
 from claude_agent_sdk import Message
@@ -16,6 +17,7 @@ from test_table import read_plan
 import qma.harness.chat
 from qma.harness import Harness, InjectedText, NewChat, OperatorText, QmxHome, SessionId
 from qma.harness.home import read_record
+from qma.harness.procs import AgentProcessCap
 from qma.harness.launch import Background, ChatKind, Child, Interactive
 from qma.harness.money import Deny, Pass, gate
 from qma.harness.profiles import ProfileName, parse_profiles
@@ -222,6 +224,56 @@ def test_a_child_whose_process_ends_mid_turn_is_a_tool_error(
             "content": [{"type": "text", "text": "the helper's process ended before it answered"}],
             "is_error": True,
         }
+
+    run(body, home)
+
+
+def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
+    home: QmxHome, defs: list[list[ToolDef]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The SDK cancels an interrupted tool call through an anyio cancel scope, which cancels
+    every await again, including the CLI disconnect in the child's teardown."""
+    settings(home, targets=["claude"])
+    FakeClient.script = lambda _: []
+    stopped: list[str] = []
+    real = AgentProcessCap.stop_chat
+
+    def stop_chat(self: AgentProcessCap, chat: str) -> None:
+        stopped.append(chat)
+        real(self, chat)
+
+    monkeypatch.setattr(AgentProcessCap, "stop_chat", stop_chat)
+    disconnect = FakeClient.disconnect
+
+    async def slow_disconnect(self: FakeClient) -> None:
+        await asyncio.sleep(0.05)
+        await disconnect(self)
+
+    monkeypatch.setattr(FakeClient, "disconnect", slow_disconnect)
+
+    async def body(harness: Harness) -> None:
+        parent = await open_parent(harness)
+        scope = anyio.CancelScope()
+
+        async def interrupted() -> None:
+            with scope:
+                await delegate_of(defs[0]).call({"profile": "claude", "prompt": "help: wait"})
+
+        task = asyncio.create_task(interrupted())
+        while len(FakeClient.made) < 2:
+            await asyncio.sleep(0.01)
+        scope.cancel()
+        await task
+        assert scope.cancelled_caught is True
+        [child] = [
+            SessionId(str(row["id"]))
+            for row in control_service(home).sessions_list()
+            if row.get("parent_id") == parent
+        ]
+        await settle(lambda: child in stopped)
+        assert stopped == [child]
+        assert FakeClient.made[1].disconnected is True
+        assert not harness._chat(child).is_live  # pyright: ignore[reportPrivateUsage]
 
     run(body, home)
 
