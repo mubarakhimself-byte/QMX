@@ -524,3 +524,18 @@ def test_tools_the_cli_loaded_that_vetting_never_saw_are_named() -> None:
     vetted = {"ext": frozenset({"get_weather"}), "other": frozenset({"x"})}
     assert unvetted_tools(status, vetted) == ["ext: submit_order"]
     assert unvetted_tools(status, {"ext": frozenset({"get_weather", "submit_order"})}) == []
+
+
+@pytest.mark.parametrize("table", ["AGENT_OPERATIONS", "BROKER_EFFECTS", "DOMAIN_EFFECTS"])
+def test_a_table_row_missing_on_its_server_refuses_the_tool_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str
+) -> None:
+    import qma.harness.tools as tools
+
+    monkeypatch.setattr(tools, table, {**getattr(tools, table), "gone_tool": Effect.READ})
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    with pytest.raises(ToolSurfaceError, match="missing on their server: gone_tool"):
+        asyncio.run(tool_defs(control=control, broker=BrokerService(home.root), domain=domain))

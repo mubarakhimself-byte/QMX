@@ -2,7 +2,7 @@
 money, and the plan token never leaves this PC through QMA.
 
 Honest layering. Against agent Bash under the operator's own OS user, exactly one thing is
-structural: broker credential scope, when proven (`MoneyPosture.STRUCTURAL`, check S27). The
+structural: broker credential scope, when proven (check S27). The
 relay's egress stop is a tripwire for plain-text Claude tokens. Everything here is a guard
 against accidents and against the model's own tool calls; Bash gets around each of them
 (variable expansion, string concatenation, a tool that runs commands):
@@ -25,10 +25,8 @@ import posixpath
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from datetime import datetime
-from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import urlsplit
 
 from qma.core.barriers.descriptors import check_descriptor, name_money_act
@@ -625,36 +623,6 @@ def check_tool_surface(
             check_descriptor(name, dict(metadata.get(name, {})))
         except MoneyPathDenyError as refused:
             raise MoneySurfaceError(str(refused)) from None
-
-
-@dataclass(frozen=True)
-class ExposureTarget:
-    kind: Literal["keyring_entry", "read_path", "write_path", "loopback"]
-    value: str
-    """A `qmx/*` keyring name, a path, or `127.0.0.1:<port>`."""
-
-
-@dataclass(frozen=True)
-class ExposureFinding:
-    target: ExposureTarget
-    reachable: bool | None
-    """None means not measured."""
-    detail: str
-    """Plain words for the usage page. Never a secret value."""
-
-
-@dataclass(frozen=True)
-class ExposureReport:
-    at: datetime
-    cli_version: str
-    findings: tuple[ExposureFinding, ...]
-
-
-class MoneyPosture(StrEnum):
-    STRUCTURAL = "structural"
-    """Every broker credential QMX knows of has a stored S27 proof that it cannot trade."""
-    SPEED_BUMP = "speed_bump"
-    """Anything else, including anything unknown, unmeasured or unreachable."""
 
 
 NON_BROKER_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})

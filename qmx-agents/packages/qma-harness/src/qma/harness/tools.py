@@ -305,12 +305,16 @@ def _from_fastmcp(tool: Tool, effect: Effect) -> ToolDef:
     )
 
 
-async def _listed(server: FastMCP, effects: Mapping[str, Effect]) -> list[ToolDef]:
-    return [
-        _from_fastmcp(tool, effects[tool.name])
-        for tool in await server.list_tools()
-        if tool.name in effects
-    ]
+async def _listed(servers: list[FastMCP], effects: Mapping[str, Effect]) -> list[ToolDef]:
+    """The tools `effects` names, from `servers`. A row with no tool behind it raises, so a
+    renamed or removed function never drops out of the agent surface unnoticed."""
+    tools = [tool for server in servers for tool in await server.list_tools()]
+    missing = sorted(set(effects) - {tool.name for tool in tools})
+    if missing:
+        raise ToolSurfaceError(
+            f"effect table rows are missing on their server: {', '.join(missing)}"
+        )
+    return [_from_fastmcp(tool, effects[tool.name]) for tool in tools if tool.name in effects]
 
 
 async def tool_defs(
@@ -323,11 +327,12 @@ async def tool_defs(
     from qmx_control.server import create_mcp  # noqa: PLC0415
     from qmx_tools.servers import create_server as domain_server  # noqa: PLC0415
 
-    found = await _listed(create_mcp(control), AGENT_OPERATIONS)
-    found += await _listed(broker_server(broker), BROKER_EFFECTS)
-    for group in DOMAIN_GROUPS:
-        found += await _listed(domain_server(group, domain), DOMAIN_EFFECTS)
-    return found
+    domain_servers = [domain_server(group, domain) for group in DOMAIN_GROUPS]
+    return [
+        *await _listed([create_mcp(control)], AGENT_OPERATIONS),
+        *await _listed([broker_server(broker)], BROKER_EFFECTS),
+        *await _listed(domain_servers, DOMAIN_EFFECTS),
+    ]
 
 
 class ToolSurfaceError(RuntimeError):
