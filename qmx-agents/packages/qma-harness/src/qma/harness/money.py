@@ -73,12 +73,37 @@ casefolded command text. No chat reads the store through a shell, whatever the e
 
 SWEEP: Final = re.compile(
     r"(?<![\w-])(find|rg|fd|tree|du|locate|gci|get-childitem|dir)(?![\w-])"
-    r"|(?<=\s)(-r|-rf|-fr|-rl|-rn|-ri|--recursive|-recurse|/s)(?![\w-])"
+    r"|(?<=\s)(-[a-z]*r[a-z]*|--recursive|/s|/r)(?![\w-])"
 )
-"""A command that walks a folder tree. Aimed at a drive root or a user home, it searches the
-operator's whole account (a model ran `find / -name .claude` in HP1)."""
+"""A command that walks a folder tree: a walking program, or a recursion flag in any spelling
+(`-alR`, `-ril`, `-Rec`, `/s`, `where /r`). Aimed at a drive root or a user home, it searches
+the operator's whole account (a model ran `find / -name .claude` in HP1)."""
 
-BARE_NAMES: Final[frozenset[str]] = frozenset({".claude", ".claude.json", ".credentials.json"})
+EVALUATED: Final = re.compile(
+    r"(?<![\w-])(-enc|-enco|-encod|-encode|-encoded|-encodedc\w*|iex|invoke-expression)"
+    r"(?![\w-])|(\$\{env:)"
+    r"|(?<![\w-])(?:powershell|pwsh)(?:\.exe)?(?![\w-]).*?\s(-e|-ec|-en)(?![\w-])"
+)
+"""Text the gate cannot read: an encoded PowerShell command (`-EncodedCommand` and the
+prefixes PowerShell accepts, the short ones only after `powershell` or `pwsh`, since `-e` is
+an everyday flag elsewhere), a string evaluated as code, or a `${env:...}` reference the
+expander does not follow. Casefolded text."""
+
+CHANGES_FOLDER: Final = re.compile(
+    r"(?<![\w-])(?:cd|pushd|chdir|set-location|sl|push-location)\s+([^\s;&|)]+)", re.IGNORECASE
+)
+"""A command that moves the shell's working folder. After one, a relative word may resolve
+against the moved folder, so it is checked against the call's cwd, the user home and each
+target."""
+
+GLOB: Final = re.compile(r"[*?\[]")
+
+MAX_SHELL_TEXT: Final = 256 * 1024
+"""Bytes of shell text the gate reads. Longer text is denied, not scanned."""
+
+MAX_SHELL_PATHS: Final = 2048
+"""Distinct path words times folders to resolve them against. Each costs a file-system
+lookup (`canonical`), so more is denied rather than left to run past the hook timeout."""
 
 DENY_PREFIX: Final = "money rule: "
 
@@ -338,12 +363,68 @@ def _roots(folded: _Folded) -> set[str]:
     return {"/", home, posixpath.dirname(home), "/home", "/users"}
 
 
+def _bases(expanded: str, *, cwd: str, rules: GateRules) -> list[str]:
+    """Folders a relative word may resolve against: the call's cwd, and after a folder change
+    also the user home and every target reached from an earlier base."""
+    targets = [match.group(1).strip("'\"") for match in CHANGES_FOLDER.finditer(expanded)]
+    if not targets:
+        return [cwd]
+    home = rules.variables.get("HOME", "/")
+    bases = [cwd, home]
+    for target in targets:
+        bases += [
+            normalize_path(
+                target, cwd=base, home=home, case_insensitive=False, variables=rules.variables
+            )
+            for base in bases
+        ]
+        bases = list(dict.fromkeys(bases))
+    return bases
+
+
+def _word(word: str, *, base: str, rules: GateRules, folded: _Folded, sweep: bool) -> Deny | None:
+    glob = GLOB.search(word)
+    if glob is not None:
+        folder = posixpath.dirname(word[: glob.start()].replace("\\", "/")) or "."
+        for path in _forms(folder, cwd=base, rules=rules, folded=folded):
+            found = _read_target(path, folded, folder=True)
+            if found is not None:
+                return found
+            if any(within(path, p) for p in folded.protected):
+                return _deny(f"agents cannot touch QMX state from a shell ({path})")
+        return None
+    forms = (
+        _forms(word, cwd=base, rules=rules, folded=folded)
+        if _pathlike(word)
+        else (
+            folded.fold(normalize_path(word, cwd=base, home=folded.home, case_insensitive=False)),
+        )
+    )
+    roots = _roots(folded)
+    for path in forms:
+        found = _read_target(path, folded, folder=False)
+        if found is not None:
+            return found
+        if any(within(path, p) for p in folded.protected):
+            return _deny(f"agents cannot touch QMX state from a shell ({path})")
+        if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
+            return _deny(f"agents cannot sweep a drive root or a user home ({path})")
+    return None
+
+
 def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny | None:
     text = " ".join(
         str(value) for key, value in tool_input.items() if key != "description" and value
     )
+    size = len(text.encode())
+    if size > MAX_SHELL_TEXT:
+        return _deny(f"the command is too long to check ({size} bytes)")
     expanded = expand(text, rules.variables)
     lowered = expanded.casefold()
+    evaluated = EVALUATED.search(f"{text.casefold()} {lowered}")
+    if evaluated:
+        found = next(group for group in evaluated.groups() if group)
+        return _deny(f"agents cannot run encoded or evaluated commands ({found})")
     for word in SHELL_WORDS:
         if word in lowered or word in text.casefold():
             return _deny(f"agents cannot touch the Claude login or its home ({word})")
@@ -357,24 +438,20 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
         if host in lowered:
             return _deny(f"agents cannot reach a broker ({host})")
     folded = _Folded.of(rules)
-    roots = _roots(folded)
-    sweep = SWEEP.search(f" {lowered}")
-    for word in _candidates(expanded):
-        if word.strip("'\"").casefold() in BARE_NAMES:
-            return _deny(f"agents cannot search for Claude homes or login files ({word})")
-        if not _pathlike(word):
-            continue
-        remote = remote_form(word)
+    sweep = SWEEP.search(f" {lowered}") is not None
+    bases = _bases(expanded, cwd=cwd, rules=rules)
+    words = list(dict.fromkeys(_candidates(expanded)))
+    paths = sum(map(_pathlike, words)) * len(bases)
+    if paths > MAX_SHELL_PATHS:
+        return _deny(f"the command names too many paths to check ({paths} path lookups)")
+    for word in words:
+        remote = remote_form(word) if _pathlike(word) else None
         if remote is not None:
             return _deny(f"agents cannot use {remote} ({word})")
-        for path in _forms(word, cwd=cwd, rules=rules, folded=folded):
-            found = _read_target(path, folded, folder=False)
+        for base in bases:
+            found = _word(word, base=base, rules=rules, folded=folded, sweep=sweep)
             if found is not None:
                 return found
-            if any(within(path, p) for p in folded.protected):
-                return _deny(f"agents cannot touch QMX state from a shell ({path})")
-            if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
-                return _deny(f"agents cannot sweep a drive root or a user home ({path})")
     return None
 
 
