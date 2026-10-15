@@ -197,6 +197,12 @@ VERDICTS: list[tuple[str, dict[str, Any], str, str]] = [
     ("ExitPlanMode", {}, "pass", ""),
     ("WebFetch", {"url": "https://demo.ctraderapi.com/x"}, "deny", "reach a broker"),
     ("WebFetch", {"url": "https://docs.python.org"}, "pass", ""),
+    ("WebFetch", {"url": "https://demo.ctraderapi.com./x"}, "deny", "(demo.ctraderapi.com)"),
+    ("WebFetch", {"url": "https://a:b@demo.ctraderapi.com/x"}, "deny", "reach a broker"),
+    ("WebFetch", {"url": "https://demo.ctraderapi.com?x=1"}, "deny", "reach a broker"),
+    ("WebFetch", {"url": "https://demo.ctraderapi.com#top"}, "deny", "reach a broker"),
+    ("WebFetch", {"url": "HTTPS://Demo.CtraderAPI.com:5035"}, "deny", "reach a broker"),
+    ("WebFetch", {"url": "https://ctraderapi.com.example.org/"}, "pass", ""),
 ]
 
 

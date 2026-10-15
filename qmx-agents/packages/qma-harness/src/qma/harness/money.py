@@ -29,6 +29,7 @@ from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from urllib.parse import urlsplit
 
 from qma.core.barriers.descriptors import check_descriptor, name_money_act
 from qma.core.barriers.money_path import MoneyPathDenyError
@@ -456,7 +457,16 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
 
 
 def _host(url: str) -> str:
-    return re.sub(r"^[a-z][a-z0-9+.-]*://", "", url.strip().casefold()).split("/")[0].split(":")[0]
+    """The host a URL reaches, as `urlsplit` parses it, without a trailing dot, casefolded. A
+    URL with no scheme is read as `https://`, as WebFetch upgrades it."""
+    text = url.strip()
+    if "://" not in text:
+        text = f"https://{text}"
+    try:
+        host = urlsplit(text).hostname or ""
+    except ValueError:
+        return ""
+    return host.rstrip(".").casefold()
 
 
 def gate(
