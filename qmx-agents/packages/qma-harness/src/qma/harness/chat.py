@@ -107,6 +107,9 @@ if TYPE_CHECKING:
 FLOOR_REASON: Final = "approvals are not wired yet"
 PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
+MCP_SETTLE_S: Final = 30.0
+"""How long a launch waits for the CLI to finish connecting the vetted external servers. The
+CLI connects them after it starts and reports them `pending` until then, with no tools."""
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,29 @@ class ChatDeps:
     @property
     def redaction(self) -> bool:
         return self.test is None or self.test.redaction
+
+
+async def _settled(client: ClaudeSDKClient, servers: frozenset[str]) -> McpStatusResponse:
+    """`get_mcp_status()` once none of `servers` is still `pending`, polled for at most
+    `MCP_SETTLE_S`. A server still pending then refuses the launch, since its tools cannot be
+    compared with the vetted ones."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + MCP_SETTLE_S
+    while True:
+        status = await client.get_mcp_status()
+        pending = sorted(
+            server["name"]
+            for server in status["mcpServers"]
+            if server["name"] in servers and server["status"] == "pending"
+        )
+        if not pending:
+            return status
+        if loop.time() > deadline:
+            raise LaunchRefused(
+                f"the MCP server {', '.join(pending)} did not finish connecting in "
+                f"{MCP_SETTLE_S:.0f} s"
+            )
+        await asyncio.sleep(0.2)
 
 
 def transcript(home: QmxHome, chat: SessionId) -> Path | None:
@@ -373,7 +399,7 @@ class Chat:
             )
             if found:
                 raise LaunchRefused(_loaded(found))
-            unvetted = unvetted_tools(status, vetted)
+            unvetted = unvetted_tools(await _settled(live.client, frozenset(vetted)), vetted)
             if unvetted:
                 raise LaunchRefused(
                     f"the CLI loaded MCP tools that vetting never saw ({', '.join(unvetted)})"
