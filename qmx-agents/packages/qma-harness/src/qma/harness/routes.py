@@ -18,9 +18,12 @@ Routes:
     POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
                                                  `<sid>.<seq of the permission or question block>`
     GET  /api/usage                              the usage page: plan windows, readings, token
-                                                 sums per profile, cap, overage stop
+                                                 sums per profile, cap, overage stop, money
+                                                 posture and the stored exposure report
     POST /api/usage/meter                        read `/usage` in a plan chat, then the page
-    GET  /api/doctor                             DoctorLine list
+    GET  /api/doctor                             DoctorLine list from stored results; never
+                                                 runs the exposure probe
+    POST /api/doctor/probe                       runs the exposure probe, then the list
     GET  /api/claude-settings                    settings.toml [claude]
     PUT  /api/claude-settings                    `home.parse_claude_settings`, then
                                                  `ControlService.settings_put`
@@ -30,7 +33,7 @@ Durable blocks keep using `GET /api/events/sessions?subject=<sid>`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
@@ -287,17 +290,26 @@ def router(
     *,
     scrubbed: Sequence[str],
     keep: Sequence[str],
-    plan_lines: Callable[[], list[DoctorLine]] = list,
+    harness_lines: Callable[[bool], Awaitable[list[DoctorLine]]] | None = None,
 ) -> APIRouter:
-    """`plan_lines` adds the harness's overage stop and extra-usage lines to the doctor."""
+    """`harness_lines(probe)` adds `Harness.doctor`'s lines; only the POST probes."""
     api = APIRouter()
+
+    async def lines(*, probe: bool) -> dict[str, list[dict[str, object]]]:
+        found = await asyncio.to_thread(
+            doctor, home, control, scrubbed=scrubbed, keep=keep, launcher=LAUNCHER
+        )
+        if harness_lines is not None:
+            found += await harness_lines(probe)
+        return {"lines": [asdict(line) for line in found]}
 
     @api.get("/api/doctor")
     async def read_doctor() -> dict[str, list[dict[str, object]]]:
-        lines = await asyncio.to_thread(
-            doctor, home, control, scrubbed=scrubbed, keep=keep, launcher=LAUNCHER
-        )
-        return {"lines": [asdict(line) for line in [*lines, *plan_lines()]]}
+        return await lines(probe=False)
+
+    @api.post("/api/doctor/probe")
+    async def run_probe() -> dict[str, list[dict[str, object]]]:
+        return await lines(probe=True)
 
     @api.get("/api/claude-settings")
     async def read_claude_settings() -> Document:
@@ -307,7 +319,7 @@ def router(
     async def write_claude_settings(values: Document) -> Document:
         return await asyncio.to_thread(control.settings_put, "claude", values)
 
-    _ = read_doctor, read_claude_settings, write_claude_settings
+    _ = read_doctor, run_probe, read_claude_settings, write_claude_settings
     return api
 
 
@@ -335,7 +347,14 @@ async def _serve(
     home = QmxHome(root)
     control = control_service(home)
     harness = await Harness.open(home, control=control)
-    extra = router(home, control, scrubbed=scrubbed, keep=keep, plan_lines=harness.usage_lines)
+    harness.control_port = port
+    extra = router(
+        home,
+        control,
+        scrubbed=scrubbed,
+        keep=keep,
+        harness_lines=lambda probe: harness.doctor(probe=probe),
+    )
     app = create_app(control, local_token(), ui_origin, extra_routers=[extra, chat_router(harness)])
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
     try:

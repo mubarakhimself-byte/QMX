@@ -1330,8 +1330,13 @@ def test_a_rate_limit_event_the_sdk_cannot_parse_stops_the_plan(
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(NewChat(title="broken", model="haiku"))
         await harness.send(chat, OperatorText("hi"))
-        await settle(lambda: harness.usage_lines()[0].ok is False)
-        assert harness.usage_lines()[0].detail == (
+        stop = (await harness.doctor())[0]
+        for _ in range(100):
+            if not stop.ok:
+                break
+            await asyncio.sleep(0.05)
+            stop = (await harness.doctor())[0]
+        assert stop.detail == (
             "a rate-limit event could not be read: TypeError: 'NoneType' object is not "
             "subscriptable"
         )

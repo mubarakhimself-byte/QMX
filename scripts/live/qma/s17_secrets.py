@@ -5,7 +5,7 @@ in memory and never printed; the log names only the key and the files that hold 
 
 PASS when no file holds any value.
 
-    s17_secrets.py [--root <folder> ...]
+    s17_secrets.py [--root <folder> ...] [--slug hp7-s17]
 """
 
 from __future__ import annotations
@@ -23,8 +23,9 @@ from spend import openrouter_key
 def main() -> int:
     parser = argparse.ArgumentParser(prog="s17_secrets.py")
     parser.add_argument("--root", type=Path, action="append", default=[])
+    parser.add_argument("--slug", default="hp7-s17")
     args = parser.parse_args()
-    log = Log("hp7-s17")
+    log = Log(args.slug)
     evidence = Path(os.environ["QMA_EVIDENCE_DIR"])
     roots = [SCRATCH / "homes", SCRATCH / "workspaces", evidence, SHIP_HOME, *args.root]
     roots = [root for root in roots if root.exists()]

@@ -45,10 +45,12 @@ from qma.harness.chat import (
     admits,
 )
 from qma.harness.home import (
+    DOCTOR_CHAT,
     ChatRecord,
     DoctorLine,
     QmxHome,
     SessionId,
+    cli_version,
     ensure_homes,
     list_records,
     read_record,
@@ -66,15 +68,31 @@ from qma.harness.launch import (
     Interactive,
     LaunchRefused,
     PermissionMode,
+    PlanLaunch,
     TestMode,
     assert_scrubbed,
+    launch_env,
     parse_budgets,
     unattended,
+)
+from qma.harness.money import (
+    NON_BROKER_REFS,
+    ExposureReport,
+    exposure_targets,
+    keyring_inventory,
+    load_exposure,
+    load_scope_proofs,
+    money_posture,
+    run_exposure_probe,
+    save_exposure,
+    store_names,
+    unproven,
 )
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import (
     PLAN,
     ClaudePlan,
+    KeyProvider,
     ProfileError,
     Profiles,
     parse_profiles,
@@ -82,9 +100,10 @@ from qma.harness.profiles import (
 )
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
-from qma.harness.tools import DelegateRefused
+from qma.harness.tools import DelegateRefused, keyring_refs, secret_files
 from qma.harness.usage import (
     BackgroundCap,
+    PostureView,
     ReadingView,
     UsageLedger,
     UsagePage,
@@ -172,6 +191,8 @@ class Harness:
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
         self._reaper = asyncio.create_task(self._reap())
+        self.control_port: int | None = None
+        """The qmx-control port, set by the server, so the exposure probe can try it."""
 
     @classmethod
     async def open(
@@ -410,10 +431,52 @@ class Harness:
     async def usage(self) -> UsagePage:
         budgets = await self._budgets()
         tokens = await asyncio.to_thread(token_sums, self._deps.home.root / "runs")
-        return usage_page(self._ledger, BackgroundCap(budgets.background_cap), tokens)
+        money = await asyncio.to_thread(posture_view, self._deps.home, self._deps.control)
+        return usage_page(self._ledger, BackgroundCap(budgets.background_cap), tokens, money)
 
-    def usage_lines(self) -> list[DoctorLine]:
-        return usage_lines(self._ledger)
+    async def doctor(self, *, probe: bool = False) -> list[DoctorLine]:
+        """The overage and extra-usage lines, the money posture and the stored exposure report,
+        the relay's grant count and refusal counters, and the process cap report. `probe=True`
+        (the operator asked) runs a fresh exposure probe first; a plain read never does."""
+        if probe:
+            await self.probe_exposure()
+        money = await asyncio.to_thread(posture_view, self._deps.home, self._deps.control)
+        relay, cap = self._deps.relay, self._deps.procs.report()
+        counts = relay.counters
+        return [
+            *usage_lines(self._ledger),
+            *money.lines(),
+            DoctorLine(
+                "relay",
+                True,
+                f"{relay.grants} live grants; refused: bearer {counts.bearer}, egress "
+                f"{counts.egress}, family {counts.family}, tier {counts.tier}; upstream errors "
+                f"{counts.upstream}",
+            ),
+            DoctorLine(
+                "agent process cap",
+                cap.os_cap,
+                f"OS cap {'on' if cap.os_cap else 'not available on this OS'}; limit "
+                f"{cap.limit_mb or 'none'} MB; using {cap.used_mb} MB; live chats "
+                f"{len(cap.chats)}; last killed {cap.last_killed or 'none'}",
+            ),
+        ]
+
+    async def probe_exposure(self) -> ExposureReport:
+        """Runs the exposure probe with the plan launch environment and stores its report."""
+        home, control = self._deps.home, self._deps.control
+        inventory = (await asyncio.to_thread(broker_inventory, control))[0]
+        targets = exposure_targets(
+            home.root, inventory, self.control_port, secret_files(home), Path.home() / ".claude"
+        )
+        env = {
+            **os.environ,
+            **launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
+        }
+        version = await asyncio.to_thread(cli_version)
+        report = await run_exposure_probe(env, targets, cli_version=version or "unknown")
+        await asyncio.to_thread(save_exposure, home.state_dir, report)
+        return report
 
     async def meter(self) -> ReadingView | None:
         """Read `/usage` in a plan chat kept for it, then close that chat. The reply costs no
@@ -498,6 +561,29 @@ class Harness:
                 raise UnknownChat(chat)
             found = self._chats[chat] = Chat(record, self._deps)
         return found
+
+
+def broker_inventory(control: ControlService) -> tuple[frozenset[str], frozenset[str]]:
+    """The keyring inventory, by name, and the entries known not to be broker credentials:
+    the fixed ones and every provider row's `credential_ref`."""
+    profiles = parse_profiles(control.settings_get("providers"))
+    keys = {
+        str(profile.credential).casefold()
+        for profile in profiles.by_name.values()
+        if isinstance(profile, KeyProvider)
+    }
+    return keyring_inventory(keyring_refs(control), store_names()), NON_BROKER_REFS | keys
+
+
+def posture_view(home: QmxHome, control: ControlService) -> PostureView:
+    """Reads names, the stored S27 proofs and the stored exposure report; runs no probe."""
+    inventory, non_broker = broker_inventory(control)
+    proofs = load_scope_proofs(home.state_dir)
+    return PostureView(
+        posture=money_posture(inventory, non_broker, proofs),
+        unproven=unproven(inventory, non_broker, proofs),
+        exposure=load_exposure(home.state_dir),
+    )
 
 
 @dataclass(frozen=True)
