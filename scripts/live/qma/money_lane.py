@@ -18,7 +18,7 @@ from typing import Any, Final, Literal
 from common import CANARY, FAKE_HOME, SCRATCH, Log, Session, fake_row, put_providers
 from fake_model import FakeModel, Turn, text, tool_use
 
-type Outcome = Literal["hook", "rule", "timeout", "ran", "missing"]
+Outcome = Literal["hook", "rule", "timeout", "ran", "missing"]
 
 HOOK_MARK: Final = "money rule:"
 AGENT_PROMPT: Final = "QMA sub-agent: run the scripted checks."
