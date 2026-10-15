@@ -55,6 +55,7 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
+from qma.harness.tools import DEFAULT_DOMAIN_WRITE, gate_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
@@ -746,6 +747,14 @@ def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) ->
         settings_json=settings,
         launcher=launcher,
         can_use_tool=_no_tools,
+        mcp_servers={},
+        gate=gate_rules(
+            [],
+            domain_write=DEFAULT_DOMAIN_WRITE,
+            home=home,
+            config_dir=home.plan_dir,
+            keyring_names=frozenset(),
+        ),
     )
     total, parts = argv_length(options)
     name, size = max(parts.items(), key=lambda part: part[1])
