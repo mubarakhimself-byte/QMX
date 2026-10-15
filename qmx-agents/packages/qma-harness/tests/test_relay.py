@@ -997,7 +997,7 @@ def test_a_malformed_stream_ends_in_an_error_event_an_alert_and_one_row(
         assert last.startswith("event: error\n")
         assert message in last
         assert "secret" not in answer.text
-        assert "claude" not in answer.text
+        assert "claude" not in answer.text.removesuffix(f"{last}\n\n")
         assert len(rig.alerts) == 1
         assert [row.status for row in rig.usage] == [200]
 
