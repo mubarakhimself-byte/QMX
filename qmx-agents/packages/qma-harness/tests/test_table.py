@@ -47,9 +47,7 @@ def read_plan(harness: Harness, used: float) -> None:
 
 
 async def chat(harness: Harness, title: str, kind: ChatKind | None = None) -> SessionId:
-    return await harness.start_chat(
-        NewChat(title=title, model="haiku", kind=kind or Interactive())
-    )
+    return await harness.start_chat(NewChat(title=title, model="haiku", kind=kind or Interactive()))
 
 
 async def finished(harness: Harness, home: QmxHome, sid: SessionId, text: str = "hi") -> None:

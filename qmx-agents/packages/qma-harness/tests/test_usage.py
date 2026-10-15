@@ -141,12 +141,12 @@ def test_a_stop_lasts_until_the_later_of_the_two_resets() -> None:
 
 
 def test_rule_1_using_overage_from_either_raw_key() -> None:
-    assert stop_after({"status": "allowed", "rateLimitType": "seven_day", "isUsingOverage": True}) == (
-        "rule 1: the plan is drawing paid extra usage (seven_day window)"
-    )
-    assert stop_after({"status": "allowed", "rateLimitType": "five_hour", "overageInUse": True}) == (
-        "rule 1: the plan is drawing paid extra usage (five_hour window)"
-    )
+    assert stop_after(
+        {"status": "allowed", "rateLimitType": "seven_day", "isUsingOverage": True}
+    ) == ("rule 1: the plan is drawing paid extra usage (seven_day window)")
+    assert stop_after(
+        {"status": "allowed", "rateLimitType": "five_hour", "overageInUse": True}
+    ) == ("rule 1: the plan is drawing paid extra usage (five_hour window)")
 
 
 def test_rule_2_a_rejected_plan_window_with_extra_usage_allowed() -> None:
@@ -180,10 +180,17 @@ def test_rule_3_an_overage_window_not_rejected() -> None:
 
 
 def test_rule_4_credits_required() -> None:
-    assert stop_after(
-        {"status": "rejected", "rateLimitType": "five_hour", "overageStatus": "rejected",
-         "errorCode": "credits_required"}
-    ) == "rule 4: the CLI reports that credits are required (five_hour window)"
+    assert (
+        stop_after(
+            {
+                "status": "rejected",
+                "rateLimitType": "five_hour",
+                "overageStatus": "rejected",
+                "errorCode": "credits_required",
+            }
+        )
+        == "rule 4: the CLI reports that credits are required (five_hour window)"
+    )
 
 
 def test_a_rejected_plan_with_extra_usage_rejected_is_no_overage_stop() -> None:
@@ -260,8 +267,7 @@ def pinned_cli() -> bytes:
 def test_the_raw_overage_keys_match_the_pinned_cli_schema() -> None:
     schema = pinned_cli()
     assert (
-        b"isUsingOverage:M().optional(),overageInUse:M().optional(),"
-        b"overageEnabled:M().optional()"
+        b"isUsingOverage:M().optional(),overageInUse:M().optional(),overageEnabled:M().optional()"
     ) in schema
     assert b'errorCode:U(["credits_required"]).optional()' in schema
     fact = event(
@@ -311,8 +317,12 @@ def test_extra_usage_on_reads_the_newest_fact() -> None:
         ),
     ]
     usage.record(
-        event(status="allowed", rateLimitType="five_hour", overageStatus="rejected",
-              overageEnabled=False),
+        event(
+            status="allowed",
+            rateLimitType="five_hour",
+            overageStatus="rejected",
+            overageEnabled=False,
+        ),
         at(3),
     )
     assert usage.extra_usage_on() is False
@@ -470,8 +480,13 @@ def test_token_sums_add_model_call_rows_per_profile(tmp_path: Path) -> None:
     with RunJournal(tmp_path / "runs" / "b" / "journal.jsonl", "b") as journal:
         journal.append(
             "model_call",
-            {"profile": "kimi", "input_tokens": 7, "output_tokens": 1,
-             "cache_read_tokens": 0, "cache_write_tokens": 0},
+            {
+                "profile": "kimi",
+                "input_tokens": 7,
+                "output_tokens": 1,
+                "cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+            },
         )
         journal.append("token_count", {"profile": "kimi", "input_tokens": 99})
     assert token_sums(tmp_path / "runs") == {

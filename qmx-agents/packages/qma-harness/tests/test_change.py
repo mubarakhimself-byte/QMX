@@ -93,9 +93,7 @@ def test_classify_change(change: dict[str, Any], kind: Any, steps: tuple[Step, .
     assert classify_change(old, replace(old, **change)) == steps
 
 
-@pytest.mark.parametrize(
-    "change", [{"workspace": Path("D:/other")}, {"kind": Background()}]
-)
+@pytest.mark.parametrize("change", [{"workspace": Path("D:/other")}, {"kind": Background()}])
 def test_a_workspace_or_kind_change_is_a_new_chat(change: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="new chat"):
         classify_change(BASE, replace(BASE, **change))
@@ -483,4 +481,3 @@ def test_a_background_chat_keeps_its_limits_across_a_relaunch(
         assert limits == [(True, 50, 5.0, None), (True, 50, 5.0, "high")]
 
     run(body, home)
-

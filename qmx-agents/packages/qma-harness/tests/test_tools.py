@@ -159,9 +159,9 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
     control = ControlService(home.root)
     domain = DomainContext(root=home.root)
     domain.control, domain.library = control, control.library
-    defs = asyncio.run(tool_defs(
-            control=control, broker=BrokerService(home.root), domain=domain, delegate=None
-        ))
+    defs = asyncio.run(
+        tool_defs(control=control, broker=BrokerService(home.root), domain=domain, delegate=None)
+    )
     effects = {tool.name: tool.effect for tool in defs}
     assert len(defs) == len(AGENT_OPERATIONS) + 7 + len(DOMAIN_EFFECTS)
     assert effects["propose_order"] is Effect.PROPOSE_MONEY
@@ -349,9 +349,9 @@ def test_no_read_or_domain_write_operation_publishes_an_app(tmp_path: Path) -> N
     control = RecordingControl(home.root)
     domain = DomainContext(root=home.root)
     domain.control, domain.library = control, control.library
-    defs = asyncio.run(tool_defs(
-            control=control, broker=BrokerService(home.root), domain=domain, delegate=None
-        ))
+    defs = asyncio.run(
+        tool_defs(control=control, broker=BrokerService(home.root), domain=domain, delegate=None)
+    )
     quiet = [
         tool
         for tool in defs
@@ -582,6 +582,8 @@ def test_a_table_row_missing_on_its_server_refuses_the_tool_list(
     domain = DomainContext(root=home.root)
     domain.control, domain.library = control, control.library
     with pytest.raises(ToolSurfaceError, match="missing on their server: gone_tool"):
-        asyncio.run(tool_defs(
-            control=control, broker=BrokerService(home.root), domain=domain, delegate=None
-        ))
+        asyncio.run(
+            tool_defs(
+                control=control, broker=BrokerService(home.root), domain=domain, delegate=None
+            )
+        )

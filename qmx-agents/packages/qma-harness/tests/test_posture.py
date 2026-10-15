@@ -84,9 +84,7 @@ def test_money_posture_table(
 
 def test_an_unlisted_store_keeps_an_unprovable_entry_in_the_inventory() -> None:
     assert keyring_inventory(["QMX/Kimi"], None) == frozenset({"qmx/kimi", UNLISTED})
-    assert keyring_inventory(["qmx/kimi"], frozenset({"qmx/x"})) == frozenset(
-        {"qmx/kimi", "qmx/x"}
-    )
+    assert keyring_inventory(["qmx/kimi"], frozenset({"qmx/x"})) == frozenset({"qmx/kimi", "qmx/x"})
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows only")
@@ -366,9 +364,7 @@ def test_the_harness_names_unproven_entries_and_stores_one_probe(
     ) -> ExposureReport:
         probes.append(targets)
         assert env["CLAUDE_CONFIG_DIR"] == str(home.plan_dir)
-        found = tuple(
-            ExposureFinding(t, t.kind == "keyring_entry", "fake") for t in targets[:4]
-        )
+        found = tuple(ExposureFinding(t, t.kind == "keyring_entry", "fake") for t in targets[:4])
         return ExposureReport(datetime(2026, 10, 15, tzinfo=UTC), cli_version, found)
 
     monkeypatch.setattr(qma.harness.harness, "run_exposure_probe", fake_probe)
