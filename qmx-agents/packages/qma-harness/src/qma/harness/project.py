@@ -110,7 +110,7 @@ class TokenGate:
 
     def _release(self, cut: int) -> list[Piece]:
         text = "".join(text for _, text in self._held)
-        kinds = [kind for kind, piece in self._held for _ in piece]
+        kinds: list[StreamKind] = [kind for kind, piece in self._held for _ in piece]
         out: list[Piece] = []
         start = 0
         for token in TOKEN_PATTERN.finditer(text[:cut]):

@@ -38,7 +38,11 @@ CANARY = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
 SAID = f"the login is {CANARY} and more"
 SHOWN = f"the login is {REDACTED} and more"
 INLINE_QMX = {"name": "qmx", "path": "D:/qmx/plugin", "source": "qmx@inline"}
-BUILTIN = {"name": "cc-plugin-agents-md", "path": "builtin", "source": "cc-plugin-agents-md@builtin"}
+BUILTIN = {
+    "name": "cc-plugin-agents-md",
+    "path": "builtin",
+    "source": "cc-plugin-agents-md@builtin",
+}
 
 
 class FakeClient:
@@ -405,7 +409,9 @@ def test_a_prompt_folded_into_the_running_turn_ends_with_that_turn(home: QmxHome
         await harness.send(chat, OperatorText("typed while the tool ran"))
         for message in [
             init(),
-            AssistantMessage(content=[ToolUseBlock("toolu_1", "Glob", {"pattern": "*"})], model="m"),
+            AssistantMessage(
+                content=[ToolUseBlock("toolu_1", "Glob", {"pattern": "*"})], model="m"
+            ),
             UserMessage(content=[ToolResultBlock("toolu_1", "No files found")]),
             *replies("both"),
         ]:
@@ -579,16 +585,12 @@ def test_a_block_landing_mid_token_never_releases_the_token_tail(
 def test_a_token_split_from_text_into_thinking_is_redacted_where_it_started(
     home: QmxHome,
 ) -> None:
-    live, leaked = watch(
-        home, [delta("text_delta", HEAD), delta("thinking_delta", TAIL), result()]
-    )
+    live, leaked = watch(home, [delta("text_delta", HEAD), delta("thinking_delta", TAIL), result()])
     assert (live, leaked) == ({"text": f"the login is {REDACTED}", "thinking": " and more"}, [])
 
 
 def test_a_token_still_open_when_the_turn_ends_is_redacted(home: QmxHome) -> None:
-    live, leaked = watch(
-        home, [delta("text_delta", HEAD), BETWEEN["task_notification"], result()]
-    )
+    live, leaked = watch(home, [delta("text_delta", HEAD), BETWEEN["task_notification"], result()])
     assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
 
 
