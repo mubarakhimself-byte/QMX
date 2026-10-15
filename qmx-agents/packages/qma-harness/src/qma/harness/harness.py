@@ -41,8 +41,12 @@ from qma.harness.chat import (
     OperatorText,
     Prompt,
     Quote,
+    RewindPoint,
     UntrustedPrompt,
     admits,
+    export_chat,
+    rewind_points,
+    transcript,
 )
 from qma.harness.home import (
     DOCTOR_CHAT,
@@ -194,6 +198,14 @@ class Harness:
         self.control_port: int | None = None
         """The qmx-control port, set by the server, so the exposure probe can try it."""
 
+    @property
+    def home(self) -> QmxHome:
+        return self._deps.home
+
+    @property
+    def control(self) -> ControlService:
+        return self._deps.control
+
     @classmethod
     async def open(
         cls, home: QmxHome, *, control: ControlService, test: TestMode | None = None
@@ -327,9 +339,12 @@ class Harness:
         try:
             await found.send(prompt)
         finally:
-            self._sending[chat] -= 1
-            if not self._sending[chat]:
-                del self._sending[chat]
+            self._release(chat)
+
+    def _release(self, chat: SessionId) -> None:
+        self._sending[chat] -= 1
+        if not self._sending[chat]:
+            del self._sending[chat]
 
     async def _take_slot(self, chat: SessionId, cap: int) -> None:
         """Hold a slot for `chat` while a send to it runs, closing the least recently used
@@ -523,12 +538,44 @@ class Harness:
         try:
             return await found.apply(quote_id, plan_stop=self._ledger.hard_stop())
         finally:
-            self._sending[chat] -= 1
-            if not self._sending[chat]:
-                del self._sending[chat]
+            self._release(chat)
 
     async def interrupt(self, chat: SessionId) -> None:
         await self._chat(chat).interrupt()
+
+    async def rewind_points(self, chat: SessionId) -> list[RewindPoint]:
+        self._chat(chat)
+        return await asyncio.to_thread(rewind_points, transcript(self._deps.home, chat))
+
+    async def rewind(self, chat: SessionId, message_id: str) -> None:
+        """The SDK's file rewind to before one of `rewind_points`. A Cold chat takes a slot
+        and connects first, as a send does. Raises `RewindRefused` mid-turn or for an id with
+        no checkpoint."""
+        found = self._chat(chat)
+        await self._take_slot(chat, (await self._budgets()).max_live_chats)
+        try:
+            await found.rewind(message_id)
+        finally:
+            self._release(chat)
+
+    async def export(self, chat: SessionId) -> Path:
+        """`export_chat` into `<home>/exports/`, with every provider key value redacted. The
+        values are read by reference here and never leave this process."""
+        found = self._chat(chat)
+        relay = self._deps.relay
+
+        def key_values() -> dict[str, str]:
+            values: dict[str, str] = {}
+            for profile in relay.profiles().by_name.values():
+                if isinstance(profile, KeyProvider):
+                    with contextlib.suppress(Exception):
+                        values[profile.credential] = relay.secrets(profile.credential)
+            return values
+
+        secrets = await asyncio.to_thread(key_values)
+        return await asyncio.to_thread(
+            export_chat, self._deps.home, self._deps.control, found.record, secrets
+        )
 
     def live(self, chat: SessionId) -> AsyncIterator[Delta]:
         return self._chat(chat).live()

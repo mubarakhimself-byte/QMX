@@ -7,12 +7,19 @@ work goes to a thread.
 
 Routes:
     POST /api/chats                     NewChat  -> {session_id}
+    GET  /api/chats                              the resume list: Interactive chats, newest
+                                                 first, with title, config and turn state
+    GET  /api/chats/{sid}                        one chat's entry of that list
     POST /api/sessions/{sid}/turns      {text}   -> 202, always `OperatorText`
     POST /api/sessions/{sid}/interrupt           -> 202
     POST /api/sessions/{sid}/quote      ChangeIn -> the quote; 400 for a change the chat
                                                  cannot take
     POST /api/sessions/{sid}/apply      {quote_id} -> the applied quote; 409 when it is
                                                  stale or the launch is refused
+    POST /api/sessions/{sid}/export              -> {folder, files}; the redacted bundle
+    GET  /api/sessions/{sid}/rewind              -> the prompts with a file checkpoint
+    POST /api/sessions/{sid}/rewind     {message_id} -> 202; 409 mid-turn or for a prompt
+                                                 with no checkpoint
     GET  /api/sessions/{sid}/live                SSE of deltas, never stored; 404 first for an
                                                  unknown chat
     POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
@@ -57,20 +64,33 @@ from qma.harness.chat import (
     Quote,
     QuoteStale,
     Reject,
+    RewindRefused,
     describe,
 )
 from qma.harness.harness import ChatTableFull, Harness, NewChat, UnknownChat
 from qma.harness.home import (
+    ChatRecord,
     DoctorLine,
     QmxHome,
     SessionId,
     claude_section,
     doctor,
+    list_records,
+    read_record,
+    record_path,
     session_id,
 )
-from qma.harness.launch import LAUNCHER, ConfigChange, Effort, LaunchRefused, PermissionMode
+from qma.harness.launch import (
+    LAUNCHER,
+    ConfigChange,
+    Effort,
+    Interactive,
+    LaunchRefused,
+    PermissionMode,
+)
 from qma.harness.profiles import ProfileName
 from qma.harness.project import Delta, InChild
+from qma.harness.usage import token_sums
 
 
 def parse_claude_document(values: Document, current: Document) -> Document:
@@ -183,6 +203,39 @@ def to_answer(body: AllowOnceIn | AllowAlwaysIn | RejectIn | AnswersIn) -> Answe
             return Answers(answers)
 
 
+class RewindIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message_id: str = Field(min_length=1)
+
+
+def chat_entry(record: ChatRecord, title: str) -> dict[str, Any]:
+    return {
+        "session_id": record.session_id,
+        "title": title,
+        "workspace": str(record.config.workspace),
+        "started": record.started,
+        "turn": record.turn,
+        **describe(record.config),
+    }
+
+
+def resume_list(home: QmxHome, control: ControlService) -> list[dict[str, Any]]:
+    """Interactive chats, most recently written first. Background, Child and doctor chats are
+    not the operator's to resume."""
+    titles: dict[str, str] = {}
+    offset = 0
+    while page := control.sessions_list(offset, 1000):
+        titles |= {str(row["id"]): str(row.get("title", "")) for row in page}
+        offset += len(page)
+    records = [
+        record
+        for record in list_records(home)
+        if isinstance(record.config.kind, Interactive) and record.session_id in titles
+    ]
+    records.sort(key=lambda record: record_path(home, record.session_id).stat().st_mtime)
+    return [chat_entry(record, titles[record.session_id]) for record in reversed(records)]
+
+
 def chat_id(text: str) -> SessionId:
     try:
         return session_id(text)
@@ -208,6 +261,19 @@ def chat_router(harness: Harness) -> APIRouter:
         except LaunchRefused as error:
             raise ControlError("invalid_chat", str(error), 400) from error
         return {"session_id": chat}
+
+    @api.get("/api/chats")
+    async def chats() -> list[dict[str, Any]]:
+        return await asyncio.to_thread(resume_list, harness.home, harness.control)
+
+    @api.get("/api/chats/{sid}")
+    async def one_chat(sid: str) -> dict[str, Any]:
+        chat = chat_id(sid)
+        record = await asyncio.to_thread(read_record, harness.home, chat)
+        if record is None:
+            raise UnknownChat(sid)
+        tokens = await asyncio.to_thread(token_sums, harness.home.root / "runs", chat)
+        return chat_entry(record, "") | {"tokens": tokens}
 
     @api.post("/api/sessions/{sid}/turns", status_code=202)
     async def turn(sid: str, body: TurnIn) -> dict[str, str]:
@@ -246,6 +312,26 @@ def chat_router(harness: Harness) -> APIRouter:
         except LaunchRefused as error:
             raise ControlError("launch_refused", str(error), 409) from error
 
+    @api.post("/api/sessions/{sid}/export")
+    async def export(sid: str) -> dict[str, Any]:
+        folder = await harness.export(chat_id(sid))
+        files = sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*.*"))
+        return {"folder": str(folder), "files": files}
+
+    @api.get("/api/sessions/{sid}/rewind")
+    async def rewind_points(sid: str) -> list[dict[str, str]]:
+        return [asdict(point) for point in await harness.rewind_points(chat_id(sid))]
+
+    @api.post("/api/sessions/{sid}/rewind", status_code=202)
+    async def rewind(sid: str, body: RewindIn) -> dict[str, str]:
+        try:
+            await harness.rewind(chat_id(sid), body.message_id)
+        except (RewindRefused, LaunchRefused) as error:
+            raise ControlError("rewind_refused", str(error), 409) from error
+        except ChatTableFull as error:
+            raise ControlError("chat_table_full", str(error), 409) from error
+        return {"status": "rewound"}
+
     def live_deltas(sid: str) -> AsyncIterator[Delta]:
         return harness.live(chat_id(sid))
 
@@ -280,7 +366,8 @@ def chat_router(harness: Harness) -> APIRouter:
             raise ControlError("chat_table_full", str(error), 409) from error
         return (await harness.usage()).document()
 
-    _ = new_chat, turn, interrupt, quote, apply, live, approve, read_usage, read_meter
+    _ = new_chat, chats, one_chat, turn, interrupt, quote, apply, export, rewind_points, rewind
+    _ = live, approve, read_usage, read_meter
     return api
 
 

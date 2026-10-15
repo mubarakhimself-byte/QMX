@@ -485,6 +485,101 @@ def transcript(home: QmxHome, chat: SessionId) -> Path | None:
     return next((home.plan_dir / "projects").glob(f"*/{chat}.jsonl"), None)
 
 
+class RewindRefused(ValueError):
+    """A rewind this chat cannot take now: a running turn, or no checkpoint for that prompt."""
+
+
+@dataclass(frozen=True)
+class RewindPoint:
+    message_id: str
+    text: str
+
+
+def _prompt_text(message: Mapping[str, Any]) -> str | None:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return None
+    parts = cast("list[dict[str, Any]]", content)
+    if any(part.get("type") != "text" for part in parts):
+        return None
+    return "\n".join(str(part.get("text", "")) for part in parts)
+
+
+def rewind_points(path: Path | None) -> list[RewindPoint]:
+    """The operator's prompts in a transcript that the CLI took a file checkpoint for, oldest
+    first. Tool results, meta lines and local command echoes are not prompts."""
+    if path is None or not path.exists():
+        return []
+    prompts: dict[str, str] = {}
+    checkpointed: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        row = cast("dict[str, Any]", entry)
+        if row.get("type") == "file-history-snapshot":
+            checkpointed.add(str(row.get("messageId")))
+        elif row.get("type") == "user" and not row.get("isMeta") and row.get("uuid"):
+            text = _prompt_text(cast("dict[str, Any]", row.get("message") or {}))
+            if text is not None and not text.startswith("<"):
+                prompts[str(row["uuid"])] = text
+    return [
+        RewindPoint(uuid, redact(text)) for uuid, text in prompts.items() if uuid in checkpointed
+    ]
+
+
+def export_chat(
+    home: QmxHome, control: ControlService, record: ChatRecord, secrets: Mapping[str, str]
+) -> Path:
+    """One folder under `<home>/exports/`: the SDK transcript, the sub-agent transcripts, the
+    asks and answers, the run journal and the chat record. Every file passes `redact`, and each
+    provider key value in `secrets` (reference to value) becomes `[redacted <reference>]`."""
+    chat = record.session_id
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    folder = home.root / "exports" / f"{chat}-{stamp}"
+    folder.mkdir(parents=True, exist_ok=False)
+    keys = sorted(
+        ((value, reference) for reference, value in secrets.items() if value),
+        key=lambda pair: -len(pair[0]),
+    )
+
+    def put(name: str, text: str) -> None:
+        for value, reference in keys:
+            text = text.replace(value, f"[redacted {reference}]")
+        target = folder / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(redact(text), encoding="utf-8")
+
+    found = transcript(home, chat)
+    if found is not None:
+        put("transcript.jsonl", found.read_text(encoding="utf-8"))
+        helpers = found.with_suffix("") / "subagents"
+        for path in sorted(helpers.glob("*")) if helpers.is_dir() else []:
+            put(f"subagents/{path.name}", path.read_text(encoding="utf-8"))
+    asks: list[str] = []
+    after = 0
+    while True:
+        events = cast("list[dict[str, Any]]", control.events("sessions", after, chat, 1000))
+        for event in events:
+            block = cast("dict[str, Any]", event["data"].get("block") or {})
+            if block.get("type") in {"permission", "question"}:
+                asks.append(json.dumps(block, ensure_ascii=False))
+        if len(events) < 1000:
+            break
+        after = int(events[-1]["id"])
+    put("approvals.jsonl", "".join(f"{line}\n" for line in asks))
+    journal = journal_path(home, chat)
+    if journal.exists():
+        put("usage.jsonl", journal.read_text(encoding="utf-8"))
+    put("chat.json", json.dumps({"session_id": chat, **describe(record.config)}, indent=2))
+    return folder
+
+
 def unexpected_extensions(
     info: Mapping[str, Any] | None, status: McpStatusResponse, servers: frozenset[str]
 ) -> list[str]:
@@ -747,6 +842,22 @@ class Chat:
         """Background Bash and sub-agents keep running, as in Claude Code."""
         if self._live is not None:
             await self._live.client.interrupt()
+
+    async def rewind(self, message_id: str) -> None:
+        """Put the files back as they were before `message_id`, one of `rewind_points`. The
+        conversation is not rewound. A Cold chat connects first, resuming its session."""
+        async with self._lock:
+            if self.record.turn == "running":
+                raise RewindRefused("a turn is running; rewind when it ends")
+            path = transcript(self._deps.home, self.session_id)
+            points = await asyncio.to_thread(rewind_points, path)
+            if message_id not in {point.message_id for point in points}:
+                raise RewindRefused(f"no file checkpoint for the message {message_id!r}")
+            live = self._live or await self._connect()
+            self._live = live
+            self._last = time.monotonic()
+            await live.client.rewind_files(message_id)
+            await self._note("changed", {"kind": "rewind", "to": message_id})
 
     async def stop_plan(self, reason: str) -> None:
         """The overage stop. Kills the CLI tree first, because an interrupt would let a prompt
