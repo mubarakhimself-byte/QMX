@@ -678,17 +678,24 @@ def test_a_cli_that_ends_mid_turn_leaves_an_unknown_outcome(home: QmxHome) -> No
 
 
 def test_the_live_door_answers_404_for_an_unknown_chat_before_streaming(home: QmxHome) -> None:
-    control = control_service(home)
-    harness = asyncio.run(Harness.open(home, control=control))
-    app = create_app(control, "test-token", extra_routers=[chat_router(harness)])
     unknown = "0b6e6c1e-8a43-4f2b-9d3c-5a7e2f1c9b10"
-    with TestClient(app) as rest:
-        answer = rest.get(
-            f"/api/sessions/{unknown}/live", headers={"Authorization": "Bearer test-token"}
+    answers: list[tuple[int, str, object]] = []
+
+    def get(harness: Harness) -> None:
+        app = create_app(control_service(home), "test-token", extra_routers=[chat_router(harness)])
+        with TestClient(app) as rest:
+            answer = rest.get(
+                f"/api/sessions/{unknown}/live", headers={"Authorization": "Bearer test-token"}
+            )
+        answers.append(
+            (answer.status_code, answer.headers["content-type"], answer.json()["error"]["message"])
         )
-    asyncio.run(harness.close())
-    assert (answer.status_code, answer.headers["content-type"]) == (404, "application/json")
-    assert answer.json()["error"]["message"] == f"No chat has the session id {unknown}."
+
+    async def body(harness: Harness) -> None:
+        await asyncio.to_thread(get, harness)
+
+    run(body, home)
+    assert answers == [(404, "application/json", f"No chat has the session id {unknown}.")]
 
 
 ROUTER_ROW: Document = {
