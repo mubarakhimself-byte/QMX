@@ -857,3 +857,213 @@ def test_the_listener_is_released_when_the_server_fails_to_start(
             probe.bind(("127.0.0.1", port))
 
     asyncio.run(main())
+
+
+@dataclass
+class HeldWriter(Writer):
+    entered: threading.Event = field(default_factory=threading.Event)
+    release: threading.Event = field(default_factory=threading.Event)
+    shut: bool = False
+
+    def append(self, usage: RelayUsage) -> None:
+        self.entered.set()
+        self.release.wait(5)
+        if self.shut:
+            raise ValueError("I/O operation on closed journal")
+        super().append(usage)
+
+    def close(self) -> None:
+        self.shut = True
+        super().close()
+
+
+async def _revoke_mid_append(rig: Rig, writer: HeldWriter, *, release_after: float) -> None:
+    rig.relay.journal = lambda _session: writer
+    grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+    answer = asyncio.create_task(rig.post("/v1/messages", body(), bearer=grant.secret))
+    await asyncio.to_thread(writer.entered.wait, 5)
+    threading.Timer(release_after, writer.release.set).start()
+    await asyncio.wait_for(rig.relay.revoke(grant), 10)
+    with contextlib.suppress(httpx.HTTPError):
+        await answer
+
+
+def test_a_revoke_during_a_journal_append_waits_for_the_row_before_closing() -> None:
+    async def check(rig: Rig) -> None:
+        writer = HeldWriter(rig.journals, CHAT)
+        await _revoke_mid_append(rig, writer, release_after=0.3)
+        assert [(row.status, row.input_tokens, row.output_tokens) for row in rig.usage] == [
+            (200, 120, 9)
+        ]
+        assert (rig.journals.closed, rig.alerts) == ([CHAT], [])
+
+    run(check)
+
+
+def test_a_journal_append_that_outlasts_the_revoke_wait_alerts_the_chat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("qma.harness.relay.STOP_WAIT_S", 0.3)
+
+    async def check(rig: Rig) -> None:
+        writer = HeldWriter(rig.journals, CHAT)
+        await _revoke_mid_append(rig, writer, release_after=1.0)
+        assert rig.journals.closed == [CHAT]
+        assert rig.alerts[0] == (
+            "usage journal: a write was still running when the writer closed; "
+            "that request's usage may not be recorded"
+        )
+
+    run(check)
+
+
+ESCAPED_TOKEN = b"sk-ant-oat01\\u002d" + TAIL.encode()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b'{"model":"anthropic/claude-opus-4","model":"kimi-k3","messages":[]}',
+        b'{"model":"kimi-k3","messages":[{"role":"user","content":"a","content":"b"}]}',
+        b'{"model":"kimi-k3","messages":[],"system":"' + ESCAPED_TOKEN + b'","system":"x"}',
+    ],
+    ids=["model", "nested", "escaped-token"],
+)
+def test_a_body_with_a_repeated_json_key_is_refused_and_never_forwarded(content: bytes) -> None:
+    async def check(rig: Rig) -> None:
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", content, bearer=grant.secret)
+        assert answer.status_code == 400
+        assert answer.json()["error"]["message"] == (
+            "the request body is not one JSON object with unique keys"
+        )
+        assert rig.upstream.seen == []
+
+    run(check)
+
+
+def raw_event(name: str | None, data: object) -> bytes:
+    named = f"event: {name}\n" if name else ""
+    return f"{named}data: {json.dumps(data)}\n\n".encode()
+
+
+MALFORMED_START = "the provider sent a malformed message_start"
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (sse({"type": "message_start", "message": "kimi-k3"}, TEXT), MALFORMED_START),
+        (
+            sse({"type": "message_start", "message": {"model": "kimi-k3", "usage": "x"}}, TEXT),
+            MALFORMED_START,
+        ),
+        (sse({"type": "message_start", "message": {"usage": {}}}, TEXT), MALFORMED_START),
+        (sse({"type": "message_start", "message": {"model": 7}}, TEXT), MALFORMED_START),
+        (
+            raw_event("message_start", {"message": {"model": "anthropic/claude-opus-4"}})
+            + raw_event("content_block_delta", {"delta": {"text": "secret"}})
+            + sse({"type": "error", "error": {"type": "overloaded_error"}}),
+            "family guard: kimi served anthropic/claude-opus-4",
+        ),
+        (
+            raw_event("ping", CLAUDE_START) + sse(TEXT),
+            "the provider sent an event named ping whose type is message_start",
+        ),
+        (
+            sse({"type": "message_start", "message": {"model": "kimi-k3"}})
+            + raw_event("message_delta", {"type": "message_delta", "usage": "x"}),
+            "the provider sent a malformed message_delta",
+        ),
+    ],
+    ids=[
+        "message-not-object",
+        "usage-not-object",
+        "no-model",
+        "model-not-string",
+        "named-start-typeless",
+        "name-type-mismatch",
+        "delta-usage-not-object",
+    ],
+)
+def test_a_malformed_stream_ends_in_an_error_event_an_alert_and_one_row(
+    content: bytes, message: str
+) -> None:
+    async def check(rig: Rig) -> None:
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", body(), bearer=grant.secret)
+        assert answer.status_code == 200
+        last = answer.text.split("\n\n")[-2]
+        assert last.startswith("event: error\n")
+        assert message in last
+        assert "secret" not in answer.text
+        assert "claude" not in answer.text
+        assert len(rig.alerts) == 1
+        assert [row.status for row in rig.usage] == [200]
+
+    run(check, handler=sse_reply(content))
+
+
+def test_a_provider_error_before_message_start_passes_alone() -> None:
+    error = {"type": "error", "error": {"type": "overloaded_error", "message": "busy"}}
+    content = raw_event(None, {"delta": {"text": "secret"}}) + sse({"type": "ping"}, error)
+
+    async def check(rig: Rig) -> None:
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", body(), bearer=grant.secret)
+        assert answer.content == sse(error)
+        assert [row.status for row in rig.usage] == [200]
+
+    run(check, handler=sse_reply(content))
+
+
+def test_a_stale_revoke_of_a_replaced_grant_leaves_the_new_one_serving() -> None:
+    async def check(rig: Rig) -> None:
+        old = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        new = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        await rig.relay.revoke(old)
+        answer = await rig.post("/v1/messages", body(), bearer=new.secret)
+        assert (answer.status_code, answer.content) == (200, stream("kimi-k3"))
+        assert rig.relay.grants == 1
+
+    run(check)
+
+
+def test_a_stream_with_no_message_start_is_stopped_at_120_seconds() -> None:
+    closed = asyncio.Event()
+
+    class Silent(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            await closed.wait()
+            yield b""
+
+        async def aclose(self) -> None:
+            closed.set()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=Silent(), headers={"content-type": "text/event-stream"})
+
+    async def check(rig: Rig) -> None:
+        loop = asyncio.get_running_loop()
+        real = loop.time
+        skew = [0.0]
+        loop.time = lambda: real() + skew[0]  # type: ignore[method-assign]
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        auth = {"authorization": f"Bearer {grant.secret}"}
+        async with (
+            httpx.AsyncClient(base_url=rig.relay.base_url, trust_env=False, timeout=None) as client,
+            client.stream("POST", "/v1/messages", json=body(), headers=auth) as answer,
+        ):
+            chunks = aiter(answer.aiter_bytes())
+            await asyncio.sleep(0.1)
+            skew[0] = 118.5
+            first = asyncio.ensure_future(anext(chunks))
+            await asyncio.sleep(0.2)
+            assert not first.done()
+            skew[0] = 121.0
+            chunk = await asyncio.wait_for(first, 2)
+        assert chunk.startswith(b"event: error\n")
+        assert b"no message_start in 120 s" in chunk
+        assert closed.is_set()
+
+    run(check, handler=handler)
