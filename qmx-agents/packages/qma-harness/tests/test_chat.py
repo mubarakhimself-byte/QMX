@@ -1046,8 +1046,10 @@ def record_grants(monkeypatch: pytest.MonkeyPatch) -> list[RelayGrant]:
     minted: list[RelayGrant] = []
     real = Relay.grant
 
-    async def grant(relay: Relay, session: SessionId, profile: ProfileName) -> RelayGrant:
-        made = await real(relay, session, profile)
+    async def grant(
+        relay: Relay, session: SessionId, profile: ProfileName, *, unattended: bool = False
+    ) -> RelayGrant:
+        made = await real(relay, session, profile, unattended=unattended)
         minted.append(made)
         return made
 

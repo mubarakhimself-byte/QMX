@@ -1106,14 +1106,17 @@ class Chat:
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile
-        through a fresh relay grant."""
+        through a fresh relay grant, which tells the relay whether the chat is unattended."""
         deps, config = self._deps, self.record.config
         if config.profile == PLAN:
             auth = await asyncio.to_thread(plan_auth_method, deps.home, settings)
             auth.require()
             return PlanLaunch()
         try:
-            return RelayedLaunch(await deps.relay.grant(self.session_id, config.profile))
+            grant = await deps.relay.grant(
+                self.session_id, config.profile, unattended=unattended(config.kind)
+            )
+            return RelayedLaunch(grant)
         except GrantRefused as refused:
             raise LaunchRefused(str(refused)) from None
 

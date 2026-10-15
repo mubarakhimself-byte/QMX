@@ -7,6 +7,9 @@ CLI from this process. With no host answering on `--port`, it starts `qma.serve`
 and stops it again on exit.
 
 Commands, mirroring Claude Code where a twin exists:
+    /login chatgpt         Sign in with ChatGPT for QMA: the stored sign-in, or OpenAI's page
+                           after a y/N, then the GPT probe unless a pass is stored, then a
+                           y/N on letting Background and helper chats use the ChatGPT plan.
     /login                 runs the bundled CLI's own `auth login --claudeai` in this terminal,
                            with CLAUDE_CONFIG_DIR set to QMX's plan home and
                            `--settings '{"forceLoginMethod": "claudeai"}'`, so the Console
@@ -115,7 +118,7 @@ class Slash:
 type Command = Send | Slash
 
 HELP: Final[dict[str, str]] = {
-    "login": "sign in to your Claude plan (claude.ai accounts only)",
+    "login": "sign in to your Claude plan (claude.ai only); /login chatgpt for GPT",
     "status": "this chat, its model and the plan sign-in",
     "model": "/model <alias or id>: switch model, after a warning",
     "provider": "/provider [name]: switch provider, after a warning",
@@ -347,6 +350,10 @@ def usage_lines(page: dict[str, Any], chat: dict[str, Any] | None = None) -> lis
                 f"cache read {sums.get('cache_read_tokens', 0)}  "
                 f"cache write {sums.get('cache_write_tokens', 0)}  ({sums.get('calls', 0)} calls)"
             )
+            if profile == "gpt":
+                lines.append(
+                    "    counted by QMA's translator; ChatGPT Settings > Usage has the plan's meter"
+                )
     lines.append(
         f"  background cap {percent(page.get('background_cap'))}: "
         f"{page.get('background_cap_note', '')}"
@@ -395,8 +402,10 @@ class Console:
     def __post_init__(self) -> None:
         self.view = View(self.term, self.color)
 
-    def call(self, method: str, path: str, body: Any = None) -> Any:
-        response = self.client.request(method, path, json=body)
+    def call(self, method: str, path: str, body: Any = None, *, wait: bool = False) -> Any:
+        """`wait` lifts the read timeout, for a call that can take minutes."""
+        timeout = httpx.Timeout(10.0, read=None) if wait else httpx.USE_CLIENT_DEFAULT
+        response = self.client.request(method, path, json=body, timeout=timeout)
         if response.status_code >= 400:
             try:
                 error = response.json().get("error", {})
@@ -728,9 +737,31 @@ class Console:
             self.call("POST", f"/api/sessions/{self.chat}/interrupt")
             self.say("  Asked the turn to stop.")
 
+    def login_chatgpt(self) -> None:
+        self.say("  Signing in to ChatGPT for QMA; the GPT probe may take a few minutes.")
+        status = self.call("POST", "/api/gpt/login", {"sign_in": False}, wait=True)
+        for line in status["lines"]:
+            self.say(f"  {line}")
+        if status["needs_sign_in"]:
+            reply = self.term.decide("  Open OpenAI's sign-in page to approve QMA? y/N > ")
+            if reply.strip().lower() not in ("y", "yes"):
+                self.say("  Not signed in to ChatGPT.")
+                return
+            self.say("  Approve QMA on OpenAI's page; this console carries on when it is done.")
+            status = self.call("POST", "/api/gpt/login", {"sign_in": True}, wait=True)
+            for line in status["lines"]:
+                self.say(f"  {line}")
+        if status["lane"] and not status["consent"]:
+            reply = self.term.decide(
+                "  Let Background and helper chats use your ChatGPT plan unattended? y/N > "
+            )
+            consent = reply.strip().lower() in ("y", "yes")
+            for line in self.call("POST", "/api/gpt/consent", {"consent": consent})["lines"]:
+                self.say(f"  {line}")
+
     def do_login(self, arg: str) -> None:
         if arg == "chatgpt":
-            self.say("  ChatGPT sign-in arrives with the GPT lane; it is not in this console yet.")
+            self.login_chatgpt()
             return
         cli = bundled_cli()
         env = dict(os.environ) | {"CLAUDE_CONFIG_DIR": str(self.home / "claude")}

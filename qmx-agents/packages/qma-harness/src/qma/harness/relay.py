@@ -1,9 +1,17 @@
-"""The loopback relay for key-provider traffic.
+"""The loopback relay for non-plan traffic: key providers and the GPT lane.
 
-A key chat's CLI gets `ANTHROPIC_BASE_URL` = this relay and `ANTHROPIC_AUTH_TOKEN` = its
-grant's per-launch secret. The relay checks the secret, stops any request that carries a Claude
-token, runs the family and tier guards on the requested and the served model, swaps in the real
-key from the OS keyring, applies the provider's wire quirks and forwards the stream.
+A key or GPT chat's CLI gets `ANTHROPIC_BASE_URL` = this relay and `ANTHROPIC_AUTH_TOKEN` = its
+grant's per-launch secret. The relay checks the secret and stops any request that carries a
+Claude token. Key lane: it runs the family and tier guards on the requested and the served
+model, swaps in the real key from the OS keyring, applies the provider's wire quirks and
+forwards the stream. GPT lane: it pins the tier, translates the request to OpenAI Responses
+with `qma.gpt.translate`, sends it with the ChatGPT sign-in's access token, checks the served
+model is a GPT model, and translates the stream back.
+
+The GPT lane opens only through `open_gpt_lane(ProbePassed, ...)`. Before a pass exists, probes
+P2 to P7 reach it through `probe_grant(ProbeRun, ...)`, a grant bound to one probe run and
+refused for a run that already had one. A GPT grant for an unattended chat needs the sign-in's
+stored background consent (SIWC terms, B17).
 
 What it is worth. The egress stop is a tripwire for plain-text Claude tokens, not a structural
 guarantee: an agent that encodes, splits or reverses a token gets past it, and a plan chat can
@@ -14,8 +22,8 @@ accounting: wire quirks, authoritative usage, the family guard, and keys that ne
 CLI env or a transcript by accident. It is not a key boundary against agent Bash, which can
 read `qmx/*` keyring entries as the same OS user.
 
-Plan traffic never comes here. `grant` accepts only a `KeyProvider`, and a relayed CLI runs in
-the relayed home, which holds no login.
+Plan traffic never comes here. `grant` accepts only a `KeyProvider` or the `GptPlan`, and a
+relayed CLI runs in the relayed home, which holds no login.
 
 - Binds 127.0.0.1 on an ephemeral port, never 0.0.0.0.
 - A request whose bearer is not a live grant gets 401 before the body is read. Only a counter
@@ -39,7 +47,8 @@ the relayed home, which holds no login.
 - A CLI that disconnects, or a revoked grant, stops the upstream request at once.
 
 Paths are matched without the query string, which is forwarded as sent: `POST /v1/messages`
-and `POST /v1/messages/count_tokens`. Anything else is 404.
+and `POST /v1/messages/count_tokens`. Anything else is 404. On the GPT lane `count_tokens` is a
+local estimate, since the route has no counting endpoint.
 """
 
 from __future__ import annotations
@@ -67,13 +76,18 @@ import httpx
 import keyring
 import uvicorn
 
+from qma.gpt import translate
+from qma.gpt.probe import ProbePassed, ProbeRun, translator_version
+from qma.gpt.siwc import SignInError, SiwcSession
 from qma.harness.home import SessionId
 from qma.harness.profiles import (
+    GptPlan,
     KeyProvider,
     ModelId,
     ProfileError,
     ProfileName,
     family_refusal,
+    gpt_refusal,
     resolve_model,
 )
 
@@ -124,6 +138,8 @@ START_WAIT_S: Final = 120.0
 STOP_WAIT_S: Final = 5.0
 CLIENT_GONE: Final = 499
 UPSTREAM_TIMEOUT: Final = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+PING_S: Final = 15.0
+"""A GPT stream silent this long gets an Anthropic `ping`, as Anthropic's own streams do."""
 
 GrantSecret = NewType("GrantSecret", str)
 """256 random bits, minted per CLI launch. Lives in relay memory and in one CLI's env. Any
@@ -149,12 +165,29 @@ class RelayGrant:
     base_url: str
     secret: GrantSecret
     session_id: SessionId
-    profile: KeyProvider
+    profile: KeyProvider | GptPlan
 
 
 class GrantRefused(RuntimeError):
-    """The relay will not serve this grant: a plan profile, a row that no longer validates, or
-    a keyring entry it cannot read."""
+    """The relay will not serve this grant: a plan profile, a row that no longer validates, a
+    keyring entry it cannot read, a GPT grant while the GPT lane is closed, a GPT grant for an
+    unattended chat without background consent, or a second probe grant for one probe run."""
+
+
+@dataclass(frozen=True)
+class GptRoute:
+    """What a GPT request needs: the sign-in whose access token it carries."""
+
+    session: SiwcSession
+
+
+@dataclass(frozen=True)
+class GptLane:
+    """The GPT lane is open for chats. Only `Relay.open_gpt_lane` builds one, from a
+    `ProbePassed` for the current translator version."""
+
+    passed: ProbePassed
+    route: GptRoute
 
 
 @dataclass(frozen=True)
@@ -207,6 +240,10 @@ class Reply:
 
 async def _once(data: bytes) -> AsyncGenerator[bytes]:
     yield data
+
+
+def _dumps(document: object) -> bytes:
+    return json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def _error(status: int, kind: str, message: str) -> Reply:
@@ -266,7 +303,16 @@ class Relay:
     """Tests only: an in-process upstream."""
     counters: Counters = field(default_factory=Counters)
     base_url: str = ""
+    gpt: GptLane | None = None
+    siwc: SiwcSession | None = None
+    """The one ChatGPT sign-in of this process, kept while the lane closes and reopens, so its
+    in-memory access token is never thrown away: OpenAI allows a refresh only near the end of
+    a token's hour."""
     _grants: dict[str, RelayGrant] = field(default_factory=dict[str, RelayGrant])
+    _probes: dict[str, GptRoute] = field(default_factory=dict[str, GptRoute])
+    """Probe grant secret -> route, while its run lasts."""
+    _probe_runs: set[str] = field(default_factory=set[str])
+    """Every probe run that has had its grant, so a run never gets a second one."""
     _streams: dict[asyncio.Task[None], RelayGrant] = field(
         default_factory=dict[asyncio.Task[None], RelayGrant]
     )
@@ -315,32 +361,85 @@ class Relay:
             raise
         return self
 
-    async def grant(self, session_id: SessionId, profile: ProfileName) -> RelayGrant:
+    async def grant(
+        self, session_id: SessionId, profile: ProfileName, *, unattended: bool = False
+    ) -> RelayGrant:
         """Mint a fresh secret bound to this session and the provider row as it is now. A
-        second grant for the same session revokes the first."""
+        second grant for the same session revokes the first. A GPT grant needs the GPT lane
+        open and, for an unattended chat, the sign-in's background consent."""
         try:
             found = self.profiles().get(profile)
         except ProfileError as error:
             raise GrantRefused(str(error)) from None
-        if not isinstance(found, KeyProvider):
-            raise GrantRefused(f"{profile} is the plan; plan traffic never passes the relay")
-        try:
-            await asyncio.to_thread(self.secrets, found.credential)
-        except Exception as error:
-            raise GrantRefused(_keyring_refusal(found.credential, error)) from None
+        match found:
+            case KeyProvider():
+                try:
+                    await asyncio.to_thread(self.secrets, found.credential)
+                except Exception as error:
+                    raise GrantRefused(_keyring_refusal(found.credential, error)) from None
+            case GptPlan():
+                if self.gpt is None:
+                    raise GrantRefused(
+                        "the GPT lane is closed: no GPT probe has passed for this translator "
+                        "version; type /login chatgpt"
+                    )
+                if unattended and not self.gpt.route.session.background_consent:
+                    raise GrantRefused(
+                        "a Background GPT chat needs your consent to use your ChatGPT plan "
+                        "unattended; /login chatgpt asks for it"
+                    )
+            case _:
+                raise GrantRefused(f"{profile} is the plan; plan traffic never passes the relay")
+        return await self._mint(session_id, found)
+
+    async def _mint(self, session_id: SessionId, profile: KeyProvider | GptPlan) -> RelayGrant:
         for older in [held for held in self._grants.values() if held.session_id == session_id]:
             await self.revoke(older)
         minted = RelayGrant(
-            self.base_url, GrantSecret(secrets.token_urlsafe(32)), session_id, found
+            self.base_url, GrantSecret(secrets.token_urlsafe(32)), session_id, profile
         )
         self._grants[minted.secret] = minted
         return minted
+
+    async def probe_grant(
+        self, run: ProbeRun, session: SiwcSession, profile: GptPlan
+    ) -> RelayGrant:
+        """A grant for probes P2 to P7 while the GPT lane may still be closed. Bound to one
+        `ProbeRun` (minted only by `qma.gpt.probe`) and revoked when the run ends, so a spent
+        grant answers 401. A run gets one grant only."""
+        if run.run_id in self._probe_runs:
+            raise GrantRefused(f"probe run {run.run_id} already had its grant")
+        self._probe_runs.add(run.run_id)
+        minted = await self._mint(SessionId(run.run_id), profile)
+        self._probes[minted.secret] = GptRoute(session)
+        return minted
+
+    async def open_gpt_lane(self, passed: ProbePassed, session: SiwcSession) -> GptLane:
+        """The only way to open the GPT lane for chats. The pass is keyed to `translate.py`'s
+        version hash, so a pass for a changed translator is refused."""
+        if passed.translator_version != translator_version():
+            raise GrantRefused("the GPT probe passed for another translator version; re-probe")
+        self.siwc = session
+        self.gpt = GptLane(passed, GptRoute(session))
+        return self.gpt
+
+    async def close_gpt_lane(self) -> None:
+        """Close the lane and revoke every GPT chat grant. Probe grants belong to their run.
+        Idempotent."""
+        self.gpt = None
+        for held in [
+            held
+            for held in self._grants.values()
+            if isinstance(held.profile, GptPlan) and held.secret not in self._probes
+        ]:
+            await self.revoke(held)
 
     async def revoke(self, grant: RelayGrant) -> None:
         """Drop exactly this grant, stop its in-flight streams, then close its session's
         journal writer. Idempotent."""
         if self._grants.get(grant.secret) == grant:
             del self._grants[grant.secret]
+            self._probes.pop(grant.secret, None)
         await self._stop([task for task, held in self._streams.items() if held == grant])
         if all(held.session_id != grant.session_id for held in self._grants.values()):
             await self._close_journal(grant.session_id)
@@ -352,6 +451,8 @@ class Relay:
     async def close(self) -> None:
         """Stop every stream, stop listening and close every journal writer. Idempotent."""
         self._grants.clear()
+        self._probes.clear()
+        self.gpt = None
         await self._stop(list(self._streams))
         if self._server is not None and self._task is not None:
             self._server.should_exit = True
@@ -477,20 +578,173 @@ class Relay:
         requested = document.get("model")
         if not isinstance(requested, str):
             return _error(400, "invalid_request_error", "the request names no model")
-        refusal = _routing_refusal(held.profile, document) or family_refusal(requested)
+        profile = held.profile
+        if isinstance(profile, GptPlan):
+            return await self._gpt(held, profile, path, document, requested)
+        refusal = _routing_refusal(profile, document) or family_refusal(requested)
         if refusal:
             self.counters.family += 1
             return await self._refuse(held, f"family guard: {refusal}")
-        pinned = resolve_model(held.profile, requested)
+        pinned = resolve_model(profile, requested)
         if pinned is None:
-            self.counters.tier += 1
-            return await self._refuse(
-                held, f"tier guard: {requested} is not one of {held.profile.name}'s tier models"
-            )
+            return await self._tier_refusal(held, requested)
         if pinned != requested:
             document["model"] = pinned
             body = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode()
-        return await self._forward(held, path, query, headers, body, pinned)
+        return await self._forward(held, profile, path, query, headers, body, pinned)
+
+    async def _tier_refusal(self, held: RelayGrant, requested: str) -> Reply:
+        self.counters.tier += 1
+        return await self._refuse(
+            held, f"tier guard: {requested} is not one of {held.profile.name}'s tier models"
+        )
+
+    def _gpt_route(self, held: RelayGrant) -> GptRoute | None:
+        if held.secret in self._probes:
+            return self._probes[held.secret]
+        return None if self.gpt is None else self.gpt.route
+
+    async def _gpt(
+        self,
+        held: RelayGrant,
+        profile: GptPlan,
+        path: str,
+        document: dict[str, object],
+        requested: str,
+    ) -> Reply:
+        """The GPT lane: tier pin, translation, the sign-in's token, then the stream back."""
+        route = self._gpt_route(held)
+        if route is None:
+            self.counters.bearer += 1
+            return _error(401, "authentication_error", "the GPT lane is closed")
+        pinned = resolve_model(profile, requested)
+        if pinned is None:
+            return await self._tier_refusal(held, requested)
+        if path != MESSAGES:
+            count = {"input_tokens": translate.estimate_tokens(document)}
+            return Reply(200, [("content-type", "application/json")], _once(_dumps(count)))
+        try:
+            translation = translate.to_responses(document, model=pinned)
+        except translate.RefusedRequest as error:
+            return _error(400, "invalid_request_error", str(error))
+        try:
+            token = await route.session.access_token()
+        except SignInError as error:
+            await self._alert(held.session_id, f"ChatGPT sign-in: {error}")
+            return _error(401, "authentication_error", f"ChatGPT sign-in: {error}")
+        if self._client is None:
+            raise RuntimeError("the relay is not started")
+        request = self._client.build_request(
+            "POST",
+            f"{route.session.api}/responses",
+            headers={
+                "authorization": f"Bearer {token}",
+                "content-type": "application/json",
+                "accept": "text/event-stream",
+            },
+            content=_dumps(translation.body),
+        )
+        del token
+        self.counters.upstream += 1
+        try:
+            response = await self._client.send(request, stream=True)
+        except httpx.HTTPError as error:
+            await self.tee(held, path, 502, pinned, {})
+            return _error(502, "api_error", f"ChatGPT did not answer: {type(error).__name__}")
+        except asyncio.CancelledError:
+            await self.tee(held, path, CLIENT_GONE, pinned, {})
+            raise
+        upstream = _Upstream(self, held, path, response, pinned)
+        state = translate.StreamState(translation, pinned)
+        try:
+            if response.status_code != 200:
+                data = await response.aread()
+                parsed = _json(data)
+                body = cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
+                error = body.get("error")
+                found = cast("dict[str, Any]", error) if isinstance(error, dict) else {}
+                status, kind, message = translate.map_error(response.status_code, found)
+                await upstream.finish()
+                return _error(status, kind, message)
+            events = self._gpt_events(upstream, state)
+            if document.get("stream") is True:
+                headers = [("content-type", "text/event-stream"), ("cache-control", "no-cache")]
+                return Reply(200, headers, events, upstream.finish)
+            async for _ in events:
+                pass
+            await upstream.finish()
+            if state.error is not None:
+                return _error(*state.error)
+            return Reply(
+                200, [("content-type", "application/json")], _once(_dumps(state.message()))
+            )
+        except BaseException:
+            await upstream.finish()
+            raise
+
+    async def _gpt_events(
+        self, upstream: _Upstream, state: translate.StreamState
+    ) -> AsyncGenerator[bytes]:
+        """Responses SSE in, Anthropic SSE out. The served model must be a GPT model before
+        any output reaches the CLI. Usage is taken from `response.completed`."""
+        lines: asyncio.Queue[str | None] = asyncio.Queue()
+        broken: list[str] = []
+
+        async def pump() -> None:
+            """Reads in a task of its own, so a ping timeout cancels only a queue wait and
+            never the upstream read."""
+            try:
+                async for line in upstream.response.aiter_lines():
+                    lines.put_nowait(line)
+            except httpx.HTTPError as error:
+                broken.append(type(error).__name__)
+            finally:
+                lines.put_nowait(None)
+
+        reader = asyncio.create_task(pump())
+        block: list[str] = []
+        try:
+            while not state.ended:
+                try:
+                    async with asyncio.timeout(PING_S if state.started else START_WAIT_S):
+                        line = await lines.get()
+                except TimeoutError:
+                    if not state.started:
+                        yield await self._stop_stream(
+                            upstream, f"ChatGPT sent nothing in {START_WAIT_S:.0f} s"
+                        )
+                        return
+                    yield translate.SseEvent("ping", {"type": "ping"}).encode()
+                    continue
+                if line is None:
+                    break
+                if line:
+                    block.append(line)
+                    continue
+                for event in translate.parse_sse(block):
+                    out = state.feed(event)
+                    refusal = None if state.served is None else gpt_refusal(state.served)
+                    if refusal:
+                        self.counters.family += 1
+                        yield await self._stop_stream(
+                            upstream, f"family guard: gpt served {refusal}"
+                        )
+                        return
+                    for sse in out:
+                        yield sse.encode()
+                block = []
+            if not state.ended:
+                cut = f" ({broken[0]})" if broken else ""
+                yield await self._stop_stream(
+                    upstream, f"the ChatGPT stream ended without response.completed{cut}"
+                )
+        finally:
+            reader.cancel()
+            await asyncio.wait({reader})
+            upstream.served = state.served or upstream.served
+            upstream.usage = dict(state.usage)
+            if state.error is not None:
+                upstream.journal_status = state.error[0]
 
     async def _token_bearer(self) -> Reply:
         self.counters.egress += 1
@@ -509,6 +763,7 @@ class Relay:
     async def _forward(
         self,
         held: RelayGrant,
+        profile: KeyProvider,
         path: str,
         query: str,
         headers: Mapping[str, str],
@@ -517,7 +772,6 @@ class Relay:
     ) -> Reply:
         if self._client is None:
             raise RuntimeError("the relay is not started")
-        profile = held.profile
         try:
             key = await asyncio.to_thread(self.secrets, profile.credential)
         except Exception as error:
@@ -839,7 +1093,7 @@ def _error_event(message: str) -> bytes:
     return b"event: error\ndata: " + json.dumps(error).encode() + b"\n\n"
 
 
-def guard_served_model(profile: KeyProvider, served: str) -> str | None:
+def guard_served_model(profile: KeyProvider | GptPlan, served: str) -> str | None:
     """A refusal reason for `message_start.message.model`, or None. The family test only:
     vendors report dated or canonical ids that differ from the requested one."""
     refusal = family_refusal(served)

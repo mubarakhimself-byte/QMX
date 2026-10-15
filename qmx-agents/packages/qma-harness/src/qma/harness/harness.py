@@ -19,8 +19,9 @@ import contextlib
 import functools
 import logging
 import os
+import webbrowser
 from collections import Counter
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,6 +32,15 @@ from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 from qmx_tools.service import DomainContext
 
+from qma.gpt import siwc
+from qma.gpt.probe import (
+    ProbeFailed,
+    ProbePassed,
+    ProbeRun,
+    run_probe,
+    stored_result,
+    translator_version,
+)
 from qma.harness.chat import (
     Answer,
     AnswerStatus,
@@ -73,6 +83,7 @@ from qma.harness.launch import (
     LaunchRefused,
     PermissionMode,
     PlanLaunch,
+    RelayedLaunch,
     TestMode,
     assert_scrubbed,
     launch_env,
@@ -94,16 +105,21 @@ from qma.harness.money import (
 )
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import (
+    GPT,
     PLAN,
+    TIERS,
     ClaudePlan,
+    GptPlan,
     KeyProvider,
+    Profile,
     ProfileError,
     Profiles,
+    gpt_refusal,
     parse_profiles,
     resolve_model,
 )
 from qma.harness.project import redact
-from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
+from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
 from qma.harness.tools import DelegateRefused, keyring_refs, secret_files
 from qma.harness.usage import (
     BackgroundCap,
@@ -218,7 +234,9 @@ class Harness:
            does not stop `open`, so `/api/doctor` can name the reason; every launch re-checks.
         4. A record left "running" gets a `needs_you` block and turns "idle", and the lock
            file a crash left on its run journal goes; running this twice changes nothing.
-        5. Start the relay on 127.0.0.1:0 with no grants."""
+        5. Start the relay on 127.0.0.1:0 with no grants.
+        6. Open the relay's GPT lane only if a `ProbePassed` is stored for this translator
+           version and a ChatGPT sign-in is stored."""
         assert_scrubbed(os.environ)
         limit = control.settings_get("budgets").get("agent_memory_mb")
         with contextlib.suppress(LaunchRefused):
@@ -258,6 +276,9 @@ class Harness:
         except BaseException:
             procs.close()
             raise
+        reason = await open_gpt_lane(relay, home)
+        if reason:
+            log.info("the GPT lane stays closed: %s", reason)
         watch = PlanWatch(UsageLedger(path=home.state_dir / "plan-usage.json"))
         deps = ChatDeps(
             home=home,
@@ -288,6 +309,7 @@ class Harness:
             raise LaunchRefused(str(error)) from None
         if resolve_model(profile, spec.model) is None:
             raise LaunchRefused(f"{spec.profile} cannot run the model {spec.model!r}")
+        await self._gpt_ready(profile)
         parent = spec.kind.parent if isinstance(spec.kind, Child) else None
         created = control.sessions_create(
             SessionInput(title=spec.title, origin="qma", parent_id=parent)
@@ -436,6 +458,128 @@ class Harness:
             except Exception:
                 log.exception("reaping idle chats failed; trying again next tick")
 
+    async def _gpt_ready(self, profile: Profile) -> None:
+        """A GPT chat starts or switches only with a stored `ProbePassed` for the translator as
+        it is on disk now. Without one the lane closes, so no grant is minted either."""
+        if not isinstance(profile, GptPlan):
+            return
+        relay, home = self._deps.relay, self._deps.home
+        stored = await asyncio.to_thread(stored_result, home.state_dir, translator_version())
+        if not isinstance(stored, ProbePassed):
+            await relay.close_gpt_lane()
+            raise LaunchRefused(
+                "GPT needs a passed GPT probe for this translator version; type /login chatgpt"
+            )
+        if relay.gpt is None or relay.gpt.passed != stored:
+            reason = await open_gpt_lane(relay, home)
+            if reason:
+                raise LaunchRefused(f"the GPT lane is closed: {reason}")
+
+    async def gpt_login(
+        self, *, sign_in: bool, open_page: Callable[[str], object] = webbrowser.open
+    ) -> GptStatus:
+        """`/login chatgpt`. Uses the stored sign-in when it still refreshes; opens OpenAI's page
+        only when `sign_in` is set. Adds a `gpt` row from `/v1/models` if none exists, runs the
+        GPT probe unless a pass is stored for this translator version, then opens the lane."""
+        relay, home = self._deps.relay, self._deps.home
+        lines: list[str] = []
+        session = await chatgpt_session(relay)
+        if session is not None:
+            try:
+                await session.access_token()
+                lines.append("Signed in to ChatGPT for QMA (stored sign-in).")
+            except siwc.SignInError as error:
+                lines.append(f"The stored ChatGPT sign-in did not refresh: {error}")
+                session = None
+        if session is None:
+            if not sign_in:
+                return GptStatus(lane=False, consent=False, lines=tuple(lines), needs_sign_in=True)
+            try:
+                session = await siwc.sign_in(open_page=open_page)
+            except siwc.SignInError as error:
+                lines.append(f"ChatGPT sign-in failed: {error}")
+                return GptStatus(lane=False, consent=False, lines=tuple(lines))
+            lines.append("Signed in to ChatGPT for QMA.")
+        relay.siwc = session
+        profile = await self._gpt_profile(session, lines)
+        if profile is None:
+            return GptStatus(lane=False, consent=session.background_consent, lines=tuple(lines))
+        stored = await asyncio.to_thread(stored_result, home.state_dir, translator_version())
+        if isinstance(stored, ProbePassed):
+            lines.append(
+                f"The GPT probe passed for this translator at {stored.at:%Y-%m-%d %H:%M} UTC."
+            )
+        else:
+            lines.append(f"Running the GPT probe on {profile.tiers.opus}...")
+            result = await self.probe_gpt(session, profile, say=lines.append)
+            if isinstance(result, ProbeFailed):
+                lines.append(f"The GPT probe failed at {result.step}; GPT stays off.")
+                return GptStatus(lane=False, consent=session.background_consent, lines=tuple(lines))
+        reason = await open_gpt_lane(relay, home)
+        lines.append(
+            f"The GPT lane is closed: {reason}" if reason else "GPT is ready: /provider gpt."
+        )
+        return GptStatus(lane=not reason, consent=session.background_consent, lines=tuple(lines))
+
+    async def _gpt_profile(self, session: siwc.SiwcSession, lines: list[str]) -> GptPlan | None:
+        """The `gpt` row, written with every tier on the first GPT model `/v1/models` lists when
+        the row is missing."""
+        control = self._deps.control
+        rows = dict(await asyncio.to_thread(control.settings_get, "providers"))
+        if GPT not in rows:
+            try:
+                listed = await siwc.list_models(session)
+            except siwc.SignInError as error:
+                lines.append(f"Could not list the ChatGPT models: {error}")
+                return None
+            model = next((slug for slug in listed if gpt_refusal(slug) is None), None)
+            if model is None:
+                lines.append(f"ChatGPT lists no GPT model: {listed}")
+                return None
+            rows[GPT] = {"tiers": dict.fromkeys(TIERS, model)}
+            await asyncio.to_thread(control.settings_put, "providers", rows)
+            lines.append(f"Added the gpt provider row on {model}.")
+        try:
+            found = (await asyncio.to_thread(self._deps.relay.profiles)).get(GPT)
+        except ProfileError as error:
+            lines.append(str(error))
+            return None
+        return found if isinstance(found, GptPlan) else None
+
+    async def probe_gpt(
+        self,
+        session: siwc.SiwcSession,
+        profile: GptPlan,
+        *,
+        say: Callable[[str], None],
+    ) -> ProbePassed | ProbeFailed:
+        """Runs the GPT probe through a probe grant and stores its result."""
+        home = self._deps.home
+        door = ProbeDoor(self._deps.relay, home, session, profile)
+        return await run_probe(
+            session,
+            door,
+            model=profile.tiers.opus,
+            state_dir=home.state_dir,
+            workspace=home.workspaces_dir / "gpt-probe",
+            say=say,
+        )
+
+    async def gpt_consent(self, consent: bool) -> GptStatus:
+        """Store the operator's answer on background use of his ChatGPT plan. The open lane's
+        own session is updated, so the next grant reads the new answer."""
+        lane = self._deps.relay.gpt
+        session = await chatgpt_session(self._deps.relay)
+        if session is None:
+            return GptStatus(lane=False, consent=False, lines=("No ChatGPT sign-in is stored.",))
+        await session.set_background_consent(consent)
+        state = "may" if consent else "may not"
+        return GptStatus(
+            lane=lane is not None,
+            consent=consent,
+            lines=(f"Background and helper chats {state} use your ChatGPT plan.",),
+        )
+
     async def _budgets(self) -> Budgets:
         return parse_budgets(await asyncio.to_thread(self._deps.control.settings_get, "budgets"))
 
@@ -461,6 +605,7 @@ class Harness:
         return [
             *usage_lines(self._ledger),
             *money.lines(),
+            await asyncio.to_thread(gpt_line, relay, self._deps.home),
             DoctorLine(
                 "relay",
                 True,
@@ -524,6 +669,7 @@ class Harness:
             raise LaunchRefused(str(error)) from None
         if resolve_model(profile, new.model) is None:
             raise LaunchRefused(f"{new.profile} cannot run the model {new.model!r}")
+        await self._gpt_ready(profile)
         stop = self._ledger.hard_stop()
         if new.profile == PLAN and old.profile != PLAN and stop is not None:
             raise LaunchRefused(f"plan use is stopped: {stop}")
@@ -608,6 +754,87 @@ class Harness:
                 raise UnknownChat(chat)
             found = self._chats[chat] = Chat(record, self._deps)
         return found
+
+
+@dataclass(frozen=True)
+class GptStatus:
+    """What `/login chatgpt` and the consent answer report to the console."""
+
+    lane: bool
+    consent: bool
+    lines: tuple[str, ...]
+    needs_sign_in: bool = False
+
+
+@dataclass
+class ProbeDoor:
+    """`qma.gpt.probe`'s door into the relay: a probe grant per run, as a relayed launch env."""
+
+    relay: Relay
+    home: QmxHome
+    session: siwc.SiwcSession
+    profile: GptPlan
+    grants: dict[str, RelayGrant] = field(default_factory=dict[str, RelayGrant])
+
+    async def open(self, run: ProbeRun) -> Mapping[str, str]:
+        grant = await self.relay.probe_grant(run, self.session, self.profile)
+        self.grants[run.run_id] = grant
+        env = launch_env(RelayedLaunch(grant), home=self.home, session_id=grant.session_id, cap="")
+        return {name: value for name, value in env.items() if not name.startswith("QMA_")}
+
+    async def close(self, run: ProbeRun) -> None:
+        grant = self.grants.pop(run.run_id, None)
+        if grant is not None:
+            await self.relay.revoke(grant)
+
+
+async def chatgpt_session(relay: Relay) -> siwc.SiwcSession | None:
+    """The relay's sign-in, loaded from the keyring the first time."""
+    if relay.siwc is None:
+        relay.siwc = await asyncio.to_thread(siwc.load)
+    return relay.siwc
+
+
+async def open_gpt_lane(relay: Relay, home: QmxHome) -> str:
+    """Open the relay's GPT lane from what is stored, or close it. Returns why it is closed,
+    or "" when open. Reads the keyring only when a pass is stored."""
+    stored = await asyncio.to_thread(stored_result, home.state_dir, translator_version())
+    if not isinstance(stored, ProbePassed):
+        await relay.close_gpt_lane()
+        return "no GPT probe has passed for this translator version"
+    try:
+        session = await chatgpt_session(relay)
+    except Exception as error:
+        await relay.close_gpt_lane()
+        return f"the ChatGPT sign-in could not be read: {type(error).__name__}"
+    if session is None:
+        await relay.close_gpt_lane()
+        return "no ChatGPT sign-in is stored"
+    await relay.open_gpt_lane(stored, session)
+    return ""
+
+
+def gpt_line(relay: Relay, home: QmxHome) -> DoctorLine:
+    lane = relay.gpt
+    if lane is not None:
+        session = lane.route.session
+        consent = "yes" if session.background_consent else "no"
+        stored = f"; {session.store_error}" if session.store_error else ""
+        return DoctorLine(
+            "gpt lane",
+            session.store_error is None,
+            f"open on {lane.passed.model}; probe passed {lane.passed.at:%Y-%m-%d %H:%M} UTC for "
+            f"translator {lane.passed.translator_version}; background consent {consent}{stored}",
+        )
+    version = translator_version()
+    match stored_result(home.state_dir, version):
+        case ProbeFailed(step=step, detail=detail):
+            why = f"the GPT probe failed at {step}: {detail}"
+        case ProbePassed():
+            why = "no ChatGPT sign-in is stored"
+        case None:
+            why = f"no GPT probe has passed for translator {version}; type /login chatgpt"
+    return DoctorLine("gpt lane", False, f"closed: {why}")
 
 
 def broker_inventory(control: ControlService) -> tuple[frozenset[str], frozenset[str]]:
