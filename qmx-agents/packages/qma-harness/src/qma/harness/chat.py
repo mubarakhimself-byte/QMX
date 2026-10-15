@@ -690,8 +690,6 @@ class Chat:
                     await live.client.set_model(quote.new.model)
                 case Step.SET_EFFORT:
                     await self._set_effort(live, str(quote.new.effort))
-                case Step.RELAUNCH:
-                    pass
 
     async def _set_effort(self, live: _Live, effort: str) -> None:
         """`/effort` replies with a synthetic result and no model call (HP0 S37)."""
