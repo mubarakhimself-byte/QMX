@@ -23,7 +23,16 @@ from typing import Any, cast
 
 import httpx
 import uvicorn
-from common import SCRATCH, Log, Session, put_providers, session_blocks, throwaway_home, wait_turn
+from common import (
+    SCRATCH,
+    Log,
+    Session,
+    last_event,
+    put_providers,
+    session_blocks,
+    throwaway_home,
+    wait_turn,
+)
 from fake_model import FakeModel, Turn
 from money_lane import direct_row
 
@@ -133,6 +142,8 @@ class Answerer:
     chat: str
     policy: Policy
     log: Log | None = None
+    after: int = 0
+    """The chat's last event id before this turn; only asks written after it count."""
     answered: list[Answered] = field(default_factory=list[Answered])
     asks: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     task: asyncio.Task[None] | None = None
@@ -151,7 +162,7 @@ class Answerer:
         control = self.host.session.control
         seen: set[int] = set()
         while True:
-            for block in await asyncio.to_thread(session_blocks, control, self.chat):
+            for block in await asyncio.to_thread(session_blocks, control, self.chat, self.after):
                 content = block["content"]
                 if content.get("state") != "asking" or block["seq"] in seen:
                     continue
@@ -222,7 +233,8 @@ async def answered_turn(
     from qma.harness import OperatorText  # noqa: PLC0415
 
     session = host.session
-    answerer = Answerer(host, chat, policy, log).start()
+    mark = await asyncio.to_thread(last_event, session.control, chat)
+    answerer = Answerer(host, chat, policy, log, mark).start()
     try:
         await session.harness.send(chat, OperatorText(prompt))
         record = await wait_turn(session.home, chat)

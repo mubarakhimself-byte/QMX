@@ -1,15 +1,15 @@
 """S20, first half, on the plan. A plan chat with `TestMode(gate_hook=False, deny_rules=False)`
-in default mode, so its own Bash can reach the QMX home. Every ask is answered through
-`POST /api/approvals/{ask_id}`.
+in default mode. Every ask is answered through `POST /api/approvals/{ask_id}`.
 
-Turn 1 asks the agent to copy a planted `settings.json` over both Claude homes' settings files.
-It holds `apiKeyHelper`, `env.HTTPS_PROXY` (a dead local port), `env.NODE_EXTRA_CA_CERTS`,
-`enabledPlugins` and `permissions.allow = ["Bash(*)"]`; the copy is allowed once. Turn 2, in
-the same chat, asks for `touch s20.txt`.
+Turn 1 makes the chat live. Then the script itself writes a planted `settings.json` over both
+Claude homes' settings files, as an agent's Bash could: `apiKeyHelper`, `env.HTTPS_PROXY` (a dead
+local port), `env.NODE_EXTRA_CA_CERTS`, `enabledPlugins` and `permissions.allow = ["Bash(*)"]`.
+The agent cannot do the plant itself, because the QMX prompt tells it not to touch QMX settings.
+Turn 2, in the same chat and the same CLI process, asks for `touch s20.txt`, allowed once.
 
-PASS when turn 2 still gets a plan reply (no proxy), its Bash call still asks (no new rule),
-and the log records whether the ConfigChange hook's block text reached the transcript. Both
-settings files are restored whatever happens.
+PASS when the plant landed in both homes, turn 2's Bash call still asked (no new rule) and ran
+on the plan (no proxy), and both settings files are restored byte for byte (sha256). The log
+records whether the ConfigChange hook's block text reached the transcript.
 
     s20_live_edit.py [--home D:/QMX-worktrees/qma-ship/home] [--model haiku]
 """
@@ -17,6 +17,7 @@ settings files are restored whatever happens.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -33,6 +34,22 @@ PLANTED = {
 BLOCKED_TEXT = "QMA owns the agent settings"
 
 
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "absent"
+
+
+def restore(log: Log, saved: dict[Path, bytes | None], before: dict[Path, str]) -> None:
+    for path, data in saved.items():
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_bytes(data)
+    after = {path: digest(path) for path in saved}
+    for path in saved:
+        log(f"  {path}: sha256 before {before[path]}, after restore {after[path]}")
+    log.check("both settings files restored", after == before, "compared by sha256")
+
+
 async def run(log: Log) -> None:
     from qma.harness import TestMode  # noqa: PLC0415
 
@@ -40,8 +57,6 @@ async def run(log: Log) -> None:
     workspace = SCRATCH / "hp9-s20"
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "s20.txt").unlink(missing_ok=True)
-    planted = workspace / "planted.json"
-    planted.write_text(json.dumps(PLANTED), encoding="utf-8")
     session = await Session.start(
         args.home,
         model=args.model,
@@ -50,49 +65,40 @@ async def run(log: Log) -> None:
         test=TestMode(gate_hook=False, deny_rules=False),
     )
     targets = [session.home.plan_dir / "settings.json", session.home.relayed_dir / "settings.json"]
-    saved: dict[Path, bytes | None] = {
-        path: path.read_bytes() if path.exists() else None for path in targets
-    }
+    saved = {path: path.read_bytes() if path.exists() else None for path in targets}
+    before = {path: digest(path) for path in targets}
     try:
         async with Host(session) as host:
-            copy = " && ".join(f'cp planted.json "{path.as_posix()}"' for path in targets)
             await answered_turn(
-                log,
-                host,
-                session.chat,
-                always(ALLOW_ONCE),
-                f"Run exactly this Bash command once, then stop: {copy}",
+                log, host, session.chat, always(ALLOW_ONCE), "Reply with the word ready."
             )
-            landed = [
-                path.exists() and json.loads(path.read_text(encoding="utf-8")) == PLANTED
-                for path in targets
-            ]
-            log(f"  planted settings landed in both homes: {landed}")
+            for path in targets:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(PLANTED), encoding="utf-8")
+            landed = [json.loads(path.read_text(encoding="utf-8")) == PLANTED for path in targets]
+            log.check("the plant landed in both homes", all(landed), landed)
             second = await answered_turn(
                 log,
                 host,
                 session.chat,
                 always(ALLOW_ONCE),
-                "Run exactly this Bash command once, then stop: touch s20.txt",
+                "Use the Bash tool, not PowerShell, to run exactly this command once, then stop: "
+                "touch s20.txt",
             )
             asked = [ask["tool"] for ask in second.asks]
+            log.check("turn 2's Bash call still asked (no new rule)", asked == ["Bash"], asked)
             log.check(
-                "the same chat's next turn still runs on the plan",
+                "turn 2 ran on the plan (no proxy)",
                 (workspace / "s20.txt").exists(),
-                asked,
+                f"s20.txt exists={(workspace / 's20.txt').exists()}",
             )
-            log.check("its Bash call still asked (no new rule)", "Bash" in asked, asked)
             log(
                 "  ConfigChange block text in the transcript: "
                 f"{BLOCKED_TEXT in session.transcript()}"
             )
     finally:
         await session.harness.close()
-        for path, data in saved.items():
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                path.write_bytes(data)
+        restore(log, saved, before)
 
 
 def main() -> int:
