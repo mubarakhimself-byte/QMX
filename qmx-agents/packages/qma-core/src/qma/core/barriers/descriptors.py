@@ -219,7 +219,6 @@ def name_money_act(name: str) -> str | None:
 
 
 _REACH: Final = 3
-"""Words a description's verb may stand before its object (`Places a market order`)."""
 
 
 def description_money_act(text: str) -> str | None:

@@ -241,7 +241,6 @@ BROKER_ACTS = [
     "mcp__broker__order_update",
     "mcp__ext__placeorder",
 ]
-"""F3 to F7 of the HP8 verify at e4efead9, then the rest of its 201-row table."""
 
 BROKER_READS = [
     "list_orders",

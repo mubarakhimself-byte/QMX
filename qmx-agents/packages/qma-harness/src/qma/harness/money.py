@@ -418,8 +418,6 @@ def _bases(expanded: str, *, cwd: str, rules: GateRules) -> list[str]:
     options = [match.group(1) for match in FOLDER_OPTION.finditer(expanded)]
     home = rules.variables.get("HOME", "/")
     targets = [target.strip("'\"") for target in (*moves, *options)]
-    if not targets and not TO_HOME.search(expanded):
-        return [cwd]
     bases = [cwd, home] if moves or TO_HOME.search(expanded) else [cwd]
     for target in targets:
         bases += [
