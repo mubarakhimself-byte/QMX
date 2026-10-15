@@ -33,8 +33,8 @@ from qma.harness.home import (
 from qma.harness.launch import PLAN, ChatConfig, Child, Interactive, LaunchRefused
 from qma.harness.routes import control_service, router
 
-TOKEN = "test-token"
-HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+BEARER = "test-token"
+HEADERS = {"Authorization": f"Bearer {BEARER}"}
 LAUNCHER = Path("D:/venv/Scripts/qma-cli-launcher.exe")
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
 
@@ -175,7 +175,7 @@ def test_the_settings_door_refuses_a_forbidden_key_and_leaves_the_file_alone(
 ) -> None:
     control = control_service(home)
     extra = router(home, control, scrubbed=(), keep=())
-    with TestClient(create_app(control, TOKEN, extra_routers=[extra])) as rest:
+    with TestClient(create_app(control, BEARER, extra_routers=[extra])) as rest:
         allowed = {"permissions": {"allow": ["Bash(git status)"]}}
         assert rest.put("/api/claude-settings", json=allowed, headers=HEADERS).json() == allowed
         before = (home.root / "settings.toml").read_text(encoding="utf-8")
@@ -332,7 +332,7 @@ def test_a_whole_section_put_keeps_remembered_rules_unless_it_names_them(
     remember_rule(control, "Bash(npm test)", home.root / "ws")
     remembered = {workspace_key(home.root / "ws"): {"allow": ["Bash(npm test)"]}}
     extra = router(home, control, scrubbed=(), keep=())
-    with TestClient(create_app(control, TOKEN, extra_routers=[extra])) as rest:
+    with TestClient(create_app(control, BEARER, extra_routers=[extra])) as rest:
         allowed = {"permissions": {"allow": ["Read"]}}
         rest.put("/api/claude-settings", json=allowed, headers=HEADERS)
         assert rest.get("/api/claude-settings", headers=HEADERS).json() == {
@@ -488,6 +488,7 @@ def test_doctor_shows_hooks_as_structure_and_hides_every_operator_value(
     _throwaway_home(monkeypatch, tmp_path)
     ensure_homes(home)
     control = control_service(home)
+    quoted = "'csecret3'"
     hooks: list[dict[str, object]] = [
         {
             "type": "http",
@@ -498,7 +499,7 @@ def test_doctor_shows_hooks_as_structure_and_hides_every_operator_value(
         },
         {
             "type": "command",
-            "command": "notify --secret='csecret3'",
+            "command": f"notify --secret={quoted}",
             "args": ["--token", "asecret4"],
         },
         {
