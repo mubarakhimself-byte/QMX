@@ -6,7 +6,7 @@ Status on 2026-10-16: **waiting for the operator.** The checks that need him are
 
 ## Live checks: `run_all.py`
 
-`scripts/live/qma/run_all.py` runs every `s*.py` check in DESIGN section 5 order and prints one table. It ran at HP17 head 26e61f94, on Windows, on the ship home's plan login on haiku, with a fresh scratch folder (`--scratch D:/Temp/qma-live-hp17`). OpenRouter turns shared one spend ledger capped at $0.045. The logs are in `D:/QMX-worktrees/qma-ship/evidence/hp17/`, and each check's raw output is in `run_all/<check>.out` there.
+`scripts/live/qma/run_all.py` runs every `s*.py` check in DESIGN section 5 order and prints one table. It ran at HP17 head 26e61f94, on Windows, on the ship home's plan login on haiku, with a fresh scratch folder (`--scratch D:/Temp/qma-live-hp17`). OpenRouter turns shared one spend ledger capped at $0.045. The logs are in `D:/QMX-worktrees/qma-ship/evidence/hp17/`, and each check's raw output is in `run_all/<check>.out` there. Every path below that starts with `evidence/` is under `D:/QMX-worktrees/qma-ship/`.
 
 Run 2:
 
@@ -109,9 +109,9 @@ Run 2 above gave 69 PASS, 3 FAIL and 2 SKIP in 22.5 minutes, inside the 60-minut
 - **S27: SKIP.** Only the operator runs it (item 9 below).
 - **S36: SKIP.** It needs a sonnet plan turn at effort `max`, and its spend guard prices the one Kimi turn at $0.0502, over tonight's $0.05 OpenRouter cap. HP12 measured it (`evidence/hp12/owner-hp12-s36.log`: PASS). Rerun it with a higher `QMA_SPEND_BUDGET` when that spend is fine.
 
-Two rows are flaky:
+Two passing rows need a note:
 
-- **S12 bash** passed in run 2 and failed in run 1. Sometimes Git Bash's `sleep.exe` outlives an interrupt by more than 5 s, until the chat closes. HP9 logged it as a low.
+- **S12 bash** is flaky. It passed in run 2 and failed in run 1. Sometimes Git Bash's `sleep.exe` outlives an interrupt by more than 5 s, until the chat closes. HP9 logged it as a low.
 - **S10 meter** passes because DESIGN S10 only asks to record whether `/usage` reaches Python. Tonight it did not. The CLI's `/usage` reply no longer holds a "Current session: N% used" line, so `Harness.meter` gets no reading from it. Plan rate-limit events still give the five-hour reading, so the usage page and the background cap keep working.
 
 Seven scripts were updated so they match what later PRs built. S3 now asks for a `claude-` model id and names WebFetch. S4 seeds its README. S8 expects tool search off on OpenRouter. S10 reads `/doctor` lines. S21d and S35u answer their asks through the approvals route. S24 counts only its own rows. After run 2, S35u's check was narrowed to the weather tool's own ask, and it passed again (`evidence/hp17-retry/hp17-retry-s35u.log`). Lane 1 (`evidence/hp17/hp17-regression.log`) compares each check's last verdict in the stack's own evidence with run 2. 74 of 84 logs agree, and the log explains each of the other ten.
