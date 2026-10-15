@@ -975,6 +975,10 @@ MALFORMED_START = "the provider sent a malformed message_start"
             + raw_event("message_delta", {"type": "message_delta", "usage": "x"}),
             "the provider sent a malformed message_delta",
         ),
+        (
+            raw_event(None, {"type": ["message_start"]}) + sse(TEXT),
+            "the provider sent an event whose type is not a string",
+        ),
     ],
     ids=[
         "message-not-object",
@@ -984,6 +988,7 @@ MALFORMED_START = "the provider sent a malformed message_start"
         "named-start-typeless",
         "name-type-mismatch",
         "delta-usage-not-object",
+        "type-not-string",
     ],
 )
 def test_a_malformed_stream_ends_in_an_error_event_an_alert_and_one_row(
@@ -1029,7 +1034,44 @@ def test_a_stale_revoke_of_a_replaced_grant_leaves_the_new_one_serving() -> None
     run(check)
 
 
-def test_a_stream_with_no_message_start_is_stopped_at_120_seconds() -> None:
+def test_a_json_reply_whose_usage_is_not_an_object_still_answers_and_journals() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"model": "kimi-k3", "usage": "x"})
+
+    async def check(rig: Rig) -> None:
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", body(), bearer=grant.secret)
+        assert (answer.status_code, answer.json()) == (200, {"model": "kimi-k3", "usage": "x"})
+        assert [(row.status, row.input_tokens) for row in rig.usage] == [(200, 0)]
+
+    run(check, handler=handler)
+
+
+def test_close_waits_for_a_row_whose_writer_is_still_opening() -> None:
+    async def check(rig: Rig) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        def slow_open(session: SessionId) -> Writer:
+            entered.set()
+            release.wait(5)
+            return rig.journals.open(session)
+
+        rig.relay.journal = slow_open
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = asyncio.create_task(rig.post("/v1/messages", body(), bearer=grant.secret))
+        await asyncio.to_thread(entered.wait, 5)
+        threading.Timer(0.3, release.set).start()
+        await asyncio.wait_for(rig.relay.close(), 10)
+        assert (rig.journals.opened, rig.journals.closed, len(rig.usage)) == ([CHAT], [CHAT], 1)
+        with contextlib.suppress(httpx.HTTPError):
+            await answer
+
+    run(check)
+
+
+def test_a_stream_with_no_message_start_is_stopped_at_120_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     closed = asyncio.Event()
 
     class Silent(httpx.AsyncByteStream):
@@ -1047,7 +1089,7 @@ def test_a_stream_with_no_message_start_is_stopped_at_120_seconds() -> None:
         loop = asyncio.get_running_loop()
         real = loop.time
         skew = [0.0]
-        loop.time = lambda: real() + skew[0]  # type: ignore[method-assign]
+        monkeypatch.setattr(loop, "time", lambda: real() + skew[0])
         grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
         auth = {"authorization": f"Bearer {grant.secret}"}
         async with (

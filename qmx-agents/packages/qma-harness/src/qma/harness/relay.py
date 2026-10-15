@@ -790,7 +790,7 @@ class _MalformedEvent(Exception):
 def _parse_event(event: bytes) -> tuple[str | None, dict[str, Any]]:
     """The event's kind and data. The CLI's SDK dispatches on the `event:` name and the guards
     read the data's `type`, so an event where the two differ is refused, and an unnamed
-    event's kind is its `type`. A `message_start` must carry a string model."""
+    event's kind is its `type`."""
     lines = event.splitlines()
     names = [line[6:].strip().decode("latin-1") for line in lines if line.startswith(b"event:")]
     payload = [line[5:].strip() for line in lines if line.startswith(b"data:")]
