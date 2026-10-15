@@ -508,7 +508,7 @@ def test_a_server_still_pending_after_the_wait_is_dropped_and_the_chat_starts(
         await harness.send(chat, OperatorText("hi"))
         [client] = FakeClient.made
         assert (client.disconnected, client.toggled) == (False, [("weather", False)])
-        assert [kind for kind, _ in blocks(home, chat)][0] == "needs_you"
+        assert next(kind for kind, _ in blocks(home, chat)) == "needs_you"
         [(_, content)] = [block for block in blocks(home, chat) if block[0] == "needs_you"]
         assert content["reason"] == (
             "the MCP server weather was left out: it did not finish connecting in 1 s"
