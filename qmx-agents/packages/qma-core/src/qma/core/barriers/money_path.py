@@ -22,6 +22,9 @@ __all__ = [
     "MONEY_PATH_DENIED_ACTS",
     "MONEY_PATH_DENY_LIST",
     "MONEY_PATH_DENY_LIST_OWNER",
+    "MONEY_PATH_FAMILY_NOUNS",
+    "MONEY_PATH_MONEY_VERBS",
+    "MONEY_PATH_MUTATING_VERBS",
     "QMA_MINTED_MONEY_PATH_VALUES",
     "QMA_MINTED_PROMOTION_COMMAND",
     "MoneyPathAct",
@@ -160,6 +163,36 @@ _ALIAS_PAIRS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 MONEY_PATH_ACT_ALIASES: Final[Mapping[str, str]] = MappingProxyType(dict(_ALIAS_PAIRS))
+
+# Word tables for tool names that spell an act in free word order (`cancel_all_orders`,
+# `OrderSend`, `ProtoOANewOrderReq`). A name holding a family noun and a mutating verb names
+# an act, in either order; a money verb names one alone.
+MONEY_PATH_FAMILY_NOUNS: Final[frozenset[str]] = frozenset({"order", "position", "trade"})
+MONEY_PATH_MUTATING_VERBS: Final[frozenset[str]] = frozenset(
+    {
+        "buy",
+        "sell",
+        "send",
+        "close",
+        "cancel",
+        "exit",
+        "execute",
+        "transfer",
+        "withdraw",
+        "amend",
+        "replace",
+        "submit",
+        "new",
+        "create",
+        "place",
+        "modify",
+        "reduce",
+        "hedge",
+        "liquidate",
+        "flatten",
+    }
+)
+MONEY_PATH_MONEY_VERBS: Final[frozenset[str]] = frozenset({"buy", "sell", "withdraw", "transfer"})
 
 
 class MoneyPathDenyError(ValueError):

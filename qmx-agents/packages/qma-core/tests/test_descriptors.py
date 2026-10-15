@@ -60,6 +60,77 @@ def test_camel_case_and_digit_spellings_read_as_their_words(name: str, act: str 
     assert name_money_act(name) == act
 
 
+@pytest.mark.parametrize(
+    ("name", "act"),
+    [
+        ("cancel_all_orders", "cancel_order"),
+        ("close_all_positions", "close_position"),
+        ("OrderSend", "send_order"),
+        ("ProtoOANewOrderReq", "new_order"),
+        ("ProtoOAClosePositionReq", "close_position"),
+        ("ProtoOAAmendPositionSLTPReq", "amend_position"),
+        ("ProtoOACancelOrderReq", "cancel_order"),
+        ("buy_market", "buy"),
+        ("sell_limit", "sell"),
+        ("marketBuy", "buy"),
+        ("withdraw_funds", "withdraw"),
+        ("transfer_funds", "transfer"),
+        ("place_order_now", "submit_order"),
+        ("close_position_request", "close_position"),
+        ("cancel_orders", "cancel_order"),
+        ("orders_cancel", "cancel_order"),
+        ("position_close", "close_position"),
+        ("positions_close_all", "close_position"),
+        ("execute_trade", "execute_trade"),
+        ("trade_execute", "execute_trade"),
+        ("send_order", "order"),
+        ("modify_order", "order"),
+        ("amend_orders", "amend_order"),
+        ("new_order", "order"),
+        ("create_orders", "create_order"),
+        ("exit_position", "position"),
+        ("exit_all_positions", "exit_position"),
+        ("close_trade", "close_trade"),
+        ("closeAllPositions", "close_position"),
+        ("CancelAllOrders", "cancel_order"),
+        ("place_market_order", "order"),
+        ("MarketOrderPlace", "place_order"),
+        ("submit_bracket_orders", "submit_order"),
+        ("reduce_positions", "reduce_position"),
+        ("mcp__broker__buy", "buy"),
+        ("mcp__ext__OrderSend", "send_order"),
+        ("list_orders", None),
+        ("get_orders", None),
+        ("orders", None),
+        ("positions", None),
+        ("list_positions", None),
+        ("get_open_positions", None),
+        ("order_history", None),
+        ("order_book", None),
+        ("trade_history", None),
+        ("list_trades", None),
+        ("get_order_status", None),
+        ("cancel_job", None),
+        ("create_report", None),
+        ("send_message", None),
+        ("apps_call", None),
+        ("runs_cancel", None),
+    ],
+)
+def test_broker_tool_names_read_as_their_acts(name: str, act: str | None) -> None:
+    assert name_money_act(name) == act
+
+
+@pytest.mark.parametrize(
+    "name", ["cancel_all_orders", "OrderSend", "ProtoOANewOrderReq", "buy_market", "withdraw_funds"]
+)
+def test_broker_tool_names_are_refused(name: str) -> None:
+    with pytest.raises(MoneyPathDenyError, match=f"Money-path act refused: {name}"):
+        check_descriptor(name, {})
+    with pytest.raises(MoneyPathDenyError, match="Money-path act refused: read_bars"):
+        check_descriptor("read_bars", {"mcp": {"tool_name": name}})
+
+
 @pytest.mark.parametrize("name", ["placeOrder", "CreateOrder", "place_order2", "closePosition"])
 def test_camel_case_and_digit_spellings_are_refused(name: str) -> None:
     with pytest.raises(MoneyPathDenyError, match=f"Money-path act refused: {name}"):
