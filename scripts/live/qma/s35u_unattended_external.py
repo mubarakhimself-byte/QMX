@@ -140,7 +140,7 @@ async def lane(log: Log, label: str, mode: str, allowed: list[str], want: str) -
                 answers = [(a.tool, a.status) for a in answerer.answered] if answerer else []
                 log.check(
                     f"{label}: the gate passes and the operator's reject resolves the CLI's ask",
-                    kind != "hook" and bool(answers) and not ran,
+                    kind != "hook" and (CALL.tool, "resolved") in answers and not ran,
                     (kind, said[:160], ran, answers, permissions),
                 )
     finally:
