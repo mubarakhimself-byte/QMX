@@ -89,6 +89,23 @@ def test_an_unlisted_store_keeps_an_unprovable_entry_in_the_inventory() -> None:
     )
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows only")
+def test_the_windows_listing_asks_only_for_qmx_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes  # noqa: PLC0415
+
+    filters: list[object] = []
+
+    class Advapi:
+        def CredEnumerateW(self, wanted: object, *_: object) -> int:  # noqa: N802
+            filters.append(wanted)
+            ctypes.set_last_error(qma.harness.money.ERROR_NOT_FOUND)
+            return 0
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_, **__: Advapi())
+    assert qma.harness.money._windows_store_names() == []  # pyright: ignore[reportPrivateUsage]
+    assert filters == ["qmx/*"]
+
+
 def test_store_names_keeps_qmx_names_only_and_drops_the_user_prefix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

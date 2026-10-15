@@ -777,9 +777,14 @@ posture stays SPEED_BUMP."""
 
 ERROR_NOT_FOUND: Final = 1168
 
+STORE_FILTER: Final = "qmx/*"
+"""`CredEnumerateW` copies each matching entry's blob into this process, so it lists QMX
+entries only, never every credential the user holds. keyring writes `<user>@qmx/<name>` only
+when two users share one service name, which QMX never does, so this filter misses none."""
+
 
 def _windows_store_names() -> list[str]:
-    """Target names of the current user's Credential Manager entries, through
+    """Target names of the current user's `qmx/*` Credential Manager entries, through
     `CredEnumerateW`. Only `TargetName` is read from each entry; the blob is never touched."""
     import ctypes  # noqa: PLC0415
     from ctypes import wintypes  # noqa: PLC0415
@@ -803,7 +808,7 @@ def _windows_store_names() -> list[str]:
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)
     count = wintypes.DWORD()
     found = ctypes.POINTER(ctypes.POINTER(Credential))()
-    if not advapi.CredEnumerateW(None, 0, ctypes.byref(count), ctypes.byref(found)):
+    if not advapi.CredEnumerateW(STORE_FILTER, 0, ctypes.byref(count), ctypes.byref(found)):
         error = ctypes.get_last_error()
         if error == ERROR_NOT_FOUND:
             return []

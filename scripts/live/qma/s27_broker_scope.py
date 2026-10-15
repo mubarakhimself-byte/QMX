@@ -8,8 +8,10 @@ connection marked `environment = "demo"`, and it only ever connects to the demo 
 
 Each broker credential in the keyring inventory gets one stored result under
 `<home>/state/scope-proofs/`: refused for scope, refused for another reason, accepted (it can
-trade; close the demo position), or not tested because no demo account given uses it. An
-untested entry never overwrites an earlier result.
+trade; close the demo position), unanswered (a demo position may be open; the log and the
+result say to check and close it by hand), or not tested because no demo account given uses
+it. An untested entry never overwrites an earlier result. Each broker answer is logged with its
+error code, so the operator can confirm the code.
 
     s27_broker_scope.py --account <ctidTraderAccountId> [--account ...]
         [--home D:/QMX-worktrees/qma-ship/home] [--symbol EURUSD] [--scope-code ACCESS_DENIED]
@@ -46,10 +48,20 @@ ANSWERS = frozenset(
     {"ProtoErrorRes", "ProtoOAErrorRes", "ProtoOAOrderErrorEvent", "ProtoOAExecutionEvent"}
 )
 ORDER_WAIT_S = 15.0
+ORDER_ID = "s27-scope"
+"""The order request's `clientMsgId`. Only an answer carrying it counts."""
+OPEN_POSITION = (
+    "WARNING: the order request got no answer, so a demo position may be open on account "
+    "{account}; check that demo account and close any position by hand"
+)
 
 
 class Refused(Exception):
     """The run stops before any credential is read."""
+
+
+class Unanswered(Exception):
+    """The order request went out and no answer to it arrived."""
 
 
 @dataclass(frozen=True)
@@ -92,12 +104,15 @@ def message(proto: CompiledProto, name: str) -> Any:
 
 
 async def answer(transport: CTraderTransport) -> tuple[str, str | None]:
-    """The next answer frame's name and, for an error, its code only."""
+    """The first answer frame to the order (`clientMsgId` is `ORDER_ID`): its name and, for an
+    error, its code only."""
     proto = transport.proto
     while True:
         size = int.from_bytes(await transport.reader.readexactly(4), "big")
         envelope = message(proto, "ProtoMessage")
         envelope.ParseFromString(await transport.reader.readexactly(size))
+        if str(envelope.clientMsgId) != ORDER_ID:
+            continue
         for name in proto.message_names():
             if name not in ANSWERS:
                 continue
@@ -113,14 +128,17 @@ async def send_order(transport: CTraderTransport, values: dict[str, Any]) -> tup
     envelope = message(transport.proto, "ProtoMessage")
     envelope.payloadType = order.payloadType
     envelope.payload = order.SerializeToString()
-    envelope.clientMsgId = "s27-scope"
+    envelope.clientMsgId = ORDER_ID
     frame = encode_framed_payload(envelope.SerializeToString())
     if is_refusal(frame):
         raise ValueError("could not frame the order request")
-    transport.writer.write(frame.value)
-    await transport.writer.drain()
-    async with asyncio.timeout(ORDER_WAIT_S):
-        return await answer(transport)
+    try:
+        transport.writer.write(frame.value)
+        await transport.writer.drain()
+        async with asyncio.timeout(ORDER_WAIT_S):
+            return await answer(transport)
+    except Exception as error:
+        raise Unanswered(type(error).__name__) from error
 
 
 async def attempt(target: Target, symbol: str) -> tuple[str, str | None]:
@@ -160,13 +178,21 @@ def record(home: QmxHome, target: Target, symbol: str, scope_codes: set[str], lo
     facts = {"account_id": target.account.id, "broker": target.broker.id, "symbol": symbol}
     try:
         name, code = asyncio.run(attempt(target, symbol))
-    except Exception as error:
-        outcome = f"not tested: the attempt failed ({type(error).__name__})"
+    except Unanswered as error:
+        outcome = f"{OPEN_POSITION.format(account=target.account.id)} ({error})"
         save_scope_proof(
             home.state_dir, target.credential, refused_for_scope=False, outcome=outcome, **facts
         )
         log(f"{target.credential} on demo account {target.account.id}: {outcome}")
         return
+    except Exception as error:
+        outcome = f"not tested: no order was sent ({type(error).__name__})"
+        save_scope_proof(
+            home.state_dir, target.credential, refused_for_scope=False, outcome=outcome, **facts
+        )
+        log(f"{target.credential} on demo account {target.account.id}: {outcome}")
+        return
+    log(f"broker answer to the order: {name}, error code {code or 'none'}")
     if name == "ProtoOAExecutionEvent":
         refused, outcome = (
             False,
