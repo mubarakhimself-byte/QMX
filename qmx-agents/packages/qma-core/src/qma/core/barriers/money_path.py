@@ -18,13 +18,23 @@ from qma.core.refusals.variants import ProhibitedMoneyPathTool
 
 __all__ = [
     "MONEY_PATH_ACT_ALIASES",
+    "MONEY_PATH_BULK_VERBS",
+    "MONEY_PATH_COMPOUND_NOUNS",
     "MONEY_PATH_DENIAL_NOT_LIFTABLE_BY",
     "MONEY_PATH_DENIED_ACTS",
     "MONEY_PATH_DENY_LIST",
     "MONEY_PATH_DENY_LIST_OWNER",
+    "MONEY_PATH_DIRECTION_NOUNS",
     "MONEY_PATH_FAMILY_NOUNS",
+    "MONEY_PATH_MONEY_NOUNS",
     "MONEY_PATH_MONEY_VERBS",
     "MONEY_PATH_MUTATING_VERBS",
+    "MONEY_PATH_PROTECTION_NOUNS",
+    "MONEY_PATH_READ_NOUNS",
+    "MONEY_PATH_READ_WORDS",
+    "MONEY_PATH_SCOPES_AFTER",
+    "MONEY_PATH_SCOPES_BEFORE",
+    "MONEY_PATH_TRAILING_WORDS",
     "QMA_MINTED_MONEY_PATH_VALUES",
     "QMA_MINTED_PROMOTION_COMMAND",
     "MoneyPathAct",
@@ -164,32 +174,73 @@ _ALIAS_PAIRS: Final[tuple[tuple[str, str], ...]] = (
 
 MONEY_PATH_ACT_ALIASES: Final[Mapping[str, str]] = MappingProxyType(dict(_ALIAS_PAIRS))
 
-MONEY_PATH_FAMILY_NOUNS: Final[frozenset[str]] = frozenset({"order", "position", "trade"})
-MONEY_PATH_MUTATING_VERBS: Final[frozenset[str]] = frozenset(
+MONEY_PATH_COMPOUND_NOUNS: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
     {
-        "buy",
-        "sell",
-        "send",
-        "close",
-        "cancel",
-        "exit",
-        "execute",
-        "transfer",
-        "withdraw",
-        "amend",
-        "replace",
-        "submit",
-        "new",
-        "create",
-        "place",
-        "modify",
-        "reduce",
-        "hedge",
-        "liquidate",
-        "flatten",
+        ("stop", "loss"): "stop_loss",
+        ("take", "profit"): "take_profit",
+        ("trailing", "stop"): "trailing_stop",
+        ("trading", "stop"): "trading_stop",
+        ("money", "path"): "money_path",
     }
 )
-MONEY_PATH_MONEY_VERBS: Final[frozenset[str]] = frozenset({"buy", "sell", "withdraw", "transfer"})
+"""Two-word nouns, read as one word before the word rule runs. `money_path` is QMA's own
+term, not a money noun."""
+MONEY_PATH_PROTECTION_NOUNS: Final[frozenset[str]] = frozenset(
+    {"stop_loss", "take_profit", "trailing_stop", "trading_stop", "sltp"}
+)
+MONEY_PATH_FAMILY_NOUNS: Final[frozenset[str]] = frozenset(
+    {"order", "position", "trade", *MONEY_PATH_PROTECTION_NOUNS}
+)
+MONEY_PATH_MONEY_NOUNS: Final[frozenset[str]] = frozenset(
+    {"money", "fund", "currency", "invoice", "payment", "cash", "coin"}
+)
+MONEY_PATH_DIRECTION_NOUNS: Final[frozenset[str]] = frozenset({"long", "short"})
+"""A trade direction. A family noun only as a name's last word (`open_long`), so
+`create_short_link` stays a link tool."""
+MONEY_PATH_MUTATING_VERBS: Final[frozenset[str]] = frozenset(
+    {
+        "send", "close", "cancel", "exit", "execute", "amend", "replace", "submit", "new",
+        "create", "place", "modify", "reduce", "hedge", "flatten", "open", "add", "update",
+        "edit", "change", "delete", "remove", "enter", "increase", "decrease", "reverse", "flip",
+        "move", "set", "adjust", "switch", "exercise", "scale", "stop", "go", "put", "post",
+        "make", "upsert", "patch", "convert", "attach", "detach", "trail", "arm", "disarm",
+        "activate", "deactivate", "enable", "disable", "toggle", "reset", "clear", "drop",
+        "halt", "resume", "pause", "start", "trigger", "fire", "roll", "rollover",
+        "unwind", "settle", "assign", "allocate", "release", "approve", "confirm", "accept",
+        "reject", "revoke", "write", "save", "apply", "register", "configure", "override",
+    }
+)  # fmt: skip
+"""Verbs that change something. With a family noun, in either order, they name an act."""
+MONEY_PATH_MONEY_VERBS: Final[frozenset[str]] = frozenset(
+    {"buy", "sell", "withdraw", "transfer", "liquidate", "deposit", "pay", "swap"}
+)
+"""Verbs that move money by themselves, with no family noun."""
+MONEY_PATH_BULK_VERBS: Final[frozenset[str]] = frozenset(
+    {
+        "cancel", "close", "exit", "flatten", "liquidate", "open", "edit", "amend", "modify",
+        "reduce", "hedge", "scale", "stop",
+    }
+)  # fmt: skip
+"""Verbs that act on orders or positions with no noun when scoped (`cancel_all`)."""
+MONEY_PATH_SCOPES_AFTER: Final[frozenset[str]] = frozenset({"all", "everything", "in", "out"})
+MONEY_PATH_SCOPES_BEFORE: Final[frozenset[str]] = frozenset(
+    {"global", "market", "private", "partial", "panic"}
+)
+"""A bulk verb with a scope after it (`cancel_all`, `scale_in`) or before it (`market_close`,
+`reqGlobalCancel`) is a bulk act when the pair ends the name, before any
+`MONEY_PATH_TRAILING_WORDS`. `in_place` and `replace_all` are not."""
+MONEY_PATH_TRAILING_WORDS: Final[frozenset[str]] = frozenset({"now", "req", "request"})
+MONEY_PATH_READ_WORDS: Final[frozenset[str]] = frozenset(
+    {
+        "get", "list", "read", "fetch", "show", "query", "search", "find", "describe", "view",
+        "is", "has", "count", "status", "history", "report", "research",
+    }
+)  # fmt: skip
+"""Allow-signals. A name holding one and no mutating verb is a read, and so is a name ending
+in one of `MONEY_PATH_READ_NOUNS` (`kill_switch_status`, `sell_side_research`)."""
+MONEY_PATH_READ_NOUNS: Final[frozenset[str]] = frozenset(
+    {"status", "history", "report", "research"}
+)
 
 
 class MoneyPathDenyError(ValueError):
