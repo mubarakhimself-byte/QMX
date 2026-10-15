@@ -530,7 +530,7 @@ def test_tools_the_cli_loaded_that_vetting_never_saw_are_named() -> None:
 def test_a_table_row_missing_on_its_server_refuses_the_tool_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str
 ) -> None:
-    import qma.harness.tools as tools
+    from qma.harness import tools
 
     monkeypatch.setattr(tools, table, {**getattr(tools, table), "gone_tool": Effect.READ})
     home = QmxHome(tmp_path / "home")
