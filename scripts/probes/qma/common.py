@@ -7,14 +7,18 @@ Run every probe with the probe venv's Python that `p_install.py` builds, for exa
 from __future__ import annotations
 
 import json
+import operator
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
-from collections.abc import Generator, Iterable, Mapping, MutableMapping
+from collections.abc import Callable, Generator, Iterable, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, TextIO, cast
 
@@ -37,6 +41,7 @@ CONFIG_DIR: Final = SHIP / "home" / "claude"
 EVIDENCE: Final = SHIP / "evidence" / "hp0" / os.environ.get("HP0_EVIDENCE_SUBDIR", "")
 HP1_EVIDENCE: Final = SHIP / "evidence" / "hp1"
 PROBE_VENV: Final = SHIP / "probe-venv"
+SHIM_EXE: Final = PROBE_VENV / "Scripts" / "qma-cli-launcher.exe"
 SCRATCH: Final = Path("D:/Temp/qma-hp0")
 UV_CACHE: Final = Path("D:/Caches/uv")
 FAKE_HOME: Final = SCRATCH / "home"
@@ -295,24 +300,12 @@ class Lockdown:
         return f"This probe chat may run only these exact Bash commands: {sorted(self.commands)}."
 
 
-LOCKED_OPTIONS: Final = frozenset(
-    {
-        "tools",
-        "allowed_tools",
-        "cwd",
-        "permission_mode",
-        "can_use_tool",
-        "add_dirs",
-        "setting_sources",
-        "plugins",
-    }
-)
 PROBE_SETTINGS: Final = frozenset({*FORCE_LOGIN, "cleanupPeriodDays"})
-PROBE_FLAGS: Final = frozenset({"append-system-prompt-file"})
 PLUGIN_MANIFEST: Final = frozenset({"name", "version", "description"})
-
-
-INPUT_HOOKS: Final = frozenset({"PermissionRequest"})
+COMMAND_FRONTMATTER: Final = frozenset({"description", "argument-hint"})
+COMMAND_TEXT: Final = r"[\w\s.,;:'\"?()$\[\]\ufeff-]*"
+"""No `!` (the CLI runs !`command` when it expands a command) and no `@` (a file mention)."""
+PROBE_HOOK_EVENTS: Final = frozenset({"PreToolUse", "Stop"})
 
 
 def deny(reason: str) -> HookJSONOutput:
@@ -367,42 +360,240 @@ def guard(lockdown: Lockdown) -> HookCallback:
     return deny_outside
 
 
+def is_link(path: Path) -> bool:
+    attributes: int = getattr(path.lstat(), "st_file_attributes", 0)
+    return path.is_symlink() or bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def frontmatter_keys(text: str) -> set[str]:
+    lines = text.lstrip("\ufeff \t\r\n").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return set()
+    end = next((i for i, line in enumerate(lines[1:], 1) if line.strip() == "---"), None)
+    if end is None:
+        return {"<unclosed>"}
+    return {
+        key[1] if (key := re.match(r"([A-Za-z0-9_-]+):(\s|$)", line)) else f"<{line.strip()}>"
+        for line in lines[1:end]
+        if line.strip()
+    }
+
+
+def command_plugin(root: Path) -> dict[str, str]:
+    def plain(folder: Path) -> dict[str, Path]:
+        entries = {entry.name: entry for entry in folder.iterdir()}
+        if linked := sorted(name for name, entry in entries.items() if is_link(entry)):
+            raise TypeError(f"{folder.as_posix()} holds links {linked}")
+        return entries
+
+    if is_link(root):
+        raise TypeError(f"{root.as_posix()} is a link")
+    top = plain(root)
+    meta, commands = root / ".claude-plugin", root / "commands"
+    layout = sorted(top) == [".claude-plugin", "commands"] and meta.is_dir() and commands.is_dir()
+    if not layout or sorted(plain(meta)) != ["plugin.json"] or not (meta / "plugin.json").is_file():
+        raise TypeError(f"{root.as_posix()} holds more than a manifest and commands: {sorted(top)}")
+    for command in plain(commands).values():
+        if not (command.is_file() and command.suffix == ".md"):
+            raise TypeError(f"{command.as_posix()} is not a command file")
+        text = command.read_text("utf-8")
+        if extra := sorted(frontmatter_keys(text) - COMMAND_FRONTMATTER):
+            raise TypeError(f"{command.as_posix()} frontmatter may not set {extra}")
+        if not re.fullmatch(COMMAND_TEXT, text):
+            raise TypeError(f"{command.as_posix()} holds more than plain text")
+    manifest = json.loads((meta / "plugin.json").read_text(encoding="utf-8"))
+    if extra := sorted(manifest.keys() - PLUGIN_MANIFEST):
+        raise TypeError(f"{root.as_posix()} manifest may not set {extra}")
+    return {"type": "local", "path": root.as_posix()}
+
+
 def settings_json(raw: str, markers: tuple[Marker, ...]) -> str:
-    """Command hooks from settings and plugins run outside `deny_only` and can rewrite an
-    allowed call, so a probe's hooks come only from `markers`."""
-    settings: dict[str, Any] = json.loads(raw)
-    if extra := sorted(settings.keys() - PROBE_SETTINGS):
-        raise TypeError(f"probe settings may not set {extra}; hooks go through Lockdown.markers")
     hooks: dict[str, list[dict[str, Any]]] = {}
     for marker in markers:
         matcher = {"matcher": marker.matcher} if marker.matcher else {}
         hooks.setdefault(marker.event, []).append(matcher | {"hooks": [marker.hook()]})
-    return json.dumps(settings | ({"hooks": hooks} if hooks else {}))
+    return json.dumps(json.loads(raw) | ({"hooks": hooks} if hooks else {}))
 
 
-def command_plugin(root: Path) -> dict[str, str]:
-    files = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
-    manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    commands = [f for f in files if re.fullmatch(r"commands/[^/]+\.md", f)]
-    if files != sorted([".claude-plugin/plugin.json", *commands]) or (
-        manifest.keys() - PLUGIN_MANIFEST
-    ):
-        raise TypeError(f"{root.as_posix()} holds more than a manifest and commands: {files}")
-    return {"type": "local", "path": root.as_posix()}
+def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
+def settings_refusal(raw: Any) -> str | None:
+    settings: dict[str, Any] = json.loads(raw, object_pairs_hook=unique_keys)
+    if extra := sorted(settings.keys() - PROBE_SETTINGS):
+        return f"keys {extra}; hooks go through Lockdown.markers"
+    days = settings.get("cleanupPeriodDays", 1)
+    if settings.get("forceLoginMethod", "claudeai") != "claudeai" or type(days) is not int:
+        return "forceLoginMethod is claudeai and cleanupPeriodDays a whole number"
+    return None
+
+
+def under_scratch(raw: str) -> bool:
+    return SCRATCH.resolve() in Path(raw).resolve().parents
+
+
+def bundled(raw: str) -> bool:
+    return Path(raw) == bundled_cli()
+
+
+def env_refusal(env: Any) -> str | None:
+    home = home_env()
+    rules: dict[str, Callable[[str], bool]] = {
+        **{name: partial(operator.eq, os.environ.get(name)) for name in KEEP_NAMES - home.keys()},
+        **{name: partial(operator.eq, home[name]) for name in home.keys() - {"CLAUDE_CONFIG_DIR"}},
+        "CLAUDE_CONFIG_DIR": lambda raw: Path(raw) == CONFIG_DIR or under_scratch(raw),
+        "ANTHROPIC_BASE_URL": partial(
+            re.fullmatch, r"(https://[a-z0-9.-]+|http://127\.0\.0\.1:\d+)(/[\w./-]*)?"
+        ),
+        "ANTHROPIC_AUTH_TOKEN": bool,
+        "CLAUDE_CODE_OAUTH_TOKEN": bool,
+        "ANTHROPIC_API_KEY": partial(operator.eq, ""),
+        **dict.fromkeys(TIER_VARS, partial(re.fullmatch, r"[\w./:-]+")),
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str.isdecimal,
+        "MAX_THINKING_TOKENS": str.isdecimal,
+        "ENABLE_TOOL_SEARCH": {"true", "false"}.__contains__,
+        "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": partial(operator.eq, "1"),
+        "QMA_CLI_PATH": bundled,
+        "QMA_CHAT_ID": partial(re.fullmatch, r"[a-z0-9-]+"),
+    }
+
+    def allowed(name: str, value: object) -> bool:
+        rule = rules.get(name)
+        return rule is not None and isinstance(value, str) and bool(rule(value))
+
+    if refused := sorted(name for name, value in dict(env).items() if not allowed(name, value)):
+        return f"names or values {refused}"
+    return None
+
+
+def only(test: Callable[[Any], object], wanted: str) -> Callable[[Any], str | None]:
+    return lambda value: None if test(value) else f"it must be {wanted}"
+
+
+class Rule(Enum):
+    LOCKED = "the lockdown sets it"
+    REFUSED = "no probe needs it"
+
+
+OPTION_RULES: Final[Mapping[str, Rule | Callable[[Any], str | None]]] = {
+    "tools": Rule.LOCKED,
+    "allowed_tools": Rule.LOCKED,
+    "cwd": Rule.LOCKED,
+    "permission_mode": Rule.LOCKED,
+    "can_use_tool": Rule.LOCKED,
+    "add_dirs": Rule.LOCKED,
+    "setting_sources": Rule.LOCKED,
+    "plugins": Rule.LOCKED,
+    "strict_mcp_config": Rule.LOCKED,
+    "env": env_refusal,
+    "settings": settings_refusal,
+    "hooks": only(
+        lambda hooks: (
+            hooks.keys() <= PROBE_HOOK_EVENTS
+            and all(callable(h) for matchers in hooks.values() for m in matchers for h in m.hooks)
+        ),
+        f"callbacks on {sorted(PROBE_HOOK_EVENTS)}",
+    ),
+    "extra_args": only(
+        lambda args: (
+            args.keys() <= {"append-system-prompt-file"}
+            and all(under_scratch(path) for path in args.values())
+        ),
+        f"append-system-prompt-file with a file under {SCRATCH.as_posix()}",
+    ),
+    "system_prompt": only(
+        lambda prompt: (
+            isinstance(prompt, str)
+            or (
+                prompt.keys() <= {"type", "preset", "append"}
+                and (prompt["type"], prompt["preset"]) == ("preset", "claude_code")
+                and isinstance(prompt.get("append", ""), str)
+            )
+        ),
+        "text or the claude_code preset with an append",
+    ),
+    "mcp_servers": only(
+        lambda servers: all(
+            re.fullmatch(r"[a-z0-9_-]+", name) and config["type"] == "sdk"
+            for name, config in servers.items()
+        ),
+        "in-process SDK servers",
+    ),
+    "cli_path": only(lambda path: Path(path) == SHIM_EXE, f"the shim {SHIM_EXE.as_posix()}"),
+    "model": only({"haiku", "sonnet"}.__contains__, "haiku or sonnet"),
+    "max_turns": only(lambda turns: type(turns) is int and 1 <= turns <= 8, "1 to 8"),
+    "resume": only(partial(re.fullmatch, r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}"), "a UUID"),
+    "thinking": only(
+        lambda thinking: (
+            thinking in ({"type": "adaptive"}, {"type": "disabled"})
+            or (
+                thinking.keys() == {"type", "budget_tokens"}
+                and thinking["type"] == "enabled"
+                and type(thinking["budget_tokens"]) is int
+                and 1024 <= thinking["budget_tokens"] <= 16000
+            )
+        ),
+        "adaptive, disabled, or enabled with 1024 to 16000 budget tokens",
+    ),
+    "effort": only({"low", "medium", "high", "xhigh", "max"}.__contains__, "an effort level"),
+    "verbatim_prompts": only(lambda flag: type(flag) is bool, "a bool"),
+    "include_partial_messages": only(lambda flag: type(flag) is bool, "a bool"),
+    **dict.fromkeys(
+        (
+            "continue_conversation",
+            "session_id",
+            "max_budget_usd",
+            "disallowed_tools",
+            "fallback_model",
+            "betas",
+            "permission_prompt_tool_name",
+            "max_buffer_size",
+            "debug_stderr",
+            "stderr",
+            "user",
+            "include_hook_events",
+            "forward_subagent_text",
+            "fork_session",
+            "resume_session_at",
+            "resume_drops_turn",
+            "agents",
+            "skills",
+            "sandbox",
+            "max_thinking_tokens",
+            "output_format",
+            "enable_file_checkpointing",
+            "session_store",
+            "session_store_flush",
+            "load_timeout_ms",
+            "task_budget",
+        ),
+        Rule.REFUSED,
+    ),
+}
+
+
+def option_refusal(name: str, value: Any) -> str | None:
+    rule = OPTION_RULES.get(name, Rule.REFUSED)
+    if isinstance(rule, Rule):
+        return rule.value
+    try:
+        return rule(value)
+    except Exception as error:
+        return f"its value could not be read ({type(error).__name__})"
 
 
 def plan_options(lockdown: Lockdown, **overrides: Any) -> ClaudeAgentOptions:
-    if locked := sorted(overrides.keys() & LOCKED_OPTIONS):
-        raise TypeError(f"the lockdown sets {locked}; a probe cannot override them")
-    if flags := sorted(overrides.get("extra_args", {}).keys() - PROBE_FLAGS):
-        raise TypeError(f"a probe may not pass the CLI flag {flags}")
+    for name, value in overrides.items():
+        if reason := option_refusal(name, value):
+            raise TypeError(f"a probe may not set {name}: {reason}")
     settings = settings_json(overrides.pop("settings", json.dumps(FORCE_LOGIN)), lockdown.markers)
     plugins = [command_plugin(root) for root in lockdown.command_plugins]
     from claude_agent_sdk import ClaudeAgentOptions, HookMatcher  # noqa: PLC0415
 
     probe_hooks: dict[str, list[HookMatcher]] = dict(overrides.pop("hooks", {}))
-    if rewriting := sorted(probe_hooks.keys() & INPUT_HOOKS):
-        raise TypeError(f"a probe hook on {rewriting} could change a tool's input")
     CHAT_CWD.mkdir(parents=True, exist_ok=True)
     probe_pre = [
         replace(matcher, hooks=[deny_only(hook) for hook in matcher.hooks])

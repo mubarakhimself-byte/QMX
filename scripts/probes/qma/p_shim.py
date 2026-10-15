@@ -26,6 +26,7 @@ from typing import Any
 from common import (
     PROBE_VENV,
     SCRATCH,
+    SHIM_EXE,
     Lockdown,
     Log,
     bundled_cli,
@@ -40,7 +41,6 @@ from common import (
 )
 
 STARTS = SCRATCH / "shim-starts"
-SHIM_EXE = PROBE_VENV / "Scripts" / "qma-cli-launcher.exe"
 PACKAGE = SCRATCH / "shim-pkg"
 NO_INPUT_SWITCH = "HP0_SHIM_NO_INPUT"
 PARENT_JOB = "Local\\qma-hp0-parent-job"
