@@ -15,7 +15,7 @@ from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
 from qma.harness.home import QmxHome
-from qma.harness.money import Deny, MoneySurfaceError, gate, normalize_path
+from qma.harness.money import Ask, Deny, MoneySurfaceError, gate, normalize_path
 from qma.harness.tools import (
     AGENT_OPERATIONS,
     DOMAIN_EFFECTS,
@@ -348,3 +348,37 @@ def test_no_read_or_domain_write_operation_publishes_an_app(tmp_path: Path) -> N
     assert control.runtime.road.published == []
     control.apps_test("app-1")
     assert control.runtime.road.published == ["app-1"]
+
+
+@pytest.mark.parametrize(
+    ("target", "verdict"),
+    [
+        (
+            "place_order",
+            Deny(
+                "money rule: agents cannot place, change or cancel orders "
+                "(apps_call target place_order is submit_order)"
+            ),
+        ),
+        (
+            "cancelAllOrders",
+            Deny(
+                "money rule: agents cannot place, change or cancel orders "
+                "(apps_call target cancelAllOrders is cancel_order)"
+            ),
+        ),
+        ("get_quote", Ask("mcp__qmx__apps_call always asks you")),
+    ],
+)
+def test_apps_call_checks_the_app_tool_it_names(
+    tmp_path: Path, target: str, verdict: Deny | Ask
+) -> None:
+    rules = gate_rules(
+        [plain("apps_call", Effect.MANAGE)],
+        domain_write="allow",
+        home=QmxHome(tmp_path / "home"),
+        config_dir=tmp_path / "home" / "claude",
+        keyring_names=frozenset(),
+    )
+    arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
+    assert gate("mcp__qmx__apps_call", arguments, rules, cwd="/", agent_id=None) == verdict

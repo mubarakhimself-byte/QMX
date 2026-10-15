@@ -175,6 +175,10 @@ OPERATIONS_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
     }
 )
 
+DISPATCH_TARGETS: Final[Mapping[str, str]] = MappingProxyType({"apps_call": "tool"})
+"""Operations that run another tool, and the argument naming it. The gate name-checks that
+tool. `workflows_run` and `run_job` name a workflow id and a compute target, not a tool."""
+
 FORCED_ARGUMENTS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {"apps_test": MappingProxyType({"auto_publish": False})}
 )
@@ -475,6 +479,13 @@ def gate_rules(
         ),
         mandatory_asks=frozenset(
             PREFIX + tool.name for tool in defs if asks(tool.effect, domain_write)
+        ),
+        dispatch_targets=MappingProxyType(
+            {
+                PREFIX + tool.name: DISPATCH_TARGETS[tool.name]
+                for tool in defs
+                if tool.name in DISPATCH_TARGETS
+            }
         ),
         protected_paths=_both(protected),
         secret_paths=_both(secrets),

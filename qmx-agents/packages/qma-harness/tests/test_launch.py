@@ -45,6 +45,7 @@ from qma.harness.relay import GrantSecret, RelayGrant
 GATE = money.GateRules(
     proposal_tools=frozenset(),
     mandatory_asks=frozenset(),
+    dispatch_targets={},
     protected_paths=("/d/qmx/settings.toml",),
     secret_paths=(),
     personal_homes=("/c/Users/Op/.claude",),

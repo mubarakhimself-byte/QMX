@@ -94,6 +94,9 @@ class GateRules:
     (`mcp__qmx__propose_order`). The only exemption from the name check."""
     mandatory_asks: frozenset[str]
     """Tool names that always ask, derived from `tools.tool_defs`, never listed by hand."""
+    dispatch_targets: Mapping[str, str]
+    """Tool name -> the input field naming another tool it runs (`mcp__qmx__apps_call` ->
+    `tool`). The named tool goes through the same name check."""
     protected_paths: tuple[str, ...]
     """No writes: both Claude homes, chats, procs, state, control.db, portfolio.db,
     settings.toml and the plugin folder."""
@@ -393,8 +396,9 @@ def gate(
 
     Order:
     2. proposal identity -> Ask.
-    3. an MCP tool whose name ends in a money act -> Deny. Built-in names are the CLI's own
-       closed set (`ExitPlanMode` would read as a `mode` act).
+    3. an MCP tool whose name names a money act, or a dispatch tool whose target does
+       (`dispatch_targets`) -> Deny. Built-in names are the CLI's own closed set
+       (`ExitPlanMode` would read as a `mode` act).
     4. READ_TOOLS or WRITE_TOOLS on an odd Windows path form (`odd_form`), a login file,
        inside the personal home, or (Grep, Glob) on a folder holding either -> Deny. Each
        path is compared as written and as resolved.
@@ -413,6 +417,13 @@ def gate(
         act = name_money_act(tool_name)
         if act is not None:
             return _deny(f"agents cannot place, change or cancel orders ({tool_name} is {act})")
+    field = rules.dispatch_targets.get(tool_name)
+    target = tool_input.get(field) if field else None
+    if isinstance(target, str) and (act := name_money_act(target)) is not None:
+        short = tool_name.removeprefix("mcp__").split("__")[-1]
+        return _deny(
+            f"agents cannot place, change or cancel orders ({short} target {target} is {act})"
+        )
     found: Deny | None = None
     if tool_name in PATH_FIELDS:
         found = _file_tool(tool_name, tool_input, rules, cwd)

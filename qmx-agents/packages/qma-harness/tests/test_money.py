@@ -28,6 +28,7 @@ from qma.harness.money import (
 RULES = GateRules(
     proposal_tools=frozenset({"mcp__qmx__propose_order"}),
     mandatory_asks=frozenset({"mcp__qmx__propose_order", "mcp__qmx__apps_publish"}),
+    dispatch_targets=MappingProxyType({"mcp__qmx__apps_call": "tool"}),
     protected_paths=(
         "/d/qmx/home/claude",
         "/d/qmx/home/chats",
@@ -150,6 +151,8 @@ VERDICTS: list[tuple[str, dict[str, Any], str, str]] = [
     ("mcp__ctrader__ProtoOANewOrderReq", {}, "deny", "is new_order"),
     ("mcp__broker__buy_market", {}, "deny", "is buy"),
     ("mcp__broker__list_orders", {}, "pass", ""),
+    ("mcp__qmx__apps_call", {"app_id": "a", "tool": "OrderSend"}, "deny", "target OrderSend"),
+    ("mcp__qmx__apps_call", {"app_id": "a", "tool": "get_quote"}, "pass", ""),
     ("mcp__qmx__propose_order", {}, "ask", "order proposal always asks"),
     ("mcp__qmx__apps_publish", {}, "ask", "always asks"),
     ("mcp__qmx__read_bars", {}, "pass", ""),
