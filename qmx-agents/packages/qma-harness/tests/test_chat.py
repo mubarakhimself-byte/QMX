@@ -1252,7 +1252,9 @@ def test_an_external_tool_runs_unasked_only_when_the_operator_allow_listed_it(
     home: QmxHome, monkeypatch: pytest.MonkeyPatch, allowed: list[str], bypass: str
 ) -> None:
     scripted_weather(home, monkeypatch, lambda _: "connected")
-    control_service(home).settings_put("claude", {"external_tools_unattended": allowed})
+    control_service(home).settings_put(
+        "claude", cast("Document", {"external_tools_unattended": allowed})
+    )
 
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
