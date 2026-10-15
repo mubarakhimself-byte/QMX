@@ -271,7 +271,14 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
             str(root / "control.db"), cwd="/", home="/", case_insensitive=False
         )
         assert database in rules.protected_paths
-        found = gate("Edit", {"file_path": str(root / "control.db")}, rules, cwd="/", agent_id=None, permission_mode="default")
+        found = gate(
+            "Edit",
+            {"file_path": str(root / "control.db")},
+            rules,
+            cwd="/",
+            agent_id=None,
+            permission_mode="default",
+        )
         assert found == Deny(f"money rule: agents cannot write QMX state ({database.casefold()})")
 
 
@@ -393,7 +400,17 @@ def test_apps_call_checks_the_app_tool_it_names(
         external_unattended=frozenset(),
     )
     arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
-    assert gate("mcp__qmx__apps_call", arguments, rules, cwd="/", agent_id=None, permission_mode="default") == verdict
+    assert (
+        gate(
+            "mcp__qmx__apps_call",
+            arguments,
+            rules,
+            cwd="/",
+            agent_id=None,
+            permission_mode="default",
+        )
+        == verdict
+    )
 
 
 def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
@@ -423,7 +440,12 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
         ("Read", {"file_path": f"{root}/apps/a/manifest.json"}, "pass"),
     ]
     found = [
-        (tool, type(gate(tool, args, rules, cwd="/", agent_id=None, permission_mode="default")).__name__.casefold())
+        (
+            tool,
+            type(
+                gate(tool, args, rules, cwd="/", agent_id=None, permission_mode="default")
+            ).__name__.casefold(),
+        )
         for tool, args, _ in calls
     ]
     assert found == [(tool, verdict) for tool, _, verdict in calls]

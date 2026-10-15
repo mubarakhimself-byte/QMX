@@ -578,7 +578,9 @@ async def gate_says(client: FakeClient, tool: str, mode: str = "default") -> str
     data: Any = {"tool_name": tool, "tool_input": {}, "cwd": "C:/w", "permission_mode": mode}
     found = cast("dict[str, Any]", await callback(data, None, {"signal": None}))
     output = found.get("hookSpecificOutput", {})
-    return f"{output.get('permissionDecision', 'pass')} {output.get('permissionDecisionReason', '')}"
+    return (
+        f"{output.get('permissionDecision', 'pass')} {output.get('permissionDecisionReason', '')}"
+    )
 
 
 def test_the_gate_denies_a_dropped_servers_tools_for_the_rest_of_the_chat(

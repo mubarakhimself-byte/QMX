@@ -334,7 +334,9 @@ def kind(verdict: money.Verdict) -> tuple[str, str]:
 def test_gate_verdict_table(
     tool: str, tool_input: dict[str, Any], expected: str, reason: str
 ) -> None:
-    seen, why = kind(gate(tool, tool_input, RULES, cwd=CWD, agent_id=None, permission_mode="default"))
+    seen, why = kind(
+        gate(tool, tool_input, RULES, cwd=CWD, agent_id=None, permission_mode="default")
+    )
     assert seen == expected
     assert reason in why
     if expected == "deny":
@@ -518,7 +520,10 @@ def test_real_short_names_read_as_the_long_path(tmp_path: Path) -> None:
         ("Read", {"file_path": short_login}),
         ("Write", {"file_path": f"{short_state}/new.txt"}),
     ]
-    found = [kind(gate(tool, args, rules, cwd=str(base), agent_id=None, permission_mode="default")) for tool, args in calls]
+    found = [
+        kind(gate(tool, args, rules, cwd=str(base), agent_id=None, permission_mode="default"))
+        for tool, args in calls
+    ]
     assert [verdict for verdict, _ in found] == ["deny"] * 5
     assert "login file" in found[0][1]
     assert "login file" in found[1][1]
@@ -540,7 +545,13 @@ def test_real_short_names_read_as_the_long_path(tmp_path: Path) -> None:
         ("mcp__weather__get_weather", "bypassPermissions", False, ("weather/get_weather",), "pass"),
         ("mcp__weather__get_weather", "bypassPermissions", False, ("weather/*",), "pass"),
         ("mcp__weather__get_weather", "default", True, ("weather/*",), "pass"),
-        ("mcp__weather__get_forecast", "bypassPermissions", False, ("weather/get_weather",), "deny"),
+        (
+            "mcp__weather__get_forecast",
+            "bypassPermissions",
+            False,
+            ("weather/get_weather",),
+            "deny",
+        ),
         ("mcp__news__get_weather", "bypassPermissions", False, ("weather/*",), "deny"),
         ("mcp__qmx__read_bars", "bypassPermissions", True, (), "pass"),
         ("Bash", "bypassPermissions", True, (), "pass"),
