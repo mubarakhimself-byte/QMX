@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, cast
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from qma.core.barriers.descriptors import check_descriptor, name_money_act
 from qma.core.barriers.money_path import MoneyPathDenyError
@@ -111,6 +111,11 @@ case-sensitive, so `python -c` is not one."""
 DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])")
 """`C:x` or `C:` alone: relative to that drive's own current folder, which the gate cannot
 know."""
+
+SHELL_DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])(?:$|[^/\\\s]*[/\\.])")
+"""`DRIVE_RELATIVE` in shell text, only where the word looks like a path: the drive alone, or
+a remainder that starts with a dot or holds a slash or a dot (`C:.claude.json`,
+`C:Users\\Op`). `a:b`, `scp h:file` and `%h:%s` are not paths."""
 
 GLOB: Final = re.compile(r"[*?\[]")
 
@@ -387,19 +392,39 @@ _CANDIDATE = re.compile(r"""[^\s'"`;&|<>(){}=,]+""")
 _QUOTED = re.compile(r"""'([^']*)'|"([^"]*)\"""")
 
 
+_BOUND = re.compile(r"^-[A-Za-z][\w-]*:(.+)$")
+_FILE_URLS = re.compile(r"""file:(?:[^\s'"`;&|<>(){}=,]|(?<=[A-Za-z])\|)+""", re.IGNORECASE)
+
+
 def _candidates(text: str) -> Iterator[str]:
-    """Path-like words of a command: every bare word, and every quoted string."""
+    """Path-like words of a command: every bare word, every quoted string, every `file:` URL
+    (`C|` is a drive there), and the value of a PowerShell parameter bound with a colon
+    (`-Path:C:x`)."""
     for match in _QUOTED.finditer(text):
         yield match.group(1) if match.group(1) is not None else match.group(2)
-    yield from _CANDIDATE.findall(text)
+    yield from _FILE_URLS.findall(text)
+    for word in _CANDIDATE.findall(text):
+        yield word
+        bound = _BOUND.match(word)
+        if bound is not None:
+            yield bound.group(1)
 
 
-_FILE_URL = re.compile(r"^file:(?://[^/]*)?/(?=[A-Za-z]:)|^file:(?://[^/]*)?(?=/)", re.I)
+_URL_DRIVE = re.compile(r"^([A-Za-z])[:|]")
 
 
 def _unurl(word: str) -> str:
-    """A `file:` URL as the path it opens (`curl file:///C:/x` reads `C:/x`)."""
-    return _FILE_URL.sub("", word)
+    """A `file:` URL in any form as the local path it opens, percent escapes decoded:
+    `file:///C:/x`, `file://C:/x`, `file:C:/x`, `file:/C:/x`, `file:///C|/x` and
+    `file://localhost/C:/x` all read `C:/x`."""
+    if word[:5].casefold() != "file:":
+        return word
+    rest = unquote(word[5:])
+    if rest.startswith("//") and not _URL_DRIVE.match(rest[2:]):
+        rest = "/" + rest[2:].partition("/")[2]
+    if _URL_DRIVE.match(rest.lstrip("/")):
+        rest = _URL_DRIVE.sub(r"\1:", rest.lstrip("/"), count=1)
+    return rest
 
 
 def _pathlike(word: str) -> bool:
@@ -500,7 +525,7 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
         remote = remote_form(word) if _pathlike(word) else None
         if remote is not None:
             return _deny(f"agents cannot use {remote} ({word})")
-        if DRIVE_RELATIVE.match(word):
+        if SHELL_DRIVE_RELATIVE.match(word):
             return _deny(f"agents cannot use a drive-relative path ({word})")
         for base in bases:
             found = _word(word, base=base, rules=rules, folded=folded, sweep=sweep)
