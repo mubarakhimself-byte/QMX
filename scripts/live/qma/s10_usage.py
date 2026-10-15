@@ -8,10 +8,14 @@
     s10_usage.py credits   a credits_required fact, fed the same way
     s10_usage.py merge     an older fact replayed after a newer one, no plan turn
     s10_usage.py expiry    a fact whose reset passes, no plan turn
+    s10_usage.py restart   a stop held across a harness restart on a throwaway home, no plan
+                           turn
 
 A fed fact goes through the SDK's parser and `project`, as a CLI event would, then to the
-harness's plan watch. PASS for a stop case when the running plan turn ends early with a
-`needs_you` block naming the rule and the next plan send is refused naming it.
+harness's plan watch. A stop case queues a second prompt while the first turn runs a tool.
+PASS for a stop case when the chat's CLI is gone soon after the feed, a `needs_you` block names
+the rule, the queued prompt never ran, and the next plan send is refused naming the rule. The
+first case of each lane also checks that the chat reopens once a clean fact lifts the stop.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ from common import (
 )
 
 SLEEP = "Run this exact Bash command, then reply done: sleep 40"
+QUEUED = "Reply with the single word QUEUEDWORD."
 CLEAN: dict[str, Any] = {
     "status": "allowed",
     "overageStatus": "rejected",
@@ -117,7 +122,13 @@ async def until_tool(session: Session, mark: int, seconds: float = 120) -> bool:
 
 
 async def stop_case(
-    session: Session, log: Log, rule: str, info: dict[str, Any], clear: dict[str, Any]
+    session: Session,
+    log: Log,
+    rule: str,
+    info: dict[str, Any],
+    clear: dict[str, Any],
+    *,
+    reopen: bool,
 ) -> None:
     from qma.harness import NewChat, OperatorText  # noqa: PLC0415
 
@@ -129,19 +140,27 @@ async def stop_case(
     mark = last_event(session.control, session.chat)
     await session.harness.send(session.chat, OperatorText(SLEEP))
     log.check(f"{rule}: a plan turn is running a tool", await until_tool(session, mark), True)
+    await session.harness.send(session.chat, OperatorText(QUEUED))
+    log(f"queued while the tool runs: {QUEUED}")
     fed_at = time.monotonic()
     feed(session, log, info)
     record = await wait_turn(session.home, session.chat, 30)
     took = time.monotonic() - fed_at
-    reasons = [
-        block["content"]["reason"]
-        for block in session_blocks(session.control, session.chat, mark)
-        if block["type"] == "needs_you"
-    ]
+    await asyncio.sleep(15)
+    found = session_blocks(session.control, session.chat, mark)
+    log(f"blocks after the feed: {[(b['type'], str(b['content'])[:80]) for b in found]}")
+    reasons = [block["content"]["reason"] for block in found if block["type"] == "needs_you"]
     log.check(
-        f"{rule}: the running plan chat was interrupted naming the rule",
+        f"{rule}: the plan chat was ended naming the rule",
         record.turn == "idle" and took < 30 and any(rule in reason for reason in reasons),
         (record.turn, f"{took:.1f} s", reasons),
+    )
+    answered = [b for b in found if b["type"] == "text" and "QUEUEDWORD" in str(b["content"])]
+    alive = session.harness._deps.procs.alive(session.chat)
+    log.check(
+        f"{rule}: the queued prompt never ran and the CLI is gone",
+        not answered and not alive,
+        (answered, f"CLI alive {alive}"),
     )
     answer = await refused(session, "say ok")
     log.check(
@@ -152,6 +171,14 @@ async def stop_case(
     feed(session, log, clear)
     stop = session.harness._ledger.hard_stop()
     log.check(f"{rule}: a newer clean fact lifts the stop", stop is None, stop)
+    if reopen:
+        _, back = await session.turn(log, "Reply with the single word BACKAGAIN.")
+        texts = [str(b["content"]) for b in back if b["type"] == "text"]
+        log.check(
+            f"{rule}: the chat reopens once the stop lifts",
+            any("BACKAGAIN" in text for text in texts),
+            texts,
+        )
 
 
 async def stops(log: Log, cases: str) -> None:
@@ -168,8 +195,8 @@ async def stops(log: Log, cases: str) -> None:
         tools=["Bash"],
     )
     try:
-        for rule, info, clear in STOPS[cases]:
-            await stop_case(session, log, rule, info, clear)
+        for n, (rule, info, clear) in enumerate(STOPS[cases]):
+            await stop_case(session, log, rule, info, clear, reopen=n == 0)
         if cases == "overage":
             feed(
                 session,
@@ -183,6 +210,7 @@ async def stops(log: Log, cases: str) -> None:
             )
             page = await session.harness.usage()
             log.check("negative case: no overage stop", page.hard_stop is None, page.hard_stop)
+        feed(session, log, {**CLEAN, "rateLimitType": "five_hour"})
     finally:
         await session.harness.close()
 
@@ -323,12 +351,52 @@ async def expiry(log: Log) -> None:
         await session.harness.close()
 
 
+async def restart(log: Log) -> None:
+    """A stop holds across a harness restart on the same home, and lifts on a clean fact."""
+    from qma.harness import LaunchRefused, OperatorText  # noqa: PLC0415
+
+    root = throwaway_home("hp10-restart")
+    workspace = throwaway_home("hp10-restart-ws")
+    session = await Session.start(root, model="haiku", workspace=workspace, title="restart")
+    chat = session.chat
+    feed(
+        session,
+        log,
+        {"status": "rejected", "rateLimitType": "five_hour", "overageStatus": "allowed"},
+    )
+    log(f"before restart: {session.harness._ledger.hard_stop()}")
+    await session.harness.close()
+
+    async def reopened() -> tuple[Session, str | None]:
+        again = await Session.start(root, model="haiku", workspace=workspace, title="again")
+        again.chat = chat
+        try:
+            await again.harness.send(chat, OperatorText("say ok"))
+        except LaunchRefused as error:
+            return again, str(error)
+        return again, None
+
+    again, answer = await reopened()
+    log.check(
+        "a stop survives a harness restart and refuses the plan send",
+        answer is not None and "rule 2" in answer,
+        answer,
+    )
+    feed(again, log, {**CLEAN, "rateLimitType": "five_hour"})
+    await again.harness.close()
+    third = await Session.start(root, model="haiku", workspace=workspace, title="third")
+    stop = third.harness._ledger.hard_stop()
+    log.check("a newer clean fact lifts it, and that survives a restart too", stop is None, stop)
+    await third.harness.close()
+
+
 LANES = {
     "meter": ("hp10-s10", meter),
     "overage": ("hp10-overage", lambda log: stops(log, "overage")),
     "credits": ("hp10-credits", lambda log: stops(log, "credits")),
     "merge": ("hp10-merge", merge),
     "expiry": ("hp10-expiry", expiry),
+    "restart": ("hp10-restart", restart),
 }
 
 

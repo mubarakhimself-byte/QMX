@@ -41,12 +41,14 @@ from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
+    Message,
     PermissionResultAllow,
     PermissionResultDeny,
     PermissionUpdate,
     SystemMessage,
 )
 from claude_agent_sdk._errors import MessageParseError
+from claude_agent_sdk._internal import message_parser
 from claude_agent_sdk.types import PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
@@ -127,6 +129,26 @@ if TYPE_CHECKING:
     from qma.harness.money import GateRules
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
+
+_sdk_parse = message_parser.parse_message
+
+
+def _parse(data: dict[str, Any]) -> Message | None:
+    """The SDK parser raises `TypeError` and the like, not only `MessageParseError`, on some
+    malformed messages, such as a `rate_limit_info` of null. Every failure becomes a
+    `MessageParseError` that carries the message, so the reader can tell a rate-limit event it
+    cannot read and stop the plan."""
+    try:
+        return _sdk_parse(data)
+    except MessageParseError:
+        raise
+    except Exception as error:
+        raise MessageParseError(f"{type(error).__name__}: {error}", data) from error
+
+
+message_parser.parse_message = _parse
+"""`ClaudeSDKClient.receive_messages` imports `parse_message` at each call, so this is the one
+seam where a parse failure is still tied to its message."""
 
 PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
@@ -466,13 +488,30 @@ class Chat:
             await self._live.client.interrupt()
 
     async def stop_plan(self, reason: str) -> None:
-        """The overage stop: a `needs_you` block naming the rule, then an interrupt."""
-        await self._note("needs_you", {"reason": f"plan use stopped: {reason}"})
-        await self.interrupt()
+        """The overage stop. Kills the CLI tree first, because an interrupt would let a prompt
+        queued in the CLI start as a new turn (measured, HP10 check). Then the chat closes and
+        writes a `needs_you` block naming the rule. The next send relaunches with `resume`."""
+        async with self._lock:
+            live, self._live = self._live, None
+            if live is None:
+                return
+            self._closing = True
+            try:
+                await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
+                await self._end(live)
+            finally:
+                self._closing = False
+            self._stream.close_all()
+            self._write(turn="idle")
+            await self._note("needs_you", {"reason": f"plan use stopped: {reason}"})
 
     @property
     def on_plan(self) -> bool:
         return self.record.config.profile == PLAN
+
+    @property
+    def is_live(self) -> bool:
+        return self._live is not None
 
     async def live(self) -> AsyncIterator[Delta]:
         """Live deltas for this chat and its native sub-agents. Dropped on disconnect."""

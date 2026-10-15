@@ -510,3 +510,71 @@ def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
         "extra_usage_on": None,
         "extra_usage_note": None,
     }
+
+
+def test_a_stop_survives_a_restart_until_a_newer_clean_fact(tmp_path: Path) -> None:
+    path = tmp_path / "state" / "plan-usage.json"
+    clock = Clock()
+    first = UsageLedger(clock, path)
+    first.record(
+        event(status="rejected", rateLimitType="five_hour", overageStatus="allowed"), at(1)
+    )
+    restarted = UsageLedger(clock, path)
+    assert restarted.hard_stop() == (
+        "rule 2: the five_hour window is used up and paid extra usage is allowed, "
+        "so the next request could bill"
+    )
+    restarted.record(
+        event(status="allowed", rateLimitType="five_hour", overageStatus="rejected"), at(2)
+    )
+    assert UsageLedger(clock, path).hard_stop() is None
+
+
+def test_an_unreadable_mark_survives_a_restart(tmp_path: Path) -> None:
+    path = tmp_path / "plan-usage.json"
+    clock = Clock()
+    UsageLedger(clock, path).record(event(status="paused"), at(1))
+    assert UsageLedger(clock, path).hard_stop() == (
+        "a rate-limit event could not be read: status is 'paused'"
+    )
+
+
+def test_a_saved_stop_lifts_when_its_reset_passes(tmp_path: Path) -> None:
+    path = tmp_path / "plan-usage.json"
+    clock = Clock()
+    UsageLedger(clock, path).record(
+        event(status="allowed", isUsingOverage=True, resetsAt=int(at(10).timestamp())), at(1)
+    )
+    clock.now = at(10)
+    assert UsageLedger(clock, path).hard_stop() is None
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        "not json",
+        '{"windows": [{"limits": {"status": "paused"}, "as_of": "2026-10-15T12:00:00+00:00"}],'
+        ' "unreadable": null}',
+        '{"unreadable": null}',
+    ],
+)
+def test_a_saved_file_that_cannot_be_read_stops_the_plan(tmp_path: Path, saved: str) -> None:
+    path = tmp_path / "plan-usage.json"
+    path.write_text(saved, encoding="utf-8")
+    stop = UsageLedger(Clock(), path).hard_stop()
+    assert stop is not None
+    assert stop.startswith(f"the saved plan usage at {path} could not be read")
+
+
+def test_every_sdk_parse_failure_carries_its_message() -> None:
+    import qma.harness.chat  # noqa: F401, PLC0415
+    from claude_agent_sdk._errors import MessageParseError  # noqa: PLC0415
+    from claude_agent_sdk._internal import message_parser  # noqa: PLC0415
+
+    broken = {"type": "rate_limit_event", "rate_limit_info": [], "uuid": "u", "session_id": "s"}
+    with pytest.raises(MessageParseError) as raised:
+        message_parser.parse_message(broken)
+    assert (str(raised.value), raised.value.data) == (
+        "TypeError: list indices must be integers or slices, not str",
+        broken,
+    )

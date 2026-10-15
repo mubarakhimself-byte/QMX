@@ -97,8 +97,9 @@ class UnknownChat(ControlError):
 
 @dataclass
 class PlanWatch:
-    """Records each plan fact in the ledger. While the overage stop holds, every running plan
-    chat is interrupted with the rule named."""
+    """Records each plan fact in the ledger. While the overage stop holds, every plan chat with
+    a live CLI is ended with the rule named, whether or not a turn runs, so nothing queued in it
+    reaches the model."""
 
     ledger: UsageLedger = field(default_factory=UsageLedger)
     chats: dict[SessionId, Chat] = field(default_factory=dict[SessionId, Chat])
@@ -110,7 +111,7 @@ class PlanWatch:
         if reason is None:
             return
         for chat in self.chats.values():
-            if chat.on_plan and chat.record.turn == "running":
+            if chat.on_plan and chat.is_live:
                 task = asyncio.create_task(chat.stop_plan(reason))
                 self._stops.add(task)
                 task.add_done_callback(self._stops.discard)
@@ -175,7 +176,7 @@ class Harness:
         except BaseException:
             procs.close()
             raise
-        watch = PlanWatch()
+        watch = PlanWatch(UsageLedger(path=home.state_dir / "plan-usage.json"))
         deps = ChatDeps(
             home=home,
             control=control,
