@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Coroutine
-from dataclasses import replace
 from typing import Any, cast
 
 import httpx
@@ -213,7 +212,7 @@ def test_an_unattended_ask_rejects_after_the_budget(home: QmxHome) -> None:
     control_service(home).settings_put("budgets", {"unattended_ask_seconds": 0.05})
 
     async def body(harness: Harness) -> None:
-        harness._deps.on_plan_limits(PlanMeter((Reading("five_hour", 0.1, None),)))
+        harness._deps.on_plan_limits(PlanMeter((Reading("five_hour", 0.1, None),)))  # pyright: ignore[reportPrivateUsage]
         chat = await harness.start_chat(NewChat(title="bg", model="haiku", kind=Background()))
         await harness.send(chat, OperatorText("go"))
         ask = FakeClient.made[-1].options.can_use_tool

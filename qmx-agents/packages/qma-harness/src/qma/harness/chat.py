@@ -330,11 +330,13 @@ def context_tokens(path: Path | None) -> int:
             entry = json.loads(line)
         except ValueError:
             continue
-        if not isinstance(entry, dict) or entry.get("type") != "assistant":
+        if not isinstance(entry, dict):
             continue
-        if cast("dict[str, Any]", entry).get("isSidechain"):
+        record = cast("dict[str, Any]", entry)
+        if record.get("type") != "assistant" or record.get("isSidechain"):
             continue
-        usage = cast("dict[str, Any]", entry).get("message", {}).get("usage")
+        message: dict[str, Any] = record.get("message", {})
+        usage = message.get("usage")
         if isinstance(usage, dict):
             names = (
                 "input_tokens",
@@ -355,7 +357,7 @@ def warning(
 ) -> str | None:
     """ "Switching to kimi resends ~182k tokens uncached and stops 1 background task.", or None
     when the change loses no cache and stops nothing."""
-    parts = []
+    parts: list[str] = []
     if resets_cache(old, new) and tokens > 0:
         parts.append(f"resends ~{_tokens(tokens)} tokens uncached")
     if Step.RELAUNCH in steps and tasks:
@@ -796,6 +798,8 @@ class Chat:
                     await live.client.set_model(quote.new.model)
                 case Step.SET_EFFORT:
                     await self._set_effort(live, str(quote.new.effort))
+                case Step.RELAUNCH:
+                    pass
 
     async def _set_effort(self, live: _Live, effort: str) -> None:
         """`/effort` replies with a synthetic result and no model call (HP0 S37)."""

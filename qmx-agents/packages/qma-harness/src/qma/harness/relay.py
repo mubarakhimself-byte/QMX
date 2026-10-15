@@ -92,9 +92,9 @@ from qma.harness.profiles import (
 )
 
 if TYPE_CHECKING:
-    from starlette.types import Receive, Scope, Send
-
     from pathlib import Path
+
+    from starlette.types import Receive, Scope, Send
 
     from qma.harness.launch import TestMode
     from qma.harness.profiles import Profiles

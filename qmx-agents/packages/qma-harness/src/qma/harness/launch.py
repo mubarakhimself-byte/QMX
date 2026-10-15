@@ -29,7 +29,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
@@ -204,7 +204,7 @@ def parse_budgets(raw: Mapping[str, object]) -> Budgets:
             and value < math.inf
         )
         if fits:
-            return value if whole else float(value)
+            return value if whole else float(cast("float", value))
         log.warning("[budgets] %s = %r is out of range; using %s", name, value, fallback)
         return fallback
 

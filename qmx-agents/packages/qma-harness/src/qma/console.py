@@ -584,7 +584,9 @@ class Console:
         answers: dict[str, str] = {}
         for item in cast("list[dict[str, Any]]", tool_input.get("questions") or []):
             question = str(item.get("question", ""))
-            options = [str(o.get("label")) for o in item.get("options") or []]
+            options = [
+                str(o.get("label")) for o in cast("list[dict[str, Any]]", item.get("options") or [])
+            ]
             self.say(f"? {question}")
             for number, label in enumerate(options, start=1):
                 self.say(f"  {number}. {label}")
@@ -835,8 +837,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     home: Path = args.home.resolve()
     scrub_process_env(os.environ, read_keep_names(home / "settings.toml"))
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    stdout: Any = sys.stdout
+    if isinstance(stdout, io.TextIOWrapper):
+        cast("io.TextIOWrapper[Any]", stdout).reconfigure(encoding="utf-8", errors="replace")
 
     color = prepare_terminal()
     term = StdTerminal()

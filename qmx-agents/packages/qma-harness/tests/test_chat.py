@@ -1257,7 +1257,7 @@ def test_an_external_tool_runs_unasked_only_when_the_operator_allow_listed_it(
 
 
 def rate_limit(**info: Any) -> Message:
-    from claude_agent_sdk._internal.message_parser import parse_message  # noqa: PLC0415
+    from claude_agent_sdk._internal.message_parser import parse_message
 
     message = parse_message(
         {"type": "rate_limit_event", "rate_limit_info": info, "uuid": "u", "session_id": "s"}
@@ -1316,7 +1316,7 @@ class BrokenEventClient(FakeClient):
     """A CLI whose rate-limit event the SDK parser cannot read."""
 
     async def receive_messages(self) -> AsyncIterator[Message]:
-        from claude_agent_sdk._internal import message_parser  # noqa: PLC0415
+        from claude_agent_sdk._internal import message_parser
 
         message_parser.parse_message(
             {"type": "rate_limit_event", "rate_limit_info": None, "uuid": "u", "session_id": "s"}

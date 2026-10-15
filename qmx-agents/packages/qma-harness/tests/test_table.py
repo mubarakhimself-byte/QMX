@@ -10,6 +10,7 @@ import httpx
 import pytest
 import test_chat
 from claude_agent_sdk import Message, TaskNotificationMessage, TaskStartedMessage
+from pydantic import JsonValue
 from qmx_control.server import create_app
 from test_chat import STOP_RULE_2, FakeClient, blocks, rate_limit, result, run, settle, turn_of
 
@@ -38,7 +39,7 @@ NO_READING = (
 )
 
 
-def budgets(home: QmxHome, **values: object) -> None:
+def budgets(home: QmxHome, **values: JsonValue) -> None:
     control_service(home).settings_put("budgets", dict(values))
 
 

@@ -11,8 +11,6 @@ from typing import Any
 
 import httpx
 import pytest
-import qma.harness.chat
-import qma.harness.harness
 import test_chat
 from claude_agent_sdk import Message, TaskStartedMessage
 from qmx_control.server import create_app
@@ -30,6 +28,8 @@ from test_chat import (
     turn_of,
 )
 
+import qma.harness.chat
+import qma.harness.harness
 from qma.harness import (
     ConfigChange,
     Harness,
@@ -177,7 +177,7 @@ def key_rows(home: QmxHome, monkeypatch: pytest.MonkeyPatch) -> list[RelayGrant]
     monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _ref: "key")  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
     tiers = {"opus": "kimi-k3", "sonnet": "kimi-k3", "haiku": "kimi-k2.6", "fable": "kimi-k3"}
     rows = {"openrouter": ROUTER_ROW, "kimi": {**ROUTER_ROW, "tiers": tiers}}
-    control_service(home).settings_put("providers", rows)
+    control_service(home).settings_put("providers", rows)  # pyright: ignore[reportArgumentType]
     return record_grants(monkeypatch)
 
 

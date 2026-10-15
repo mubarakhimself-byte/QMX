@@ -618,11 +618,17 @@ def test_a_saved_file_that_cannot_be_read_stops_the_plan(tmp_path: Path, saved: 
 
 
 def test_every_sdk_parse_failure_carries_its_message() -> None:
-    import qma.harness.chat  # noqa: F401, PLC0415
-    from claude_agent_sdk._errors import MessageParseError  # noqa: PLC0415
-    from claude_agent_sdk._internal import message_parser  # noqa: PLC0415
+    from claude_agent_sdk._errors import MessageParseError
+    from claude_agent_sdk._internal import message_parser
 
-    broken = {"type": "rate_limit_event", "rate_limit_info": [], "uuid": "u", "session_id": "s"}
+    import qma.harness.chat  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
+    broken: dict[str, Any] = {
+        "type": "rate_limit_event",
+        "rate_limit_info": [],
+        "uuid": "u",
+        "session_id": "s",
+    }
     with pytest.raises(MessageParseError) as raised:
         message_parser.parse_message(broken)
     assert (str(raised.value), raised.value.data) == (

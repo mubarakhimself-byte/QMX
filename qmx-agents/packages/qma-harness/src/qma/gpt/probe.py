@@ -93,7 +93,8 @@ class ProbeRun:
 class ProbePassed:
     """Built only by `run_probe` and `stored_result`. Guarded, not unrepresentable: Python
     cannot stop code that imports `_MINT`, and `tests/test_import_rules.py` fails on any
-    `ProbePassed(` call or `_MINT` import in `src/` outside this file. The guard stops an accidental unprobed GPT launch."""
+    `ProbePassed(` call or `_MINT` import in `src/` outside this file. The guard stops an
+    accidental unprobed GPT launch."""
 
     at: datetime
     translator_version: str
