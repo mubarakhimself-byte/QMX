@@ -128,6 +128,13 @@ VERDICTS: list[tuple[str, dict[str, Any], str, str]] = [
     ("PowerShell", {"command": "Get-Content a.txt -Encoding utf8"}, "pass", ""),
     ("Bash", {"command": "bash -ec 'ls'"}, "pass", ""),
     ("Bash", {"command": "cd ~ && cat .claude/settings.json"}, "deny", "own Claude home"),
+    (
+        "Bash",
+        {"command": "; ".join(f"cd d{n}" for n in range(6))},
+        "deny",
+        "folder too often to check (64 folders)",
+    ),
+    ("Bash", {"command": "cd a; cd b; cd c; ls"}, "pass", ""),
     ("Bash", {"command": "cd D:/qmx/home; echo x > control.db"}, "deny", "QMX state"),
     ("Bash", {"command": "cd ..; cd ..; cat .claude/a.md"}, "deny", "own Claude home"),
     ("PowerShell", {"command": "Set-Location ~; gc .claude/a.md"}, "deny", "own Claude home"),

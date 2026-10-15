@@ -164,9 +164,6 @@ _ALIAS_PAIRS: Final[tuple[tuple[str, str], ...]] = (
 
 MONEY_PATH_ACT_ALIASES: Final[Mapping[str, str]] = MappingProxyType(dict(_ALIAS_PAIRS))
 
-# Word tables for tool names that spell an act in free word order (`cancel_all_orders`,
-# `OrderSend`, `ProtoOANewOrderReq`). A name holding a family noun and a mutating verb names
-# an act, in either order; a money verb names one alone.
 MONEY_PATH_FAMILY_NOUNS: Final[frozenset[str]] = frozenset({"order", "position", "trade"})
 MONEY_PATH_MUTATING_VERBS: Final[frozenset[str]] = frozenset(
     {

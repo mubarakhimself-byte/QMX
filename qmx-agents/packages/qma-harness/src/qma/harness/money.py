@@ -100,6 +100,10 @@ GLOB: Final = re.compile(r"[*?\[]")
 MAX_SHELL_TEXT: Final = 256 * 1024
 """Bytes of shell text the gate reads. Longer text is denied, not scanned."""
 
+MAX_SHELL_BASES: Final = 32
+"""Folders a relative word is resolved against after folder changes. Each `cd` can double
+them, so more is denied."""
+
 MAX_SHELL_PATHS: Final = 2048
 """Distinct path words times folders to resolve them against. Each costs a file-system
 lookup (`canonical`), so more is denied rather than left to run past the hook timeout."""
@@ -395,6 +399,8 @@ def _bases(expanded: str, *, cwd: str, rules: GateRules) -> list[str]:
             for base in bases
         ]
         bases = list(dict.fromkeys(bases))
+        if len(bases) > MAX_SHELL_BASES:
+            break
     return bases
 
 
@@ -456,6 +462,8 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
     folded = _Folded.of(rules)
     sweep = SWEEP.search(f" {lowered}") is not None
     bases = _bases(expanded, cwd=cwd, rules=rules)
+    if len(bases) > MAX_SHELL_BASES:
+        return _deny(f"the command changes folder too often to check ({len(bases)} folders)")
     words = list(dict.fromkeys(_candidates(expanded)))
     paths = sum(map(_pathlike, words)) * len(bases)
     if paths > MAX_SHELL_PATHS:
