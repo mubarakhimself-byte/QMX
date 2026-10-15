@@ -90,6 +90,17 @@ def harness_submodule_imports(found: Modules) -> list[tuple[str, str]]:
     ]
 
 
+def probe_pass_builders(found: Modules) -> list[str]:
+    """Modules outside `qma.gpt.probe` that call `ProbePassed(` or import its mint. Only `src/`
+    is scanned; tests build passes on purpose."""
+    return sorted(
+        module
+        for module, source in found.items()
+        if module != "qma.gpt.probe"
+        and (calls(source, "ProbePassed") or "qma.gpt.probe._MINT" in imports(source))
+    )
+
+
 def plant(root: Path, files: dict[str, str]) -> Modules:
     for relative, source in files.items():
         path = root / "qma" / relative
@@ -141,8 +152,20 @@ def test_relative_and_from_package_imports_are_resolved(tmp_path: Path) -> None:
 def test_test_mode_and_probe_passed_are_built_only_where_allowed() -> None:
     found = modules()
     assert [module for module, source in found.items() if calls(source, "TestMode")] == []
-    probe_passed = [module for module, source in found.items() if calls(source, "ProbePassed")]
-    assert set(probe_passed) <= {"qma.gpt.probe"}
+    assert probe_pass_builders(found) == []
+
+
+def test_a_planted_probe_pass_outside_probe_py_is_caught(tmp_path: Path) -> None:
+    found = plant(
+        tmp_path,
+        {
+            "gpt/probe.py": "ProbePassed(at, version, model, _mint=_MINT)\n",
+            "harness/relay.py": "from qma.gpt.probe import ProbePassed\nProbePassed(a, b, c)\n",
+            "harness/harness.py": "from qma.gpt.probe import _MINT\n",
+            "console.py": "from qma.gpt import probe\nprobe.ProbePassed(a, b, c)\n",
+        },
+    )
+    assert probe_pass_builders(found) == ["qma.console", "qma.harness.harness", "qma.harness.relay"]
 
 
 def test_keep_names_hold_no_banned_fragment() -> None:

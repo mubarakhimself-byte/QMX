@@ -470,3 +470,48 @@ def test_no_repr_on_the_lane_shows_a_token(tmp_path: Path) -> None:
             assert "oaiapp_1" in shown
 
     asyncio.run(body())
+
+
+def test_removing_the_stored_pass_stops_new_grants_for_open_chats(tmp_path: Path) -> None:
+    async def body() -> None:
+        async with rig(tmp_path) as found:
+            found.relay.probe_state = tmp_path
+            await found.relay.open_gpt_lane(found.passed, found.session)
+            await found.relay.grant(CHAT, GPT)
+            (tmp_path / PROBE_FILE).unlink()
+            with pytest.raises(GrantRefused) as refused:
+                await found.relay.grant(CHAT, GPT)
+            assert str(refused.value) == (
+                "the GPT lane is closed: no GPT probe has passed for this translator version; "
+                "type /login chatgpt"
+            )
+            assert found.relay.gpt is None
+
+    asyncio.run(body())
+
+
+def test_login_shows_why_the_rotated_token_was_not_stored(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    signed_in = SiwcSession(
+        Record("oaiapp_1", "urn:uuid:1", "refresh-1", ("chatgpt.tokens.use.direct",)),
+        MemoryVault(),
+    )
+    gpt_home(home, monkeypatch, signed_in)
+    a_pass(home.state_dir)
+
+    def refuse(value: str) -> None:
+        raise OSError("CredWrite")
+
+    async def body(harness: Harness) -> None:
+        monkeypatch.setattr(signed_in.vault, "set", refuse)
+        await signed_in.accept({"access_token": "access-2", "expires_in": 3600})
+        status = await harness.gpt_login(sign_in=False)
+        assert status.lines[:2] == (
+            "Signed in to ChatGPT for QMA (stored sign-in).",
+            "Warning: the rotated ChatGPT refresh token could not be stored in qmx/chatgpt "
+            "(OSError); sign in again after this host stops.",
+        )
+        assert status.lane
+
+    run(body, home)

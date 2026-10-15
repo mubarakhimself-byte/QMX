@@ -77,7 +77,7 @@ import keyring
 import uvicorn
 
 from qma.gpt import translate
-from qma.gpt.probe import ProbePassed, ProbeRun, translator_version
+from qma.gpt.probe import ProbePassed, ProbeRun, stored_result, translator_version
 from qma.gpt.siwc import SignInError, SiwcSession
 from qma.harness.home import SessionId
 from qma.harness.profiles import (
@@ -93,6 +93,8 @@ from qma.harness.profiles import (
 
 if TYPE_CHECKING:
     from starlette.types import Receive, Scope, Send
+
+    from pathlib import Path
 
     from qma.harness.launch import TestMode
     from qma.harness.profiles import Profiles
@@ -305,6 +307,10 @@ class Relay:
     base_url: str = ""
     gpt: GptLane | None = None
     siwc: SiwcSession | None = None
+    probe_state: Path | None = None
+    """The folder holding the stored GPT probe result. When set, every GPT grant re-reads
+    it, so a removed pass or a changed translator stops new grants at once, not only at the
+    next start or switch."""
     """The one ChatGPT sign-in of this process, kept while the lane closes and reopens, so its
     in-memory access token is never thrown away: OpenAI allows a refresh only near the end of
     a token's hour."""
@@ -378,6 +384,8 @@ class Relay:
                 except Exception as error:
                     raise GrantRefused(_keyring_refusal(found.credential, error)) from None
             case GptPlan():
+                if self.gpt is not None and not await self._pass_holds(self.gpt.passed):
+                    await self.close_gpt_lane()
                 if self.gpt is None:
                     raise GrantRefused(
                         "the GPT lane is closed: no GPT probe has passed for this translator "
@@ -391,6 +399,14 @@ class Relay:
             case _:
                 raise GrantRefused(f"{profile} is the plan; plan traffic never passes the relay")
         return await self._mint(session_id, found)
+
+    async def _pass_holds(self, passed: ProbePassed) -> bool:
+        version = translator_version()
+        if passed.translator_version != version:
+            return False
+        if self.probe_state is None:
+            return True
+        return await asyncio.to_thread(stored_result, self.probe_state, version) == passed
 
     async def _mint(self, session_id: SessionId, profile: KeyProvider | GptPlan) -> RelayGrant:
         for older in [held for held in self._grants.values() if held.session_id == session_id]:

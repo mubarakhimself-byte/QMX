@@ -271,6 +271,7 @@ class Harness:
                 journal=functools.partial(UsageRows.open, home),
                 alert=alert,
                 profiles=profiles,
+                probe_state=home.state_dir,
                 test=test,
             ).start()
         except BaseException:
@@ -488,6 +489,8 @@ class Harness:
             try:
                 await session.access_token()
                 lines.append("Signed in to ChatGPT for QMA (stored sign-in).")
+                if session.store_error:
+                    lines.append(f"Warning: {session.store_error}.")
             except siwc.SignInError as error:
                 lines.append(f"The stored ChatGPT sign-in did not refresh: {error}")
                 session = None
