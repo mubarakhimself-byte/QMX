@@ -1120,6 +1120,18 @@ def probe_child() -> None:
 
 PROBE_TIMEOUT_S: Final = 30.0
 
+PROBE_BOOT: Final = "\n".join(
+    (
+        "import importlib.util, sys",
+        "spec = importlib.util.spec_from_file_location('qma_exposure_probe', sys.argv[1])",
+        "module = importlib.util.module_from_spec(spec)",
+        "sys.modules[spec.name] = module",
+        "spec.loader.exec_module(module)",
+        "module.probe_child()",
+    )
+)
+"""Loads this file alone, not the `qma.harness` package, whose imports take seconds."""
+
 
 async def run_exposure_probe(
     env: Mapping[str, str], targets: tuple[ExposureTarget, ...], *, cli_version: str
@@ -1132,7 +1144,8 @@ async def run_exposure_probe(
         sys.executable,
         "-I",
         "-c",
-        "from qma.harness.money import probe_child; probe_child()",
+        PROBE_BOOT,
+        __file__,
         env=dict(env),
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,

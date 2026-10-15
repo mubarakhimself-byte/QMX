@@ -257,12 +257,10 @@ def test_the_probe_child_never_calls_get_password(tmp_path: Path) -> None:
         "    raise SystemExit('get_password called')\n"
         "keyring.get_password = boom\n"
         "keyring.get_credential = boom\n"
-        "from qma.harness.money import probe_child\n"
-        "probe_child()\n"
-    )
+    ) + qma.harness.money.PROBE_BOOT
     rows = json.dumps([{"kind": t.kind, "value": t.value} for t in targets])
     done = subprocess.run(
-        [sys.executable, "-I", "-c", code],
+        [sys.executable, "-I", "-c", code, qma.harness.money.__file__],
         input=rows,
         capture_output=True,
         text=True,
