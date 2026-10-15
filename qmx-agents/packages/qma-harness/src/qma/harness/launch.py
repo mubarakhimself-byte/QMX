@@ -70,10 +70,15 @@ class Background:
 @dataclass(frozen=True)
 class Child:
     """Started by `mcp__qmx__delegate` from a parent chat. Its prompt was written by a model.
-    `unattended` is copied from the parent, so a child of a Background chat is unattended."""
+    `unattended` is copied from the parent, so a child of a Background chat is unattended.
+    It gets no `delegate` tool and no Agent tool, so a child never starts children."""
 
     parent: SessionId
     unattended: bool
+
+
+CHILD_DENIED: Final = ("Agent", "Task")
+"""`Task` is the Agent tool's older name, which the CLI still matches."""
 
 
 type ChatKind = Interactive | Background | Child
@@ -405,7 +410,10 @@ def build_options(
         strict_mcp_config=True,
         mcp_servers=dict(mcp_servers),
         hooks=hooks or None,
-        disallowed_tools=money.deny_rules(gate) if rules_on else [],
+        disallowed_tools=[
+            *(CHILD_DENIED if isinstance(config.kind, Child) else ()),
+            *(money.deny_rules(gate) if rules_on else ()),
+        ],
         can_use_tool=can_use_tool,
         session_id=None if transcript_exists else session_id,
         resume=session_id if transcript_exists else None,

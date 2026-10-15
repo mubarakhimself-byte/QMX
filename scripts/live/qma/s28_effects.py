@@ -87,7 +87,9 @@ async def real_list(log: Log, root: Path) -> None:
     control = control_service(home)
     domain = DomainContext(root=root)
     domain.control, domain.library = control, control.library
-    defs = await tool_defs(control=control, broker=BrokerService(root), domain=domain)
+    defs = await tool_defs(
+        control=control, broker=BrokerService(root), domain=domain, delegate=None
+    )
     build_server(defs, grants=Grants(), domain_write="ask")
     log.check("control: the real QMX tool list builds", True, f"{len(defs)} tools")
 

@@ -30,6 +30,7 @@ from qma.core.barriers.descriptors import description_money_act
 from qmx_broker.service import BrokerService
 
 from qma.harness.money import (
+    DELEGATE_TOOL,
     NON_BROKER_REFS,
     QMX_SERVER,
     GateRules,
@@ -58,7 +59,9 @@ class Effect(Enum):
 
     READ           reads QMX or broker state. Runs without asking.
     DOMAIN_WRITE   writes QMX research state (library, backtests, run results). Asks or not
-                   per `settings.toml [agents] domain_write` ("allow" | "ask").
+                   per `settings.toml [agents] domain_write` ("allow" | "ask"). `delegate`
+                   is DOMAIN_WRITE: its child chat's own acts face their own gates, and its
+                   spend is bounded by the allow-list and the child's [budgets] limits.
     MANAGE         publish, install, schedule, run, cancel, destructive control-plane ops.
                    Always asks (R35).
     PROPOSE_MONEY  writes an unsigned order proposal. Always asks. Accepted on
@@ -320,11 +323,16 @@ async def _listed(servers: list[FastMCP], effects: Mapping[str, Effect]) -> list
 
 
 async def tool_defs(
-    *, control: ControlService, broker: BrokerService, domain: DomainContext
+    *,
+    control: ControlService,
+    broker: BrokerService,
+    domain: DomainContext,
+    delegate: Delegate | None,
 ) -> list[ToolDef]:
     """Every QMX tool for one chat, each with its declared `Effect`: the `AGENT_OPERATIONS`
-    rows of the control plane, the broker's reads and `propose_order`, and the domain
-    functions in `DOMAIN_EFFECTS`. `domain` shares `control`, so no second writer runs."""
+    rows of the control plane, the broker's reads and `propose_order`, the domain functions
+    in `DOMAIN_EFFECTS`, and `delegate` when not None (a Child chat passes None). `domain`
+    shares `control`, so no second writer runs."""
     from qmx_broker.server import create_server as broker_server  # noqa: PLC0415
     from qmx_control.server import create_mcp  # noqa: PLC0415
     from qmx_tools.servers import create_server as domain_server  # noqa: PLC0415
@@ -334,7 +342,60 @@ async def tool_defs(
         *await _listed([create_mcp(control)], AGENT_OPERATIONS),
         *await _listed([broker_server(broker)], BROKER_EFFECTS),
         *await _listed(domain_servers, DOMAIN_EFFECTS),
+        *([] if delegate is None else [delegate_def(delegate)]),
     ]
+
+
+type Delegate = Callable[[str, str], Awaitable[str]]
+"""Runs a helper chat on a profile with a prompt, to its end, and returns its final text.
+Bound to the calling chat by the harness."""
+
+
+class DelegateRefused(RuntimeError):
+    """The helper chat was not started, or ended without an answer. The tool returns the
+    reason as an error result."""
+
+
+DELEGATE_SCHEMA: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string", "description": "A provider profile from the allow-list"},
+            "prompt": {"type": "string", "description": "The whole task for the helper"},
+        },
+        "required": ["profile", "prompt"],
+    }
+)
+
+
+def delegate_def(delegate: Delegate) -> ToolDef:
+    """`mcp__qmx__delegate`, the one QMX tool that adds what the SDK lacks: native sub-agents
+    cannot change provider. The helper is a full chat with its own process, relay grant,
+    qmx-control child session, asks and verbatim prompts, so every rule above holds in it."""
+
+    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
+        profile, prompt = arguments.get("profile"), arguments.get("prompt")
+        if not isinstance(profile, str) or not isinstance(prompt, str) or not prompt.strip():
+            return _error("delegate needs a profile name and a prompt")
+        try:
+            return {"content": [{"type": "text", "text": await delegate(profile, prompt)}]}
+        except DelegateRefused as refused:
+            return _error(str(refused))
+
+    return ToolDef(
+        name=DELEGATE_TOOL.removeprefix(PREFIX),
+        description=(
+            "Run a helper chat on another provider profile and return its final answer. The "
+            "helper starts fresh: put the whole task in the prompt. It cannot start helpers."
+        ),
+        input_schema=DELEGATE_SCHEMA,
+        effect=Effect.DOMAIN_WRITE,
+        call=call,
+    )
+
+
+def _error(text: str) -> dict[str, Any]:
+    return {"content": [{"type": "text", "text": text}], "is_error": True}
 
 
 class ToolSurfaceError(RuntimeError):

@@ -36,8 +36,11 @@ SecretRef = NewType("SecretRef", str)
 PLAN: Final = ProfileName("claude")
 RESERVED: Final = frozenset({"claude", "gpt"})
 """`gpt` waits for the GPT lane of the relay; until then no row may take the name."""
-NON_MODEL_ROWS: Final = frozenset({"litestream"})
-"""`[providers]` rows that configure other services and are not model hosts."""
+DELEGATE_TARGETS: Final = "delegate_targets"
+"""`[providers] delegate_targets = ["kimi", ...]`: the profiles an agent may name in
+`mcp__qmx__delegate`. Missing means none."""
+NON_MODEL_ROWS: Final = frozenset({"litestream", DELEGATE_TARGETS})
+"""`[providers]` keys that are not model hosts."""
 
 type CacheMarkers = Literal["as_sent", "top_level_only"]
 type AuthHeader = Literal["bearer", "x-api-key"]
@@ -207,12 +210,24 @@ class Profiles:
 
     by_name: Mapping[ProfileName, Profile]
     errors: Mapping[str, str] = field(default_factory=dict[str, str])
+    delegate_targets: frozenset[ProfileName] = frozenset()
+    """Profiles an agent may name in `mcp__qmx__delegate`. UI-editable allow-list."""
 
     def get(self, name: str) -> Profile:
         found = self.by_name.get(ProfileName(name))
         if found is not None:
             return found
         raise ProfileError(self.errors.get(name, f"no provider is named {name!r}"))
+
+    def delegate_refusal(self, name: str) -> str | None:
+        """Why an agent may not delegate to `name`, or None."""
+        if name in self.delegate_targets:
+            return None
+        listed = ", ".join(sorted(self.delegate_targets)) or "nothing"
+        return (
+            f"{name!r} is not in the delegate allow-list, [providers] {DELEGATE_TARGETS}, "
+            f"which lists {listed}"
+        )
 
 
 class ProfileError(ValueError):
@@ -231,7 +246,14 @@ def parse_profiles(rows: Mapping[str, object], *, allow_loopback_http: bool = Fa
             found[ProfileName(name)] = _key_provider(name, row, allow_loopback_http)
         except ProfileError as error:
             errors[name] = f"[providers.{name}] {error}"
-    return Profiles(found, errors)
+    targets = rows.get(DELEGATE_TARGETS, [])
+    if not isinstance(targets, list):
+        errors[DELEGATE_TARGETS] = f"[providers] {DELEGATE_TARGETS} must be a list of names"
+        targets = []
+    named = frozenset(
+        ProfileName(name) for name in cast("list[object]", targets) if isinstance(name, str)
+    )
+    return Profiles(found, errors, named)
 
 
 def _key_provider(name: str, row: object, allow_loopback_http: bool) -> KeyProvider:

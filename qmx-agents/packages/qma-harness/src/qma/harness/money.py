@@ -190,6 +190,7 @@ class GateRules:
 
 
 QMX_SERVER: Final = "qmx"
+DELEGATE_TOOL: Final = f"mcp__{QMX_SERVER}__delegate"
 
 
 def _external_unattended(tool_name: str, server: str, rules: GateRules, mode: str | None) -> bool:
@@ -592,10 +593,10 @@ def gate(
     permission_mode: str | None,
 ) -> Verdict:
     """Fast, no network and no writes; it stats paths only to resolve them (`canonical`).
-    Total over every tool name, built-in or MCP, main agent or sub-agent. `agent_id` is
-    unused until `delegate` lands (gate step 1, R33).
+    Total over every tool name, built-in or MCP, main agent or sub-agent.
 
     Order:
+    1. `mcp__qmx__delegate` with an `agent_id` (a native sub-agent) -> Deny (R33).
     2. proposal identity -> Ask.
     3. an MCP tool whose name, with or without its `mcp__<server>__` prefix, names a money
        act, or a dispatch tool whose target does (`dispatch_targets`) -> Deny, in every mode.
@@ -619,7 +620,8 @@ def gate(
     8. name in `mandatory_asks` -> Ask.
     9. else Pass.
     """
-    del agent_id
+    if agent_id and tool_name.casefold() == DELEGATE_TOOL:
+        return _deny("a sub-agent cannot start a helper chat (mcp__qmx__delegate)")
     if tool_name in rules.proposal_tools:
         return Ask("an order proposal always asks you")
     if tool_name.startswith("mcp__"):

@@ -107,7 +107,10 @@ def test_the_result_ends_the_turn_and_reports_usage() -> None:
     found = facts("readme_turn.jsonl")
     ended = [fact for fact in found if isinstance(fact, TurnEnded)]
     usage = [fact for fact in found if isinstance(fact, TurnUsage)]
-    assert ended == [TurnEnded(ok=True, terminal_reason="completed", deferred_tool_use=False)]
+    assert [(e.ok, e.terminal_reason, e.deferred_tool_use) for e in ended] == [
+        (True, "completed", False)
+    ]
+    assert str(ended[0].result).endswith("I can read them if you want to check.")
     assert [(u.session_id, u.num_turns) for u in usage] == [
         ("e793343e-1f7e-4e11-b665-b7224355ea53", 4)
     ]

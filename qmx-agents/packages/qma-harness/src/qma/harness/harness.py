@@ -37,6 +37,7 @@ from qma.harness.chat import (
     AskId,
     Chat,
     ChatDeps,
+    InjectedText,
     OperatorText,
     Prompt,
     Quote,
@@ -59,6 +60,7 @@ from qma.harness.launch import (
     Budgets,
     ChatConfig,
     ChatKind,
+    Child,
     ConfigChange,
     Effort,
     Interactive,
@@ -78,7 +80,9 @@ from qma.harness.profiles import (
     parse_profiles,
     resolve_model,
 )
+from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
+from qma.harness.tools import DelegateRefused
 from qma.harness.usage import (
     BackgroundCap,
     ReadingView,
@@ -159,7 +163,7 @@ class PlanWatch:
 
 class Harness:
     def __init__(self, deps: ChatDeps, watch: PlanWatch) -> None:
-        self._deps = deps
+        self._deps = replace(deps, delegate=self._delegate)
         self._chats = watch.chats
         """The one table of chats, Cold and Live. Only the harness writes it."""
         self._ledger = watch.ledger
@@ -251,7 +255,10 @@ class Harness:
             raise LaunchRefused(str(error)) from None
         if resolve_model(profile, spec.model) is None:
             raise LaunchRefused(f"{spec.profile} cannot run the model {spec.model!r}")
-        created = control.sessions_create(SessionInput(title=spec.title, origin="qma"))
+        parent = spec.kind.parent if isinstance(spec.kind, Child) else None
+        created = control.sessions_create(
+            SessionInput(title=spec.title, origin="qma", parent_id=parent)
+        )
         chat = session_id(str(created["id"]))
         if workspace is None:
             workspace = home.workspaces_dir / chat
@@ -331,6 +338,52 @@ class Harness:
                     if await found.close_if_idle(0):
                         break
 
+    async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
+        """Backs `mcp__qmx__delegate`. Refuses a profile outside `Profiles.delegate_targets`.
+        Starts a Child chat (a qmx-control child session with `parent_id`, verbatim, `unattended`
+        copied from the parent, its own relay grant, the [budgets] turn and spend limits) on the
+        parent's model tier, workspace and mode. Sends the prompt as `InjectedText`, because a
+        model wrote it, and returns the turn's final text. A full table, the overage stop or
+        the background cap refuses at once through `send`; nothing waits on a slot that only the
+        parent could free. The child closes, and its grant is revoked, however this ends."""
+        profiles = await asyncio.to_thread(self._deps.relay.profiles)
+        refusal = profiles.delegate_refusal(profile)
+        if refusal is not None:
+            raise DelegateRefused(refusal)
+        origin = self._chat(parent).record.config
+        try:
+            target = profiles.get(profile)
+            child = await self.start_chat(
+                NewChat(
+                    title=f"Helper on {profile}",
+                    model=origin.model if resolve_model(target, origin.model) else "opus",
+                    mode=origin.mode,
+                    workspace=origin.workspace,
+                    profile=profile,
+                    kind=Child(parent, unattended=unattended(origin.kind)),
+                )
+            )
+        except (ProfileError, LaunchRefused) as refused:
+            raise DelegateRefused(f"the helper did not start: {refused}") from None
+        found = self._chat(child)
+        end = found.next_end()
+        try:
+            await self.send(child, InjectedText(prompt))
+            ended = await end
+        except (LaunchRefused, ChatTableFull) as refused:
+            raise DelegateRefused(f"the helper did not start: {refused}") from None
+        finally:
+            end.cancel()
+            await found.close()
+        if ended is None:
+            raise DelegateRefused("the helper's process ended before it answered")
+        text = ended.result or ""
+        if self._deps.redaction:
+            text = redact(text)
+        if not ended.ok:
+            raise DelegateRefused(f"the helper's turn failed: {text or ended.terminal_reason}")
+        return text
+
     async def _reap(self) -> None:
         """Close every live chat idle longer than `idle_reap_seconds`, checked at a quarter of
         that period and at least once a minute. Closing is safe: the next send resumes the same
@@ -348,9 +401,7 @@ class Harness:
                 log.exception("reaping idle chats failed; trying again next tick")
 
     async def _budgets(self) -> Budgets:
-        return parse_budgets(
-            await asyncio.to_thread(self._deps.control.settings_get, "budgets")
-        )
+        return parse_budgets(await asyncio.to_thread(self._deps.control.settings_get, "budgets"))
 
     async def _needs_you(self, chat: SessionId, reason: str, **extra: object) -> None:
         block = SessionBlock(type="needs_you", content={"reason": reason, **extra})

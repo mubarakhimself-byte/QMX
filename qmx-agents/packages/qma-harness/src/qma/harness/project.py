@@ -276,6 +276,8 @@ class TurnEnded:
     ok: bool
     terminal_reason: str | None
     deferred_tool_use: bool
+    result: str | None = None
+    """The CLI's final text for the turn, or its error text when the turn failed."""
 
 
 @dataclass(frozen=True)
@@ -466,6 +468,7 @@ def _result(message: ResultMessage) -> list[Fact]:
             ok=not message.is_error,
             terminal_reason=message.terminal_reason,
             deferred_tool_use=message.deferred_tool_use is not None,
+            result=message.result,
         )
     )
     return facts
