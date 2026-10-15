@@ -25,6 +25,7 @@ from qma.harness import (
     QmxHome,
     Reject,
 )
+from qma.harness.chat import ask_budget
 from qma.harness.home import read_record, session_id, workspace_key, write_record
 from qma.harness.launch import Background
 from qma.harness.routes import chat_router, control_service
@@ -272,3 +273,58 @@ def test_fifty_concurrent_answers_each_resolve_their_own_ask(home: QmxHome) -> N
         assert await asyncio.gather(*calls) == [PermissionResultAllow()] * 50
 
     run(body, home)
+
+
+def test_an_edited_input_goes_through_the_money_gate_and_the_grant_binds_it(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    held: list[Grants] = []
+    real = qma.harness.chat.build_server
+
+    def keep(defs: Any, *, grants: Grants, **kwargs: Any) -> Any:
+        held.append(grants)
+        return real(defs, grants=grants, **kwargs)
+
+    monkeypatch.setattr(qma.harness.chat, "build_server", keep)
+    to_broker = {"command": "curl https://demo.ctraderapi.com:5035"}
+
+    async def body(harness: Harness) -> None:
+        chat, ask = await open_chat(harness)
+        sid = session_id(chat)
+        shell = asyncio.create_task(ask("Bash", {"command": "touch a"}, context()))
+        [n] = await asked(home, chat)
+        assert harness.answer(AskId(sid, n), AllowOnce(to_broker)) == "resolved"
+        assert await shell == PermissionResultDeny(
+            message="money rule: agents cannot reach a broker (ctraderapi.com)"
+        )
+        assert blocks(home, chat)[-1] == ("permission", {"ask": n, "state": "denied"})
+        order = asyncio.create_task(ask(PROPOSE, ORDER, context()))
+        [_, m] = await asked(home, chat, 2)
+        edited = {**ORDER, "volume": 0.05}
+        assert harness.answer(AskId(sid, m), AllowOnce(edited)) == "resolved"
+        assert await order == PermissionResultAllow(updated_input=edited)
+
+    run(body, home)
+    [grants] = held
+    assert grants.consume(PROPOSE, args_digest(PROPOSE, ORDER)) is False
+    assert grants.consume(PROPOSE, args_digest(PROPOSE, {**ORDER, "volume": 0.05})) is True
+
+
+@pytest.mark.parametrize(
+    ("raw", "seconds"),
+    [
+        ({}, 300.0),
+        ({"unattended_ask_seconds": 12}, 12.0),
+        ({"unattended_ask_seconds": 0.5}, 0.5),
+        ({"unattended_ask_seconds": "soon"}, 300.0),
+        ({"unattended_ask_seconds": True}, 300.0),
+        ({"unattended_ask_seconds": 0}, 300.0),
+        ({"unattended_ask_seconds": -5}, 300.0),
+        ({"unattended_ask_seconds": float("nan")}, 300.0),
+        ({"unattended_ask_seconds": float("inf")}, 300.0),
+    ],
+)
+def test_the_unattended_ask_budget_falls_back_on_a_bad_value(
+    raw: dict[str, object], seconds: float
+) -> None:
+    assert ask_budget(raw) == seconds

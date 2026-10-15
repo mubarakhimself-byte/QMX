@@ -22,7 +22,8 @@ on an asking QMX tool records a `Grant` for the exact final input, which the too
 consumes. AllowAlways on any other tool saves the CLI's suggested allow rules for this
 workspace and hands them back to the CLI for this process. An Interactive chat waits like
 Claude Code; an unattended one waits at most `[budgets] unattended_ask_seconds`, then rejects.
-The money gate runs before any of this, so no answer or remembered rule reaches a call it denied.
+The money gate runs before any of this, so no answer or remembered rule reaches a call it denied,
+and an input the operator edits passes the gate again before it runs.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -72,7 +74,8 @@ from qma.harness.launch import (
     launch_env,
     unattended,
 )
-from qma.harness.money import MoneySurfaceError
+from qma.harness.money import Deny, MoneySurfaceError
+from qma.harness.money import gate as money_gate
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
@@ -195,6 +198,20 @@ UNATTENDED_ASK_S: Final = 300.0
 REJECTED: Final = "the operator rejected this call"
 NOT_IN_TIME: Final = "the operator did not answer in time"
 ENDED: Final = "the agent process ended before the operator answered"
+
+
+def ask_budget(budgets: Mapping[str, object]) -> float:
+    """`[budgets] unattended_ask_seconds`, or `UNATTENDED_ASK_S` when it is unset or is not a
+    positive finite number of seconds."""
+    raw = budgets.get("unattended_ask_seconds", UNATTENDED_ASK_S)
+    if isinstance(raw, int | float) and not isinstance(raw, bool) and 0 < raw < math.inf:
+        return float(raw)
+    log.warning(
+        "[budgets] unattended_ask_seconds = %r is not a positive number; using %s s",
+        raw,
+        UNATTENDED_ASK_S,
+    )
+    return UNATTENDED_ASK_S
 
 
 @dataclass(frozen=True)
@@ -415,7 +432,7 @@ class Chat:
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._grants = Grants()
-        self._asking: frozenset[str] = frozenset()
+        self._gate: GateRules | None = None
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
 
@@ -631,7 +648,7 @@ class Chat:
             unattended=unattended(self.record.config.kind),
             external_unattended=external_unattended,
         )
-        self._asking = gate.mandatory_asks
+        self._gate = gate
         return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 
     async def _routing(self, settings: str) -> Launch:
@@ -735,7 +752,7 @@ class Chat:
     async def _can_use_tool(
         self, tool_name: str, tool_input: dict[str, Any], context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
-        asking_qmx = tool_name in self._asking
+        asking_qmx = self._gate is not None and tool_name in self._gate.mandatory_asks
         rules = () if asking_qmx else allow_rules(context.suggestions)
         kind = "question" if tool_name == QUESTION_TOOL else "permission"
         content: dict[str, Any] = {"tool": tool_name, "input": tool_input, "state": "asking"}
@@ -766,11 +783,30 @@ class Chat:
         if not unattended(self.record.config.kind):
             return await ask.reply
         budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
-        seconds = budgets.get("unattended_ask_seconds", UNATTENDED_ASK_S)
-        await asyncio.wait({ask.reply}, timeout=float(cast("float", seconds)))
+        await asyncio.wait({ask.reply}, timeout=ask_budget(budgets))
         if n in self._asks:
             self._settle(n, "expired", _Expired(NOT_IN_TIME))
         return ask.reply.result()
+
+    def _edit_refused(self, tool: str, edited: dict[str, Any]) -> str | None:
+        """The money gate's reason to deny an input the operator edited, or None. The CLI ran
+        the gate on the model's input only, so the edit gets the same check before it runs."""
+        if self._deps.test is not None and not self._deps.test.gate_hook:
+            return None
+        if self._gate is None:
+            return "the money gate has no rules for this chat, so the edited call is blocked"
+        try:
+            verdict = money_gate(
+                tool,
+                edited,
+                self._gate,
+                cwd=str(self.record.config.workspace),
+                agent_id=None,
+                permission_mode=self.record.config.mode,
+            )
+        except Exception as error:
+            return f"the gate failed ({type(error).__name__}), so the edited call is blocked"
+        return verdict.reason if isinstance(verdict, Deny) else None
 
     async def _resolve(
         self, n: int, ask: _Ask, kind: str, reply: Answer | _Expired
@@ -784,6 +820,10 @@ class Chat:
             case Answers(answers=answers):
                 state = "answered"
                 result = PermissionResultAllow(updated_input={**ask.input, "answers": answers})
+            case AllowOnce(edited_input=edited) if (
+                edited is not None and (refused := self._edit_refused(ask.tool, edited))
+            ):
+                state, result = "denied", PermissionResultDeny(message=refused)
             case AllowOnce(edited_input=edited):
                 final = ask.input if edited is None else edited
                 if ask.asking_qmx and (self._deps.test is None or self._deps.test.grants):
