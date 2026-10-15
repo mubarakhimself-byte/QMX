@@ -140,12 +140,38 @@ def _words(raw: list[str]) -> list[str]:
     return joined
 
 
+_VERBS: Final = MONEY_PATH_MUTATING_VERBS | MONEY_PATH_MONEY_VERBS
+
+
+def _names_record(words: list[str]) -> bool:
+    """The last word names a record and the rest spells no act (`kill_switch_status`,
+    `sell_side_research`); `cancel_order_report`, `buy_report` and `arm_kill_switch_report`
+    spell one. A money verb before `side` is a noun, and so is a run whose listed verb trails
+    its first word (`kill_switch`)."""
+    if not words or words[-1] not in MONEY_PATH_READ_NOUNS:
+        return False
+    nominal = [
+        word
+        for word, after in zip(words, [*words[1:], ""], strict=True)
+        if not (word in MONEY_PATH_MONEY_VERBS and after == "side")
+    ]
+    acting_runs = (
+        run
+        for start in range(len(nominal))
+        for stop in range(start + 2, len(nominal) + 1)
+        if (run := nominal[start:stop])[0] in _VERBS or not any(word in _VERBS for word in run)
+    )
+    if any(match_money_path_act("_".join(run)) for run in acting_runs if "_".join(run) in _PHRASES):
+        return False
+    return _word_act(nominal) is None
+
+
 def _reads(words: list[str]) -> bool:
-    """An allow-signal: a read word with no mutating verb (`get_open_positions`,
-    `list_transfers`), or a last word naming a record (`kill_switch_status`)."""
-    if words and words[-1] in MONEY_PATH_READ_NOUNS:
+    """An allow-signal: a read verb with no mutating verb (`get_open_positions`,
+    `get_deposit_history`), or a last word naming a record of no act."""
+    if _names_record(words):
         return True
-    return any(w in MONEY_PATH_READ_WORDS for w in words) and not any(
+    return any(w in MONEY_PATH_READ_WORDS - MONEY_PATH_READ_NOUNS for w in words) and not any(
         w in MONEY_PATH_MUTATING_VERBS for w in words
     )
 

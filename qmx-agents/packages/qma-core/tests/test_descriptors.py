@@ -240,6 +240,14 @@ BROKER_ACTS = [
     "mcp__broker__cancel_all",
     "mcp__broker__order_update",
     "mcp__ext__placeorder",
+    "cancel_order_report",
+    "close_position_history",
+    "place_order_status",
+    "buy_report",
+    "sell_status",
+    "withdraw_funds_history",
+    "arm_kill_switch_report",
+    "PlaceOrderStatus",
 ]
 
 BROKER_READS = [

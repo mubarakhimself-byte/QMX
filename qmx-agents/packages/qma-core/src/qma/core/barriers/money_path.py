@@ -236,8 +236,9 @@ MONEY_PATH_READ_WORDS: Final[frozenset[str]] = frozenset(
         "is", "has", "count", "status", "history", "report", "research",
     }
 )  # fmt: skip
-"""Allow-signals. A name holding one and no mutating verb is a read, and so is a name ending
-in one of `MONEY_PATH_READ_NOUNS` (`kill_switch_status`, `sell_side_research`)."""
+"""Allow-signals. A name holding one outside `MONEY_PATH_READ_NOUNS` and no mutating verb is a
+read, and so is a name ending in one of `MONEY_PATH_READ_NOUNS` that spells no act before it
+(`kill_switch_status`, `sell_side_research`, not `cancel_order_report` or `buy_report`)."""
 MONEY_PATH_READ_NOUNS: Final[frozenset[str]] = frozenset(
     {"status", "history", "report", "research"}
 )
