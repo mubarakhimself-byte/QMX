@@ -314,6 +314,115 @@ def test_a_read_word_or_a_name_without_an_act_passes(name: str) -> None:
     assert name_money_act(name) is None
 
 
+BULK_AND_PROTECTION_ACTS = [
+    ("cancel", "cancel"),
+    ("flatten", "flatten"),
+    ("kill", "kill"),
+    ("Liquidate", "liquidate"),
+    ("mass_cancel", "cancel_mass"),
+    ("bulk_cancel", "cancel_bulk"),
+    ("batch_cancel", "cancel_batch"),
+    ("schedule_cancel", "cancel_schedule"),
+    ("cancel_by_cloid", "cancel"),
+    ("cancelReplace", "cancel"),
+    ("cancelAllAfter", "cancel_all"),
+    ("cancel_all_after", "cancel_all"),
+    ("cancel_all_open", "cancel_all"),
+    ("cancel_all_for_symbol", "cancel_all"),
+    ("cancel_open", "cancel"),
+    ("close_all_by_symbol", "close_all"),
+    ("flatten_book", "flatten_book"),
+    ("flatten_portfolio", "flatten_portfolio"),
+    ("kill_all", "kill_all"),
+    ("cancelall", "cancel_all"),
+    ("closeall", "close_all"),
+    ("flattenall", "flatten_all"),
+    ("killall", "kill_all"),
+    ("marketbuy", "buy"),
+    ("buymarket", "buy"),
+    ("sellmarket", "sell"),
+    ("cancel_all_report", "cancel_all"),
+    ("cancel_all_history", "cancel_all"),
+    ("flatten_all_status", "flatten_all"),
+    ("market_close_status", "close_market"),
+    ("list_and_flatten", "flatten"),
+    ("order_market", "market_order"),
+    ("order_limit", "limit_order"),
+    ("bulk_orders", "bulk_order"),
+    ("placeOCO", "place_oco"),
+    ("placeOSO", "place_oso"),
+    ("close_by", "close_position"),
+    ("set_sl", "set_sl"),
+    ("set_tp", "set_tp"),
+    ("set_sl_tp", "set_sl"),
+    ("update_sl", "update_sl"),
+    ("modify_sl_tp", "modify_sl"),
+    ("set_tpsl", "set_tpsl"),
+    ("set_stoploss", "set_stoploss"),
+    ("stoploss_set", "set_stoploss"),
+    ("setstoploss", "set_stoploss"),
+    ("settakeprofit", "set_takeprofit"),
+    ("update_stop", "update_stop"),
+    ("set_breakeven", "set_breakeven"),
+    ("move_sl_to_breakeven", "move_sl"),
+    ("set_leverage", "set_leverage"),
+    ("update_leverage", "update_leverage"),
+    ("futures_change_leverage", "change_leverage"),
+    ("update_isolated_margin", "update_margin"),
+    ("margin_borrow", "borrow"),
+    ("margin_repay", "repay"),
+    ("Stake", "stake"),
+    ("Unstake", "unstake"),
+]
+
+
+@pytest.mark.parametrize(("name", "act"), BULK_AND_PROTECTION_ACTS)
+def test_bulk_verbs_stop_loss_abbreviations_and_margin_acts_are_refused(
+    name: str, act: str
+) -> None:
+    assert name_money_act(name) == act
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "set_display_currency",
+        "add_coin_to_watchlist",
+        "update_trade_journal",
+        "add_trade_note",
+        "add_trade_notes",
+        "cancel_job",
+        "cancel_subscription",
+        "cancel_backtest",
+        "flatten_list",
+        "flatten_json",
+        "get_cancel_status",
+        "stop_server",
+        "stop_backtest",
+        "kill_process",
+        "kill_switch_status",
+        "close_all_tabs",
+        "get_leverage",
+        "get_margin_requirements",
+        "get_stake_rewards",
+        "get_order_limit",
+    ],
+)
+def test_names_near_the_new_acts_still_pass(name: str) -> None:
+    assert name_money_act(name) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "act"),
+    [
+        ("Update the display currency.", None),
+        ("Sets the leverage of the account.", "set_leverage"),
+    ],
+)
+def test_a_description_reads_display_as_a_non_money_object(text: str, act: str | None) -> None:
+    assert description_money_act(text) == act
+
+
 @pytest.mark.parametrize(
     ("name", "act"),
     [

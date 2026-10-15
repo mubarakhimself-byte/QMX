@@ -582,7 +582,8 @@ def gate(
     if tool_name in rules.proposal_tools:
         return Ask("an order proposal always asks you")
     if tool_name.startswith("mcp__"):
-        act = name_money_act(tool_name)
+        bare = tool_name.removeprefix("mcp__").partition("__")[2]
+        act = name_money_act(tool_name) or name_money_act(bare)
         if act is not None:
             return _deny(f"agents cannot place, change or cancel orders ({tool_name} is {act})")
     field = rules.dispatch_targets.get(tool_name)

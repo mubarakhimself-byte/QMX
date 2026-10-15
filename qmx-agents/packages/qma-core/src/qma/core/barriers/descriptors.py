@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from typing import Any, Final, cast
 
 from qma.core.barriers.money_path import (
     MONEY_PATH_ACT_ALIASES,
+    MONEY_PATH_BULK_CUTS,
+    MONEY_PATH_BULK_OBJECTS,
+    MONEY_PATH_BULK_QUALIFIERS,
     MONEY_PATH_BULK_VERBS,
     MONEY_PATH_COMPOUND_NOUNS,
+    MONEY_PATH_CONJUNCTIONS,
     MONEY_PATH_DENIED_ACTS,
     MONEY_PATH_DENY_LIST,
     MONEY_PATH_DIRECTION_NOUNS,
@@ -16,11 +21,16 @@ from qma.core.barriers.money_path import (
     MONEY_PATH_MONEY_NOUNS,
     MONEY_PATH_MONEY_VERBS,
     MONEY_PATH_MUTATING_VERBS,
+    MONEY_PATH_NON_MONEY_OBJECTS,
+    MONEY_PATH_NON_MONEY_QUALIFIERS,
+    MONEY_PATH_ORDER_TYPES,
     MONEY_PATH_PROTECTION_NOUNS,
     MONEY_PATH_READ_NOUNS,
     MONEY_PATH_READ_WORDS,
     MONEY_PATH_SCOPES_AFTER,
     MONEY_PATH_SCOPES_BEFORE,
+    MONEY_PATH_STOP_NOUN,
+    MONEY_PATH_STRONG_BULK_VERBS,
     MONEY_PATH_TRAILING_WORDS,
     MoneyPathDenyError,
     match_money_path_act,
@@ -54,6 +64,11 @@ _VOCABULARY: Final = frozenset(
         *MONEY_PATH_SCOPES_AFTER,
         *MONEY_PATH_SCOPES_BEFORE,
         *MONEY_PATH_TRAILING_WORDS,
+        *MONEY_PATH_STRONG_BULK_VERBS,
+        *MONEY_PATH_BULK_QUALIFIERS,
+        *MONEY_PATH_ORDER_TYPES,
+        *MONEY_PATH_NON_MONEY_OBJECTS,
+        *MONEY_PATH_NON_MONEY_QUALIFIERS,
     }
 )
 """Every word with a role. Plurals fold onto it, and a lowercase run of them splits into it."""
@@ -93,9 +108,14 @@ def _fold(word: str) -> str:
     return word
 
 
+_BULK_ACTORS: Final = MONEY_PATH_BULK_VERBS | MONEY_PATH_STRONG_BULK_VERBS | MONEY_PATH_MONEY_VERBS
+_SPLIT_SCOPES: Final = MONEY_PATH_SCOPES_AFTER | MONEY_PATH_SCOPES_BEFORE | MONEY_PATH_ORDER_TYPES
+
+
 def _segment(word: str) -> list[str]:
-    """A lowercase run of role words that holds a family noun (`placeorder`, `ordersend`)
-    as its words; any other word unchanged."""
+    """A lowercase run of role words that holds a family noun (`placeorder`, `ordersend`), or
+    a bulk or money verb with a scope (`cancelall`, `marketbuy`), as its words; any other word
+    unchanged."""
     if _fold(word) in _VOCABULARY or len(word) < 6:
         return [word]
     best: list[list[str] | None] = [[], *([None] * len(word))]
@@ -110,9 +130,12 @@ def _segment(word: str) -> list[str]:
             default=None,
         )
     pieces = best[-1]
-    if pieces is None or not any(_fold(piece) in MONEY_PATH_FAMILY_NOUNS for piece in pieces):
+    if pieces is None:
         return [word]
-    return pieces
+    folded = {_fold(piece) for piece in pieces}
+    family = bool(folded & MONEY_PATH_FAMILY_NOUNS)
+    bulk = bool(folded & _BULK_ACTORS) and bool(folded & _SPLIT_SCOPES)
+    return pieces if family or bulk else [word]
 
 
 def _words(raw: list[str]) -> list[str]:
@@ -188,18 +211,65 @@ def _run_act(words: list[str]) -> str | None:
     return next((matched for run in runs if (matched := match_money_path_act(run))), None)
 
 
+_READ_VERBS: Final = MONEY_PATH_READ_WORDS - MONEY_PATH_READ_NOUNS
+_BULK_SCOPES: Final = (
+    MONEY_PATH_SCOPES_AFTER
+    | MONEY_PATH_SCOPES_BEFORE
+    | MONEY_PATH_BULK_QUALIFIERS
+    | MONEY_PATH_BULK_OBJECTS
+)
+
+
+def _bulk_head(words: list[str]) -> list[str]:
+    """`words` up to the first `MONEY_PATH_BULK_CUTS` word, without trailing words or read
+    nouns at the end (`close_all_by_symbol` and `cancel_all_report` read `close_all` and
+    `cancel_all`)."""
+    cut = next((i for i, word in enumerate(words) if word in MONEY_PATH_BULK_CUTS), len(words))
+    head = words[:cut]
+    while head and head[-1] in MONEY_PATH_TRAILING_WORDS | MONEY_PATH_READ_NOUNS:
+        head.pop()
+    return head
+
+
+def _bulk_act(words: list[str]) -> str | None:
+    """A strong bulk verb with a scope, qualifier or bulk object anywhere (`cancel_all_open`,
+    `mass_cancel`, `flatten_book`), or alone beside other verbs and trailing words, read words
+    too when a conjunction joins them (`cancel`, `cancelReplace`, `list_and_flatten`). A read
+    noun never lifts it."""
+    head = _bulk_head(words)
+    strong = next(
+        (
+            word
+            for word, after in zip(head, [*head[1:], ""][: len(head)], strict=True)
+            if word in MONEY_PATH_STRONG_BULK_VERBS and not (word == "kill" and after == "switch")
+        ),
+        None,
+    )
+    if strong is None:
+        return None
+    scope = next((word for word in words if word in _BULK_SCOPES), None)
+    if scope is not None:
+        return f"{strong}_{scope}"
+    joined = any(word in MONEY_PATH_CONJUNCTIONS for word in head)
+    alone = (
+        _VERBS
+        | MONEY_PATH_STRONG_BULK_VERBS
+        | MONEY_PATH_CONJUNCTIONS
+        | (MONEY_PATH_READ_WORDS if joined else frozenset[str]())
+    )
+    return strong if all(word in alone for word in head) else None
+
+
 def _scope_act(words: list[str]) -> str | None:
-    """A bulk verb with a scope after it (`cancel_all`, `close_all_now`) or before it
-    (`market_close`, `reqGlobalCancel`), ending the name. Never in a name with a read word, so
-    `is_market_open` reads."""
-    if any(word in MONEY_PATH_READ_WORDS for word in words):
+    """A bulk verb with a scope after it (`cancel_all`, `close_all_by_symbol`) or before it
+    (`market_close_status`, `reqGlobalCancel`), ending the name's `_bulk_head`. Never in a name
+    with a read verb, so `is_market_open` reads."""
+    if any(word in _READ_VERBS for word in words):
         return None
-    end = len(words)
-    while end and words[end - 1] in MONEY_PATH_TRAILING_WORDS:
-        end -= 1
-    if end < 2:
+    head = _bulk_head(words)
+    if len(head) < 2:
         return None
-    first, last = words[end - 2], words[end - 1]
+    first, last = head[-2], head[-1]
     if first in MONEY_PATH_BULK_VERBS and last in MONEY_PATH_SCOPES_AFTER:
         return f"{first}_{last}"
     if last in MONEY_PATH_BULK_VERBS and first in MONEY_PATH_SCOPES_BEFORE:
@@ -207,38 +277,80 @@ def _scope_act(words: list[str]) -> str | None:
     return None
 
 
+def _object_noun(words: list[str], index: int, nouns: frozenset[str]) -> bool:
+    """`words[index]` is one of `nouns`, not a setting (`set_display_currency`) and not the
+    subject of a non-money record right after it (`add_trade_note`, `add_coin_to_watchlist`)."""
+    after = words[index + 1 : index + 3]
+    record = after == ["to", "watchlist"] or (
+        bool(after) and after[0] in MONEY_PATH_NON_MONEY_OBJECTS
+    )
+    return (
+        words[index] in nouns
+        and not record
+        and (index == 0 or words[index - 1] not in MONEY_PATH_NON_MONEY_QUALIFIERS)
+    )
+
+
+_NAME_NOUNS: Final = MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS | {MONEY_PATH_STOP_NOUN}
+
+
 def _word_act(words: list[str]) -> str | None:
-    """A money verb anywhere; else a family or money noun, or a direction ending the name,
-    with any mutating verb in either order; else a protection noun ending the name; else a
-    scoped bulk verb."""
+    """A money verb anywhere; else a mutating verb with a family or money noun at another word,
+    or a direction ending the name (`_object_noun`); else a protection noun ending the name;
+    else a bulk qualifier or an order type with `order`; else a scoped bulk verb."""
     money = next((word for word in words if word in MONEY_PATH_MONEY_VERBS), None)
     if money is not None:
         return money
-    verb = next((word for word in words if word in MONEY_PATH_MUTATING_VERBS), None)
-    nouns = MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS
-    noun = next((word for word in words if word in nouns), None)
-    if noun is None and words and words[-1] in MONEY_PATH_DIRECTION_NOUNS:
-        noun = words[-1]
-    if verb and noun:
-        return f"{verb}_{noun}"
+    last = len(words) - 1
+    pair = next(
+        (
+            f"{verb}_{words[j]}"
+            for i, verb in enumerate(words)
+            if verb in MONEY_PATH_MUTATING_VERBS
+            for j in range(len(words))
+            if j != i
+            and (
+                _object_noun(words, j, _NAME_NOUNS)
+                or (j == last and words[j] in MONEY_PATH_DIRECTION_NOUNS)
+            )
+        ),
+        None,
+    )
+    if pair is not None:
+        return pair
     if words and words[-1] in MONEY_PATH_PROTECTION_NOUNS:
         return "protection"
+    family = next((word for word in words if word in MONEY_PATH_FAMILY_NOUNS), None)
+    qualifier = next((word for word in words if word in MONEY_PATH_BULK_QUALIFIERS), None)
+    if family is not None and qualifier is not None:
+        return f"{qualifier}_{family}"
+    kind = next(
+        (
+            word
+            for pair in itertools.pairwise(words)
+            if "order" in pair
+            for word in pair
+            if word in MONEY_PATH_ORDER_TYPES
+        ),
+        None,
+    )
+    if kind is not None:
+        return f"{kind}_order"
     return _scope_act(words)
 
 
 def name_money_act(name: str) -> str | None:
     """The denied act a tool name spells, read through both splits: the base suffix rule
-    first, then, unless an allow-signal reads the name, a multi-word act anywhere and the
-    word rule."""
+    first; then, unless an allow-signal reads the name, a multi-word act anywhere and the word
+    rule; then a bulk act, which no read noun lifts."""
     splits = _splits(name)
     suffix = next((act for words in splits if (act := _suffix_act(words))), None)
     if suffix is not None:
         return suffix
     for raw in splits:
         words = _words(raw)
-        if _reads(words):
-            continue
-        act = _run_act(words) or _word_act(words)
+        act = None if _reads(words) else _run_act(words) or _word_act(words)
+        act = act or _bulk_act(words) or _scope_act(words)
         if act is not None:
             return act
     return None
@@ -250,8 +362,9 @@ _REACH: Final = 3
 def description_money_act(text: str) -> str | None:
     """The act a description names as a verb with its object: a mutating or money verb
     followed, within `_REACH` words, by a family or money noun (`Places a market order`) or by
-    the rest of a multi-word act (`Set the book mode`). A lone word (`size`, `transfer`, `buy`)
-    or a noun without such a verb (`Get the current book mode`) names none."""
+    the rest of a multi-word act (`Set the book mode`). A lone word (`size`, `transfer`, `buy`),
+    a noun without such a verb (`Get the current book mode`) or a setting (`Update the display
+    currency`) names none."""
     words = _words(_splits(text)[0])
     verbs = MONEY_PATH_MUTATING_VERBS | MONEY_PATH_MONEY_VERBS
     nouns = MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS
@@ -259,7 +372,7 @@ def description_money_act(text: str) -> str | None:
         if verb not in verbs:
             continue
         for start in range(index + 1, min(index + 1 + _REACH, len(words))):
-            if words[start] in nouns:
+            if _object_noun(words, start, nouns):
                 return f"{verb}_{words[start]}"
             for stop in range(start + 1, len(words) + 1):
                 phrase = "_".join([verb, *words[start:stop]])
