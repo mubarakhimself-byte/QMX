@@ -95,6 +95,23 @@ CHANGES_FOLDER: Final = re.compile(
 against the moved folder, so it is checked against the call's cwd, the user home and each
 target."""
 
+TO_HOME: Final = re.compile(
+    r"(?<![\w-])(?:cd|pushd|chdir|set-location|sl|push-location)(?=\s*(?:$|[;&|)]))",
+    re.IGNORECASE,
+)
+"""A folder change with no target, which goes to the user home in bash."""
+
+FOLDER_OPTION: Final = re.compile(
+    r"(?<![\w-])(?:-C|--chdir|--directory|(?i:-wo\w*))(?:=|\s+)([^\s;&|)]+)"
+)
+"""An option that runs a program in another folder (`git -C`, `tar -C`, `env --chdir`, `make
+--directory`, PowerShell `-WorkingDirectory`). Its target counts as a folder change. `-C` is
+case-sensitive, so `python -c` is not one."""
+
+DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])")
+"""`C:x` or `C:` alone: relative to that drive's own current folder, which the gate cannot
+know."""
+
 GLOB: Final = re.compile(r"[*?\[]")
 
 MAX_SHELL_TEXT: Final = 256 * 1024
@@ -232,12 +249,15 @@ def remote_form(raw: str) -> str | None:
 
 
 def odd_form(raw: str) -> str | None:
-    """`remote_form`, a stream on any path, an 8.3 short segment (`CLAUDE~1`), or a segment
-    ending in a dot or a space, which Windows drops. File-tool paths only: in shell text
-    `HEAD~1:a.py` and a sentence ending `a.py.` are ordinary, so there `canonical` reads them."""
+    """`remote_form`, a drive-relative path (`C:x`), a stream on any path, an 8.3 short
+    segment (`CLAUDE~1`), or a segment ending in a dot or a space, which Windows drops.
+    File-tool paths only: in shell text `HEAD~1:a.py` and a sentence ending `a.py.` are
+    ordinary, so there `canonical` reads them."""
     found = remote_form(raw)
     if found is not None:
         return found
+    if DRIVE_RELATIVE.match(raw.strip().strip("'\"")):
+        return "a drive-relative path"
     text = raw.strip().strip("'\"").replace("\\", "/")
     segments = text.split("/")
     if ":" in re.sub(r"^[A-Za-z]:", "", text):
@@ -374,6 +394,14 @@ def _candidates(text: str) -> Iterator[str]:
     yield from _CANDIDATE.findall(text)
 
 
+_FILE_URL = re.compile(r"^file:(?://[^/]*)?/(?=[A-Za-z]:)|^file:(?://[^/]*)?(?=/)", re.I)
+
+
+def _unurl(word: str) -> str:
+    """A `file:` URL as the path it opens (`curl file:///C:/x` reads `C:/x`)."""
+    return _FILE_URL.sub("", word)
+
+
 def _pathlike(word: str) -> bool:
     return bool(word) and ("/" in word or "\\" in word or word[0] in "~$%.")
 
@@ -384,13 +412,15 @@ def _roots(folded: _Folded) -> set[str]:
 
 
 def _bases(expanded: str, *, cwd: str, rules: GateRules) -> list[str]:
-    """Folders a relative word may resolve against: the call's cwd, and after a folder change
-    also the user home and every target reached from an earlier base."""
-    targets = [match.group(1).strip("'\"") for match in CHANGES_FOLDER.finditer(expanded)]
-    if not targets:
-        return [cwd]
+    """Folders a relative word may resolve against: the call's cwd, after a `cd` also the user
+    home, and every target of a `cd` or a folder option reached from an earlier base."""
+    moves = [match.group(1) for match in CHANGES_FOLDER.finditer(expanded)]
+    options = [match.group(1) for match in FOLDER_OPTION.finditer(expanded)]
     home = rules.variables.get("HOME", "/")
-    bases = [cwd, home]
+    targets = [target.strip("'\"") for target in (*moves, *options)]
+    if not targets and not TO_HOME.search(expanded):
+        return [cwd]
+    bases = [cwd, home] if moves or TO_HOME.search(expanded) else [cwd]
     for target in targets:
         bases += [
             normalize_path(
@@ -464,7 +494,7 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
     bases = _bases(expanded, cwd=cwd, rules=rules)
     if len(bases) > MAX_SHELL_BASES:
         return _deny(f"the command changes folder too often to check ({len(bases)} folders)")
-    words = list(dict.fromkeys(_candidates(expanded)))
+    words = list(dict.fromkeys(map(_unurl, _candidates(expanded))))
     paths = sum(map(_pathlike, words)) * len(bases)
     if paths > MAX_SHELL_PATHS:
         return _deny(f"the command names too many paths to check ({paths} path lookups)")
@@ -472,6 +502,8 @@ def _shell(tool_input: Mapping[str, object], rules: GateRules, cwd: str) -> Deny
         remote = remote_form(word) if _pathlike(word) else None
         if remote is not None:
             return _deny(f"agents cannot use {remote} ({word})")
+        if DRIVE_RELATIVE.match(word):
+            return _deny(f"agents cannot use a drive-relative path ({word})")
         for base in bases:
             found = _word(word, base=base, rules=rules, folded=folded, sweep=sweep)
             if found is not None:
@@ -515,8 +547,10 @@ def gate(
     5. WRITE_TOOLS into `protected_paths`, or into the QMX home outside `writable_paths`
        -> Deny.
     6. SHELL_TOOLS whose command names a login fragment, a credential-store reader, a
-       keyring name, a broker host, a protected or secret path, the personal home, a bare
-       Claude home name, or sweeps a drive root or user home -> Deny.
+       keyring name, a broker host, a protected or secret path, the personal home, a
+       drive-relative word, or sweeps a drive root or user home -> Deny. Relative words are
+       also resolved against the targets of `cd` and folder options, and the home after a
+       `cd`.
     7. WebFetch to a broker host -> Deny.
     8. name in `mandatory_asks` -> Ask.
     9. else Pass.
