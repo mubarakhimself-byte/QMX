@@ -78,7 +78,7 @@ class Child:
 
 
 CHILD_DENIED: Final = ("Agent", "Task")
-"""`Task` is the Agent tool's older name, which the CLI still matches."""
+"""`Task` is the Agent tool's older name, denied too in case a CLI build still uses it."""
 
 
 type ChatKind = Interactive | Background | Child
