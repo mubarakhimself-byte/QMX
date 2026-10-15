@@ -140,14 +140,16 @@ class QmxHome:
     def workspaces_dir(self) -> Path:
         return self.root / "workspaces"
 
+    @property
+    def agent_memory_dir(self) -> Path:
+        return self.root / "agent-memory"
+
     def memory_dir(self, workspace: Path) -> Path:
         """Auto memory for launches in `workspace`. Not a protected path, so agents read and
         write it as in vanilla."""
         key = workspace_key(workspace)
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", Path(key).name).strip("-.") or "root"
-        return (
-            self.root / "agent-memory" / f"{slug}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
-        )
+        return self.agent_memory_dir / f"{slug}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
 
 
 def workspace_key(workspace: Path) -> str:

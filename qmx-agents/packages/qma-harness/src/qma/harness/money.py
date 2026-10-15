@@ -125,10 +125,16 @@ class GateRules:
     `tool`). The named tool goes through the same name check."""
     protected_paths: tuple[str, ...]
     """No writes: both Claude homes, chats, procs, state, control.db, portfolio.db,
-    settings.toml and the plugin folder."""
+    settings.toml and the plugin folder. Also rendered as deny rules."""
+    qmx_homes: tuple[str, ...]
+    """The QMX home. No writes anywhere in it outside `writable_paths`. Deny rules cannot
+    carve out an exception, so only the gate holds this; the rules list the children."""
+    writable_paths: tuple[str, ...]
+    """`workspaces/` and `agent-memory/` in the QMX home, written as in vanilla."""
     secret_paths: tuple[str, ...]
     """No reads and no writes: the plan login in both forms, under each QMX Claude home and
-    under the operator's `~/.claude`, and his `~/.claude.json`."""
+    under the operator's `~/.claude`, his `~/.claude.json`, and the QMX home's
+    `settings.toml` and `rclone.conf`, which can hold keys."""
     personal_homes: tuple[str, ...]
     """His `~/.claude`, as written and as resolved. No reads and no writes (R20)."""
     keyring_names: frozenset[str]
@@ -266,6 +272,8 @@ class _Folded:
     """The rules' paths and names in the form `gate` compares, built once per call."""
 
     protected: tuple[str, ...]
+    qmx_homes: tuple[str, ...]
+    writable: tuple[str, ...]
     secrets: tuple[str, ...]
     personal: tuple[str, ...]
     home: str
@@ -276,10 +284,19 @@ class _Folded:
         fold: Callable[[str], str] = str.casefold if rules.case_insensitive else str
         return cls(
             tuple(map(fold, rules.protected_paths)),
+            tuple(map(fold, rules.qmx_homes)),
+            tuple(map(fold, rules.writable_paths)),
             tuple(map(fold, rules.secret_paths)),
             tuple(map(fold, rules.personal_homes)),
             fold(rules.variables.get("HOME", "/")),
             fold,
+        )
+
+    def protects(self, path: str) -> bool:
+        if any(within(path, p) for p in self.protected):
+            return True
+        return any(within(path, h) for h in self.qmx_homes) and not any(
+            within(path, w) for w in self.writable
         )
 
 
@@ -305,7 +322,7 @@ def _secret(path: str, folded: _Folded) -> bool:
 
 def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:
     if _secret(path, folded):
-        return _deny(f"agents cannot read or write a login file ({path})")
+        return _deny(f"agents cannot read or write a login file or a key file ({path})")
     if any(within(path, home) for home in folded.personal):
         return _deny(f"agents cannot read or write the operator's own Claude home ({path})")
     if folder and any(within(target, path) for target in (*folded.secrets, *folded.personal)):
@@ -339,7 +356,7 @@ def _file_tool(
             found = _read_target(path, folded, folder=folder)
             if found is not None:
                 return found
-            if tool_name in WRITE_TOOLS and any(within(path, p) for p in folded.protected):
+            if tool_name in WRITE_TOOLS and folded.protects(path):
                 return _deny(f"agents cannot write QMX state ({path})")
     return None
 
@@ -391,7 +408,7 @@ def _word(word: str, *, base: str, rules: GateRules, folded: _Folded, sweep: boo
             found = _read_target(path, folded, folder=True)
             if found is not None:
                 return found
-            if any(within(path, p) for p in folded.protected):
+            if folded.protects(path):
                 return _deny(f"agents cannot touch QMX state from a shell ({path})")
         return None
     forms = (
@@ -406,7 +423,7 @@ def _word(word: str, *, base: str, rules: GateRules, folded: _Folded, sweep: boo
         found = _read_target(path, folded, folder=False)
         if found is not None:
             return found
-        if any(within(path, p) for p in folded.protected):
+        if folded.protects(path):
             return _deny(f"agents cannot touch QMX state from a shell ({path})")
         if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
             return _deny(f"agents cannot sweep a drive root or a user home ({path})")
@@ -489,7 +506,8 @@ def gate(
     4. READ_TOOLS or WRITE_TOOLS on an odd Windows path form (`odd_form`), a login file,
        inside the personal home, or (Grep, Glob) on a folder holding either -> Deny. Each
        path is compared as written and as resolved.
-    5. WRITE_TOOLS into `protected_paths` -> Deny.
+    5. WRITE_TOOLS into `protected_paths`, or into the QMX home outside `writable_paths`
+       -> Deny.
     6. SHELL_TOOLS whose command names a login fragment, a credential-store reader, a
        keyring name, a broker host, a protected or secret path, the personal home, a bare
        Claude home name, or sweeps a drive root or user home -> Deny.

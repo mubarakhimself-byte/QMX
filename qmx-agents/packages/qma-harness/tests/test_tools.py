@@ -255,14 +255,12 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
         keyring_names=frozenset(),
     )
     for root in (real, link):
-        settings = normalize_path(
-            str(root / "settings.toml"), cwd="/", home="/", case_insensitive=False
+        database = normalize_path(
+            str(root / "control.db"), cwd="/", home="/", case_insensitive=False
         )
-        assert settings in rules.protected_paths
-        found = gate(
-            "Edit", {"file_path": str(root / "settings.toml")}, rules, cwd="/", agent_id=None
-        )
-        assert found == Deny(f"money rule: agents cannot write QMX state ({settings.casefold()})")
+        assert database in rules.protected_paths
+        found = gate("Edit", {"file_path": str(root / "control.db")}, rules, cwd="/", agent_id=None)
+        assert found == Deny(f"money rule: agents cannot write QMX state ({database.casefold()})")
 
 
 class RecordingRoad:
@@ -382,3 +380,30 @@ def test_apps_call_checks_the_app_tool_it_names(
     )
     arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
     assert gate("mcp__qmx__apps_call", arguments, rules, cwd="/", agent_id=None) == verdict
+
+
+def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
+    tmp_path: Path,
+) -> None:
+    home = QmxHome(tmp_path / "home")
+    rules = gate_rules(
+        [], domain_write="allow", home=home, config_dir=home.plan_dir, keyring_names=frozenset()
+    )
+    root = home.root.as_posix()
+    calls: list[tuple[str, dict[str, object], str]] = [
+        ("Write", {"file_path": f"{root}/apps/a/manifest.json"}, "deny"),
+        ("Edit", {"file_path": f"{root}/library/x.json"}, "deny"),
+        ("Bash", {"command": f"echo x > {root}/runs/r.json"}, "deny"),
+        ("Read", {"file_path": f"{root}/settings.toml"}, "deny"),
+        ("Read", {"file_path": f"{root}/rclone.conf"}, "deny"),
+        ("Grep", {"pattern": "key", "path": root}, "deny"),
+        ("Write", {"file_path": f"{root}/workspaces/w/a.py"}, "pass"),
+        ("Write", {"file_path": f"{root}/agent-memory/w-1/MEMORY.md"}, "pass"),
+        ("Bash", {"command": f"ls {root}/workspaces/w"}, "pass"),
+        ("Read", {"file_path": f"{root}/apps/a/manifest.json"}, "pass"),
+    ]
+    found = [
+        (tool, type(gate(tool, args, rules, cwd="/", agent_id=None)).__name__.casefold())
+        for tool, args, _ in calls
+    ]
+    assert found == [(tool, verdict) for tool, _, verdict in calls]

@@ -472,7 +472,7 @@ def gate_rules(
         folder / name
         for folder in (home.plan_dir, home.relayed_dir, personal)
         for name in (".credentials.json", ".claude.json")
-    ] + [Path.home() / ".claude.json"]
+    ] + [Path.home() / ".claude.json", home.root / "settings.toml", home.root / "rclone.conf"]
     return GateRules(
         proposal_tools=frozenset(
             PREFIX + tool.name for tool in defs if tool.effect is Effect.PROPOSE_MONEY
@@ -488,6 +488,8 @@ def gate_rules(
             }
         ),
         protected_paths=_both(protected),
+        qmx_homes=_both([home.root]),
+        writable_paths=_both([home.workspaces_dir, home.agent_memory_dir]),
         secret_paths=_both(secrets),
         personal_homes=_both([personal]),
         keyring_names=frozenset(name.casefold() for name in keyring_names),

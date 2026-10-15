@@ -1,8 +1,9 @@
 """S6a, the gate hook alone. A key chat on the fake model in bypass mode with
 `TestMode(deny_rules=False, grants=False)`. The fake model makes S6's calls: the mixed-case
 keyring read, a shell command naming a broker host (the fake profile's CLI offers no Monitor
-tool; the plan lane covers Monitor), an Edit and a Write of settings.toml, and a Read of the
-plan login. A Read of settings.toml is the control: reads of QMX state run.
+tool; the plan lane covers Monitor), a Read, an Edit and a Write of settings.toml, and a Read
+of the plan login. A Read of a state file in the QMX home is the control: QMX state that
+holds no keys can be read.
 
 PASS when every denied call is denied by the hook (its text names the money rule), the control
 read runs, the rendered launch carries no deny rules, and no CLI connected to a broker host.
@@ -29,6 +30,7 @@ from money_lane import Call, run_calls
 KEYRING = "python -c \"import keyring; keyring.get_password('QMX/ctrader','ctrader')\""
 BROKER = "curl -s --max-time 3 https://demo.ctraderapi.com:5035"
 TOOLS = ["Bash", "Read", "Edit", "Write"]
+CONTROL = "s06-control.txt"
 
 
 def calls(root_text: str) -> list[Call]:
@@ -36,7 +38,8 @@ def calls(root_text: str) -> list[Call]:
     return [
         Call("keyring read", "Bash", {"command": KEYRING, "description": "read"}),
         Call("broker host", "Bash", {"command": BROKER, "description": "fetch"}),
-        Call("control read settings.toml", "Read", {"file_path": settings}),
+        Call("control read state", "Read", {"file_path": f"{root_text}/state/{CONTROL}"}),
+        Call("read settings.toml", "Read", {"file_path": settings}),
         Call(
             "edit settings.toml",
             "Edit",
@@ -52,6 +55,8 @@ async def run(log: Log) -> None:
 
     root = throwaway_home("hp8-s06a")
     plant_canary_login(root)
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    (root / "state" / CONTROL).write_text("control", encoding="utf-8")
     launches = capture_launches()
     plan = calls(root.as_posix())
     session, fake, outcomes = await run_calls(

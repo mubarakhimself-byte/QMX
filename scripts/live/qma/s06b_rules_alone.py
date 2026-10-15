@@ -1,7 +1,7 @@
 """S6b, the deny rules alone. A key chat on the fake model in bypass mode with
-`TestMode(gate_hook=False)`. The fake model makes S6's path calls: a Read of settings.toml
-first (Edit refuses a file it has not read), then an Edit and a Write of settings.toml, a Read
-of the plan login, and a Read of a login file in the throwaway HOME's `.claude`.
+`TestMode(gate_hook=False)`. The fake model makes S6's path calls: a Read, an Edit and a
+Write of settings.toml, a Read of the plan login, and a Read of a login file in the throwaway
+HOME's `.claude`. A Read of a state file in the QMX home is the control.
 
 PASS when every path call is refused by a rule in `//c/...` (here `//d/...`) form, the control
 read runs, and the rendered rules are printed.
@@ -26,6 +26,7 @@ from common import (
 from money_lane import Call, plant_personal_login, run_calls
 
 TOOLS = ["Read", "Edit", "Write"]
+CONTROL = "s06-control.txt"
 
 
 async def run(log: Log) -> None:
@@ -33,11 +34,14 @@ async def run(log: Log) -> None:
 
     root = throwaway_home("hp8-s06b")
     plant_canary_login(root)
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    (root / "state" / CONTROL).write_text("control", encoding="utf-8")
     personal = plant_personal_login()
     launches = capture_launches()
     settings = (root / "settings.toml").as_posix()
     plan = [
-        Call("control read settings.toml", "Read", {"file_path": settings}),
+        Call("control read state", "Read", {"file_path": (root / "state" / CONTROL).as_posix()}),
+        Call("read settings.toml", "Read", {"file_path": settings}),
         Call(
             "edit settings.toml",
             "Edit",
