@@ -132,6 +132,11 @@ lookup (`canonical`), so more is denied rather than left to run past the hook ti
 
 DENY_PREFIX: Final = "money rule: "
 
+ATTENDED_MODES: Final[frozenset[str]] = frozenset({"default", "acceptEdits", "plan"})
+"""Permission modes in which the CLI asks before an MCP tool runs. Every other mode, an unknown
+one and a hook input with none run it unasked, so an external tool there needs the operator's
+allow-list."""
+
 
 @dataclass(frozen=True)
 class GateRules:
@@ -170,10 +175,27 @@ class GateRules:
     """Values the gate expands in paths and commands: HOME, USERPROFILE, CLAUDE_CONFIG_DIR."""
     case_insensitive: bool
     """True on Windows and macOS. Paths and names are compared casefolded there."""
+    unattended: bool
+    """The chat runs without the operator (`launch.unattended`): no external MCP tool runs
+    unless `external_unattended` lists it, whatever the permission mode."""
+    external_unattended: frozenset[str]
+    """`settings.toml [claude] external_tools_unattended`: `server/tool` and `server/*` entries
+    the operator allows to run without asking. Only the operator writes settings."""
     dropped_servers: set[str] = field(default_factory=set[str])
     """External MCP servers the chat left out after launch. The only field that changes once
     the chat runs: the chat adds a server when it switches it off, and every tool of that
     server is denied from then on, whether or not the switch-off held."""
+
+
+QMX_SERVER: Final = "qmx"
+
+
+def _external_unattended(tool_name: str, server: str, rules: GateRules, mode: str | None) -> bool:
+    """An external MCP tool that would run unasked and that the operator has not allowed."""
+    if server == QMX_SERVER or (mode in ATTENDED_MODES and not rules.unattended):
+        return False
+    bare = tool_name.removeprefix(f"mcp__{server}__")
+    return not {f"{server}/{bare}", f"{server}/*"} & rules.external_unattended
 
 
 def mcp_server(tool_name: str) -> str | None:
@@ -567,6 +589,7 @@ def gate(
     *,
     cwd: str,
     agent_id: str | None,
+    permission_mode: str | None,
 ) -> Verdict:
     """Fast, no network and no writes; it stats paths only to resolve them (`canonical`).
     Total over every tool name, built-in or MCP, main agent or sub-agent. `agent_id` is
@@ -574,9 +597,14 @@ def gate(
 
     Order:
     2. proposal identity -> Ask.
-    3. an MCP tool whose name names a money act, or a dispatch tool whose target does
-       (`dispatch_targets`) -> Deny. Built-in names are the CLI's own closed set
-       (`ExitPlanMode` would read as a `mode` act).
+    3. an MCP tool whose name, with or without its `mcp__<server>__` prefix, names a money
+       act, or a dispatch tool whose target does (`dispatch_targets`) -> Deny, in every mode.
+       Built-in names are the CLI's own closed set (`ExitPlanMode` would read as a `mode`
+       act).
+    3a. a tool of a server the chat left out (`dropped_servers`) -> Deny.
+    3b. an external MCP tool in a mode outside `ATTENDED_MODES` (or none) or in an unattended
+       chat, unless `external_unattended` lists it -> Deny. The name barrier above is defense
+       in depth; this rule does not depend on any vocabulary.
     4. READ_TOOLS or WRITE_TOOLS on an odd Windows path form (`odd_form`), a login file,
        inside the personal home, or (Grep, Glob) on a folder holding either -> Deny. Each
        path is compared as written and as resolved.
@@ -602,6 +630,11 @@ def gate(
     server = mcp_server(tool_name)
     if server is not None and server in rules.dropped_servers:
         return _deny(f"the MCP server {server} was left out of this chat ({tool_name})")
+    if server is not None and _external_unattended(tool_name, server, rules, permission_mode):
+        return _deny(
+            "agents cannot call an external MCP tool in an unattended chat unless [claude] "
+            f"external_tools_unattended lists it ({tool_name})"
+        )
     field = rules.dispatch_targets.get(tool_name)
     target = tool_input.get(field) if field else None
     if isinstance(target, str) and (act := name_money_act(target)) is not None:
@@ -643,10 +676,11 @@ def hook_output(verdict: Verdict) -> dict[str, Any]:
 
 
 def pre_tool_use(rules: GateRules) -> HookCallback:
-    """Adapter from `gate` to the SDK hook output shape. Reads `cwd` and `agent_id` from the
-    hook input. Any exception inside `gate` returns deny (fail closed). A callback past its
-    `HookMatcher.timeout` blocks the call (hooks reference); check S38 proves it here. The
-    callback does no I/O and awaits nothing."""
+    """Adapter from `gate` to the SDK hook output shape. Reads `cwd`, `agent_id` and
+    `permission_mode` from the hook input; a missing mode counts as unattended. Any exception
+    inside `gate` returns deny (fail closed). A callback past its `HookMatcher.timeout` blocks
+    the call (hooks reference); check S38 proves it here. The callback does no I/O and awaits
+    nothing."""
 
     async def callback(
         hook_input: HookInput, tool_use_id: str | None, context: HookContext
@@ -660,6 +694,7 @@ def pre_tool_use(rules: GateRules) -> HookCallback:
                 rules,
                 cwd=str(data.get("cwd") or "/"),
                 agent_id=data.get("agent_id"),
+                permission_mode=data.get("permission_mode"),
             )
         except Exception as error:
             verdict = _deny(f"the gate failed ({type(error).__name__}), so the call is blocked")

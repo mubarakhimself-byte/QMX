@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import sys
 import tempfile
@@ -56,6 +57,8 @@ RULES = GateRules(
         }
     ),
     case_insensitive=True,
+    unattended=False,
+    external_unattended=frozenset(),
 )
 CWD = "C:\\Users\\Op\\Desktop\\QMX"
 
@@ -327,7 +330,7 @@ def kind(verdict: money.Verdict) -> tuple[str, str]:
 def test_gate_verdict_table(
     tool: str, tool_input: dict[str, Any], expected: str, reason: str
 ) -> None:
-    seen, why = kind(gate(tool, tool_input, RULES, cwd=CWD, agent_id=None))
+    seen, why = kind(gate(tool, tool_input, RULES, cwd=CWD, agent_id=None, permission_mode="default"))
     assert seen == expected
     assert reason in why
     if expected == "deny":
@@ -511,8 +514,71 @@ def test_real_short_names_read_as_the_long_path(tmp_path: Path) -> None:
         ("Read", {"file_path": short_login}),
         ("Write", {"file_path": f"{short_state}/new.txt"}),
     ]
-    found = [kind(gate(tool, args, rules, cwd=str(base), agent_id=None)) for tool, args in calls]
+    found = [kind(gate(tool, args, rules, cwd=str(base), agent_id=None, permission_mode="default")) for tool, args in calls]
     assert [verdict for verdict, _ in found] == ["deny"] * 5
     assert "login file" in found[0][1]
     assert "login file" in found[1][1]
     assert "QMX state" in found[2][1]
+
+
+@pytest.mark.parametrize(
+    ("tool", "mode", "unattended", "allowed", "expected"),
+    [
+        ("mcp__weather__get_weather", "bypassPermissions", False, (), "deny"),
+        ("mcp__weather__get_weather", None, False, (), "deny"),
+        ("mcp__weather__get_weather", "auto", False, (), "deny"),
+        ("mcp__weather__get_weather", "dontAsk", False, (), "deny"),
+        ("mcp__weather__get_weather", "somethingNew", False, (), "deny"),
+        ("mcp__weather__get_weather", "default", False, (), "pass"),
+        ("mcp__weather__get_weather", "acceptEdits", False, (), "pass"),
+        ("mcp__weather__get_weather", "plan", False, (), "pass"),
+        ("mcp__weather__get_weather", "default", True, (), "deny"),
+        ("mcp__weather__get_weather", "bypassPermissions", False, ("weather/get_weather",), "pass"),
+        ("mcp__weather__get_weather", "bypassPermissions", False, ("weather/*",), "pass"),
+        ("mcp__weather__get_weather", "default", True, ("weather/*",), "pass"),
+        ("mcp__weather__get_forecast", "bypassPermissions", False, ("weather/get_weather",), "deny"),
+        ("mcp__news__get_weather", "bypassPermissions", False, ("weather/*",), "deny"),
+        ("mcp__qmx__read_bars", "bypassPermissions", True, (), "pass"),
+        ("Bash", "bypassPermissions", True, (), "pass"),
+    ],
+)
+def test_an_external_mcp_tool_in_an_unattended_chat_needs_the_operators_allow_list(
+    tool: str, mode: str | None, unattended: bool, allowed: tuple[str, ...], expected: str
+) -> None:
+    rules = dataclasses.replace(
+        RULES, unattended=unattended, external_unattended=frozenset(allowed)
+    )
+    tool_input = {"command": "ls"} if tool == "Bash" else {}
+    seen, why = kind(gate(tool, tool_input, rules, cwd=CWD, agent_id=None, permission_mode=mode))
+    assert seen == expected
+    if expected == "deny":
+        assert why == (
+            f"money rule: agents cannot call an external MCP tool in an unattended chat unless "
+            f"[claude] external_tools_unattended lists it ({tool})"
+        )
+
+
+def test_the_name_barrier_still_refuses_an_allow_listed_money_tool() -> None:
+    rules = dataclasses.replace(RULES, external_unattended=frozenset({"broker/*"}))
+    seen, why = kind(
+        gate(
+            "mcp__broker__place_order",
+            {},
+            rules,
+            cwd=CWD,
+            agent_id=None,
+            permission_mode="bypassPermissions",
+        )
+    )
+    assert (seen, why) == (
+        "deny",
+        "money rule: agents cannot place, change or cancel orders "
+        "(mcp__broker__place_order is submit_order)",
+    )
+
+
+def test_a_hook_input_without_a_permission_mode_counts_as_unattended() -> None:
+    assert hook("mcp__weather__get_weather", {})["hookSpecificOutput"]["permissionDecision"] == (
+        "deny"
+    )
+    assert hook("mcp__qmx__read_bars", {}) == {}

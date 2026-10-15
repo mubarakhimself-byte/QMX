@@ -55,7 +55,7 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
-from qma.harness.tools import DEFAULT_DOMAIN_WRITE, gate_rules
+from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, gate_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
@@ -213,13 +213,18 @@ CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
         "permissions", "env", "hooks",
         "outputStyle", "attribution", "includeCoAuthoredBy", "alwaysThinkingEnabled",
         "language", "respectGitignore",
-        "remembered",
+        "remembered", "external_tools_unattended",
     }
 )  # fmt: skip
 """Top-level keys allowed in `settings.toml [claude]`. Everything else refuses, including
 `apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins`, marketplaces and
 `model`. `remembered` is QMX's, never passed through as is: per-workspace "always allow"
-rules merged into `permissions.allow` only for launches in that workspace."""
+rules merged into `permissions.allow` only for launches in that workspace.
+`external_tools_unattended` is QMX's too: the `server/tool` and `server/*` entries whose
+external MCP tools may run in an unattended chat or mode (`money.GateRules`). Neither reaches
+the CLI."""
+
+QMX_ONLY_KEYS: Final = frozenset({"remembered", "external_tools_unattended"})
 
 PERMISSION_KEYS: Final = frozenset({"allow", "ask", "deny", "additionalDirectories"})
 
@@ -266,6 +271,10 @@ class ClaudeSettings:
 
     raw: Mapping[str, object] = field(default_factory=dict[str, object])
 
+    @property
+    def external_tools_unattended(self) -> frozenset[str]:
+        return frozenset(cast("list[str]", self.raw.get("external_tools_unattended", [])))
+
     def remembered(self, workspace: Path) -> list[str]:
         table = cast("Mapping[str, Mapping[str, list[str]]]", self.raw.get("remembered", {}))
         return list(table.get(workspace_key(workspace), {}).get("allow", []))
@@ -289,6 +298,20 @@ def _table(value: object, key: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise _refuse(key, "must be a table")
     return cast("dict[str, object]", value)
+
+
+_EXTERNAL_ENTRY = re.compile(rf"({SERVER_NAME.pattern})/(\*|[A-Za-z0-9_.-]+)")
+
+
+def _external_entries(value: object) -> None:
+    key = "external_tools_unattended"
+    _strings(value, key)
+    for entry in cast("list[str]", value):
+        found = _EXTERNAL_ENTRY.fullmatch(entry)
+        if found is None:
+            raise _refuse(key, f"holds {entry!r}, which is not server/tool or server/*")
+        if found.group(1) == SERVER:
+            raise _refuse(key, f"holds {entry!r}; QMX's own tools follow their effect table")
 
 
 def _hooks(value: object) -> None:
@@ -347,6 +370,8 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
                     raise _refuse(f"env.{name}", "must be a string")
         elif key == "hooks":
             _hooks(value)
+        elif key == "external_tools_unattended":
+            _external_entries(value)
         elif key == "remembered":
             for workspace, rules in _table(value, key).items():
                 entry = _table(rules, f"remembered.{workspace}")
@@ -393,7 +418,9 @@ def code_settings(
     """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
     The operator's keys, the workspace's remembered rules, then the fixed values, which win."""
     document: dict[str, Any] = {
-        key: value for key, value in json.loads(json.dumps(user.raw)).items() if key != "remembered"
+        key: value
+        for key, value in json.loads(json.dumps(user.raw)).items()
+        if key not in QMX_ONLY_KEYS
     }
     remembered = user.remembered(workspace)
     if remembered:
@@ -791,6 +818,8 @@ def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) ->
             home=home,
             config_dir=home.plan_dir,
             keyring_names=frozenset(),
+            unattended=False,
+            external_unattended=frozenset(),
         ),
     )
     total, parts = argv_length(options)

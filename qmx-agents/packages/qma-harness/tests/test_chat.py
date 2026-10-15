@@ -1239,3 +1239,29 @@ def test_open_reaps_the_journal_lock_a_crash_left(home: QmxHome) -> None:
         assert not lock.exists()
 
     run(reopened, home)
+
+
+@pytest.mark.parametrize(
+    ("allowed", "bypass"),
+    [
+        ([], "deny"),
+        (["weather/get_weather"], "pass"),
+        (["weather/*"], "pass"),
+        (["weather/get_tide"], "deny"),
+    ],
+)
+def test_an_external_tool_runs_unasked_only_when_the_operator_allow_listed_it(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch, allowed: list[str], bypass: str
+) -> None:
+    scripted_weather(home, monkeypatch, lambda _: "connected")
+    control_service(home).settings_put("claude", {"external_tools_unattended": allowed})
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        tool = "mcp__weather__get_weather"
+        assert (await gate_says(client, tool, "bypassPermissions")).split()[0] == bypass
+        assert await gate_says(client, tool, "default") == "pass "
+
+    run(body, home)

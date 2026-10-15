@@ -55,6 +55,8 @@ GATE = money.GateRules(
     broker_hosts=frozenset(),
     variables={},
     case_insensitive=True,
+    unattended=False,
+    external_unattended=frozenset(),
 )
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")

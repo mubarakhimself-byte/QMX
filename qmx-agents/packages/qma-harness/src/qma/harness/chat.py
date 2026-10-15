@@ -55,6 +55,7 @@ from qma.harness.launch import (
     assert_scrubbed,
     build_options,
     launch_env,
+    unattended,
 )
 from qma.harness.money import MoneySurfaceError
 from qma.harness.profiles import PLAN
@@ -403,7 +404,7 @@ class Chat:
         launch = await self._routing(settings)
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
-            servers, gate, vetted = await self._tools(launch)
+            servers, gate, vetted = await self._tools(launch, user.external_tools_unattended)
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
@@ -461,11 +462,12 @@ class Chat:
         return live
 
     async def _tools(
-        self, launch: Launch
+        self, launch: Launch, external_unattended: frozenset[str]
     ) -> tuple[dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]]]:
         """The `qmx` server, the vetted external servers, the gate's rules and each vetted
         server's tool names. A refused external server gets a `needs_you` block and is left
-        out; the chat still starts."""
+        out; the chat still starts. `external_unattended` is the operator's allow-list for
+        external tools in an unattended chat or mode."""
         deps = self._deps
         control = deps.control
         defs = await tool_defs(control=control, broker=deps.broker, domain=deps.domain)
@@ -494,6 +496,8 @@ class Chat:
             if isinstance(launch, PlanLaunch)
             else deps.home.relayed_dir,
             keyring_names=await asyncio.to_thread(keyring_refs, control),
+            unattended=unattended(self.record.config.kind),
+            external_unattended=external_unattended,
         )
         return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 

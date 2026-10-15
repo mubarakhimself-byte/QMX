@@ -31,6 +31,7 @@ from qmx_broker.service import BrokerService
 
 from qma.harness.money import (
     NON_BROKER_REFS,
+    QMX_SERVER,
     GateRules,
     MoneySurfaceError,
     check_tool_surface,
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
     from qma.harness.home import QmxHome
 
-SERVER: Final = "qmx"
+SERVER: Final = QMX_SERVER
 PREFIX: Final = f"mcp__{SERVER}__"
 
 
@@ -456,6 +457,8 @@ def gate_rules(
     home: QmxHome,
     config_dir: Path,
     keyring_names: frozenset[str],
+    unattended: bool,
+    external_unattended: frozenset[str],
     broker_hosts: frozenset[str] = BROKER_HOSTS,
 ) -> GateRules:
     """Derive `GateRules` from the same defs: proposal_tools are the PROPOSE_MONEY names,
@@ -510,6 +513,8 @@ def gate_rules(
             }
         ),
         case_insensitive=sys.platform in ("win32", "darwin"),
+        unattended=unattended,
+        external_unattended=external_unattended,
     )
 
 

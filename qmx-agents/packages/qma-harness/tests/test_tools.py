@@ -173,6 +173,8 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
         home=home,
         config_dir=home.plan_dir,
         keyring_names=frozenset({"QMX/ctrader"}),
+        unattended=False,
+        external_unattended=frozenset(),
     )
     assert rules.proposal_tools == {"mcp__qmx__propose_order"}
     assert {"mcp__qmx__apps_publish", "mcp__qmx__propose_order"} <= rules.mandatory_asks
@@ -261,13 +263,15 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
         home=QmxHome(link),
         config_dir=link / "claude",
         keyring_names=frozenset(),
+        unattended=False,
+        external_unattended=frozenset(),
     )
     for root in (real, link):
         database = normalize_path(
             str(root / "control.db"), cwd="/", home="/", case_insensitive=False
         )
         assert database in rules.protected_paths
-        found = gate("Edit", {"file_path": str(root / "control.db")}, rules, cwd="/", agent_id=None)
+        found = gate("Edit", {"file_path": str(root / "control.db")}, rules, cwd="/", agent_id=None, permission_mode="default")
         assert found == Deny(f"money rule: agents cannot write QMX state ({database.casefold()})")
 
 
@@ -385,9 +389,11 @@ def test_apps_call_checks_the_app_tool_it_names(
         home=QmxHome(tmp_path / "home"),
         config_dir=tmp_path / "home" / "claude",
         keyring_names=frozenset(),
+        unattended=False,
+        external_unattended=frozenset(),
     )
     arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
-    assert gate("mcp__qmx__apps_call", arguments, rules, cwd="/", agent_id=None) == verdict
+    assert gate("mcp__qmx__apps_call", arguments, rules, cwd="/", agent_id=None, permission_mode="default") == verdict
 
 
 def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
@@ -395,7 +401,13 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
 ) -> None:
     home = QmxHome(tmp_path / "home")
     rules = gate_rules(
-        [], domain_write="allow", home=home, config_dir=home.plan_dir, keyring_names=frozenset()
+        [],
+        domain_write="allow",
+        home=home,
+        config_dir=home.plan_dir,
+        keyring_names=frozenset(),
+        unattended=False,
+        external_unattended=frozenset(),
     )
     root = home.root.as_posix()
     calls: list[tuple[str, dict[str, object], str]] = [
@@ -411,7 +423,7 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
         ("Read", {"file_path": f"{root}/apps/a/manifest.json"}, "pass"),
     ]
     found = [
-        (tool, type(gate(tool, args, rules, cwd="/", agent_id=None)).__name__.casefold())
+        (tool, type(gate(tool, args, rules, cwd="/", agent_id=None, permission_mode="default")).__name__.casefold())
         for tool, args, _ in calls
     ]
     assert found == [(tool, verdict) for tool, _, verdict in calls]

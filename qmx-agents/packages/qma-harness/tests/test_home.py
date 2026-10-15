@@ -645,3 +645,40 @@ def test_doctor_reports_the_whole_plan_launch_command_line(
     assert not ok
     assert total > 31_000
     assert largest == "QMX.md and the workspace CLAUDE.md and AGENTS.md"
+
+
+@pytest.mark.parametrize(
+    ("value", "named"),
+    [
+        ("weather/*", "must be a list of strings"),
+        ([1], "is not a string"),
+        (["weather"], "is not server/tool or server/*"),
+        (["*/*"], "is not server/tool or server/*"),
+        (["weather/"], "is not server/tool or server/*"),
+        (["qmx__evil/get"], "is not server/tool or server/*"),
+        (["weather/get weather"], "is not server/tool or server/*"),
+        (["qmx/read_bars"], "QMX's own tools"),
+    ],
+)
+def test_external_tools_unattended_holds_server_tool_entries_only(
+    value: object, named: str
+) -> None:
+    with pytest.raises(LaunchRefused) as refused:
+        parse_claude_settings({"external_tools_unattended": value})
+    assert str(refused.value).startswith("[claude] external_tools_unattended")
+    assert named in str(refused.value)
+
+
+def test_external_tools_unattended_is_read_by_qmx_and_never_passed_to_the_cli(
+    tmp_path: Path,
+) -> None:
+    user = parse_claude_settings(
+        {"external_tools_unattended": ["weather/get_weather", "news/*"], "language": "en"}
+    )
+    assert user.external_tools_unattended == frozenset({"weather/get_weather", "news/*"})
+    rendered = json.loads(
+        code_settings(user, launcher=LAUNCHER, workspace=tmp_path, memory_dir=tmp_path / "m")
+    )
+    assert "external_tools_unattended" not in rendered
+    assert rendered["language"] == "en"
+    assert parse_claude_settings({}).external_tools_unattended == frozenset()
