@@ -51,6 +51,8 @@ token shapes on purpose: redaction only rewrites displayed text and never blocks
 REDACTED: Final = "[redacted sk-ant token]"
 _PREFIX: Final = "sk-ant-"
 _OPEN_TOKEN: Final = re.compile(r"sk-ant-[A-Za-z0-9_-]*\Z")
+_WHOLE_TOKEN: Final = re.compile(r"sk-ant-[A-Za-z0-9_-]+\Z")
+_TOKEN_END: Final = re.compile(r"[^A-Za-z0-9_-]")
 
 PLAN_TOOLS: Final = frozenset({"TodoWrite", "TaskCreate", "TaskUpdate"})
 AGENT_TOOLS: Final = frozenset({"Agent", "Task"})
@@ -79,19 +81,32 @@ type Piece = tuple[StreamKind, str]
 
 class TokenGate:
     """One target's streamed text and thinking in, redacted pieces out. Holds back a tail that
-    is, or could still become, a token across kinds and across any block landing between two
-    deltas, until a later delta settles it or `close` ends the turn. A token redacted across a
-    kind change shows under the kind it started in."""
+    is, or could still become, a token across kinds and across any foreign block landing
+    between two deltas, until a later delta settles it or `close` ends the target's stream. A
+    token redacted across a kind change shows under the kind it started in."""
 
     def __init__(self) -> None:
         self._held: list[Piece] = []
+        self._token: StreamKind | None = None
 
     def feed(self, kind: StreamKind, text: str) -> list[Piece]:
+        out: list[Piece] = []
+        if self._token is not None:
+            end = _TOKEN_END.search(text)
+            if end is None:
+                return []
+            out.append((self._token, REDACTED))
+            self._token = None
+            text = text[end.start() :]
         self._held.append((kind, text))
-        return self._release(_settled_length("".join(text for _, text in self._held)))
+        out += self._release(_settled_length("".join(text for _, text in self._held)))
+        return _merged(out)
 
     def close(self) -> list[Piece]:
-        return self._release(sum(len(text) for _, text in self._held))
+        out: list[Piece] = [] if self._token is None else [(self._token, REDACTED)]
+        self._token = None
+        out += self._release(sum(len(text) for _, text in self._held))
+        return _merged(out)
 
     def _release(self, cut: int) -> list[Piece]:
         text = "".join(text for _, text in self._held)
@@ -103,10 +118,17 @@ class TokenGate:
             out.append((kinds[token.start()], REDACTED))
             start = token.end()
         out += _runs(text[start:cut], kinds[start:cut])
-        self._held = _runs(text[cut:], kinds[cut:])
-        return [
-            (kind, "".join(text for _, text in run)) for kind, run in groupby(out, itemgetter(0))
-        ]
+        if _WHOLE_TOKEN.match(text, cut):
+            self._held, self._token = [], kinds[cut]
+        else:
+            self._held = _runs(text[cut:], kinds[cut:])
+        return out
+
+
+def _merged(pieces: list[Piece]) -> list[Piece]:
+    return [
+        (kind, "".join(text for _, text in run)) for kind, run in groupby(pieces, itemgetter(0))
+    ]
 
 
 def _runs(text: str, kinds: list[StreamKind]) -> list[Piece]:
@@ -194,6 +216,14 @@ class Limits:
 
 
 @dataclass(frozen=True)
+class StreamEnded:
+    """The target's own streamed block stopped (`content_block_stop`), or the sub-agent that
+    owns the target finished (its `task_notification`). That target's token gate closes."""
+
+    target: Target
+
+
+@dataclass(frozen=True)
 class TurnEnded:
     """Any `ResultMessage`. The CLI opens every turn, the operator's or an injected one such as
     a background task's notification, with an `init` and ends it with one result."""
@@ -210,7 +240,7 @@ class Compacted:
     trigger: Literal["manual", "auto"]
 
 
-type Fact = Block | Delta | TurnUsage | Limits | TurnEnded | Compacted
+type Fact = Block | Delta | StreamEnded | TurnUsage | Limits | TurnEnded | Compacted
 
 
 def project(message: Message, *, redact_tokens: bool = True) -> list[Fact]:
@@ -339,10 +369,12 @@ def _tool_results(message: UserMessage) -> list[Fact]:
 
 def _delta(message: StreamEvent) -> list[Fact]:
     event = message.event
+    target = _target(message.parent_tool_use_id)
+    if event.get("type") == "content_block_stop":
+        return [StreamEnded(target)]
     if event.get("type") != "content_block_delta":
         return []
     delta = cast("dict[str, Any]", event.get("delta", {}))
-    target = _target(message.parent_tool_use_id)
     match delta.get("type"):
         case "text_delta":
             return [Delta(target, "text", str(delta.get("text", "")))]
@@ -419,19 +451,18 @@ def _system(message: SystemMessage) -> list[Fact]:
                     f"{message.description}: {message.last_tool_name or 'working'}",
                 )
             ]
-        case TaskNotificationMessage():
-            return [
-                _block(
-                    Here(),
-                    "agents",
-                    {
-                        "task_id": message.task_id,
-                        "tool_use_id": message.tool_use_id,
-                        "state": message.status,
-                        "summary": message.summary,
-                    },
-                )
-            ]
+        case TaskNotificationMessage(tool_use_id=tool_use_id):
+            card = _block(
+                Here(),
+                "agents",
+                {
+                    "task_id": message.task_id,
+                    "tool_use_id": tool_use_id,
+                    "state": message.status,
+                    "summary": message.summary,
+                },
+            )
+            return [card, StreamEnded(InChild(tool_use_id))] if tool_use_id else [card]
         case TaskUpdatedMessage(status=status) if status:
             return [_block(Here(), "agents", {"task_id": message.task_id, "state": status})]
         case _ if message.subtype == "compact_boundary":

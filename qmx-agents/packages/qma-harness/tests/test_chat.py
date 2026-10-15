@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -34,8 +34,8 @@ from qma.harness.project import REDACTED
 from qma.harness.routes import chat_router, control_service
 
 SIGNED_IN = PlanAuth(logged_in=True, method="claude.ai", provider="firstParty", subscription="max")
-TOKEN = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
-SAID = f"the login is {TOKEN} and more"
+CANARY = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
+SAID = f"the login is {CANARY} and more"
 SHOWN = f"the login is {REDACTED} and more"
 INLINE_QMX = {"name": "qmx", "path": "D:/qmx/plugin", "source": "qmx@inline"}
 BUILTIN = {"name": "cc-plugin-agents-md", "path": "builtin", "source": "cc-plugin-agents-md@builtin"}
@@ -50,7 +50,7 @@ class FakeClient:
     agents: ClassVar[list[dict[str, Any]]] = []
     servers: ClassVar[list[dict[str, Any]]] = []
     plugins: ClassVar[list[dict[str, Any]]] = []
-    script: ClassVar[Callable[[str], list[Message]]]
+    script: ClassVar[Callable[[str], Sequence[Message | None]]]
 
     def __init__(self, options: ClaudeAgentOptions) -> None:
         self.options = options
@@ -459,6 +459,15 @@ def delta(kind: str, text: str, parent: str | None = None) -> StreamEvent:
     )
 
 
+def stop(parent: str | None = None) -> StreamEvent:
+    return StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_stop", "index": 0},
+        parent_tool_use_id=parent,
+    )
+
+
 def progress(description: str) -> TaskProgressMessage:
     return TaskProgressMessage(
         subtype="task_progress",
@@ -473,7 +482,7 @@ def progress(description: str) -> TaskProgressMessage:
     )
 
 
-def watch(home: QmxHome, script: list[Message]) -> tuple[dict[str, str], list[str]]:
+def watch(home: QmxHome, script: Sequence[Message | None]) -> tuple[dict[str, str], list[str]]:
     FakeClient.script = lambda _: script
     shown: list[tuple[str, str]] = []
     leaked: list[str] = []
@@ -493,7 +502,7 @@ def watch(home: QmxHome, script: list[Message]) -> tuple[dict[str, str], list[st
         await asyncio.sleep(0.05)
         listener.cancel()
         everything = json.dumps(blocks(home, chat)) + "".join(text for _, text in shown)
-        leaked.extend(TOKEN[i:] for i in range(len(TOKEN) - 7) if TOKEN[i:] in everything)
+        leaked.extend(CANARY[i:] for i in range(len(CANARY) - 7) if CANARY[i:] in everything)
 
     run(body, home)
     return {kind: "".join(text for k, text in shown if k == kind) for kind, _ in shown}, leaked
@@ -507,7 +516,7 @@ def test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_d
     for pieces in deliveries:
         for piece in pieces:
             stream += [delta("text_delta", piece), delta("thinking_delta", piece, "toolu_child")]
-    stream += [progress(f"check {TOKEN}") for _ in range(3)]
+    stream += [progress(f"check {CANARY}") for _ in range(3)]
     live, leaked = watch(
         home, [*stream, AssistantMessage(content=[TextBlock(SAID)], model="haiku"), result()]
     )
@@ -553,6 +562,7 @@ BETWEEN: dict[str, Message] = {
     "child_text": AssistantMessage(
         content=[TextBlock("child says hi")], model="haiku", parent_tool_use_id="toolu_child"
     ),
+    "child_block_stop": stop("toolu_child"),
 }
 
 
@@ -579,6 +589,63 @@ def test_a_token_still_open_when_the_turn_ends_is_redacted(home: QmxHome) -> Non
     live, leaked = watch(
         home, [delta("text_delta", HEAD), BETWEEN["task_notification"], result()]
     )
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
+
+
+def test_a_sub_agent_token_open_at_the_main_result_stays_held(home: QmxHome) -> None:
+    live, leaked = watch(
+        home,
+        [
+            delta("text_delta", HEAD, "toolu_child"),
+            result(),
+            delta("text_delta", TAIL, "toolu_child"),
+        ],
+    )
+    assert (live, leaked) == ({"text": SHOWN}, [])
+
+
+def test_a_sub_agent_token_open_at_its_own_completion_is_redacted(home: QmxHome) -> None:
+    done = TaskNotificationMessage(
+        subtype="task_notification",
+        data={},
+        task_id="a1",
+        status="completed",
+        output_file="",
+        summary="helper done",
+        uuid="u",
+        session_id="s",
+        tool_use_id="toolu_child",
+    )
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD, "toolu_child"), done, delta("text_delta", "x"), result()]
+    )
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}x"}, [])
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "shown"),
+    [
+        (
+            delta("text_delta", "the prefix is sk-ant-"),
+            delta("text_delta", "Done now."),
+            {"text": "the prefix is sk-ant-Done now."},
+        ),
+        (
+            delta("thinking_delta", "check sk-ant-oat01"),
+            delta("text_delta", "Here is the answer"),
+            {"thinking": f"check {REDACTED}", "text": "Here is the answer"},
+        ),
+    ],
+)
+def test_the_block_after_a_held_tail_starts_whole(
+    home: QmxHome, first: Message, second: Message, shown: dict[str, str]
+) -> None:
+    live, leaked = watch(home, [first, stop(), second, result()])
+    assert (live, leaked) == (shown, [])
+
+
+def test_a_cli_that_ends_mid_token_releases_it_redacted(home: QmxHome) -> None:
+    live, leaked = watch(home, [delta("text_delta", HEAD), None])
     assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
 
 

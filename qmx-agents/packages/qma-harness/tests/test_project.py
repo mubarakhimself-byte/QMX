@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,7 @@ from qma.harness.project import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CHILD = InChild("toolu_01TNHT9HDZj9wdnvtjLfFWcw")
-TOKEN = "sk-ant-oat01-QMXCANARY" + "a1B2c3D4e5" * 4
+CANARY = "sk-ant-oat01-QMXCANARY" + "a1B2c3D4e5" * 4
 
 
 def recorded(name: str) -> list[Message]:
@@ -189,10 +190,10 @@ def test_a_recorded_compact_boundary_is_a_manual_compaction() -> None:
 
 
 def test_a_printed_token_is_redacted_unless_the_check_turns_redaction_off() -> None:
-    message = AssistantMessage(content=[TextBlock(f"the login is {TOKEN}.")], model="haiku")
+    message = AssistantMessage(content=[TextBlock(f"the login is {CANARY}.")], model="haiku")
     assert blocks(project(message)) == [("text", {"text": f"the login is {REDACTED}."})]
     assert blocks(project(message, redact_tokens=False)) == [
-        ("text", {"text": f"the login is {TOKEN}."})
+        ("text", {"text": f"the login is {CANARY}."})
     ]
 
 
@@ -216,6 +217,17 @@ def test_the_token_gate_holds_a_prefix_until_the_turn_ends_and_labels_each_kind(
     assert gate.feed("thinking", "check the tests") == [("thinking", "check the test")]
     assert gate.feed("text", "! sk-ant-oat01") == [("thinking", "s"), ("text", "! ")]
     assert gate.close() == [("text", REDACTED)]
+
+
+def test_the_token_gate_holds_a_long_open_token_in_linear_time() -> None:
+    gate = TokenGate()
+    start = time.perf_counter()
+    shown = gate.feed("text", "key sk-ant-")
+    for _ in range(32_000):
+        shown += gate.feed("text", "A")
+    shown += gate.feed("text", " done")
+    assert time.perf_counter() - start < 1.0
+    assert shown == [("text", "key "), ("text", f"{REDACTED} done")]
 
 
 def streamed(kind: str, text: str, parent: str | None = None) -> StreamEvent:

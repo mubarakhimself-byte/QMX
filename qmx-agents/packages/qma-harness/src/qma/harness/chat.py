@@ -60,6 +60,7 @@ from qma.harness.project import (
     InChild,
     Limits,
     Piece,
+    StreamEnded,
     Target,
     TokenGate,
     TurnEnded,
@@ -189,10 +190,14 @@ class _Stream:
         for kind, text in pieces:
             self.publish(Delta(target, kind, text))
 
-    def close(self) -> None:
-        for target, gate in self.gates.items():
+    def close(self, target: Target) -> None:
+        gate = self.gates.pop(target, None)
+        if gate is not None:
             self.release(target, gate.close())
-        self.gates.clear()
+
+    def close_all(self) -> None:
+        for target in list(self.gates):
+            self.close(target)
 
 
 class Chat:
@@ -339,7 +344,7 @@ class Chat:
     async def _lost(self, live: _Live) -> None:
         if self._live is live:
             self._live = None
-        self._stream.close()
+        self._stream.close_all()
         if self.record.turn == "running":
             await self._note(
                 "needs_you",
@@ -349,7 +354,7 @@ class Chat:
         await self._end(live)
 
     async def _route(
-        self, fact: Block | Delta | TurnUsage | Limits | TurnEnded | Compacted
+        self, fact: Block | Delta | StreamEnded | TurnUsage | Limits | TurnEnded | Compacted
     ) -> None:
         match fact:
             case Block(target=target, block=block):
@@ -363,8 +368,10 @@ class Chat:
                 self._stream.release(target, gate.feed(kind, text))
             case Delta():
                 self._stream.publish(fact)
+            case StreamEnded(target=target):
+                self._stream.close(target)
             case TurnEnded():
-                self._stream.close()
+                self._stream.close(Here())
                 self._write(turn="idle", started=True)
             case Compacted(trigger=trigger):
                 await self._note("changed", {"kind": "compacted", "trigger": trigger})
