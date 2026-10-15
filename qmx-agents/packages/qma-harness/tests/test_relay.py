@@ -462,10 +462,14 @@ def test_a_broken_journal_never_changes_the_reply_and_alerts_the_chat() -> None:
         counted = await rig.post("/v1/messages/count_tokens", body(), bearer=grant.secret)
         assert (streamed.status_code, streamed.content) == (200, stream("kimi-k3"))
         assert (counted.status_code, counted.json()) == (200, {"input_tokens": 33})
-        assert rig.alerts == [
-            "usage journal: FileExistsError: journal.jsonl.lock; "
-            "this request's usage was not recorded"
-        ] * 2
+        assert (
+            rig.alerts
+            == [
+                "usage journal: FileExistsError: journal.jsonl.lock; "
+                "this request's usage was not recorded"
+            ]
+            * 2
+        )
 
     run(check, broken_journal=True)
 
@@ -525,7 +529,10 @@ def slow_stream(produced: list[int], closed: asyncio.Event) -> Callable[[httpx.R
     class Slow(httpx.AsyncByteStream):
         async def __aiter__(self) -> AsyncIterator[bytes]:
             yield sse(
-                {"type": "message_start", "message": {"model": "kimi-k3", "usage": {"input_tokens": 5}}}
+                {
+                    "type": "message_start",
+                    "message": {"model": "kimi-k3", "usage": {"input_tokens": 5}},
+                }
             )
             for index in range(50):
                 await asyncio.sleep(0.05)
@@ -1102,7 +1109,9 @@ def test_a_stream_with_no_message_start_is_stopped_at_120_seconds(
         grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
         auth = {"authorization": f"Bearer {grant.secret}"}
         async with (
-            httpx.AsyncClient(base_url=rig.relay.base_url, trust_env=False, timeout=None) as client,
+            httpx.AsyncClient(
+                base_url=rig.relay.base_url, trust_env=False, timeout=httpx.Timeout(None)
+            ) as client,
             client.stream("POST", "/v1/messages", json=body(), headers=auth) as answer,
         ):
             chunks = aiter(answer.aiter_bytes())
@@ -1166,9 +1175,10 @@ def test_two_journal_writes_that_fail_together_never_hold_the_reply_or_cry_wolf(
         assert [(answer.status_code, answer.content) for answer in answers] == [
             (200, stream("kimi-k3"))
         ] * 2
-        assert rig.alerts == [
-            "usage journal: OSError: disk full; this request's usage was not recorded"
-        ] * 2
+        assert (
+            rig.alerts
+            == ["usage journal: OSError: disk full; this request's usage was not recorded"] * 2
+        )
         assert rig.journals.closed == [CHAT]
 
     run(check)

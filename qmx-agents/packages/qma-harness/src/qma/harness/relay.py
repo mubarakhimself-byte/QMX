@@ -67,6 +67,7 @@ import httpx
 import keyring
 import uvicorn
 
+from qma.harness.home import SessionId
 from qma.harness.profiles import (
     KeyProvider,
     ModelId,
@@ -79,7 +80,6 @@ from qma.harness.profiles import (
 if TYPE_CHECKING:
     from starlette.types import Receive, Scope, Send
 
-    from qma.harness.home import SessionId
     from qma.harness.launch import TestMode
     from qma.harness.profiles import Profiles
 
@@ -270,8 +270,10 @@ class Relay:
     _streams: dict[asyncio.Task[None], RelayGrant] = field(
         default_factory=dict[asyncio.Task[None], RelayGrant]
     )
-    _journals: dict[SessionId, UsageJournal] = field(default_factory=dict)
-    _writes: dict[asyncio.Task[None], SessionId] = field(default_factory=dict)
+    _journals: dict[SessionId, UsageJournal] = field(default_factory=dict[SessionId, UsageJournal])
+    _writes: dict[asyncio.Task[None], SessionId] = field(
+        default_factory=dict[asyncio.Task[None], SessionId]
+    )
     _opening: asyncio.Lock = field(default_factory=asyncio.Lock)
     _client: httpx.AsyncClient | None = None
     _server: _Server | None = None
@@ -583,7 +585,7 @@ class Relay:
 
     async def _events(self, upstream: _Upstream, *, guarded: bool) -> AsyncGenerator[bytes]:
         held, errors, pending, started = b"", b"", b"", not guarded
-        chunks = aiter(upstream.response.aiter_bytes())
+        chunks = cast("AsyncGenerator[bytes]", upstream.response.aiter_bytes())
         deadline = asyncio.get_running_loop().time() + START_WAIT_S
         try:
             while True:
@@ -758,7 +760,7 @@ def _json(data: bytes) -> object:
     first-wins upstream parser acts on the first."""
     try:
         document = cast("object", json.loads(data, object_pairs_hook=_unique_keys))
-    except (ValueError, RecursionError):
+    except ValueError, RecursionError:
         return None
     level = [document]
     for _ in range(JSON_DEPTH):
