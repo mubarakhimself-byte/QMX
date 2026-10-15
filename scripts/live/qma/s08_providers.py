@@ -224,7 +224,9 @@ async def rows_check(log: Log, args: argparse.Namespace) -> None:
         )
         tools = init.get("tools", [])
         log.check(
-            "tool search is listed with the row's default env", "ToolSearch" in tools, len(tools)
+            "tool search is off with the OpenRouter row's default env (HP12)",
+            "ToolSearch" not in tools,
+            len(tools),
         )
         profile = session.relay.profiles().get("openrouter")
         log(f"quirks recorded: env={dict(profile.quirks.env)} wire={profile.quirks.wire}")

@@ -29,6 +29,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Generator, Sequence
 from dataclasses import dataclass, field
@@ -188,6 +189,7 @@ class Plan:
     timeout: float = CHECK_TIMEOUT_S
     skip: dict[str, str] = field(default_factory=dict[str, str])
     host_home: Path = SHIP_HOME
+    scratch: Path | None = None
 
 
 def skip_reasons(
@@ -253,10 +255,13 @@ def host(plan: Plan, env: dict[str, str]) -> Generator[None]:
 
 
 def healthy() -> bool:
+    """True once the host answers. `/api/health` wants the control token, so a 401 counts."""
     url = f"http://127.0.0.1:{HOST_PORT}/api/health"
     try:
-        with urllib.request.urlopen(url, timeout=2) as reply:
-            return reply.status == 200
+        with urllib.request.urlopen(url, timeout=2):
+            return True
+    except urllib.error.HTTPError:
+        return True
     except OSError:
         return False
 
@@ -278,6 +283,8 @@ def run_one(found: Check, plan: Plan) -> Outcome:
         "QMA_SPEND_LEDGER": ledger.name,
         "PYTHONIOENCODING": "utf-8",
     }
+    if plan.scratch is not None:
+        env["QMA_LIVE_SCRATCH"] = str(plan.scratch)
     out = plan.evidence / "run_all" / f"{found.label.replace(' ', '-')}.out"
     started = time.monotonic()
     with contextlib.ExitStack() as stack:
@@ -349,6 +356,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--no-login", action="store_true")
     parser.add_argument("--spend-budget", type=float, default=0.05)
     parser.add_argument("--timeout", type=float, default=CHECK_TIMEOUT_S)
+    parser.add_argument(
+        "--scratch", type=Path, help="QMA_LIVE_SCRATCH for every check, so no earlier lane's files"
+    )
     args = parser.parse_args(argv)
     if args.evidence is None:
         parser.error("set --evidence or QMA_EVIDENCE_DIR")
@@ -356,7 +366,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     reasons = skip_reasons(
         checks, gpt_parked=args.gpt_parked, no_login=args.no_login, skip=args.skip
     )
-    plan = Plan(args.scripts, args.evidence, args.spend_budget, args.timeout, reasons)
+    plan = Plan(
+        args.scripts, args.evidence, args.spend_budget, args.timeout, reasons, scratch=args.scratch
+    )
     outcomes = run(checks, plan)
     print(table(outcomes), flush=True)
     return 1 if any(outcome.verdict is Verdict.FAIL for outcome in outcomes) else 0

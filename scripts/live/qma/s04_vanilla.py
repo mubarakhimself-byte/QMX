@@ -82,6 +82,10 @@ def main() -> int:
         log(f"vanilla first text delta after {first:.2f} s" if first else "no text delta")
         log.check("vanilla turn succeeded", result.get("is_error") is False, result.get("result"))
         return log.verdict()
+    readme = args.workspace / "README.md"
+    if not readme.exists():
+        args.workspace.mkdir(parents=True, exist_ok=True)
+        readme.write_text("# Demo\n\nA folder for operator check 2.\n", encoding="utf-8")
     _, lines = vanilla(args.home, args.model, args.workspace, CHECK2)
     tools = [
         (part["name"], json.dumps(part["input"])[:200])

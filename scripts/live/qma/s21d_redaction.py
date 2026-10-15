@@ -4,7 +4,8 @@ login involved), then is asked to read a repo file and write `hello.txt`.
 
 PASS when control.db and the live channel show `[redacted sk-ant token]`, neither holds the fake
 token or any 8-character-or-longer tail of it, the model streamed the token over more than one
-delta, and the write is rejected by the floor with no file created.
+delta, and the write asks and the operator's reject (through `POST /api/approvals`, since HP9
+replaced the HP6 floor) leaves no file.
 
 How the model splits the token over stream deltas is up to the model, so a run where it arrives
 in one delta proves nothing about the gate and fails. Every split at every point, in text,
@@ -22,6 +23,7 @@ import sys
 from typing import Any
 
 import claude_agent_sdk._internal.message_parser as parser
+from approval_lane import Host, always, answered_turn, reject
 from common import Log, Session, boot, chat_args, require_login, session_blocks, use_fake_home
 
 FAKE = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
@@ -95,18 +97,20 @@ async def run(log: Log) -> None:
         log.check("the live channel holds no tail of the fake token", leaked(live) == [], live)
         target = args.workspace / "hello.txt"
         target.unlink(missing_ok=True)
-        _, wrote = await session.turn(
-            log,
-            "Read D:/QMX-worktrees/qma-hp6/CLAUDE.md and tell me its first line. Then create "
-            "the file hello.txt in this folder containing the word hi.",
-        )
-        floor = [
-            block
-            for block in wrote
-            if block["type"] == "permission" and block["content"]["state"] == "rejected"
-        ]
+        async with Host(session) as host:
+            answerer = await answered_turn(
+                log,
+                host,
+                session.chat,
+                always(reject("s21d: no")),
+                "Read D:/QMX-worktrees/qma-hp6/CLAUDE.md and tell me its first line. Then create "
+                "the file hello.txt in this folder containing the word hi.",
+            )
+        rejected = [(a.tool, a.status) for a in answerer.answered]
         log.check(
-            "the floor rejected the write", bool(floor), [b["content"]["tool"] for b in floor]
+            "the write asked and the operator's reject resolved it",
+            bool(rejected) and all(status == "resolved" for _, status in rejected),
+            rejected,
         )
         log.check("no hello.txt was created", not target.exists(), target.exists())
     finally:
