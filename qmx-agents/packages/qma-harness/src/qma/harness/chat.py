@@ -171,7 +171,6 @@ async def _settled(
 
 KEEP_OFF_POLL_S: Final = 0.5
 KEEP_OFF_BACKOFF_MAX: Final = 5
-"""A failing poll doubles the wait, up to `KEEP_OFF_POLL_S * 2**KEEP_OFF_BACKOFF_MAX`."""
 
 log = logging.getLogger(__name__)
 

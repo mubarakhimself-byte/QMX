@@ -193,7 +193,6 @@ QMX_SERVER: Final = "qmx"
 
 
 def _external_unattended(tool_name: str, server: str, rules: GateRules, mode: str | None) -> bool:
-    """An external MCP tool that would run unasked and that the operator has not allowed."""
     if server == QMX_SERVER or (mode in ATTENDED_MODES and not rules.unattended):
         return False
     bare = tool_name.removeprefix(f"mcp__{server}__")
@@ -201,8 +200,7 @@ def _external_unattended(tool_name: str, server: str, rules: GateRules, mode: st
 
 
 def mcp_server(tool_name: str) -> str | None:
-    """The server of an `mcp__<server>__<tool>` name. `tools.server_config` refuses a server
-    name holding `__`, so the split is unambiguous for every server QMA passes."""
+    """The server of an `mcp__<server>__<tool>` name (`tools.SERVER_NAME` has no `__`)."""
     if not tool_name.startswith("mcp__"):
         return None
     server, separator, _ = tool_name.removeprefix("mcp__").partition("__")

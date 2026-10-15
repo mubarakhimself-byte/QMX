@@ -556,8 +556,6 @@ def test_a_dropped_server_that_connects_later_is_switched_off_again(
 def scripted_weather(
     home: QmxHome, monkeypatch: pytest.MonkeyPatch, state: Callable[[FakeClient], str]
 ) -> None:
-    """The weather server reports `state(client)`; `raise` raises like the SDK's
-    control-request timeout."""
     script = home.root.parent / "weather.py"
     script.write_text(WEATHER, encoding="utf-8")
     control_service(home).settings_put(
@@ -568,8 +566,6 @@ def scripted_weather(
 
     async def status(self: FakeClient) -> dict[str, list[dict[str, Any]]]:
         now = state(self)
-        if now == "raise":
-            raise TimeoutError("Control request timeout: mcp_status")
         tools = [{"name": "get_weather"}] if now == "connected" else []
         return {"mcpServers": [{"name": "weather", "status": now, "tools": tools}]}
 
@@ -614,7 +610,7 @@ def test_the_keeper_outlives_status_errors_and_still_switches_the_server_off(
             errors.append("timeout")
             if len(errors) == 3:
                 phase["now"] = "connected"
-            return "raise"
+            raise TimeoutError("Control request timeout: mcp_status")
         return phase["now"]
 
     scripted_weather(home, monkeypatch, state)
