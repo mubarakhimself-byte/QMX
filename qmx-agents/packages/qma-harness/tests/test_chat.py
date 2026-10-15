@@ -553,6 +553,138 @@ def test_a_dropped_server_that_connects_later_is_switched_off_again(
     run(body, home)
 
 
+def scripted_weather(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch, state: Callable[[FakeClient], str]
+) -> None:
+    """The weather server reports `state(client)`; `raise` raises like the SDK's
+    control-request timeout."""
+    script = home.root.parent / "weather.py"
+    script.write_text(WEATHER, encoding="utf-8")
+    control_service(home).settings_put(
+        "mcp_servers", {"weather": {"command": sys.executable, "args": [str(script)]}}
+    )
+    monkeypatch.setattr(qma.harness.chat, "MCP_SETTLE_S", 0.3)
+    monkeypatch.setattr(qma.harness.chat, "KEEP_OFF_POLL_S", 0.01)
+
+    async def status(self: FakeClient) -> dict[str, list[dict[str, Any]]]:
+        now = state(self)
+        if now == "raise":
+            raise TimeoutError("Control request timeout: mcp_status")
+        tools = [{"name": "get_weather"}] if now == "connected" else []
+        return {"mcpServers": [{"name": "weather", "status": now, "tools": tools}]}
+
+    monkeypatch.setattr(FakeClient, "get_mcp_status", status)
+
+
+async def gate_says(client: FakeClient, tool: str, mode: str = "default") -> str:
+    hooks = client.options.hooks or {}
+    callback = hooks["PreToolUse"][0].hooks[0]
+    data: Any = {"tool_name": tool, "tool_input": {}, "cwd": "C:/w", "permission_mode": mode}
+    found = cast("dict[str, Any]", await callback(data, None, {"signal": None}))
+    output = found.get("hookSpecificOutput", {})
+    return f"{output.get('permissionDecision', 'pass')} {output.get('permissionDecisionReason', '')}"
+
+
+def test_the_gate_denies_a_dropped_servers_tools_for_the_rest_of_the_chat(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripted_weather(home, monkeypatch, lambda _: "pending")
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        assert await gate_says(client, "mcp__weather__get_weather") == (
+            "deny money rule: the MCP server weather was left out of this chat "
+            "(mcp__weather__get_weather)"
+        )
+        assert await gate_says(client, "mcp__qmx__read_bars") == "pass "
+
+    run(body, home)
+
+
+def test_the_keeper_outlives_status_errors_and_still_switches_the_server_off(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    phase = {"now": "pending"}
+    errors: list[str] = []
+
+    def state(_: FakeClient) -> str:
+        if phase["now"] == "raise":
+            errors.append("timeout")
+            if len(errors) == 3:
+                phase["now"] = "connected"
+            return "raise"
+        return phase["now"]
+
+    scripted_weather(home, monkeypatch, state)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        phase["now"] = "raise"
+        await settle(lambda: len(client.toggled) >= 2)
+        assert (len(errors), client.toggled[:2]) == (3, [("weather", False)] * 2)
+
+    run(body, home)
+
+
+def test_closing_the_chat_stops_the_keeper(home: QmxHome, monkeypatch: pytest.MonkeyPatch) -> None:
+    phase = {"now": "pending"}
+    scripted_weather(home, monkeypatch, lambda _: phase["now"])
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        await harness.close()
+        phase["now"] = "connected"
+        await asyncio.sleep(0.3)
+        assert client.toggled == [("weather", False)]
+
+    run(body, home)
+
+
+def test_a_server_the_cli_kept_switched_off_is_switched_on_and_vetted_again_each_launch(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def state(client: FakeClient) -> str:
+        return "connected" if client.toggled[-1:] == [("weather", True)] else "disabled"
+
+    scripted_weather(home, monkeypatch, state)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        assert client.toggled == [("weather", True)]
+        assert [kind for kind, _ in blocks(home, chat)].count("needs_you") == 0
+
+    run(body, home)
+
+
+def test_a_server_switched_off_by_an_earlier_chat_that_stays_down_writes_needs_you_again(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def state(client: FakeClient) -> str:
+        return "pending" if ("weather", True) in client.toggled else "disabled"
+
+    scripted_weather(home, monkeypatch, state)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        assert client.toggled[:2] == [("weather", True), ("weather", False)]
+        [(_, content)] = [block for block in blocks(home, chat) if block[0] == "needs_you"]
+        assert content["reason"] == (
+            "the MCP server weather was left out: it did not finish connecting in 0 s"
+        )
+
+    run(body, home)
+
+
 def test_an_interrupt_ends_the_running_turn(home: QmxHome) -> None:
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(NewChat(title="stop", model="haiku"))

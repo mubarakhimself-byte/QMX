@@ -213,6 +213,9 @@ def test_server_config_shapes() -> None:
         ("qmx", {"command": "py"}, "belongs to QMX"),
         ("f", {"url": "https://x", "credential_ref": "qmx/f"}, "stored credential"),
         ("f", {}, "a command or a url"),
+        ("qmx__evil", {"command": "py"}, "single _"),
+        ("my.server", {"command": "py"}, "single _"),
+        ("_w", {"command": "py"}, "single _"),
     ]:
         with pytest.raises(ValueError, match=message):
             server_config(name, row)

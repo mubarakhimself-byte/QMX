@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -111,7 +112,9 @@ MCP_SETTLE_S: Final = 30.0
 """How long a launch waits for the CLI to finish connecting the vetted external servers. The
 CLI connects them after it starts and reports them `pending` until then, with no tools. A
 server still pending then is switched off with a `needs_you` block, as a server that fails
-vetting is, and the chat starts without it."""
+vetting is, and the chat starts without it. The CLI keeps a switch-off in its own state for the
+workspace, so a launch switches every vetted server it finds `disabled` back on first, and each
+chat vets and settles every server afresh."""
 
 
 @dataclass(frozen=True)
@@ -149,8 +152,8 @@ class ChatDeps:
 async def _settled(
     client: ClaudeSDKClient, servers: frozenset[str]
 ) -> tuple[McpStatusResponse, list[str]]:
-    """`get_mcp_status()` once none of `servers` is still `pending`, polled for at most
-    `MCP_SETTLE_S`, and the servers still pending then."""
+    """`get_mcp_status()` once none of `servers` is still `pending` or `disabled`, polled for
+    at most `MCP_SETTLE_S`, and the servers not up then."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + MCP_SETTLE_S
     while True:
@@ -158,7 +161,7 @@ async def _settled(
         pending = sorted(
             server["name"]
             for server in status["mcpServers"]
-            if server["name"] in servers and server["status"] == "pending"
+            if server["name"] in servers and server["status"] in {"pending", "disabled"}
         )
         if not pending or loop.time() > deadline:
             return status, pending
@@ -166,18 +169,30 @@ async def _settled(
 
 
 KEEP_OFF_POLL_S: Final = 0.5
+KEEP_OFF_BACKOFF_MAX: Final = 5
+"""A failing poll doubles the wait, up to `KEEP_OFF_POLL_S * 2**KEEP_OFF_BACKOFF_MAX`."""
+
+log = logging.getLogger(__name__)
 
 
 async def _keep_off(client: ClaudeSDKClient, servers: frozenset[str]) -> None:
     """Switch `servers` off whenever the CLI reports one connected, for the life of the chat.
     A switch-off sent while a server is still connecting reads `disabled` at once, and the
-    server connects anyway when its start finishes (measured, S35), so no state is final."""
+    server connects anyway when its start finishes (measured, S35), so no state is final. The
+    SDK raises on its control-request timeout; the keeper logs it and polls again, and the gate
+    denies the servers' tools meanwhile (`GateRules.dropped_servers`)."""
+    failures = 0
     while True:
-        status = await client.get_mcp_status()
-        for server in status["mcpServers"]:
-            if server["name"] in servers and server["status"] == "connected":
-                await client.toggle_mcp_server(server["name"], enabled=False)
-        await asyncio.sleep(KEEP_OFF_POLL_S)
+        try:
+            status = await client.get_mcp_status()
+            for server in status["mcpServers"]:
+                if server["name"] in servers and server["status"] == "connected":
+                    await client.toggle_mcp_server(server["name"], enabled=False)
+            failures = 0
+        except Exception as error:
+            failures += 1
+            log.warning("keeping %s off failed %d times: %r", sorted(servers), failures, error)
+        await asyncio.sleep(KEEP_OFF_POLL_S * 2 ** min(failures, KEEP_OFF_BACKOFF_MAX))
 
 
 def transcript(home: QmxHome, chat: SessionId) -> Path | None:
@@ -417,7 +432,11 @@ class Chat:
             )
             if found:
                 raise LaunchRefused(_loaded(found))
+            for server in status["mcpServers"]:
+                if server["name"] in vetted and server["status"] == "disabled":
+                    await live.client.toggle_mcp_server(server["name"], enabled=True)
             settled, pending = await _settled(live.client, frozenset(vetted))
+            gate.dropped_servers.update(pending)
             for name in pending:
                 await live.client.toggle_mcp_server(name, enabled=False)
                 await self._note(

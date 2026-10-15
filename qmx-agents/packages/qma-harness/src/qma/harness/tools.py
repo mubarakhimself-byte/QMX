@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
@@ -546,11 +547,20 @@ def config_digest(config: McpServerConfig) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
+SERVER_NAME: Final = re.compile(r"[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*")
+"""An external MCP server name the CLI keeps unchanged in its tool names, with no `__`."""
+
+
 def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
     """One settings.toml [mcp_servers] row as an SDK config: `command` with `args` and `env`
     for stdio, or `url` for HTTP. Raises ValueError naming what is wrong."""
     if name == SERVER:
         raise ValueError(f"the name {SERVER} belongs to QMX's own tools")
+    if not SERVER_NAME.fullmatch(name):
+        raise ValueError(
+            "a server name takes letters, digits, - and single _ between them, so its tools "
+            "read as mcp__<server>__<tool>"
+        )
     if row.get("credential_ref"):
         raise ValueError("servers that need a stored credential are not wired yet")
     command, url = row.get("command"), row.get("url")

@@ -24,7 +24,7 @@ import os
 import posixpath
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import unquote, urlsplit
@@ -170,6 +170,19 @@ class GateRules:
     """Values the gate expands in paths and commands: HOME, USERPROFILE, CLAUDE_CONFIG_DIR."""
     case_insensitive: bool
     """True on Windows and macOS. Paths and names are compared casefolded there."""
+    dropped_servers: set[str] = field(default_factory=set[str])
+    """External MCP servers the chat left out after launch. The only field that changes once
+    the chat runs: the chat adds a server when it switches it off, and every tool of that
+    server is denied from then on, whether or not the switch-off held."""
+
+
+def mcp_server(tool_name: str) -> str | None:
+    """The server of an `mcp__<server>__<tool>` name. `tools.server_config` refuses a server
+    name holding `__`, so the split is unambiguous for every server QMA passes."""
+    if not tool_name.startswith("mcp__"):
+        return None
+    server, separator, _ = tool_name.removeprefix("mcp__").partition("__")
+    return server if separator else None
 
 
 _VARIABLE = re.compile(r"\$\{(\w+)\}|\$env:(\w+)|\$(\w+)|%(\w+)%", re.IGNORECASE)
@@ -586,6 +599,9 @@ def gate(
         act = name_money_act(tool_name) or name_money_act(bare)
         if act is not None:
             return _deny(f"agents cannot place, change or cancel orders ({tool_name} is {act})")
+    server = mcp_server(tool_name)
+    if server is not None and server in rules.dropped_servers:
+        return _deny(f"the MCP server {server} was left out of this chat ({tool_name})")
     field = rules.dispatch_targets.get(tool_name)
     target = tool_input.get(field) if field else None
     if isinstance(target, str) and (act := name_money_act(target)) is not None:
