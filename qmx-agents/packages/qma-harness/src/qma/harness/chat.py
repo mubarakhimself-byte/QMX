@@ -109,7 +109,9 @@ PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
 MCP_SETTLE_S: Final = 30.0
 """How long a launch waits for the CLI to finish connecting the vetted external servers. The
-CLI connects them after it starts and reports them `pending` until then, with no tools."""
+CLI connects them after it starts and reports them `pending` until then, with no tools. A
+server still pending then is switched off with a `needs_you` block, as a server that fails
+vetting is, and the chat starts without it."""
 
 
 @dataclass(frozen=True)
@@ -144,10 +146,11 @@ class ChatDeps:
         return self.test is None or self.test.redaction
 
 
-async def _settled(client: ClaudeSDKClient, servers: frozenset[str]) -> McpStatusResponse:
+async def _settled(
+    client: ClaudeSDKClient, servers: frozenset[str]
+) -> tuple[McpStatusResponse, list[str]]:
     """`get_mcp_status()` once none of `servers` is still `pending`, polled for at most
-    `MCP_SETTLE_S`. A server still pending then refuses the launch, since its tools cannot be
-    compared with the vetted ones."""
+    `MCP_SETTLE_S`, and the servers still pending then."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + MCP_SETTLE_S
     while True:
@@ -157,14 +160,24 @@ async def _settled(client: ClaudeSDKClient, servers: frozenset[str]) -> McpStatu
             for server in status["mcpServers"]
             if server["name"] in servers and server["status"] == "pending"
         )
-        if not pending:
-            return status
-        if loop.time() > deadline:
-            raise LaunchRefused(
-                f"the MCP server {', '.join(pending)} did not finish connecting in "
-                f"{MCP_SETTLE_S:.0f} s"
-            )
+        if not pending or loop.time() > deadline:
+            return status, pending
         await asyncio.sleep(0.2)
+
+
+KEEP_OFF_POLL_S: Final = 0.5
+
+
+async def _keep_off(client: ClaudeSDKClient, servers: frozenset[str]) -> None:
+    """Switch `servers` off whenever the CLI reports one connected, for the life of the chat.
+    A switch-off sent while a server is still connecting reads `disabled` at once, and the
+    server connects anyway when its start finishes (measured, S35), so no state is final."""
+    while True:
+        status = await client.get_mcp_status()
+        for server in status["mcpServers"]:
+            if server["name"] in servers and server["status"] == "connected":
+                await client.toggle_mcp_server(server["name"], enabled=False)
+        await asyncio.sleep(KEEP_OFF_POLL_S)
 
 
 def transcript(home: QmxHome, chat: SessionId) -> Path | None:
@@ -237,6 +250,7 @@ class _Live:
     client: ClaudeSDKClient
     grant: RelayGrant | None
     reader: asyncio.Task[None] | None = None
+    keeper: asyncio.Task[None] | None = None
 
 
 @dataclass
@@ -323,6 +337,10 @@ class Chat:
             await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
             await asyncio.wait_for(live.client.disconnect(), CLOSE_WAIT_S)
+        if live.keeper is not None:
+            live.keeper.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await live.keeper
         if live.reader is not None and live.reader is not asyncio.current_task():
             live.reader.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
@@ -399,7 +417,20 @@ class Chat:
             )
             if found:
                 raise LaunchRefused(_loaded(found))
-            unvetted = unvetted_tools(await _settled(live.client, frozenset(vetted)), vetted)
+            settled, pending = await _settled(live.client, frozenset(vetted))
+            for name in pending:
+                await live.client.toggle_mcp_server(name, enabled=False)
+                await self._note(
+                    "needs_you",
+                    {
+                        "reason": f"the MCP server {name} was left out: it did not finish "
+                        f"connecting in {MCP_SETTLE_S:.0f} s"
+                    },
+                )
+            if pending:
+                live.keeper = asyncio.create_task(_keep_off(live.client, frozenset(pending)))
+            compared = {name: tools for name, tools in vetted.items() if name not in pending}
+            unvetted = unvetted_tools(settled, compared)
             if unvetted:
                 raise LaunchRefused(
                     f"the CLI loaded MCP tools that vetting never saw ({', '.join(unvetted)})"

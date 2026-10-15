@@ -73,6 +73,7 @@ class FakeClient:
         self.inbox: asyncio.Queue[Message | None] = asyncio.Queue()
         self.go = asyncio.Event()
         self.disconnected = False
+        self.toggled: list[tuple[str, bool]] = []
         FakeClient.made.append(self)
 
     async def connect(self) -> None:
@@ -83,6 +84,9 @@ class FakeClient:
 
     async def get_mcp_status(self) -> dict[str, list[dict[str, Any]]]:
         return {"mcpServers": FakeClient.servers}
+
+    async def toggle_mcp_server(self, server_name: str, enabled: bool) -> None:
+        self.toggled.append((server_name, enabled))
 
     async def query(self, text: str) -> None:
         async def answer() -> None:
@@ -459,16 +463,7 @@ def test_a_cli_tool_list_that_differs_from_the_vetted_one_refuses_the_launch(
     run(body, home)
 
 
-@pytest.mark.parametrize(
-    ("pending_answers", "reason"),
-    [
-        (2, "vetting never saw (weather: get_extra)"),
-        (10_000, "the MCP server weather did not finish connecting in 1 s"),
-    ],
-)
-def test_the_launch_waits_for_pending_servers_before_comparing_tools(
-    home: QmxHome, monkeypatch: pytest.MonkeyPatch, pending_answers: int, reason: str
-) -> None:
+def pending_weather(home: QmxHome, monkeypatch: pytest.MonkeyPatch, pending_answers: int) -> None:
     script = home.root.parent / "weather.py"
     script.write_text(WEATHER, encoding="utf-8")
     control_service(home).settings_put(
@@ -486,11 +481,74 @@ def test_the_launch_waits_for_pending_servers_before_comparing_tools(
 
     monkeypatch.setattr(FakeClient, "get_mcp_status", status)
 
+
+def test_the_launch_waits_for_pending_servers_before_comparing_tools(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pending_weather(home, monkeypatch, pending_answers=2)
+
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
-        with pytest.raises(LaunchRefused, match=re.escape(reason)):
+        with pytest.raises(
+            LaunchRefused, match=re.escape("vetting never saw (weather: get_extra)")
+        ):
             await harness.send(chat, OperatorText("hi"))
         assert FakeClient.made[0].disconnected
+
+    run(body, home)
+
+
+def test_a_server_still_pending_after_the_wait_is_dropped_and_the_chat_starts(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pending_weather(home, monkeypatch, pending_answers=10_000)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        assert (client.disconnected, client.toggled) == (False, [("weather", False)])
+        assert [kind for kind, _ in blocks(home, chat)][0] == "needs_you"
+        [(_, content)] = [block for block in blocks(home, chat) if block[0] == "needs_you"]
+        assert content["reason"] == (
+            "the MCP server weather was left out: it did not finish connecting in 1 s"
+        )
+
+    run(body, home)
+
+
+def test_a_dropped_server_that_connects_later_is_switched_off_again(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = home.root.parent / "weather.py"
+    script.write_text(WEATHER, encoding="utf-8")
+    control_service(home).settings_put(
+        "mcp_servers", {"weather": {"command": sys.executable, "args": [str(script)]}}
+    )
+    monkeypatch.setattr(qma.harness.chat, "MCP_SETTLE_S", 0.3)
+    monkeypatch.setattr(qma.harness.chat, "KEEP_OFF_POLL_S", 0.05)
+    answers: list[str] = []
+
+    async def status(self: FakeClient) -> dict[str, list[dict[str, Any]]]:
+        answers.append("asked")
+        if len(answers) <= 5:
+            state = "pending"
+        elif len(answers) <= 8:
+            state = "disabled"
+        else:
+            state = "disabled" if len(self.toggled) > 1 else "connected"
+        tools = [{"name": "get_weather"}] if state == "connected" else []
+        return {"mcpServers": [{"name": "weather", "status": state, "tools": tools}]}
+
+    monkeypatch.setattr(FakeClient, "get_mcp_status", status)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        await settle(lambda: len(client.toggled) == 2)
+        await asyncio.sleep(1.2)
+        assert client.toggled == [("weather", False), ("weather", False)]
 
     run(body, home)
 

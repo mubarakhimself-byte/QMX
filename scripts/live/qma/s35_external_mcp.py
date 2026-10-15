@@ -8,7 +8,10 @@ from the launch's `mcp_servers` and from `get_mcp_status()` before the first pro
 `weather` is admitted and listed. The in-process `qmx` server is served by the SDK, and the
 CLI's status does not list it (measured), so the model's tool list shows it instead. For
 `shifting`, PASS when the launch is refused after connect with a `needs_you` block naming
-`get_extra`, and the fake model gets no request.
+`get_extra`, and the fake model gets no request. A third home declares `slow`, which
+answers vetting at once and sleeps 15 s before it serves the CLI, with the settle wait cut to
+2 s. PASS when the chat starts, a `needs_you` block says `slow` was left out, the model is
+offered none of its tools, and the CLI still reports it switched off after it woke.
 
     s35_external_mcp.py
 """
@@ -211,6 +214,92 @@ async def shifted(log: Log) -> None:
         fake.stop()
 
 
+SLOW = """\
+import pathlib, sys, time
+from fastmcp import FastMCP
+starts = pathlib.Path(sys.argv[1])
+count = len(starts.read_text()) if starts.exists() else 0
+starts.write_text("x" * (count + 1))
+if count:
+    time.sleep(15)
+server = FastMCP("slow")
+@server.tool
+def get_tide(x: int = 0) -> int:
+    return x
+server.run()
+"""
+
+
+async def slow(log: Log) -> None:
+    """A server still pending after the settle wait is switched off with a needs_you block,
+    and the chat runs without it."""
+    import qma.harness.chat as chat_module  # noqa: PLC0415
+    from qma.harness import QmxHome, TestMode  # noqa: PLC0415
+    from qma.harness.routes import control_service  # noqa: PLC0415
+
+    chat_module.MCP_SETTLE_S = 2.0
+    root = throwaway_home("hp8-s35-slow")
+    servers = SCRATCH / "hp8-s35-servers"
+    servers.mkdir(parents=True, exist_ok=True)
+    script, starts = servers / "slow.py", servers / "slow-starts.txt"
+    script.write_text(SLOW, encoding="utf-8")
+    starts.unlink(missing_ok=True)
+    fake = FakeModel([Turn([text("hello")])]).start()
+    control = control_service(QmxHome(root))
+    control.settings_put("providers", {"fake": direct_row(fake.url)})
+    row = {"command": sys.executable, "args": [str(script), str(starts)]}
+    control.settings_put("mcp_servers", {"slow": row})
+    launches = capture_launches()
+    session = await Session.start(
+        root,
+        model="opus",
+        workspace=SCRATCH / "workspace",
+        title="s35 slow",
+        test=TestMode(loopback_http_provider=True),
+        profile="fake",
+        mode="default",
+    )
+    try:
+        await session.turn(log, "Say hello.")
+        reasons = [
+            str(block["content"].get("reason", ""))
+            for block in session_blocks(session.control, session.chat)
+            if block["type"] == "needs_you"
+        ]
+        log.check(
+            "a needs_you block says slow was left out",
+            any("MCP server slow was left out" in reason for reason in reasons),
+            reasons,
+        )
+        offered = [
+            tool["name"]
+            for seen_request in fake.requests
+            for tool in seen_request.json.get("tools", [])
+        ]
+        log.check("the chat ran a turn", len(fake.requests) >= 1, len(fake.requests))
+        log.check(
+            "the model is offered no slow tool",
+            not any("slow" in name for name in offered),
+            sorted(name for name in offered if "slow" in name or "tide" in name),
+        )
+        await asyncio.sleep(16)
+        status = await launches[-1].get_mcp_status()
+        found = [
+            (server["name"], server["status"], [tool["name"] for tool in server.get("tools", [])])
+            for server in status["mcpServers"]
+            if server["name"] == "slow"
+        ]
+        log(f"slow after it woke: {found}")
+        log.check(
+            "the CLI keeps slow switched off after it woke",
+            all(entry[1] != "connected" and not entry[2] for entry in found),
+            found,
+        )
+    finally:
+        await session.harness.close()
+        fake.stop()
+
+
 def main() -> int:
     log = Log("hp8-s35")
     boot()
@@ -218,6 +307,7 @@ def main() -> int:
     use_fake_key()
     asyncio.run(run(log))
     asyncio.run(shifted(log))
+    asyncio.run(slow(log))
     return log.verdict()
 
 
