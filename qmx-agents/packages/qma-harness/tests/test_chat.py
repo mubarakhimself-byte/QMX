@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import shutil
+import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
@@ -405,6 +406,52 @@ def test_a_plugin_changed_since_it_shipped_or_running_shell_lines_is_refused(
         with pytest.raises(LaunchRefused, match=re.escape(reason)):
             await harness.send(chat, OperatorText("hi"))
         assert FakeClient.made == []
+        [(kind, content)] = blocks(home, chat)
+        assert kind == "needs_you"
+        assert reason in content["reason"]
+
+    run(body, home)
+
+
+WEATHER = """\
+from fastmcp import FastMCP
+server = FastMCP("weather")
+@server.tool
+def get_weather(x: int) -> int:
+    return x
+server.run()
+"""
+
+
+@pytest.mark.parametrize(
+    ("loaded", "reason"),
+    [
+        (["get_weather"], None),
+        (["get_weather", "close_all"], "vetting never saw (weather: close_all)"),
+        (["mcp__weather__get_weather", "mcp__weather__x"], "(weather: x)"),
+    ],
+)
+def test_a_cli_tool_list_that_differs_from_the_vetted_one_refuses_the_launch(
+    home: QmxHome, loaded: list[str], reason: str | None
+) -> None:
+    script = home.root.parent / "weather.py"
+    script.write_text(WEATHER, encoding="utf-8")
+    control_service(home).settings_put(
+        "mcp_servers", {"weather": {"command": sys.executable, "args": [str(script)]}}
+    )
+    FakeClient.servers = [
+        {"name": "weather", "status": "connected", "tools": [{"name": n} for n in loaded]}
+    ]
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="mcp", model="haiku"))
+        if reason is None:
+            await harness.send(chat, OperatorText("hi"))
+            assert not FakeClient.made[0].disconnected
+            return
+        with pytest.raises(LaunchRefused, match=re.escape(reason)):
+            await harness.send(chat, OperatorText("hi"))
+        assert FakeClient.made[0].disconnected
         [(kind, content)] = blocks(home, chat)
         assert kind == "needs_you"
         assert reason in content["reason"]

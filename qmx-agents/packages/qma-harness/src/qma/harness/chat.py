@@ -79,11 +79,13 @@ from qma.harness.tools import (
     SERVER,
     Grants,
     ToolSurfaceError,
+    VetCache,
     build_server,
     domain_write_policy,
     gate_rules,
     keyring_refs,
     tool_defs,
+    unvetted_tools,
     vet_mcp_servers,
 )
 
@@ -129,6 +131,8 @@ class ChatDeps:
     broker: BrokerService
     domain: DomainContext
     """The domain tools' context. It shares `control`, so no second writer runs."""
+    vetted: VetCache = field(default_factory=VetCache)
+    """External MCP tool lists already vetted, by config digest, for this harness."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
 
@@ -340,7 +344,7 @@ class Chat:
         launch = await self._routing(settings)
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
-            servers, gate = await self._tools(launch)
+            servers, gate, vetted = await self._tools(launch)
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
@@ -363,22 +367,29 @@ class Chat:
                 await deps.relay.revoke(grant)
             raise
         try:
+            status = await live.client.get_mcp_status()
             found = unexpected_extensions(
-                await live.client.get_server_info(),
-                await live.client.get_mcp_status(),
-                frozenset(servers),
+                await live.client.get_server_info(), status, frozenset(servers)
             )
             if found:
                 raise LaunchRefused(_loaded(found))
+            unvetted = unvetted_tools(status, vetted)
+            if unvetted:
+                raise LaunchRefused(
+                    f"the CLI loaded MCP tools that vetting never saw ({', '.join(unvetted)})"
+                )
         except BaseException:
             await self._end(live)
             raise
         live.reader = asyncio.create_task(self._read(live))
         return live
 
-    async def _tools(self, launch: Launch) -> tuple[dict[str, McpServerConfig], GateRules]:
-        """The `qmx` server, the vetted external servers and the gate's rules. A refused
-        external server gets a `needs_you` block and is left out; the chat still starts."""
+    async def _tools(
+        self, launch: Launch
+    ) -> tuple[dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]]]:
+        """The `qmx` server, the vetted external servers, the gate's rules and each vetted
+        server's tool names. A refused external server gets a `needs_you` block and is left
+        out; the chat still starts."""
         deps = self._deps
         control = deps.control
         defs = await tool_defs(control=control, broker=deps.broker, domain=deps.domain)
@@ -392,7 +403,9 @@ class Chat:
             )
         except (MoneySurfaceError, ToolSurfaceError) as refused:
             raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
-        vetted = await vet_mcp_servers(await asyncio.to_thread(control.settings_get, "mcp_servers"))
+        vetted = await vet_mcp_servers(
+            await asyncio.to_thread(control.settings_get, "mcp_servers"), deps.vetted
+        )
         for name, reason in vetted.refused.items():
             await self._note(
                 "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
@@ -406,7 +419,7 @@ class Chat:
             else deps.home.relayed_dir,
             keyring_names=await asyncio.to_thread(keyring_refs, control),
         )
-        return {SERVER: qmx, **vetted.configs}, gate
+        return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile

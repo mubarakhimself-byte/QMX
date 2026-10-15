@@ -26,6 +26,7 @@ from qma.harness.tools import (
     Grants,
     ToolDef,
     ToolSurfaceError,
+    VetCache,
     args_digest,
     asks,
     build_server,
@@ -35,6 +36,8 @@ from qma.harness.tools import (
     sdk_tools,
     server_config,
     tool_defs,
+    unvetted_tools,
+    vet_mcp_servers,
     vet_server,
 )
 
@@ -234,9 +237,11 @@ def test_vetting_starts_the_server_and_checks_its_tools(
     row = {"command": sys.executable, "args": [str(script)]}
     if refused:
         with pytest.raises(MoneySurfaceError, match="Money-path act refused: submitOrder"):
-            asyncio.run(vet_server("ext", row))
+            asyncio.run(vet_server("ext", row, VetCache()))
     else:
-        assert asyncio.run(vet_server("ext", row))["type"] == "stdio"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+        vetted = asyncio.run(vet_server("ext", row, VetCache()))
+        assert vetted.config["type"] == "stdio"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+        assert vetted.tools == {"get_weather"}
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows form")
@@ -407,3 +412,115 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
         for tool, args, _ in calls
     ]
     assert found == [(tool, verdict) for tool, _, verdict in calls]
+
+
+PAGED = """\
+from fastmcp import FastMCP
+server = FastMCP("ext", list_page_size=1)
+@server.tool
+def get_weather(x: int) -> int:
+    return x
+@server.tool
+def {name}(x: int) -> int:
+    '''{doc}'''
+    return x
+server.run()
+"""
+
+
+@pytest.mark.parametrize(
+    ("name", "doc", "refusal"),
+    [
+        ("submitOrder", "Reads a value.", "Money-path act refused: submitOrder"),
+        ("get_quote", "Places a market order for the symbol.", "description of get_quote"),
+        ("get_bars", "Reads bars.", None),
+    ],
+)
+def test_vetting_reads_every_page_and_every_description(
+    tmp_path: Path, name: str, doc: str, refusal: str | None
+) -> None:
+    script = tmp_path / "server.py"
+    script.write_text(PAGED.format(name=name, doc=doc), encoding="utf-8")
+    row = {"command": sys.executable, "args": [str(script)]}
+    found = asyncio.run(vet_mcp_servers({"ext": row}, VetCache()))
+    if refusal is None:
+        assert found.refused == {}
+        assert found.tools == {"ext": frozenset({"get_weather", "get_bars"})}
+    else:
+        assert refusal in found.refused["ext"]
+        assert "ext" not in found.configs
+
+
+COORDINATED = """\
+import pathlib, sys, time
+from fastmcp import FastMCP
+mine, theirs = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+mine.touch()
+deadline = time.monotonic() + 5
+while not theirs.exists():
+    if time.monotonic() > deadline:
+        sys.exit(1)
+    time.sleep(0.05)
+server = FastMCP("ext")
+@server.tool
+def get_weather(x: int) -> int:
+    return x
+server.run()
+"""
+
+
+def test_servers_are_vetted_at_the_same_time(tmp_path: Path) -> None:
+    script = tmp_path / "server.py"
+    script.write_text(COORDINATED, encoding="utf-8")
+    first, second = tmp_path / "first", tmp_path / "second"
+    declared = {
+        "a": {"command": sys.executable, "args": [str(script), str(first), str(second)]},
+        "b": {"command": sys.executable, "args": [str(script), str(second), str(first)]},
+    }
+    found = asyncio.run(vet_mcp_servers(declared, VetCache()))
+    assert found.refused == {}
+    assert sorted(found.configs) == ["a", "b"]
+
+
+COUNTED = """\
+import pathlib, sys
+from fastmcp import FastMCP
+with pathlib.Path(sys.argv[1]).open("a") as starts:
+    starts.write("start ")
+server = FastMCP("ext")
+@server.tool
+def get_weather(x: int) -> int:
+    return x
+server.run()
+"""
+
+
+def test_a_vetted_config_is_not_started_again_until_it_changes(tmp_path: Path) -> None:
+    script = tmp_path / "server.py"
+    script.write_text(COUNTED, encoding="utf-8")
+    starts = tmp_path / "starts.txt"
+    cache = VetCache()
+    row: dict[str, object] = {"command": sys.executable, "args": [str(script), str(starts)]}
+    first = asyncio.run(vet_mcp_servers({"ext": row}, cache))
+    again = asyncio.run(vet_mcp_servers({"ext": row}, cache))
+    assert first == again
+    assert starts.read_text(encoding="utf-8") == "start "
+    changed = {**row, "env": {"X": "1"}}
+    asyncio.run(vet_mcp_servers({"ext": changed}, cache))
+    assert starts.read_text(encoding="utf-8") == "start start "
+
+
+def test_tools_the_cli_loaded_that_vetting_never_saw_are_named() -> None:
+    status: Any = {
+        "mcpServers": [
+            {
+                "name": "ext",
+                "status": "connected",
+                "tools": [{"name": "get_weather"}, {"name": "mcp__ext__submit_order"}],
+            },
+            {"name": "other", "status": "failed"},
+        ]
+    }
+    vetted = {"ext": frozenset({"get_weather"}), "other": frozenset({"x"})}
+    assert unvetted_tools(status, vetted) == ["ext: submit_order"]
+    assert unvetted_tools(status, {"ext": frozenset({"get_weather", "submit_order"})}) == []

@@ -25,6 +25,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
+from qma.core.barriers.descriptors import name_money_act
 from qmx_broker.service import BrokerService
 
 from qma.harness.money import (
@@ -37,6 +38,7 @@ from qma.harness.money import (
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpSdkServerConfig, McpServerConfig
+    from claude_agent_sdk.types import McpStatusResponse
     from fastmcp import FastMCP
     from fastmcp.tools import Tool
     from qmx_control.service import ControlService
@@ -510,12 +512,33 @@ VET_TIMEOUT_S: Final = 30.0
 
 @dataclass(frozen=True)
 class VettedServers:
-    """External MCP servers that passed `vet_mcp_servers`, as SDK configs, and each refused
-    server with its reason. Only `configs` reach `mcp_servers`; `strict_mcp_config=True` makes
-    the CLI ignore every other MCP config (02a section 7)."""
+    """External MCP servers that passed `vet_mcp_servers`, as SDK configs with the tool names
+    vetting saw, and each refused server with its reason. Only `configs` reach `mcp_servers`;
+    `strict_mcp_config=True` makes the CLI ignore every other MCP config (02a section 7)."""
 
     configs: Mapping[str, McpServerConfig]
+    tools: Mapping[str, frozenset[str]]
     refused: Mapping[str, str]
+
+
+class VetCache:
+    """Tool names vetted per config digest, for one harness. A changed row has a new digest
+    and is vetted again. A server that changes its tools under the same row is caught after
+    connect (`unvetted_tools`)."""
+
+    def __init__(self) -> None:
+        self._tools: dict[str, frozenset[str]] = {}
+
+    def get(self, digest: str) -> frozenset[str] | None:
+        return self._tools.get(digest)
+
+    def put(self, digest: str, tools: frozenset[str]) -> None:
+        self._tools[digest] = tools
+
+
+def config_digest(config: McpServerConfig) -> str:
+    body = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode()).hexdigest()
 
 
 def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
@@ -546,6 +569,7 @@ async def _list_tools(config: McpServerConfig) -> list[Any]:
     from mcp import ClientSession, StdioServerParameters  # noqa: PLC0415
     from mcp.client.stdio import stdio_client  # noqa: PLC0415
     from mcp.client.streamable_http import streamable_http_client  # noqa: PLC0415
+    from mcp.types import PaginatedRequestParams  # noqa: PLC0415
 
     async with AsyncExitStack() as stack:
         spec = cast("dict[str, Any]", config)
@@ -558,13 +582,32 @@ async def _list_tools(config: McpServerConfig) -> list[Any]:
             streams = await stack.enter_async_context(streamable_http_client(spec["url"]))
         session = await stack.enter_async_context(ClientSession(streams[0], streams[1]))
         await session.initialize()
-        return list((await session.list_tools()).tools)
+        found: list[Any] = []
+        cursor: str | None = None
+        while True:
+            params = PaginatedRequestParams(cursor=cursor) if cursor else None
+            page = await session.list_tools(params=params)
+            found += page.tools
+            cursor = page.next_cursor
+            if not cursor:
+                return found
 
 
-async def vet_server(name: str, row: Mapping[str, object]) -> McpServerConfig:
-    """Start one declared server with the Python MCP client, list its tools and run the
-    surface check on their names and metadata. Raises ValueError or MoneySurfaceError."""
+@dataclass(frozen=True)
+class VettedServer:
+    config: McpServerConfig
+    tools: frozenset[str]
+
+
+async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> VettedServer:
+    """Start one declared server with the Python MCP client, list every page of its tools and
+    run the surface check on their names, metadata and descriptions. A config already in
+    `cache` is not started again. Raises ValueError or MoneySurfaceError."""
     config = server_config(name, row)
+    digest = config_digest(config)
+    cached = cache.get(digest)
+    if cached is not None:
+        return VettedServer(config, cached)
     listed = await asyncio.wait_for(_list_tools(config), VET_TIMEOUT_S)
     metadata = {
         tool.name: {
@@ -576,25 +619,54 @@ async def vet_server(name: str, row: Mapping[str, object]) -> McpServerConfig:
         for tool in listed
     }
     check_tool_surface(list(metadata), metadata, frozenset())
-    return config
+    for tool in listed:
+        act = name_money_act(tool.description or "")
+        if act is not None:
+            raise MoneySurfaceError(f"the description of {tool.name} names a money act ({act})")
+    tools = frozenset(metadata)
+    cache.put(digest, tools)
+    return VettedServer(config, tools)
 
 
-async def vet_mcp_servers(declared: Mapping[str, object]) -> VettedServers:
-    """Before any launch uses them: vet every enabled server in settings.toml [mcp_servers].
-    A server that exposes a money act, or that cannot be listed, is refused and never
-    launched (A8, B10). A tool that a server adds later is still denied by name in the gate.
-    Servers are vetted at each launch, so a changed config is always vetted again."""
+async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> VettedServers:
+    """Before any launch uses them: vet every enabled server in settings.toml [mcp_servers],
+    all at once. A server that exposes a money act, or that cannot be listed, is refused and
+    never launched (A8, B10). A tool that a server adds later is still denied by name in the
+    gate, and one the CLI loads that vetting never saw refuses the launch."""
+    rows = {
+        name: cast("Mapping[str, object]", row)
+        for name, row in declared.items()
+        if isinstance(row, Mapping) and cast("Mapping[str, object]", row).get("enabled", True)
+    }
+    results = await asyncio.gather(
+        *(vet_server(name, row, cache) for name, row in rows.items()), return_exceptions=True
+    )
     configs: dict[str, McpServerConfig] = {}
+    tools: dict[str, frozenset[str]] = {}
     refused: dict[str, str] = {}
-    for name, row in declared.items():
-        if not isinstance(row, Mapping) or not cast("Mapping[str, object]", row).get(
-            "enabled", True
-        ):
-            continue
-        try:
-            configs[name] = await vet_server(name, cast("Mapping[str, object]", row))
-        except MoneySurfaceError as error:
-            refused[name] = f"it exposes a money act ({error})"
-        except Exception as error:
-            refused[name] = f"it could not be vetted ({type(error).__name__}: {error})"
-    return VettedServers(MappingProxyType(configs), MappingProxyType(refused))
+    for name, result in zip(rows, results, strict=True):
+        match result:
+            case VettedServer():
+                configs[name], tools[name] = result.config, result.tools
+            case MoneySurfaceError():
+                refused[name] = f"it exposes a money act ({result})"
+            case Exception():
+                refused[name] = f"it could not be vetted ({type(result).__name__}: {result})"
+            case _:
+                raise result
+    return VettedServers(
+        MappingProxyType(configs), MappingProxyType(tools), MappingProxyType(refused)
+    )
+
+
+def unvetted_tools(status: McpStatusResponse, vetted: Mapping[str, frozenset[str]]) -> list[str]:
+    """`server: tool` for each tool the CLI loaded from a vetted server that vetting never
+    saw. The CLI may report a name bare or as `mcp__<server>__<tool>`."""
+    return sorted(
+        f"{server['name']}: {bare}"
+        for server in status["mcpServers"]
+        if server["name"] in vetted
+        for tool in server.get("tools", [])
+        if (bare := tool["name"].removeprefix(f"mcp__{server['name']}__"))
+        not in vetted[server["name"]]
+    )
