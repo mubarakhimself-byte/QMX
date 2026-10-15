@@ -69,6 +69,39 @@ SessionId = NewType("SessionId", str)
 PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 """`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""
 
+PLUGIN_SHA256: Final = "1ad08fe8432b60134d15fa747251aed6b418d92a783be20619e9e59527402642"
+"""`plugin_digest(PLUGIN_DIR)` as shipped. The CLI reloads the plugin at every launch and
+only bypassable rules guard its folder, so a launch refuses any other content. Update this
+with any edit to the plugin."""
+
+
+def plugin_digest(folder: Path) -> str:
+    """sha256 over each file's path relative to `folder` and its bytes, CRLF read as LF so a
+    Windows checkout hashes as the commit does."""
+    digest = hashlib.sha256()
+    files = sorted((path.relative_to(folder).as_posix(), path) for path in folder.rglob("*"))
+    for name, path in files:
+        if path.is_file():
+            digest.update(name.encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
+
+
+def plugin_refusal(home: QmxHome) -> str | None:
+    """Why this launch may not load `home.plugin_dir`, or None. A `!` shell line in a command,
+    skill or agent body runs outside every hook, so the gate never sees it."""
+    folder = home.plugin_dir
+    for path in sorted(folder.rglob("*.md")):
+        if "!`" in path.read_text(encoding="utf-8", errors="replace"):
+            name = path.relative_to(folder).as_posix()
+            return f"the QMX plugin runs shell lines outside every hook ({name})"
+    found = plugin_digest(folder)
+    if found != home.plugin_sha256:
+        return (
+            f"the QMX plugin at {folder} changed since it shipped (sha256 {found}, shipped "
+            f"{home.plugin_sha256}); restore it from git"
+        )
+    return None
+
 
 def session_id(text: str) -> SessionId:
     if not is_chat_id(text):
@@ -80,6 +113,8 @@ def session_id(text: str) -> SessionId:
 class QmxHome:
     root: Path
     plugin_dir: Path = PLUGIN_DIR
+    plugin_sha256: str = PLUGIN_SHA256
+    """What `plugin_digest(plugin_dir)` must be at each launch."""
 
     @property
     def plan_dir(self) -> Path:

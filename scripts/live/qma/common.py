@@ -216,9 +216,14 @@ class Session:
         if tools is not None:
             only_tools(tools)
         from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
+        from qma.harness.home import plugin_digest  # noqa: PLC0415
         from qma.harness.routes import control_service  # noqa: PLC0415
 
-        home = QmxHome(root) if plugin_dir is None else QmxHome(root, plugin_dir)
+        home = (
+            QmxHome(root)
+            if plugin_dir is None
+            else QmxHome(root, plugin_dir, plugin_digest(plugin_dir))
+        )
         control = control_service(home)
         harness = await Harness.open(home, control=control, test=test)
         workspace.mkdir(parents=True, exist_ok=True)

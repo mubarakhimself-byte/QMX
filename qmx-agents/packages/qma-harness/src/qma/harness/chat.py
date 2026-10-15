@@ -41,6 +41,7 @@ from qma.harness.home import (
     ensure_homes,
     parse_claude_settings,
     plan_auth_method,
+    plugin_refusal,
     write_record,
 )
 from qma.harness.launch import (
@@ -310,6 +311,9 @@ class Chat:
         if await asyncio.to_thread(deps.procs.alive, chat):
             raise LaunchRefused("an earlier agent process of this chat is still running")
         ensure_homes(deps.home)
+        tampered = await asyncio.to_thread(plugin_refusal, deps.home)
+        if tampered is not None:
+            raise LaunchRefused(tampered)
         planted = [
             name
             for claude_home in (deps.home.plan_dir, deps.home.relayed_dir)
