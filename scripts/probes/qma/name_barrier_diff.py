@@ -42,7 +42,7 @@ DECORATED = [
     re.compile(r"StructuredTool\.from_function\([^)]*?name\s*=\s*[\"']([^\"']+)[\"']", re.S),
 ]
 
-type Check = Callable[[str, dict[str, Any]], None]
+Check = Callable[[str, dict[str, Any]], None]
 
 
 def base_check(base: str) -> Check:
@@ -78,7 +78,7 @@ def harvested() -> set[str]:
             continue
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError, UnicodeDecodeError:
+        except (OSError, UnicodeDecodeError):
             continue
         for pattern in DECORATED:
             names |= {match.group(1) for match in pattern.finditer(text)}
