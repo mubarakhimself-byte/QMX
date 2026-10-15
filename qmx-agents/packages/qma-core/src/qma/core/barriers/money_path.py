@@ -211,8 +211,8 @@ MONEY_PATH_MONEY_NOUNS: Final[frozenset[str]] = frozenset(
     {"money", "fund", "currency", "invoice", "payment", "cash", "coin", "leverage", "margin"}
 )
 MONEY_PATH_NON_MONEY_OBJECTS: Final[frozenset[str]] = frozenset({"journal", "note", "watchlist"})
-"""A name ending in one of these acts on that record, not on the trade or coin before it
-(`add_trade_note`, `add_coin_to_watchlist`)."""
+"""A noun right before one of these, or before `to_watchlist`, names that record's subject, not
+an object to act on (`add_trade_note`, `add_coin_to_watchlist`)."""
 MONEY_PATH_NON_MONEY_QUALIFIERS: Final[frozenset[str]] = frozenset({"display"})
 """A noun right after one of these is a setting, not money (`set_display_currency`)."""
 MONEY_PATH_DIRECTION_NOUNS: Final[frozenset[str]] = frozenset({"long", "short"})
