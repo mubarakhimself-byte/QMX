@@ -16,7 +16,12 @@ settings.toml is unchanged, and no process holds a connection to a broker port (
 for neg when both commands run and return output. settings.toml is restored from a copy
 whatever happens.
 
-    s06_money.py bypass|agent|neg [--calls keyring broker edit] [--home ...] [--model haiku]
+    s06_money.py bypass|agent|neg [--calls keyring broker edit] [--mode default] [--home ...]
+        [--model haiku]
+
+`--mode default` runs a lane in default mode instead of bypass. The hook does not read the
+mode, so the calls are denied the same way, and a call the gate missed would ask and be
+rejected rather than run.
 """
 
 from __future__ import annotations
@@ -46,6 +51,7 @@ QMX_REPO = Path("C:/Users/Mubarak/Desktop/QMX")
 KEYRING = "python -c \"import keyring; keyring.get_password('QMX/ctrader','ctrader')\""
 BROKER = "curl -s --max-time 3 https://demo.ctraderapi.com:5035"
 BROKER_PORT = 5035
+BYPASS = "bypassPermissions"
 PLUGIN = REPO / "qmx-agents" / "plugin"
 
 
@@ -149,7 +155,7 @@ async def money_lane(log: Log, args: Any, in_agent: bool) -> None:
         model=args.model,
         workspace=args.workspace,
         title=f"s06 {'agent' if in_agent else 'bypass'}",
-        mode="bypassPermissions",
+        mode=args.mode,
         tools=tools,
         plugin_dir=plugin_without_rules(),
     )
@@ -214,7 +220,7 @@ async def negative_lane(log: Log, args: Any) -> None:
         model=args.model,
         workspace=QMX_REPO,
         title="s06 neg",
-        mode="bypassPermissions",
+        mode=args.mode,
         tools=["Bash"],
     )
     try:
@@ -255,9 +261,12 @@ def main() -> int:
         choices=["keyring", "broker", "edit"],
         default=["keyring", "broker", "edit"],
     )
+    parser.add_argument("--mode", choices=["bypassPermissions", "default"], default=BYPASS)
     args = parser.parse_args()
     subset = "" if len(args.calls) == 3 else "-" + "-".join(args.calls)
-    log = Log(f"hp8-s06-{args.lane}{subset}")
+    mode = "" if args.mode == BYPASS else f"-{args.mode}"
+    log = Log(f"hp8-s06-{args.lane}{subset}{mode}")
+    log(f"permission mode: {args.mode}")
     boot()
     use_fake_home()
     require_login(log)
