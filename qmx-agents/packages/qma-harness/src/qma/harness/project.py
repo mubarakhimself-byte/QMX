@@ -14,12 +14,14 @@ progress is a whole description per message, and `chat.py` redacts it whole.
 from __future__ import annotations
 
 import json
+import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from itertools import groupby
 from operator import itemgetter
-from typing import Any, Final, Literal, cast
+from typing import Any, Final, Literal, cast, get_args
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -183,7 +185,9 @@ class Delta:
 @dataclass(frozen=True)
 class TurnUsage:
     """From `ResultMessage`. Plan chats count usage here and relayed chats at the relay, so
-    each profile has one usage source. Costs are list-price estimates."""
+    each profile has one usage source. Costs are list-price estimates. `model_usage` and
+    `total_cost_usd` are running totals of the CLI process, and a resumed process starts from
+    the session's earlier totals (measured, CLI 2.1.299)."""
 
     session_id: str
     model_usage: dict[str, dict[str, int | float]]
@@ -192,12 +196,31 @@ class TurnUsage:
 
 
 type LimitStatus = Literal["allowed", "allowed_warning", "rejected"]
-type Window = Literal["five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "overage"]
+type Window = Literal[
+    "five_hour",
+    "seven_day",
+    "seven_day_opus",
+    "seven_day_sonnet",
+    "seven_day_overage_included",
+    "overage",
+]
+"""The `rateLimitType` values in Claude Code 2.1.296's `rate_limit_info` schema."""
+STATUSES: Final[frozenset[str]] = frozenset(get_args(LimitStatus.__value__))
+WINDOWS: Final[frozenset[str]] = frozenset(get_args(Window.__value__))
+
+
+@dataclass(frozen=True)
+class Reading:
+    """How much of a plan window is used, as a fraction from 0 to 1."""
+
+    window: str
+    utilization: float
+    resets_at: datetime | None
 
 
 @dataclass(frozen=True)
 class Limits:
-    """From `RateLimitEvent`. Every field the SDK's `RateLimitInfo` models, plus three the CLI
+    """From `RateLimitEvent`. Every field the SDK's `RateLimitInfo` models, plus what the CLI
     sends in `raw` that the SDK does not model."""
 
     window: Window | None
@@ -213,6 +236,28 @@ class Limits:
     overage_enabled: bool | None
     """`raw["overageEnabled"]`."""
     credits_required: bool
+    """`raw["errorCode"]` is `credits_required`, or `raw` has a `credits_required` key."""
+    readings: tuple[Reading, ...] = ()
+    """`raw["unifiedWindows"]`: the five-hour and weekly use the CLI reports on any window's
+    event."""
+
+
+@dataclass(frozen=True)
+class UnreadableLimits:
+    """A rate-limit event this code cannot read. The overage stop treats it as paid use."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class PlanMeter:
+    """The plan's use as the CLI's `/usage` text states it: the session as `five_hour`, the
+    all-models week as `seven_day`."""
+
+    readings: tuple[Reading, ...]
+
+
+type PlanFact = Limits | UnreadableLimits | PlanMeter
 
 
 @dataclass(frozen=True)
@@ -240,7 +285,7 @@ class Compacted:
     trigger: Literal["manual", "auto"]
 
 
-type Fact = Block | Delta | StreamEnded | TurnUsage | Limits | TurnEnded | Compacted
+type Fact = Block | Delta | StreamEnded | TurnUsage | PlanFact | TurnEnded | Compacted
 
 
 def project(message: Message, *, redact_tokens: bool = True) -> list[Fact]:
@@ -289,6 +334,24 @@ def _facts(message: Message) -> list[Fact]:
             return []
 
 
+SYNTHETIC: Final = "<synthetic>"
+"""The model name on messages the CLI writes itself, such as a local command's reply."""
+METER: Final = (
+    ("five_hour", re.compile(r"Current session: (\d+(?:\.\d+)?)% used")),
+    ("seven_day", re.compile(r"Current week \(all models\): (\d+(?:\.\d+)?)% used")),
+)
+"""Lines of the CLI's `/usage` reply (HP0 S10)."""
+
+
+def _meter(text: str) -> list[Fact]:
+    readings = tuple(
+        Reading(window, float(found.group(1)) / 100, None)
+        for window, pattern in METER
+        if (found := pattern.search(text))
+    )
+    return [PlanMeter(readings)] if readings else []
+
+
 def _assistant(message: AssistantMessage) -> list[Fact]:
     target = _target(message.parent_tool_use_id)
     facts: list[Fact] = []
@@ -296,6 +359,8 @@ def _assistant(message: AssistantMessage) -> list[Fact]:
         match part:
             case TextBlock(text=text) if text:
                 facts.append(_block(target, "text", {"text": text}))
+                if message.model == SYNTHETIC:
+                    facts += _meter(text)
             case ToolUseBlock() | ServerToolUseBlock():
                 facts += _tool_use(target, part.id, part.name, part.input)
             case ServerToolResultBlock(tool_use_id=tool_use_id, content=content):
@@ -406,25 +471,97 @@ def _result(message: ResultMessage) -> list[Fact]:
     return facts
 
 
-def _moment(stamp: int | None) -> datetime | None:
-    return None if stamp is None else datetime.fromtimestamp(stamp, UTC)
+class _Unreadable(Exception):
+    pass
 
 
-def _limits(info: RateLimitInfo) -> Limits:
-    raw = info.raw
-    flags = [raw[key] for key in ("isUsingOverage", "overageInUse") if key in raw]
-    enabled = raw.get("overageEnabled")
+def _choice(value: object, allowed: frozenset[str], name: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise _Unreadable(f"{name} is {value!r}")
+    return value
+
+
+def _moment(value: object, name: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise _Unreadable(f"{name} is {value!r}")
+    try:
+        return datetime.fromtimestamp(value, UTC)
+    except OverflowError, OSError, ValueError:
+        raise _Unreadable(f"{name} is {value!r}") from None
+
+
+def _fraction(value: object, name: str) -> float | None:
+    if value is None:
+        return None
+    if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
+        raise _Unreadable(f"{name} is {value!r}")
+    return float(value)
+
+
+def _flag(raw: Mapping[str, object], key: str) -> bool | None:
+    value = raw.get(key)
+    if value is None or isinstance(value, bool):
+        return value
+    raise _Unreadable(f"{key} is {value!r}")
+
+
+def _readings(value: object) -> tuple[Reading, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, dict):
+        raise _Unreadable(f"unifiedWindows is {value!r}")
+    readings: list[Reading] = []
+    for window, entry in cast("dict[object, object]", value).items():
+        if not isinstance(window, str) or not isinstance(entry, dict):
+            raise _Unreadable(f"unifiedWindows has {window!r}: {entry!r}")
+        fields = cast("dict[str, object]", entry)
+        used = _fraction(fields.get("utilization"), f"unifiedWindows.{window}.utilization")
+        if used is not None:
+            resets = _moment(fields.get("resetsAt"), f"unifiedWindows.{window}.resetsAt")
+            readings.append(Reading(window, used, resets))
+    return tuple(readings)
+
+
+def _limits(info: RateLimitInfo) -> Limits | UnreadableLimits:
+    """Any field outside the pinned CLI's schema makes the whole event unreadable, so a shape
+    this code does not know never reads as "no overage"."""
+    try:
+        return _read_limits(info)
+    except _Unreadable as error:
+        return UnreadableLimits(f"a rate-limit event could not be read: {error}")
+
+
+def _read_limits(info: RateLimitInfo) -> Limits:
+    raw = cast("Mapping[str, object]", info.raw)
+    flags = [
+        flag for key in ("isUsingOverage", "overageInUse") if (flag := _flag(raw, key)) is not None
+    ]
+    code = raw.get("errorCode")
+    if code is not None and code != "credits_required":
+        raise _Unreadable(f"errorCode is {code!r}")
+    window = info.rate_limit_type
+    overage = info.overage_status
+    reason: object = info.overage_disabled_reason
+    if reason is not None and not isinstance(reason, str):
+        raise _Unreadable(f"overageDisabledReason is {reason!r}")
     return Limits(
-        window=info.rate_limit_type,
-        status=info.status,
-        utilization=info.utilization,
-        resets_at=_moment(info.resets_at),
-        overage_status=info.overage_status,
-        overage_resets_at=_moment(info.overage_resets_at),
-        overage_disabled_reason=info.overage_disabled_reason,
-        using_overage=any(flag is True for flag in flags) if flags else None,
-        overage_enabled=enabled if isinstance(enabled, bool) else None,
-        credits_required="credits_required" in raw,
+        window=None
+        if window is None
+        else cast("Window", _choice(window, WINDOWS, "rateLimitType")),
+        status=cast("LimitStatus", _choice(info.status, STATUSES, "status")),
+        utilization=_fraction(info.utilization, "utilization"),
+        resets_at=_moment(info.resets_at, "resetsAt"),
+        overage_status=None
+        if overage is None
+        else cast("LimitStatus", _choice(overage, STATUSES, "overageStatus")),
+        overage_resets_at=_moment(info.overage_resets_at, "overageResetsAt"),
+        overage_disabled_reason=reason,
+        using_overage=any(flags) if flags else None,
+        overage_enabled=_flag(raw, "overageEnabled"),
+        credits_required=code == "credits_required" or "credits_required" in raw,
+        readings=_readings(raw.get("unifiedWindows")),
     )
 
 

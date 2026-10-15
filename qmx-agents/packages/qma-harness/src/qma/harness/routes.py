@@ -13,6 +13,9 @@ Routes:
                                                  unknown chat
     POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
                                                  `<sid>.<seq of the permission or question block>`
+    GET  /api/usage                              the usage page: plan windows, readings, token
+                                                 sums per profile, cap, overage stop
+    POST /api/usage/meter                        read `/usage` in a plan chat, then the page
     GET  /api/doctor                             DoctorLine list
     GET  /api/claude-settings                    settings.toml [claude]
     PUT  /api/claude-settings                    `home.parse_claude_settings`, then
@@ -23,7 +26,7 @@ Durable blocks keep using `GET /api/events/sessions?subject=<sid>`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
@@ -47,7 +50,14 @@ from qma.harness.chat import (
     Reject,
 )
 from qma.harness.harness import Harness, NewChat, UnknownChat
-from qma.harness.home import QmxHome, SessionId, claude_section, doctor, session_id
+from qma.harness.home import (
+    DoctorLine,
+    QmxHome,
+    SessionId,
+    claude_section,
+    doctor,
+    session_id,
+)
 from qma.harness.launch import LAUNCHER, Effort, LaunchRefused, PermissionMode
 from qma.harness.project import Delta, InChild
 
@@ -196,7 +206,19 @@ def chat_router(harness: Harness) -> APIRouter:
             return {"status": "unknown"}
         return {"status": harness.answer(ask, to_answer(body))}
 
-    _ = new_chat, turn, interrupt, live, approve
+    @api.get("/api/usage")
+    async def read_usage() -> dict[str, Any]:
+        return (await harness.usage()).document()
+
+    @api.post("/api/usage/meter")
+    async def read_meter() -> dict[str, Any]:
+        try:
+            await harness.meter()
+        except LaunchRefused as error:
+            raise ControlError("launch_refused", str(error), 409) from error
+        return (await harness.usage()).document()
+
+    _ = new_chat, turn, interrupt, live, approve, read_usage, read_meter
     return api
 
 
@@ -206,7 +228,9 @@ def router(
     *,
     scrubbed: Sequence[str],
     keep: Sequence[str],
+    plan_lines: Callable[[], list[DoctorLine]] = list,
 ) -> APIRouter:
+    """`plan_lines` adds the harness's overage stop and extra-usage lines to the doctor."""
     api = APIRouter()
 
     @api.get("/api/doctor")
@@ -214,7 +238,7 @@ def router(
         lines = await asyncio.to_thread(
             doctor, home, control, scrubbed=scrubbed, keep=keep, launcher=LAUNCHER
         )
-        return {"lines": [asdict(line) for line in lines]}
+        return {"lines": [asdict(line) for line in [*lines, *plan_lines()]]}
 
     @api.get("/api/claude-settings")
     async def read_claude_settings() -> Document:
@@ -252,7 +276,7 @@ async def _serve(
     home = QmxHome(root)
     control = control_service(home)
     harness = await Harness.open(home, control=control)
-    extra = router(home, control, scrubbed=scrubbed, keep=keep)
+    extra = router(home, control, scrubbed=scrubbed, keep=keep, plan_lines=harness.usage_lines)
     app = create_app(control, local_token(), ui_origin, extra_routers=[extra, chat_router(harness)])
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
     try:
