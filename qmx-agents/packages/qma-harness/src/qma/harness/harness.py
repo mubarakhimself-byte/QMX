@@ -39,6 +39,7 @@ from qma.harness.chat import (
     ChatDeps,
     OperatorText,
     Prompt,
+    Quote,
     UntrustedPrompt,
     admits,
 )
@@ -58,6 +59,7 @@ from qma.harness.launch import (
     Budgets,
     ChatConfig,
     ChatKind,
+    ConfigChange,
     Effort,
     Interactive,
     LaunchRefused,
@@ -375,6 +377,41 @@ class Harness:
             await asyncio.sleep(0.2)
         await chat.close()
         return self._ledger.reading("five_hour")
+
+    async def quote(self, chat: SessionId, change: ConfigChange) -> Quote:
+        """Every change goes through a quote. The new model goes through
+        `profiles.resolve_model`, the parser the relay uses, so a change the relay would refuse
+        never gets a quote. A switch onto the plan is refused while the overage stop holds."""
+        found = self._chat(chat)
+        old = found.record.config
+        new = change.applied_to(old)
+        try:
+            profile = (
+                ClaudePlan()
+                if new.profile == PLAN
+                else (await asyncio.to_thread(self._deps.relay.profiles)).get(new.profile)
+            )
+        except ProfileError as error:
+            raise LaunchRefused(str(error)) from None
+        if resolve_model(profile, new.model) is None:
+            raise LaunchRefused(f"{new.profile} cannot run the model {new.model!r}")
+        stop = self._ledger.hard_stop()
+        if new.profile == PLAN and old.profile != PLAN and stop is not None:
+            raise LaunchRefused(f"plan use is stopped: {stop}")
+        return await found.quote(new)
+
+    async def apply(self, chat: SessionId, quote_id: str) -> Quote:
+        """The quote stays server-side in its chat; a caller only names it, so it cannot forge
+        one. An unknown or stale id raises `QuoteStale`. The chat keeps its slot through a
+        relaunch, so no other chat takes it while the CLI restarts."""
+        found = self._chat(chat)
+        self._sending[chat] += 1
+        try:
+            return await found.apply(quote_id, plan_stop=self._ledger.hard_stop())
+        finally:
+            self._sending[chat] -= 1
+            if not self._sending[chat]:
+                del self._sending[chat]
 
     async def interrupt(self, chat: SessionId) -> None:
         await self._chat(chat).interrupt()

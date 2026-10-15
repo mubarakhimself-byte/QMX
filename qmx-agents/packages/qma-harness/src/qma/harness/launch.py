@@ -26,7 +26,8 @@ import os
 import subprocess
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal
 
@@ -105,6 +106,66 @@ class ChatConfig:
     mode: PermissionMode
     workspace: Path
     kind: ChatKind
+
+
+@dataclass(frozen=True)
+class ConfigChange:
+    """What the operator asked to change. Unset fields keep their value. Workspace and kind
+    are not here: changing either is a new chat."""
+
+    profile: ProfileName | None = None
+    model: str | None = None
+    effort: Effort | None = None
+    mode: PermissionMode | None = None
+
+    def applied_to(self, config: ChatConfig) -> ChatConfig:
+        return replace(
+            config,
+            profile=config.profile if self.profile is None else self.profile,
+            model=config.model if self.model is None else self.model,
+            effort=config.effort if self.effort is None else self.effort,
+            mode=config.mode if self.mode is None else self.mode,
+        )
+
+
+class Step(Enum):
+    SET_MODE = "set_mode"
+    """`ClaudeSDKClient.set_permission_mode`, at once, even mid-turn."""
+    SET_MODEL = "set_model"
+    """`ClaudeSDKClient.set_model`, same provider."""
+    SET_EFFORT = "set_effort"
+    """`/effort <level>` sent as a prompt. HP0 S37 measured that the next model turn uses it,
+    so effort needs no relaunch where slash commands run."""
+    RELAUNCH = "relaunch"
+    """Revoke the grant, end the CLI, launch again with `resume=session_id`."""
+
+
+def classify_change(old: ChatConfig, new: ChatConfig) -> tuple[Step, ...]:
+    """The one table that decides how a change applies. A profile change relaunches, and the
+    relaunch carries every other field. Otherwise mode, model and effort each have a native
+    step, except effort in a verbatim chat, where `/effort` is plain text, so it relaunches.
+    A workspace or kind change raises `ValueError`: that is a new chat."""
+    if old.workspace != new.workspace or old.kind != new.kind:
+        raise ValueError("a workspace or kind change is a new chat, not a change")
+    if old.profile != new.profile:
+        return (Step.RELAUNCH,)
+    effort_changed = old.effort != new.effort
+    if effort_changed and (verbatim(new.kind) or new.effort is None):
+        return (Step.RELAUNCH,)
+    steps = (
+        (Step.SET_MODE, old.mode != new.mode),
+        (Step.SET_MODEL, old.model != new.model),
+        (Step.SET_EFFORT, effort_changed),
+    )
+    return tuple(step for step, changed in steps if changed)
+
+
+def resets_cache(old: ChatConfig, new: ChatConfig) -> bool:
+    """True when the next request sends the whole conversation uncached. Each provider and
+    each model has its own cache. An effort change counts too: it changes the thinking budget,
+    which Anthropic documents as invalidating cached messages (inferred for effort, not
+    measured). A permission-mode change keeps the cache."""
+    return old.profile != new.profile or old.model != new.model or old.effort != new.effort
 
 
 @dataclass(frozen=True)

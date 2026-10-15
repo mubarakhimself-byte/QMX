@@ -73,6 +73,8 @@ class FakeClient:
         self.go = asyncio.Event()
         self.disconnected = False
         self.toggled: list[tuple[str, bool]] = []
+        self.set: list[tuple[str, str]] = []
+        self.queries: list[str] = []
         FakeClient.made.append(self)
 
     async def connect(self) -> None:
@@ -88,6 +90,8 @@ class FakeClient:
         self.toggled.append((server_name, enabled))
 
     async def query(self, text: str) -> None:
+        self.queries.append(text)
+
         async def answer() -> None:
             await self.go.wait()
             for reply in [init(), *FakeClient.script(text)]:
@@ -101,6 +105,12 @@ class FakeClient:
 
     async def interrupt(self) -> None:
         self.inbox.put_nowait(result(terminal_reason="aborted_streaming"))
+
+    async def set_permission_mode(self, mode: str) -> None:
+        self.set.append(("mode", mode))
+
+    async def set_model(self, model: str | None = None) -> None:
+        self.set.append(("model", str(model)))
 
     async def disconnect(self) -> None:
         self.disconnected = True

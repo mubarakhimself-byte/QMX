@@ -40,6 +40,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -76,17 +77,21 @@ from qma.harness.home import (
     write_record,
 )
 from qma.harness.launch import (
+    ChatConfig,
     ChatKind,
     Launch,
     LaunchRefused,
     PlanLaunch,
     RelayedLaunch,
+    Step,
     TestMode,
     assert_argv_fits,
     assert_scrubbed,
     build_options,
+    classify_change,
     launch_env,
     parse_budgets,
+    resets_cache,
     unattended,
     verbatim,
 )
@@ -282,6 +287,95 @@ class _Ask:
                 return not question
             case AllowAlways():
                 return not question and not self.asking_qmx and bool(self.rules)
+
+
+@dataclass(frozen=True)
+class Quote:
+    """The warning that comes before a change. `apply` takes only the id of a quote this chat
+    issued, so no change runs without its warning having been produced first. `epoch` counts
+    the prompts sent to the chat when quoted, so a warning is never reused after the
+    conversation grew."""
+
+    id: str
+    session_id: SessionId
+    old: ChatConfig
+    new: ChatConfig
+    steps: tuple[Step, ...]
+    recomputed_tokens: int
+    """Context tokens the next request sends uncached, from the transcript's last reply."""
+    background_tasks: int
+    """Background Bash and sub-agent tasks running when quoted. A relaunch stops them."""
+    warning: str | None
+    """None when the change keeps the cache and stops nothing."""
+    epoch: int
+
+
+class QuoteStale(RuntimeError):
+    """The quote is unknown, used, or out of date. Quote again; the routes answer 409."""
+
+
+EFFORT_WAIT_S: Final = 60.0
+
+
+def context_tokens(path: Path | None) -> int:
+    """The main conversation's size at its last reply: that request's input, cache reads and
+    writes, plus its output, which the next request also resends. 0 with no reply yet."""
+    if path is None:
+        return 0
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "assistant":
+            continue
+        if cast("dict[str, Any]", entry).get("isSidechain"):
+            continue
+        usage = cast("dict[str, Any]", entry).get("message", {}).get("usage")
+        if isinstance(usage, dict):
+            names = (
+                "input_tokens",
+                "cache_creation_input_tokens",
+                "cache_read_input_tokens",
+                "output_tokens",
+            )
+            return sum(int(cast("dict[str, Any]", usage).get(name) or 0) for name in names)
+    return 0
+
+
+def _tokens(count: int) -> str:
+    return f"{round(count / 1000)}k" if count >= 1000 else str(count)
+
+
+def warning(
+    old: ChatConfig, new: ChatConfig, steps: tuple[Step, ...], tokens: int, tasks: int
+) -> str | None:
+    """"Switching to kimi resends ~182k tokens uncached and stops 1 background task.", or None
+    when the change loses no cache and stops nothing."""
+    parts = []
+    if resets_cache(old, new) and tokens > 0:
+        parts.append(f"resends ~{_tokens(tokens)} tokens uncached")
+    if Step.RELAUNCH in steps and tasks:
+        parts.append(f"stops {tasks} background task{'' if tasks == 1 else 's'}")
+    if not parts:
+        return None
+    if old.profile != new.profile:
+        subject = f"Switching to {new.profile}"
+    elif old.model != new.model:
+        subject = f"Switching to {new.model}"
+    else:
+        subject = f"Setting effort to {new.effort or 'the default'}"
+    return f"{subject} {' and '.join(parts)}."
+
+
+def describe(config: ChatConfig) -> dict[str, Any]:
+    return {
+        "profile": config.profile,
+        "model": config.model,
+        "effort": config.effort,
+        "mode": config.mode,
+    }
 
 
 def rule_text(rule: PermissionRuleValue) -> str:
@@ -498,6 +592,9 @@ class Chat:
         self._last = time.monotonic()
         self._tasks: set[str] = set()
         """Background Bash and sub-agents the CLI reported started and not yet finished."""
+        self._epoch = 0
+        """Prompts sent since this object was made. A quote from an older epoch is stale."""
+        self._quotes: dict[str, Quote] = {}
 
     @property
     def session_id(self) -> SessionId:
@@ -511,9 +608,101 @@ class Chat:
             live = self._live or await self._connect()
             self._live = live
             self._last = time.monotonic()
+            self._epoch += 1
             await self._note("user", {"text": prompt.text})
             self._write(turn="running")
             await live.client.query(prompt.text)
+
+    async def quote(self, new: ChatConfig) -> Quote:
+        """The steps, the warning and the counts `apply` will hold the chat to. The harness has
+        already checked that `new` names a profile and a model the relay accepts."""
+        old = self.record.config
+        steps = classify_change(old, new)
+        path = transcript(self._deps.home, self.session_id)
+        tokens = await asyncio.to_thread(context_tokens, path)
+        tasks = len(self._tasks)
+        quote = Quote(
+            id=uuid.uuid4().hex,
+            session_id=self.session_id,
+            old=old,
+            new=new,
+            steps=steps,
+            recomputed_tokens=tokens,
+            background_tasks=tasks,
+            warning=warning(old, new, steps, tokens, tasks),
+            epoch=self._epoch,
+        )
+        self._quotes[quote.id] = quote
+        return quote
+
+    async def apply(self, quote_id: str, *, plan_stop: str | None) -> Quote:
+        """Run a quote this chat issued, once. Refuse an unknown or used id, a prompt sent since
+        the quote, a config changed since, or more background tasks than it named. A Cold chat
+        only records the new config; its next send launches with it. A relaunch and an
+        `/effort` wait for the running turn's end to be refused, never cut it short.
+        `plan_stop` is the overage stop's reason, which refuses a switch onto the plan."""
+        async with self._lock:
+            quote = self._quotes.pop(quote_id, None)
+            if quote is None:
+                raise QuoteStale("this chat issued no such quote, or it was used; quote again")
+            if quote.epoch != self._epoch or quote.old != self.record.config:
+                raise QuoteStale("the chat moved on since this quote; quote again")
+            if len(self._tasks) > quote.background_tasks:
+                raise QuoteStale(
+                    f"{len(self._tasks)} background tasks run now and the quote named "
+                    f"{quote.background_tasks}; quote again"
+                )
+            if quote.new.profile == PLAN and quote.old.profile != PLAN and plan_stop:
+                raise LaunchRefused(f"plan use is stopped: {plan_stop}")
+            live = self._live
+            boundary = {Step.RELAUNCH, Step.SET_EFFORT} & set(quote.steps)
+            if live is not None and boundary and self.record.turn == "running":
+                raise QuoteStale("a turn is running; quote again when it ends")
+            if live is not None:
+                await self._run_steps(live, quote)
+            self._write(config=quote.new)
+            await self._note(
+                "changed",
+                {
+                    "kind": "config",
+                    "steps": [step.value for step in quote.steps],
+                    "from": describe(quote.old),
+                    "to": describe(quote.new),
+                },
+            )
+            return quote
+
+    async def _run_steps(self, live: _Live, quote: Quote) -> None:
+        if Step.RELAUNCH in quote.steps:
+            await self._shut()
+            self.record = replace(self.record, config=quote.new)
+            try:
+                self._live = await self._connect()
+            except BaseException:
+                self.record = replace(self.record, config=quote.old)
+                raise
+            return
+        for step in quote.steps:
+            match step:
+                case Step.SET_MODE:
+                    await live.client.set_permission_mode(quote.new.mode)
+                case Step.SET_MODEL:
+                    await live.client.set_model(quote.new.model)
+                case Step.SET_EFFORT:
+                    await self._set_effort(live, str(quote.new.effort))
+                case Step.RELAUNCH:
+                    pass
+
+    async def _set_effort(self, live: _Live, effort: str) -> None:
+        """`/effort` replies with a synthetic result and no model call (HP0 S37)."""
+        self._write(turn="running")
+        await live.client.query(f"/effort {effort}")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + EFFORT_WAIT_S
+        while self.record.turn == "running" and self._live is live:
+            if loop.time() > deadline:
+                raise LaunchRefused(f"/effort {effort} got no reply in {EFFORT_WAIT_S:.0f} s")
+            await asyncio.sleep(0.05)
 
     @property
     def idle_seconds(self) -> float:
