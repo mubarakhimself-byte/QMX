@@ -43,7 +43,7 @@ def _splits(name: str) -> tuple[list[str], list[str]]:
     raw = [word for word in re.split(r"[\W_]+", _BOUNDARY.sub("_", name).casefold()) if word]
     humped = [
         word
-        for word, after in zip(raw, [*raw[1:], ""], strict=True)
+        for word, after in zip(raw, [*raw[1:], ""][: len(raw)], strict=True)
         if not word.isdigit() and not (word == "v" and after.isdigit())
     ]
     return plain, humped

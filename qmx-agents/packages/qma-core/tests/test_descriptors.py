@@ -209,3 +209,9 @@ def test_propose_order_is_refused_without_the_callers_writer_type_exemption() ->
 )
 def test_read_tools_pass(name: str, metadata: dict[str, Any]) -> None:
     assert check_descriptor(name, metadata) is None
+
+
+@pytest.mark.parametrize("name", ["", "__", " ", "-"])
+def test_a_name_with_no_words_names_no_act(name: str) -> None:
+    assert name_money_act(name) is None
+    assert check_descriptor("read_bars", {"tool_name": name}) is None
