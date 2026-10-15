@@ -917,6 +917,7 @@ def test_a_journal_append_that_outlasts_the_revoke_wait_alerts_the_chat(
     run(check)
 
 
+NOT_ONE_OBJECT = "the request body is not one JSON object with unique keys, nested 512 deep at most"
 ESCAPED_TOKEN = b"sk-ant-oat01\\u002d" + TAIL.encode()
 
 
@@ -934,9 +935,7 @@ def test_a_body_with_a_repeated_json_key_is_refused_and_never_forwarded(content:
         grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
         answer = await rig.post("/v1/messages", content, bearer=grant.secret)
         assert answer.status_code == 400
-        assert answer.json()["error"]["message"] == (
-            "the request body is not one JSON object with unique keys"
-        )
+        assert answer.json()["error"]["message"] == NOT_ONE_OBJECT
         assert rig.upstream.seen == []
 
     run(check)
@@ -948,6 +947,10 @@ def raw_event(name: str | None, data: object) -> bytes:
 
 
 MALFORMED_START = "the provider sent a malformed message_start"
+
+
+def raw_start(message: bytes) -> bytes:
+    return b'event: message_start\ndata: {"type":"message_start","message":' + message + b"}\n\n"
 
 
 @pytest.mark.parametrize(
@@ -979,6 +982,11 @@ MALFORMED_START = "the provider sent a malformed message_start"
             raw_event(None, {"type": ["message_start"]}) + sse(TEXT),
             "the provider sent an event whose type is not a string",
         ),
+        (
+            raw_start(b'{"model":"kimi-k3","x":' + b"[" * 100_000 + b"]" * 100_000 + b"}")
+            + sse(TEXT),
+            MALFORMED_START,
+        ),
     ],
     ids=[
         "message-not-object",
@@ -989,6 +997,7 @@ MALFORMED_START = "the provider sent a malformed message_start"
         "name-type-mismatch",
         "delta-usage-not-object",
         "type-not-string",
+        "start-nested-too-deep",
     ],
 )
 def test_a_malformed_stream_ends_in_an_error_event_an_alert_and_one_row(
@@ -1109,3 +1118,128 @@ def test_a_stream_with_no_message_start_is_stopped_at_120_seconds(
         assert closed.is_set()
 
     run(check, handler=handler)
+
+
+def nested(depth: int) -> bytes:
+    return b'{"model":"kimi-k3","messages":[],"x":' + b"[" * depth + b"]" * depth + b"}"
+
+
+@pytest.mark.parametrize(
+    ("content", "status"),
+    [(nested(511), 200), (nested(512), 400), (nested(1_500), 400), (nested(100_000), 400)],
+    ids=["512-levels", "513-levels", "1501-levels", "100001-levels"],
+)
+def test_a_body_nested_past_512_levels_is_refused_and_never_forwarded(
+    content: bytes, status: int
+) -> None:
+    async def check(rig: Rig) -> None:
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = await rig.post("/v1/messages", content, bearer=grant.secret)
+        assert answer.status_code == status
+        assert len(rig.upstream.seen) == (status == 200)
+        if status == 400:
+            assert answer.json()["error"]["message"] == NOT_ONE_OBJECT
+
+    run(check)
+
+
+@dataclass
+class FailingTogether(Writer):
+    both: threading.Barrier = field(default_factory=lambda: threading.Barrier(2))
+
+    def append(self, usage: RelayUsage) -> None:
+        self.both.wait(5)
+        raise OSError("disk full")
+
+
+def test_two_journal_writes_that_fail_together_never_hold_the_reply_or_cry_wolf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("qma.harness.relay.STOP_WAIT_S", 10.0)
+
+    async def check(rig: Rig) -> None:
+        writer = FailingTogether(rig.journals, CHAT)
+        rig.relay.journal = lambda _session: writer
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        posts = (rig.post("/v1/messages", body(), bearer=grant.secret) for _ in range(2))
+        answers = await asyncio.wait_for(asyncio.gather(*posts), 3)
+        assert [(answer.status_code, answer.content) for answer in answers] == [
+            (200, stream("kimi-k3"))
+        ] * 2
+        assert rig.alerts == [
+            "usage journal: OSError: disk full; this request's usage was not recorded"
+        ] * 2
+        assert rig.journals.closed == [CHAT]
+
+    run(check)
+
+
+async def refused(_request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("refused")
+
+
+async def hung(_request: httpx.Request) -> httpx.Response:
+    await asyncio.Event().wait()
+    raise AssertionError
+
+
+@pytest.mark.parametrize(
+    ("handler", "status"), [(refused, 502), (hung, 499)], ids=["no-answer", "client-gone"]
+)
+def test_a_revoke_during_a_teed_row_waits_for_the_row_before_closing(
+    handler: Callable[[httpx.Request], Any], status: int
+) -> None:
+    async def check(rig: Rig) -> None:
+        writer = HeldWriter(rig.journals, CHAT)
+        rig.relay.journal = lambda _session: writer
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+
+        async def post() -> None:
+            auth = {"authorization": f"Bearer {grant.secret}"}
+            with contextlib.suppress(httpx.HTTPError):
+                async with httpx.AsyncClient(
+                    base_url=rig.relay.base_url, trust_env=False, timeout=0.3
+                ) as client:
+                    await client.post("/v1/messages", json=body(), headers=auth)
+
+        answer = asyncio.create_task(post())
+        await asyncio.to_thread(writer.entered.wait, 5)
+        threading.Timer(0.3, writer.release.set).start()
+        await asyncio.wait_for(rig.relay.revoke(grant), 10)
+        await answer
+        assert [(row.status, row.input_tokens) for row in rig.usage] == [(status, 0)]
+        assert (rig.journals.closed, rig.alerts) == ([CHAT], [])
+
+    run(check, handler=handler)
+
+
+def test_a_revoke_waits_5_seconds_for_a_journal_row_then_closes_and_alerts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def check(rig: Rig) -> None:
+        loop = asyncio.get_running_loop()
+        real = loop.time
+        skew = [0.0]
+        monkeypatch.setattr(loop, "time", lambda: real() + skew[0])
+        writer = HeldWriter(rig.journals, CHAT)
+        rig.relay.journal = lambda _session: writer
+        grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
+        answer = asyncio.create_task(rig.post("/v1/messages", body(), bearer=grant.secret))
+        await asyncio.to_thread(writer.entered.wait, 5)
+        revoking = asyncio.ensure_future(rig.relay.revoke(grant))
+        await asyncio.sleep(0.1)
+        skew[0] = 4.5
+        await asyncio.sleep(0.2)
+        assert not revoking.done()
+        skew[0] = 5.5
+        await asyncio.wait_for(revoking, 2)
+        writer.release.set()
+        with contextlib.suppress(httpx.HTTPError):
+            await answer
+        assert rig.journals.closed == [CHAT]
+        assert rig.alerts[0] == (
+            "usage journal: a write was still running when the writer closed; "
+            "that request's usage may not be recorded"
+        )
+
+    run(check)

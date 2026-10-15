@@ -22,8 +22,8 @@ the relayed home, which holds no login.
   moves, unless the bearer is itself a Claude token.
 - A request with a `TOKEN_SHAPES` match in a header value, the query or the body, raw or as a
   decoded JSON string, gets 400 naming the rule and is never forwarded or logged. A body that
-  is not one JSON object with unique keys at every depth gets 400, so the bytes forwarded
-  always parse to the document that was checked.
+  is not one JSON object with unique keys at every depth, nested at most `JSON_DEPTH` deep,
+  gets 400, so the bytes forwarded always parse to the document that was checked.
 - Header values are never logged, and the relay keeps no access log.
 - Forwarded bytes are unchanged except the auth swap, the model pinned to the tier's id, and
   the profile's `WireQuirks`. Nothing of a stream reaches the CLI before its `message_start`
@@ -117,6 +117,9 @@ PRE_START: Final = frozenset({None, "ping", "error"})
 EVENT_END: Final = re.compile(rb"(?:\r\n|\r(?!\n)|\n)(?:\r\n|\r(?!\n)|\n)")
 """A blank line ends an SSE event, and a line ends in CRLF, LF or a lone CR."""
 START_BYTES: Final = 64 * 1024
+JSON_DEPTH: Final = 512
+"""Deeper JSON is refused: the relay's own walks and `json.dumps` recurse, and a deeper
+document would raise `RecursionError` mid-request."""
 START_WAIT_S: Final = 120.0
 STOP_WAIT_S: Final = 5.0
 CLIENT_GONE: Final = 499
@@ -463,7 +466,10 @@ class Relay:
                 "send it. Rewind or fork the chat to before the turn that carried it.",
             )
         if not isinstance(parsed, dict):
-            message = "the request body is not one JSON object with unique keys"
+            message = (
+                "the request body is not one JSON object with unique keys, "
+                f"nested {JSON_DEPTH} deep at most"
+            )
             return _error(400, "invalid_request_error", message)
         document = cast("dict[str, object]", parsed)
         requested = document.get("model")
@@ -690,7 +696,7 @@ class Relay:
                     self._journals[held.session_id] = journal
             await asyncio.to_thread(journal.append, row)
         except Exception as error:
-            await self._close_journal(held.session_id)
+            await self._drop_journal(held.session_id)
             await self._alert(
                 held.session_id,
                 f"usage journal: {type(error).__name__}: {error}; "
@@ -698,11 +704,7 @@ class Relay:
             )
 
     async def _close_journal(self, session_id: SessionId) -> None:
-        writes = [
-            task
-            for task, session in self._writes.items()
-            if session == session_id and task is not asyncio.current_task()
-        ]
+        writes = [task for task, session in self._writes.items() if session == session_id]
         if writes:
             _, late = await asyncio.wait(writes, timeout=STOP_WAIT_S)
             if late:
@@ -711,6 +713,9 @@ class Relay:
                     "usage journal: a write was still running when the writer closed; "
                     "that request's usage may not be recorded",
                 )
+        await self._drop_journal(session_id)
+
+    async def _drop_journal(self, session_id: SessionId) -> None:
         journal = self._journals.pop(session_id, None)
         if journal is not None:
             with contextlib.suppress(Exception):
@@ -748,12 +753,25 @@ def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 
 def _json(data: bytes) -> object:
-    """None for anything but JSON with unique keys at every depth. With a repeated key the
-    relay would check the last value while a first-wins upstream parser acts on the first."""
+    """None for anything but JSON with unique keys at every depth, nested at most
+    `JSON_DEPTH` deep. With a repeated key the relay would check the last value while a
+    first-wins upstream parser acts on the first."""
     try:
-        return cast("object", json.loads(data, object_pairs_hook=_unique_keys))
-    except ValueError:
+        document = cast("object", json.loads(data, object_pairs_hook=_unique_keys))
+    except (ValueError, RecursionError):
         return None
+    level = [document]
+    for _ in range(JSON_DEPTH):
+        level = [child for value in level for child in _children(value)]
+    return None if any(isinstance(value, dict | list) for value in level) else document
+
+
+def _children(value: object) -> list[object]:
+    if isinstance(value, dict):
+        return list(cast("dict[str, object]", value).values())
+    if isinstance(value, list):
+        return cast("list[object]", value)
+    return []
 
 
 def _strings(value: object) -> Iterator[str]:
