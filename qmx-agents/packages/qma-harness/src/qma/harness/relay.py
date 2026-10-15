@@ -7,10 +7,12 @@ key from the OS keyring, applies the provider's wire quirks and forwards the str
 
 What it is worth. The egress stop is a tripwire for plain-text Claude tokens, not a structural
 guarantee: an agent that encodes, splits or reverses a token gets past it, and a plan chat can
-send a token out without touching the relay. Everything else is correctness and accounting:
-wire quirks, authoritative usage, the family guard, and keys that never sit in a CLI env or a
-transcript by accident. It is not a key boundary against agent Bash, which can read `qmx/*`
-keyring entries as the same OS user.
+send a token out without touching the relay. Known misses, kept as limits: a percent-encoded
+header value, a query percent-encoded twice, a JSON escape inside a JSON document nested in a
+string, base64, and a token split across two strings. Everything else is correctness and
+accounting: wire quirks, authoritative usage, the family guard, and keys that never sit in a
+CLI env or a transcript by accident. It is not a key boundary against agent Bash, which can
+read `qmx/*` keyring entries as the same OS user.
 
 Plan traffic never comes here. `grant` accepts only a `KeyProvider`, and a relayed CLI runs in
 the relayed home, which holds no login.
@@ -19,15 +21,21 @@ the relayed home, which holds no login.
 - A request whose bearer is not a live grant gets 401 before the body is read. Only a counter
   moves, unless the bearer is itself a Claude token.
 - A request with a `TOKEN_SHAPES` match in a header value, the query or the body, raw or as a
-  decoded JSON string, gets 400 naming the rule and is never forwarded or logged.
+  decoded JSON string, gets 400 naming the rule and is never forwarded or logged. A body that
+  is not one JSON object with unique keys at every depth gets 400, so the bytes forwarded
+  always parse to the document that was checked.
 - Header values are never logged, and the relay keeps no access log.
 - Forwarded bytes are unchanged except the auth swap, the model pinned to the tier's id, and
   the profile's `WireQuirks`. Nothing of a stream reaches the CLI before its `message_start`
-  passes the family test; after that each event is passed on as it arrives.
+  passes the family test; after that each event is passed on as it arrives. A `message_start`
+  with no string model, an event whose `event:` name and `type` differ, or a non-object
+  `message` or `usage` ends the stream with an error event and an alert. A provider error
+  before `message_start` reaches the CLI alone, without the events held before it.
 - Usage is read from the stream and written as one journal row per upstream request, through
   one writer per session. For relayed chats this is the only usage source. A journal failure
   alerts the chat and never changes the reply, because a changed reply makes the CLI retry
-  and spend again.
+  and spend again. A revoke waits up to `STOP_WAIT_S` for rows still being written before it
+  closes the writer, and alerts the chat if one is still running.
 - A CLI that disconnects, or a revoked grant, stops the upstream request at once.
 
 Paths are matched without the query string, which is forwarded as sent: `POST /v1/messages`
@@ -42,7 +50,15 @@ import json
 import re
 import secrets
 import socket
-from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Iterator, Mapping
+from collections.abc import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Iterator,
+    Mapping,
+)
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, NewType, Protocol, cast
 from urllib.parse import unquote_plus
@@ -222,10 +238,13 @@ class _Upstream:
         if self.finished:
             return
         self.finished = True
+        await self.relay.settle(self.held.session_id, self._close_and_journal())
+
+    async def _close_and_journal(self) -> None:
         with contextlib.suppress(Exception):
             await self.response.aclose()
         status = self.journal_status or self.response.status_code
-        await self.relay.tee(self.held, self.path, status, self.served, self.usage)
+        await self.relay.write_row(self.held, self.path, status, self.served, self.usage)
 
 
 @dataclass
@@ -249,6 +268,7 @@ class Relay:
         default_factory=dict[asyncio.Task[None], RelayGrant]
     )
     _journals: dict[SessionId, UsageJournal] = field(default_factory=dict)
+    _writes: dict[asyncio.Task[None], SessionId] = field(default_factory=dict)
     _opening: asyncio.Lock = field(default_factory=asyncio.Lock)
     _client: httpx.AsyncClient | None = None
     _server: _Server | None = None
@@ -335,7 +355,7 @@ class Relay:
         if self._client is not None:
             await self._client.aclose()
         self._server = self._task = self._client = None
-        for session in list(self._journals):
+        for session in {*self._journals, *self._writes.values()}:
             await self._close_journal(session)
 
     async def _stop(self, streams: list[asyncio.Task[None]]) -> None:
@@ -443,7 +463,8 @@ class Relay:
                 "send it. Rewind or fork the chat to before the turn that carried it.",
             )
         if not isinstance(parsed, dict):
-            return _error(400, "invalid_request_error", "the request names no model")
+            message = "the request body is not one JSON object with unique keys"
+            return _error(400, "invalid_request_error", message)
         document = cast("dict[str, object]", parsed)
         requested = document.get("model")
         if not isinstance(requested, str):
@@ -541,7 +562,8 @@ class Relay:
             return _error(502, "api_error", f"the provider reply broke off: {type(error).__name__}")
         parsed = _json(data)
         document = cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
-        upstream.usage = cast("dict[str, Any]", document.get("usage") or {})
+        usage = document.get("usage")
+        upstream.usage = cast("dict[str, Any]", usage) if isinstance(usage, dict) else {}
         if path == MESSAGES and response.is_success:
             served = document.get("model")
             if not isinstance(served, str):
@@ -554,7 +576,7 @@ class Relay:
         return Reply(response.status_code, kept, _once(data))
 
     async def _events(self, upstream: _Upstream, *, guarded: bool) -> AsyncGenerator[bytes]:
-        held, pending, started, failed = b"", b"", not guarded, False
+        held, errors, pending, started = b"", b"", b"", not guarded
         chunks = aiter(upstream.response.aiter_bytes())
         deadline = asyncio.get_running_loop().time() + START_WAIT_S
         try:
@@ -571,11 +593,14 @@ class Relay:
                 pending += chunk
                 while (end := EVENT_END.search(pending)) is not None:
                     event, pending = pending[: end.end()], pending[end.end() :]
-                    data = _event_data(event)
-                    kind = data.get("type")
+                    try:
+                        kind, data = _parse_event(event)
+                    except _MalformedEvent as error:
+                        yield await self._stop_stream(upstream, f"the provider sent {error}")
+                        return
                     if kind == "message_start":
-                        message = cast("dict[str, Any]", data.get("message") or {})
-                        upstream.served = str(message.get("model") or upstream.served)
+                        message = cast("dict[str, Any]", data["message"])
+                        upstream.served = cast("str", message["model"])
                         upstream.usage |= cast("dict[str, Any]", message.get("usage") or {})
                         refusal = guard_served_model(upstream.held.profile, upstream.served)
                         if refusal:
@@ -590,7 +615,9 @@ class Relay:
                     if started:
                         yield event
                     elif kind in PRE_START:
-                        held, failed = held + event, failed or kind == "error"
+                        held += event
+                        if kind == "error":
+                            errors += event
                     else:
                         reason = f"the provider sent {kind} before message_start"
                         yield await self._stop_stream(upstream, reason)
@@ -599,9 +626,11 @@ class Relay:
                     reason = f"no message_start in the first {START_BYTES} bytes"
                     yield await self._stop_stream(upstream, reason)
                     return
-            if started or failed:
-                if held + pending:
-                    yield held + pending
+            if started:
+                if pending:
+                    yield pending
+            elif errors:
+                yield errors
             else:
                 reason = "the provider stream ended without message_start"
                 yield await self._stop_stream(upstream, reason)
@@ -620,6 +649,19 @@ class Relay:
             await self.alert(session_id, reason)
 
     async def tee(
+        self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
+    ) -> None:
+        await self.settle(held.session_id, self.write_row(held, path, status, model, usage))
+
+    async def settle(self, session_id: SessionId, work: Coroutine[Any, Any, None]) -> None:
+        """Runs `work` to the end even when the caller is cancelled, and lets `_close_journal`
+        wait for it, so a revoke never closes the writer under a row still being written."""
+        task = asyncio.create_task(work)
+        self._writes[task] = session_id
+        task.add_done_callback(self._writes.pop)
+        await asyncio.shield(task)
+
+    async def write_row(
         self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
     ) -> None:
         """One journal row for one upstream request. A failure alerts the chat and drops the
@@ -656,6 +698,19 @@ class Relay:
             )
 
     async def _close_journal(self, session_id: SessionId) -> None:
+        writes = [
+            task
+            for task, session in self._writes.items()
+            if session == session_id and task is not asyncio.current_task()
+        ]
+        if writes:
+            _, late = await asyncio.wait(writes, timeout=STOP_WAIT_S)
+            if late:
+                await self._alert(
+                    session_id,
+                    "usage journal: a write was still running when the writer closed; "
+                    "that request's usage may not be recorded",
+                )
         journal = self._journals.pop(session_id, None)
         if journal is not None:
             with contextlib.suppress(Exception):
@@ -685,9 +740,18 @@ def _keyring_refusal(reference: str, error: Exception) -> str:
     return f"the keyring could not read {reference}: {type(error).__name__}"
 
 
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    document = dict(pairs)
+    if len(document) < len(pairs):
+        raise ValueError("repeated key")
+    return document
+
+
 def _json(data: bytes) -> object:
+    """None for anything but JSON with unique keys at every depth. With a repeated key the
+    relay would check the last value while a first-wins upstream parser acts on the first."""
     try:
-        return cast("object", json.loads(data))
+        return cast("object", json.loads(data, object_pairs_hook=_unique_keys))
     except ValueError:
         return None
 
@@ -719,15 +783,35 @@ def _routing_refusal(profile: KeyProvider, document: Mapping[str, object]) -> st
     return f"the request sets {', '.join(found)}, which lets the vendor pick the model"
 
 
-def _event_data(event: bytes) -> dict[str, Any]:
-    lines = [line[5:].strip() for line in event.splitlines() if line.startswith(b"data:")]
-    if not lines:
-        return {}
-    try:
-        found: object = json.loads(b"\n".join(lines))
-    except ValueError:
-        return {}
-    return cast("dict[str, Any]", found) if isinstance(found, dict) else {}
+class _MalformedEvent(Exception):
+    pass
+
+
+def _parse_event(event: bytes) -> tuple[str | None, dict[str, Any]]:
+    """The event's kind and data. The CLI's SDK dispatches on the `event:` name and the guards
+    read the data's `type`, so an event where the two differ is refused, and an unnamed
+    event's kind is its `type`. A `message_start` must carry a string model."""
+    lines = event.splitlines()
+    names = [line[6:].strip().decode("latin-1") for line in lines if line.startswith(b"event:")]
+    payload = [line[5:].strip() for line in lines if line.startswith(b"data:")]
+    found = _json(b"\n".join(payload)) if payload else None
+    data = cast("dict[str, Any]", found) if isinstance(found, dict) else {}
+    name = names[-1] if names else None
+    kind = data.get("type", name)
+    if not isinstance(kind, str | None):
+        raise _MalformedEvent("an event whose type is not a string")
+    if name is not None and kind != name:
+        raise _MalformedEvent(f"an event named {name} whose type is {kind}")
+    if kind == "message_start":
+        message = data.get("message")
+        start = cast("dict[str, Any]", message) if isinstance(message, dict) else {}
+        if not isinstance(start.get("model"), str) or not isinstance(
+            start.get("usage") or {}, dict
+        ):
+            raise _MalformedEvent("a malformed message_start")
+    if kind == "message_delta" and not isinstance(data.get("usage") or {}, dict):
+        raise _MalformedEvent("a malformed message_delta")
+    return kind, data
 
 
 def _error_event(message: str) -> bytes:
