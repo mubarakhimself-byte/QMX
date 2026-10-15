@@ -5,6 +5,11 @@ subprocess that the SDK starts through `qma.launcher`, which has put itself unde
 first. A key-provider chat's CLI reaches its provider only through the relay on loopback.
 `open` kills any tree a crash left behind before anything resumes. No chat CLI starts at open;
 chats connect on their first `send`.
+
+At most `[budgets] max_live_chats` CLIs run. A send to a Cold chat at the cap closes the least
+recently used idle chat, or refuses with `ChatTableFull`; nothing queues. A reaper closes chats
+idle past `idle_reap_seconds`. A chat mid-turn or with a background task running is never idle,
+and a closed chat resumes its session on the next send.
 """
 
 from __future__ import annotations
@@ -12,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import logging
 import os
+from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -24,7 +31,17 @@ from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 from qmx_tools.service import DomainContext
 
-from qma.harness.chat import Answer, AnswerStatus, AskId, Chat, ChatDeps, OperatorText, Prompt
+from qma.harness.chat import (
+    Answer,
+    AnswerStatus,
+    AskId,
+    Chat,
+    ChatDeps,
+    OperatorText,
+    Prompt,
+    UntrustedPrompt,
+    admits,
+)
 from qma.harness.home import (
     ChatRecord,
     DoctorLine,
@@ -38,13 +55,16 @@ from qma.harness.home import (
 )
 from qma.harness.launch import (
     LAUNCHER,
+    Budgets,
     ChatConfig,
+    ChatKind,
     Effort,
     Interactive,
     LaunchRefused,
     PermissionMode,
     TestMode,
     assert_scrubbed,
+    parse_budgets,
     unattended,
 )
 from qma.harness.procs import AgentProcessCap
@@ -58,10 +78,10 @@ from qma.harness.profiles import (
 )
 from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
 from qma.harness.usage import (
+    BackgroundCap,
     ReadingView,
     UsageLedger,
     UsagePage,
-    background_cap,
     journal_path,
     token_sums,
     usage_lines,
@@ -75,6 +95,9 @@ if TYPE_CHECKING:
 
 UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message to continue"
 METER_WAIT_S = 60.0
+REAP_TICK_S = 60.0
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -86,6 +109,8 @@ class NewChat:
     workspace: Path | None = None
     """None means a fresh folder under `<qmx_home>/workspaces/`."""
     profile: str = PLAN
+    kind: ChatKind = field(default_factory=Interactive)
+    """Background and Child chats are verbatim and bounded (`launch.verbatim`)."""
 
 
 class UnknownChat(ControlError):
@@ -93,6 +118,19 @@ class UnknownChat(ControlError):
 
     def __init__(self, chat: str) -> None:
         super().__init__("not_found", f"No chat has the session id {chat}.", 404)
+
+
+class ChatTableFull(RuntimeError):
+    """`max_live_chats` CLIs are live and none is idle, so no chat can connect. Nothing is
+    queued: the caller gets this at once and the chat shows a `needs_you` block naming the busy
+    chats. The operator closes or interrupts one, or raises the cap."""
+
+    def __init__(self, cap: int, busy: tuple[SessionId, ...]) -> None:
+        self.busy = busy
+        super().__init__(
+            f"all {cap} live chats are busy ({', '.join(busy)}); interrupt or close one, "
+            "or raise [budgets] max_live_chats"
+        )
 
 
 @dataclass
@@ -121,8 +159,13 @@ class Harness:
     def __init__(self, deps: ChatDeps, watch: PlanWatch) -> None:
         self._deps = deps
         self._chats = watch.chats
+        """The one table of chats, Cold and Live. Only the harness writes it."""
         self._ledger = watch.ledger
         self._meter: SessionId | None = None
+        self._admit = asyncio.Lock()
+        self._sending: Counter[SessionId] = Counter()
+        """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
+        self._reaper = asyncio.create_task(self._reap())
 
     @classmethod
     async def open(
@@ -217,34 +260,104 @@ class Harness:
             effort=spec.effort,
             mode=spec.mode,
             workspace=workspace.resolve(),
-            kind=Interactive(),
+            kind=spec.kind,
         )
         write_record(home, ChatRecord(chat, config, started=False, turn="idle"))
         return chat
 
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
-        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks. A plan
-        chat refuses while the overage stop holds, and an unattended plan chat refuses at the
-        background cap."""
+        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks.
+        `InjectedText` into an Interactive chat raises `UntrustedPrompt`. A plan chat refuses
+        while the overage stop holds, and an unattended plan chat refuses at the background
+        cap; each refusal also shows the chat a `needs_you` block. A Cold chat needs a slot
+        first: at `max_live_chats` the least recently used idle chat closes, and with none idle
+        the send raises `ChatTableFull`."""
         found = self._chat(chat)
+        kind = found.record.config.kind
+        if not admits(kind, prompt):
+            raise UntrustedPrompt(
+                "injected text goes only to a Background or Child chat, which reads it verbatim"
+            )
+        budgets = await self._budgets()
         if found.on_plan:
             stop = self._ledger.hard_stop()
             if stop is not None:
+                await self._needs_you(chat, f"plan use is stopped: {stop}")
                 raise LaunchRefused(f"plan use is stopped: {stop}")
-            if unattended(found.record.config.kind):
-                budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
-                cap = background_cap(budgets)
-                if not cap.allows(self._ledger):
-                    raise LaunchRefused(
-                        f"the plan is at the background cap ({cap.fraction:.0%} of the five-hour "
-                        "window, or a window is used up)"
-                    )
-        await found.send(prompt)
+            refusal = (
+                BackgroundCap(budgets.background_cap).refusal(self._ledger)
+                if unattended(kind)
+                else None
+            )
+            if refusal is not None:
+                reason = f"the background cap holds this chat: {refusal}"
+                await self._needs_you(chat, reason)
+                raise LaunchRefused(reason)
+        await self._take_slot(chat, budgets.max_live_chats)
+        try:
+            await found.send(prompt)
+        finally:
+            self._sending[chat] -= 1
+            if not self._sending[chat]:
+                del self._sending[chat]
+
+    async def _take_slot(self, chat: SessionId, cap: int) -> None:
+        """Hold a slot for `chat` while a send to it runs, closing the least recently used
+        idle chat when the table is full. A chat being sent to is never evicted. Admission is
+        one critical section, so two sends never both take the last slot."""
+        async with self._admit:
+            while True:
+                live = [found for found in self._chats.values() if found.is_live]
+                held = {found.session_id for found in live} | self._sending.keys()
+                if chat in held or len(held) < cap:
+                    self._sending[chat] += 1
+                    return
+                idle = sorted(
+                    (
+                        found
+                        for found in live
+                        if found.idle_seconds > 0 and found.session_id not in self._sending
+                    ),
+                    key=lambda found: found.idle_seconds,
+                    reverse=True,
+                )
+                if not idle:
+                    full = ChatTableFull(cap, tuple(sorted(held)))
+                    await self._needs_you(chat, str(full), busy=sorted(held))
+                    raise full
+                for found in idle:
+                    if await found.close_if_idle(0):
+                        break
+
+    async def _reap(self) -> None:
+        """Close every live chat idle longer than `idle_reap_seconds`, checked at a quarter of
+        that period and at least once a minute. Closing is safe: the next send resumes the same
+        session."""
+        budgets = Budgets()
+        while True:
+            with contextlib.suppress(Exception):
+                budgets = await self._budgets()
+            await asyncio.sleep(min(REAP_TICK_S, budgets.idle_reap_seconds / 4))
+            try:
+                for chat in list(self._chats.values()):
+                    if chat.idle_seconds > budgets.idle_reap_seconds:
+                        await chat.close_if_idle(budgets.idle_reap_seconds)
+            except Exception:
+                log.exception("reaping idle chats failed; trying again next tick")
+
+    async def _budgets(self) -> Budgets:
+        return parse_budgets(
+            await asyncio.to_thread(self._deps.control.settings_get, "budgets")
+        )
+
+    async def _needs_you(self, chat: SessionId, reason: str, **extra: object) -> None:
+        block = SessionBlock(type="needs_you", content={"reason": reason, **extra})
+        await asyncio.to_thread(self._deps.control.sessions_append, chat, block)
 
     async def usage(self) -> UsagePage:
-        budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
+        budgets = await self._budgets()
         tokens = await asyncio.to_thread(token_sums, self._deps.home.root / "runs")
-        return usage_page(self._ledger, background_cap(budgets), tokens)
+        return usage_page(self._ledger, BackgroundCap(budgets.background_cap), tokens)
 
     def usage_lines(self) -> list[DoctorLine]:
         return usage_lines(self._ledger)
@@ -281,6 +394,9 @@ class Harness:
     async def close(self) -> None:
         """Close every chat, then the relay, then release the process cap so the home can be
         opened again. Idempotent."""
+        self._reaper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._reaper
         for chat in list(self._chats.values()):
             await chat.close()
         await self._deps.relay.close()

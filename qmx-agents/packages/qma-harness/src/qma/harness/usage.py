@@ -33,8 +33,6 @@ from qma.harness.project import (
     Window,
 )
 
-BACKGROUND_CAP: Final = 0.5
-"""`[budgets] background_cap` when the operator has not set it (R6)."""
 EXTRA_USAGE_ON: Final = (
     "extra usage is on for this account; switch it off at claude.ai so the plan can never bill"
 )
@@ -130,6 +128,8 @@ class UsageLedger:
             return
         self._windows = {view.limits.window: view for view in windows}
         self._unreadable = unreadable
+        for view in windows:
+            self._read(_readings_of(view.limits), view.as_of, "rate_limit_event")
 
     def _save(self) -> None:
         if self.path is None:
@@ -171,12 +171,7 @@ class UsageLedger:
                 if self._unreadable is not None and self._unreadable[1] < at:
                     self._unreadable = None
                 self._save()
-                own = (
-                    (Reading(fact.window, fact.utilization, fact.resets_at),)
-                    if fact.window is not None and fact.utilization is not None
-                    else ()
-                )
-                self._read(fact.readings + own, at, "rate_limit_event")
+                self._read(_readings_of(fact), at, "rate_limit_event")
             case PlanMeter(readings=readings):
                 self._read(readings, at, "usage_command")
 
@@ -213,7 +208,12 @@ class UsageLedger:
         return next((rule for view in self.windows() if (rule := overage_rule(view.limits))), None)
 
     def rejected(self) -> bool:
-        return any(view.limits.status == "rejected" for view in self.windows())
+        """A plan window is used up. A `rejected` overage window means paid extra use is
+        refused, the safe state, so it does not count."""
+        return any(
+            view.limits.status == "rejected" and view.limits.window != "overage"
+            for view in self.windows()
+        )
 
     def extra_usage_on(self) -> bool | None:
         """From the newest plan fact: True when `overage_enabled` is True or `overage_status`
@@ -231,6 +231,16 @@ class UsageLedger:
         }
 
 
+def _readings_of(limits: Limits) -> tuple[Reading, ...]:
+    """The readings a rate-limit fact carries, its own window's included."""
+    own = (
+        (Reading(limits.window, limits.utilization, limits.resets_at),)
+        if limits.window is not None and limits.utilization is not None
+        else ()
+    )
+    return limits.readings + own
+
+
 def _live(ends: datetime | None, now: datetime) -> bool:
     return ends is None or now < ends
 
@@ -239,31 +249,34 @@ def _live(ends: datetime | None, now: datetime) -> bool:
 class BackgroundCap:
     """Background chats stop at this share of the plan's five-hour window (R6)."""
 
-    fraction: float = BACKGROUND_CAP
+    fraction: float
+    """`[budgets] background_cap` (R6)."""
 
-    def allows(self, ledger: UsageLedger) -> bool:
-        """False when the last five-hour reading is at or above `fraction`, or a plan window
-        is `rejected`. An unknown reading allows. The CLI reports use only when a turn runs or
-        `/usage` is read, so the cap acts on the last reading, which can lag."""
+    def refusal(self, ledger: UsageLedger) -> str | None:
+        """Why an unattended plan send must not run now, or None. It refuses at or above
+        `fraction` of the last five-hour reading, while a plan window is `rejected`, and with
+        no five-hour reading at all, since an unknown use could already be past the cap. The
+        CLI reports use only when a turn runs or `/usage` is read, so the cap acts on the last
+        reading, which can lag."""
         if ledger.rejected():
-            return False
+            return "a plan window is used up"
         five_hour = ledger.reading("five_hour")
-        return five_hour is None or five_hour.reading.utilization < self.fraction
-
-
-def background_cap(budgets: Mapping[str, object]) -> BackgroundCap:
-    """`[budgets] background_cap`, a share above 0 and at most 1, else the default."""
-    raw = budgets.get("background_cap", BACKGROUND_CAP)
-    if isinstance(raw, int | float) and not isinstance(raw, bool) and 0 < raw <= 1:
-        return BackgroundCap(float(raw))
-    return BackgroundCap()
+        if five_hour is None:
+            return (
+                "there is no reading of the plan's five-hour window yet; read it with "
+                "POST /api/usage/meter or run an Interactive plan turn"
+            )
+        used, cap = five_hour.reading.utilization, self.fraction
+        if used >= cap:
+            return f"the five-hour window is {used:.0%} used, at or over the {cap:.0%} cap"
+        return None
 
 
 def cap_note(cap: BackgroundCap) -> str:
     return (
-        f"Background chats stop at {cap.fraction:.0%} of the plan's five-hour window. The cap "
-        "acts on the last reading of the plan's use, not a live value: the CLI reports it only "
-        "when a turn runs or /usage is read."
+        f"Background chats stop at {cap.fraction:.0%} of the plan's five-hour window, and "
+        "until the window has been read once. The cap acts on the last reading of the plan's "
+        "use, not a live value: the CLI reports it only when a turn runs or /usage is read."
     )
 
 

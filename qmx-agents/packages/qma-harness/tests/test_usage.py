@@ -24,7 +24,6 @@ from qma.harness.usage import (
     BackgroundCap,
     Totals,
     UsageLedger,
-    background_cap,
     plan_base,
     plan_row,
     token_sums,
@@ -332,12 +331,25 @@ def reading_ledger(utilization: float) -> UsageLedger:
     return usage
 
 
+NO_READING = (
+    "there is no reading of the plan's five-hour window yet; read it with "
+    "POST /api/usage/meter or run an Interactive plan turn"
+)
+
+
 def test_the_background_cap_refuses_at_and_above_its_fraction() -> None:
     cap = BackgroundCap(0.5)
-    assert cap.allows(reading_ledger(0.49)) is True
-    assert cap.allows(reading_ledger(0.5)) is False
-    assert cap.allows(reading_ledger(0.51)) is False
-    assert cap.allows(ledger()[0]) is True
+    assert cap.refusal(reading_ledger(0.49)) is None
+    assert cap.refusal(reading_ledger(0.5)) == (
+        "the five-hour window is 50% used, at or over the 50% cap"
+    )
+    assert cap.refusal(reading_ledger(0.51)) == (
+        "the five-hour window is 51% used, at or over the 50% cap"
+    )
+
+
+def test_the_background_cap_fails_closed_with_no_reading() -> None:
+    assert BackgroundCap(0.5).refusal(ledger()[0]) == NO_READING
 
 
 def test_the_background_cap_refuses_while_a_plan_window_is_rejected() -> None:
@@ -345,14 +357,25 @@ def test_the_background_cap_refuses_while_a_plan_window_is_rejected() -> None:
     usage.record(
         event(status="rejected", rateLimitType="seven_day", overageStatus="rejected"), at(1)
     )
-    assert BackgroundCap(0.5).allows(usage) is False
+    assert BackgroundCap(0.5).refusal(usage) == "a plan window is used up"
 
 
-def test_the_cap_setting_falls_back_to_one_half() -> None:
-    assert background_cap({}) == BackgroundCap(0.5)
-    assert background_cap({"background_cap": 0.3}) == BackgroundCap(0.3)
-    assert background_cap({"background_cap": 1.5}) == BackgroundCap(0.5)
-    assert background_cap({"background_cap": True}) == BackgroundCap(0.5)
+def test_a_saved_reading_survives_a_restart(tmp_path: Path) -> None:
+    path = tmp_path / "plan-usage.json"
+    first = UsageLedger(Clock(), path)
+    first.record(
+        event(
+            status="allowed",
+            rateLimitType="seven_day",
+            unifiedWindows={"five_hour": {"utilization": 0.2, "resetsAt": int(LATER.timestamp())}},
+        ),
+        at(1),
+    )
+    again = UsageLedger(Clock(), path)
+    assert BackgroundCap(0.5).refusal(again) is None
+    held = again.reading("five_hour")
+    assert held is not None
+    assert held.reading.utilization == 0.2
 
 
 USAGE_TEXT = (
@@ -502,9 +525,9 @@ def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
         "tokens": {"claude": {"calls": 1}},
         "background_cap": 0.5,
         "background_cap_note": (
-            "Background chats stop at 50% of the plan's five-hour window. The cap acts on the "
-            "last reading of the plan's use, not a live value: the CLI reports it only when a "
-            "turn runs or /usage is read."
+            "Background chats stop at 50% of the plan's five-hour window, and until the window "
+            "has been read once. The cap acts on the last reading of the plan's use, not a live "
+            "value: the CLI reports it only when a turn runs or /usage is read."
         ),
         "hard_stop": None,
         "extra_usage_on": None,

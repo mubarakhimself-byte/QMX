@@ -49,7 +49,7 @@ from qma.harness.chat import (
     OperatorText,
     Reject,
 )
-from qma.harness.harness import Harness, NewChat, UnknownChat
+from qma.harness.harness import ChatTableFull, Harness, NewChat, UnknownChat
 from qma.harness.home import (
     DoctorLine,
     QmxHome,
@@ -179,6 +179,8 @@ def chat_router(harness: Harness) -> APIRouter:
             await harness.send(chat_id(sid), OperatorText(body.text))
         except LaunchRefused as error:
             raise ControlError("launch_refused", str(error), 409) from error
+        except ChatTableFull as error:
+            raise ControlError("chat_table_full", str(error), 409) from error
         return {"status": "sent"}
 
     @api.post("/api/sessions/{sid}/interrupt", status_code=202)
@@ -216,6 +218,8 @@ def chat_router(harness: Harness) -> APIRouter:
             await harness.meter()
         except LaunchRefused as error:
             raise ControlError("launch_refused", str(error), 409) from error
+        except ChatTableFull as error:
+            raise ControlError("chat_table_full", str(error), 409) from error
         return (await harness.usage()).document()
 
     _ = new_chat, turn, interrupt, live, approve, read_usage, read_meter

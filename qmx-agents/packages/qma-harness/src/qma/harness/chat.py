@@ -24,6 +24,12 @@ workspace and hands them back to the CLI for this process. An Interactive chat w
 Claude Code; an unattended one waits at most `[budgets] unattended_ask_seconds`, then rejects.
 The money gate runs before any of this, so no answer or remembered rule reaches a call it denied,
 and an input the operator edits passes the gate again before it runs.
+
+Prompts. Who wrote the text is in its type. `OperatorText` is what the operator typed; slash
+commands and `@path` work, as in Claude Code. `InjectedText` is anything QMA built from news,
+files, tool output or a model. Background and Child chats launch with `verbatim_prompts=True`,
+so no prompt there dispatches a slash command or reads an `@path`. An Interactive chat is never
+verbatim, so it refuses `InjectedText` outright.
 """
 
 from __future__ import annotations
@@ -32,8 +38,8 @@ import asyncio
 import contextlib
 import json
 import logging
-import math
 import os
+import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -46,10 +52,13 @@ from claude_agent_sdk import (
     PermissionResultDeny,
     PermissionUpdate,
     SystemMessage,
+    TaskNotificationMessage,
+    TaskStartedMessage,
+    TaskUpdatedMessage,
 )
 from claude_agent_sdk._errors import MessageParseError
 from claude_agent_sdk._internal import message_parser
-from claude_agent_sdk.types import PermissionRuleValue
+from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 
@@ -67,6 +76,7 @@ from qma.harness.home import (
     write_record,
 )
 from qma.harness.launch import (
+    ChatKind,
     Launch,
     LaunchRefused,
     PlanLaunch,
@@ -76,7 +86,9 @@ from qma.harness.launch import (
     assert_scrubbed,
     build_options,
     launch_env,
+    parse_budgets,
     unattended,
+    verbatim,
 )
 from qma.harness.money import Deny, MoneySurfaceError
 from qma.harness.money import gate as money_gate
@@ -168,7 +180,25 @@ class OperatorText:
     text: str
 
 
-type Prompt = OperatorText
+@dataclass(frozen=True)
+class InjectedText:
+    """Text QMA built from news, files, tool output or a model. Every producer of such text
+    wraps it here at its source."""
+
+    text: str
+
+
+type Prompt = OperatorText | InjectedText
+
+
+class UntrustedPrompt(ValueError):
+    """`InjectedText` was sent to an Interactive chat, which is not verbatim, so a slash
+    command or an `@path` in it would run. Raised before anything reaches the CLI."""
+
+
+def admits(kind: ChatKind, prompt: Prompt) -> bool:
+    """Operator text goes to any chat. Injected text goes only to a verbatim chat."""
+    return isinstance(prompt, OperatorText) or verbatim(kind)
 
 
 @dataclass(frozen=True)
@@ -221,25 +251,9 @@ AllowAlways on an asking QMX tool or with no rule to save, Answers to a tool ask
 answer to a question. `unknown` is an id that names no chat."""
 
 QUESTION_TOOL: Final = "AskUserQuestion"
-UNATTENDED_ASK_S: Final = 300.0
-"""`[budgets] unattended_ask_seconds` when the operator has not set it."""
 REJECTED: Final = "the operator rejected this call"
 NOT_IN_TIME: Final = "the operator did not answer in time"
 ENDED: Final = "the agent process ended before the operator answered"
-
-
-def ask_budget(budgets: Mapping[str, object]) -> float:
-    """`[budgets] unattended_ask_seconds`, or `UNATTENDED_ASK_S` when it is unset or is not a
-    positive finite number of seconds."""
-    raw = budgets.get("unattended_ask_seconds", UNATTENDED_ASK_S)
-    if isinstance(raw, int | float) and not isinstance(raw, bool) and 0 < raw < math.inf:
-        return float(raw)
-    log.warning(
-        "[budgets] unattended_ask_seconds = %r is not a positive number; using %s s",
-        raw,
-        UNATTENDED_ASK_S,
-    )
-    return UNATTENDED_ASK_S
 
 
 @dataclass(frozen=True)
@@ -351,6 +365,20 @@ async def _keep_off(client: ClaudeSDKClient, servers: frozenset[str]) -> None:
             failures += 1
             log.warning("keeping %s off failed %d times: %r", sorted(servers), failures, error)
         await asyncio.sleep(KEEP_OFF_POLL_S * 2 ** min(failures, KEEP_OFF_BACKOFF_MAX))
+
+
+def track_task(running: set[str], message: Message) -> None:
+    """Add a task the CLI started; drop one it reports finished. A background task can end
+    with only a `task_updated` whose status is terminal, so both kinds count."""
+    match message:
+        case TaskStartedMessage(task_id=task):
+            running.add(task)
+        case TaskNotificationMessage(task_id=task, status=status) | TaskUpdatedMessage(
+            task_id=task, status=status
+        ) if status in TERMINAL_TASK_STATUSES:
+            running.discard(task)
+        case _:
+            pass
 
 
 def transcript(home: QmxHome, chat: SessionId) -> Path | None:
@@ -467,6 +495,9 @@ class Chat:
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
         self._usage: tuple[RunJournal, Totals] | None = None
+        self._last = time.monotonic()
+        self._tasks: set[str] = set()
+        """Background Bash and sub-agents the CLI reported started and not yet finished."""
 
     @property
     def session_id(self) -> SessionId:
@@ -474,13 +505,33 @@ class Chat:
 
     async def send(self, prompt: Prompt) -> None:
         """Connect if Cold, write the `user` block and turn "running", then `client.query`.
-        While a turn runs, the SDK queues the message, like typing into Claude Code."""
+        While a turn runs, the SDK queues the message, like typing into Claude Code. The
+        harness has already checked that this chat admits the prompt."""
         async with self._lock:
             live = self._live or await self._connect()
             self._live = live
+            self._last = time.monotonic()
             await self._note("user", {"text": prompt.text})
             self._write(turn="running")
             await live.client.query(prompt.text)
+
+    @property
+    def idle_seconds(self) -> float:
+        """Seconds since the CLI last spoke or a prompt went in, or 0 while the chat is Cold,
+        a turn runs or a background task runs. Only an idle chat is evicted or reaped, so a
+        background Bash or sub-agent is never killed by either."""
+        if self._live is None or self.record.turn == "running" or self._tasks:
+            return 0.0
+        return time.monotonic() - self._last
+
+    async def close_if_idle(self, at_least: float) -> bool:
+        """Close the chat if it has been idle longer than `at_least` seconds, checked under the
+        chat's lock so a send that got in first keeps it open. True when it closed."""
+        async with self._lock:
+            if self.idle_seconds <= at_least:
+                return False
+            await self._shut()
+            return True
 
     async def interrupt(self) -> None:
         """Background Bash and sub-agents keep running, as in Claude Code."""
@@ -544,16 +595,20 @@ class Chat:
         """Disconnect, stop this chat's launcher tree and revoke its relay grant. Pending asks
         become `expired`. Idempotent."""
         async with self._lock:
-            live, self._live = self._live, None
-            if live is None:
-                return
-            self._closing = True
-            try:
-                await self._end(live)
-            finally:
-                self._closing = False
+            await self._shut()
+
+    async def _shut(self) -> None:
+        live, self._live = self._live, None
+        if live is None:
+            return
+        self._closing = True
+        try:
+            await self._end(live)
+        finally:
+            self._closing = False
 
     async def _end(self, live: _Live) -> None:
+        self._tasks.clear()
         for n in list(self._asks):
             self._settle(n, "expired", _Expired(ENDED))
         if live.grant is not None:
@@ -599,6 +654,7 @@ class Chat:
                 "plugin; remove it from the Claude home"
             )
         user = parse_claude_settings(await asyncio.to_thread(deps.control.settings_get, "claude"))
+        budgets = parse_budgets(await asyncio.to_thread(deps.control.settings_get, "budgets"))
         settings = code_settings(
             user,
             launcher=deps.launcher,
@@ -627,6 +683,7 @@ class Chat:
                 can_use_tool=self._can_use_tool,
                 mcp_servers=servers,
                 gate=gate,
+                budgets=budgets,
                 test=deps.test,
             )
             assert_argv_fits(options)
@@ -728,6 +785,8 @@ class Chat:
     async def _read(self, live: _Live) -> None:
         try:
             async for message in live.client.receive_messages():
+                self._last = time.monotonic()
+                track_task(self._tasks, message)
                 if isinstance(message, SystemMessage) and message.subtype == "init":
                     found = unexpected_plugins(message.data)
                     if found:
@@ -869,7 +928,7 @@ class Chat:
         if not unattended(self.record.config.kind):
             return await ask.reply
         budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
-        await asyncio.wait({ask.reply}, timeout=ask_budget(budgets))
+        await asyncio.wait({ask.reply}, timeout=parse_budgets(budgets).unattended_ask_seconds)
         if n in self._asks:
             self._settle(n, "expired", _Expired(NOT_IN_TIME))
         return ask.reply.result()
