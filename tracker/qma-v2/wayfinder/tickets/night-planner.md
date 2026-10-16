@@ -2,11 +2,12 @@
 title: Night planner (one heavy job per night)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, decision-1-lab-self-scheduling]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Premise of one Claude Max at 50% per window is overridden (rulings 26-27); the load balancer replaces it."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 2 pilots' exit gate (one clean night).
 ## Sources
 
 `19` C4 and 5.1; `20-review-a` finding 14; `21` A13.
+
+## Resolution
+
+Superseded. The one-account 50% premise is overridden (rulings 26, 27). Engine AD-9 and AD-12 (pause at limits, pool across accounts) replace it. (Map rewrite 2026-10-16.)

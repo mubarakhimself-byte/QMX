@@ -1,13 +1,19 @@
 ---
-title: Hub copilot, sub-agent roles and menus
+title: Copilot methodology (B26)
 type: grilling
 mode: HITL
 status: open
-blocked_by: [capability-packs, autonomy-policy]
+blocked_by: [methodology-builder, session-homes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches rulings 5, 11, 12; say sub-agents, not helpers (ruling 35)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Re-scoped to B26. Question: how each copilot works. Lab copilot more freedom, Portfolio less, the hub copilot holds both (rulings 5, 11-13); sub-agents, not helpers (ruling 35); packs per home. Recommended answer: one methodology with a per-home autonomy row and pack set, read as data, not one golden rule. Handled tomorrow (ruling 82).
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

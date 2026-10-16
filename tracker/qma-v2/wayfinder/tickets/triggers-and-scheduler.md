@@ -2,11 +2,12 @@
 title: Triggers and scheduler
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, autonomy-policy]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches ruling 25 (Hermes cron); add server and cloud triggers."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Trader-agent methodology, methodology umbrella.
 ## Sources
 
 `03-workflow-engines.md` §6 Hermes cron, §9.6, §10 idea 13; `05-qmx-today.md` §6 hook point 1, §7 `trigger_fires`; `BACKLOG.md` B34; clipping "Not Every Agent Workflow Needs AI".
+
+## Resolution
+
+Resolved. Engine AD-10 (trigger rows, at most one fire per occurrence), Hermes scheduling and one catch-up run (rulings 25, 54). (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Workflow engine contract (assumptions A1-A2; spec)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Still the central ticket; rewrite for rulings 22-26: runs apart from the harness, a test step, several accounts, and the docs engine node kinds (study 24 section 3)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Loop spec, triggers and scheduler, pause at cap, async delegation and fan-out, t
 ## Sources
 
 `03-workflow-engines.md` §1, §7-§10; `05-qmx-today.md` §6 hook points, gaps 1 and 6; `11-references.md` §3 Hermes; `12` section (c); corrections 8, 11, E.
+
+## Resolution
+
+Resolved. The workflow-engine architecture (33 ADs), approved by rulings 45 and 73. (Map rewrite 2026-10-16.)

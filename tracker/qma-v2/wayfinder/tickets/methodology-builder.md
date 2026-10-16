@@ -1,13 +1,19 @@
 ---
-title: Methodology builder (agents, workflows, skills, packs)
+title: QMX skill set and builder (B28)
 type: grilling
 mode: HITL
 status: open
-blocked_by: [skill-format-and-verbs, agent-as-a-folder, loop-spec]
+blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 18 (new versions, BMad builder plus skill writer)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Re-scoped to B28 (26 section C: researched, not designed). Question: which BMad, Pocock and pstack skills become QMX skills, in what format (Agent Skills format with QMX verbs; the old 'Skill format and QMX verbs' ticket is folded in here), and how he and the copilot build a new skill or a new version of a workflow from a rough description (ruling 18). Skill evals land here too. Recommended answer: one QMX skill format (Agent Skills plus a `qmx.toml`), a builder skill that reuses engine AD-22's loop-me interview and AD-11's test gate, stored as Library `skill` objects. Handled tomorrow (ruling 82).
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

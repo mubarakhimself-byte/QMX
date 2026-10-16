@@ -2,11 +2,12 @@
 title: Loop spec as a first-class object
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [workflow-engine-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Loop engineering (ruling 2)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Workflow builder, trader-agent methodology, Lab overnight loop, methodology umbr
 ## Sources
 
 Clipping "Agent Harness Engineering vs. Loop Engineering vs. Graph Engineering"; `03-workflow-engines.md` §5, §9.4; `02-pocock-pstack.md` autonomous-run and hillclimb playbooks.
+
+## Resolution
+
+Resolved. Engine AD-5 (`loop` node kind) and AD-6 (deterministic control flow). (Map rewrite 2026-10-16.)

@@ -1,5 +1,5 @@
 ---
-title: Wave 1 prerequisites (HP merge, D1-D4, B1)
+title: Build prerequisites: HP merge, D1-D4, B1
 type: task
 mode: HITL
 status: open
@@ -8,6 +8,12 @@ claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. HP merge, D1-D4 and B1 are still real prerequisites; drop the wave 1 framing (ruling 33)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Still real; the wave framing is dropped (ruling 33). The HP stack #81-#90 awaits his merge; D1-D4 have not run; the B1 SQLite one-writer fix is not in (33 section 5). `ENGINE-PLAN.md` stacks on `qma/hp17` meanwhile. HITL: the merge click is his.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

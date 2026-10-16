@@ -2,11 +2,12 @@
 title: Minimal workflow builder (wave 2)
 type: prototype
 mode: HITL
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, folder-format-one-shape]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Now central (ruling 22), but drop wave 2 and add node-editor creation and a real test run (ruling 23)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 3 builders (agent, skill, pack, methodology).
 ## Sources
 
 `19` section 6; `20-review-a` finding 11; `21` A10; `02-pocock-pstack.md` loop-me.
+
+## Resolution
+
+Resolved. Engine AD-11 (lifecycle with a test gate), AD-21 (three surfaces, one Engine API) and AD-22 (the copilot drafts, the operator publishes). (Map rewrite 2026-10-16.)

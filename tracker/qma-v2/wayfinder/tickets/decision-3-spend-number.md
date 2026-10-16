@@ -2,11 +2,12 @@
 title: Decision 3: the spend-per-run number on paid keys
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. No spending caps and no usage asks (ruling 27)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -24,3 +25,7 @@ The per-run spend cap in Settings and the pre-flight estimate before heavy runs.
 ## Sources
 
 `19` section 1; `20-review-a` finding 1 and rewritten decision 3; `21` A1.
+
+## Resolution
+
+Superseded. No spending caps and no usage asks (ruling 27). (Map rewrite 2026-10-16.)

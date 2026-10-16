@@ -1,5 +1,5 @@
 ---
-title: Risk and sizing session outcome
+title: Risk-session dependencies
 type: task
 mode: HITL
 status: open
@@ -8,6 +8,12 @@ claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Placeholder for the risk session (ruling 14)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Re-scoped to what the risk session must settle for this map: the unit and the pod adapter (Lab OPEN-1, AD-11), the identity rule table (Lab AD-16), the CT-22/CT-27 blocks with no governed home (Lab DOC-CHANGES), whether units read MIS directly (study 30 question 10). Owned by the risk session (ruling 14); this ticket closes when that session records its answers.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

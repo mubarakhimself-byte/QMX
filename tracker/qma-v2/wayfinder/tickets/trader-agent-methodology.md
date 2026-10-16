@@ -1,13 +1,19 @@
 ---
-title: Trader-agent methodology
+title: Trader-agent methodology (B27)
 type: grilling
 mode: HITL
 status: open
-blocked_by: [autonomy-policy, strategy-pipeline-gates, loop-spec, triggers-and-scheduler, account-guard-lockout]
+blocked_by: [methodology-builder, decision-5-checks-bind-agents-only]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Backlog B27; read-only now."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Re-scoped to B27. Question: the methodology for agents that test ideas, research and run workflows, now that templates are engine configurations with plain names (rulings 22, 35) ending at paper (ruling 29). Agents stay read-only on money. Recommended answer: the trader agent is a role in the engine's role table (engine AD-13) plus a skill set from B28; no new runtime. Handled tomorrow (ruling 82).
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

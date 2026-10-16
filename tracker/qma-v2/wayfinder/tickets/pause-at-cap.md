@@ -2,11 +2,12 @@
 title: Pause at the cap, do not fail
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, feasibility-probes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Pause and resume stands (ruling 27) but must work per account with the load balancer (ruling 26) and never park on a human gate; the user:profile probe does not apply to Python (20b finding 9)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Nothing directly; it is required by the first templates to run overnight. Feeds 
 ## Sources
 
 `03-workflow-engines.md` §2 usage signals, §3 drain, §9.6, open questions; `HARNESS-PLAN.md` HP10, HP11; `BACKLOG.md` S3; `UI-NOTES.md` §6.
+
+## Resolution
+
+Resolved. Engine AD-9 (limits pause the work; nobody is asked) with per-account leases from AD-12. (Map rewrite 2026-10-16.)

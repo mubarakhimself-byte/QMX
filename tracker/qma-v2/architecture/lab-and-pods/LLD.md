@@ -25,7 +25,7 @@ class DocumentKind(Protocol):
 | `workflow` | `qmx.workflow/1` JSON (engine AD-2) **[retrieved]** | nodes and connections as they are; node status from the last run's memo | one cell per node: `# %% step:<node_id> <name>` header, then the node's `code_ref` body for script-family nodes or a generated call stub for others | `to_code ∘ patch_from_code = identity` on the JSON minus `position`; a cell whose header was deleted removes the node; a new unmarked cell becomes a `lab.cell` node appended after the previous cell |
 | `bot-logic` | folder: `logic.py` + `declaration.json` (QML QL-2 two artifacts) **[retrieved]** | derived: one node per declared confluence leg and producer binding, one `logic` node; read-only positions | `logic.py` verbatim | code is the truth; `patch_from_graph` is refused except `set_param` on declaration parameters |
 | `pod-block` | `form` → param values; `graph` → a `qmx.workflow/1` sub-document with fixed `in` and `out` ports for the slot; `code` → a Python function with the slot's signature; `model` → a model ref plus ceiling params | by kind | by kind | as `workflow` for `graph`; code is the truth for `code` |
-| `board` | cell script (ruling 31) | the cell DAG: `lab.cell` and `lab.note` nodes; cells that name an upstream cell (`# uses: <node_id>`) get an edge | the script | as `workflow` |
+| `board` | cell script (ruling 31) | the cell DAG: `lab.cell` and `note` nodes; cells that name an upstream cell (`# uses: <node_id>`) get an edge | the script | as `workflow` |
 
 The Start-something-new kinds (shot 43: hypothesis, compare, train, sweep, workflow, import) each open a `workflow` draft cloned from the matching template, with the chosen subject, data and machine written into its `inputs` (shot 44).
 
@@ -49,16 +49,16 @@ Status per node is derived, never stored: `stale` when the engine memo for `(nod
 | --- | --- | --- | --- |
 | Model file | `.onnx`, `.pkl`, `.joblib` | a `model` object (weights blob, format, inferred input schema) | the file is a blob; inference code is a generated `lab.model` wrapper that loads from the blob, never from a URL ("shipped inside the bot so it never fetches at run time") |
 | Code from a repo | a folder or `CodeSource{repository, revision}` (qmx_remote shape **[retrieved]**) | a `bot-logic` draft | the folder becomes the logic blobs; `declaration.json` is scaffolded from discovered parameters; Layer-1 lint runs; network and clock reads are findings |
-| Notebook | `.ipynb` | a `board` or `workflow` draft | each code cell → `lab.cell`; a cell tagged `# step: <type>` → that node type; markdown → `lab.note` |
+| Notebook | `.ipynb` | a `board` or `workflow` draft | each code cell → `lab.cell`; a cell tagged `# step: <type>` → that node type; markdown → `note` |
 | Python file | `.py` | one `lab.cell` node, or a `bot-logic` draft when it defines the runtime protocol entry points | the user picks "one step" or "whole bot" (shot 18's note) |
 
 ---
 
 ## 2. The Lab node pack
 
-Every type is an engine `typeVersion` with typed `data` ports (engine AD-4). Parameters are JSON Schema; `effect` defaults as listed.
+Every type is a pack type with a `base_kind` (engine AD-5) and typed `data` ports (engine AD-4); the validator checks it against its base kind's contract. Parameters are JSON Schema; `effect` defaults as listed.
 
-| Type | Engine kind | In → out | Parameters (summary) | Effect |
+| Type | Base kind | In → out | Parameters (summary) | Effect |
 | --- | --- | --- | --- | --- |
 | `lab.data` | library | — → `bars` | `recipe_ref` or `{source, symbol, timeframe, range}` → resolves to a qmf-data room read and a CT-12 split ref | none |
 | `lab.feature` | script | `bars` → `features` | `component_refs[]` (indicators), params | reversible |
@@ -67,19 +67,19 @@ Every type is an engine `typeVersion` with typed `data` ports (engine AD-4). Par
 | `lab.test` | subworkflow | `signals \| bot_ref` → `result` | wraps `qmb.compile → qmb.run`; costs preset | per callee |
 | `lab.report` | library | `result` → `artifact` | report type; `save_to_library` | compensable |
 | `lab.cell` | script | `*` → `*` | `code`, `uses[]` | reversible |
-| `lab.note` | — (draft-only, engine AD-11 note node) | — | markdown | none |
+| `note` | — (the engine's one draft-only type, engine AD-5; not a Lab type) | — | markdown | none |
 | `qmb.compile` | script over `QmbPort` | `subject_ref, composition_ref, data_ref, costs, assignment` → `setup_ref` | see section 3 | compensable (writes a `setup`) |
-| `qmb.run` | script over `QmbPort` | `setup_ref` → `backtest_result_ref` | `procedure backtest`, `window in_sample\|validation` | irreversible (CPU time; memoised) |
-| `qmb.sweep` | script over `QmbPort` | `setup_ref, grid` → `backtest_result_refs[]` | the Cartesian batch (QMB B-12) run inside ONE qmb invocation; `partition_by: placement` only | irreversible |
-| `qmb.walk_forward` | script | `setup_ref, folds, purge, embargo` → `backtest_result_refs[]` | | irreversible |
-| `qmb.robustness` | script | `setup_ref, checks[]` → `check_results[]` | ladder order; early exit at first fail; each check names its bar | irreversible |
-| `qmb.optimize` | script | `setup_ref, space, objective, generations, seed` → `trial_refs[], sensitivity` | B-8 generation-stepped sampler | irreversible |
+| `qmb.run` | app_op (`qmb_backtest` on the `qmb` placement, via `QmbPort`) | `setup_ref` → `backtest_result_ref` | `procedure backtest`, `window in_sample\|validation` | none (memoised by intent key; retried freely) |
+| `qmb.sweep` | app_op (`qmb_backtest`) | `setup_ref, grid` → `backtest_result_refs[]` | the Cartesian batch (QMB B-12) run inside ONE qmb invocation; `partition_by: placement` only | none |
+| `qmb.walk_forward` | app_op (`qmb_backtest`) | `setup_ref, folds, purge, embargo` → `backtest_result_refs[]` | | none |
+| `qmb.robustness` | app_op (`qmb_backtest`) | `setup_ref, checks[]` → `check_results[]` | ladder order; early exit at first fail; each check names its bar | none |
+| `qmb.optimize` | app_op (`qmb_backtest`) | `setup_ref, space, objective, generations, seed` → `trial_refs[], sensitivity` | B-8 generation-stepped sampler | none |
 | `qmb.compare` | script | `result_refs[]` → `readout` | `compare_runs` (query, no occupancy) | none |
-| `qmb.holdout_touch` | script | `family_ref, setup_ref` → `backtest_result_ref` | refuses if the window was touched; journals who and why | irreversible |
+| `qmb.holdout_touch` | app_op (`qmb_backtest`, sealed window) | `family_ref, setup_ref` → `backtest_result_ref` | refuses if the window was touched; journals who and why; runs only on `qmb` or `pc` | irreversible (the one Lab compute node that is) |
 | `ml.dataset` | script over Kernel | `bars, features` → `dataset_ref` | point-in-time build | reversible |
 | `ml.split` | script | `dataset_ref` → `split_ref` | CT-12: train / validation / sealed-test, purge, embargo | compensable |
 | `ml.leakage_check` | grader (deterministic) | `dataset_ref, split_ref` → `pass \| fail` | horizon vs purge, feature knowable-at, shuffle test | none |
-| `ml.train` | script over Kernel + Compute | `dataset_ref, split_ref, spec` → `model_ref` | framework in the workflow folder; `runs_on`; checkpoints every N epochs; emits `metric` events (loss curves, shot 20) | irreversible |
+| `ml.train` | script over Kernel + Compute | `dataset_ref, split_ref, spec` → `model_ref` | framework in the workflow folder; `runs_on`; checkpoints every N epochs; emits `metric` events (loss curves, shot 20) | none (checkpointed and memoised by intent key; a retry resumes from the last checkpoint; a dead worker never pages him) |
 | `ml.evaluate` | script | `model_ref, split_ref` → `metrics` | validation only; `likely_overfitting` flag when train/validation gap passes `settings.lab.overfit_gap` | none |
 | `ml.plug` | library | `model_ref, owner_ref, slot` → `owner_version_ref` | mints a new owner version with `uses → model` | compensable |
 | `pod.sim` | script over the simulator | `pod_version_ref, bot_refs[], window` → `pod_result_ref` | replay trades through the stack; equity, interventions, size trails | reversible |
@@ -111,7 +111,7 @@ A UI step kind (shot 16: DATA, FEATURE, MODEL, TEST, OUTPUT) is the palette *gro
     "assignment": {"atr_stop": "1.5", "lookback": "40"},
     "assignment_is_canonical": false,
     "measures": ["net_pct", "sharpe", "max_drawdown", "profit_factor"],
-    "placement": "local",
+    "placement": "qmb",
     "resolved_run_config_fp1": "fp1:…",
     "world": "replay", "clock": "replay", "data_provenance": "recorded"
   }
@@ -131,7 +131,7 @@ class QmbPort(Protocol):
     def data(self, cmd: Literal["catalog","verify","gap_check","download"], args) -> Document: ...
 ```
 
-Adapters: `adapters.qmb_api` (in-process `qmb.doors.api`, controlled host only; governed lane `spawn_governed` so the ledger line exists) and `adapters.qmb_cli` (the `qmb` CLI inside a remote worker bundle; outputs come back as artifacts by hash through the engine gateway). A fake adapter returns recorded CT-32 fixtures for tests (ruling 51: tests use real models for model steps, but QMB fixtures are allowed for door tests). `RunOutcome = { ledger_line_fp1, ct32_fp1, role, world, claim_class, fidelity, measures {name: {value, unit}}, chart_series_ref, trade_events_ref }` — copied, never computed by the Lab.
+Adapters: `adapters.qmb_app_op` (**default**: the engine's `app_op qmb_backtest` on the `qmb` placement, engine AD-31, ruling 68; results come back as objects by hash on the run's branch) and `adapters.qmb_api` (in-process `qmb.doors.api`, used only when the registered `qmb` placement is the PC itself, the developer fallback; governed lane `spawn_governed` so the ledger line exists). The earlier `qmb_cli`-in-a-remote-worker adapter is dropped: backtests never run on agent hosts. A fake adapter returns recorded CT-32 fixtures for tests (ruling 51: tests use real models for model steps, but QMB fixtures are allowed for door tests). `RunOutcome = { ledger_line_fp1, ct32_fp1, role, world, claim_class, fidelity, measures {name: {value, unit}}, chart_series_ref, trade_events_ref }` — copied, never computed by the Lab.
 
 ### 3.3 `backtest-result` import
 
@@ -235,14 +235,14 @@ v1 adapter `adapters.pod_book_bms`: `sizer fixed-fractional → money_rules (sea
 ```json
 { "kind": "paper-run", "fields": {
     "pod_version": "fp1:…", "members": ["bot fp1…"], "money": {"kind": "server-ledger", "balance_start": 20000, "currency": "USD"},
-    "placement": "local", "started": "2026-09-29", "days_planned": 7, "days_extra": 0, "day": 4,
+    "placement": "contabo", "trigger_id": "…", "started": "2026-09-29", "days_planned": 7, "days_extra": 0, "day": 4,
     "state": "running|paused|stopped|ready", "band": {"from_test": "fp1:pod-result", "p5": [...], "p95": [...]},
     "equity": [...], "decisions": [{"at": "…", "bot": "…", "side": "Buy", "symbol": "…", "steps": [{"by": "Sizer 0.75%", "usd": 860}], "refused": null}],
     "interventions": [...], "checks": {"soak_time": false, "inside_band": true, "kill_line_distance": true, "fills_matched": true, "no_unknown_positions": true},
     "verdict": "as-tested|drifting|ready" } }
 ```
 
-The `paper` template: `trigger(manual)` → `loop(until stopped)` { `paper.step` per bar } → `paper.check` daily; `max_concurrent: 1`; pause/resume/extend/stop are `service.paper.*` operations that write `gate_resolved` events into the run. Money kinds: `server-ledger` (v1), `broker-demo`, `exchange-testnet` (OPEN-2, through `NodePort` later). `fills_matched` is trivially true on the server ledger and reads the node's reconciliation on a demo account.
+The `paper` template is a **chain of finite daily runs** (spine AD-12; engine AD-25): `trigger(cron, daily at session open, market zone, continuity: true, max_concurrent: 1)` → `loop(bounded by the day's bars)` { `wait(next bar close)` → `paper.step` } → `paper.check` at session close. `continuity` hands each day's run the previous day's ledger state, open positions and band position; each day appends one version to the `paper-run` item. The template's runaway guard allows one day's wall time. For a 24-hour market (crypto, and FX through the trading week) the "day" is the market's session boundary from the instrument calendar (00:00 UTC by default for crypto): each daily run's loop ends at that boundary, before the next fire, so `max_concurrent 1` never blocks the next day. The paper template overrides the engine's default runaway `wall_seconds` (4 h) with one session plus 30 minutes. `service.paper.pause/resume` disable and enable the trigger, `extend` raises `days_planned`, `stop` disables the trigger and marks the `paper-run` stopped (record kept); none of them writes `gate_resolved`, which stays reserved for human gates. A daily run that dies mid-day is folded and resumed by the engine like any run; a missed day collapses into one catch-up run (engine AD-10). Money kinds: `server-ledger` (v1), `broker-demo`, `exchange-testnet` (OPEN-2, through `NodePort` later). `fills_matched` is trivially true on the server ledger and reads the node's reconciliation on a demo account.
 
 ---
 
@@ -252,11 +252,11 @@ The `paper` template: `trigger(manual)` → `loop(until stopped)` { `paper.step`
 class LabService:
     # subjects and drafts (Build; Inspector; Resources)
     subjects.list(bench, machine?) -> [Subject{item_id, kind, name, version, stage, draft_revision, published_version}]
-    drafts.get(item, ref="main") -> Draft + GraphView + CodeView
+    drafts.get(item, ref="refs/drafts/<item>") -> Draft + GraphView + CodeView   # main holds published versions only
     drafts.patch(item, ref, ops: list[GraphOp] | {code: str}, expected_revision) -> Draft
     drafts.validate(item, ref) -> [Finding]
-    drafts.save(item, ref, message) -> version (Library put; branches-from)
-    drafts.publish(item, ref, semver) -> version                                   # MANAGE for governed kinds
+    drafts.save(item, ref, message) -> version (his Save: merges refs/drafts/<item> into main as the next version, branches-from, no ask because he is the operator; an agent's save stays on its own ref)
+    drafts.publish(item, ref, semver) -> version   # merge into main; semver is an annotation; tested-by copied when content_hash matches (27d C1); MANAGE for governed and lifecycle kinds
     drafts.import(item, kind: model-file|repo|notebook|python-file, payload) -> Draft
     palette() -> [{group, type, name, note, ports, param_schema}]
     # runs (Run button; Runs; Equity; Robustness; Log; Compare; Sweep grid)
@@ -287,7 +287,7 @@ class LabService:
     pods.trail(item, ref, sample, market) -> [{step, usd}]
     pods.test(pod_refs[], bot_refs[], window, scenario_refs[], mix?) -> run_id         # pod-test template
     pods.results(pod_refs[]) -> {equity, head_to_head, fan, stress_cells, interventions}
-    pods.send_to_paper(item, ref, money, placement) -> paper_run_id                   # MANAGE (OPEN-3)
+    pods.send_to_paper(item, ref, money, placement) -> paper_run_id                   # MANAGE (ruling 80; creates the daily paper trigger, AD-12)
     paper.get(pod) -> PaperRun; paper.pause/resume/extend/stop(paper_run_id); paper.decisions(paper_run_id, since) -> stream
     paper.checks(paper_run_id) -> {checks, ready}; paper.promote(paper_run_id) -> card_ref   # MANAGE; card lands in Portfolio
     scenarios_stress.create(spec) -> stress_scenario_ref
@@ -321,25 +321,25 @@ Auth: the existing `qmx-control` bearer; agent calls arrive through the MCP tool
 
 | UI tool (shot 21 composer) | Service operation | Effect | Note |
 | --- | --- | --- | --- |
-| `qmb.backtest` | `runs.start("backtest", …)` | DOMAIN_WRITE | test mode on a draft; live on a version |
-| `qmb.sweep` | `scenarios.draft` + `scenarios.run` | DOMAIN_WRITE | MANAGE when `estimate.usd > ask_above_usd` |
+| `qmb.backtest` | `runs.start("backtest", …)` | DOMAIN_WRITE (test mode) | test mode on a draft (DOMAIN_WRITE); a live run of a published version goes through the engine's `workflows_run` (MANAGE, asks once, engine SOLUTION-DESIGN §13) |
+| `qmb.sweep` | `scenarios.draft` + `scenarios.run` | DOMAIN_WRITE | no spend ask (ruling 27); the estimate is shown, never gated on |
 | `qmb.walk_forward` | `runs.start("walk-forward", …)` | DOMAIN_WRITE | |
 | `qmb.robustness` | `runs.start("robustness", …)` | DOMAIN_WRITE | |
 | `qmb.optimize` | `runs.start("optimise", …)` | DOMAIN_WRITE | trial cap from the family ledger |
-| `lab.train` | `training.start` | DOMAIN_WRITE | MANAGE above spend threshold |
+| `lab.train` | `training.start` | DOMAIN_WRITE | no spend ask (ruling 27) |
 | `lab.import_model` | `models.import` | DOMAIN_WRITE | |
 | `graph.edit_draft` | `drafts.patch(ops)` | DOMAIN_WRITE | onto `refs/agents/<session>/<item>` |
 | `code.edit` | `drafts.patch({code})` | DOMAIN_WRITE | same ref |
 | `lab.add_panel` | `panels.propose` | DOMAIN_WRITE | the operator pins |
-| `compute.place` | `compute.preflight` + `compute.place` | DOMAIN_WRITE | MANAGE if the placement is paid and above threshold |
+| `compute.place` | `compute.preflight` + `compute.place` | DOMAIN_WRITE | choosing among registered placements never asks; adding a new provider is the engine's onboarding flow (MANAGE once, engine AD-30) |
 | `data.inspect` | `data.inspect` | READ | |
-| `pod.edit` | `pods.patch` | DOMAIN_WRITE | agent ref; merge into `main` is MANAGE (governed) |
+| `pod.edit` | `pods.patch` | DOMAIN_WRITE | agent ref; merge into `main` is MANAGE (publishing a lifecycle kind, ruling 80) |
 | `pod.test` | `pods.test` | DOMAIN_WRITE | |
 | `pod.stress_scenario` | `scenarios_stress.create` | DOMAIN_WRITE | |
 | `pod.mix` | `pods.patch(set_members)` + `pods.test` | DOMAIN_WRITE | |
 | `pod.paper` | `pods.send_to_paper` | MANAGE | "Needs your yes" (shot 27) |
 
-Plus reads the pack needs that the composer does not list: `runs.list/get/explain`, `subjects.list`, `pods.get`, `paper.get`, `families.ledger`, `compute.list` (all READ). Rows are added to `qma.harness.tools.AGENT_OPERATIONS` **[retrieved]** as `lab_*` and `pod_*` names; nothing else in the harness changes (ruling 24).
+Plus reads the pack needs that the composer does not list: `runs.list/get/explain`, `subjects.list`, `pods.get`, `paper.get`, `families.ledger`, `compute.list` (all READ). Rows are added to `qma.harness.tools.AGENT_OPERATIONS` **[retrieved]** as `lab_*` and `pod_*` names. Table rows are still a harness change no ruling grants, so they are part of engine HARNESS-REQUESTS H17 and need his grant (ruling 24); until then the Lab is driven from the UI, and the copilot reaches Lab drafts and test runs through the engine's H17 fallback (`library_save` of a draft plus the test-on-save watcher).
 
 Plugin layout: `plugins/qmx-lab/.claude-plugin/plugin.json`, `.mcp.json` (the control door), `skills/<template>/SKILL.md` for `l1-idea-to-first-result`, `l2-run-this-part`, `l3-promote`, `l4-overnight-loop`, `d1-component-build`, `d2-spec-compile`, `d3-iterate-against-qmb`, `d4-variants`, `d5-indicator`, `d6-training`, `d10-code-health`, `pod-design`, `pod-test`, `pod-paper`; `prompts/lab-layer.md` (the Lab's system-prompt layer: it knows the open subject, layout and runs because the UI sends `context {subject, layout, ticked_runs, machine}` with each message).
 
@@ -374,15 +374,15 @@ sequenceDiagram
   participant C as ComputePort
   participant E as engine
   participant Q as QmbPort
-  UI->>S: scenarios.draft(subject v7, markets, timeframes, params, measures, costs, placement=vps)
+  UI->>S: scenarios.draft(subject v7, markets, timeframes, params, measures, costs, placement=qmb)
   S->>F: luck_warning(runs=72, family)
-  S->>C: estimate(sweep, 72 runs, vps) → 26 min
-  S-->>UI: ScenarioDraft{72 runs, estimate, warn, exploration_only=true}
+  S->>C: estimate(sweep, 72 runs, qmb) → 26 min (shown, never gated on)
+  S-->>UI: ScenarioDraft{72 runs, estimate, warn, exploration_only=false}
   UI->>S: scenarios.run(draft)
-  S->>E: runs.start(template=sweep, inputs={setup grid}, placement=vps)
-  E->>Q: qmb.compile ×1, qmb.sweep ×1 (one qmb invocation on vps; QMB runs 72 isolated runs)
+  S->>E: runs.start(template=sweep, inputs={setup grid}, placement=qmb)
+  E->>Q: qmb.compile ×1, qmb.sweep ×1 (app_op qmb_backtest: one qmb invocation on the QMB machine; QMB runs 72 isolated runs)
   Q-->>E: ledger lines + CT-32 by hash
-  E->>S: backtest-result ×72 on refs/runs/<run>, exploration_only
+  E->>S: backtest-result ×72 on refs/runs/<run> (evidence: the qmb placement is a controlled host)
   UI->>S: sweeps.grid(run) → cells; runs.list → rows
 ```
 
@@ -395,7 +395,7 @@ sequenceDiagram
   participant C as ComputePort
   participant E as engine
   participant K as KernelPort
-  CP->>S: training.start(spec{predicts=entry_signal, data=fx-m1, model=lightgbm}, placement=colab-or-ssh)
+  CP->>S: training.start(spec{predicts=entry_signal, data=fx-m1, model=lightgbm}, placement=<a registered GPU row, e.g. an ssh provider row>)
   S->>C: preflight(placement) → healthy; estimate
   S->>E: runs.start(template=training)
   E->>K: ml.dataset, ml.split (CT-12 sealed), ml.leakage_check (grader)
@@ -421,8 +421,8 @@ sequenceDiagram
   UI->>S: pods.test([classic, trend, voltarget], bots[3], crises[7])
   S->>E: runs.start(template=pod-test) → pod.sim ×3, pod.stress ×21, pod.fan ×3, pod.head_to_head
   E-->>UI: results (equity, stress board, fan, head to head, interventions)
-  UI->>S: pods.send_to_paper(trend v3, money=server-ledger, placement=local)  [MANAGE]
-  S->>E: runs.start(template=paper, max_concurrent 1) → paper.step per bar; paper.check daily
+  UI->>S: pods.send_to_paper(trend v3, money=server-ledger, placement=contabo)  [MANAGE, his one yes]
+  S->>E: triggers.create(paper, daily cron at session open, continuity, max_concurrent 1) → one finite run per day: paper.step per bar, paper.check at close
   E-->>UI: paper run, decisions stream, checks
   UI->>S: paper.promote(run)  [MANAGE]
   S->>N: mint_promotion_card(pod v3, unit parts, evidence refs)
@@ -431,7 +431,7 @@ sequenceDiagram
 
 ### 8.5 The copilot edits a draft beside the operator
 
-The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the operator keeps `main`; `library_merge` (library AD-7) brings the agent's draft into `main` with a three-way merge of the JSON (structural) or the code (line); a conflict shows the comparison view; a governed kind (`bot`, `pod`, `pod-block`) merges under MANAGE.
+The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the operator keeps `refs/drafts/<item>`, and `main` holds published versions only; `library_merge` (library AD-7) brings the agent's draft into his draft (DOMAIN_WRITE) or, as publishing, into `main` (MANAGE) with a three-way merge of the JSON (structural) or the code (line); a conflict shows the comparison view; a governed kind (`bot`, `unit`, `book`, `bms`) or a lifecycle kind (`pod`, `workflow`) merges into `main` under MANAGE; `pod-block` stays DOMAIN_WRITE.
 
 ---
 
@@ -439,7 +439,6 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 
 | Setting | Default |
 | --- | --- |
-| `lab.ask_above_usd` | 5 |
 | `lab.cheap_run_seconds` (L2 stale-upstream prompt) | 120 |
 | `lab.overfit_gap` | 0.05 of loss |
 | `lab.luck_warning_runs` | 200 |
@@ -447,7 +446,8 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 | `lab.robustness_ladder` | costs ×2 ≥ 50 % kept; trade shuffle 1,000 p95 DD ≥ −15 %; candle noise positive in 90 %; significance p < 0.05; walk-forward 7 of 9 clusters |
 | `pod.fan_paths` / `pod.fan_horizon_days` | 1,000 / 90 |
 | `pod.noise_quantile` | 0.9 |
-| `paper.min_days` / `paper.extend_days` | 7 / 7 |
+| `paper.min_days` / `paper.extend_days` | 7 / 7 (seven daily runs, then seven more) |
+| `paper.day_trigger` | daily cron at the market's session open, market zone (24-hour markets: the session boundary, 00:00 UTC for crypto); runaway `wall_seconds` one session + 30 min |
 | `paper.band_quantiles` | p5–p95 of the pod's own test |
 | `identity_rule` | D4 label set, `profile → branches-from` |
 
@@ -461,7 +461,8 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 | FM-2 | QMB refuses the compile (dummy Book, key collision, synthetic-tainted data with a replay clock) | the refusal is returned verbatim as the node result; the run parks with the refusal text; no relabelling | AD-5 |
 | FM-3 | A sweep cell fails | that cell's QMB ledger line is `aborted`; the grid shows ✕ (shot 19); the other cells stand; rerun is one cell | AD-4, engine AD-7 |
 | FM-4 | The placement is not `healthy` at run start | `placement_not_healthy` refusal before any spend; the picker shows the failing check (shot: Connecting strip) | AD-8 |
-| FM-5 | A run placed off the controlled host is cited as evidence | `exploration_only` results refuse `tested-by` edges and the robustness ladder; "rerun winners here" | AD-8 |
+| FM-5 | A run placed off a controlled host (`pc`, `qmb`) is cited as evidence | `exploration_only` results refuse `tested-by` edges and the robustness ladder; "rerun winners on the QMB machine" | AD-8 |
+| FM-17 | A daily paper run dies mid-day, or a day is missed | the engine folds and resumes the run; missed days collapse into one catch-up run; `continuity` carries the ledger forward | AD-12, engine AD-10 |
 | FM-6 | Second touch of a sealed window | `holdout_already_touched`; the template ends with "did not hold" marked; a new window is required | AD-6 |
 | FM-7 | A block with side effects (network, clock) | `block_not_pure` at save; the block stays a draft | AD-10 |
 | FM-8 | A pod block the node cannot run | `unsupported_blocks` in the composition; Ready-for-live row fails; paper still runs in the simulator | AD-11 |
@@ -480,8 +481,8 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 
 | Seam | Adapters | Test strategy |
 | --- | --- | --- |
-| `QmbPort` | in-process `qmb.doors.api`; `qmb` CLI in a remote worker; fixture adapter (recorded CT-32) | door parity: both real adapters give byte-identical `RunOutcome` for one setup (QMB B-1 parity test reused) |
-| `KernelPort` | `python -I` subprocess (day one); the environment study's sandbox (later); in-memory fake | the same cell suite across adapters; snapshot/restore round trip |
+| `QmbPort` | engine `app_op qmb_backtest` on the `qmb` placement (default); in-process `qmb.doors.api` (PC dev fallback); fixture adapter (recorded CT-32) | door parity: both real adapters give byte-identical `RunOutcome` for one setup (QMB B-1 parity test reused) |
+| `KernelPort` | the engine's `sandbox_python` kernel in `qmx-worker` (day one); `python -I` host subprocess only for cells he saved himself, or when Docker is off; in-memory fake | the same cell suite across adapters; snapshot/restore round trip; a model-written cell refuses the host adapter |
 | `ComputePort` | the engine's `WorkerPort`/`GatewayPort` over `qmx_remote` providers; local-only fake | preflight states asserted per provider |
 | `PodCompilerPort` | `pod_book_bms`; `pod_policy_pair` (later); identity fake | every catalogue block is either placed or named unsupported; the compiled Book/BMS passes QMB's dummy check |
 | `NodePort` | node doors over the three thin doors (TN-17); fake with canned seats and MIS snapshot | the Lab test suite never needs a node |

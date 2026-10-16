@@ -2,11 +2,12 @@
 title: Harness extension packets (before the engine)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [wave1-prerequisites, decision-1-lab-self-scheduling, folder-format-one-shape, session-homes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. The harness must not be touched; the engine runs separately (ruling 24)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ The thin engine, wave 1 packet plan.
 ## Sources
 
 `20-review-b` findings 2, 4, 16, 17; `21` B2, B5; `HARNESS-PLAN.md`.
+
+## Resolution
+
+Superseded. The harness is untouched (ruling 24) except the account pool (ruling 39, engine AD-12). What remains are the harness request tickets H1-H14. (Map rewrite 2026-10-16.)

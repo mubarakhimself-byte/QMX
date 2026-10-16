@@ -2,11 +2,12 @@
 title: Account guard: no agent write path, ever
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Read-only guard idea stands, but the effect-table edit touches the harness (ruling 24) and guard facts are node depth (ruling 14)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ The unit read adapter's guard half; wave 1 packets; the node-dependent templates
 ## Sources
 
 `09-self-configuring-unit.md` §3 item 10; `19` C7; `20-review-a` finding 5; `20-review-b` finding 5; `21` A5, B5.
+
+## Resolution
+
+Resolved. The money gate stays in the harness, untouched (ruling 24; HARNESS-REQUESTS 'not requested'); engine AD-8 classes effects and no agent gets an order verb; engine AD-33 deny-lists broker windows; guard facts are node depth (ruling 14). (Map rewrite 2026-10-16.)

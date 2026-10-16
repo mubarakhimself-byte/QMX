@@ -2,11 +2,12 @@
 title: Decision 7: build order, Lab and Board first
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. No build order yet; waves dropped (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -24,3 +25,7 @@ The wave 2 pilot order and the wave 1 packet plan.
 ## Sources
 
 `19` section 1 and section 8; `20-review-a` finding 2 and rewritten decision 7; `21` A2 and the merged wave order.
+
+## Resolution
+
+Superseded. No waves (ruling 33). The build order lives in `ENGINE-PLAN.md` (ruling 84). (Map rewrite 2026-10-16.)

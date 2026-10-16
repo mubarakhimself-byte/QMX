@@ -2,11 +2,12 @@
 title: Memory scopes and lessons
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [session-homes, workflow-engine-contract, memory-candidates-facts]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 8."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -40,3 +41,7 @@ Self-improvement loop, methodology umbrella.
 ## Sources
 
 `03-workflow-engines.md` §9.3, §10 idea 10; `01-bmad.md` memory agents, idea 11; `BACKLOG.md` B40, B41, B51, B53; `05-qmx-today.md` §7; clipping "The Loop Runs While You Sleep".
+
+## Resolution
+
+Resolved. Engine AD-18 scopes and the `refs/memory/*` owners (Library ENGINE-REQUESTS-ANSWERED L1, L2). (Map rewrite 2026-10-16.)

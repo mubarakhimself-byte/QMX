@@ -2,11 +2,12 @@
 title: Evals harness for skills and workflows
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [skill-format-and-verbs, role-to-model-table]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Model-agnostic re-checks (ruling 3)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Self-improvement loop.
 ## Sources
 
 `01-bmad.md` evals, §Q5 weak spot; `02-pocock-pstack.md` eval playbook, skill-creator, §8 idea 11; `HARNESS-PLAN.md` `fake_model.py`.
+
+## Resolution
+
+Resolved. Engine AD-11 (test gate on real cheap models, ruling 51) and AD-26 (champion and challenger replay). Skill evals belong to 'QMX skill set and builder (B28)'. (Map rewrite 2026-10-16.)

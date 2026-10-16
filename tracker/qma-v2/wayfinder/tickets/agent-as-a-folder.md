@@ -2,11 +2,12 @@
 title: Agents and workflows as clean folders
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [skill-format-and-verbs, plugin-unit-and-loading]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Folders match ruling 19; study 14 has landed, fold it in."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Methodology builder, trader-agent methodology; feeds the build plan.
 ## Sources
 
 `01-bmad.md` §Q1 agent, memory agents, idea 14; `02-pocock-pstack.md` §1 sidecars, §2 layout; `BACKLOG.md` B32, B52; `12` sections (b), (c); correction E.
+
+## Resolution
+
+Resolved. Engine AD-2 (one `qmx.workflow/1` format; a single agent is a workflow, ruling 44) and AD-19 (a mini app is a pack); the folder is fetched by object id (Library ENGINE-REQUESTS-ANSWERED L8). (Map rewrite 2026-10-16.)

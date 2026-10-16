@@ -2,11 +2,12 @@
 title: Send a long workflow to the server
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [workflow-engine-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Now required: server or cloud as well as local (ruling 25)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Feeds the build plan after B44.
 ## Sources
 
 `BACKLOG.md` B44, B46; `05-qmx-today.md` §2 remote runs; `03-workflow-engines.md` §9.5; correction 7.
+
+## Resolution
+
+Resolved. Engine AD-20 (workers and placement), AD-25 (harness outside the sandbox) and AD-30 (Contabo always-on; burst provider-neutral); ruling 74. (Map rewrite 2026-10-16.)

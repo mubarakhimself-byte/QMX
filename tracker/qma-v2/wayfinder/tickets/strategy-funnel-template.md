@@ -2,11 +2,12 @@
 title: Strategy funnel template
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, strategy-pipeline-gates]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Becomes an engine configuration with a plain name (rulings 22, 35) ending at paper (ruling 29); not template one."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ First templates (the rest of the set), build plan.
 ## Sources
 
 `08-strategy-funnel-lineage.md` §1e, §3, §4; `11-references.md` T3; `12` section (d); corrections 9 and I.
+
+## Resolution
+
+Superseded. A template on the one engine ending at paper (rulings 22, 29; Lab AD-4, AD-12). It is in the `ENGINE-PLAN.md` template pack. (Map rewrite 2026-10-16.)

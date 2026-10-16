@@ -9,6 +9,12 @@ created: 2026-10-16
 rubric: "KEEP. Ruling 7."
 ---
 
+## Rewrite (2026-10-16, map rewrite)
+
+Still open; no architecture covers it (ruling 7). It meets 'MCP apps (B16)' at the chat surface. Handled with the methodology tomorrow (ruling 82).
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
+
 ## Question
 
 How every agent output becomes an animated, interactive explainer document that renders in the QMX UI, including what the agent did, so he never reads a block of text; and what chat widgets and preview modes the UI needs for it.

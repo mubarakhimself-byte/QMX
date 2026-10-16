@@ -2,11 +2,12 @@
 title: Research harness design
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [workflow-engine-contract, role-to-model-table]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. The shape stands; drop per-run dollar budgets (ruling 27) and make it an engine configuration (ruling 22)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ First templates, build plan.
 ## Sources
 
 `11-references.md` §1, §2, T2, T4; `05-qmx-today.md` §7; `03-workflow-engines.md` §9; `12` section (d).
+
+## Resolution
+
+Superseded. A template on the one engine (rulings 22, 83). The template pack is in `ENGINE-PLAN.md`. (Map rewrite 2026-10-16.)

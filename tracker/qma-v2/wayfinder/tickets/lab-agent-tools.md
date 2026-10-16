@@ -2,11 +2,12 @@
 title: Lab pack: tools for total creative freedom
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [autonomy-policy, capability-packs]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. The Lab is the core (ruling 6); check the tool list against study 23."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Lab overnight loop; Experimentation Board.
 ## Sources
 
 `05-qmx-today.md` §2, gap 8; `10-ui-depth.md` §1; `02-pocock-pstack.md` ml4t research-operator; memory `qmx-ui-rebuild`; correction 4.
+
+## Resolution
+
+Resolved. Lab AD-14 (the Lab copilot's 17 tools ship as a plugin with Effects) and AD-3 (closed Lab node pack). (Map rewrite 2026-10-16.)

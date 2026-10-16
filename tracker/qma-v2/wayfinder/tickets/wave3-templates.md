@@ -2,11 +2,12 @@
 title: Wave 3 templates (the rest of the catalogue)
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [first-templates, research-harness-design, methodology-builder, shared-blocks-catalogue, qmb-door]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Waves dropped; templates become engine configurations (rulings 22, 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Wave 4 templates.
 ## Sources
 
 `19` sections 7, 8; `15`, `16`, `17` template cards and their pilot-order answers.
+
+## Resolution
+
+Superseded. Waves dropped (ruling 33); templates are engine configurations (rulings 22, 48). See the `ENGINE-PLAN.md` template pack. (Map rewrite 2026-10-16.)

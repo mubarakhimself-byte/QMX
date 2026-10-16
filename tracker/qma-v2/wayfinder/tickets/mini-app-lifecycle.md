@@ -2,11 +2,12 @@
 title: Mini-app lifecycle: archive, DevOps, Lab dependency
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [plugin-unit-and-loading, skill-format-and-verbs, mini-app-data-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches ruling 9; align creation with workflows (ruling 23) and archive with DEC-0443 (26 section E)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Build plan.
 ## Sources
 
 `05-qmx-today.md` §1; `10-ui-depth.md` §5, §6 mismatches 10 and 11; `BACKLOG.md` B23, B16, B42; `12` section (g); correction 3.
+
+## Resolution
+
+Resolved. Engine AD-11 and AD-19 (same create, test, publish flow as workflows, ruling 23) and Library AD-6 (archive, never delete, ruling 9). (Map rewrite 2026-10-16.)

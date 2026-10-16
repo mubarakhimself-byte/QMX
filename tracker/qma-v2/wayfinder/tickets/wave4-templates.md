@@ -2,11 +2,12 @@
 title: Wave 4 templates (node-dependent, Docker apps, server, cloud browser)
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [wave3-templates, mini-app-lifecycle, app-check-command, risk-sizing-session-outcome, send-workflow-to-server, feasibility-probes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Waves dropped (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Nothing; it is the last wave before the build plan closes.
 ## Sources
 
 `19` sections 8, 11; `17` D7-D9, P1-P4; `13` §2; `18` recommended stack.
+
+## Resolution
+
+Superseded. Waves dropped (ruling 33); node-dependent work waits on the risk session (ruling 14). See `ENGINE-PLAN.md`. (Map rewrite 2026-10-16.)

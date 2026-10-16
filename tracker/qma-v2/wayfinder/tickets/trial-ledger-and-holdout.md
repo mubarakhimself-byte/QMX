@@ -2,11 +2,12 @@
 title: Trial ledger, sealed holdout and live cost model (C9)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Ledger and holdout stand; the live cost model from T9 is node depth (ruling 14) and the wave wording is stale (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 2 pilot templates (B, L1, D2, D3, RK4), the overnight Lab loop, variants an
 ## Sources
 
 `17-templates-dev-pm-lab.md` D2, D3, §family-ledger, §holdout-touch, §What the Lab backend must provide; `16-templates-trader-risk.md` §4.4, T9; `05-qmx-today.md` §4 QMB ledger; `19` C9.
+
+## Resolution
+
+Resolved. Lab AD-6: families, trials and holdouts are Library edges; the holdout is touched once per family. The live cost model is node depth (ruling 14). (Map rewrite 2026-10-16.)

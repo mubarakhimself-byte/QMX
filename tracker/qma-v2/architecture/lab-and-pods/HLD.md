@@ -39,7 +39,7 @@ Companion to `ARCHITECTURE-SPINE.md` (the invariants). This file carries the sha
 | Candidate | Verdict |
 | --- | --- |
 | Node-paper only (Book-level demo routing, DEC-0261/0275) | alone it cannot show the Paper bench, which soaks a pod version before any card exists |
-| A Lab paper run as an engine run on live prices with a paper ledger, node adapter later (**chosen**) | ruling 29: the line ends at paper; the ledger needs no venue; demo accounts arrive through the node |
+| A Lab paper run as engine runs on live prices with a paper ledger, node adapter later (**chosen**); one finite run per trading day chained by `continuity` (27c: a week-long single run broke the engine's finite-run rule) | ruling 29: the line ends at paper; the ledger needs no venue; demo accounts arrive through the node |
 | QMA-paper | dead (DEC-0275) |
 
 ## 3. Components
@@ -124,7 +124,7 @@ flowchart LR
   PD --> SV[save → pod version]
   SV --> PT[pod-test run: sim · stress · fan · head to head · mix]
   PT --> PR[(pod results, interventions)]
-  SV --> PP[send to paper: paper run on live prices, server ledger]
+  SV --> PP[send to paper, his one yes: daily paper runs on live prices, server ledger]
   PP --> DEC[(paper-run: decisions, band, checks)]
   DEC --> CARD[promote → NodePort.mint_promotion_card]
   CARD --> PF[Portfolio: sign, then activate — two human clicks]
@@ -168,7 +168,7 @@ Every Lab noun is a Library kind already in the roster **[retrieved library AD-3
 | Agents panel with live sub-agent progress and machine | the harness gives start and end only; engine spans give per-node state | **defer** the live last line; show spans now |
 | "Build your own" robustness check and "Your own" measure by describing it | needs a component built and tested first | **keep** as the D1/D5 template path (tests first), not a free-text formula |
 | Head-to-head trophy noise band, luck share | definable from the fan and the trade list | **keep**; formulas in LLD section 5.2 |
-| Training on a notebook runtime (Colab) with live curves | kernel adapter not chosen (ruling 53) | **defer** the adapter; the port and the `metric` events are fixed |
+| Training on a notebook runtime (Colab) with live curves | Colab is not a provider; the kernel is the engine's `sandbox_python` (27c, AD-9) | **defer** Colab; the port and the `metric` events are fixed |
 | Portfolio Pod panel's "Workflow" sizing method | a sizer block of kind `graph` already covers it | **keep**; the Portfolio method chips map to the sizer block kinds (form = Simple rules / Book+BMS, model, graph = Workflow, hybrid = model under a form ceiling) |
 | MIS labelers built in the Lab and promoted in Portfolio | the node's shadow lane is designed, not wired (TN-19) | **keep** the path through `NodePort`; promote stays MANAGE |
 | "Explain it as" diagram or video of a result | output-layer design (engine Deferred) | **defer**; `explain()` returns text plus a diagram spec the tier-1 catalog can draw |

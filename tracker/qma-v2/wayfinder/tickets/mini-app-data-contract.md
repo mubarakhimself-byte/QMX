@@ -2,11 +2,12 @@
 title: Mini-app data contract
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [plugin-unit-and-loading]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches ruling 9."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Mini-app lifecycle; build plan.
 ## Sources
 
 `05-qmx-today.md` §1 runtime and manifest; `12` section (h); `03-workflow-engines.md` §9.3 cross-workflow data; corrections G, 3.
+
+## Resolution
+
+Resolved. Engine AD-19: a mini app is a pack (ruling 10); apps meet only at declared edges. (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Combined-session pilot (wave 2)
 type: prototype
 mode: HITL
-status: open
+status: closed
 blocked_by: [session-homes, capability-packs, harness-extensions]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Wave 2 pilot that waits on harness extensions (rulings 24, 33); the idea lives in session-homes and capability-packs."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 3.
 ## Sources
 
 `19` C3 and section 8; `20-review-a` finding 12; `21` A11.
+
+## Resolution
+
+Superseded. A wave pilot behind harness extensions (rulings 24, 33). The combined-session idea lives in 'Session homes'. (Map rewrite 2026-10-16.)

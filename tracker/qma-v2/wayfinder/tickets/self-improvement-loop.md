@@ -2,11 +2,12 @@
 title: Self-improvement loop
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [memory-scopes-and-lessons, skill-format-and-verbs, evals-harness, methodology-builder]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Backlog B41."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Nothing on this map; feeds H2 of the build plan.
 ## Sources
 
 `BACKLOG.md` B41, B53; `05-qmx-today.md` §7 lessons; `02-pocock-pstack.md` retro, correct, §8 idea 12; `03-workflow-engines.md` §5 loop levels, §10 idea 15.
+
+## Resolution
+
+Resolved. Engine AD-26 (champion and challenger, replayed, auto-rolled back) and ruling 79. The default rule is 'Engine OPEN-6: default self-improvement rule'. (Map rewrite 2026-10-16.)

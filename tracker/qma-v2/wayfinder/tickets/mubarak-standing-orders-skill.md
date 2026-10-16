@@ -9,6 +9,12 @@ created: 2026-10-16
 rubric: "KEEP. When written, use rulings 26-27, not the one-account and spend rules."
 ---
 
+## Rewrite (2026-10-16, map rewrite)
+
+Still open (AFK). Write it from rulings 1-84, not from the one-account and spend rules. It feeds 'System-prompt design (B29)'.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
+
 ## Question
 
 In one line: a short list of how Mubarak likes things done, loaded into every agent and pasted into every brief, so he never has to repeat himself.

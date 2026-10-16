@@ -1,6 +1,6 @@
 # Wayfinder tracker (local Markdown)
 
-This folder is the issue tracker for the QMX methodology map. It follows the Wayfinder skill (`~/.agents/skills/wayfinder/SKILL.md`) using its local-markdown fallback, because the operator asked for no GitHub issues.
+This folder is the issue tracker for the QMX methodology and agent system map. It follows the Wayfinder skill (`~/.agents/skills/wayfinder/SKILL.md`) using its local-markdown fallback, because the operator asked for no GitHub issues.
 
 ## Wayfinding operations
 
@@ -34,5 +34,9 @@ status: open            # open | closed
 blocked_by: []          # ticket slugs
 claimed_by: ""
 created: 2026-10-16
+closed: 2026-10-16      # only when status is closed
+owner: harness owner    # optional; who answers it when not the operator
 ---
 ```
+
+Build PRs are not tickets. They live in `../ENGINE-PLAN.md`; tickets link to it.

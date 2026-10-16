@@ -1,13 +1,19 @@
 ---
-title: System-prompt design
+title: System-prompt design (B29)
 type: grilling
 mode: HITL
 status: open
-blocked_by: [copilot-roster-and-freedom, role-to-model-table, session-homes, mubarak-standing-orders-skill]
+blocked_by: [copilot-roster-and-freedom, trader-agent-methodology, mubarak-standing-orders-skill, session-homes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. B29 was missed today (26 section C); still owed."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+B29 was missed on 10-16 (26 section C) and is handled tomorrow (ruling 82). Question: how prompts are derived from the methodology (the five-layer design of research 31; XML meta prompts he asked about) for copilots and engine agent nodes, without editing the harness's verbatim prompts (ruling 24). Recommended answer: prompts are compiled from the methodology tables plus the standing-orders skill and passed as the agent node's or chat's appended prompt.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

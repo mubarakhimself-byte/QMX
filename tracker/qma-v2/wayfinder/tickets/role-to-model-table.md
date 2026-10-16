@@ -2,11 +2,12 @@
 title: Model tiers and reviewer settings (assumption A5; spec)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [decision-3-spend-number]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Blocked on superseded decision 3 (ruling 27); add accounts and the load balancer (ruling 26)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ First templates, research harness design, evals harness, system-prompt design, m
 ## Sources
 
 `02-pocock-pstack.md` setup-pstack; `HARNESS-PLAN.md` HP7, HP12, HP13, HP16; `BACKLOG.md` B35; `UI-NOTES.md` §6; corrections 7, H.
+
+## Resolution
+
+Resolved. Engine AD-13 (roles map to models in Settings, ruling 15) and AD-12 (account pool and load balancer). (Map rewrite 2026-10-16.)

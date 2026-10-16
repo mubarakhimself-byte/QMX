@@ -2,11 +2,12 @@
 title: QMX Browser, broker and leases (C6)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [decision-4-browser-first-step, feasibility-probes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Ruling 30 wants the plan and user journeys explained first; wave 3 wording is stale (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -40,3 +41,7 @@ Wave 3 templates (RS4 at B3), the funnel's capture stage, trader-agent trials la
 ## Sources
 
 `14-folders-miniapps-browser.md` §3; `18-browser-harnesses.md`; `BACKLOG.md` B17, B17a, B38; `19` C6; corrections 9 and K.
+
+## Resolution
+
+Superseded. Engine AD-33 (Cua as an optional pack with a bounded manifest) replaces C6. Ruling 30's plan and journeys are owed in 'Browser and computer-use plan and journeys'. (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Unit read adapter and account-guard reader (C7)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. The unit.tighten write and direction table are node depth (ruling 14, removed by 21); keep only read-only facts."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 2 pilot templates (P2, T1, RK1, T5, T9), the Portfolio watcher, the trader-
 ## Sources
 
 `16-templates-trader-risk.md` §4.1, §4.2, §4.6; `09-self-configuring-unit.md` §2, §3; `05-qmx-today.md` §5; `19` C7.
+
+## Resolution
+
+Resolved. Lab AD-11: a pod reaches trading only through `PodCompilerPort` and `NodePort`. Unit internals belong to the risk session (ruling 14). (Map rewrite 2026-10-16.)

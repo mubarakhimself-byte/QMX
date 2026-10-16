@@ -2,11 +2,12 @@
 title: Capability packs across homes
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [session-homes, plugin-unit-and-loading]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches rulings 12-13; packs are fixed at launch (20b finding 16), so adding one is a relaunch."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Lab agent tools, portfolio copilot purpose, system-prompt design, methodology um
 ## Sources
 
 `12` section (b); `10-ui-depth.md` §3 message aim and reach; `05-qmx-today.md` §6; corrections F, G.
+
+## Resolution
+
+Resolved. Engine AD-33 (`qmx_engine.packs`, loaded by node scope) and Lab AD-14 (the Lab copilot pack is a plugin with Effects). Packs are fixed at launch (20b finding 16). (Map rewrite 2026-10-16.)

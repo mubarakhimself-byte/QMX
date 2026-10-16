@@ -41,7 +41,7 @@ For each of the ten kinds, read records through the QMB B-15 as-of port **[retri
 ## Step 4 — Import app artifacts and remote run folders
 
 - `qmx_apps` `artifacts.db` rows → `artifact` objects, `produced-by → mini-app-instance`, `fields.output`, `fields.definition_hash`; the `provides` JSON schema becomes a `component` object the artifact `instance-of`s.
-- Each `runs/<id>/manifest.json` on the bucket → one `workflow-run` object (status from the manifest) + one `artifact` per listed blob, blobs copied by hash; `ran-on → setup(target)`.
+- Each `runs/<id>/manifest.json` on the bucket → one `workflow-run` object (status from the manifest) + one `artifact` per listed blob, blobs copied by hash; the manifest's target becomes the run's placement fields (engine L14).
 - App definitions (`app.toml` folders) → `mini-app` objects with the folder as a `tar` blob and the manifest fields parsed.
 
 ## Step 5 — Dual run (one to two weeks)
@@ -71,7 +71,7 @@ A config change with a procedure, not a build. Preconditions: step 7 done, repli
 
 1. Announce in the UI: "Library moving to the server; saves pause for a few minutes." The engine finishes or parks in-flight local runs.
 2. Quiesce the PC writer (`qmx_control` refuses `put/merge/annotate` with `primary_moving`); reads keep working.
-3. Push until the PC and Hub ref logs are byte-equal for every PC-owned ref (`main`, `refs/variants/*`, `refs/items/*/state`, `refs/memory/home/*`, `refs/memory/operator`, local `refs/agents/*` and `refs/runs/*`). Verify with the same count-and-head check as the restore drill.
+3. Push until the PC and Hub ref logs are byte-equal for every PC-owned ref (`main`, `refs/drafts/*`, `refs/variants/*`, `refs/items/*/state`, `refs/memory/home/*`, `refs/memory/operator`, local `refs/agents/*` and `refs/runs/*`). Verify with the same count-and-head check as the restore drill.
 4. Flip `[library] primary = server` on the PC and `primary = server` in `hub.toml`; the owner table (AD-7, AD-11) is read from that key, so no code changes.
 5. Restart both. The PC store is now a replica plus hot-blob cache plus checkout working copy; its `put`s go to the Hub over the tailnet; `refs/agents/*` for PC chats are minted on the Hub from now on.
 6. Verify: a chat edit, a UI save and a local run all land on the Hub and mirror back to the PC; the doctor page shows `primary: server`.

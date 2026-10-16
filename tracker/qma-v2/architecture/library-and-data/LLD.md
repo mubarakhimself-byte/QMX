@@ -104,7 +104,7 @@ The v1 roster and the mapping from today's stores:
 | `memory-row` | new (engine L1, file 28) | identity `scope, tag, intent_key?, when_to_use, content, refs[]`; annotations `keywords, confidence, f, u, source_run_ids, learned_at, occurred_at`; lives on `refs/runs/*` then `refs/memory/*` |
 | `agent-tool` | new (engine L4) | blob `tools/<name>.py` + schema; field `review ∈ unreviewed | reviewed`; `made-by`, `used-by → workflow-run` |
 | `model` | UI models; model files (Lab AD-7) | blobs `weights`, `card`; fields dataset fp, CT-12 split fp, purge/embargo, metrics, features; versions are objects; `ml.plug` mints a new owner version with `uses → model` |
-| `workflow`, `workflow-run` | nothing today (`workflows_*` return 501) | engine contract; `workflow` carries `fields.publish ∈ auto|hold` (AD-18) and `fields.placement`; run status chain per AD-15 |
+| `workflow`, `workflow-run` | nothing today (`workflows_*` return 501) | engine contract; `workflow` carries `fields.publish ∈ auto|hold` (AD-18), `fields.content_hash` (the engine's definition hash; "tested" keys on it, AD-15) and a `semver` annotation; the schedule's store comes from the trigger's `home_engine` (AD-7), never a field; a workflow template is a published version tagged `template`; `workflow-run` carries `mode: live | test`, a status chain from the shared table (AD-15) and the placement fields `placement, agent_mode, health, cost_machine_minutes, link_out` (engine L14) |
 | `mini-app`, `mini-app-instance` | `qmx_apps` definitions and instances; UI Apps + Library apps | the plugin folder of research file 14 §2.5 (`.claude-plugin/plugin.json`, `app.toml`, skills, `.mcp.json`, widgets, tests, evals) is one `bundle.tar` blob plus parsed manifest fields; file 14's `pending/` agent edits are an agent branch + merge (AD-7); semver + content hash = the object's `fp1` |
 | `skill`, `methodology` | QMX plugin `skills/`; BMad/pstack re-hosted | SKILL.md as blob |
 | `source` | Library B `article` (Firecrawl, MQL5); registry `source-observation`; videos, papers | `fields.url`, `fields.fetched_date`; transcript blob |
@@ -113,9 +113,9 @@ The v1 roster and the mapping from today's stores:
 | `test-report`, `paper-run`, `stress-scenario` | UI Proof shelves; QMB ledger roles | |
 | `dataset` | registry `split-manifest` (CT-12); UI Data; file 30 §4a | a **card**: `source, instruments[], window, world, split_fp, licence, partition_digests[]`; points at qmf-data rooms or `qmx-marketdata`, never copies Parquet; results carry `consumed → dataset`; a sealed holdout card is what a run `touched` |
 | `backtest-result` evidence fields | QMB ledger line (Lab AD-5) | `world, claim_class, role, fidelity, provenance` copied verbatim; `governed_fp1` cites the CT-32 artifact; a trial in its family is any object reached over `variant-of | branches-from | derived-from` from the family root (Lab AD-6), never a stored counter |
-| a "draft" | Lab AD-2, AD-10 | **not a kind**: `fields.stage = draft` on an object on `main` or an agent ref; a notebook is a `board` (Lab AD-9) |
-| `setup` | registry `experiment-spec` (CT-47); UI Saved setups; machine descriptors | |
-| `template` | UI Templates (26 hand-written) | `instantiates` kind |
+| a "draft" | Lab AD-2, AD-10 | **not a kind**: the head of `refs/drafts/<item>` (his) or `refs/agents/<session_id>/<item>` (an agent's), never on `main`, which holds published versions only (AD-7); a notebook is a `board` (Lab AD-9) |
+| `setup` | registry `experiment-spec` (CT-47); UI Saved setups | CT-47 backtest spec only; a run's placement is a field set on `workflow-run` (engine L14) |
+| `template` | UI Templates (26 hand-written) | `instantiates` kind; non-workflow templates only (a workflow template is a published `workflow` version tagged `template`, AD-3) |
 | `board` | the Experimentation Board (ruling 31) | layout + notes + selected subgraph |
 | `collection` | UI collections (localStorage today) | list of item ids |
 | `merge-conflict` | new | both sides + diff |
@@ -187,7 +187,7 @@ class LibraryPort(Protocol):
     def relate(self, edge: EdgeDraft) -> EdgeId: ...
     def branch(self, item: ItemRef, *, from_ref: str, name: str) -> RefView: ...
     def merge(self, item: ItemRef, *, from_ref: str, into: str, strategy: str = "auto",
-              expected_head: ObjectId | None = None) -> MergeResult: ...   # MANAGE when into=main and kind governed
+              expected_head: ObjectId | None = None) -> MergeResult: ...   # MANAGE when into=main and the kind is governed or a lifecycle kind (publishing)
     def checkout(self, item: ItemRef, ref: str) -> Path: ...
     def commit(self, checkout: Path, message: str, *, expected_head: ObjectId | None = None) -> Commit: ...
     def annotate(self, object_id: ObjectId, fields: dict[str, object]) -> None: ...   # only annotation fields the kind accepts; no new version
@@ -199,7 +199,7 @@ Value types (all frozen): `ItemRef = item_id | ("kind", slug)`, `Draft = {kind, 
 
 Typed refusal codes (closed): `unknown_kind`, `schema_invalid`, `unknown_relation`, `stale_head`, `ref_not_owned`, `not_found`, `corrupt_blob`, `collision`, `blob_unavailable` (no tier has it), `blob_expired` (transient, past retention), `merge_conflict`, `archived`, `token_scope`, `storage_failure`, `invalid_search`, `primary_moving` (during a cut-over, MIGRATION step 8), `annotation_not_accepted`.
 
-Invariants a caller must know (the interface, per the codebase-design skill): `put` never mutates; `on` must be a ref the caller's principal owns; `expected_head=None` is allowed only on a brand-new item; `get(blobs="fetch")` may take network time and may refuse `blob_unavailable`; `search` hides archived items unless asked; `merge` into `main` of a governed kind asks (MANAGE).
+Invariants a caller must know (the interface, per the codebase-design skill): `put` never mutates; `on` must be a ref the caller's principal owns; `expected_head=None` is allowed only on a brand-new item; `get(blobs="fetch")` may take network time and may refuse `blob_unavailable`; `search` hides archived items unless asked; `merge` into `main` of a governed or lifecycle kind asks (MANAGE): that is publishing (ruling 80); a merge into `refs/drafts/<item>` does not ask.
 
 ### MCP tools on the control door **[inferred, extends the existing rows]**
 
@@ -223,7 +223,7 @@ Invariants a caller must know (the interface, per the codebase-design skill): `p
 
 Engine-side principals (`engine:<store>`) do not go through the MCP tool table; the engine holds the in-process `LibraryPort` on its store and the HTTPS adapter to the Hub, authenticated by the engine service credential, and is bound by the same owner table (AD-7).
 
-The harness table `AGENT_OPERATIONS` in `qma/harness/tools.py` **[retrieved]** gains these rows; nothing else in the harness changes (ruling 24; ruling 39's exception is for the load balancer, not needed here).
+The harness table `AGENT_OPERATIONS` in `qma/harness/tools.py` **[retrieved]** gains these rows. Adding rows is still a harness change that no ruling grants (ruling 24; ruling 39's exception is for the load balancer only), so these rows are part of engine HARNESS-REQUESTS H17 and need his grant. Until then the existing rows `library_search`, `library_get`, `library_save`, `library_versions`, `library_links` and `library_link` keep their names and Effects and are re-pointed at `qmx_library` in `qmx_control` (no harness change); the new verbs wait.
 
 ## 8. Sequences
 
@@ -257,12 +257,12 @@ Steps 4–5 run under the writer's lock (one process, one `RLock`, `BEGIN IMMEDI
 
 ### 8d. Remote run lifecycle
 
-1. PC `runs_start_remote(bundle)`: push the referenced objects, mint the run token, start the provider (existing `ComputeProvider`), keys over stdin.
+1. PC `runs_start_remote(bundle)`: push the referenced objects, mint the run pass (engine AD-28), start the provider (existing `ComputeProvider`) with `secrets = {QMX_RUN_PASS}` only; no provider key; model calls go to the relay named by the pass (`relay_url`, the central relay on Contabo for non-owned placements).
 2. Sidecar boots: validates it can reach the hub, writes `runs/<id>/heartbeat` every 10 s, opens log/trace streams.
 3. The engine or agent inside the run uses the HTTPS adapter of `LibraryPort` with the token; writes land on `refs/runs/<id>`.
 4. Node boundary: sidecar flushes checkpoints and `put`s a new `workflow-run` object (parents = previous status object).
-5. End: final `workflow-run` object (`passed|failed|stopped`); sidecar scrubs env and secrets; provider teardown.
-6. PC later pulls; OPEN-6 policy fast-forwards or queues the run's objects for review.
+5. End: final `workflow-run` object (status `passed | failed | stopped | interrupted` from the shared table, `mode` unchanged); sidecar scrubs env and the pass; provider teardown.
+6. PC later pulls; AD-18 fast-forwards a passed live run's objects into `main` and lands lifecycle kinds on `refs/drafts/<item>`; nothing is queued for review.
 
 ## 9. Hub API (HTTPS, versioned)
 
@@ -278,9 +278,9 @@ Steps 4–5 run under the writer's lock (one process, one `RLock`, `BEGIN IMMEDI
 | POST | `/v1/runs/<id>/heartbeat`, `/logs`, `/traces`, `/checkpoints/<name>` | that run's token | runs sink |
 | GET | `/v1/runs/<id>/logs?tail=` | pairing | PC and UI live tail |
 | GET | `/v1/healthz` | none (loopback and tailnet only) or pairing | hub self-check: store writable, replication lag, bucket push age, disk free |
-| POST | `/v1/refs/adopt` | operator (pairing + explicit flag) | the FM-16 recovery; never called by a run token |
+| POST | `/v1/refs/adopt` | operator (pairing + explicit flag) | the FM-16 recovery; never called by a run pass |
 
-Token: compact JWS signed with the PC-server pairing key (Ed25519), claims as in AD-12, `exp` = run timeout + grace. The hub keeps a revocation list keyed by `run_id` so `runs_stop` cuts access at once.
+Run pass: compact JWS signed with the pairing key (Ed25519), claims as in AD-12 (engine AD-28's pass), `exp` = attempt timeout, at most 1 h, renewed by the sidecar heartbeat. The hub verifies by signature and pulls the signed revocation list each sync, so `runs_stop` or a stolen-pass alarm cuts access within one sync.
 
 ## 10. Backups and drills (concrete)
 
@@ -307,7 +307,7 @@ The weekly GitHub snapshot (`qmx_control/backup.py`) drops `library.db` from `DA
 | FM-7 | blob missing everywhere | `blob_unavailable`; object still readable; alarm | AD-10 |
 | FM-8 | manifest hash mismatch on read | `corrupt_blob`; fetch from another tier; alarm | AD-2 |
 | FM-9 | catalog.db corrupt | delete and `rebuild_indexes()` | AD-5 |
-| FM-10 | kind schema changes incompatibly | new `schema_version`; old objects still validate against their stamped version; a migration mints new objects with `supersedes` | AD-3 |
+| FM-10 | kind schema changes incompatibly | new `schema_version`; old objects still validate against their stamped version; a migration mints new objects with `replaces` (the engine's `supersedes`, AD-4) | AD-3 |
 | FM-11 | an agent tries to write `main` | `ref_not_owned` | AD-7, AD-9 |
 | FM-12 | question grounds nothing | ladder refuses before any model call | AD-8 |
 | FM-13 | merge conflict never resolved | conflict object stays; item's `main` unchanged; UI badge | AD-7 |
@@ -325,12 +325,12 @@ The weekly GitHub snapshot (`qmx_control/backup.py`) drops `library.db` from `DA
 | catalog/index (internal) | — | SQLite+FTS5; the same code against `:memory:` | rebuild from fixtures, compare |
 | vectors (internal, optional) | — | sqlite-vec; `None` (disabled) | one adapter is hypothetical until the dense index ships; keep it behind a flag, not a port |
 | replication transport | rclone SFTP, rclone S3 | local directory (tests) | the existing `ResultsStore.copy` local-vs-rclone branch **[retrieved]** is the pattern |
-| hub auth | pairing key, run tokens | test keys | token claims unit-tested; `token_scope` refusals asserted |
+| hub auth | pairing key, run passes | test keys | pass claims unit-tested; `token_scope` refusals and revocation-list refusals asserted |
 | text extraction | per media type | pure functions | golden files |
 
 Deletion test: remove `qmx_library` and the complexity reappears in the UI (15 shelf builders), the control service (library_* rows), the engine (a definition store), the hub (a second object model) and the migrator. It earns its depth.
 
-## 13. Interaction with the harness (unchanged, ruling 24)
+## 13. Interaction with the harness (table rows only, engine HARNESS-REQUESTS H17, his grant)
 
 - The QMX plugin gains one skill `library` describing the verbs and the citation rule; agent definitions list the `mcp__qmx__library_*` tools they may use.
 - Effects come from the table in §7; `MANAGE` asks the operator exactly as today.

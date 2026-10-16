@@ -2,11 +2,12 @@
 title: Wave 1 packet plan
 type: task
 mode: HITL
-status: open
+status: closed
 blocked_by: [decision-1-lab-self-scheduling, decision-3-spend-number, decision-5-checks-bind-agents-only, decision-7-build-order, workflow-engine-contract, plugin-unit-and-loading, session-homes, role-to-model-table, autonomy-policy, folder-format-one-shape, gate-threshold-store, trial-ledger-and-holdout, unit-read-adapter]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Waves dropped (ruling 33) and harness extensions are not allowed (ruling 24)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ The orchestrator session's dispatch of wave 1.
 ## Sources
 
 `19` section 8 wave 1; `20-review-b` finding 1; `21` B14; `HARNESS-PLAN.md`.
+
+## Resolution
+
+Superseded. Waves dropped (ruling 33) and harness extensions refused (ruling 24). The plan is `ENGINE-PLAN.md`. (Map rewrite 2026-10-16.)

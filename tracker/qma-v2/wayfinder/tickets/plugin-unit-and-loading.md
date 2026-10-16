@@ -2,11 +2,12 @@
 title: Plugins as the contract to mini apps (assumption A3; spec)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Plugins as the mini-app contract stands (ruling 10); changing the harness plugin loader conflicts with ruling 24."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -40,3 +41,7 @@ Capability packs, agent and workflow folders, mini-app lifecycle, mini-app data 
 ## Sources
 
 `05-qmx-today.md` §1 gaps 3 and 5, §6; `BACKLOG.md` B23, B31, B32; `01-bmad.md` modules; `12` sections (b), (g); corrections 2, F.
+
+## Resolution
+
+Resolved. Ruling 10 and engine AD-19: a mini app is a plugin pack. The harness plugin lock stays untouched (HARNESS-REQUESTS 'not requested'). (Map rewrite 2026-10-16.)

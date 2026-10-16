@@ -3,11 +3,17 @@ title: Portfolio: watcher plus scripts and templates
 type: grilling
 mode: HITL
 status: open
-blocked_by: [capability-packs, risk-sizing-session-outcome, account-guard-lockout]
+blocked_by: [risk-sizing-session-outcome]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Portfolio is human-driven (ruling 13); its purpose is still being rethought (ruling 5)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Still open; no architecture covers it. Ruling 5 says its purpose is being rethought; ruling 13 says Portfolio is human-driven. Re-blocked on the risk session only (the old blockers are closed). Lab AD-12 fixes one edge: signing and activation stay as Portfolio's two clicks.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

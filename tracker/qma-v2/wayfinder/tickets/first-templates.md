@@ -2,11 +2,12 @@
 title: Wave 2 pilot templates
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [wave1-packets, harness-extensions, decision-2-strats-promotion-notify, decision-6-board-on-backend, output-methodology, session-homes, capability-packs, memory-scopes-and-lessons, triggers-and-scheduler, pause-at-cap, night-planner, shared-blocks-catalogue, experimentation-board-vibe-coding, minimal-workflow-builder, combined-session-pilot]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Wave 2 pilots of hand-built templates; one engine with templates as configs, no waves (rulings 22, 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -41,3 +42,7 @@ Wave 3 templates, the waves 2-4 packet plans.
 ## Sources
 
 `19` section 8; `21` merged wave order; `20-review-b` finding 26 (the hidden edges, now wired).
+
+## Resolution
+
+Superseded. Templates are configurations of the one engine and ship as working fillers (rulings 22, 48, 83). The template pack is in `ENGINE-PLAN.md`. (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Gate and threshold store, read-only to agents (C8)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Still needed; only the wave wording is stale (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 2 pilot templates (RK4, B, L1), the overnight Lab loop, the trader-agent me
 ## Sources
 
 `16-templates-trader-risk.md` RK4, §4.5; `17-templates-dev-pm-lab.md` §Gates and settings; `19` C8 and section 9; clipping "The Loop Runs While You Sleep".
+
+## Resolution
+
+Resolved. Lab AD-13: thresholds are Settings data bound to the draft hash; an agent may tighten, never loosen. Engine SettingsPort (SOLUTION-DESIGN 8.3) and section 17 defaults. (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Library read contract for agents
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Rewrite against ruling 28 and study 24 (one Library replacing two); drop Strats and the Strats-session hand-off."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Nothing on the map directly. Feeds the Lab tools, memory scopes, first templates
 ## Sources
 
 `05-qmx-today.md` §4; clipping "Structuring 40 Million Documents into an Agentic Knowledge Graph"; `BACKLOG.md` B8, B18.
+
+## Resolution
+
+Resolved. Library AD-9 (one port, eleven verbs) and AD-15 (the engine uses the port only). One Library replaces both hp17 Libraries (`MIGRATION.md`). (Map rewrite 2026-10-16.)

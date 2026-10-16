@@ -17,3 +17,7 @@ The docs on `main` ban "STRATS" as product language; the operator calls the Libr
 ## Resolution
 
 Not a decision for him: it is already his word ("strats S T R A T", BACKLOG B8), so asking again would re-ask a settled point (`20-review-a` finding 6; `21` A6). Recorded as Claude's assumption A10 in `19`: Strats is the product name, the docs ban is lifted, and the glossary and ADR-0023 are corrected in the next docs change-mode pass. Closed so it leaves the frontier.
+
+## Correction (2026-10-16, map rewrite)
+
+The resolution above is wrong. Strats is out of scope; the Library inside QMX stores everything (ruling 28, Library AD-1).

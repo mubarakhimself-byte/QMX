@@ -2,11 +2,12 @@
 title: Lab overnight loop
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [loop-spec, strategy-pipeline-gates, lab-agent-tools, strategy-funnel-template, feasibility-probes, night-planner]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Becomes a configuration of the one engine, not template one (ruling 22); the per-night usage budget and night-planner block are stale (rulings 26-27)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Feeds first templates and the build plan.
 ## Sources
 
 `02-pocock-pstack.md` hillclimb, §8 idea 5; clipping "The Loop Runs While You Sleep"; `06` §3.1 and the storyboard.
+
+## Resolution
+
+Resolved. Lab AD-4: every Lab procedure is a template on the one engine. Enabling Lab schedules is 'Lab OPEN-5'. (Map rewrite 2026-10-16.)

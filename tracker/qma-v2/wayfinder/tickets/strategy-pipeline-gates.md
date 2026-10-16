@@ -2,11 +2,12 @@
 title: Strategy pipeline and gate defaults (assumption A7; spec)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [decision-5-checks-bind-agents-only]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Gates stand; numbers stay editable defaults."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -43,3 +44,7 @@ First templates, trader-agent methodology, Lab overnight loop, methodology umbre
 ## Sources
 
 `02-pocock-pstack.md` §3 ml4t, §8 ideas 4 and 5; clippings "The Loop Runs While You Sleep" and "Why a Portfolio of Trading Strategies"; `05-qmx-today.md` §4 memo key, §2 QMB gates; memory `qmx-operator-standing-rules` (sizing authority).
+
+## Resolution
+
+Resolved. Lab AD-5 (QMB door), AD-6 (families, trials and holdouts as Library edges), AD-12 (paper ends the line) and AD-13 (editable thresholds). Whether he may drop a check stays in 'Decision 5'. (Map rewrite 2026-10-16.)

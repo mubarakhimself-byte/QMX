@@ -2,6 +2,14 @@
 
 The lead re-walked the whole session, from the morning backlog through the resets, at the operator's request (ruling 72). Read this file first next time, then `26` (the rulings, which outrank everything else).
 
+**Updated 2026-10-16, night (after 27d).** Current truth, in short:
+- Rulings run **1-88** (file 26, sections A-J). Ruling 88: gaps go back into the architectures first.
+- The HP stack is **merged into `rebuild/base`** at `ed704c92`. The old blocker "the HP stack is unmerged" is gone.
+- The three architectures were amended through **27c** (gap fixes from the final rubric walk `27b-final-rubric-walk.md`) and **27d** (the independent fix-check `27d-fix-check.md`). The applied record is `27c-gap-fixes-applied.md`, including its §"27d applied".
+- `ENGINE-PLAN.md` (the engine build plan, packets EP0-EP14, TP1-TP4, DP1) and `PROMPT-ENGINE.md` (its start prompt) exist at the root of `tracker/qma-v2/`.
+- The superseded drafts 06, 07, 12, 19, 20a, 20b, 21 and 22 are archived in `archive/2026-10-16-methodology-drafts/`.
+- The Wayfinder map was rewritten (`wayfinder/REWRITE-NOTES.md`), and the tickets resolved by 27c and 27d are closed.
+
 ## 1. The day in one line each
 
 1. **Morning.** The goal was set: design the workflow system and the methodology, and wire both into QMA v2 (BACKLOG B26-B36). Context collection covered BMad, Pocock, pstack, workflow engines and QMX today (files 01-05).
@@ -20,33 +28,38 @@ The lead re-walked the whole session, from the morning backlog through the reset
 5. **18:30.** Two Fable + BMad architectures were delivered: the workflow engine and Library + remote data. The journey page was published. The operator approved both architectures.
 6. **Night.** Rulings 45-59. Studies on memory (28), environments (29) and data/DevOps (30). The Lab and Pods architecture landed. Both architectures were amended. Other reading: Rivet (harness outside the sandbox), Cua (31), Amp (32), Cloudroom (below). Rulings 60-72.
 
-## 2. What exists now (all on `D:\QMX-worktrees\agent-system`, branch `plan/agent-system`, **uncommitted**)
+## 2. What exists now (all on `D:\QMX-worktrees\agent-system`, branch `plan/agent-system`)
 
 | Item | Path | Status |
 |---|---|---|
-| Binding rulings 1-72 | `research/methodology/26-operator-rulings-and-alignment.md` | Current; outranks all |
-| Rubric walk | `27-rubric-walk.md` | Marks 01-22 as KEEP / PARTLY-STALE / SUPERSEDED |
-| **Workflow engine architecture** | `architecture/workflow-engine/` (27 ADs) | Approved, amended once (rulings 45-59, Rivet, memory, environments) |
-| **Library + remote data architecture** | `architecture/library-and-data/` (19 ADs) | Approved, amended once (server-primary switch, no asks, L1-L10 granted, dataset cards, book/bms) |
-| **Lab + Pods architecture** | `architecture/lab-and-pods/` (17 ADs, UI-TO-BACKEND-MAP) | Delivered from screenshots; not yet reviewed by him |
-| UI handoff (running) | `UI-HANDOFF.md` | Sections 0-7 filled; Machines view (ruling 65/67) still to add |
+| Binding rulings 1-88 | `research/methodology/26-operator-rulings-and-alignment.md` | Current; outranks all (ruling 73: architecture approved as solid) |
+| Rubric walks | `27-rubric-walk.md`, `27b-final-rubric-walk.md` (6 blockers, 26 should-fix), `27d-fix-check.md` (1 critical, 13 should-fix) | All findings applied; see `27c-gap-fixes-applied.md` |
+| **Workflow engine architecture** | `architecture/workflow-engine/` (35 ADs) | Approved; amended three times plus the 27c and 27d fixes: chunking and context discipline (AD-34), session homes (AD-35), drafts off `main`, run `mode` plus one shared status table, "tested" keyed on the definition `content_hash`, runaway guard (no spend caps), capacity derived from RAM, central relay, provider onboarding |
+| **Library + remote data architecture** | `architecture/library-and-data/` (19 ADs) | Approved; L1-L17 answered; run passes (no key on any worker), `refs/drafts`, `refs/challengers` |
+| **Lab + Pods architecture** | `architecture/lab-and-pods/` (17 ADs, UI-TO-BACKEND-MAP) | Approved with the rest (ruling 73); backtests on the QMB machine, paper as daily runs, no spend asks |
+| UI handoff (running) | `UI-HANDOFF.md` | Sections 0-9; §9 adds machines, keys, providers and context |
+| Engine build plan | `ENGINE-PLAN.md`, `PROMPT-ENGINE.md` | Written; check it against 27d (see `27c` §"27d applied" for what changed under it) |
 | Studies still valid as sources | 01-03, 08, 09, 11, 13, 14, 18, 23-25, 28-32 | — |
-| Wayfinder map | `wayfinder/` (69 tickets, rubric field) | **Stale versus the three architectures**; needs a rewrite before build planning |
+| Archived drafts | `archive/2026-10-16-methodology-drafts/` (06, 07, 12, 19, 20a, 20b, 21, 22) | Reference only |
+| Wayfinder map | `wayfinder/` | Rewritten against the architectures; resolved tickets closed |
 | Explainer pages | artifact "QMX Agent System" (stale), "QMX Design Day" (pre-amendment) | Need one refreshed page |
 
 ## 3. Open decisions, merged (his calls only; everything else is a labelled default)
 
-1. **Agent hosting provider** (rulings 55, 69). Options:
-   - Contabo for storage and always-on services, plus a managed agent host for burst. Candidates: Amp (runners free, orbs $0.08-1.32/h), Cloudroom (free 100 cloud agents per 30 days; Pro $50; open source, self-hostable Rust core, still being packaged), Cloudflare, others.
-   - Or Contabo for everything.
-2. **Credentials once, everywhere** (61): adopt the key vault in the Hub plus short-lived run passes. The Claude plan login stays per machine.
-3. **Mixed providers inside one agent** (62): relay routing by model name, as a harness extension under the load-balancer exception.
-4. **Machines view** (65, 67): lean on provider dashboards via MCP or computer use first; build a native view only if needed.
-5. **Backtests on one dedicated QMB machine** (68): it shapes the Lab's QMB door and remote runs; detail comes later.
-6. Engine leftovers: what counts as "irreversible external"; whether self-improvement defaults to auto.
-7. Lab leftovers: paper start needs his yes; paper money lives on a server ledger in v1.
-8. Library leftovers: copilot-chat merges of units and bots ask once.
-9. Data (30): **back up the orphaned 10 GB tick history now**; the trading node gets its own small VPS.
+**His calls first** (engine OPEN-DECISIONS A-C):
+- A. Grant harness requests H0, H15, H16, H17. Recommended: yes. Each has a fallback that needs no harness edit.
+- B. Does the 50% plan background cap still apply to workflows (ruling 27)? Recommended: keep it for plan accounts only.
+- C. Accept study 30 §4-§5 as the design for the first data packets (rulings 58, 81)? Recommended: yes, tick backup first.
+
+**Still open, with recommendations:** the burst provider to try first; whether `host_harness` is acceptable at all; plan logins on Contabo and an owned Amp runner; what counts as an irreversible external effect; Library OPEN-2 to 5 (mirror the registry, encrypt the bucket, dense retrieval, public Hub listener); Lab OPEN-1, 2, 4, 6 (pod to node, paper money, mix, pairs).
+
+**Answered since this file was first written:**
+- Hosting: Contabo first, others addable (ruling 74); capacity is about 4 sessions on its 12 GB (ruling 76).
+- Central relay (ruling 75): the PC and Contabo keep relays; Contabo's is central.
+- Credentials (61), mixed providers (62), machines view (65, 67) and the QMB machine (68): all designed (engine AD-28 to AD-32).
+- Self-improvement default (79), inbox volume (77), creation and publishing (80).
+- Paper start needs his yes (80). Lab schedules ask once at publish (80).
+- Chat merges into `main` ask once: lifecycle kinds by ruling 80, governed kinds on the earlier recommendation.
 
 ## 4. Backlog coverage (BACKLOG.md)
 
@@ -75,12 +88,12 @@ The lead re-walked the whole session, from the morning backlog through the reset
   6. scheduler and inbox.
 
   It uses the LibraryPort with an in-memory fake until the Library ships.
-- **Blockers to state honestly:**
-  - The HP stack (#81-#90) is unmerged, so tonight's work stacks on `qma/hp17`.
+- **Blockers, as of the 27d update:**
+  - ~~The HP stack (#81-#90) is unmerged.~~ Merged into `rebuild/base` at `ed704c92`.
   - D1-D4 have not run.
   - The B1 SQLite fix is not in.
-  - No build plan or packets have been written yet (the Wayfinder map is stale).
-- **Needed from him before 8 pm:** a go. The lead then writes the packet plan and the start prompt from the engine SOLUTION-DESIGN §18 live checks.
+  - ~~No build plan or packets.~~ `ENGINE-PLAN.md` and `PROMPT-ENGINE.md` exist; shipping starts in the morning (ruling 84).
+- Superseded: "ship tonight" (ruling 71) became "ship early tomorrow morning" (ruling 84).
 
 ## 6. Cloudroom facts (read in the browser, 2026-10-16)
 

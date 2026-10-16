@@ -2,11 +2,12 @@
 title: Workflow builder from a rough description
 type: prototype
 mode: HITL
-status: open
+status: closed
 blocked_by: [loop-spec, skill-format-and-verbs, methodology-builder]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Fits rulings 18 and 23; creation must also work in the node editor with a test run."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Feeds the build plan and the self-improvement loop.
 ## Sources
 
 `02-pocock-pstack.md` loop-me, skill-creator, §6, §8 ideas 10 and 11; `BACKLOG.md` B28; `05-qmx-today.md` §1 `build-workflow` placeholder.
+
+## Resolution
+
+Resolved. Engine AD-22 and SOLUTION-DESIGN 6.4: the builder runs the loop-me interview, writes drafts, tests them and shows a result card. (Map rewrite 2026-10-16.)

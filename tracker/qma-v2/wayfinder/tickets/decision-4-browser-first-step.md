@@ -2,11 +2,12 @@
 title: Decision 4: lift the browser hold for one read-only step?
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Answered yes by ruling 30, with the plan and journeys explained first."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -24,3 +25,7 @@ C6: the pipe-owned QMX Browser, the broker and lease proxy, the authenticated wa
 ## Sources
 
 `19` section 1 and C6; `20-review-a` finding 18 and rewritten decision 4; `20-review-b` finding 6; `21` B6; BACKLOG B17a.
+
+## Resolution
+
+Resolved. Ruling 30: yes to a first step, with the plan and journeys explained first. Engine AD-33 holds the shape. (Map rewrite 2026-10-16.)

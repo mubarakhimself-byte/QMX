@@ -3,11 +3,17 @@ title: Methodology umbrella
 type: grilling
 mode: HITL
 status: open
-blocked_by: [workflow-engine-contract, engine-failure-and-doctor, folder-format-one-shape, session-homes, plugin-unit-and-loading, skill-format-and-verbs, role-to-model-table, autonomy-policy, strategy-pipeline-gates, gate-threshold-store, trial-ledger-and-holdout, unit-read-adapter, output-methodology, memory-scopes-and-lessons, copilot-roster-and-freedom, capability-packs, loop-spec, triggers-and-scheduler, methodology-builder]
+blocked_by: [methodology-builder, copilot-roster-and-freedom, trader-agent-methodology, system-prompt-design, output-methodology, decision-5-checks-bind-agents-only]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 1; drop unit-read-adapter as a blocker while node depth stays out (ruling 14)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Still open (ruling 1). Re-blocked on the live methodology tickets only; every central contract it waited on is now an AD in the three architectures. Portfolio's purpose is not a blocker; it is recorded as pending. Handled tomorrow (ruling 82).
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

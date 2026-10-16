@@ -2,11 +2,12 @@
 title: qmx app check and qmx agent info
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [folder-format-one-shape, mini-app-data-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Test before use fits ruling 23; ignore the wave 4 wording (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 4 templates (D7, D8, D9).
 ## Sources
 
 `14-folders-miniapps-browser.md` §1.4 rule 5, §2.6; `05-qmx-today.md` §1 road; `19` C11.
+
+## Resolution
+
+Resolved. Engine AD-11: validate, then a real-model test gate before publish (ruling 23, 51); mini apps pass the same gate as packs (engine AD-19). (Map rewrite 2026-10-16.)

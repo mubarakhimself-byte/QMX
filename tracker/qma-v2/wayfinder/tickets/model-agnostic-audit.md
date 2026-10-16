@@ -2,11 +2,12 @@
 title: Model-agnostic audit
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 3."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Feeds the methodology umbrella's "model-agnostic at the node" rule and the skill
 ## Sources
 
 `03-workflow-engines.md` §1 limits, §2 SDK pieces, §8 item 15; `01-bmad.md` §Q4, §Q5; `02-pocock-pstack.md` §5.
+
+## Resolution
+
+Resolved. Engine AD-13 (roles, not models) and AD-29 (the relay routes by model id); ruling 3. (Map rewrite 2026-10-16.)

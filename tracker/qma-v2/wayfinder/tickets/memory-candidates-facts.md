@@ -2,11 +2,12 @@
 title: Memory candidates facts
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Memory for autonomous workflows (ruling 8)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Memory scopes and lessons.
 ## Sources
 
 `BACKLOG.md` B40, B51; `03-workflow-engines.md` §4, §6 Hermes memory, §9.3; `01-bmad.md` memory agents.
+
+## Resolution
+
+Resolved. Study 28 and engine AD-18 (memory is a port; evidence lives in the Library as `memory-row`, Library L1 granted). (Map rewrite 2026-10-16.)

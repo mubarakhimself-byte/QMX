@@ -2,11 +2,12 @@
 title: Shared building blocks catalogue
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [folder-format-one-shape, workflow-engine-contract, engine-failure-and-doctor]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Blocks become engine nodes and sub-workflow configs (ruling 22); wave 2-4 wording is stale (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Wave 2 pilot templates, wave 3 templates.
 ## Sources
 
 `19` section 5; `15` §Shared building blocks; `16` §4; `17` §Shared building blocks; `02-pocock-pstack.md` §3 ml4t.
+
+## Resolution
+
+Superseded. Blocks are engine node kinds and sub-workflows (engine AD-5). The template pack is in `ENGINE-PLAN.md`. (Map rewrite 2026-10-16.)

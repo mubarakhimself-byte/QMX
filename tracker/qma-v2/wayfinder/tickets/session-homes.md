@@ -2,12 +2,19 @@
 title: Session homes (assumption A4; spec)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Matches ruling 12; store the home where no harness edit is needed (ruling 24)."
+closed: 2026-10-16
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Still open, and no architecture covers it: the engine API is home-agnostic (engine reconcile-inputs, ruling 12 row) and UI-HANDOFF section 1.2 says the backend home field is still owed (the harness writes `origin="qma"`). The recommendation below stands; the home must be stored outside the harness (ruling 24), on the control session.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 
@@ -32,3 +39,7 @@ Capability packs, memory scopes and lessons, system-prompt design, methodology u
 ## Sources
 
 `BACKLOG.md` B30, ruling 10-13 Q4; `05-qmx-today.md` §6, gap 3; `10-ui-depth.md` §3, §6 mismatches 2 and 3; `UI-NOTES.md` §10; corrections 5, F.
+
+## Resolution
+
+Resolved. Engine AD-35: `home: {kind, project_id}` in `qmx_control` `session_homes`, write-once at birth, Child chats inherit, every surface resumes through the same session id; no harness edit (27c fix 10).

@@ -2,11 +2,12 @@
 title: Waves 2-4 packet plans
 type: task
 mode: HITL
-status: open
+status: closed
 blocked_by: [wave1-packets, first-templates]
 claimed_by: ""
 created: 2026-10-16
 rubric: "SUPERSEDED. Waves dropped and no build order yet (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ The destination.
 ## Sources
 
 `README.md` (how the harness plan was made); `HARNESS-PLAN.md` checklist shape; memory `light-verification-per-pr`, `builders-sequential`; `07-central-pieces.md` §6 build waves.
+
+## Resolution
+
+Superseded. Waves dropped (ruling 33). The build plan is `ENGINE-PLAN.md` (ruling 84). (Map rewrite 2026-10-16.)

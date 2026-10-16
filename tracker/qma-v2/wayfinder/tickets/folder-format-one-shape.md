@@ -2,11 +2,12 @@
 title: One folder shape (C1)
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 19; keep pending/ outside the hashed folder (20b finding 4)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Skill format and verbs, agents and workflows as folders, shared blocks catalogue
 ## Sources
 
 `14-folders-miniapps-browser.md` §1, §2.5; `01-bmad.md` §Q1; `02-pocock-pstack.md` §3 Agent Skills; `19` C1.
+
+## Resolution
+
+Resolved. Engine AD-2 (`qmx.workflow/1`), AD-19 (pack = plugin + `app.toml`), Library AD-2 and AD-3 (content identity, closed kinds). (Map rewrite 2026-10-16.)

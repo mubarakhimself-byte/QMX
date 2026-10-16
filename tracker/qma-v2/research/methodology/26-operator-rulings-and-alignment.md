@@ -151,3 +151,22 @@ On 10-13 he reversed CLIProxy-for-Claude for this reason. Using someone else's C
 70. He wants a **focused architecture pass** next (credentials, provider routing, machines), built with more complexity in mind. Architecture over creativity now.
 71. **Ship tonight** with the poteto-mode-based shipping workflow used for QMA v2, in a LIGHTER version: it works, it's tested, the code is right, PRs are stacked overnight for morning review. Reference session: "Claude Agent SDK Baseline and Design".
 72. **Before acting, re-walk the whole session** (especially from about 4 pm and across the usage resets) so no seed is skipped. Then report where we are, what's next, and how much of the backlog is covered.
+
+## J. Wrap-up answers (2026-10-16 night)
+
+73. **Architecture approved as solid.** Coding can start.
+74. **Hosting:** start with **Contabo**. Every other provider (Amp, Cloudroom, E2B, others) must be addable later. Providers publish skills or instructions for external agents, so the copilot should be able to set a provider up from those instructions (built in, no hand-wiring).
+75. **Central routing idea (Theo / T3 Code):** one machine runs the proxy/relay and the other machines route through it over Tailscale. No answer beyond that on provider-hosted harnesses.
+76. **Contabo today:** 6 cores, **12 GB RAM**, 200 GB SSD. Possible upgrade in December. This means about 4-6 concurrent Claude sessions at most, so burst providers matter.
+77. **Inbox waits:** almost nothing. Workflows run end to end. Human attention is needed only for provider failures and harness-level errors. **Notifications are UI-side**: the UI session designs them (UI-HANDOFF).
+78. **Chunking:** fan-out is per CHUNK of items, not one agent per item. 1M-context models take large chunks; compaction near 40%. **Context compaction, caching, tool calls and hooks are critical in the engine.**
+79. **Self-improvement:** ship a default; borrow from prime-agent/RLM and the harness. Memory providers (Hindsight for the copilot) also give self-improvement.
+80. **Creation is human-driven first** (workflows, mini apps, pods): build, test, paper if needed, then run autonomously. Starting a pod on paper is part of that human-driven creation.
+81. **Data is among the first things built.** He will provide data later; tick backup and import are early work.
+82. Methodology, system prompts and MCP apps (the Model Context Protocol apps standard used in Claude Desktop; a UI concern) are handled **tomorrow**.
+83. **Templates ship as ship-ready working defaults ("fillers").** (He said "ship", not "cheap"; that was a dictation slip.) He edits them with the copilot as he uses QMX. Each must actually run on the engine.
+84. **Shipping starts early tomorrow morning** (not tonight). Tonight: one more rubric walk, the Wayfinder map rewrite, a detailed build plan in the QMA v2 style, and the branch prepared. What remains of the backlog after that: methodology and system prompts (tomorrow). MCP apps are a UI topic.
+85. **Voice chat inside QMX** is a much-later nice-to-have (BACKLOG B15).
+86. **Shipping prep follows `WORKFLOW-SHIP-PREP.md`'s skills and its "mistakes not to repeat", adapted rather than run verbatim:** our design came from the files plus the BMad architecture, not from transcripts.
+87. **No more Fable.** Every agent from now on is Opus 5.5.
+88. **Gaps go back into the architectures first.** If the rubric walk, the Wayfinder rewrite or the planner finds missing gaps, apply them to the architectures (with Opus), then centralize the architecture once more, then continue the plan. Take time and ground slowly; the morning prompt is the deliverable.

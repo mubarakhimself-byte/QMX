@@ -1,5 +1,5 @@
 ---
-title: QMB register and batch door (owned by the QMB session)
+title: QMB-session dependencies
 type: task
 mode: HITL
 status: open
@@ -8,6 +8,12 @@ claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Owned by the QMB session; ignore the B-lite and wave wording (ruling 33)."
 ---
+
+## Rewrite (2026-10-16, map rewrite)
+
+Re-scoped to what the QMB session must deliver for this map: the `qmb.compile` door and qmb node pack (Lab AD-5); the `qmb` CLI inside the worker bundle (Lab DOC-CHANGES, P21 row); the one dedicated QMB machine agents call (engine AD-31, ruling 68); a spread instrument before pairs (Lab OPEN-6); retiring `run_backtest(config_ref)`. Owned by the QMB session; this ticket closes when that session records its answers.
+
+The text below is the earlier charting; where it disagrees with this section or with `26`, they win.
 
 ## Question
 

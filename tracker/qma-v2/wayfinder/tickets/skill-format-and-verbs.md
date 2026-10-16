@@ -2,11 +2,12 @@
 title: Skill format and QMX verbs
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [folder-format-one-shape]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Ruling 4."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -32,3 +33,7 @@ Agent as a folder, mini-app lifecycle, evals harness, workflow builder, self-imp
 ## Sources
 
 `01-bmad.md` §Q1 skill, §Q5; `02-pocock-pstack.md` §3 Agent Skills spec, §5, §8 idea 1; `05-qmx-today.md` §1 skills row.
+
+## Resolution
+
+Superseded. Folded into 'QMX skill set and builder (B28)'. (Map rewrite 2026-10-16.)

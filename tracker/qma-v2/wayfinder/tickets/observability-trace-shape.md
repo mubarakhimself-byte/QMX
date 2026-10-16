@@ -2,11 +2,12 @@
 title: Run logs he and the copilot can inspect
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [workflow-engine-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Rulings 9 and 21."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Feeds the build plan, the self-improvement loop and the mini-app DevOps.
 ## Sources
 
 `03-workflow-engines.md` §6 OpenAI tracing, §9.7; `11-references.md` §3; `02-pocock-pstack.md` show-me-your-work; `UI-NOTES.md` §2; `05-qmx-today.md` gap 13; correction 8.
+
+## Resolution
+
+Resolved. Engine AD-15 (one trace per run, one span per node attempt) and Library AD-13 (DevOps sidecar on remote runs). (Map rewrite 2026-10-16.)

@@ -2,11 +2,12 @@
 title: Engine failure ladder, watchdog, doctor and notifications
 type: task
 mode: AFK
-status: open
+status: closed
 blocked_by: [workflow-engine-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "KEEP. Answers ruling 21 and is core to the one engine; its wave 2 wording is stale (ruling 33)."
+closed: 2026-10-16
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Shared blocks catalogue (`preflight`, `headroom`), wave 2 pilot templates, metho
 ## Sources
 
 `13-failure-and-rlm.md` §1, §3, §4; `03-workflow-engines.md` §9.5-9.7; `11-references.md` §3; `19` C2.
+
+## Resolution
+
+Resolved. Engine AD-16 (failure ladder and watchdog) and AD-17 (the inbox is the one notification channel). (Map rewrite 2026-10-16.)

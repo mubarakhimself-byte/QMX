@@ -58,7 +58,7 @@ graph TB
 
 | Component | Role | Depth (codebase-design vocabulary) |
 | --- | --- | --- |
-| `qmx_library` | the deep module: everything about storing, versioning, relating, finding and merging Library things | eleven verbs hide the object model, canonicalisation, fp1, ref log, merge strategies, graph build, grounding, gates, extraction, replication and tiering |
+| `qmx_library` | the deep module: everything about storing, versioning, relating, finding and merging Library things | fourteen verbs (plus the operator-only `adopt`) hide the object model, canonicalisation, fp1, ref log, merge strategies, graph build, grounding, gates, extraction, replication and tiering |
 | `LibraryPort` | the one external seam; two adapters: in-process (PC, hub) and HTTPS client (remote) | a real seam: two adapters exist from day one |
 | `qmx_control` | PC host: REST/MCP door with harness Effects; the PC's single writer | adapter at the door; unchanged shape |
 | `qmx_hub` | server host: same port over HTTPS; token validation; runs sink; replication endpoint | adapter plus the auth module |
@@ -121,17 +121,17 @@ sequenceDiagram
   participant Run as sandbox worker + sidecar
   participant Bucket as S3-compatible bucket
   PC->>Hub: push objects the run needs (workflow fp1:w1, inputs)
-  PC->>Hub: submit run_id, token{write_prefix refs/runs/r9, key_scope [qmx/kimi]}
-  PC->>Run: start (provider), keys over stdin, token
+  PC->>Hub: submit run_id; the engine mints run pass{write_prefix refs/runs/r9, key_scope [qmx/kimi], model_scope, relay_url}
+  PC->>Run: start (provider) with secrets = {QMX_RUN_PASS} only; no provider key; model calls go to the central relay on Contabo
   Note over PC: PC sleeps
   Run->>Hub: heartbeat; logs/traces stream to runs/r9/
   Run->>Hub: get(fp1:w1) → cached locally by hash
   Run->>Hub: put artifact objects + blobs; advance(refs/runs/r9, ...)
-  Run->>Hub: put workflow-run object (status passed, relations run-of, produced-by)
+  Run->>Hub: put workflow-run object (mode live, status passed, placement fields, relations run-of, produced-by)
   Hub->>Bucket: nightly rclone push (everything)
   Note over PC: PC wakes
   PC->>Hub: pull refs/runs/* + missing objects (manifests + edges; blobs lazily)
-  PC->>PC: engine fast-forwards everything the passed run produced into main (AD-18, publish=auto); UI "landed" feed shows it
+  PC->>PC: engine fast-forwards what the passed live run produced into main (AD-18, publish=auto), lifecycle kinds onto refs/drafts/<item> instead; UI "landed" feed shows it
 ```
 
 ### 5c. Search with refusal gates
@@ -161,24 +161,25 @@ flowchart LR
 
 ## 6. Interface to the workflow engine (from the Library side)
 
-**[inferred]** `architecture/workflow-engine/` did not exist when this run started, so this is the contract the Library offers. The engine spine and its `LIBRARY-REQUESTS.md` (L1-L10) arrived the same night; every request is answered in `ENGINE-REQUESTS-ANSWERED.md` and folded into AD-3, AD-5, AD-6, AD-7, AD-9, AD-11, AD-15 and AD-18. Added since the first draft: kinds `memory-row` and `agent-tool`; refs `refs/memory/*` and `refs/champions/*`; transient checkpoint blobs; the `intent_key` annotation with `find_by_intent`; `search_runs`; the `test` run status; index watchers; `data_scope` on run tokens; the `publish` standing rule.
+**[inferred]** `architecture/workflow-engine/` did not exist when this run started, so this is the contract the Library offers. The engine spine and its `LIBRARY-REQUESTS.md` (L1-L10) arrived the same night; every request is answered in `ENGINE-REQUESTS-ANSWERED.md` and folded into AD-3, AD-5, AD-6, AD-7, AD-9, AD-11, AD-15 and AD-18. Added since the first draft: kinds `memory-row` and `agent-tool`; refs `refs/memory/*` and `refs/champions/*`; transient checkpoint blobs; the `intent_key` annotation with `find_by_intent`; `search_runs`; index watchers; `data_scope` on run passes; the `publish` standing rule. Added in the gap-fix pass (engine L11-L17): the run pass replaces injected keys; `refs/drafts/*` (drafts off `main`) and `refs/challengers/*`; the `mode: live | test` field beside one shared run status table; placement fields on `workflow-run`.
 
 | The engine needs | The Library gives |
 | --- | --- |
-| a workflow definition to run | `resolve(item, ref) → object_id`, `get(object_id) → manifest + blob handles`; the definition is one JSON blob slot `definition` plus `pinned/<node>.json` blobs |
-| templates | `template` objects whose `instantiates` field names a `workflow` kind; "use this template" = `put` a new `workflow` object with `derived-from → template` |
-| a place to record a run | `put(kind=workflow-run, on=refs/runs/<run_id>)`, then `relate(run-of, consumed, produced-by, ran-on)`; one object per run, updated by new objects with `parents` as status changes |
+| a workflow definition to run | `resolve(item, ref) → object_id`, `get(object_id) → manifest + blob handles`; the definition is one JSON blob slot `definition` plus `pinned/<node>.json` blobs; a trigger pins the exact published object (or its champion), never a draft |
+| drafts | the head of `refs/drafts/<item>` (his) or `refs/agents/<session_id>/<item>` (an agent's); `main` is published-only; publishing is a merge into `main` (MANAGE from a chat) |
+| templates | a workflow template is a published `workflow` version tagged `template`; "use this template" = `put` a new `workflow` draft with `derived-from → template version`; the `template` kind is kept for non-workflow templates only (AD-3) |
+| a place to record a run | `put(kind=workflow-run, on=refs/runs/<run_id>)` with `mode` and a status from the shared table, then `relate(run-of, consumed, produced-by)`; one object per run, updated by new objects with `parents` as status changes |
 | artifacts a node produced | `put(kind=artifact, on=refs/runs/<run_id>)` with `produced-by → run`, `produced-by-node: <node_id>` field |
-| a "tested" gate before scheduling | `walk(workflow_object, tested-by)` must reach a `workflow-run` with `status=passed`; the engine refuses to schedule otherwise |
+| a "tested" gate before scheduling | `walk(workflow_object, tested-by)` must reach a `workflow-run` with `status=passed`, in either mode (`live` or `test`); the engine refuses to enable a trigger otherwise |
 | checkpoints for pause/resume | blobs under the run's `checkpoints` slot, written by the sidecar; the engine's own live state stays in its SQLite |
-| the machine it ran on | `ran-on → machine` descriptor stored as a `setup` object (provider, image, resources) |
+| the machine it ran on | placement fields on the `workflow-run` itself (`placement`, `agent_mode`, `health`, `cost_machine_minutes`, `link_out`; engine L14); `ran-on` is retired and `setup` stays the CT-47 backtest spec |
 | events | control topic `library` for `object_put`/`ref_advanced` on `refs/runs/*` |
 
 ### Interface notes for the engine architect
 
 1. **No second definition store.** Research file 25 §"What this means" item 16 proposes "one SQLite store for workflows, executions and the job queue". Keep the job queue and live execution state there; put definitions, pinned data, templates and finished runs in the Library (AD-15). Otherwise the UI's Workflows shelf and the engine disagree, which is today's bug repeated.
 2. **"Tested" is a relation, not a flag** (file 25 item 5 proposes a flag on the saved version). A flag on a mutable row cannot survive a new version; an edge from an exact object id can.
-3. **Run branches.** A run writes only `refs/runs/<run_id>`. If the engine wants results on `main`, it asks for a merge; OPEN-6 decides auto fast-forward per kind.
+3. **Run branches.** A run writes only `refs/runs/<run_id>`. AD-18 decides what lands: a passed live run's results fast-forward into `main`; lifecycle kinds land on `refs/drafts/<item>`; test-mode runs never fast-forward.
 4. **One agent can be a workflow** (ruling 44): a `Background` chat started by the engine still gets a `workflow-run` object; its transcript JSONL is a blob in the run's `logs` slot.
 5. **Mismatch to flag:** DEC-0417's "do not fingerprint templates onto the Artifact rail" is reversed here; templates and workflow versions are Library objects with fp1 ids (ruling 28 overrides). DEC-0420/0439's Mission Compiler / Task Graph names refer to the deleted daemon engine; the new engine should not inherit their store.
 6. **Pause at usage limits** (file 25 item 7) is engine state, not Library state; the Library sees only `status=waiting` objects if the engine chooses to publish them.
@@ -187,8 +188,8 @@ flowchart LR
 
 - Money stays read-only: the hub and sidecar have no order verb; `propose_order` exists only on the PC harness **[retrieved]** (DESIGN.md).
 - Broker credentials never leave Windows Credential Manager **[retrieved]** (DEC-0188); AD-12 refuses tokens naming them.
-- A run token can write one branch, read a declared scope, and nothing else; it expires with the run.
-- The hub stores no provider key; keys ride the submitter's stdin/sandbox env exactly as `qmx_remote` does today **[retrieved]**.
+- A run pass can write one branch, read a declared scope, reach the relay for its `model_scope`, and nothing else; it expires with the attempt (at most 1 h) and can be revoked.
+- No provider key reaches the hub or any worker: a worker holds only its run pass, and the relay on the runner host (or the central relay on Contabo) injects the key into each model call (engine AD-28). Today's `qmx_remote` passes secrets as `--env` **[retrieved]**; that path is retired, and every `ComputeProvider.start` call passes only `{QMX_RUN_PASS}`.
 - Page text, article bodies and video transcripts in the Library are data; the grounder never executes them and the agent harness marks injected text verbatim (DESIGN.md).
 
 ## 8. What is deliberately not here
