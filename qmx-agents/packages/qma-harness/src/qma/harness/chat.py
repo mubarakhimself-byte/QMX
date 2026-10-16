@@ -34,20 +34,24 @@ import json
 import logging
 import math
 import os
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
+    Message,
     PermissionResultAllow,
     PermissionResultDeny,
     PermissionUpdate,
     SystemMessage,
 )
+from claude_agent_sdk._errors import MessageParseError
+from claude_agent_sdk._internal import message_parser
 from claude_agent_sdk.types import PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
+from qmx_ledger.journal import RunJournal
 
 from qma.harness.home import (
     ChatRecord,
@@ -85,11 +89,14 @@ from qma.harness.project import (
     InChild,
     Limits,
     Piece,
+    PlanFact,
+    PlanMeter,
     StreamEnded,
     Target,
     TokenGate,
     TurnEnded,
     TurnUsage,
+    UnreadableLimits,
     project,
     redact,
     redacted,
@@ -110,6 +117,7 @@ from qma.harness.tools import (
     unvetted_tools,
     vet_mcp_servers,
 )
+from qma.harness.usage import Totals, journal_path, plan_base, plan_row
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig
@@ -121,6 +129,26 @@ if TYPE_CHECKING:
     from qma.harness.money import GateRules
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
+
+_sdk_parse = message_parser.parse_message
+
+
+def _parse(data: dict[str, Any]) -> Message | None:
+    """The SDK parser raises `TypeError` and the like, not only `MessageParseError`, on some
+    malformed messages, such as a `rate_limit_info` of null. Every failure becomes a
+    `MessageParseError` that carries the message, so the reader can tell a rate-limit event it
+    cannot read and stop the plan."""
+    try:
+        return _sdk_parse(data)
+    except MessageParseError:
+        raise
+    except Exception as error:
+        raise MessageParseError(f"{type(error).__name__}: {error}", data) from error
+
+
+message_parser.parse_message = _parse
+"""`ClaudeSDKClient.receive_messages` imports `parse_message` at each call, so this is the one
+seam where a parse failure is still tied to its message."""
 
 PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
@@ -267,6 +295,9 @@ class ChatDeps:
     broker: BrokerService
     domain: DomainContext
     """The domain tools' context. It shares `control`, so no second writer runs."""
+    on_plan_limits: Callable[[PlanFact], None]
+    """Where a plan chat's rate-limit facts and `/usage` readings go: the harness's ledger,
+    which may stop every plan chat."""
     vetted: VetCache = field(default_factory=VetCache)
     """External MCP tool lists already vetted, by config digest, for this harness."""
     test: TestMode | None = None
@@ -435,6 +466,7 @@ class Chat:
         self._gate: GateRules | None = None
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
+        self._usage: tuple[RunJournal, Totals] | None = None
 
     @property
     def session_id(self) -> SessionId:
@@ -454,6 +486,32 @@ class Chat:
         """Background Bash and sub-agents keep running, as in Claude Code."""
         if self._live is not None:
             await self._live.client.interrupt()
+
+    async def stop_plan(self, reason: str) -> None:
+        """The overage stop. Kills the CLI tree first, because an interrupt would let a prompt
+        queued in the CLI start as a new turn (measured, HP10 check). Then the chat closes and
+        writes a `needs_you` block naming the rule. The next send relaunches with `resume`."""
+        async with self._lock:
+            live, self._live = self._live, None
+            if live is None:
+                return
+            self._closing = True
+            try:
+                await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
+                await self._end(live)
+            finally:
+                self._closing = False
+            self._stream.close_all()
+            self._write(turn="idle")
+            await self._note("needs_you", {"reason": f"plan use stopped: {reason}"})
+
+    @property
+    def on_plan(self) -> bool:
+        return self.record.config.profile == PLAN
+
+    @property
+    def is_live(self) -> bool:
+        return self._live is not None
 
     async def live(self) -> AsyncIterator[Delta]:
         """Live deltas for this chat and its native sub-agents. Dropped on disconnect."""
@@ -510,6 +568,9 @@ class Chat:
             live.reader.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.reader
+        if self._usage is not None:
+            journal, self._usage = self._usage[0], None
+            await asyncio.to_thread(journal.close)
         await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
 
     async def _connect(self) -> _Live:
@@ -676,6 +737,13 @@ class Chat:
                     self._write(turn="running")
                 for fact in project(message, redact_tokens=self._deps.redaction):
                     await self._route(fact)
+        except MessageParseError as error:
+            if not (isinstance(error.data, dict) and error.data.get("type") == "rate_limit_event"):
+                raise
+            if self.on_plan:
+                self._deps.on_plan_limits(
+                    UnreadableLimits(f"a rate-limit event could not be read: {error}")
+                )
         finally:
             if not self._closing:
                 await self._lost(live)
@@ -694,7 +762,8 @@ class Chat:
             await self._end(live)
 
     async def _route(
-        self, fact: Block | Delta | StreamEnded | TurnUsage | Limits | TurnEnded | Compacted
+        self,
+        fact: Block | Delta | StreamEnded | TurnUsage | PlanFact | TurnEnded | Compacted,
     ) -> None:
         match fact:
             case Block(target=target, block=block):
@@ -715,8 +784,25 @@ class Chat:
                 self._write(turn="idle", started=True)
             case Compacted(trigger=trigger):
                 await self._note("changed", {"kind": "compacted", "trigger": trigger})
-            case TurnUsage() | Limits():
+            case TurnUsage() if self.on_plan:
+                await self._journal_turn(fact)
+            case Limits() | UnreadableLimits() | PlanMeter() if self.on_plan:
+                self._deps.on_plan_limits(fact)
+            case TurnUsage() | Limits() | UnreadableLimits() | PlanMeter():
                 pass
+
+    async def _journal_turn(self, turn: TurnUsage) -> None:
+        """One `model_call` row per plan turn. Relayed chats are counted at the relay."""
+        if self._usage is None:
+            path = journal_path(self._deps.home, self.session_id)
+            base = await asyncio.to_thread(plan_base, path)
+            journal = await asyncio.to_thread(RunJournal, path, self.session_id)
+            self._usage = (journal, base)
+        journal, base = self._usage
+        payload, totals = plan_row(turn, base)
+        self._usage = (journal, totals)
+        if payload is not None:
+            await asyncio.to_thread(journal.append, "model_call", payload)
 
     async def _note(self, kind: str, content: dict[str, Any]) -> None:
         if self._deps.redaction:
@@ -820,8 +906,8 @@ class Chat:
             case Answers(answers=answers):
                 state = "answered"
                 result = PermissionResultAllow(updated_input={**ask.input, "answers": answers})
-            case AllowOnce(edited_input=edited) if (
-                edited is not None and (refused := self._edit_refused(ask.tool, edited))
+            case AllowOnce(edited_input=edited) if edited is not None and (
+                refused := self._edit_refused(ask.tool, edited)
             ):
                 state, result = "denied", PermissionResultDeny(message=refused)
             case AllowOnce(edited_input=edited):

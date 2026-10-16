@@ -14,7 +14,7 @@ import contextlib
 import functools
 import os
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,9 +24,10 @@ from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 from qmx_tools.service import DomainContext
 
-from qma.harness.chat import Answer, AnswerStatus, AskId, Chat, ChatDeps, Prompt
+from qma.harness.chat import Answer, AnswerStatus, AskId, Chat, ChatDeps, OperatorText, Prompt
 from qma.harness.home import (
     ChatRecord,
+    DoctorLine,
     QmxHome,
     SessionId,
     ensure_homes,
@@ -44,6 +45,7 @@ from qma.harness.launch import (
     PermissionMode,
     TestMode,
     assert_scrubbed,
+    unattended,
 )
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import (
@@ -55,13 +57,24 @@ from qma.harness.profiles import (
     resolve_model,
 )
 from qma.harness.relay import MESSAGES, Relay, RelayUsage, keyring_secret
+from qma.harness.usage import (
+    ReadingView,
+    UsageLedger,
+    UsagePage,
+    background_cap,
+    journal_path,
+    token_sums,
+    usage_lines,
+    usage_page,
+)
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
 
-    from qma.harness.project import Delta
+    from qma.harness.project import Delta, PlanFact
 
 UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message to continue"
+METER_WAIT_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -82,10 +95,34 @@ class UnknownChat(ControlError):
         super().__init__("not_found", f"No chat has the session id {chat}.", 404)
 
 
+@dataclass
+class PlanWatch:
+    """Records each plan fact in the ledger. While the overage stop holds, every plan chat with
+    a live CLI is ended with the rule named, whether or not a turn runs, so nothing queued in it
+    reaches the model."""
+
+    ledger: UsageLedger = field(default_factory=UsageLedger)
+    chats: dict[SessionId, Chat] = field(default_factory=dict[SessionId, Chat])
+    _stops: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+
+    def __call__(self, fact: PlanFact) -> None:
+        self.ledger.record(fact, self.ledger.clock())
+        reason = self.ledger.hard_stop()
+        if reason is None:
+            return
+        for chat in self.chats.values():
+            if chat.on_plan and chat.is_live:
+                task = asyncio.create_task(chat.stop_plan(reason))
+                self._stops.add(task)
+                task.add_done_callback(self._stops.discard)
+
+
 class Harness:
-    def __init__(self, deps: ChatDeps) -> None:
+    def __init__(self, deps: ChatDeps, watch: PlanWatch) -> None:
         self._deps = deps
-        self._chats: dict[SessionId, Chat] = {}
+        self._chats = watch.chats
+        self._ledger = watch.ledger
+        self._meter: SessionId | None = None
 
     @classmethod
     async def open(
@@ -139,6 +176,7 @@ class Harness:
         except BaseException:
             procs.close()
             raise
+        watch = PlanWatch(UsageLedger(path=home.state_dir / "plan-usage.json"))
         deps = ChatDeps(
             home=home,
             control=control,
@@ -147,9 +185,10 @@ class Harness:
             relay=relay,
             broker=broker,
             domain=domain,
+            on_plan_limits=watch,
             test=test,
         )
-        return cls(deps)
+        return cls(deps, watch)
 
     async def start_chat(self, spec: NewChat) -> SessionId:
         """A qmx-control session, then a chat record with `started=False`. No process yet."""
@@ -184,8 +223,45 @@ class Harness:
         return chat
 
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
-        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks."""
-        await self._chat(chat).send(prompt)
+        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks. A plan
+        chat refuses while the overage stop holds, and an unattended plan chat refuses at the
+        background cap."""
+        found = self._chat(chat)
+        if found.on_plan:
+            stop = self._ledger.hard_stop()
+            if stop is not None:
+                raise LaunchRefused(f"plan use is stopped: {stop}")
+            if unattended(found.record.config.kind):
+                budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
+                cap = background_cap(budgets)
+                if not cap.allows(self._ledger):
+                    raise LaunchRefused(
+                        f"the plan is at the background cap ({cap.fraction:.0%} of the five-hour "
+                        "window, or a window is used up)"
+                    )
+        await found.send(prompt)
+
+    async def usage(self) -> UsagePage:
+        budgets = await asyncio.to_thread(self._deps.control.settings_get, "budgets")
+        tokens = await asyncio.to_thread(token_sums, self._deps.home.root / "runs")
+        return usage_page(self._ledger, background_cap(budgets), tokens)
+
+    def usage_lines(self) -> list[DoctorLine]:
+        return usage_lines(self._ledger)
+
+    async def meter(self) -> ReadingView | None:
+        """Read `/usage` in a plan chat kept for it, then close that chat. The reply costs no
+        model call, and its five-hour reading lands in the ledger."""
+        if self._meter is None:
+            self._meter = await self.start_chat(NewChat(title="Plan usage meter", model="haiku"))
+        chat = self._chat(self._meter)
+        await self.send(self._meter, OperatorText("/usage"))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + METER_WAIT_S
+        while chat.record.turn == "running" and loop.time() < deadline:
+            await asyncio.sleep(0.2)
+        await chat.close()
+        return self._ledger.reading("five_hour")
 
     async def interrupt(self, chat: SessionId) -> None:
         await self._chat(chat).interrupt()
@@ -218,10 +294,6 @@ class Harness:
                 raise UnknownChat(chat)
             found = self._chats[chat] = Chat(record, self._deps)
         return found
-
-
-def journal_path(home: QmxHome, session: SessionId) -> Path:
-    return home.root / "runs" / session / "journal.jsonl"
 
 
 @dataclass(frozen=True)

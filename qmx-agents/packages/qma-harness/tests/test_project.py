@@ -27,6 +27,7 @@ from qma.harness.project import (
     Here,
     InChild,
     Limits,
+    Reading,
     TokenGate,
     TurnEnded,
     TurnUsage,
@@ -181,6 +182,10 @@ def test_a_rate_limit_event_keeps_every_overage_field() -> None:
             using_overage=False,
             overage_enabled=None,
             credits_required=False,
+            readings=(
+                Reading("five_hour", 0.26, datetime(2026, 10, 14, 22, 20, tzinfo=UTC)),
+                Reading("seven_day", 0.11, datetime(2026, 10, 21, 13, 0, tzinfo=UTC)),
+            ),
         )
     ]
 

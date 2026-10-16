@@ -40,7 +40,7 @@ from qma.harness import Harness, LaunchRefused, NewChat, OperatorText, QmxHome, 
 from qma.harness.harness import UsageRows, journal_path
 from qma.harness.home import PlanAuth, read_record, write_record
 from qma.harness.profiles import ProfileName
-from qma.harness.project import REDACTED
+from qma.harness.project import REDACTED, Limits, project
 from qma.harness.relay import Relay, RelayGrant, RelayUsage
 from qma.harness.routes import chat_router, control_service
 
@@ -1240,5 +1240,92 @@ def test_an_external_tool_runs_unasked_only_when_the_operator_allow_listed_it(
         tool = "mcp__weather__get_weather"
         assert (await gate_says(client, tool, "bypassPermissions")).split()[0] == bypass
         assert await gate_says(client, tool, "default") == "pass "
+
+    run(body, home)
+
+
+def rate_limit(**info: Any) -> Message:
+    from claude_agent_sdk._internal.message_parser import parse_message  # noqa: PLC0415
+
+    message = parse_message(
+        {"type": "rate_limit_event", "rate_limit_info": info, "uuid": "u", "session_id": "s"}
+    )
+    assert message is not None
+    return message
+
+
+STOP_RULE_2 = (
+    "plan use stopped: rule 2: the five_hour window is used up and paid extra usage is "
+    "allowed, so the next request could bill"
+)
+
+
+def test_a_stop_ends_every_live_plan_chat_and_drops_its_queued_prompt(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        busy = await harness.start_chat(NewChat(title="busy", model="haiku"))
+        idle = await harness.start_chat(NewChat(title="idle", model="haiku"))
+        await harness.send(idle, OperatorText("warm"))
+        FakeClient.made[0].go.set()
+        await settle(lambda: turn_of(home, idle) == "idle")
+        await harness.send(busy, OperatorText("first"))
+        await harness.send(busy, OperatorText("queued"))
+        FakeClient.made[1].inbox.put_nowait(
+            rate_limit(status="rejected", rateLimitType="five_hour", overageStatus="allowed")
+        )
+        await settle(lambda: all(client.disconnected for client in FakeClient.made))
+        await settle(lambda: ("needs_you", {"reason": STOP_RULE_2}) in blocks(home, busy))
+        FakeClient.made[1].go.set()
+        await asyncio.sleep(0.05)
+        assert [client.disconnected for client in FakeClient.made] == [True, True]
+        assert blocks(home, busy) == [
+            ("user", {"text": "first"}),
+            ("user", {"text": "queued"}),
+            ("needs_you", {"reason": STOP_RULE_2}),
+        ]
+        assert ("needs_you", {"reason": STOP_RULE_2}) in blocks(home, idle)
+        assert turn_of(home, busy) == "idle"
+        with pytest.raises(LaunchRefused, match="plan use is stopped: rule 2"):
+            await harness.send(busy, OperatorText("again"))
+        (clean,) = project(
+            rate_limit(status="allowed", rateLimitType="five_hour", overageStatus="rejected")
+        )
+        assert isinstance(clean, Limits)
+        harness._deps.on_plan_limits(clean)  # pyright: ignore[reportPrivateUsage]
+        plant_transcript(home, busy)
+        await harness.send(busy, OperatorText("after"))
+        FakeClient.made[2].go.set()
+        await settle(lambda: ("text", {"text": "echo after"}) in blocks(home, busy))
+        assert FakeClient.made[2].options.resume == busy
+
+    run(body, home)
+
+
+class BrokenEventClient(FakeClient):
+    """A CLI whose rate-limit event the SDK parser cannot read."""
+
+    async def receive_messages(self) -> AsyncIterator[Message]:
+        from claude_agent_sdk._internal import message_parser  # noqa: PLC0415
+
+        message_parser.parse_message(
+            {"type": "rate_limit_event", "rate_limit_info": None, "uuid": "u", "session_id": "s"}
+        )
+        yield init()
+
+
+def test_a_rate_limit_event_the_sdk_cannot_parse_stops_the_plan(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qma.harness.chat, "ClaudeSDKClient", BrokenEventClient)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="broken", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        await settle(lambda: harness.usage_lines()[0].ok is False)
+        assert harness.usage_lines()[0].detail == (
+            "a rate-limit event could not be read: TypeError: 'NoneType' object is not "
+            "subscriptable"
+        )
+        with pytest.raises(LaunchRefused, match="a rate-limit event could not be read"):
+            await harness.send(chat, OperatorText("again"))
 
     run(body, home)
