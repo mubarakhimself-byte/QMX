@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -41,6 +42,7 @@ from qma.harness.home import (
     ensure_homes,
     parse_claude_settings,
     plan_auth_method,
+    plugin_refusal,
     write_record,
 )
 from qma.harness.launch import (
@@ -53,7 +55,9 @@ from qma.harness.launch import (
     assert_scrubbed,
     build_options,
     launch_env,
+    unattended,
 )
+from qma.harness.money import MoneySurfaceError
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
@@ -73,21 +77,45 @@ from qma.harness.project import (
     redacted,
 )
 from qma.harness.relay import GrantRefused
+from qma.harness.tools import (
+    SERVER,
+    Grants,
+    ToolSurfaceError,
+    VetCache,
+    build_server,
+    domain_write_policy,
+    gate_rules,
+    keyring_refs,
+    tool_defs,
+    unvetted_tools,
+    vet_mcp_servers,
+)
 
 if TYPE_CHECKING:
+    from claude_agent_sdk import McpServerConfig
     from claude_agent_sdk.types import (
         McpStatusResponse,
         PermissionResultAllow,
         ToolPermissionContext,
     )
+    from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
+    from qmx_tools.service import DomainContext
 
+    from qma.harness.money import GateRules
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
 
 FLOOR_REASON: Final = "approvals are not wired yet"
 PLUGIN: Final = "qmx"
 CLOSE_WAIT_S: Final = 10.0
+MCP_SETTLE_S: Final = 30.0
+"""How long a launch waits for the CLI to finish connecting the vetted external servers. The
+CLI connects them after it starts and reports them `pending` until then, with no tools. A
+server still pending then is switched off with a `needs_you` block, as a server that fails
+vetting is, and the chat starts without it. The CLI keeps a switch-off in its own state for the
+workspace, so a launch switches every vetted server it finds `disabled` back on first, and each
+chat vets and settles every server afresh."""
 
 
 @dataclass(frozen=True)
@@ -109,6 +137,11 @@ class ChatDeps:
     procs: AgentProcessCap
     launcher: Path
     relay: Relay
+    broker: BrokerService
+    domain: DomainContext
+    """The domain tools' context. It shares `control`, so no second writer runs."""
+    vetted: VetCache = field(default_factory=VetCache)
+    """External MCP tool lists already vetted, by config digest, for this harness."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
 
@@ -117,14 +150,62 @@ class ChatDeps:
         return self.test is None or self.test.redaction
 
 
+async def _settled(
+    client: ClaudeSDKClient, servers: frozenset[str]
+) -> tuple[McpStatusResponse, list[str]]:
+    """`get_mcp_status()` once none of `servers` is still `pending` or `disabled`, polled for
+    at most `MCP_SETTLE_S`, and the servers not up then."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + MCP_SETTLE_S
+    while True:
+        status = await client.get_mcp_status()
+        pending = sorted(
+            server["name"]
+            for server in status["mcpServers"]
+            if server["name"] in servers and server["status"] in {"pending", "disabled"}
+        )
+        if not pending or loop.time() > deadline:
+            return status, pending
+        await asyncio.sleep(0.2)
+
+
+KEEP_OFF_POLL_S: Final = 0.5
+KEEP_OFF_BACKOFF_MAX: Final = 5
+
+log = logging.getLogger(__name__)
+
+
+async def _keep_off(client: ClaudeSDKClient, servers: frozenset[str]) -> None:
+    """Switch `servers` off whenever the CLI reports one connected, for the life of the chat.
+    A switch-off sent while a server is still connecting reads `disabled` at once, and the
+    server connects anyway when its start finishes (measured, S35), so no state is final. The
+    SDK raises on its control-request timeout; the keeper logs it and polls again, and the gate
+    denies the servers' tools meanwhile (`GateRules.dropped_servers`)."""
+    failures = 0
+    while True:
+        try:
+            status = await client.get_mcp_status()
+            for server in status["mcpServers"]:
+                if server["name"] in servers and server["status"] == "connected":
+                    await client.toggle_mcp_server(server["name"], enabled=False)
+            failures = 0
+        except Exception as error:
+            failures += 1
+            log.warning("keeping %s off failed %d times: %r", sorted(servers), failures, error)
+        await asyncio.sleep(KEEP_OFF_POLL_S * 2 ** min(failures, KEEP_OFF_BACKOFF_MAX))
+
+
 def transcript(home: QmxHome, chat: SessionId) -> Path | None:
     """The SDK JSONL of this chat, under any project folder of the plan home."""
     return next((home.plan_dir / "projects").glob(f"*/{chat}.jsonl"), None)
 
 
-def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusResponse) -> list[str]:
-    """What the CLI loaded besides its built-ins and the QMX plugin. The server info lists no
-    plugins, so a plugin shows as its `<plugin>:` commands and agents."""
+def unexpected_extensions(
+    info: Mapping[str, Any] | None, status: McpStatusResponse, servers: frozenset[str]
+) -> list[str]:
+    """What the CLI loaded besides its built-ins, the QMX plugin and the MCP `servers` QMA
+    passed. The server info lists no plugins, so a plugin shows as its `<plugin>:` commands
+    and agents."""
     commands = cast("list[dict[str, Any]]", (info or {}).get("commands", []))
     agents = cast("list[dict[str, Any]]", (info or {}).get("agents", []))
     found = [
@@ -137,7 +218,11 @@ def unexpected_extensions(info: Mapping[str, Any] | None, status: McpStatusRespo
         for agent in agents
         if ":" in str(agent["name"]) and not str(agent["name"]).startswith(f"{PLUGIN}:")
     ]
-    found += [f"MCP server {server['name']}" for server in status["mcpServers"]]
+    found += [
+        f"MCP server {server['name']}"
+        for server in status["mcpServers"]
+        if server["name"] not in servers
+    ]
     return found
 
 
@@ -180,6 +265,7 @@ class _Live:
     client: ClaudeSDKClient
     grant: RelayGrant | None
     reader: asyncio.Task[None] | None = None
+    keeper: asyncio.Task[None] | None = None
 
 
 @dataclass
@@ -218,6 +304,7 @@ class Chat:
         self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
+        self._grants = Grants()
 
     @property
     def session_id(self) -> SessionId:
@@ -265,6 +352,10 @@ class Chat:
             await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
             await asyncio.wait_for(live.client.disconnect(), CLOSE_WAIT_S)
+        if live.keeper is not None:
+            live.keeper.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await live.keeper
         if live.reader is not None and live.reader is not asyncio.current_task():
             live.reader.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
@@ -283,6 +374,9 @@ class Chat:
         if await asyncio.to_thread(deps.procs.alive, chat):
             raise LaunchRefused("an earlier agent process of this chat is still running")
         ensure_homes(deps.home)
+        tampered = await asyncio.to_thread(plugin_refusal, deps.home)
+        if tampered is not None:
+            raise LaunchRefused(tampered)
         planted = [
             name
             for claude_home in (deps.home.plan_dir, deps.home.relayed_dir)
@@ -309,6 +403,7 @@ class Chat:
         launch = await self._routing(settings)
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
+            servers, gate, vetted = await self._tools(launch, user.external_tools_unattended)
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
@@ -319,6 +414,9 @@ class Chat:
                 settings_json=settings,
                 launcher=deps.launcher,
                 can_use_tool=self._can_use_tool,
+                mcp_servers=servers,
+                gate=gate,
+                test=deps.test,
             )
             assert_argv_fits(options)
             live = _Live(ClaudeSDKClient(options), grant)
@@ -328,16 +426,79 @@ class Chat:
                 await deps.relay.revoke(grant)
             raise
         try:
+            status = await live.client.get_mcp_status()
             found = unexpected_extensions(
-                await live.client.get_server_info(), await live.client.get_mcp_status()
+                await live.client.get_server_info(), status, frozenset(servers)
             )
             if found:
                 raise LaunchRefused(_loaded(found))
+            for server in status["mcpServers"]:
+                if server["name"] in vetted and server["status"] == "disabled":
+                    await live.client.toggle_mcp_server(server["name"], enabled=True)
+            settled, pending = await _settled(live.client, frozenset(vetted))
+            gate.dropped_servers.update(pending)
+            for name in pending:
+                await live.client.toggle_mcp_server(name, enabled=False)
+                await self._note(
+                    "needs_you",
+                    {
+                        "reason": f"the MCP server {name} was left out: it did not finish "
+                        f"connecting in {MCP_SETTLE_S:.0f} s"
+                    },
+                )
+            if pending:
+                live.keeper = asyncio.create_task(_keep_off(live.client, frozenset(pending)))
+            compared = {name: tools for name, tools in vetted.items() if name not in pending}
+            unvetted = unvetted_tools(settled, compared)
+            if unvetted:
+                raise LaunchRefused(
+                    f"the CLI loaded MCP tools that vetting never saw ({', '.join(unvetted)})"
+                )
         except BaseException:
             await self._end(live)
             raise
         live.reader = asyncio.create_task(self._read(live))
         return live
+
+    async def _tools(
+        self, launch: Launch, external_unattended: frozenset[str]
+    ) -> tuple[dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]]]:
+        """The `qmx` server, the vetted external servers, the gate's rules and each vetted
+        server's tool names. A refused external server gets a `needs_you` block and is left
+        out; the chat still starts. `external_unattended` is the operator's allow-list for
+        external tools in an unattended chat or mode."""
+        deps = self._deps
+        control = deps.control
+        defs = await tool_defs(control=control, broker=deps.broker, domain=deps.domain)
+        policy = domain_write_policy(await asyncio.to_thread(control.settings_get, "agents"))
+        try:
+            qmx = build_server(
+                defs,
+                grants=self._grants,
+                domain_write=policy,
+                enforce_grants=deps.test is None or deps.test.grants,
+            )
+        except (MoneySurfaceError, ToolSurfaceError) as refused:
+            raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
+        vetted = await vet_mcp_servers(
+            await asyncio.to_thread(control.settings_get, "mcp_servers"), deps.vetted
+        )
+        for name, reason in vetted.refused.items():
+            await self._note(
+                "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
+            )
+        gate = gate_rules(
+            defs,
+            domain_write=policy,
+            home=deps.home,
+            config_dir=deps.home.plan_dir
+            if isinstance(launch, PlanLaunch)
+            else deps.home.relayed_dir,
+            keyring_names=await asyncio.to_thread(keyring_refs, control),
+            unattended=unattended(self.record.config.kind),
+            external_unattended=external_unattended,
+        )
+        return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile

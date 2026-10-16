@@ -18,9 +18,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from qmx_broker.service import BrokerService
 from qmx_control.models import ControlError
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
+from qmx_tools.service import DomainContext
 
 from qma.harness.chat import Chat, ChatDeps, Prompt
 from qma.harness.home import (
@@ -115,6 +117,9 @@ class Harness:
                 )
                 write_record(home, replace(record, turn="idle"))
         loopback = test is not None and test.loopback_http_provider
+        broker = BrokerService(home.root)
+        domain = DomainContext(root=home.root)
+        domain.control, domain.library = control, control.library
 
         def profiles() -> Profiles:
             return parse_profiles(control.settings_get("providers"), allow_loopback_http=loopback)
@@ -135,7 +140,14 @@ class Harness:
             procs.close()
             raise
         deps = ChatDeps(
-            home=home, control=control, procs=procs, launcher=LAUNCHER, relay=relay, test=test
+            home=home,
+            control=control,
+            procs=procs,
+            launcher=LAUNCHER,
+            relay=relay,
+            broker=broker,
+            domain=domain,
+            test=test,
         )
         return cls(deps)
 

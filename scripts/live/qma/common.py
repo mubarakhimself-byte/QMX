@@ -208,6 +208,7 @@ class Session:
         profile: str = "claude",
         mode: str = "default",
         tools: list[str] | None = None,
+        plugin_dir: Path | None = None,
     ) -> Session:
         """`tools` replaces the harness's `claude_code` preset for every launch in this process,
         and bypass mode needs it."""
@@ -215,9 +216,14 @@ class Session:
         if tools is not None:
             only_tools(tools)
         from qma.harness import Harness, NewChat, QmxHome  # noqa: PLC0415
+        from qma.harness.home import plugin_digest  # noqa: PLC0415
         from qma.harness.routes import control_service  # noqa: PLC0415
 
-        home = QmxHome(root)
+        home = (
+            QmxHome(root)
+            if plugin_dir is None
+            else QmxHome(root, plugin_dir, plugin_digest(plugin_dir))
+        )
         control = control_service(home)
         harness = await Harness.open(home, control=control, test=test)
         workspace.mkdir(parents=True, exist_ok=True)
@@ -349,17 +355,27 @@ def capture_grants() -> list[Any]:
     return minted
 
 
+NARROWED: list[str] = []
+"""The tools every launch gets once `only_tools` has run. One wrapper reads it, so a later
+call in the same process replaces the list instead of stacking a wrapper the earlier list
+would override."""
+
+
 def only_tools(tools: list[str]) -> None:
     """Every chat launch from now on runs with only `tools`."""
     import dataclasses  # noqa: PLC0415
 
     import qma.harness.chat as chat_module  # noqa: PLC0415
 
+    first = not NARROWED
+    NARROWED[:] = tools
+    if not first:
+        return
     base = chat_module.ClaudeSDKClient
 
     class Narrowed(base):
         def __init__(self, options: Any) -> None:
-            super().__init__(dataclasses.replace(options, tools=list(tools)))
+            super().__init__(dataclasses.replace(options, tools=list(NARROWED)))
 
     chat_module.ClaudeSDKClient = Narrowed
 

@@ -3,7 +3,7 @@
 Everything not set here is the vanilla CLI default, which is the operator's floor.
 
 - `tools` and `system_prompt` use the `claude_code` presets. The money rule is not enforced
-  by removing tools.
+  by removing tools: the gate callback and the deny rules (`money`) run on every call.
 - `permission_mode` is always passed. Omitting it can start the session in `auto`.
 - Settings in code. `setting_sources=[]`, so the CLI loads no settings file from any home, and
   every Claude setting arrives as one inline JSON string through `settings`
@@ -28,14 +28,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal
 
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from qma.boot import banned_fragment
+from qma.harness import money
 from qma.harness.profiles import TIER_ENV, ProfileName
 
 if TYPE_CHECKING:
-    from claude_agent_sdk.types import CanUseTool
+    from claude_agent_sdk import McpServerConfig
+    from claude_agent_sdk.types import CanUseTool, HookEvent
 
     from qma.harness.home import QmxHome, SessionId
     from qma.harness.relay import RelayGrant
@@ -253,9 +255,25 @@ def build_options(
     settings_json: str,
     launcher: Path,
     can_use_tool: CanUseTool,
+    mcp_servers: Mapping[str, McpServerConfig],
+    gate: money.GateRules,
+    test: TestMode | None = None,
 ) -> ClaudeAgentOptions:
-    """One plan chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
-    `ChatRecord.started`."""
+    """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
+    `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The money
+    gate runs as a PreToolUse callback on every tool, with an explicit timeout, and the deny
+    rules ride in `disallowed_tools`; `test` switches either off for a layer check."""
+    gate_hook = test is None or test.gate_hook
+    rules_on = test is None or test.deny_rules
+    hooks: dict[HookEvent, list[HookMatcher]] = (
+        {
+            "PreToolUse": [
+                HookMatcher(matcher=None, hooks=[money.pre_tool_use(gate)], timeout=GATE_TIMEOUT_S)
+            ]
+        }
+        if gate_hook
+        else {}
+    )
     return ClaudeAgentOptions(
         cli_path=launcher,
         tools={"type": "preset", "preset": "claude_code"},
@@ -273,6 +291,9 @@ def build_options(
         settings=settings_json,
         plugins=[{"type": "local", "path": str(home.plugin_dir)}],
         strict_mcp_config=True,
+        mcp_servers=dict(mcp_servers),
+        hooks=hooks or None,
+        disallowed_tools=money.deny_rules(gate) if rules_on else [],
         can_use_tool=can_use_tool,
         session_id=None if transcript_exists else session_id,
         resume=session_id if transcript_exists else None,

@@ -55,6 +55,7 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
+from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, gate_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
@@ -68,6 +69,39 @@ SessionId = NewType("SessionId", str)
 PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 """`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""
 
+PLUGIN_SHA256: Final = "1ad08fe8432b60134d15fa747251aed6b418d92a783be20619e9e59527402642"
+"""`plugin_digest(PLUGIN_DIR)` as shipped. The CLI reloads the plugin at every launch and
+only bypassable rules guard its folder, so a launch refuses any other content. Update this
+with any edit to the plugin."""
+
+
+def plugin_digest(folder: Path) -> str:
+    """sha256 over each file's path relative to `folder` and its bytes, CRLF read as LF so a
+    Windows checkout hashes as the commit does."""
+    digest = hashlib.sha256()
+    files = sorted((path.relative_to(folder).as_posix(), path) for path in folder.rglob("*"))
+    for name, path in files:
+        if path.is_file():
+            digest.update(name.encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
+
+
+def plugin_refusal(home: QmxHome) -> str | None:
+    """Why this launch may not load `home.plugin_dir`, or None. A `!` shell line in a command,
+    skill or agent body runs outside every hook, so the gate never sees it."""
+    folder = home.plugin_dir
+    for path in sorted(folder.rglob("*.md")):
+        if "!`" in path.read_text(encoding="utf-8", errors="replace"):
+            name = path.relative_to(folder).as_posix()
+            return f"the QMX plugin runs shell lines outside every hook ({name})"
+    found = plugin_digest(folder)
+    if found != home.plugin_sha256:
+        return (
+            f"the QMX plugin at {folder} changed since it shipped (sha256 {found}, shipped "
+            f"{home.plugin_sha256}); restore it from git"
+        )
+    return None
+
 
 def session_id(text: str) -> SessionId:
     if not is_chat_id(text):
@@ -79,6 +113,8 @@ def session_id(text: str) -> SessionId:
 class QmxHome:
     root: Path
     plugin_dir: Path = PLUGIN_DIR
+    plugin_sha256: str = PLUGIN_SHA256
+    """What `plugin_digest(plugin_dir)` must be at each launch."""
 
     @property
     def plan_dir(self) -> Path:
@@ -104,14 +140,16 @@ class QmxHome:
     def workspaces_dir(self) -> Path:
         return self.root / "workspaces"
 
+    @property
+    def agent_memory_dir(self) -> Path:
+        return self.root / "agent-memory"
+
     def memory_dir(self, workspace: Path) -> Path:
         """Auto memory for launches in `workspace`. Not a protected path, so agents read and
         write it as in vanilla."""
         key = workspace_key(workspace)
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", Path(key).name).strip("-.") or "root"
-        return (
-            self.root / "agent-memory" / f"{slug}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
-        )
+        return self.agent_memory_dir / f"{slug}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
 
 
 def workspace_key(workspace: Path) -> str:
@@ -175,13 +213,18 @@ CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
         "permissions", "env", "hooks",
         "outputStyle", "attribution", "includeCoAuthoredBy", "alwaysThinkingEnabled",
         "language", "respectGitignore",
-        "remembered",
+        "remembered", "external_tools_unattended",
     }
 )  # fmt: skip
 """Top-level keys allowed in `settings.toml [claude]`. Everything else refuses, including
 `apiKeyHelper`, `forceLoginMethod`, `disableAllHooks`, `enabledPlugins`, marketplaces and
 `model`. `remembered` is QMX's, never passed through as is: per-workspace "always allow"
-rules merged into `permissions.allow` only for launches in that workspace."""
+rules merged into `permissions.allow` only for launches in that workspace.
+`external_tools_unattended` is QMX's too: the `server/tool` and `server/*` entries whose
+external MCP tools may run in an unattended chat or mode (`money.GateRules`). Neither reaches
+the CLI."""
+
+QMX_ONLY_KEYS: Final = frozenset({"remembered", "external_tools_unattended"})
 
 PERMISSION_KEYS: Final = frozenset({"allow", "ask", "deny", "additionalDirectories"})
 
@@ -228,6 +271,10 @@ class ClaudeSettings:
 
     raw: Mapping[str, object] = field(default_factory=dict[str, object])
 
+    @property
+    def external_tools_unattended(self) -> frozenset[str]:
+        return frozenset(cast("list[str]", self.raw.get("external_tools_unattended", [])))
+
     def remembered(self, workspace: Path) -> list[str]:
         table = cast("Mapping[str, Mapping[str, list[str]]]", self.raw.get("remembered", {}))
         return list(table.get(workspace_key(workspace), {}).get("allow", []))
@@ -251,6 +298,20 @@ def _table(value: object, key: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise _refuse(key, "must be a table")
     return cast("dict[str, object]", value)
+
+
+_EXTERNAL_ENTRY = re.compile(rf"({SERVER_NAME.pattern})/(\*|[A-Za-z0-9_.-]+)")
+
+
+def _external_entries(value: object) -> None:
+    key = "external_tools_unattended"
+    _strings(value, key)
+    for entry in cast("list[str]", value):
+        found = _EXTERNAL_ENTRY.fullmatch(entry)
+        if found is None:
+            raise _refuse(key, f"holds {entry!r}, which is not server/tool or server/*")
+        if found.group(1) == SERVER:
+            raise _refuse(key, f"holds {entry!r}; QMX's own tools follow their effect table")
 
 
 def _hooks(value: object) -> None:
@@ -309,6 +370,8 @@ def parse_claude_settings(raw: Mapping[str, object]) -> ClaudeSettings:
                     raise _refuse(f"env.{name}", "must be a string")
         elif key == "hooks":
             _hooks(value)
+        elif key == "external_tools_unattended":
+            _external_entries(value)
         elif key == "remembered":
             for workspace, rules in _table(value, key).items():
                 entry = _table(rules, f"remembered.{workspace}")
@@ -355,7 +418,9 @@ def code_settings(
     """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
     The operator's keys, the workspace's remembered rules, then the fixed values, which win."""
     document: dict[str, Any] = {
-        key: value for key, value in json.loads(json.dumps(user.raw)).items() if key != "remembered"
+        key: value
+        for key, value in json.loads(json.dumps(user.raw)).items()
+        if key not in QMX_ONLY_KEYS
     }
     remembered = user.remembered(workspace)
     if remembered:
@@ -746,6 +811,16 @@ def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) ->
         settings_json=settings,
         launcher=launcher,
         can_use_tool=_no_tools,
+        mcp_servers={},
+        gate=gate_rules(
+            [],
+            domain_write=DEFAULT_DOMAIN_WRITE,
+            home=home,
+            config_dir=home.plan_dir,
+            keyring_names=frozenset(),
+            unattended=False,
+            external_unattended=frozenset(),
+        ),
     )
     total, parts = argv_length(options)
     name, size = max(parts.items(), key=lambda part: part[1])
