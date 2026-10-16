@@ -4,18 +4,34 @@
 allows `TestMode(` nowhere else.
 """
 
-from qma.harness.chat import OperatorText
+from qma.harness.chat import (
+    AllowAlways,
+    AllowOnce,
+    Answer,
+    Answers,
+    AnswerStatus,
+    AskId,
+    OperatorText,
+    Reject,
+)
 from qma.harness.harness import Harness, NewChat, UnknownChat
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import LaunchRefused, TestMode
 from qma.harness.routes import serve
 
 __all__ = [
+    "AllowAlways",
+    "AllowOnce",
+    "Answer",
+    "AnswerStatus",
+    "Answers",
+    "AskId",
     "Harness",
     "LaunchRefused",
     "NewChat",
     "OperatorText",
     "QmxHome",
+    "Reject",
     "SessionId",
     "TestMode",
     "UnknownChat",

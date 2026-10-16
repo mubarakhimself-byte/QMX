@@ -16,7 +16,6 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     Message,
-    PermissionResultDeny,
     ResultMessage,
     StreamEvent,
     SystemMessage,
@@ -28,7 +27,7 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
 )
-from claude_agent_sdk.types import TaskUpdatedMessage, ToolPermissionContext
+from claude_agent_sdk.types import TaskUpdatedMessage
 from fastapi.testclient import TestClient
 from qmx_control.models import Document
 from qmx_control.server import create_app
@@ -258,28 +257,6 @@ def test_a_record_left_running_yields_one_needs_you_block_at_open(home: QmxHome)
             {"reason": "the last turn ended with an unknown outcome; send a message to continue"},
         )
     ]
-
-
-def test_the_floor_rejects_every_call_that_would_ask_and_shows_it(home: QmxHome) -> None:
-    async def body(harness: Harness) -> None:
-        chat = await harness.start_chat(NewChat(title="floor", model="haiku"))
-        await harness.send(chat, OperatorText("write a file"))
-        ask = FakeClient.made[0].options.can_use_tool
-        assert ask is not None
-        context = ToolPermissionContext(signal=None, suggestions=[])
-        answer = await ask("Write", {"file_path": "hello.txt", "content": "hi"}, context)
-        assert answer == PermissionResultDeny(message="approvals are not wired yet")
-        assert blocks(home, chat)[-1] == (
-            "permission",
-            {
-                "tool": "Write",
-                "input": {"file_path": "hello.txt", "content": "hi"},
-                "state": "rejected",
-                "reason": "approvals are not wired yet",
-            },
-        )
-
-    run(body, home)
 
 
 @pytest.mark.parametrize(
