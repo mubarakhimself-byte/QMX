@@ -43,7 +43,6 @@ from claude_agent_sdk import PermissionResultDeny
 from qma.boot import banned_fragment
 from qma.harness.launch import (
     ARGV_BUDGET,
-    PLAN,
     Background,
     ChatConfig,
     ChatKind,
@@ -51,11 +50,11 @@ from qma.harness.launch import (
     Interactive,
     LaunchRefused,
     PlanLaunch,
-    ProfileName,
     argv_length,
     build_options,
     launch_env,
 )
+from qma.harness.profiles import PLAN, ProfileName, parse_profiles
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
@@ -804,6 +803,10 @@ def doctor(
             f"logged in {auth.logged_in}, method {auth.method}, provider {auth.provider}, "
             f"subscription {auth.subscription}",
         )
+    )
+    errors = parse_profiles(control.settings_get("providers")).errors
+    lines.append(
+        DoctorLine("[providers]", not errors, "; ".join(errors.values()) or "every row parses")
     )
     lines += _policy_lines()
     lines += [

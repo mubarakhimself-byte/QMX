@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+import httpx
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
@@ -25,12 +28,19 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import TaskUpdatedMessage, ToolPermissionContext
 from fastapi.testclient import TestClient
+from qmx_control.models import Document
 from qmx_control.server import create_app
+from qmx_control.service import ControlService, SessionBlock
 
 import qma.harness.chat
+import qma.harness.harness
+import qma.harness.procs
 from qma.harness import Harness, LaunchRefused, NewChat, OperatorText, QmxHome, SessionId
+from qma.harness.harness import UsageRows, journal_path
 from qma.harness.home import PlanAuth, read_record, write_record
+from qma.harness.profiles import ProfileName
 from qma.harness.project import REDACTED
+from qma.harness.relay import Relay, RelayGrant, RelayUsage
 from qma.harness.routes import chat_router, control_service
 
 SIGNED_IN = PlanAuth(logged_in=True, method="claude.ai", provider="firstParty", subscription="max")
@@ -668,14 +678,251 @@ def test_a_cli_that_ends_mid_turn_leaves_an_unknown_outcome(home: QmxHome) -> No
 
 
 def test_the_live_door_answers_404_for_an_unknown_chat_before_streaming(home: QmxHome) -> None:
-    control = control_service(home)
-    harness = asyncio.run(Harness.open(home, control=control))
-    app = create_app(control, "test-token", extra_routers=[chat_router(harness)])
     unknown = "0b6e6c1e-8a43-4f2b-9d3c-5a7e2f1c9b10"
-    with TestClient(app) as rest:
-        answer = rest.get(
-            f"/api/sessions/{unknown}/live", headers={"Authorization": "Bearer test-token"}
+    answers: list[tuple[int, str, object]] = []
+
+    def get(harness: Harness) -> None:
+        app = create_app(control_service(home), "test-token", extra_routers=[chat_router(harness)])
+        with TestClient(app) as rest:
+            answer = rest.get(
+                f"/api/sessions/{unknown}/live", headers={"Authorization": "Bearer test-token"}
+            )
+        answers.append(
+            (answer.status_code, answer.headers["content-type"], answer.json()["error"]["message"])
         )
-    asyncio.run(harness.close())
-    assert (answer.status_code, answer.headers["content-type"]) == (404, "application/json")
-    assert answer.json()["error"]["message"] == f"No chat has the session id {unknown}."
+
+    async def body(harness: Harness) -> None:
+        await asyncio.to_thread(get, harness)
+
+    run(body, home)
+    assert answers == [(404, "application/json", f"No chat has the session id {unknown}.")]
+
+
+ROUTER_ROW: Document = {
+    "base_url": "https://openrouter.ai/api",
+    "credential_ref": "qmx/openrouter",
+    "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "deepseek/deepseek-v4.1-flash"),
+}
+
+
+def no_plan_login(*_: object) -> PlanAuth:
+    raise AssertionError("a relayed launch read the plan login")
+
+
+def test_a_key_chat_launches_through_a_relay_grant_revoked_when_its_cli_ends(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qma.harness.chat, "plan_auth_method", no_plan_login)
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _ref: "key")  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    control_service(home).settings_put("providers", {"openrouter": ROUTER_ROW})
+    statuses: list[int] = []
+
+    async def probe(env: dict[str, str]) -> int:
+        async with httpx.AsyncClient(trust_env=False) as client:
+            answer = await client.post(
+                f"{env['ANTHROPIC_BASE_URL']}/v1/other",
+                headers={"authorization": f"Bearer {env['ANTHROPIC_AUTH_TOKEN']}"},
+            )
+        return answer.status_code
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="k", model="opus", profile="openrouter"))
+        await harness.send(chat, OperatorText("hi"))
+        env = dict(FakeClient.made[0].options.env)
+        assert env["CLAUDE_CONFIG_DIR"] == str(home.relayed_dir)
+        assert env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "deepseek/deepseek-v4.1-flash"
+        assert env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
+        assert "key" not in env.values()
+        statuses.append(await probe(env))
+        FakeClient.made[0].go.set()
+        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        FakeClient.made[0].inbox.put_nowait(None)
+        await settle(lambda: FakeClient.made[0].disconnected)
+        statuses.append(await probe(env))
+
+    run(body, home)
+    assert statuses == [404, 401]
+
+
+def record_grants(monkeypatch: pytest.MonkeyPatch) -> list[RelayGrant]:
+    minted: list[RelayGrant] = []
+    real = Relay.grant
+
+    async def grant(relay: Relay, session: SessionId, profile: ProfileName) -> RelayGrant:
+        made = await real(relay, session, profile)
+        minted.append(made)
+        return made
+
+    monkeypatch.setattr(Relay, "grant", grant)
+    return minted
+
+
+async def answers(grant: RelayGrant) -> int:
+    async with httpx.AsyncClient(trust_env=False) as client:
+        reply = await client.post(
+            f"{grant.base_url}/v1/other", headers={"authorization": f"Bearer {grant.secret}"}
+        )
+    return reply.status_code
+
+
+def key_chat(home: QmxHome, monkeypatch: pytest.MonkeyPatch) -> list[RelayGrant]:
+    monkeypatch.setattr(qma.harness.chat, "plan_auth_method", no_plan_login)
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _ref: "key")  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    control_service(home).settings_put("providers", {"openrouter": ROUTER_ROW})
+    return record_grants(monkeypatch)
+
+
+def test_an_old_cli_teardown_never_revokes_or_stops_the_next_cli(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    minted = key_chat(home, monkeypatch)
+    stopped: list[int] = []
+    append = ControlService.sessions_append
+
+    def slow_append(self: ControlService, session: str, block: SessionBlock) -> Document:
+        if block.type == "needs_you":
+            time.sleep(0.2)
+        return append(self, session, block)
+
+    def stop_chat(_self: object, _chat: str) -> None:
+        time.sleep(0.2)
+        stopped.append(len(FakeClient.made))
+
+    monkeypatch.setattr(ControlService, "sessions_append", slow_append)
+    monkeypatch.setattr(qma.harness.procs.AgentProcessCap, "stop_chat", stop_chat)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="k", model="opus", profile="openrouter"))
+        await harness.send(chat, OperatorText("long job"))
+        FakeClient.made[0].inbox.put_nowait(None)
+        for _ in range(3):
+            await asyncio.sleep(0)
+        await harness.send(chat, OperatorText("again"))
+        await settle(lambda: len(stopped) == 1)
+        await asyncio.sleep(0.05)
+        assert len(FakeClient.made) == 2
+        assert stopped == [1]
+        assert [await answers(grant) for grant in minted] == [401, 404]
+
+    run(body, home)
+
+
+def test_a_launch_refused_after_its_grant_was_minted_revokes_it(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    minted = key_chat(home, monkeypatch)
+    FakeClient.commands = [*FakeClient.commands, {"name": "planted:mod-check"}]
+
+    async def body(harness: Harness) -> None:
+        gone = await harness.start_chat(NewChat(title="g", model="opus", profile="openrouter"))
+        record = read_record(home, gone)
+        assert record is not None
+        write_record(home, record.__class__(gone, record.config, started=True, turn="idle"))
+        with pytest.raises(LaunchRefused, match="transcript is gone"):
+            await harness.send(gone, OperatorText("hi"))
+        planted = await harness.start_chat(NewChat(title="p", model="opus", profile="openrouter"))
+        with pytest.raises(LaunchRefused, match="planted:mod-check"):
+            await harness.send(planted, OperatorText("hi"))
+        assert minted
+        assert [await answers(grant) for grant in minted] == [401] * len(minted)
+
+    run(body, home)
+
+
+def test_a_connect_failure_revokes_the_grant(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    minted = key_chat(home, monkeypatch)
+
+    async def refuse(_self: FakeClient) -> None:
+        raise ConnectionError("the CLI did not start")
+
+    monkeypatch.setattr(FakeClient, "connect", refuse)
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="k", model="opus", profile="openrouter"))
+        with pytest.raises(ConnectionError):
+            await harness.send(chat, OperatorText("hi"))
+        assert [await answers(grant) for grant in minted] == [401]
+
+    run(body, home)
+
+
+@pytest.mark.parametrize(
+    ("profile", "model", "message"),
+    [
+        ("kimi", "opus", "no provider is named 'kimi'"),
+        ("openrouter", "claude-opus-5-5", "openrouter cannot run the model 'claude-opus-5-5'"),
+        ("claude", "deepseek/deepseek-v4.1-flash", "claude cannot run the model"),
+    ],
+)
+def test_a_chat_on_an_unknown_profile_or_a_refused_model_never_starts(
+    home: QmxHome, profile: str, model: str, message: str
+) -> None:
+    control_service(home).settings_put("providers", {"openrouter": ROUTER_ROW})
+
+    async def body(harness: Harness) -> None:
+        with pytest.raises(LaunchRefused, match=re.escape(message)):
+            await harness.start_chat(NewChat(title="x", model=model, profile=profile))
+
+    run(body, home)
+
+
+def test_a_bad_provider_row_blocks_only_itself(home: QmxHome) -> None:
+    broken: Document = {"base_url": "http://openrouter.ai/api"}
+    control_service(home).settings_put("providers", {"broken": broken, "openrouter": ROUTER_ROW})
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="plan", model="opus"))
+        await harness.send(chat, OperatorText("hi"))
+        assert len(FakeClient.made) == 1
+        await harness.start_chat(NewChat(title="key", model="opus", profile="openrouter"))
+        with pytest.raises(LaunchRefused, match=re.escape("[providers.broken]")):
+            await harness.start_chat(NewChat(title="x", model="opus", profile="broken"))
+
+    run(body, home)
+
+
+def test_relay_usage_lands_in_the_run_journal_through_one_held_writer(home: QmxHome) -> None:
+    chat = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
+    call = RelayUsage(chat, ProfileName("openrouter"), "/v1/messages", 200, "m", 5, 6, 7, 8)
+    count = RelayUsage(chat, ProfileName("openrouter"), "/v1/messages/count_tokens", 200, "m")
+    rows = UsageRows.open(home, chat)
+    lock = Path(f"{journal_path(home, chat)}.lock")
+    for usage in (call, count, call):
+        rows.append(usage)
+        assert lock.exists()
+    rows.close()
+    assert not lock.exists()
+    lines = journal_path(home, chat).read_text(encoding="utf-8").splitlines()
+    records = [json.loads(line) for line in lines]
+    assert [record["event"] for record in records] == ["model_call", "token_count", "model_call"]
+    assert records[0]["payload"] == {
+        "agent": "primary",
+        "model": "m",
+        "profile": "openrouter",
+        "path": "/v1/messages",
+        "status": 200,
+        "input_tokens": 5,
+        "output_tokens": 6,
+        "cache_read_tokens": 7,
+        "cache_write_tokens": 8,
+    }
+    indexed = control_service(home).run_index.refresh()
+    assert [(run["id"], run["model"]) for run in indexed] == [(chat, {"primary": "m"})]
+
+
+def test_open_reaps_the_journal_lock_a_crash_left(home: QmxHome) -> None:
+    async def start(harness: Harness) -> None:
+        chats.append(await harness.start_chat(NewChat(title="t", model="haiku")))
+
+    chats: list[SessionId] = []
+    run(start, home)
+    lock = Path(f"{journal_path(home, chats[0])}.lock")
+    lock.parent.mkdir(parents=True)
+    lock.write_text("", encoding="utf-8")
+
+    async def reopened(_harness: Harness) -> None:
+        assert not lock.exists()
+
+    run(reopened, home)

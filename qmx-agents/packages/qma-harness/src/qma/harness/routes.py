@@ -79,6 +79,7 @@ class NewChatIn(BaseModel):
     effort: Effort | None = None
     mode: PermissionMode = "default"
     workspace: str | None = None
+    profile: str = "claude"
 
 
 class TurnIn(BaseModel):
@@ -104,6 +105,7 @@ def chat_router(harness: Harness) -> APIRouter:
             effort=body.effort,
             mode=body.mode,
             workspace=Path(body.workspace) if body.workspace else None,
+            profile=body.profile,
         )
         try:
             chat = await harness.start_chat(spec)

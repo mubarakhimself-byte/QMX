@@ -30,7 +30,8 @@ from qma.harness.home import (
     workspace_key,
     write_record,
 )
-from qma.harness.launch import PLAN, ChatConfig, Child, Interactive, LaunchRefused
+from qma.harness.launch import ChatConfig, Child, Interactive, LaunchRefused
+from qma.harness.profiles import PLAN
 from qma.harness.routes import control_service, router
 
 BEARER = "test-token"
@@ -198,6 +199,7 @@ def test_doctor_names_the_homes_scrubbed_names_and_a_relayed_login(
         monkeypatch.setenv(name, str(tmp_path / "throwaway"))
     ensure_homes(home)
     (home.relayed_dir / ".credentials.json").write_text("{}", encoding="utf-8")
+    control_service(home).settings_put("providers", {"broken": {"base_url": "x"}})
     lines = {
         line.name: line
         for line in doctor(
@@ -208,6 +210,8 @@ def test_doctor_names_the_homes_scrubbed_names_and_a_relayed_login(
             launcher=LAUNCHER,
         )
     }
+    assert not lines["[providers]"].ok
+    assert lines["[providers]"].detail.startswith("[providers.broken] ")
     assert lines["boot scrub removed"].detail == "ANTHROPIC_API_KEY, HTTPS_PROXY"
     assert not lines["relayed home login"].ok
     assert str(home.relayed_dir / ".credentials.json") in lines["relayed home login"].detail

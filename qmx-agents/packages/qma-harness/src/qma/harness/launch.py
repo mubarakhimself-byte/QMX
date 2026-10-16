@@ -26,20 +26,19 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Literal, NewType
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from claude_agent_sdk import ClaudeAgentOptions
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from qma.boot import banned_fragment
+from qma.harness.profiles import TIER_ENV, ProfileName
 
 if TYPE_CHECKING:
     from claude_agent_sdk.types import CanUseTool
 
     from qma.harness.home import QmxHome, SessionId
-
-ProfileName = NewType("ProfileName", str)
-PLAN: Final = ProfileName("claude")
+    from qma.harness.relay import RelayGrant
 
 type PermissionMode = Literal[
     "default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"
@@ -144,18 +143,42 @@ class PlanLaunch:
     owns sign-in, and no QMX process is in the request path."""
 
 
-type Launch = PlanLaunch
+@dataclass(frozen=True)
+class RelayedLaunch:
+    """A key provider through the loopback relay. Only `Relay.grant` mints a grant, and only
+    for a key profile, so a third-party base URL without its own token cannot be built and a
+    plan launch cannot be relayed. Runs in the relayed home, which holds no login."""
+
+    grant: RelayGrant
+
+
+type Launch = PlanLaunch | RelayedLaunch
+
+LOOPBACK: Final = "127.0.0.1,localhost"
 
 
 def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str) -> dict[str, str]:
-    """The names this launch needs plus `CONSTANT_ENV`. The `QMA_*` names are the launcher's
-    inputs, which it strips before the CLI starts."""
+    """The names this launch needs plus `CONSTANT_ENV`. A relayed launch adds the relay URL,
+    the grant secret (never a provider key), the four pinned tiers, `NO_PROXY` for loopback and
+    the profile's env quirks. The `QMA_*` names are the launcher's inputs, which it strips
+    before the CLI starts."""
+    routing: dict[str, str]
     match launch:
         case PlanLaunch():
-            config_dir = home.plan_dir
+            routing = {"CLAUDE_CONFIG_DIR": str(home.plan_dir)}
+        case RelayedLaunch(grant=grant):
+            tiers = grant.profile.tiers
+            routing = {
+                **grant.profile.quirks.env,
+                "CLAUDE_CONFIG_DIR": str(home.relayed_dir),
+                "ANTHROPIC_BASE_URL": grant.base_url,
+                "ANTHROPIC_AUTH_TOKEN": grant.secret,
+                **{name: getattr(tiers, tier) for tier, name in TIER_ENV.items()},
+                "NO_PROXY": LOOPBACK,
+            }
     return {
         **CONSTANT_ENV,
-        "CLAUDE_CONFIG_DIR": str(config_dir),
+        **routing,
         "QMA_CHAT_ID": session_id,
         "QMA_PROC_DIR": str(home.procs_dir),
         "QMA_CAP": cap,
