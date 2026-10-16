@@ -120,8 +120,13 @@ CONSTANT_ENV: Final[Mapping[str, str]] = {
     "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
+    "CLAUDE_CODE_DISABLE_WORKFLOWS": "1",
     "CLAUDE_AGENT_SDK_CLIENT_APP": "QMA",
+    **({"CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"} if os.name == "nt" else {}),
 }
+"""Nonessential traffic off also stops feature-flag fetching, which drops the PowerShell, Monitor,
+DesignSync and PushNotification tools (measured, CLI 2.1.299). On Windows, vanilla Claude Code
+offers PowerShell, so it is turned back on by name; the other three stay off."""
 
 LAUNCHER: Final = Path(sys.executable).parent / (
     "qma-cli-launcher.exe" if os.name == "nt" else "qma-cli-launcher"

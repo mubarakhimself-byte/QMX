@@ -1,0 +1,681 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from pathlib import Path
+from typing import Any, ClassVar, cast
+
+import pytest
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    Message,
+    PermissionResultDeny,
+    ResultMessage,
+    StreamEvent,
+    SystemMessage,
+    TaskNotificationMessage,
+    TaskProgressMessage,
+    TaskStartedMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
+from claude_agent_sdk.types import TaskUpdatedMessage, ToolPermissionContext
+from fastapi.testclient import TestClient
+from qmx_control.server import create_app
+
+import qma.harness.chat
+from qma.harness import Harness, LaunchRefused, NewChat, OperatorText, QmxHome, SessionId
+from qma.harness.home import PlanAuth, read_record, write_record
+from qma.harness.project import REDACTED
+from qma.harness.routes import chat_router, control_service
+
+SIGNED_IN = PlanAuth(logged_in=True, method="claude.ai", provider="firstParty", subscription="max")
+CANARY = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
+SAID = f"the login is {CANARY} and more"
+SHOWN = f"the login is {REDACTED} and more"
+INLINE_QMX = {"name": "qmx", "path": "D:/qmx/plugin", "source": "qmx@inline"}
+BUILTIN = {
+    "name": "cc-plugin-agents-md",
+    "path": "builtin",
+    "source": "cc-plugin-agents-md@builtin",
+}
+
+
+class FakeClient:
+    """Stands in for `ClaudeSDKClient`: answers each query with an init message and `script`,
+    released by `go`. An interrupt answers like the CLI, with an aborted result."""
+
+    made: ClassVar[list[FakeClient]] = []
+    commands: ClassVar[list[dict[str, Any]]] = []
+    agents: ClassVar[list[dict[str, Any]]] = []
+    servers: ClassVar[list[dict[str, Any]]] = []
+    plugins: ClassVar[list[dict[str, Any]]] = []
+    script: ClassVar[Callable[[str], Sequence[Message | None]]]
+
+    def __init__(self, options: ClaudeAgentOptions) -> None:
+        self.options = options
+        self.inbox: asyncio.Queue[Message | None] = asyncio.Queue()
+        self.go = asyncio.Event()
+        self.disconnected = False
+        FakeClient.made.append(self)
+
+    async def connect(self) -> None:
+        return None
+
+    async def get_server_info(self) -> dict[str, Any]:
+        return {"commands": FakeClient.commands, "agents": FakeClient.agents}
+
+    async def get_mcp_status(self) -> dict[str, list[dict[str, Any]]]:
+        return {"mcpServers": FakeClient.servers}
+
+    async def query(self, text: str) -> None:
+        async def answer() -> None:
+            await self.go.wait()
+            for reply in [init(), *FakeClient.script(text)]:
+                self.inbox.put_nowait(reply)
+
+        asyncio.get_running_loop().create_task(answer())
+
+    async def receive_messages(self) -> AsyncIterator[Message]:
+        while (message := await self.inbox.get()) is not None:
+            yield message
+
+    async def interrupt(self) -> None:
+        self.inbox.put_nowait(result(terminal_reason="aborted_streaming"))
+
+    async def disconnect(self) -> None:
+        self.disconnected = True
+        self.inbox.put_nowait(None)
+
+
+def init() -> SystemMessage:
+    return SystemMessage(subtype="init", data={"plugins": FakeClient.plugins})
+
+
+def result(**changes: Any) -> ResultMessage:
+    fields: dict[str, Any] = {
+        "subtype": "success",
+        "duration_ms": 5,
+        "duration_api_ms": 5,
+        "is_error": False,
+        "num_turns": 1,
+        "session_id": "s",
+        "terminal_reason": "completed",
+    }
+    return ResultMessage(**(fields | changes))
+
+
+def replies(text: str) -> list[Message]:
+    return [AssistantMessage(content=[TextBlock(f"echo {text}")], model="haiku"), result()]
+
+
+@pytest.fixture
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> QmxHome:
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(tmp_path / "throwaway"))
+    monkeypatch.setattr(qma.harness.chat, "ClaudeSDKClient", FakeClient)
+    monkeypatch.setattr(qma.harness.chat, "plan_auth_method", lambda *_: SIGNED_IN)  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    FakeClient.made = []
+    FakeClient.commands = [{"name": "compact", "builtin": True}, {"name": "qmx:qmx-overview"}]
+    FakeClient.agents = [{"name": "Explore"}, {"name": "qmx:reviewer"}]
+    FakeClient.servers = []
+    FakeClient.plugins = [INLINE_QMX, BUILTIN]
+    FakeClient.script = replies
+    return QmxHome(tmp_path / "qmx")
+
+
+def run(body: Callable[[Harness], Awaitable[None]], home: QmxHome) -> None:
+    async def main() -> None:
+        harness = await Harness.open(home, control=control_service(home))
+        try:
+            await body(harness)
+        finally:
+            await harness.close()
+
+    asyncio.run(main())
+
+
+def blocks(home: QmxHome, chat: str) -> list[tuple[str, dict[str, Any]]]:
+    events = cast("list[dict[str, Any]]", control_service(home).events("sessions", 0, chat, 1000))
+    return [
+        (event["data"]["block"]["type"], event["data"]["block"]["content"])
+        for event in events
+        if event["data"].get("type") == "block"
+    ]
+
+
+async def settle(check: Callable[[], bool]) -> None:
+    for _ in range(1000):
+        if check():
+            return
+        await asyncio.sleep(0.01)
+
+
+def plant_transcript(home: QmxHome, chat: str) -> Path:
+    path = home.plan_dir / "projects" / "D--work" / f"{chat}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"type":"user"}\n', encoding="utf-8")
+    return path
+
+
+def test_started_turns_true_only_on_the_first_result(home: QmxHome) -> None:
+    seen: list[tuple[str, bool]] = []
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="t", model="haiku"))
+        await harness.send(chat, OperatorText("hello"))
+        record = read_record(home, chat)
+        assert record is not None
+        seen.append((record.turn, record.started))
+        FakeClient.made[0].go.set()
+        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        record = read_record(home, chat)
+        assert record is not None
+        seen.append((record.turn, record.started))
+        assert blocks(home, chat) == [("user", {"text": "hello"}), ("text", {"text": "echo hello"})]
+
+    run(body, home)
+    assert seen == [("running", False), ("idle", True)]
+
+
+def test_the_resume_table_follows_the_transcript_on_disk(home: QmxHome) -> None:
+    picked: list[tuple[str | None, str | None]] = []
+
+    async def body(harness: Harness) -> None:
+        fresh = await harness.start_chat(NewChat(title="fresh", model="haiku"))
+        partial = await harness.start_chat(NewChat(title="partial", model="haiku"))
+        plant_transcript(home, partial)
+        for chat in (fresh, partial):
+            await harness.send(chat, OperatorText("hi"))
+        picked.extend((c.options.session_id, c.options.resume) for c in FakeClient.made)
+        assert picked == [(fresh, None), (None, partial)]
+
+    run(body, home)
+    assert len(picked) == 2
+
+
+def test_a_started_chat_whose_transcript_is_gone_is_refused(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="gone", model="haiku"))
+        record = read_record(home, chat)
+        assert record is not None
+        write_record(home, record.__class__(chat, record.config, started=True, turn="idle"))
+        with pytest.raises(LaunchRefused, match="transcript is gone"):
+            await harness.send(chat, OperatorText("hi"))
+        assert FakeClient.made == []
+        assert blocks(home, chat) == [
+            (
+                "needs_you",
+                {"reason": "this chat's transcript is gone from the plan home; start a new chat"},
+            )
+        ]
+
+    run(body, home)
+
+
+def test_a_record_left_running_yields_one_needs_you_block_at_open(home: QmxHome) -> None:
+    holder: list[SessionId] = []
+
+    async def first(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="crashed", model="haiku"))
+        record = read_record(home, chat)
+        assert record is not None
+        write_record(home, record.__class__(chat, record.config, started=True, turn="running"))
+        holder.append(chat)
+
+    async def again(_: Harness) -> None:
+        return None
+
+    run(first, home)
+    run(again, home)
+    run(again, home)
+    chat = holder[0]
+    record = read_record(home, chat)
+    assert (record.turn if record else None) == "idle"
+    assert blocks(home, chat) == [
+        (
+            "needs_you",
+            {"reason": "the last turn ended with an unknown outcome; send a message to continue"},
+        )
+    ]
+
+
+def test_the_floor_rejects_every_call_that_would_ask_and_shows_it(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="floor", model="haiku"))
+        await harness.send(chat, OperatorText("write a file"))
+        ask = FakeClient.made[0].options.can_use_tool
+        assert ask is not None
+        context = ToolPermissionContext(signal=None, suggestions=[])
+        answer = await ask("Write", {"file_path": "hello.txt", "content": "hi"}, context)
+        assert answer == PermissionResultDeny(message="approvals are not wired yet")
+        assert blocks(home, chat)[-1] == (
+            "permission",
+            {
+                "tool": "Write",
+                "input": {"file_path": "hello.txt", "content": "hi"},
+                "state": "rejected",
+                "reason": "approvals are not wired yet",
+            },
+        )
+
+    run(body, home)
+
+
+@pytest.mark.parametrize(
+    ("kind", "found"),
+    [
+        ("commands", "command planted:mod-check"),
+        ("agents", "agent planted:helper"),
+        ("servers", "MCP server planted"),
+    ],
+)
+def test_an_extension_besides_qmx_closes_the_chat_before_its_first_prompt(
+    home: QmxHome, kind: str, found: str
+) -> None:
+    extra = {
+        "commands": {"name": "planted:mod-check"},
+        "agents": {"name": "planted:helper"},
+        "servers": {"name": "planted", "status": "connected"},
+    }[kind]
+    setattr(FakeClient, kind, [*getattr(FakeClient, kind), extra])
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="planted", model="haiku"))
+        with pytest.raises(LaunchRefused, match=found):
+            await harness.send(chat, OperatorText("hi"))
+        assert FakeClient.made[0].disconnected
+        assert blocks(home, chat) == [
+            (
+                "needs_you",
+                {
+                    "reason": f"the CLI loaded {found} besides the QMX plugin; "
+                    "remove it from the Claude home"
+                },
+            )
+        ]
+
+    run(body, home)
+
+
+def test_a_plugin_the_init_message_names_besides_qmx_closes_the_chat(home: QmxHome) -> None:
+    hooks_only = {"name": "hooksonly", "path": "D:/plants/hooksonly", "source": "hooksonly@inline"}
+    FakeClient.plugins = [*FakeClient.plugins, hooks_only]
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="hooks", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        FakeClient.made[0].go.set()
+        await settle(lambda: FakeClient.made[0].disconnected)
+        record = read_record(home, chat)
+        assert record is not None
+        assert (record.turn, record.started) == ("idle", False)
+        assert blocks(home, chat) == [
+            ("user", {"text": "hi"}),
+            (
+                "needs_you",
+                {
+                    "reason": "the CLI loaded plugin hooksonly@inline besides the QMX plugin; "
+                    "remove it from the Claude home"
+                },
+            ),
+        ]
+
+    run(body, home)
+
+
+@pytest.mark.parametrize(
+    ("relative", "content"),
+    [
+        ("claude/settings.json", {"enabledPlugins": {"planted@market": True}}),
+        (
+            "claude-relayed/plugins/installed_plugins.json",
+            {"version": 2, "plugins": {"planted@market": [{"scope": "user"}]}},
+        ),
+    ],
+)
+def test_a_plugin_installed_into_a_claude_home_is_refused_before_connect(
+    home: QmxHome, relative: str, content: dict[str, Any]
+) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="installed", model="haiku"))
+        planted = home.root / relative
+        planted.parent.mkdir(parents=True, exist_ok=True)
+        planted.write_text(json.dumps(content), encoding="utf-8")
+        with pytest.raises(LaunchRefused, match="planted@market"):
+            await harness.send(chat, OperatorText("hi"))
+        assert FakeClient.made == []
+        assert blocks(home, chat) == [
+            (
+                "needs_you",
+                {
+                    "reason": "the Claude home has plugin planted@market installed besides "
+                    "the QMX plugin; remove it from the Claude home"
+                },
+            )
+        ]
+
+    run(body, home)
+
+
+def test_an_interrupt_ends_the_running_turn(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="stop", model="haiku"))
+        await harness.send(chat, OperatorText("long job"))
+        await harness.interrupt(chat)
+        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        record = read_record(home, chat)
+        assert record is not None
+        assert (record.turn, record.started) == ("idle", True)
+
+    run(body, home)
+
+
+def turn_of(home: QmxHome, chat: SessionId) -> str:
+    return getattr(read_record(home, chat), "turn", "")
+
+
+def test_a_queued_prompt_keeps_the_turn_running_until_its_own_result(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="queued", model="haiku"))
+        await harness.send(chat, OperatorText("first"))
+        await harness.send(chat, OperatorText("second"))
+        inbox = FakeClient.made[0].inbox
+        for message in [init(), *replies("first"), init()]:
+            inbox.put_nowait(message)
+        await settle(lambda: ("text", {"text": "echo first"}) in blocks(home, chat))
+        await asyncio.sleep(0.05)
+        assert turn_of(home, chat) == "running"
+        for message in replies("second"):
+            inbox.put_nowait(message)
+        await settle(lambda: turn_of(home, chat) == "idle")
+        assert blocks(home, chat)[-1] == ("text", {"text": "echo second"})
+        assert turn_of(home, chat) == "idle"
+
+    run(body, home)
+
+
+def test_a_prompt_folded_into_the_running_turn_ends_with_that_turn(home: QmxHome) -> None:
+    holder: list[SessionId] = []
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="folded", model="haiku"))
+        holder.append(chat)
+        await harness.send(chat, OperatorText("first"))
+        await harness.send(chat, OperatorText("typed while the tool ran"))
+        for message in [
+            init(),
+            AssistantMessage(
+                content=[ToolUseBlock("toolu_1", "Glob", {"pattern": "*"})], model="m"
+            ),
+            UserMessage(content=[ToolResultBlock("toolu_1", "No files found")]),
+            *replies("both"),
+        ]:
+            FakeClient.made[0].inbox.put_nowait(message)
+        await settle(lambda: ("text", {"text": "echo both"}) in blocks(home, chat))
+        await asyncio.sleep(0.05)
+        assert turn_of(home, chat) == "idle"
+
+    async def again(_: Harness) -> None:
+        return None
+
+    run(body, home)
+    run(again, home)
+    assert [kind for kind, _ in blocks(home, holder[0])] == ["user", "user", "tool", "tool", "text"]
+
+
+def test_a_background_task_turn_runs_from_its_init_to_its_result(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="injected", model="haiku"))
+        await harness.send(chat, OperatorText("start a background job"))
+        FakeClient.made[0].go.set()
+        await settle(lambda: turn_of(home, chat) == "idle")
+        inbox = FakeClient.made[0].inbox
+        inbox.put_nowait(init())
+        await settle(lambda: turn_of(home, chat) == "running")
+        assert turn_of(home, chat) == "running"
+        inbox.put_nowait(result(origin={"kind": "task-notification"}))
+        await settle(lambda: turn_of(home, chat) == "idle")
+        assert turn_of(home, chat) == "idle"
+
+    run(body, home)
+
+
+def split_deliveries(text: str) -> list[list[str]]:
+    size = len(text)
+    two = [[text[:i], text[i:]] for i in range(1, size)]
+    three = [
+        [text[:i], text[i:j], text[j:]] for i in range(1, size - 1) for j in range(i + 1, size)
+    ]
+    chunks = [[text[k : k + n] for k in range(0, size, n)] for n in range(2, 9)]
+    return [*two, *three, list(text), *chunks]
+
+
+def delta(kind: str, text: str, parent: str | None = None) -> StreamEvent:
+    field = "text" if kind == "text_delta" else "thinking"
+    return StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_delta", "index": 0, "delta": {"type": kind, field: text}},
+        parent_tool_use_id=parent,
+    )
+
+
+def stop(parent: str | None = None) -> StreamEvent:
+    return StreamEvent(
+        uuid="u",
+        session_id="s",
+        event={"type": "content_block_stop", "index": 0},
+        parent_tool_use_id=parent,
+    )
+
+
+def progress(description: str) -> TaskProgressMessage:
+    return TaskProgressMessage(
+        subtype="task_progress",
+        data={},
+        task_id="t1",
+        description=description,
+        usage={"total_tokens": 1, "tool_uses": 1, "duration_ms": 1},
+        uuid="u",
+        session_id="s",
+        tool_use_id="toolu_child",
+        last_tool_name="Read",
+    )
+
+
+def watch(home: QmxHome, script: Sequence[Message | None]) -> tuple[dict[str, str], list[str]]:
+    FakeClient.script = lambda _: script
+    shown: list[tuple[str, str]] = []
+    leaked: list[str] = []
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="watch", model="haiku"))
+
+        async def listen() -> None:
+            async for item in harness.live(chat):
+                shown.append((item.kind, item.text))
+
+        listener = asyncio.create_task(listen())
+        await asyncio.sleep(0.05)
+        await harness.send(chat, OperatorText("print it"))
+        FakeClient.made[0].go.set()
+        await settle(lambda: turn_of(home, chat) == "idle")
+        await asyncio.sleep(0.05)
+        listener.cancel()
+        everything = json.dumps(blocks(home, chat)) + "".join(text for _, text in shown)
+        leaked.extend(CANARY[i:] for i in range(len(CANARY) - 7) if CANARY[i:] in everything)
+
+    run(body, home)
+    return {kind: "".join(text for k, text in shown if k == kind) for kind, _ in shown}, leaked
+
+
+def test_a_token_split_across_deltas_never_reaches_the_live_channel_or_control_db(
+    home: QmxHome,
+) -> None:
+    deliveries = split_deliveries(SAID)
+    stream: list[Message] = []
+    for pieces in deliveries:
+        for piece in pieces:
+            stream += [delta("text_delta", piece), delta("thinking_delta", piece, "toolu_child")]
+    stream += [progress(f"check {CANARY}") for _ in range(3)]
+    live, leaked = watch(
+        home, [*stream, AssistantMessage(content=[TextBlock(SAID)], model="haiku"), result()]
+    )
+    assert live == {
+        "text": SHOWN * len(deliveries),
+        "thinking": SHOWN * len(deliveries),
+        "tool_progress": f"check {REDACTED}: Read" * 3,
+    }
+    assert leaked == []
+
+
+HEAD = "the login is sk-ant-oat01-QMX"
+TAIL = SAID[len(HEAD) :]
+BETWEEN: dict[str, Message] = {
+    "task_started": TaskStartedMessage(
+        subtype="task_started",
+        data={},
+        task_id="bg2",
+        description="background job",
+        uuid="u",
+        session_id="s",
+    ),
+    "task_notification": TaskNotificationMessage(
+        subtype="task_notification",
+        data={},
+        task_id="bg1",
+        status="completed",
+        output_file="out.txt",
+        summary="background job done",
+        uuid="u",
+        session_id="s",
+    ),
+    "task_updated": TaskUpdatedMessage(
+        subtype="task_updated",
+        data={},
+        task_id="bg1",
+        patch={"status": "completed"},
+        status="completed",
+    ),
+    "tool_use": AssistantMessage(
+        content=[ToolUseBlock("toolu_1", "Read", {"file_path": "x"})], model="haiku"
+    ),
+    "child_text": AssistantMessage(
+        content=[TextBlock("child says hi")], model="haiku", parent_tool_use_id="toolu_child"
+    ),
+    "child_block_stop": stop("toolu_child"),
+}
+
+
+@pytest.mark.parametrize("between", list(BETWEEN))
+def test_a_block_landing_mid_token_never_releases_the_token_tail(
+    home: QmxHome, between: str
+) -> None:
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD), BETWEEN[between], delta("text_delta", TAIL), result()]
+    )
+    assert (live, leaked) == ({"text": SHOWN}, [])
+
+
+def test_a_token_split_from_text_into_thinking_is_redacted_where_it_started(
+    home: QmxHome,
+) -> None:
+    live, leaked = watch(home, [delta("text_delta", HEAD), delta("thinking_delta", TAIL), result()])
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}", "thinking": " and more"}, [])
+
+
+def test_a_token_still_open_when_the_turn_ends_is_redacted(home: QmxHome) -> None:
+    live, leaked = watch(home, [delta("text_delta", HEAD), BETWEEN["task_notification"], result()])
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
+
+
+def test_a_sub_agent_token_open_at_the_main_result_stays_held(home: QmxHome) -> None:
+    live, leaked = watch(
+        home,
+        [
+            delta("text_delta", HEAD, "toolu_child"),
+            result(),
+            delta("text_delta", TAIL, "toolu_child"),
+        ],
+    )
+    assert (live, leaked) == ({"text": SHOWN}, [])
+
+
+def test_a_sub_agent_token_open_at_its_own_completion_is_redacted(home: QmxHome) -> None:
+    done = TaskNotificationMessage(
+        subtype="task_notification",
+        data={},
+        task_id="a1",
+        status="completed",
+        output_file="",
+        summary="helper done",
+        uuid="u",
+        session_id="s",
+        tool_use_id="toolu_child",
+    )
+    live, leaked = watch(
+        home, [delta("text_delta", HEAD, "toolu_child"), done, delta("text_delta", "x"), result()]
+    )
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}x"}, [])
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "shown"),
+    [
+        (
+            delta("text_delta", "the prefix is sk-ant-"),
+            delta("text_delta", "Done now."),
+            {"text": "the prefix is sk-ant-Done now."},
+        ),
+        (
+            delta("thinking_delta", "check sk-ant-oat01"),
+            delta("text_delta", "Here is the answer"),
+            {"thinking": f"check {REDACTED}", "text": "Here is the answer"},
+        ),
+    ],
+)
+def test_the_block_after_a_held_tail_starts_whole(
+    home: QmxHome, first: Message, second: Message, shown: dict[str, str]
+) -> None:
+    live, leaked = watch(home, [first, stop(), second, result()])
+    assert (live, leaked) == (shown, [])
+
+
+def test_a_cli_that_ends_mid_token_releases_it_redacted(home: QmxHome) -> None:
+    live, leaked = watch(home, [delta("text_delta", HEAD), None])
+    assert (live, leaked) == ({"text": f"the login is {REDACTED}"}, [])
+
+
+def test_a_cli_that_ends_mid_turn_leaves_an_unknown_outcome(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="dies", model="haiku"))
+        await harness.send(chat, OperatorText("long job"))
+        FakeClient.made[0].inbox.put_nowait(None)
+        await settle(lambda: getattr(read_record(home, chat), "turn", "") == "idle")
+        assert blocks(home, chat)[-1] == (
+            "needs_you",
+            {"reason": "the agent process ended during a turn; its outcome is unknown"},
+        )
+        await harness.send(chat, OperatorText("again"))
+        assert len(FakeClient.made) == 2
+
+    run(body, home)
+
+
+def test_the_live_door_answers_404_for_an_unknown_chat_before_streaming(home: QmxHome) -> None:
+    control = control_service(home)
+    harness = asyncio.run(Harness.open(home, control=control))
+    app = create_app(control, "test-token", extra_routers=[chat_router(harness)])
+    unknown = "0b6e6c1e-8a43-4f2b-9d3c-5a7e2f1c9b10"
+    with TestClient(app) as rest:
+        answer = rest.get(
+            f"/api/sessions/{unknown}/live", headers={"Authorization": "Bearer test-token"}
+        )
+    asyncio.run(harness.close())
+    assert (answer.status_code, answer.headers["content-type"]) == (404, "application/json")
+    assert answer.json()["error"]["message"] == f"No chat has the session id {unknown}."

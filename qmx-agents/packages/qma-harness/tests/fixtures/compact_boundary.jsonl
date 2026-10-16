@@ -1,0 +1,1 @@
+{"type": "system", "subtype": "compact_boundary", "session_id": "a022651d-d809-43c5-bc7c-85a997449267", "uuid": "77b34601-d864-4524-8c82-93f10c50e460", "compact_metadata": {"trigger": "manual", "pre_tokens": 18656, "post_tokens": 1327, "cumulative_dropped_tokens": 17329, "duration_ms": 4734}, "logical_parent_uuid": "11cd183d-29e6-49d5-88c1-8e2465589771"}
