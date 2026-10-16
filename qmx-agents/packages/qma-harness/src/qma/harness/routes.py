@@ -28,6 +28,10 @@ Routes:
                                                  sums per profile, cap, overage stop, money
                                                  posture and the stored exposure report
     POST /api/usage/meter                        read `/usage` in a plan chat, then the page
+    POST /api/gpt/login                 {sign_in} -> GptStatus; the stored ChatGPT sign-in,
+                                                 or OpenAI's page when `sign_in`, then the GPT
+                                                 probe unless a pass is stored, then the lane
+    POST /api/gpt/consent               {consent} -> GptStatus; background use of the plan
     GET  /api/doctor                             DoctorLine list from stored results; never
                                                  runs the exposure probe
     POST /api/doctor/probe                       runs the exposure probe, then the list
@@ -144,6 +148,16 @@ class ChangeIn(BaseModel):
     model: str | None = None
     effort: Effort | None = None
     mode: PermissionMode | None = None
+
+
+class GptLoginIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sign_in: bool = False
+
+
+class GptConsentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    consent: bool
 
 
 class ApplyIn(BaseModel):
@@ -366,8 +380,16 @@ def chat_router(harness: Harness) -> APIRouter:
             raise ControlError("chat_table_full", str(error), 409) from error
         return (await harness.usage()).document()
 
+    @api.post("/api/gpt/login")
+    async def gpt_login(body: GptLoginIn) -> dict[str, Any]:
+        return asdict(await harness.gpt_login(sign_in=body.sign_in))
+
+    @api.post("/api/gpt/consent")
+    async def gpt_consent(body: GptConsentIn) -> dict[str, Any]:
+        return asdict(await harness.gpt_consent(body.consent))
+
     _ = new_chat, chats, one_chat, turn, interrupt, quote, apply, export, rewind_points, rewind
-    _ = live, approve, read_usage, read_meter
+    _ = live, approve, read_usage, read_meter, gpt_login, gpt_consent
     return api
 
 

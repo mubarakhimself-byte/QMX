@@ -25,6 +25,11 @@ USERPROFILE and the app data folders point at a throwaway folder.
     typeahead keys typed before an ask do not answer it (fake model).
     canary    /export in a throwaway home redacts a fake sk-ant token and the provider key.
     perf      five console turns and five drive.py turns, interleaved, first-delta medians.
+    10        HP16: /login chatgpt on the stored ChatGPT sign-in (never the sign-in page; the
+              background-consent question is answered N), one plan turn so a chat exists,
+              /provider gpt after its y/N warning, check 3 with hello-gpt.txt, then /usage
+              shows the gpt row. With --video, /provider gpt and check 3 are recorded for the
+              review. The operator's half, ChatGPT's usage page listing QMA, stays his.
 
     op_checks_console.py <lane> [--video]
 """
@@ -68,6 +73,10 @@ CHECK3: Final = (
     "the text to goodbye."
 )
 CHECK4: Final = "Delete hello.txt"
+CHECK10: Final = (
+    "Make a file hello-gpt.txt with today's date, show it using a terminal command, then "
+    "change the text to goodbye."
+)
 CHECK6: Final = "List your skills and slash commands."
 CLI_SKILLS: Final = frozenset(
     {
@@ -567,6 +576,68 @@ def lane_8_9(log: Log) -> None:
     log("SKIPPED check 9: OpenRouter is the only keyed provider row")
 
 
+def lane_10(log: Log, video: bool) -> int:
+    fresh_workspace()
+    window = open_console("QMA console check 10")
+    recorder = None
+    try:
+        lines = run_turn(window, log, "/login chatgpt", ["n"], seconds=900)
+        if not any("GPT is ready" in line for line in lines):
+            log("OPERATOR-PENDING: /login chatgpt did not open the GPT lane on the stored sign-in")
+            save_screen(window, "hp16-check10")
+            return 3
+        log.check("check 10: /login chatgpt opens GPT on the stored sign-in", True, lines[-2:])
+        run_turn(window, log, "Say hi in three words.", ["n"])
+        if video:
+            recorder = window.record(evidence("hp16-check10-raw.mp4"), 600)
+        start = mark(window)
+        window.type("/provider gpt")
+        prompt = window.wait("[y/N]", seconds=120)
+        log(f"  | {prompt}")
+        window.type("y")
+        window.wait(seconds=180)
+        switched = turn_lines(window, start)
+        for line in switched:
+            log(f"  | {line}")
+        log.check(
+            "check 10: /provider gpt switches the chat after its y/N",
+            any(line.strip().startswith("Now gpt /") for line in switched),
+            switched[-1:],
+        )
+        lines = run_turn(window, log, CHECK10, ["y"])
+        steps = asked_steps(lines)
+        writes = [(step, asked) for step, asked in steps if WRITE_STEP.match(step)]
+        log.check(
+            "check 10: on GPT it asked before every write and command",
+            bool(writes) and all(asked for _, asked in writes),
+            f"{len(writes)} write or command steps",
+        )
+        made = WORKSPACE / "hello-gpt.txt"
+        held = made.read_text(encoding="utf-8").strip() if made.exists() else "<missing>"
+        log.check(
+            'check 10: hello-gpt.txt holds "goodbye" (check 3 on GPT)',
+            held.lower() == "goodbye",
+            held,
+        )
+        save_screen(window, "hp16-check10")
+        lines = run_turn(window, log, "/usage", [])
+        row = next((line for line in lines if "tokens, this chat, gpt" in line), "")
+        log.check(
+            "/usage shows the gpt row with the translator's token count",
+            "calls" in row and "(0 calls)" not in row and "in 0 " not in row,
+            row,
+        )
+        save_screen(window, "hp16-usage")
+    finally:
+        if recorder is not None:
+            recorder.communicate(b"q", timeout=30)
+        window.close()
+    if video:
+        fit_video(log, evidence("hp16-check10-raw.mp4"), REVIEW / "HP16-review.mp4")
+    log("OPERATOR-PENDING: the operator confirms ChatGPT Settings > Usage lists QMA")
+    return log.verdict()
+
+
 def claude_names() -> dict[str, list[str]]:
     root = Path(os.environ.get("QMA_REAL_HOME", str(Path.home()))) / ".claude"
     return {
@@ -881,14 +952,17 @@ def main() -> int:
             "canary",
             "typeahead",
             "perf",
+            "10",
         ],
     )
-    parser.add_argument("--video", action="store_true", help="record lane 2-4 for the review")
+    parser.add_argument("--video", action="store_true", help="record lane 2-4 or 10 for review")
     parser.add_argument("--log", default="owner", help="log name prefix, e.g. fix1")
     parser.add_argument("--with-login", action="store_true", help="lane 1 opens a sign-in page")
     args = parser.parse_args()
     os.environ.setdefault("QMA_REAL_HOME", str(Path.home()))
     boot()
+    if args.lane == "10":
+        return lane_10(Log(f"{args.log}-hp16-check10"), args.video)
     log = Log(f"{args.log}-hp15-{args.lane}")
     match args.lane:
         case "1":

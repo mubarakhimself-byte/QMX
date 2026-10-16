@@ -13,6 +13,8 @@ Claude home of that one process.
 - Every tier is pinned on a key provider, because the CLI sends background work to the haiku
   tier and an unpinned tier fails silently on some vendors.
 - A key provider's credential is a keyring reference that only the relay reads.
+- `GptPlan` is GPT through the operator's ChatGPT sign-in, through the relay's GPT lane. Its
+  row holds only the four tiers, each a GPT model, and its quirks are fixed.
 
 Rows come from `settings.toml [providers]`.
 """
@@ -34,8 +36,9 @@ SecretRef = NewType("SecretRef", str)
 """A `qmx/<name>` OS-keyring reference. Never the secret itself."""
 
 PLAN: Final = ProfileName("claude")
-RESERVED: Final = frozenset({"claude", "gpt"})
-"""`gpt` waits for the GPT lane of the relay; until then no row may take the name."""
+GPT: Final = ProfileName("gpt")
+RESERVED: Final = frozenset({PLAN, GPT})
+"""Names of the built-in kinds. A `gpt` row becomes a `GptPlan`, never a key provider."""
 DELEGATE_TARGETS: Final = "delegate_targets"
 """`[providers] delegate_targets = ["kimi", ...]`: the profiles an agent may name in
 `mcp__qmx__delegate`. Missing means none."""
@@ -107,7 +110,29 @@ class KeyProvider:
     quirks: Quirks = field(default_factory=Quirks)
 
 
-type Profile = ClaudePlan | KeyProvider
+GPT_QUIRKS: Final = Quirks(
+    env={
+        "ENABLE_TOOL_SEARCH": "false",
+        "CLAUDE_CODE_MAX_RETRIES": "2",
+        "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+    }
+)
+"""Fixed. The ChatGPT route refuses `tool_search`, a usage-limit 429 must not be retried into
+the plan limit again and again, and beta-only fields have no Responses mapping (02b D)."""
+
+
+@dataclass(frozen=True)
+class GptPlan:
+    """GPT through the operator's ChatGPT sign-in. The CLI talks to the relay's GPT lane, which
+    translates to OpenAI Responses. `Relay.grant` refuses it until the lane is open, which needs
+    a stored `ProbePassed` for the current translator."""
+
+    tiers: TierMap
+    name: ProfileName = GPT
+    quirks: Quirks = GPT_QUIRKS
+
+
+type Profile = ClaudePlan | KeyProvider | GptPlan
 
 QUIRK_ENV_KEYS: Final = frozenset(
     {
@@ -146,6 +171,8 @@ KEY_QUIRKS: Final = Quirks(env={"ENABLE_TOOL_SEARCH": "true"})
 
 FORBIDDEN_ON_KEY: Final = ("claude", "anthropic", "gpt", "openai", "chatgpt", "codex")
 OPENAI_REASONING_SEGMENT: Final = re.compile(r"^o\d+($|-)")
+GPT_MODEL: Final = re.compile(r"gpt-\d[a-z0-9.-]*")
+"""A GPT id as `/v1/models` lists them on the ChatGPT route, such as `gpt-6.1-sol`."""
 ROUTER_SLUGS: Final = ("openrouter/", "@preset/", "~")
 """Prefixes that let the vendor choose the model, which could be Claude or GPT."""
 SUFFIX: Final = re.compile(r"\[[^\]]*\]$")
@@ -184,18 +211,27 @@ def family_refusal(model: str) -> str | None:
     return None
 
 
+def gpt_refusal(model: str) -> str | None:
+    """A refusal reason when `model` is not a GPT id, or None. The GPT lane checks the requested
+    and the served model with it."""
+    norm = normalize(model)
+    if norm.isascii() and GPT_MODEL.fullmatch(norm):
+        return None
+    return f"{model!r} is not a GPT model"
+
+
 def resolve_model(profile: Profile, requested: str) -> ModelId | None:
     """The one parser for a requested model id, used for `ChatConfig.model` and by the relay.
-    None means refused. Behind a key an id must be a tier alias or equal a tier model after
-    normalization, and the result is that tier's pinned id, which the relay forwards."""
+    None means refused. Behind a key or on GPT an id must be a tier alias or equal a tier model
+    after normalization, and the result is that tier's pinned id, which the relay forwards."""
+    norm = normalize(requested)
     match profile:
         case ClaudePlan():
-            norm = normalize(requested)
             return ModelId(requested) if norm in TIERS or norm.startswith("claude-") else None
-        case KeyProvider(tiers=tiers):
-            if family_refusal(requested):
+        case KeyProvider(tiers=tiers) | GptPlan(tiers=tiers):
+            family = gpt_refusal if isinstance(profile, GptPlan) else family_refusal
+            if norm not in TIERS and family(requested):
                 return None
-            norm = normalize(requested)
             alias = tiers.get(norm)
             if alias is not None:
                 return alias
@@ -243,7 +279,9 @@ def parse_profiles(rows: Mapping[str, object], *, allow_loopback_http: bool = Fa
         if name in NON_MODEL_ROWS:
             continue
         try:
-            found[ProfileName(name)] = _key_provider(name, row, allow_loopback_http)
+            found[ProfileName(name)] = (
+                _gpt_plan(row) if name == GPT else _key_provider(name, row, allow_loopback_http)
+            )
         except ProfileError as error:
             errors[name] = f"[providers.{name}] {error}"
     targets = rows.get(DELEGATE_TARGETS, [])
@@ -285,6 +323,22 @@ def _key_provider(name: str, row: object, allow_loopback_http: bool) -> KeyProvi
         tiers=TierMap(**models),
         quirks=quirks,
     )
+
+
+def _gpt_plan(row: object) -> GptPlan:
+    """`[providers.gpt]` holds only `tiers`. The quirks are fixed and the credential is the
+    ChatGPT sign-in, so neither is a field."""
+    tier_table = _table(_table(row, "the row", {"tiers"}).get("tiers"), "tiers", set(TIERS))
+    models: dict[str, ModelId] = {}
+    for tier in TIERS:
+        model = tier_table.get(tier)
+        if not isinstance(model, str):
+            raise ProfileError(f"tiers.{tier} must name a model; every tier is pinned")
+        refusal = gpt_refusal(model)
+        if refusal:
+            raise ProfileError(f"tiers.{tier}: {refusal}")
+        models[tier] = ModelId(model)
+    return GptPlan(tiers=TierMap(**models))
 
 
 def _table(value: object, what: str, allowed: set[str]) -> dict[str, object]:

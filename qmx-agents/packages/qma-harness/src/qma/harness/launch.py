@@ -262,9 +262,9 @@ class PlanLaunch:
 
 @dataclass(frozen=True)
 class RelayedLaunch:
-    """A key provider through the loopback relay. Only `Relay.grant` mints a grant, and only
-    for a key profile, so a third-party base URL without its own token cannot be built and a
-    plan launch cannot be relayed. Runs in the relayed home, which holds no login."""
+    """A key provider or GPT through the loopback relay. Only the relay mints a grant, and
+    only for a key or GPT profile, so a third-party base URL without its own token cannot be
+    built and a plan launch cannot be relayed. Runs in the relayed home, which holds no login."""
 
     grant: RelayGrant
 

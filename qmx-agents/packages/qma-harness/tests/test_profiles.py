@@ -146,7 +146,11 @@ def test_a_row_overrides_the_host_defaults() -> None:
     ("name", "row", "message"),
     [
         ("claude", OPENROUTER_ROW, "[providers.claude] is a reserved name"),
-        ("gpt", OPENROUTER_ROW, "[providers.gpt] is a reserved name"),
+        (
+            "gpt",
+            OPENROUTER_ROW,
+            "[providers.gpt] the row has unknown keys base_url, credential_ref",
+        ),
         ("x", OPENROUTER_ROW | {"base_url": "http://openrouter.ai/api"}, "must be an https URL"),
         ("x", OPENROUTER_ROW | {"base_url": "http://127.0.0.1:9"}, "must be an https URL"),
         ("x", OPENROUTER_ROW | {"base_url": "https://h/?a=1"}, "must not carry a query"),
