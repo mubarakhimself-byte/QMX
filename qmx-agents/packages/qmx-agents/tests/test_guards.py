@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from itertools import repeat
 from pathlib import Path
@@ -18,21 +17,23 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
+from qma.core.barriers.money_path import (
+    MONEY_PATH_ACT_ALIASES,
+    MONEY_PATH_DENIED_ACTS,
+    MoneyPathDenyError,
+)
+from qma.core.barriers.parent_surfaces import is_parent_surface_permitted
+from qmx_ledger.journal import RunJournal, fingerprint
 from test_spec import call, write_spec
 
 from qmx_agents.guards import (
     AdmissionBackend,
     AdmissionDenied,
     AdmissionGate,
-    MoneyPathDenyError,
-    RunJournal,
     WriteProposal,
     check_tool,
     propose_order,
 )
-from qmx_agents.guards.journal import fingerprint
-from qmx_agents.guards.money_path import MONEY_PATH_ACT_ALIASES, MONEY_PATH_DENIED_ACTS
-from qmx_agents.guards.parent_surfaces import is_parent_surface_permitted
 from qmx_agents.router import ModelRouter, RouterConfig
 from qmx_agents.spec import Budget, BuildContext
 
@@ -87,6 +88,14 @@ def test_existing_money_vocabulary_and_aliases_are_retained() -> None:
     assert is_parent_surface_permitted("qmf-registry", "dev_zone_candidate_write")
     assert not is_parent_surface_permitted("qmf-risk", "dev_zone_candidate_write")
     assert not is_parent_surface_permitted("qmf-registry", "zone_transition")
+
+
+@pytest.mark.parametrize(
+    "name", ["create_order", "create-order", "Create Order", "CREATE-ORDER", "paper-place order"]
+)
+def test_spelled_money_names_are_refused(name: str) -> None:
+    with pytest.raises(MoneyPathDenyError, match=f"Money-path act refused: {name}"):
+        check_tool(lookup.model_copy(update={"name": name}))
 
 
 def test_proposal_only_writes_unsigned_evidence(tmp_path: Path) -> None:
@@ -187,27 +196,6 @@ def test_interrupt_and_decision_are_journaled(
         events = [row["event"] for row in records(journal)]
         assert "interrupt" in events and "approval_resolved" in events
         assert ("tool_start" in events) == (decision != "reject")
-
-
-def test_journal_serializes_reopens_and_refuses_other_writer(tmp_path: Path) -> None:
-    path = tmp_path / "run.jsonl"
-    with RunJournal(path, "r") as journal:
-        with pytest.raises(FileExistsError):
-            RunJournal(path, "r")
-
-        def append(n: int) -> dict[str, Any]:
-            return journal.append("test", {"n": n})
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            list(pool.map(append, range(20)))
-        assert [r["seq"] for r in records(journal)] == list(range(1, 21))
-        raw = b"invalid evidence\x00\xff"
-        assert Path(journal.quarantine(raw, "invalid")).read_bytes() == raw
-    with RunJournal(path, "r") as journal:
-        assert journal.append("end", {})["seq"] == 22
-    path.write_text(path.read_text().replace('"seq":1,', '"seq":9,', 1))
-    with pytest.raises(ValueError, match="corrupt"):
-        RunJournal(path, "r")
 
 
 def test_journal_write_errors_propagate(tmp_path: Path, config: RouterConfig) -> None:

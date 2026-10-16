@@ -20,6 +20,8 @@ dependencies = [
     "wcmatch==11.0.1",
     "jsonschema==4.26.0",
     "aiosqlite==0.22.1",
+    "qmx-ledger",
+    "qma-core",
 ]
 
 [build-system]
@@ -29,6 +31,8 @@ build-backend = "uv_build"
 [tool.uv.sources]
 qmx-tools = { workspace = true }
 qmx-broker = { workspace = true }
+qmx-ledger = { workspace = true }
+qma-core = { workspace = true }
 
 [dependency-groups]
 dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-cov>=7,<8", "pytest-xdist>=3.8,<4", "poethepoet==0.48.0"]

@@ -10,7 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
-from qmx_agents.guards.journal import encoded, fingerprint
+from qmx_ledger.journal import encoded, fingerprint
 
 
 class EvidenceRejected(ValueError):

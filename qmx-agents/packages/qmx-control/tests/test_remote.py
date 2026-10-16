@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from fastmcp import Client
-from qmx_agents.guards.journal import fingerprint
+from qmx_ledger.journal import fingerprint
 from qmx_remote.models import Document, Manifest, RunBundle, Status, Target
 from qmx_remote.runs import RemoteRuns
 from qmx_remote.store import ResultsStore

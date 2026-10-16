@@ -10,7 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
-from qmx_agents.guards.journal import RunJournal, encoded
+from qmx_ledger.journal import RunJournal, encoded
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition

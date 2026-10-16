@@ -3,7 +3,7 @@ name = "qmx-remote"
 version = "0.1.0"
 description = "Durable QMX remote runs and content-addressed results"
 requires-python = ">=3.14,<3.15"
-dependencies = ["pydantic>=2,<3", "keyring==25.7.0", "qmx-agents", "qmx-apps"]
+dependencies = ["pydantic>=2,<3", "keyring==25.7.0", "qmx-agents", "qmx-apps", "qmx-ledger"]
 
 [project.optional-dependencies]
 amp = ["amp-sdk==0.1.20260918210324"]
@@ -17,6 +17,7 @@ build-backend = "uv_build"
 [tool.uv.sources]
 qmx-agents = { workspace = true }
 qmx-apps = { workspace = true }
+qmx-ledger = { workspace = true }
 
 [dependency-groups]
 dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0"]

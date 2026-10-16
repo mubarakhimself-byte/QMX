@@ -16,9 +16,9 @@ from qmx_apps.road.models import Stage
 from qmx_control.models import Document
 from qmx_control.server import create_mcp
 from qmx_control.service import ControlError, ControlService, SessionInput
+from qmx_ledger.journal import RunJournal
 from test_spec import call, write_spec
 
-from qmx_agents.guards import RunJournal
 from qmx_agents.router import ModelRouter, RouterConfig, RunContext
 from qmx_agents.spec import BuildContext, build_agent
 

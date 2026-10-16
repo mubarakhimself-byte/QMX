@@ -9,11 +9,12 @@ import pytest
 from conftest import fake, fake_models
 from langchain_core.runnables import Runnable
 from langchain_core.tools import tool
+from qma.core.barriers.money_path import MoneyPathDenyError
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection
 from qmx_broker.service import BrokerService
 from test_spec import call, write_spec
 
-from qmx_agents.guards import MoneyPathDenyError, check_tool
+from qmx_agents.guards import check_tool
 from qmx_agents.guards.money_path import BrokerOrderProposalTool
 from qmx_agents.router import ModelRouter, RouterConfig
 from qmx_agents.spec import BuildContext, build_agent, load_spec

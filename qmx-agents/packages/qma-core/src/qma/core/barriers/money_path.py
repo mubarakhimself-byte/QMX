@@ -120,6 +120,7 @@ _ROLE_PREFIXES: Final[tuple[str, ...]] = (
 
 # Phrase / synonym aliases → canonical family or denied-act token.
 _ALIAS_PAIRS: Final[tuple[tuple[str, str], ...]] = (
+    ("create_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("place_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("place_an_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),
     ("submit_an_order", MoneyPathDeniedAct.SUBMIT_ORDER.value),

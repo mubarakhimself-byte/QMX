@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from pydantic import JsonValue
-from qmx_agents.guards.journal import fingerprint
+from qmx_ledger.journal import fingerprint
 
 from qmx_apps.backup import snapshot
 from qmx_apps.errors import AppError, Document

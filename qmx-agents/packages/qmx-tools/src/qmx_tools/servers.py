@@ -2,7 +2,7 @@
 
 from fastmcp import FastMCP
 
-from qmx_tools.registry import domain_functions
+from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
 

@@ -20,7 +20,8 @@ from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMiss
 from langgraph.graph.message import add_messages  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.types import Send, interrupt
-from qmx_tools import DomainContext, default_tool_registry
+from qmx_tools import DomainContext
+from qmx_tools.registry import default_tool_registry
 from qmx_tools.service import Artifact, json_value
 
 from qmx_agents.spec import BuildContext, build_agent, load_spec

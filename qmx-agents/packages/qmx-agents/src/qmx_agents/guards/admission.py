@@ -23,8 +23,7 @@ from deepagents.backends.protocol import (
     SandboxBackendProtocol,
     WriteResult,
 )
-
-from qmx_agents.guards.journal import RunJournal, encoded, fingerprint
+from qmx_ledger.journal import RunJournal, encoded, fingerprint
 
 
 class AdmissionDenied(ValueError):
