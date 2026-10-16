@@ -781,6 +781,16 @@ sequenceDiagram
 | Sub-agent fan-out inside one node hits provider rate limits | SDK stall watchdog + pool | caps 3-5 per node; wider fan-out is an engine edge across containers | nothing |
 | Agent-made tool misbehaves | runs only in `runsc`; money deny-list; `unreviewed` state | tool errors feed the ladder; a grader may later promote or archive the tool | nothing |
 | Server down or unreachable over Tailscale | `placement_status(server)` | nodes `waiting(placement)`; burst providers may be chosen per node | item after `alert_after` |
+| `qmx-vault` or the Hub unreachable from a runner host | vault sync fails; Hub calls fail | the host's relay keeps serving on its cached vault copy; issued passes keep working to expiry; no new pass for that placement; the sidecar buffers Library writes to the bucket layout | doctor line "vault sync stale since …"; item after `alert_after` |
+| A run pass is stolen | relay sees a pass from a non-allow-listed source, or a pass used outside its scope | refuse; put the pass on the revocation list; kill the attempt; bench the placement until he looks | `urgent` item with the pass id, run and placement |
+| A worker is compromised | egress anomalies, pass rate cap, heartbeat loss | revoke its pass, kill the container, bench the placement; damage bounded to that run's budget and branch (plus that run's transcript in `cli_inside` / `host_harness`) | `urgent` item |
+| A provider key is rotated while streams are live | `vault_version` changes | in-flight streams finish on the old key; the next request uses the new one; a 401 after rotation benches the row and raises one item | one item only on failure |
+| A provider-hosted thread (`host_harness`) never returns | the adapter's `status` plus the attempt timeout | the attempt fails `unknown` outcome; no auto-retry if its effect was irreversible; the provider thread is stopped through the adapter | item with `link_out` to the provider thread |
+| A managed host hits its spawn pacing or quota | adapter `provision` refusal | the placement reads `configured` not `available`; nodes wait or pick another placement by `runs_on` candidates | item after `alert_after` |
+| RAM budget exhausted on a host | admission | nodes `waiting(placement)` until a session ends; no OOM kill | nothing unless prolonged |
+| The QMB machine is busy | its queue | the `qmb_backtest` attempt waits in that queue; memoised by intent key so repeats never requeue | nothing |
+| Two agents want one desktop | Cua `one native input at a time` | the second waits; browser tabs may proceed in the background | nothing |
+| A login wall or CAPTCHA in a Cua node | the driver | the attempt ends; inbox item; never a credential typed | one item |
 
 ---
 
@@ -810,6 +820,13 @@ sequenceDiagram
 | Memory evidence | provider-owned store; Library rows with providers as indexes | Library rows (`memory-row`) | backups, Hub route, one writer per ref come for free [retrieved study 28 §7.1] |
 | Self-improvement approval | per change; never; one standing rule plus replay gate and rollback | standing rule + gate + rollback | ruling 57; `main` untouched (Library OPEN-6 respected) |
 | Already built | fuzzy recall only; exact intent key first | intent key first | deterministic before fuzzy [retrieved study 28 §7.6] |
+| Credentials across machines | (a) copy keys to every worker's env (today's `credentials_scope` over stdin); (b) a central secrets service every worker calls per request; (c) one vault replica on Contabo, one relay per host as the only key reader, short-lived run passes for workers | (c) | (a) puts raw keys on every worker and in every provider VM; (b) makes every model call depend on one service and still hands the key to the caller; (c) keeps DESIGN's "relay is the only key reader" per host, survives a Hub outage on cached keys, and bounds theft to one run's budget and branch [inferred; Amp's "sign in once, served everywhere" is the behaviour matched, study 32 retrieved] |
+| Where the vault lives | inside the Library Hub as objects; a separate service beside the Hub | separate service `qmx-vault` | Library AD-12 "secrets never ride the hub" stays true; the operator's "key vault in the Hub" is met by colocation [inferred] |
+| Mixed providers in one agent | (a) one provider per chat, fan-out across nodes only; (b) relay routes by model id within one chat, pool leases per provider; (c) a provider-side mixer (Cloudroom-style) | (b) with (a) as the always-available fallback | (b) keeps one audit path and the pool's leases; (a) is model-agnostic and needs no harness change; (c) belongs to `host_harness` placements only [inferred; SDK `model` field retrieved study 29 §1.1; wire pass-through of a non-Claude id inferred, probe E24] |
+| Agent hosting | Contabo for everything; a managed agent host for everything; Contabo always-on plus provider-neutral burst adapters | Contabo + neutral burst | rulings 66, 69: cheap and reliable, nothing paid for yet, no lock-in; Amp, Cloudroom, Cloudflare, E2B, Modal are adapters behind one port [retrieved studies 32, 33] |
+| Provider hosts the harness | refuse such providers; let them run whole workflows (Amp threads, Cloudroom threads); treat one thread as one leaf node attempt with a run pass | leaf attempt (`host_harness`) | whole-workflow use would make a second engine and move state and traces to the provider (ruling 22; study 32); refusing loses the cheapest "place to live" (ruling 69); a leaf attempt keeps the ledger, scheduler and Library in QMX and accepts the Rivet trade-off explicitly [inferred] |
+| Machines view | a native fleet view; provider dashboards through the copilot; both | provider dashboards first, native fields on the run card only, live view on demand | ruling 67: optional and only if necessary; UI latency and load [retrieved] |
+| Computer use layer | OpenCUA model (dropped 10-13); Playwright/Stagehand only; Cua Driver as an MCP tool executor under the harness | Cua pack, Playwright kept for headless research | Cua is MIT, model-agnostic, has bounded manifests and background input, fits the Rivet split [retrieved study 31]; Spaces and Bots are FSL, not adopted |
 
 ---
 
@@ -840,8 +857,116 @@ sequenceDiagram
 | sync-back cap | 2 GiB |
 | `self_improve` default / K live runs watched | `auto` for workflows he created or enabled / 10 |
 | `memory.prune` | archive after 5 retrievals with `u/f ≤ 0.5`; promote to skill at `f ≥ 5`, `u/f > 0.8` |
+| `placement.session_mb` / `overhead_mb` | 1,536 / 4,096 (so a 32 GiB box derives about 18 sessions; 16 GiB about 7) |
+| run pass `expires` / renew | attempt timeout, at most 1 h / renewed by each sidecar heartbeat |
+| vault sync interval / revocation pull | 60 s / every sync and on every pass refusal |
+| per-pass token cap | the run's remaining budget at mint time |
+| warm workers on Contabo | 2 |
+| `host_harness` leaf attempt timeout | the node's `timeout.run_seconds`; default 1 h |
+| Cua manifest `expiry` / `idle_timeout` | the attempt's timeout / 10 min |
 
 ---
+
+## 19. Credentials once, everywhere [spine AD-28; ruling 61; Library AD-11, AD-12]
+
+```mermaid
+flowchart LR
+  S[Settings on the PC<br/>keys entered once] --> WCM[(Windows Credential Manager<br/>qmx/* source of truth)]
+  WCM --> SYNC[vault sync: envelope-encrypt each replicable entry<br/>vault_version, tombstones]
+  SYNC -- Tailscale --> VAULT[(qmx-vault on Contabo<br/>ciphertext + its own private key in the OS keyring)]
+  WCM --> RPC[relay on the PC qma.serve]
+  VAULT --> RN[relay on qmx-node]
+  VAULT --> RO[relay-only process on any owned machine]
+  E[engine instance] -- mints --> PASS[run pass per attempt<br/>run, attempt, placement, key_scope, model_scope,<br/>write_prefix, data_scope, relay_url, expires, nonce]
+  PASS --> W[worker / container / provider thread]
+  W -- model call + pass --> RN
+  W -- Library call + pass --> HUB[Library Hub]
+  RN -- injects key --> PROV[provider]
+```
+
+| Topic | Rule |
+| --- | --- |
+| Source of truth | `qmx/*` entries in Windows Credential Manager, entered once in Settings (unchanged); Settings shows per entry `replicable: yes/no`, `vault_version`, last sync |
+| Replicable set | provider keys (`[providers]` rows), declared tool keys (Firecrawl, data vendors). Never: `qmx/ctrader-*`, the backup payload key, pairing keys, Claude plan logins |
+| Vault | `qmx-vault`, a systemd unit beside the Hub on Contabo; stores ciphertext only; decrypts with a private key held in Contabo's OS keyring; serves keys only to relays on the tailnet that present the pairing credential; not a Library object, not on the Hub's data path (Library AD-12 holds) |
+| Relay per host | the harness relay on each runner host reads keys from its local keyring (PC) or vault copy (Contabo, owned machines); it is the only key reader on that host; plan traffic never passes it |
+| Run pass | minted by the owning engine instance per node attempt; extends the Library AD-12 run token with `model_scope` and `relay_url`; signed with the pairing key; verified by signature at the relay and the Hub (no lookup needed); TTL = attempt timeout, max 1 h, renewed by the sidecar heartbeat; bound to `placement` and checked against a source allow-list (tailnet addresses, or the declared egress of a managed provider) |
+| How each mode uses the pass | `runner_outside`: the chat on the runner host needs no pass for models (it is a harness chat on a leased account); the sandbox tool server and the sidecar carry the pass for the Hub. `cli_inside`: the pass is the CLI's `ANTHROPIC_AUTH_TOKEN`, the relay URL its base URL; the egress allow-list is the only proxy. `host_harness`: the pass is handed to the provider thread as its only credential, as the thread's provider base URL + token; the thread's own model calls still go to our relay |
+| Plan logins | per machine via the CLI's `/login`; `qmx node login <placement>` opens it there once; allowed machines: the PC, Contabo (`qmx-node`), an Amp runner on hardware he owns; a plan row in the pool carries `machine`; preflight refuses a plan account on any provider VM |
+| Rotation | a changed key in Settings → new `vault_version` → sync within 60 s; relays resolve keys at request time, so the next request uses the new key; in-flight streams finish on the old; the UI shows "key rotated, N relays updated" from sync acks |
+| Revocation | delete in Settings → tombstone replicates; relays refuse within one sync; revoked passes go on a signed revocation list every relay and the Hub pull per sync and on every refusal; the pairing key rotates by re-pairing every placement (a Settings action that shows which placements re-paired) |
+| Hub or vault unreachable | relays serve from their cached copy; passes already issued verify by signature; no new pass for a placement the engine cannot reach (it reads `unreachable`); sidecars buffer Library writes to the bucket layout (Library FM-3) and the PC pulls later; sync resumes by `vault_version` with tombstones winning |
+| Stolen pass (threat) | bounded by: scope (`model_scope`, `key_scope`, `write_prefix refs/runs/<id>`, `data_scope`), TTL, placement binding, source allow-list, a per-pass token cap = the run's remaining budget, and the revocation list. It cannot read any key, another run, `main`, or money (the Hub refuses tokens naming broker entries; no order verb off the PC harness). Worst case: that run's remaining budget spent and junk on that run's branch |
+| Compromised worker (threat) | holds no key and in `runner_outside` no transcript; one pass with the bounds above; `runsc` and no sensitive mounts; detection = egress anomalies, pass rate caps, heartbeat loss; response = revoke pass, kill container, bench placement, one `urgent` item. In `cli_inside` and `host_harness` the run's transcript is also exposed: the listed trade-off of those modes |
+| Reconciliation with DESIGN.md | "the relay is the only reader of provider keys at run time" becomes "the relay on each host is that host's only key reader; keys reach a host only through the vault sync"; this, the tailnet-reachable relay and model-id routing are the load-balancer exception (ruling 39) |
+
+## 20. Mixed providers inside one agent [spine AD-29; rulings 62, 63]
+
+```text
+request from a chat (any mode) → relay
+  bearer: chat grant (runner_outside) or run pass (cli_inside / host_harness)
+  model = body.model
+  provider = provider_table.resolve(model)          # exact id or declared alias; unknown → 400, never guessed
+  check provider ∈ bearer.model_scope               # the node's allowed providers
+  lease = pool.acquire(provider, affinity=session)  # one lease per (session, provider); kept for the session
+  key   = local keyring | vault copy [lease.account.credential_ref]
+  forward with the vendor's auth header and wire quirks; tee usage per (session, provider)
+```
+
+- A node's `model_scope` is derived from its role candidates plus its sub-agents' roles; the main agent, each sub-agent and the judge may each resolve to a different provider; three or more leases per session are normal.
+- The SDK's `AgentDefinition.model` accepts a full model id (study 29 §1.1 [retrieved]); that the CLI forwards a non-Claude id such as `deepseek-v4` unchanged, and that the tier env aliases do not rewrite it, is [inferred] until probe E24. The harness today refuses non-family ids behind a key by design (family guard) and must learn the provider table (HARNESS-REQUESTS H10).
+- Fallback that needs no harness change: fan-out across provider-specific `agent` nodes (one role per provider), joined by the engine; the Lab editor shows it as three nodes instead of one.
+- Any provider joins as a `KeyProvider` row: base URL + `qmx/*` key ref + four tiers + quirks; no code. OpenCode Go (OpenAI chat-completions format for GLM and Kimi) needs the translator lane (H12, reusing `qma/gpt/translate.py`'s shape) or direct Z.ai / Moonshot rows.
+- The Claude plan is never in a mixed chat (no relay on the plan path); GPT only through the GPT lane; `test_only` rows (OpenRouter) only in test mode.
+
+## 21. Hosting placements and RAM budgets [spine AD-30; rulings 55, 66, 69]
+
+| Placement kind | Examples | Mode | Who holds what | Cost |
+| --- | --- | --- | --- | --- |
+| `owned` always-on | Contabo: `qmx-hub`, `qmx-vault`, market data, monitoring, server engine + scheduler, `qmx-node` runner + relay, warm `qmx-worker` containers | `runner_outside` (default), `cli_inside` | keys in the vault copy, read by the relay; plan login allowed (his machine); transcripts on the runner | fixed monthly |
+| `owned` PC | Docker Desktop, interactive desktop | `runner_outside`, `host` scripts | keyring, plan logins | none |
+| `managed_vm` | Amp orbs (E2B microVMs, Linux), E2B, Modal, Cloudflare containers | `runner_outside` with the runner on Contabo and the container remote; or `cli_inside` | only a run pass in the VM | per minute / per second; nothing committed |
+| `managed_agent_host` | Cloudroom threads, Amp threads, an Amp runner in Claude Code mode | `host_harness` | the provider's harness runs the loop inside its VM with the run pass; key accounts only (plan only on an owned Amp runner) | free tiers exist; nothing committed |
+| `qmb` | the dedicated backtest machine | `app_op` door | no model account; Library + market data only | owned |
+| `desktop` | PC interactive session, Windows VM (KVM), Linux orb desktop | Cua pack under `runner_outside` | driver on the desktop, loop in the runner | per placement |
+
+RAM budgeting: `max_sessions = floor((ram_budget_mb − overhead_mb) / session_mb)` unless set by hand; `session_mb` 1,536 (the light case is about 1 GB; scraping, tool calls and backtests add more); a node's `resources.memory_mb` counts fully on top; backtests never run on a runner host (AD-31). The scheduler of the owning engine instance admits by placement: a node waits `placement` when its placement's sessions or RAM are exhausted, and may name `runs_on` candidates in order (`server, amp, cloudroom`) so burst absorbs overflow without a code change. Warm workers on Contabo are a Settings count (Claude's default 2) and serve `warm: true` agents. Spawn pacing and quotas of managed hosts surface as the `configured` preflight state, never as failures.
+
+`host_harness` in detail: the adapter opens one provider thread per node attempt with a brief rendered from the `NodeJob` (inputs by Hub reference, the run pass, the output schema, the Library write prefix), polls `status`, and on completion fetches the result and artifacts from the Hub (the thread wrote them with its pass) and the provider's thread log as a trace artifact; the engine records one span; the provider's own schedules, webhooks, automations and agent-to-agent features are not used as control flow (one engine, ruling 22); a thread that exceeds the attempt timeout is stopped through the adapter and recorded `unknown`.
+
+## 22. The QMB backtest machine [spine AD-31; ruling 68]
+
+One placement of kind `qmb`, one door: `qmb_backtest(spec_object_id, data_snapshot, cost_model, splits) -> result object ids`, reached as an `app_op` node by workflows and as a Lab tool by copilots. It queues on the machine with its own semaphore, needs no model account, no relay and no agent, reads market data from the Contabo service, and writes results on the run's branch. The engine memoises it by intent key (AD-27), so a repeated request returns the existing result. Sizing, queue policy and internals belong to the QMB session.
+
+## 23. Machines: provider dashboards first, native fields always [spine AD-32; rulings 65, 67]
+
+| Surface | Shows |
+| --- | --- |
+| Run card and span | `placement` (name, kind), `mode`, `health` at the time, `cost so far` (tokens, cost estimate, machine minutes × `cost_rate`), `link_out` to the provider's thread / VM / desktop |
+| Inbox item | the same four fields plus the pass id when the item is about a placement |
+| Machines list (Settings) | the placement registry with live preflight states, sessions in use / `max_sessions`, RAM in use, vault sync age, last error |
+| Provider dashboards | reached by the copilot through the provider's MCP where one exists, else through the Cua pack; never re-implemented natively |
+| Native live view | only when a node declares `watch: true` and he opens it: a Cua Space or desktop stream, a container log tail; stops on close; nothing streams by default (UI load) |
+
+## 24. The Cua capability pack [spine AD-33; ruling 60; study 31]
+
+```text
+node.scope: { desktop: true | false, browser: none | B1 read_web | B2 act_web | B3 read_as_me | B4 act_as_me }
+manifest (per node, agent cannot widen):
+  apps: [...]                      # window titles / app ids allowed
+  file_roots: [/work/...]
+  origins: [...]                   # browser origins allowed
+  profile: isolated | logged_in    # logged_in only on the PC, explicit grant, never unattended on a server
+  expiry: attempt timeout; idle_timeout: 10 min
+  input: one_native_input_at_a_time_per_desktop
+  deny (always): broker, MT5, cTrader, prop-firm windows and origins  # the money gate on desktop actions
+placement: desktop row (PC interactive session | Windows VM windows:2022 on KVM | Linux orb/runner desktop | Cua Linux sandbox)
+executor: Cua Driver (MIT) on the desktop as the MCP tool executor; loop in the runner (Rivet split)
+trace: every action with a screenshot; login wall or CAPTCHA → attempt ends, inbox item
+probes (before any build): cTrader and MT5 control exposure on the PC; real Chrome profile attach for reads
+```
+
+Playwright and Stagehand stay for headless, logged-out research and cheap replays (study 18); the Cua pack is loaded only when `scope` asks for a desktop or a browser level above `none`.
 
 ## 18. Live checks that prove the invariants (for the builder, one per PR, light verification rule)
 
@@ -869,4 +994,9 @@ sequenceDiagram
 | E20 | AD-26 champion | seed 3 failed and 3 passed runs; the improve workflow proposes; replay passes; `refs/champions/*` moves; force 10 failing live runs; the pointer moves back with a `dead_end` row; `main` is unchanged throughout |
 | E21 | AD-11 real-model tests | a draft test run resolves a cheap real candidate (OpenRouter allowed), writes on `refs/runs/<id>` with status `test`, and is excluded from auto-fast-forward; with the fake switch no provider is called |
 | E22 | AD-5 rlm | an `rlm` node runs three cells through `sandbox_python`; kill the container after cell two; a fresh container restores the snapshot and reruns only cell three; cached sub-calls are not repaid |
+| E24 | AD-29 mixed providers (probe, before the agent-node packet) | one chat with a Kimi main agent, a sub-agent whose `AgentDefinition.model` is a full DeepSeek id and a judge on GLM; the relay journal shows three providers leased for one session, each request routed by its `model` field; record whether the CLI forwards the full id unchanged; if not, the same workflow built as three provider-specific agent nodes passes |
+| E25 | AD-28 run pass bounds | mint a pass for run A; use it against run B's branch, against `main`, against a model outside its `model_scope`, after expiry, and after revocation: every call refused; a stolen pass replayed from a non-allow-listed source is refused; the per-pass token cap stops spend at the run budget |
+| E26 | AD-28 vault and outage | rotate a provider key in Settings; the next relayed request on Contabo uses the new key within one sync; delete a key: relays refuse within one sync; stop `qmx-vault` and the Hub: in-flight runs on Contabo keep calling models on cached keys, already-issued passes keep working, no new pass is minted for that placement and it reads `unreachable` |
+| E27 | AD-30 RAM budget and host_harness | set `ram_budget_mb` so `max_sessions` derives to 4; dispatch 6 agent nodes: 4 run, 2 wait `placement`; a `host_harness` node on a managed host receives only a run pass, returns artifacts through the Hub and its trace is imported; a plan account requested on a provider VM is refused at preflight |
+| E28 | AD-33 Cua manifest | an agent node with `scope: browser B3` and a manifest naming two origins: a navigation to a third origin and to a broker domain is refused by the driver and the money gate; actions appear as screenshots in the trace; a second node asking for the same desktop waits (one native input at a time) |
 | E23 | AD-25 runner outside (probe, before the agent-node packet) | run the Claude Agent SDK with built-in `Bash`, `Write`, `Edit`, `NotebookEdit` disabled and the sandbox MCP tools enabled on a 10-task coding and data set; measure task pass rate, turns and wall time against the same tasks with the built-in tools in `cli_inside`; record whether the SDK honours the disallow list and the extra server per chat (H2, H8). Separately, try agentOS's sandbox mounting on the same tasks and record whether it gives native-tool quality with the harness outside; adopt it as the `runner_outside` transport if it wins and its licence and Windows support allow |
