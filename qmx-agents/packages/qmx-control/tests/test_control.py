@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 import pytest
 import uvicorn
+from fastapi import APIRouter
 from fastapi.testclient import TestClient
 from fastmcp import Client
 
@@ -391,3 +392,32 @@ def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
         server.should_exit = True
         thread.join(timeout=10)
     assert not thread.is_alive()
+
+
+def test_host_sections_are_written_only_through_a_registered_parser(tmp_path: Path) -> None:
+    bare = ControlService(tmp_path / "bare")
+    with pytest.raises(ControlError, match="written only by the QMA host"):
+        bare.settings_put("environment", {"keep": ["JAVA_HOME"]})
+    assert not (tmp_path / "bare" / "settings.toml").exists()
+
+    hosted = ControlService(
+        tmp_path / "hosted",
+        settings_parsers={"environment": lambda values, current: {"keep": ["JAVA_HOME"]}},
+    )
+    assert hosted.settings_put("environment", {"keep": ["java_home"]}) == {"keep": ["JAVA_HOME"]}
+    assert hosted.settings_get("environment") == {"keep": ["JAVA_HOME"]}
+    with pytest.raises(ControlError, match="written only by the QMA host"):
+        hosted.settings_put("claude", {})
+
+
+def test_extra_routers_sit_behind_the_bearer(tmp_path: Path) -> None:
+    extra = APIRouter()
+
+    @extra.get("/api/extra")
+    async def read_extra() -> dict[str, str]:
+        return {"extra": "yes"}
+
+    _ = read_extra
+    with TestClient(create_app(ControlService(tmp_path), TOKEN, extra_routers=[extra])) as rest:
+        assert rest.get("/api/extra").status_code == 401
+        assert rest.get("/api/extra", headers=HEADERS).json() == {"extra": "yes"}

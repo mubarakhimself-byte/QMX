@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import tomllib
 import uuid
-from collections.abc import AsyncIterator, Callable, Generator
+from collections.abc import AsyncIterator, Callable, Generator, Mapping
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Literal, cast
@@ -38,8 +38,20 @@ from qmx_control.models import LibraryInput as LibraryInput  # noqa: PLC0414 - p
 from qmx_control.runs import RunIndex
 
 type SettingsSection = Literal[
-    "providers", "mcp_servers", "budgets", "memory_provider", "backup", "brokers", "remote"
+    "providers",
+    "mcp_servers",
+    "budgets",
+    "memory_provider",
+    "backup",
+    "brokers",
+    "remote",
+    "claude",
+    "environment",
 ]
+type SettingsParser = Callable[[Document, Document], Document]
+"""(values written, section stored now) -> the section to store."""
+HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
+"""Sections only a host that registers a parser for them can write."""
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 type WorkKind = Literal["runs", "jobs"]
 
@@ -99,8 +111,10 @@ class ControlService:
         tier: Literal["T1", "T2"] = "T1",
         node: str = "laptop",
         secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+        settings_parsers: Mapping[SettingsSection, SettingsParser] | None = None,
     ) -> None:
         self.home = home.resolve()
+        self.settings_parsers = dict(settings_parsers or {})
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
@@ -217,9 +231,30 @@ class ControlService:
                 }
             return values
 
+    def settings_update(
+        self, section: SettingsSection, change: Callable[[Document], Document]
+    ) -> Document:
+        """Read, change and write one section under the settings lock, so concurrent updates
+        all land. Writes nothing when the change returns the section as it was."""
+        with self._lock:
+            current = self.settings_get(section)
+            values = change(current)
+            return values if values == current else self.settings_put(section, values)
+
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
+        with self._lock:
+            return self._settings_put(section, values)
+
+    def _settings_put(self, section: SettingsSection, values: Document) -> Document:
         _no_secrets(values)
+        if section in HOST_SECTIONS:
+            parser = self.settings_parsers.get(section)
+            if parser is None:
+                raise ControlError(
+                    "invalid_settings", f"The {section} section is written only by the QMA host."
+                )
+            values = parser(values, self.settings_get(section))
         if section == "remote":
             try:
                 RemoteSettings.model_validate(values)
