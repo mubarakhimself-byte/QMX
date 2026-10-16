@@ -119,7 +119,7 @@ def test_a_row_becomes_a_key_provider_with_its_host_quirks() -> None:
         base_url=BaseUrl("https://openrouter.ai/api"),
         credential=SecretRef("qmx/openrouter"),
         tiers=TierMap(*[ModelId("deepseek/deepseek-v4.1-flash")] * 4),
-        quirks=Quirks(env={"ENABLE_TOOL_SEARCH": "true"}),
+        quirks=Quirks(env={"ENABLE_TOOL_SEARCH": "false"}),
     )
     assert set(profiles.by_name) == {PLAN, "openrouter"}
 

@@ -118,7 +118,7 @@ QUIRK_ENV_KEYS: Final = frozenset(
 )
 
 HOST_QUIRKS: Final[Mapping[str, Quirks]] = {
-    "openrouter.ai": Quirks(env={"ENABLE_TOOL_SEARCH": "true"}),
+    "openrouter.ai": Quirks(env={"ENABLE_TOOL_SEARCH": "false"}),
     "api.meta.ai": Quirks(
         env={"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1"},
         wire=WireQuirks(
@@ -131,9 +131,13 @@ HOST_QUIRKS: Final[Mapping[str, Quirks]] = {
         env={"ENABLE_TOOL_SEARCH": "true"}, wire=WireQuirks(cache_markers="top_level_only")
     ),
 }
-"""Defaults a row's own `quirks` override. OpenRouter is measured (HP1 FINDINGS: tool search
-works on `deepseek/deepseek-v4.1-flash` only with the flag). Meta and Kimi are the vendors'
-documented rejections, not yet probed with a key."""
+"""Defaults a row's own `quirks` override. OpenRouter keeps tool search off: with it on, every
+chat's `qmx` tools go out deferred, and OpenRouter answers 400 "Deferred custom tools are only
+supported on Anthropic models" for `moonshotai/kimi-k2.5` (HP12 check 8) and
+`deepseek-v4-flash-0731` (HP1). With it off, Kimi K2.5 ran a Bash call (HP12 check 8) and
+`deepseek/deepseek-v4.1-flash` answered (HP12 fix round; HP1's B1 Bash call ran with it off).
+Meta and the Moonshot API are the vendors' documented
+rejections, not yet probed with a key; their `true` may hit the same 400."""
 KEY_QUIRKS: Final = Quirks(env={"ENABLE_TOOL_SEARCH": "true"})
 """Tool search is off by default behind a base URL."""
 

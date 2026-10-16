@@ -98,8 +98,16 @@ class Ledger:
         return now - baseline
 
     async def spend(
-        self, label: str, calls: int, max_output: int, run: Callable[[], Awaitable[T]]
+        self,
+        label: str,
+        calls: int,
+        max_output: int,
+        run: Callable[[], Awaitable[T]],
+        *,
+        measured: float | None = None,
     ) -> T:
+        """`measured` replaces the worst-case estimate with a cost an earlier run of the same
+        turn was charged, for a budget the worst case cannot fit. The row records which."""
         rows = self._rows()
         before = self.usage()
         baseline = next((float(r[5]) for r in rows if r[5]), before)
@@ -108,7 +116,7 @@ class Ledger:
         def total(reading: float | None, fallback: float) -> float:
             return fallback if reading is None or baseline is None else reading - baseline
 
-        estimate = self.prices.estimate(calls, max_output)
+        estimate = self.prices.estimate(calls, max_output) if measured is None else measured
         so_far = total(before, charged_sum)
         cells = (label, calls, max_output, f"{estimate:.6f}", _usd(before))
         if so_far + estimate > self.budget:

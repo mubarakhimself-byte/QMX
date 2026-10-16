@@ -9,6 +9,10 @@ Routes:
     POST /api/chats                     NewChat  -> {session_id}
     POST /api/sessions/{sid}/turns      {text}   -> 202, always `OperatorText`
     POST /api/sessions/{sid}/interrupt           -> 202
+    POST /api/sessions/{sid}/quote      ChangeIn -> the quote; 400 for a change the chat
+                                                 cannot take
+    POST /api/sessions/{sid}/apply      {quote_id} -> the applied quote; 409 when it is
+                                                 stale or the launch is refused
     GET  /api/sessions/{sid}/live                SSE of deltas, never stored; 404 first for an
                                                  unknown chat
     POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
@@ -47,7 +51,10 @@ from qma.harness.chat import (
     Answers,
     AskId,
     OperatorText,
+    Quote,
+    QuoteStale,
     Reject,
+    describe,
 )
 from qma.harness.harness import ChatTableFull, Harness, NewChat, UnknownChat
 from qma.harness.home import (
@@ -58,7 +65,8 @@ from qma.harness.home import (
     doctor,
     session_id,
 )
-from qma.harness.launch import LAUNCHER, Effort, LaunchRefused, PermissionMode
+from qma.harness.launch import LAUNCHER, ConfigChange, Effort, LaunchRefused, PermissionMode
+from qma.harness.profiles import ProfileName
 from qma.harness.project import Delta, InChild
 
 
@@ -105,6 +113,31 @@ class NewChatIn(BaseModel):
 class TurnIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1)
+
+
+class ChangeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    profile: str | None = None
+    model: str | None = None
+    effort: Effort | None = None
+    mode: PermissionMode | None = None
+
+
+class ApplyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quote_id: str = Field(min_length=1)
+
+
+def quote_document(quote: Quote) -> dict[str, Any]:
+    return {
+        "id": quote.id,
+        "warning": quote.warning,
+        "steps": [step.value for step in quote.steps],
+        "recomputed_tokens": quote.recomputed_tokens,
+        "background_tasks": quote.background_tasks,
+        "old": describe(quote.old),
+        "new": describe(quote.new),
+    }
 
 
 class AllowOnceIn(BaseModel):
@@ -188,6 +221,28 @@ def chat_router(harness: Harness) -> APIRouter:
         await harness.interrupt(chat_id(sid))
         return {"status": "interrupted"}
 
+    @api.post("/api/sessions/{sid}/quote")
+    async def quote(sid: str, body: ChangeIn) -> dict[str, Any]:
+        change = ConfigChange(
+            profile=None if body.profile is None else ProfileName(body.profile),
+            model=body.model,
+            effort=body.effort,
+            mode=body.mode,
+        )
+        try:
+            return quote_document(await harness.quote(chat_id(sid), change))
+        except LaunchRefused as error:
+            raise ControlError("change_refused", str(error), 400) from error
+
+    @api.post("/api/sessions/{sid}/apply")
+    async def apply(sid: str, body: ApplyIn) -> dict[str, Any]:
+        try:
+            return quote_document(await harness.apply(chat_id(sid), body.quote_id))
+        except QuoteStale as error:
+            raise ControlError("quote_stale", str(error), 409) from error
+        except LaunchRefused as error:
+            raise ControlError("launch_refused", str(error), 409) from error
+
     def live_deltas(sid: str) -> AsyncIterator[Delta]:
         return harness.live(chat_id(sid))
 
@@ -222,7 +277,7 @@ def chat_router(harness: Harness) -> APIRouter:
             raise ControlError("chat_table_full", str(error), 409) from error
         return (await harness.usage()).document()
 
-    _ = new_chat, turn, interrupt, live, approve, read_usage, read_meter
+    _ = new_chat, turn, interrupt, quote, apply, live, approve, read_usage, read_meter
     return api
 
 
